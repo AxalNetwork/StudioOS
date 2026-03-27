@@ -9,7 +9,7 @@ function ModernSelect({ value, onChange, children, ...props }) {
         className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400">
         {children}
       </select>
-      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
     </div>
   );
 }
@@ -24,8 +24,8 @@ export default function AdvisoryPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-white mb-1">AI Advisory Suite</h1>
-      <p className="text-sm text-gray-400 mb-6">Strategy, financial planning, and automated diligence</p>
+      <h1 className="text-2xl font-bold text-gray-900 mb-1">AI Advisory Suite</h1>
+      <p className="text-sm text-gray-600 mb-6">Strategy, financial planning, and automated diligence</p>
 
       <div className="flex gap-1 mb-6">
         {[
@@ -35,7 +35,7 @@ export default function AdvisoryPage() {
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-colors ${
-              tab === t.key ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
+              tab === t.key ? 'bg-violet-600 text-gray-900' : 'bg-gray-50 text-gray-600 hover:text-gray-900'
             }`}>
             <t.icon size={14} /> {t.label}
           </button>
@@ -77,9 +77,9 @@ function AdvisorTab({ projects }) {
   return (
     <div className="grid lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-4">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-            <Brain size={16} className="text-violet-400" /> Ask the AI Advisor
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <Brain size={16} className="text-violet-600" /> Ask the AI Advisor
           </h3>
           <div className="flex gap-3 mb-3">
             <ModernSelect value={category} onChange={e => setCategory(e.target.value)}>
@@ -98,36 +98,36 @@ function AdvisorTab({ projects }) {
             <input value={question} onChange={e => setQuestion(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && ask()}
               placeholder="Ask anything about strategy, GTM, fundraising..."
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white placeholder-gray-500" />
+              className="flex-1 bg-gray-50 border border-gray-700 rounded-lg px-4 py-2 text-sm text-gray-900 placeholder-gray-500" />
             <button onClick={ask} disabled={loading || !question.trim()}
-              className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 rounded-lg text-sm text-white flex items-center gap-2">
+              className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 rounded-lg text-sm text-gray-900 flex items-center gap-2">
               <Send size={14} /> {loading ? 'Thinking...' : 'Ask'}
             </button>
           </div>
         </div>
 
         {response && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
             <div className="flex items-center gap-2 mb-3">
-              <Brain size={14} className="text-violet-400" />
-              <span className="text-xs text-gray-400">{response.ai_generated ? 'AI-Powered' : 'Template'} Response</span>
-              {response.project_name && <span className="text-xs text-violet-400">| {response.project_name}</span>}
+              <Brain size={14} className="text-violet-600" />
+              <span className="text-xs text-gray-600">{response.ai_generated ? 'AI-Powered' : 'Template'} Response</span>
+              {response.project_name && <span className="text-xs text-violet-600">| {response.project_name}</span>}
             </div>
             <div className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed">{response.advice}</div>
           </div>
         )}
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 h-fit">
-        <h3 className="text-sm font-semibold text-white mb-3">Query History</h3>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 h-fit">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3">Query History</h3>
         {history.length === 0 ? (
           <p className="text-xs text-gray-500">No queries yet. Ask a question to get started.</p>
         ) : (
           <div className="space-y-3">
             {history.slice(0, 8).map((h, i) => (
-              <div key={i} className="border-b border-gray-800 pb-2">
-                <div className="text-xs text-gray-400 mb-1">{h.category}</div>
-                <div className="text-xs text-white font-medium truncate">{h.q}</div>
+              <div key={i} className="border-b border-gray-200 pb-2">
+                <div className="text-xs text-gray-600 mb-1">{h.category}</div>
+                <div className="text-xs text-gray-900 font-medium truncate">{h.q}</div>
                 <div className="text-[10px] text-gray-500 mt-0.5">{h.ts.toLocaleTimeString()}</div>
               </div>
             ))}
@@ -160,12 +160,12 @@ function FinancialTab({ projects }) {
 
   return (
     <div className="grid lg:grid-cols-2 gap-6">
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-white mb-4">Financial Parameters</h3>
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Financial Parameters</h3>
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <label className="text-xs text-gray-400">Project</label>
-            <select {...f('project_id')} className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200">
+            <label className="text-xs text-gray-600">Project</label>
+            <select {...f('project_id')} className="w-full mt-1 bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200">
               <option value="">Standalone</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -181,13 +181,13 @@ function FinancialTab({ projects }) {
             ['avg_salary', 'Avg Salary ($)', 'number'],
           ].map(([key, label, type]) => (
             <div key={key}>
-              <label className="text-xs text-gray-400">{label}</label>
-              <input type={type} {...f(key)} className="w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" />
+              <label className="text-xs text-gray-600">{label}</label>
+              <input type={type} {...f(key)} className="w-full mt-1 bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900" />
             </div>
           ))}
         </div>
         <button onClick={generate} disabled={loading}
-          className="mt-4 w-full px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 rounded-lg text-sm text-white">
+          className="mt-4 w-full px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 rounded-lg text-sm text-gray-900">
           {loading ? 'Generating...' : 'Generate Financial Plan'}
         </button>
       </div>
@@ -207,11 +207,11 @@ function FinancialTab({ projects }) {
             </div>
 
             {plan.recommendations.length > 0 && (
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                <h3 className="text-sm font-semibold text-white mb-3">Recommendations</h3>
+              <div className="bg-white border border-gray-200 rounded-xl p-5">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Recommendations</h3>
                 <ul className="space-y-2">
                   {plan.recommendations.map((r, i) => (
-                    <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
+                    <li key={i} className="text-xs text-gray-700 flex items-start gap-2">
                       <AlertTriangle size={12} className="text-yellow-400 mt-0.5 shrink-0" />
                       {r}
                     </li>
@@ -220,17 +220,17 @@ function FinancialTab({ projects }) {
               </div>
             )}
 
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-white mb-3">18-Month Projection</h3>
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">18-Month Projection</h3>
               <div className="space-y-1 max-h-64 overflow-y-auto">
                 {plan.projections.map(p => (
                   <div key={p.month} className="flex items-center gap-2 text-xs">
                     <span className="w-8 text-gray-500">M{p.month}</span>
-                    <div className="flex-1 bg-gray-800 rounded-full h-2 overflow-hidden">
+                    <div className="flex-1 bg-gray-50 rounded-full h-2 overflow-hidden">
                       <div className={`h-full rounded-full ${p.cash_balance > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}
                         style={{ width: `${Math.min(Math.max((p.cash_balance / (form.current_cash || 1)) * 100, 0), 100)}%` }} />
                     </div>
-                    <span className={`w-24 text-right ${p.cash_balance > 0 ? 'text-gray-300' : 'text-red-400'}`}>
+                    <span className={`w-24 text-right ${p.cash_balance > 0 ? 'text-gray-700' : 'text-red-400'}`}>
                       ${Math.round(p.cash_balance).toLocaleString()}
                     </span>
                   </div>
@@ -268,16 +268,16 @@ function DiligenceTab({ projects }) {
 
   return (
     <div>
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
-        <h3 className="text-sm font-semibold text-white mb-3">Automated Diligence Check</h3>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3">Automated Diligence Check</h3>
         <div className="flex gap-3">
           <select value={projectId} onChange={e => setProjectId(e.target.value)}
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200">
+            className="flex-1 bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200">
             <option value="">Select a project...</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <button onClick={runCheck} disabled={loading || !projectId}
-            className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 rounded-lg text-sm text-white">
+            className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 rounded-lg text-sm text-gray-900">
             {loading ? 'Running...' : 'Run Diligence'}
           </button>
         </div>
@@ -285,28 +285,28 @@ function DiligenceTab({ projects }) {
 
       {report && (
         <div className="space-y-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-bold text-white">{report.project_name}</h3>
-                <p className="text-xs text-gray-400">{report.recommendation}</p>
+                <h3 className="text-lg font-bold text-gray-900">{report.project_name}</h3>
+                <p className="text-xs text-gray-600">{report.recommendation}</p>
               </div>
               <span className={`text-sm px-3 py-1 rounded-full font-medium ${
-                report.overall_status === 'pass' ? 'bg-emerald-500/20 text-emerald-400' :
+                report.overall_status === 'pass' ? 'bg-emerald-100 text-emerald-700' :
                 report.overall_status === 'conditional' ? 'bg-yellow-500/20 text-yellow-400' :
-                'bg-red-500/20 text-red-400'
+                'bg-red-100 text-red-700'
               }`}>{report.overall_status.toUpperCase()}</span>
             </div>
             <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="bg-gray-800 rounded-lg p-3">
+              <div className="bg-gray-50 rounded-lg p-3">
                 <div className="text-xl font-bold text-emerald-400">{report.summary.pass}</div>
                 <div className="text-[10px] text-gray-500">PASS</div>
               </div>
-              <div className="bg-gray-800 rounded-lg p-3">
+              <div className="bg-gray-50 rounded-lg p-3">
                 <div className="text-xl font-bold text-yellow-400">{report.summary.warning}</div>
                 <div className="text-[10px] text-gray-500">WARNING</div>
               </div>
-              <div className="bg-gray-800 rounded-lg p-3">
+              <div className="bg-gray-50 rounded-lg p-3">
                 <div className="text-xl font-bold text-red-400">{report.summary.missing}</div>
                 <div className="text-[10px] text-gray-500">MISSING</div>
               </div>
@@ -317,15 +317,15 @@ function DiligenceTab({ projects }) {
             const items = report.checks.filter(c => c.category === cat);
             if (items.length === 0) return null;
             return (
-              <div key={cat} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                <h4 className="text-sm font-semibold text-white mb-3">{cat} Checks</h4>
+              <div key={cat} className="bg-white border border-gray-200 rounded-xl p-5">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">{cat} Checks</h4>
                 <div className="space-y-2">
                   {items.map((c, i) => (
-                    <div key={i} className="flex items-start gap-3 px-3 py-2 bg-gray-800 rounded-lg">
+                    <div key={i} className="flex items-start gap-3 px-3 py-2 bg-gray-50 rounded-lg">
                       {statusIcon(c.status)}
                       <div className="flex-1">
-                        <div className="text-xs text-white font-medium">{c.item}</div>
-                        <div className="text-[11px] text-gray-400">{c.detail}</div>
+                        <div className="text-xs text-gray-900 font-medium">{c.item}</div>
+                        <div className="text-[11px] text-gray-600">{c.detail}</div>
                       </div>
                     </div>
                   ))}
@@ -344,10 +344,10 @@ function MetricCard({ label, value, status }) {
     Healthy: 'border-emerald-500/30 text-emerald-400',
     Warning: 'border-yellow-500/30 text-yellow-400',
     Critical: 'border-red-500/30 text-red-400',
-    info: 'border-gray-700 text-gray-300',
+    info: 'border-gray-700 text-gray-700',
   };
   return (
-    <div className={`bg-gray-900 border rounded-xl p-4 ${colors[status] || colors.info}`}>
+    <div className={`bg-white border rounded-xl p-4 ${colors[status] || colors.info}`}>
       <div className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</div>
       <div className="text-lg font-bold mt-1">{value}</div>
     </div>

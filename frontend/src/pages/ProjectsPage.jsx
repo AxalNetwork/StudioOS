@@ -35,8 +35,8 @@ export default function ProjectsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Projects</h1>
-          <p className="text-sm text-gray-400">Venture pipeline & 4-week playbook tracking</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Projects</h1>
+          <p className="text-sm text-gray-600">Venture pipeline & 4-week playbook tracking</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white transition-colors">
           <Plus size={14} /> New Project
@@ -44,8 +44,8 @@ export default function ProjectsPage() {
       </div>
 
       {showForm && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
-          <h2 className="font-semibold text-white text-sm mb-4">Add New Project</h2>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+          <h2 className="font-semibold text-gray-900 text-sm mb-4">Add New Project</h2>
           <div className="grid md:grid-cols-2 gap-4">
             <Input label="Project Name" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
             <Input label="Sector" value={form.sector} onChange={v => setForm(f => ({ ...f, sector: v }))} />
@@ -58,8 +58,8 @@ export default function ProjectsPage() {
             <Input label="Solution" value={form.solution} onChange={v => setForm(f => ({ ...f, solution: v }))} />
           </div>
           <div className="flex gap-3 mt-4">
-            <button onClick={submit} className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm text-white">Create</button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-white">Cancel</button>
+            <button onClick={submit} className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm text-gray-900">Create</button>
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm text-gray-900">Cancel</button>
           </div>
         </div>
       )}
@@ -70,18 +70,18 @@ export default function ProjectsPage() {
           <input
             type="text" placeholder="Filter projects..."
             value={filter} onChange={e => setFilter(e.target.value)}
-            className="w-full md:w-64 bg-gray-900 border border-gray-800 rounded-lg pl-9 pr-3 py-2 text-sm text-white focus:border-violet-500 focus:outline-none"
+            className="w-full md:w-64 bg-white border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
           />
         </div>
       </div>
 
       {loading ? (
-        <div className="text-gray-400 text-center py-10 text-sm">Loading...</div>
+        <div className="text-gray-600 text-center py-10 text-sm">Loading...</div>
       ) : (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800 text-gray-400 text-xs uppercase">
+              <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
                 <th className="text-left px-5 py-3">Name</th>
                 <th className="text-left px-5 py-3 hidden md:table-cell">Sector</th>
                 <th className="text-left px-5 py-3">Status</th>
@@ -91,15 +91,15 @@ export default function ProjectsPage() {
             </thead>
             <tbody className="divide-y divide-gray-800">
               {filtered.map(p => (
-                <tr key={p.id} className="hover:bg-gray-800/50 transition-colors">
+                <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="px-5 py-3">
-                    <Link to={`/projects/${p.id}`} className="text-white hover:text-violet-400 font-medium">{p.name}</Link>
+                    <Link to={`/projects/${p.id}`} className="text-gray-900 hover:text-violet-600 font-medium">{p.name}</Link>
                     <div className="text-xs text-gray-500 md:hidden">{p.sector}</div>
                   </td>
-                  <td className="px-5 py-3 hidden md:table-cell text-gray-400">{p.sector || '—'}</td>
+                  <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.sector || '—'}</td>
                   <td className="px-5 py-3"><StatusBadge status={p.status} /></td>
                   <td className="px-5 py-3 hidden md:table-cell"><WeekBadge week={p.playbook_week} /></td>
-                  <td className="px-5 py-3 hidden md:table-cell text-gray-400 capitalize">{p.stage}</td>
+                  <td className="px-5 py-3 hidden md:table-cell text-gray-600 capitalize">{p.stage}</td>
                 </tr>
               ))}
               {filtered.length === 0 && (
@@ -116,10 +116,10 @@ export default function ProjectsPage() {
 function Input({ label, value, onChange }) {
   return (
     <div>
-      <label className="block text-xs text-gray-400 mb-1">{label}</label>
+      <label className="block text-xs text-gray-600 mb-1">{label}</label>
       <input
         type="text" value={value} onChange={e => onChange(e.target.value)}
-        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-violet-500 focus:outline-none"
+        className="w-full bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
       />
     </div>
   );

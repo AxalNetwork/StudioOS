@@ -62,7 +62,7 @@ export default function PartnersPage() {
           </div>
           <div className="flex gap-3 mt-4">
             <button onClick={submit} className="px-4 py-2 bg-violet-600 rounded-lg text-sm text-white">Add</button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-700 rounded-lg text-sm text-white">Cancel</button>
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-200 rounded-lg text-sm text-white">Cancel</button>
           </div>
         </div>
       )}

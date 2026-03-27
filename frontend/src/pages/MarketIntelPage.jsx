@@ -57,7 +57,7 @@ export default function MarketIntelPage() {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-white">{s.sector}</h3>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  s.sentiment === 'Aggressive' ? 'bg-emerald-500/20 text-emerald-400' :
+                  s.sentiment === 'Aggressive' ? 'bg-emerald-100 text-emerald-700' :
                   s.sentiment === 'Cautious' ? 'bg-orange-500/20 text-orange-400' :
                   'bg-yellow-500/20 text-yellow-400'
                 }`}>{s.sentiment}</span>
@@ -117,9 +117,9 @@ export default function MarketIntelPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        s.ipo_window === 'Open' ? 'bg-emerald-500/20 text-emerald-400' :
+                        s.ipo_window === 'Open' ? 'bg-emerald-100 text-emerald-700' :
                         s.ipo_window === 'Selective' ? 'bg-yellow-500/20 text-yellow-400' :
-                        s.ipo_window === 'Opening' ? 'bg-blue-500/20 text-blue-400' :
+                        s.ipo_window === 'Opening' ? 'bg-blue-100 text-blue-700' :
                         'bg-orange-500/20 text-orange-400'
                       }`}>{s.ipo_window}</span>
                     </td>
@@ -174,8 +174,8 @@ export default function MarketIntelPage() {
                   <h3 className="text-sm font-semibold text-white">{play.sector}</h3>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                     play.play_type === 'Efficiency Play' ? 'bg-violet-500/20 text-violet-400' :
-                    play.play_type === 'Replacement Play' ? 'bg-blue-500/20 text-blue-400' :
-                    'bg-emerald-500/20 text-emerald-400'
+                    play.play_type === 'Replacement Play' ? 'bg-blue-100 text-blue-700' :
+                    'bg-emerald-100 text-emerald-700'
                   }`}>{play.play_type}</span>
                 </div>
                 <span className="text-lg font-bold text-violet-400">{play.multiple}x</span>

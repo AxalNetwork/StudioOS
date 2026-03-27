@@ -127,7 +127,7 @@ export default function ProjectDetail() {
             {['week_1', 'week_2', 'week_3', 'week_4'].map(w => (
               <div key={w} className={`flex-1 h-2 rounded-full ${
                 project.playbook_week === 'complete' || ['week_2','week_3','week_4'].indexOf(project.playbook_week) >= ['week_2','week_3','week_4'].indexOf(w)
-                  ? 'bg-violet-500' : 'bg-gray-700'
+                  ? 'bg-violet-500' : 'bg-gray-200'
               }`} />
             ))}
           </div>
@@ -174,9 +174,9 @@ export default function ProjectDetail() {
                   <span className="text-xs text-gray-500 ml-2">{d.doc_type}</span>
                 </div>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                  d.status === 'signed' ? 'bg-emerald-500/20 text-emerald-400' :
-                  d.status === 'sent' ? 'bg-blue-500/20 text-blue-400' :
-                  'bg-gray-700 text-gray-300'
+                  d.status === 'signed' ? 'bg-emerald-100 text-emerald-700' :
+                  d.status === 'sent' ? 'bg-blue-100 text-blue-700' :
+                  'bg-gray-100 text-gray-700'
                 }`}>{d.status}</span>
               </div>
             ))}

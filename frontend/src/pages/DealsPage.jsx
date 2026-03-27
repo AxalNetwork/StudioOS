@@ -4,11 +4,11 @@ import { ArrowRight, Filter } from 'lucide-react';
 
 const STATUSES = ['all', 'applied', 'scored', 'active', 'funded', 'rejected'];
 const statusColors = {
-  applied: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  applied: 'bg-blue-100 text-blue-700 border-blue-500/30',
   scored: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
   active: 'bg-green-500/20 text-green-400 border-green-500/30',
   funded: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
-  rejected: 'bg-red-500/20 text-red-400 border-red-500/30',
+  rejected: 'bg-red-100 text-red-700 border-red-500/30',
 };
 
 const PIPELINE = ['applied', 'scored', 'active', 'funded'];
@@ -90,7 +90,7 @@ export default function DealsPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
                     <span className="text-white font-medium">{deal.project_name || `Project #${deal.project_id}`}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${statusColors[deal.status] || 'bg-gray-700 text-gray-400'}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${statusColors[deal.status] || 'bg-gray-200 text-gray-400'}`}>
                       {deal.status?.toUpperCase()}
                     </span>
                   </div>

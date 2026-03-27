@@ -9,7 +9,7 @@ function ModernSelect({ value, onChange, children, ...props }) {
         className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400">
         {children}
       </select>
-      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
     </div>
   );
 }
@@ -30,10 +30,10 @@ function ScoreBar({ label, value, max, color = 'violet' }) {
   return (
     <div className="mb-2">
       <div className="flex justify-between text-xs mb-1">
-        <span className="text-gray-400">{label}</span>
-        <span className="text-gray-300">{value}/{max}</span>
+        <span className="text-gray-600">{label}</span>
+        <span className="text-gray-700">{value}/{max}</span>
       </div>
-      <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+      <div className="h-2 bg-gray-50 rounded-full overflow-hidden">
         <div className={`h-full ${colors[color] || colors.violet} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
       </div>
     </div>
@@ -79,20 +79,20 @@ export default function ScoringPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-1">Diligence & Scoring Engine</h1>
-        <p className="text-sm text-gray-400">100-Point Startup Scoring Algorithm — The Brain</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Diligence & Scoring Engine</h1>
+        <p className="text-sm text-gray-600">100-Point Startup Scoring Algorithm — The Brain</p>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
             <div className="flex items-center gap-2 mb-4">
-              <Target size={16} className="text-violet-400" />
-              <h2 className="font-semibold text-white text-sm">Score Input</h2>
+              <Target size={16} className="text-violet-600" />
+              <h2 className="font-semibold text-gray-900 text-sm">Score Input</h2>
             </div>
 
             <div className="mb-4">
-              <label className="block text-xs text-gray-400 mb-1 font-medium">Link to Project (optional)</label>
+              <label className="block text-xs text-gray-600 mb-1 font-medium">Link to Project (optional)</label>
               <ModernSelect
                 value={selectedProject || ''}
                 onChange={e => setSelectedProject(e.target.value ? parseInt(e.target.value) : null)}
@@ -141,11 +141,11 @@ export default function ScoringPage() {
             </Section>
 
             <div className="flex gap-3 mt-6">
-              <button onClick={runScore} disabled={loading} className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+              <button onClick={runScore} disabled={loading} className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-gray-900 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
                 <Play size={14} /> {loading ? 'Scoring...' : 'Run Full Score'}
               </button>
               {selectedProject && result && (
-                <button onClick={generateMemo} className="flex items-center gap-2 px-5 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors">
+                <button onClick={generateMemo} className="flex items-center gap-2 px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg text-sm font-medium transition-colors">
                   <FileText size={14} /> Generate Deal Memo
                 </button>
               )}
@@ -155,16 +155,16 @@ export default function ScoringPage() {
 
         <div className="space-y-4">
           {result ? (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
               <div className="text-center mb-6">
                 <div className={`text-5xl font-bold ${
                   result.tier === 'TIER_1' ? 'text-emerald-400' :
                   result.tier === 'TIER_2' ? 'text-blue-400' : 'text-red-400'
                 }`}>{result.total_score}</div>
-                <div className="text-xs text-gray-400 mt-1">/ 100</div>
+                <div className="text-xs text-gray-600 mt-1">/ 100</div>
                 <div className={`mt-2 inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                  result.tier === 'TIER_1' ? 'bg-emerald-500/20 text-emerald-400' :
-                  result.tier === 'TIER_2' ? 'bg-blue-500/20 text-blue-400' : 'bg-red-500/20 text-red-400'
+                  result.tier === 'TIER_1' ? 'bg-emerald-100 text-emerald-700' :
+                  result.tier === 'TIER_2' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
                 }`}>{result.tier_label}</div>
               </div>
 
@@ -176,22 +176,22 @@ export default function ScoringPage() {
               <ScoreBar label="Distribution" value={result.breakdown.distribution.total} max={10} color="emerald" />
             </div>
           ) : (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
+            <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
               <Target size={40} className="text-gray-700 mx-auto mb-3" />
               <p className="text-sm text-gray-500">Run a score to see results</p>
             </div>
           )}
 
           {queue.length > 0 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <h3 className="font-semibold text-white text-sm mb-3">Scoring Queue</h3>
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <h3 className="font-semibold text-gray-900 text-sm mb-3">Scoring Queue</h3>
               <div className="space-y-2">
                 {queue.map(p => (
                   <button
                     key={p.id}
                     onClick={() => setSelectedProject(p.id)}
                     className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                      selectedProject === p.id ? 'bg-violet-500/20 text-violet-300' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                      selectedProject === p.id ? 'bg-violet-500/20 text-violet-300' : 'bg-gray-50 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
                     <div className="font-medium">{p.name}</div>
@@ -211,7 +211,7 @@ function Section({ title, children }) {
   const [open, setOpen] = useState(true);
   return (
     <div className="mb-4">
-      <button onClick={() => setOpen(!open)} className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-300 mb-2">
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-700 mb-2">
         {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         {title}
       </button>
@@ -229,7 +229,7 @@ function Field({ label, value, onChange, max }) {
         value={value}
         onChange={e => onChange(e.target.value)}
         max={max}
-        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:border-violet-500 focus:outline-none"
+        className="w-full bg-gray-50 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
       />
     </div>
   );

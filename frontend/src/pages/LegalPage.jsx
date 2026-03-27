@@ -9,7 +9,7 @@ function ModernSelect({ value, onChange, children, ...props }) {
         className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400">
         {children}
       </select>
-      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
     </div>
   );
 }
@@ -46,14 +46,14 @@ export default function LegalPage() {
     } catch (e) { alert(e.message); }
   };
 
-  if (loading) return <div className="text-gray-400 text-center py-20">Loading...</div>;
+  if (loading) return <div className="text-gray-600 text-center py-20">Loading...</div>;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Legal & Compliance Engine</h1>
-          <p className="text-sm text-gray-400">Document generation, incorporation, and spin-out workflows</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Legal & Compliance Engine</h1>
+          <p className="text-sm text-gray-600">Document generation, incorporation, and spin-out workflows</p>
         </div>
         <button onClick={() => setShowGen(!showGen)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white">
           <Plus size={14} /> Generate Document
@@ -61,22 +61,22 @@ export default function LegalPage() {
       </div>
 
       {showGen && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
-          <h2 className="font-semibold text-white text-sm mb-4">Generate Document from Template</h2>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+          <h2 className="font-semibold text-gray-900 text-sm mb-4">Generate Document from Template</h2>
           <div className="grid md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-gray-400 mb-1 font-medium">Template</label>
+              <label className="block text-xs text-gray-600 mb-1 font-medium">Template</label>
               <ModernSelect value={genForm.doc_type} onChange={e => setGenForm(f => ({ ...f, doc_type: e.target.value }))}>
                 {templates.map(t => <option key={t.key} value={t.key}>{t.title}</option>)}
               </ModernSelect>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Title</label>
+              <label className="block text-xs text-gray-600 mb-1">Title</label>
               <input type="text" value={genForm.title} onChange={e => setGenForm(f => ({ ...f, title: e.target.value }))}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" />
+                className="w-full bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900" />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1 font-medium">Project</label>
+              <label className="block text-xs text-gray-600 mb-1 font-medium">Project</label>
               <ModernSelect value={genForm.project_id} onChange={e => setGenForm(f => ({ ...f, project_id: e.target.value }))}>
                 <option value="">None</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -84,15 +84,15 @@ export default function LegalPage() {
             </div>
           </div>
           <div className="flex gap-3 mt-4">
-            <button onClick={generate} className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm text-white">Generate</button>
-            <button onClick={() => setShowGen(false)} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-white">Cancel</button>
+            <button onClick={generate} className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm text-gray-900">Generate</button>
+            <button onClick={() => setShowGen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm text-gray-900">Cancel</button>
           </div>
         </div>
       )}
 
       <div className="grid lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
             <Building size={14} className="text-blue-400" /> Legal Entities
           </h3>
           {entities.length === 0 ? (
@@ -100,23 +100,23 @@ export default function LegalPage() {
           ) : (
             <div className="space-y-2">
               {entities.map(e => (
-                <div key={e.id} className="flex items-center justify-between px-3 py-2 bg-gray-800 rounded-lg text-sm">
+                <div key={e.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg text-sm">
                   <div>
-                    <div className="text-white">{e.name}</div>
+                    <div className="text-gray-900">{e.name}</div>
                     <div className="text-xs text-gray-500">{e.entity_type} | {e.jurisdiction}</div>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">{e.status}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">{e.status}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-white mb-3">Available Templates</h3>
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">Available Templates</h3>
           <div className="space-y-2">
             {templates.map(t => (
-              <div key={t.key} className="px-3 py-2 bg-gray-800 rounded-lg text-sm text-gray-300 flex items-center gap-2">
+              <div key={t.key} className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-700 flex items-center gap-2">
                 <FileText size={14} className="text-gray-500" /> {t.title}
               </div>
             ))}
@@ -124,16 +124,16 @@ export default function LegalPage() {
         </div>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-800">
-          <h3 className="font-semibold text-white text-sm">All Documents</h3>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200">
+          <h3 className="font-semibold text-gray-900 text-sm">All Documents</h3>
         </div>
         {documents.length === 0 ? (
           <div className="p-8 text-center text-gray-500 text-sm">No documents generated yet</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800 text-gray-400 text-xs uppercase">
+              <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
                 <th className="text-left px-5 py-3">Title</th>
                 <th className="text-left px-5 py-3 hidden md:table-cell">Type</th>
                 <th className="text-left px-5 py-3">Status</th>
@@ -142,19 +142,19 @@ export default function LegalPage() {
             </thead>
             <tbody className="divide-y divide-gray-800">
               {documents.map(d => (
-                <tr key={d.id} className="hover:bg-gray-800/50">
-                  <td className="px-5 py-3 text-white">{d.title}</td>
-                  <td className="px-5 py-3 hidden md:table-cell text-gray-400">{d.doc_type}</td>
+                <tr key={d.id} className="hover:bg-gray-50/50">
+                  <td className="px-5 py-3 text-gray-900">{d.title}</td>
+                  <td className="px-5 py-3 hidden md:table-cell text-gray-600">{d.doc_type}</td>
                   <td className="px-5 py-3">
                     <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                      d.status === 'signed' ? 'bg-emerald-500/20 text-emerald-400' :
-                      d.status === 'sent' ? 'bg-blue-500/20 text-blue-400' :
-                      d.status === 'generated' ? 'bg-amber-500/20 text-amber-400' :
-                      'bg-gray-700 text-gray-300'
+                      d.status === 'signed' ? 'bg-emerald-100 text-emerald-700' :
+                      d.status === 'sent' ? 'bg-blue-100 text-blue-700' :
+                      d.status === 'generated' ? 'bg-amber-100 text-amber-700' :
+                      'bg-gray-200 text-gray-700'
                     }`}>{d.status}</span>
                   </td>
                   <td className="px-5 py-3">
-                    <button onClick={() => setViewDoc(viewDoc?.id === d.id ? null : d)} className="text-violet-400 hover:text-violet-300 text-xs flex items-center gap-1">
+                    <button onClick={() => setViewDoc(viewDoc?.id === d.id ? null : d)} className="text-violet-600 hover:text-violet-700 text-xs flex items-center gap-1">
                       <Eye size={12} /> View
                     </button>
                   </td>
@@ -167,10 +167,10 @@ export default function LegalPage() {
 
       {viewDoc && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setViewDoc(null)}>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="font-semibold text-white mb-4">{viewDoc.title}</h3>
-            <pre className="text-xs text-gray-300 whitespace-pre-wrap bg-gray-800 p-4 rounded-lg">{viewDoc.content}</pre>
-            <button onClick={() => setViewDoc(null)} className="mt-4 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-white">Close</button>
+          <div className="bg-white border border-gray-200 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-gray-900 mb-4">{viewDoc.title}</h3>
+            <pre className="text-xs text-gray-700 whitespace-pre-wrap bg-gray-50 p-4 rounded-lg">{viewDoc.content}</pre>
+            <button onClick={() => setViewDoc(null)} className="mt-4 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm text-gray-900">Close</button>
           </div>
         </div>
       )}
