@@ -1,9 +1,10 @@
-modules = ["web", "nodejs-20", "ruby-3.2"]
+modules = ["web", "nodejs-20", "ruby-3.2", "python-3.11"]
 [agent]
 expertMode = true
 
 [nix]
 channel = "stable-25_05"
+packages = ["libxcrypt"]
 
 [workflows]
 runButton = "Project"
@@ -21,19 +22,20 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bundle exec jekyll serve --host 0.0.0.0 --port 5000 --livereload"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
 
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd /home/runner/workspace && python -m uvicorn backend.app.main:app --host localhost --port 8000 & cd /home/runner/workspace/frontend && npx vite --host 0.0.0.0 --port 5000"
+waitForPort = 5000
+
 [[ports]]
 localPort = 5000
-externalPort = 5000
+externalPort = 80
 
 [deployment]
-deploymentTarget = "static"
-build = ["bundle", "exec", "jekyll", "build"]
+deploymentTarget = "autoscale"
+build = ["bash", "-c", "cd frontend && npx vite build && cp -r dist ../static"]
 publicDir = "_site"
+run = ["bash", "-c", "cd /home/runner/workspace && python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 5000"]

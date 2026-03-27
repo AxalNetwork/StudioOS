@@ -1,0 +1,100 @@
+You are an expert full-stack AI engineer. Build the **complete production-ready StudioOS v1.0** for Axal VC — an API-powered Venture Studio Operating System.
+
+PROJECT NAME: Axal VC - StudioOS
+TAGLINE: The 30-Day Spin-Out Engine (API Venture Studio OS)
+
+CORE REQUIREMENT: Implement the exact 100-point Startup Scoring Algorithm from the attached PDF as the "Spinout Gatekeeper / Decision Gate".
+
+### 1. HIGH-LEVEL ARCHITECTURE (MUST FOLLOW)
+- HoldCo (Delaware C-Corp) owns everything
+- Studio Ops = Management Company (wholly-owned subsidiary)
+- Projects → Decision Gate (scoring) → Spin-Out Subsidiary or Reject
+- VC Fund / LP layer below
+- StudioOS is the **horizontal API layer** connecting all boxes
+
+Use the exact 7 modules we defined:
+1. Analytics & BI Core
+2. Partner Ecosystem
+3. Diligence & Scoring Engine (this is the #1 priority — use the 100-point rubric)
+4. AI Advisory Suite
+5. Legal & Compliance Engine (use the full OpenAPI spec already provided)
+6. Operations & Support Hub
+7. Capital & Investment Ops
+
+### 2. TECH STACK (Replit-friendly & modern)
+- Backend: FastAPI (Python 3.12) + SQLModel + Alembic
+- Database: Supabase PostgreSQL (or Replit Postgres if Supabase not possible)
+- Auth: Clerk (use Clerk Python SDK)
+- Frontend: React 19 + Vite + Tailwind + shadcn/ui (single-page dashboard style)
+- AI Layer: LangChain + OpenAI (gpt-4o-mini for scoring & advisory)
+- File storage: Supabase Storage (for documents)
+- E-sign: DocuSign sandbox or HelloSign (placeholder API)
+- Incorporation: Stripe Atlas sandbox integration
+- Other: Redis (for caching), Celery/RQ for background jobs, WebSockets for live scoring
+
+### 3. DATABASE SCHEMA (Key Models)
+- Entity (holding_company, project, subsidiary, vc_fund)
+- Project (links to scoring snapshots)
+- Founder / Team
+- ScoreSnapshot (full 100-point breakdown + final tier)
+- Document (templates, generated docs, signed status)
+- DealMemo
+- Partner / LP
+- CapitalCall
+- Ticket
+
+### 4. MUST-HAVE FEATURES (Implement ALL)
+**Killer Feature 1 – Legal & Compliance Engine**
+- Exact OpenAPI spec provided in the PDF (pages ~19-24) — implement every endpoint
+- Automated Incorporation (Stripe Atlas)
+- Model templates + document generation
+- Spin-out workflow (IP licensing + equity allocation)
+
+**Killer Feature 2 – Diligence & Scoring Engine (THE BRAIN)**
+Implement the **exact** 100-point system from the PDF:
+- A. Market (25 pts)
+- B. Founder/Team (20 pts)
+- C. Product Feasibility (15 pts)
+- D. Capital Efficiency (15 pts)
+- E. Axal Strategic Fit (15 pts)
+- F. Distribution Potential (10 pts)
+- Final tiers: 85–100 = Tier 1 (Immediate Spinout), 70–84 = Tier 2, <70 = Reject
+- AI bonus layer (pattern recognition, psychometric signals, market timing)
+- One-click “Run Full Score” that returns the Deal Memo (1-page template from PDF)
+
+**Founder 4-Week Playbook Automation**
+- Week 1: Validation Sprint → AI assistant + market snapshot
+- Week 2: Build + Structure → Auto-incorporation + financial model + pitch deck
+- Week 3: Distribution + Deal Flow → Partner matchmaking
+- Week 4: Capital + Launch → Capital call + portfolio onboarding
+
+**All Other Modules**
+- Partner Matchmaking + Deal Flow + Referral Dashboard (with referral codes)
+- AI Advisory + Financial Planner
+- Live Portfolio Performances
+- Ticket support
+- Publications
+- BI dashboards (market data, venture reports)
+
+### 5. UI / DASHBOARDS (5 Role-Based Views)
+1. Studio Admin Dashboard (Decision Gate + scoring queue)
+2. Founder Portal (playbook progress, AI tools, docs)
+3. Partner Marketplace (matchmaking + referral dashboard)
+4. LP Investor Portal (portfolio + capital calls)
+5. Mobile-responsive + dark mode
+
+### 6. DELIVERABLES I EXPECT FROM YOU
+Build the full monorepo in this Replit:
+- `/backend` → FastAPI app with all routes
+- `/frontend` → React + Vite app
+- `/shared` → types and schemas
+- Seed data with 3 example projects + scoring examples
+- README.md with run instructions + environment variables
+- Docker-compose ready (optional but nice)
+- Deployable to Replit static + FastAPI
+
+Start by creating the project structure, then implement the **Diligence & Scoring Engine + Legal Engine** first (they are the highest priority). After that, add the frontend dashboards and the 4-week playbook automation.
+
+Use realistic mock data where external APIs (Stripe Atlas, DocuSign) are not live.
+
+Begin now — output the folder structure first, then build step-by-step.

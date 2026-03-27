@@ -1,0 +1,290 @@
+You are building **StudioOS (Axal VC)** — an API-first Venture Studio Operating System that enables launching startups in 30 days.
+
+Your task is to generate a **full-stack application** with backend APIs, database schema, and basic frontend dashboards.
+
+---
+
+# 🧠 PRODUCT OVERVIEW
+
+StudioOS is a modular platform with 4 layers:
+
+1. Data Layer (market intelligence, portfolio tracking)
+2. Decision Layer (AI scoring, diligence)
+3. Execution Layer (legal, incorporation, workflows)
+4. Network Layer (partners, deal flow, referrals)
+
+Core goal:
+→ Turn ideas into funded startups in 30 days via automation.
+
+---
+
+# ⚙️ CORE FEATURES TO BUILD (MVP PRIORITY)
+
+## 1. Startup Scoring Engine (Gatekeeper)
+
+* Endpoint: POST /scoreStartup
+
+* Input:
+
+  * market (tam, urgency, trend)
+  * team (experience, execution, network)
+  * product (mvpTimeDays, complexity, dependencies)
+  * financials (costToMVP, timeToRevenueMonths, burnRisk)
+  * axalFit
+  * distribution (channels, virality)
+
+* Output:
+
+  * score (0–100)
+  * tier (TIER_1, TIER_2, REJECT)
+  * breakdown
+
+* Logic:
+
+  * Market: 25%
+  * Team: 20%
+  * Product: 15%
+  * Capital: 15%
+  * Fit: 15%
+  * Distribution: 10%
+
+---
+
+## 2. Deal Flow CRM
+
+* Entities:
+
+  * Startup
+  * Founder
+  * Partner
+  * Deal
+* Features:
+
+  * Track status: applied → scored → active → funded
+  * Store scoring results
+  * Link partners to startups
+
+---
+
+## 3. Partner Matchmaking Engine
+
+* Endpoint: POST /matchPartners
+* Input:
+
+  * startup needs (sector, capital, expertise)
+  * partner profile
+* Output:
+
+  * ranked list of partners
+
+---
+
+## 4. Legal & Incorporation Engine (Mock MVP)
+
+* Endpoint: POST /incorporate
+* Simulate:
+
+  * company creation
+  * document generation
+* Store:
+
+  * entity
+  * documents
+
+---
+
+## 5. Deal Memo Generator
+
+* Endpoint: POST /generateMemo
+* Input: startup data
+* Output:
+
+  * structured memo:
+
+    * problem
+    * solution
+    * traction
+    * risks
+    * decision
+
+---
+
+## 6. Capital Call System (Basic)
+
+* Endpoint: POST /capitalCall
+* Input:
+
+  * startup_id
+  * amount
+* Output:
+
+  * list of participating partners
+
+---
+
+# 🗓️ SPINOUT WORKFLOW LOGIC
+
+Implement a 4-stage pipeline:
+
+1. VALIDATION
+2. BUILD
+3. DEALFLOW
+4. CAPITAL
+
+Each startup progresses through stages.
+
+---
+
+# 🧱 DATABASE SCHEMA (PostgreSQL)
+
+Tables:
+
+* users (id, role: admin/founder/partner)
+* startups (id, name, stage, score, tier)
+* founders (id, startup_id)
+* partners (id, expertise, capital)
+* deals (id, startup_id, status)
+* scores (id, startup_id, breakdown_json)
+* entities (id, startup_id, legal_status)
+* documents (id, entity_id, type, url)
+* capital_calls (id, startup_id, amount)
+
+---
+
+# 🔌 API STRUCTURE
+
+Build REST API:
+
+* POST /scoreStartup
+
+* POST /matchPartners
+
+* POST /incorporate
+
+* POST /generateMemo
+
+* POST /capitalCall
+
+* GET /startups
+
+* GET /partners
+
+* GET /deals
+
+---
+
+# 🤖 AI INTEGRATION (IMPORTANT)
+
+Use OpenAI API for:
+
+* memo generation
+* scoring enhancement (optional)
+* founder advisory (future endpoint)
+
+---
+
+# 🖥️ FRONTEND (BASIC DASHBOARD)
+
+Build simple UI:
+
+## Admin Dashboard
+
+* List startups
+* View scores
+* Trigger actions
+
+## Founder View
+
+* Submit startup
+* View score + feedback
+
+## Partner View
+
+* View deals
+* Accept capital calls
+
+---
+
+# ⚙️ TECH STACK
+
+Backend:
+
+* Node.js (Express or NestJS)
+
+Database:
+
+* PostgreSQL
+
+ORM:
+
+* Prisma
+
+Frontend:
+
+* Next.js or simple React
+
+AI:
+
+* OpenAI API
+
+---
+
+# 🔐 AUTH
+
+* JWT-based authentication
+* Roles:
+
+  * admin
+  * founder
+  * partner
+
+---
+
+# ⚡ AUTOMATION LOGIC
+
+* When startup is created → auto score
+* If score ≥ 85 → move to BUILD stage
+* If score ≥ 70 → mark as conditional
+* Else → reject
+
+---
+
+# 🚀 BONUS (IF TIME)
+
+* Referral system (partner codes)
+* Notifications (email/logs)
+* AI advisor endpoint
+
+---
+
+# 🎯 FINAL OUTPUT
+
+Generate:
+
+1. Full backend API
+2. Database schema
+3. Basic frontend dashboard
+4. Working scoring system
+
+Ensure:
+
+* Clean modular architecture
+* Easy to extend
+* API-first design
+
+---
+
+# IMPORTANT
+
+This is not a demo.
+
+Build it as a real scalable product structure with:
+
+* services
+* controllers
+* models
+* routes
+
+---
+
+Start building StudioOS now.
