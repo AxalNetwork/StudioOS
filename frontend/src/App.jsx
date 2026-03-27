@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
-  Ticket, Menu, X, Zap, ChevronRight, Handshake, Rocket, UserCircle
+  Ticket, Menu, X, Zap, ChevronRight, Handshake, Rocket, UserCircle,
+  Globe, Brain, Activity, Briefcase
 } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import ScoringPage from './pages/ScoringPage';
@@ -15,18 +16,26 @@ import TicketsPage from './pages/TicketsPage';
 import DealsPage from './pages/DealsPage';
 import FounderPortal from './pages/FounderPortal';
 import PartnerPortal from './pages/PartnerPortal';
+import MarketIntelPage from './pages/MarketIntelPage';
+import AdvisoryPage from './pages/AdvisoryPage';
+import ActivityPage from './pages/ActivityPage';
+import LPPortalPage from './pages/LPPortalPage';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/scoring', icon: Target, label: 'Scoring Engine' },
   { to: '/projects', icon: Zap, label: 'Projects' },
   { to: '/deals', icon: Handshake, label: 'Deal Flow' },
+  { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
+  { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
   { to: '/legal', icon: FileText, label: 'Legal & Compliance' },
   { to: '/partners', icon: Users, label: 'Partners' },
   { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
   { to: '/tickets', icon: Ticket, label: 'Support' },
+  { to: '/activity', icon: Activity, label: 'Activity Log' },
   { to: '/founder', icon: Rocket, label: 'Founder Portal', divider: true },
   { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal' },
+  { to: '/lp-portal', icon: Briefcase, label: 'LP Investor Portal' },
 ];
 
 export default function App() {
@@ -99,8 +108,12 @@ export default function App() {
             <Route path="/capital" element={<CapitalPage />} />
             <Route path="/tickets" element={<TicketsPage />} />
             <Route path="/deals" element={<DealsPage />} />
+            <Route path="/market-intel" element={<MarketIntelPage />} />
+            <Route path="/advisory" element={<AdvisoryPage />} />
+            <Route path="/activity" element={<ActivityPage />} />
             <Route path="/founder" element={<FounderPortal />} />
             <Route path="/partner-portal" element={<PartnerPortal />} />
+            <Route path="/lp-portal" element={<LPPortalPage />} />
           </Routes>
         </div>
       </main>

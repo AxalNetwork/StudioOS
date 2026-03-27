@@ -7,7 +7,7 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 - **Backend**: Python 3.11 + FastAPI + SQLModel + Uvicorn
 - **Frontend**: React 19 + Vite + Tailwind CSS
 - **Database**: Replit PostgreSQL
-- **AI**: OpenAI API (optional, for memo generation)
+- **AI**: OpenAI API (optional, for memo generation + advisory)
 - **Architecture**: Monorepo with `/backend` and `/frontend`
 
 ## Project Structure
@@ -30,6 +30,9 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
       tickets.py       — Support hub
       deals.py         — Deal flow pipeline (applied→scored→active→funded)
       users.py         — User management with roles (admin/founder/partner)
+      market_intel.py  — Market intelligence (sector signals, macro, private rounds)
+      advisory.py      — AI advisory + financial planner + diligence checker
+      activity.py      — Activity/audit log endpoints
   seed.py              — Seed data script
 
 /frontend/
@@ -37,18 +40,31 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
     App.jsx            — Main app with routing + sidebar
     lib/api.js         — API client
     pages/
-      Dashboard.jsx    — Studio overview dashboard
-      ScoringPage.jsx  — 100-point scoring UI
-      ProjectsPage.jsx — Project pipeline
-      ProjectDetail.jsx — Project detail + playbook
-      LegalPage.jsx    — Legal docs & incorporation
-      PartnersPage.jsx — Partner matchmaking + referrals
-      CapitalPage.jsx  — LP investors & capital calls
-      TicketsPage.jsx  — Support ticket management
-      DealsPage.jsx    — Deal flow pipeline with status progression
+      Dashboard.jsx     — Studio overview dashboard
+      ScoringPage.jsx   — 100-point scoring UI
+      ProjectsPage.jsx  — Project pipeline
+      ProjectDetail.jsx — Project detail + playbook + 4-week tracker
+      LegalPage.jsx     — Legal docs & incorporation
+      PartnersPage.jsx  — Partner matchmaking + referrals
+      CapitalPage.jsx   — LP investors & capital calls
+      TicketsPage.jsx   — Support ticket management
+      DealsPage.jsx     — Deal flow pipeline with status progression
       FounderPortal.jsx — Founder submission form with auto-scoring
       PartnerPortal.jsx — Partner view: deals + capital call acceptance
+      MarketIntelPage.jsx — Market intelligence (pulse, macro, private, conviction, benchmarks)
+      AdvisoryPage.jsx  — AI advisory + financial planner + diligence checker
+      ActivityPage.jsx  — System activity/audit log
+      LPPortalPage.jsx  — LP investor portal (portfolio, capital calls, returns)
 ```
+
+## StudioOS Modules (7 Engines)
+1. **Intelligence Engine** — BI, market data, sector signals, competitive intelligence, studio benchmarks
+2. **Scoring & Diligence Engine** — 100-pt scoring, automated diligence (legal/tech/financial checks)
+3. **AI Advisory Suite** — AI advisor (strategy/GTM/fundraising), financial planner, diligence automation
+4. **Deal & Match Engine** — Deal flow pipeline, partner matchmaking, referral system
+5. **Legal & Compliance Engine** — Incorporation, templates (SAFE, bylaws, equity, IP), document management, spinout workflow
+6. **Operations & Support Hub** — Ticket support, activity/audit log
+7. **Capital & Investment Engine** — Capital calls, LP investor portal, portfolio performance tracking
 
 ## Database Tables
 - **users** — id, email, name, role (admin/founder/partner), password_hash
@@ -59,27 +75,45 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 - **score_snapshots** — Historical scoring records
 - **deal_memos** — Structured investment memos
 - **documents** — Legal documents
-- **entities** — Legal entities
+- **entities** — Legal entities (holding company, subsidiary, VC fund)
 - **lp_investors** — Limited Partners
 - **capital_calls** — Capital call tracking
 - **tickets** — Support tickets
-- **activity_logs** — System activity tracking
+- **activity_logs** — System activity/audit tracking
 
 ## API Endpoints
-- POST /api/scoring/score — Score a startup
-- POST /api/scoring/generateMemo — AI-generated deal memo (standalone)
+Core:
+- POST /api/scoring/score — Score a startup (100-pt algorithm)
+- POST /api/scoring/generateMemo — AI-generated deal memo
 - POST /api/projects/submit — Founder submission with auto-scoring
 - POST /api/partners/matchPartners — Ranked partner matchmaking
 - POST /api/capital/capitalCall — Capital call with partner participation
-- GET /api/deals/ — Deal flow pipeline
-- GET /api/users/ — User management
-- Full CRUD on projects, partners, investors, tickets, deals
+
+Market Intelligence:
+- GET /api/market-intel/market-pulse — Sector signals + gap opportunities
+- GET /api/market-intel/macro — Public market data (P/E, growth, IPO windows)
+- GET /api/market-intel/private-rounds — Recent private funding rounds
+- GET /api/market-intel/studio-benchmarks — Studio performance metrics
+- GET /api/market-intel/competitive-intelligence — High-conviction plays
+
+AI Advisory:
+- POST /api/advisory/ask — AI strategy advisor (GTM, fundraising, product, team)
+- POST /api/advisory/financial-plan — Financial planner (burn, runway, projections)
+- POST /api/advisory/diligence — Automated diligence checker
+
+Activity:
+- GET /api/activity/ — Activity log with filtering
+- GET /api/activity/summary — Activity summary + action breakdown
+
+Full CRUD on projects, partners, investors, tickets, deals, users, documents, entities.
 
 ## Automation Logic
-- When startup is submitted via Founder Portal → auto-scored immediately
+- Startup submitted via Founder Portal → auto-scored immediately
 - Score ≥ 85 → TIER_1 (Immediate Spinout), stage → BUILD
 - Score ≥ 70 → TIER_2 (Conditional), deal status → scored
 - Score < 70 → REJECTED
+- Diligence checker auto-validates scoring, legal docs, team, financials
+- Activity log auto-records all system actions
 
 ## Scoring Algorithm (100 points)
 - A. Market (25 pts): TAM/SAM (0-10), Urgency (0-10), Trend (0-5)
@@ -89,16 +123,22 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 - E. Strategic Fit (15 pts): Alignment (0-10), Synergy (0-5)
 - F. Distribution (10 pts): Channels (0-5), Virality (0-5)
 
+## User Portals
+1. **StudioOS Dashboard** — Studio admin overview (projects, deals, partners, scores)
+2. **Founder Portal** — Multi-step submission with instant scoring results
+3. **Partner Portal** — Deal access + capital call acceptance
+4. **LP Investor Portal** — Portfolio performance, capital calls, returns tracking
+
 ## Development
 Backend runs on port 8000 (localhost), Frontend on port 5000 (0.0.0.0).
 Vite proxies /api/* to the backend.
 
 ## Seed Data
-3 example projects (NexusAI, ChainFlow, DataCortex), 3 partners, 2 LP investors, 2 tickets.
+4 example projects, 3 partners, 2 LP investors, 2 tickets.
 
 ## Deployment
 Autoscale deployment: builds frontend, serves via FastAPI with static files.
 
 ## Environment Variables
 - DATABASE_URL — PostgreSQL connection (auto-set by Replit)
-- OPENAI_API_KEY — Optional, for AI memo generation (falls back to template-based memos)
+- OPENAI_API_KEY — Optional, for AI advisory + memo generation (falls back to templates)

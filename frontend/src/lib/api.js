@@ -64,4 +64,17 @@ export const api = {
   capitalCall: (data) => request('/capital/capitalCall', { method: 'POST', body: JSON.stringify(data) }),
 
   founderSubmit: (data) => request('/projects/submit', { method: 'POST', body: JSON.stringify(data) }),
+
+  marketPulse: () => request('/market-intel/market-pulse'),
+  marketMacro: () => request('/market-intel/macro'),
+  privateRounds: () => request('/market-intel/private-rounds'),
+  studioBenchmarks: () => request('/market-intel/studio-benchmarks'),
+  competitiveIntelligence: () => request('/market-intel/competitive-intelligence'),
+
+  askAdvisory: (data) => request('/advisory/ask', { method: 'POST', body: JSON.stringify(data) }),
+  financialPlan: (data) => request('/advisory/financial-plan', { method: 'POST', body: JSON.stringify(data) }),
+  runDiligence: (data) => request('/advisory/diligence', { method: 'POST', body: JSON.stringify(data) }),
+
+  activityLog: (params) => request(`/activity/${params ? `?${new URLSearchParams(params)}` : ''}`),
+  activitySummary: () => request('/activity/summary'),
 };
