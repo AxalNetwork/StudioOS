@@ -10,10 +10,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white text-gray-900">
       <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <img src="/axal-mark.png" alt="Axal Ventures" className="h-8" />
-            <span className="font-bold text-lg text-gray-900">Axal</span>
-          </div>
+          <img src="/axal-mark.png" alt="Axal Ventures" className="h-8" />
           <div className="hidden md:flex items-center gap-8">
             <a href="#about" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">About</a>
             <a href="#how-it-works" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">How It Works</a>
@@ -239,10 +236,7 @@ export default function LandingPage() {
 
       <footer className="py-12 px-6 border-t border-gray-200">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-1.5">
-            <img src="/axal-mark.png" alt="Axal Ventures" className="h-5" />
-            <span className="font-bold text-sm text-gray-900">Axal</span>
-          </div>
+          <img src="/axal-mark.png" alt="Axal Ventures" className="h-5" />
           <div className="text-xs text-gray-600">
             Rue Robert-Ceard 6, 1204 Geneva, Switzerland
           </div>

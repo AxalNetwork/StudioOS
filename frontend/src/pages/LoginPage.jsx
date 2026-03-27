@@ -35,10 +35,7 @@ export default function LoginPage() {
         </Link>
 
         <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-          <div className="flex items-center gap-2 mb-6">
-            <img src="/axal-mark.png" alt="Axal" className="h-8" />
-            <span className="font-bold text-lg text-gray-900">Axal</span>
-          </div>
+          <img src="/axal-mark.png" alt="Axal" className="h-8 mb-6" />
 
           <h2 className="text-xl font-bold text-gray-900 mb-1">Welcome Back</h2>
           <p className="text-sm text-gray-600 mb-6">Sign in with your email and authenticator code.</p>
