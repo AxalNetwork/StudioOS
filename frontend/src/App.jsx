@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
-  Ticket, Menu, X, Zap, ChevronRight, Handshake, Rocket, UserCircle,
-  Globe, Brain, Activity, Briefcase
+  Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
+  Globe, Brain, Activity, Briefcase, LogOut
 } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import ScoringPage from './pages/ScoringPage';
@@ -20,6 +20,9 @@ import MarketIntelPage from './pages/MarketIntelPage';
 import AdvisoryPage from './pages/AdvisoryPage';
 import ActivityPage from './pages/ActivityPage';
 import LPPortalPage from './pages/LPPortalPage';
+import LandingPage from './pages/LandingPage';
+import RegisterPage from './pages/RegisterPage';
+import LoginPage from './pages/LoginPage';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -38,7 +41,7 @@ const navItems = [
   { to: '/lp-portal', icon: Briefcase, label: 'LP Investor Portal' },
 ];
 
-export default function App() {
+function ProtectedLayout({ children, user, onLogout }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -80,8 +83,18 @@ export default function App() {
             </React.Fragment>
           ))}
         </nav>
-        <div className="px-5 py-3 border-t border-gray-800 text-xs text-gray-500">
-          The 30-Day Spin-Out Engine
+        <div className="px-5 py-3 border-t border-gray-800">
+          {user && (
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-white font-medium truncate">{user.name}</div>
+                <div className="text-[10px] text-gray-500 truncate">{user.email}</div>
+              </div>
+              <button onClick={onLogout} className="text-gray-500 hover:text-red-400 transition-colors" title="Sign out">
+                <LogOut size={14} />
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -97,26 +110,64 @@ export default function App() {
           <div className="text-sm font-medium text-gray-300">Axal VC StudioOS</div>
         </header>
         <div className="p-4 md:p-6 max-w-7xl mx-auto">
-          <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/scoring" element={<ScoringPage />} />
-            <Route path="/projects" element={<ProjectsPage />} />
-            <Route path="/projects/:id" element={<ProjectDetail />} />
-            <Route path="/legal" element={<LegalPage />} />
-            <Route path="/partners" element={<PartnersPage />} />
-            <Route path="/capital" element={<CapitalPage />} />
-            <Route path="/tickets" element={<TicketsPage />} />
-            <Route path="/deals" element={<DealsPage />} />
-            <Route path="/market-intel" element={<MarketIntelPage />} />
-            <Route path="/advisory" element={<AdvisoryPage />} />
-            <Route path="/activity" element={<ActivityPage />} />
-            <Route path="/founder" element={<FounderPortal />} />
-            <Route path="/partner-portal" element={<PartnerPortal />} />
-            <Route path="/lp-portal" element={<LPPortalPage />} />
-          </Routes>
+          {children}
         </div>
       </main>
     </div>
+  );
+}
+
+function RequireAuth({ user, children, onLogout }) {
+  const location = useLocation();
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  return <ProtectedLayout user={user} onLogout={onLogout}>{children}</ProtectedLayout>;
+}
+
+export default function App() {
+  const [user, setUser] = useState(() => {
+    const stored = localStorage.getItem('user');
+    return stored ? JSON.parse(stored) : null;
+  });
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    window.location.href = '/';
+  };
+
+  useEffect(() => {
+    const handleStorage = () => {
+      const stored = localStorage.getItem('user');
+      setUser(stored ? JSON.parse(stored) : null);
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  return (
+    <Routes>
+      <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
+      <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
+      <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+
+      <Route path="/dashboard" element={<RequireAuth user={user} onLogout={logout}><Dashboard /></RequireAuth>} />
+      <Route path="/scoring" element={<RequireAuth user={user} onLogout={logout}><ScoringPage /></RequireAuth>} />
+      <Route path="/projects" element={<RequireAuth user={user} onLogout={logout}><ProjectsPage /></RequireAuth>} />
+      <Route path="/projects/:id" element={<RequireAuth user={user} onLogout={logout}><ProjectDetail /></RequireAuth>} />
+      <Route path="/legal" element={<RequireAuth user={user} onLogout={logout}><LegalPage /></RequireAuth>} />
+      <Route path="/partners" element={<RequireAuth user={user} onLogout={logout}><PartnersPage /></RequireAuth>} />
+      <Route path="/capital" element={<RequireAuth user={user} onLogout={logout}><CapitalPage /></RequireAuth>} />
+      <Route path="/tickets" element={<RequireAuth user={user} onLogout={logout}><TicketsPage /></RequireAuth>} />
+      <Route path="/deals" element={<RequireAuth user={user} onLogout={logout}><DealsPage /></RequireAuth>} />
+      <Route path="/market-intel" element={<RequireAuth user={user} onLogout={logout}><MarketIntelPage /></RequireAuth>} />
+      <Route path="/advisory" element={<RequireAuth user={user} onLogout={logout}><AdvisoryPage /></RequireAuth>} />
+      <Route path="/activity" element={<RequireAuth user={user} onLogout={logout}><ActivityPage /></RequireAuth>} />
+      <Route path="/founder" element={<RequireAuth user={user} onLogout={logout}><FounderPortal /></RequireAuth>} />
+      <Route path="/partner-portal" element={<RequireAuth user={user} onLogout={logout}><PartnerPortal /></RequireAuth>} />
+      <Route path="/lp-portal" element={<RequireAuth user={user} onLogout={logout}><LPPortalPage /></RequireAuth>} />
+    </Routes>
   );
 }

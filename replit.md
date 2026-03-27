@@ -22,6 +22,7 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
       scoring.py       — 100-point scoring algorithm
       ai_memo.py       — AI-powered deal memo generation (OpenAI)
     api/routes/
+      auth.py          — TOTP authentication (register, login, JWT)
       scoring.py       — Scoring engine + POST /generateMemo
       projects.py      — Project CRUD + playbook + auto-scoring (POST /submit)
       legal.py         — Legal & compliance engine
@@ -37,9 +38,12 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 
 /frontend/
   src/
-    App.jsx            — Main app with routing + sidebar
-    lib/api.js         — API client
+    App.jsx            — Main app with routing, auth guard, sidebar
+    lib/api.js         — API client with JWT auth headers
     pages/
+      LandingPage.jsx   — Public landing page (Axal Ventures)
+      RegisterPage.jsx  — Registration with TOTP QR setup
+      LoginPage.jsx     — TOTP-based login
       Dashboard.jsx     — Studio overview dashboard
       ScoringPage.jsx   — 100-point scoring UI
       ProjectsPage.jsx  — Project pipeline
@@ -81,7 +85,22 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 - **tickets** — Support tickets
 - **activity_logs** — System activity/audit tracking
 
+## Authentication
+- TOTP-based (passwordless) authentication using pyotp
+- Registration generates a TOTP secret + QR code for authenticator apps
+- Login requires email + 6-digit TOTP code from authenticator
+- JWT tokens (24h expiry) for session management
+- Frontend auth guard redirects unauthenticated users to login
+- Public pages: Landing (/), Register (/register), Login (/login)
+- All dashboard routes are protected behind authentication
+
 ## API Endpoints
+Auth:
+- POST /api/auth/register — Register + get TOTP QR code
+- POST /api/auth/login — Login with email + TOTP code → JWT
+- GET /api/auth/me — Get current user (requires JWT)
+- POST /api/auth/verify-totp — Verify a TOTP code
+
 Core:
 - POST /api/scoring/score — Score a startup (100-pt algorithm)
 - POST /api/scoring/generateMemo — AI-generated deal memo
@@ -142,3 +161,9 @@ Autoscale deployment: builds frontend, serves via FastAPI with static files.
 ## Environment Variables
 - DATABASE_URL — PostgreSQL connection (auto-set by Replit)
 - OPENAI_API_KEY — Optional, for AI advisory + memo generation (falls back to templates)
+- JWT_SECRET — JWT signing key (defaults to dev key if not set)
+
+## Auth Packages
+- pyotp — TOTP generation/verification
+- PyJWT — JWT token creation/validation
+- qrcode — QR code generation for authenticator setup
