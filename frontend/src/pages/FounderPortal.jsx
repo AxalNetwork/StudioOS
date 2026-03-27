@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
 import { api } from '../lib/api';
-import { Rocket, CheckCircle, XCircle, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Rocket, CheckCircle, XCircle, AlertTriangle, ArrowRight, ChevronDown } from 'lucide-react';
+
+function ModernSelect({ value, onChange, children, ...props }) {
+  return (
+    <div className="relative">
+      <select value={value} onChange={onChange} {...props}
+        className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400">
+        {children}
+      </select>
+      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+    </div>
+  );
+}
 
 const SECTORS = ['AI/Infrastructure', 'Blockchain/DeFi', 'Data/Analytics', 'FinTech', 'HealthTech', 'CleanTech', 'EdTech', 'SaaS', 'Other'];
 
@@ -76,11 +88,11 @@ export default function FounderPortal() {
               <input className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" value={form.name} onChange={e => handleChange('name', e.target.value)} />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Sector</label>
-              <select className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" value={form.sector} onChange={e => handleChange('sector', e.target.value)}>
+              <label className="block text-sm text-gray-400 mb-1 font-medium">Sector</label>
+              <ModernSelect value={form.sector} onChange={e => handleChange('sector', e.target.value)}>
                 <option value="">Select sector</option>
                 {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              </ModernSelect>
             </div>
             <div>
               <label className="block text-sm text-gray-400 mb-1">Your Name *</label>

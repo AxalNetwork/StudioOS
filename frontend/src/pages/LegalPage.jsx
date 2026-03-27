@@ -1,6 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { FileText, Plus, Building, Eye } from 'lucide-react';
+import { FileText, Plus, Building, Eye, ChevronDown } from 'lucide-react';
+
+function ModernSelect({ value, onChange, children, ...props }) {
+  return (
+    <div className="relative">
+      <select value={value} onChange={onChange} {...props}
+        className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400">
+        {children}
+      </select>
+      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+    </div>
+  );
+}
 
 export default function LegalPage() {
   const [documents, setDocuments] = useState([]);
@@ -53,11 +65,10 @@ export default function LegalPage() {
           <h2 className="font-semibold text-white text-sm mb-4">Generate Document from Template</h2>
           <div className="grid md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Template</label>
-              <select value={genForm.doc_type} onChange={e => setGenForm(f => ({ ...f, doc_type: e.target.value }))}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
+              <label className="block text-xs text-gray-400 mb-1 font-medium">Template</label>
+              <ModernSelect value={genForm.doc_type} onChange={e => setGenForm(f => ({ ...f, doc_type: e.target.value }))}>
                 {templates.map(t => <option key={t.key} value={t.key}>{t.title}</option>)}
-              </select>
+              </ModernSelect>
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Title</label>
@@ -65,12 +76,11 @@ export default function LegalPage() {
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Project</label>
-              <select value={genForm.project_id} onChange={e => setGenForm(f => ({ ...f, project_id: e.target.value }))}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
+              <label className="block text-xs text-gray-400 mb-1 font-medium">Project</label>
+              <ModernSelect value={genForm.project_id} onChange={e => setGenForm(f => ({ ...f, project_id: e.target.value }))}>
                 <option value="">None</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              </ModernSelect>
             </div>
           </div>
           <div className="flex gap-3 mt-4">

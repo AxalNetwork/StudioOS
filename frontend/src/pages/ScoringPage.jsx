@@ -2,6 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Target, ChevronDown, ChevronUp, Play, FileText } from 'lucide-react';
 
+function ModernSelect({ value, onChange, children, ...props }) {
+  return (
+    <div className="relative">
+      <select value={value} onChange={onChange} {...props}
+        className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400">
+        {children}
+      </select>
+      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+    </div>
+  );
+}
+
 const defaultForm = {
   tam: 500000000, market_urgency: 7, market_trend: 4,
   team_expertise: 6, team_execution: 7, team_network: 3,
@@ -80,15 +92,14 @@ export default function ScoringPage() {
             </div>
 
             <div className="mb-4">
-              <label className="block text-xs text-gray-400 mb-1">Link to Project (optional)</label>
-              <select
+              <label className="block text-xs text-gray-400 mb-1 font-medium">Link to Project (optional)</label>
+              <ModernSelect
                 value={selectedProject || ''}
                 onChange={e => setSelectedProject(e.target.value ? parseInt(e.target.value) : null)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
               >
                 <option value="">Standalone scoring</option>
                 {queue.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              </ModernSelect>
             </div>
 
             <Section title="A. Market (25 pts)">

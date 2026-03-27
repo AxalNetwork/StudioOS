@@ -1,6 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Ticket, Plus } from 'lucide-react';
+import { Ticket, Plus, ChevronDown } from 'lucide-react';
+
+function ModernSelect({ value, onChange, children, ...props }) {
+  return (
+    <div className="relative">
+      <select value={value} onChange={onChange} {...props}
+        className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400">
+        {children}
+      </select>
+      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+    </div>
+  );
+}
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState([]);
@@ -59,14 +71,13 @@ export default function TicketsPage() {
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Priority</label>
-              <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
+              <label className="block text-xs text-gray-400 mb-1 font-medium">Priority</label>
+              <ModernSelect value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
                 <option value="urgent">Urgent</option>
-              </select>
+              </ModernSelect>
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Submitted By</label>

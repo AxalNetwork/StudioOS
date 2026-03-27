@@ -1,6 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { Brain, Send, DollarSign, BarChart3, CheckCircle, AlertTriangle, XCircle, Info } from 'lucide-react';
+import { Brain, Send, DollarSign, BarChart3, CheckCircle, AlertTriangle, XCircle, Info, ChevronDown } from 'lucide-react';
 import { api } from '../lib/api';
+
+function ModernSelect({ value, onChange, children, ...props }) {
+  return (
+    <div className="relative">
+      <select value={value} onChange={onChange} {...props}
+        className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400">
+        {children}
+      </select>
+      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+    </div>
+  );
+}
 
 export default function AdvisoryPage() {
   const [tab, setTab] = useState('advisor');
@@ -70,19 +82,17 @@ function AdvisorTab({ projects }) {
             <Brain size={16} className="text-violet-400" /> Ask the AI Advisor
           </h3>
           <div className="flex gap-3 mb-3">
-            <select value={category} onChange={e => setCategory(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200">
+            <ModernSelect value={category} onChange={e => setCategory(e.target.value)}>
               <option value="general">General Strategy</option>
               <option value="gtm">Go-to-Market</option>
               <option value="fundraising">Fundraising</option>
               <option value="product">Product</option>
               <option value="team">Team Building</option>
-            </select>
-            <select value={projectId} onChange={e => setProjectId(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200">
+            </ModernSelect>
+            <ModernSelect value={projectId} onChange={e => setProjectId(e.target.value)}>
               <option value="">No project context</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </ModernSelect>
           </div>
           <div className="flex gap-2">
             <input value={question} onChange={e => setQuestion(e.target.value)}
