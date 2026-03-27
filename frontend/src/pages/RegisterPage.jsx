@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowLeft, Shield, Smartphone, Copy, Check } from 'lucide-react';
+import QRCode from 'qrcode';
 import { api } from '../lib/api';
 
 export default function RegisterPage() {
-  const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ email: '', name: '', role: 'partner' });
   const [totpData, setTotpData] = useState(null);
@@ -12,6 +12,17 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    if (totpData?.provisioning_uri && canvasRef.current) {
+      QRCode.toCanvas(canvasRef.current, totpData.provisioning_uri, {
+        width: 200,
+        margin: 2,
+        color: { dark: '#000000', light: '#ffffff' },
+      });
+    }
+  }, [totpData]);
 
   const register = async () => {
     if (!form.email || !form.name) {
@@ -130,11 +141,7 @@ export default function RegisterPage() {
               {error && <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mb-4">{error}</div>}
 
               <div className="bg-white rounded-xl p-4 flex items-center justify-center mb-4">
-                {totpData.qr_code ? (
-                  <img src={`data:image/png;base64,${totpData.qr_code}`} alt="TOTP QR Code" className="w-48 h-48" />
-                ) : (
-                  <div className="text-gray-500 text-sm py-8">QR code unavailable. Use the secret key below.</div>
-                )}
+                <canvas ref={canvasRef} className="rounded" />
               </div>
 
               <div className="bg-gray-800 rounded-lg p-3 mb-4">
