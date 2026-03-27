@@ -7,27 +7,23 @@ import {
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <nav className="fixed top-0 w-full z-50 bg-gray-950/80 backdrop-blur border-b border-gray-800/50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-white text-gray-900">
+      <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-violet-600 flex items-center justify-center font-bold text-sm">A</div>
-            <div>
-              <span className="font-bold text-lg">Axal</span>
-              <span className="text-violet-400 font-bold text-lg"> Ventures</span>
-            </div>
+            <img src="/axal-logo.png" alt="Axal Ventures" className="h-7" />
           </div>
           <div className="hidden md:flex items-center gap-8">
-            <a href="#about" className="text-sm text-gray-400 hover:text-white transition-colors">About</a>
-            <a href="#how-it-works" className="text-sm text-gray-400 hover:text-white transition-colors">How It Works</a>
-            <a href="#features" className="text-sm text-gray-400 hover:text-white transition-colors">Platform</a>
-            <a href="#partners" className="text-sm text-gray-400 hover:text-white transition-colors">Partners</a>
+            <a href="#about" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">About</a>
+            <a href="#how-it-works" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">How It Works</a>
+            <a href="#features" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Platform</a>
+            <a href="#partners" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Partners</a>
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm text-gray-300 hover:text-white transition-colors px-4 py-2">
+            <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 transition-colors px-4 py-2">
               Sign In
             </Link>
-            <Link to="/register" className="text-sm bg-violet-600 hover:bg-violet-500 transition-colors px-5 py-2 rounded-lg font-medium">
+            <Link to="/register" className="text-sm bg-violet-600 hover:bg-violet-700 transition-colors text-white px-5 py-2 rounded-lg font-medium">
               Get Started
             </Link>
           </div>
@@ -37,25 +33,25 @@ export default function LandingPage() {
       <section className="pt-32 pb-20 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-violet-500/10 border border-violet-500/20 rounded-full text-xs text-violet-400 mb-8">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-violet-100 border border-violet-300 rounded-full text-xs text-violet-700 mb-8">
               <Zap size={12} /> The 30-Day Spin-Out Engine
             </div>
-            <h1 className="text-5xl md:text-7xl font-bold leading-tight mb-6">
+            <h1 className="text-5xl md:text-7xl font-bold leading-tight mb-6 text-gray-900">
               From Idea to{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-violet-600">
+              <span className="text-violet-600">
                 Funded Company
               </span>
               <br />in 30 Days
             </h1>
-            <p className="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+            <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto mb-10 leading-relaxed">
               Axal Ventures is the operating system for venture creation. We combine AI-powered scoring, 
               automated incorporation, and a global partner network to manufacture startups at scale.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link to="/register" className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 transition-all px-8 py-3.5 rounded-xl text-sm font-medium shadow-lg shadow-violet-600/20 hover:shadow-violet-600/40">
+              <Link to="/register" className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-8 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20 hover:shadow-violet-600/40">
                 Apply as Partner <ArrowRight size={16} />
               </Link>
-              <a href="#how-it-works" className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 transition-colors px-8 py-3.5 rounded-xl text-sm font-medium text-gray-300">
+              <a href="#how-it-works" className="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 transition-colors px-8 py-3.5 rounded-xl text-sm font-medium text-gray-900">
                 See How It Works <ChevronRight size={16} />
               </a>
             </div>
@@ -68,8 +64,8 @@ export default function LandingPage() {
               { value: '88', label: 'Match Rate', suffix: '%' },
               { value: '11', label: 'Days to Inc.', suffix: '' },
             ].map((stat, i) => (
-              <div key={i} className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 text-center">
-                <div className="text-2xl md:text-3xl font-bold text-violet-400">{stat.value}<span className="text-lg">{stat.suffix}</span></div>
+              <div key={i} className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+                <div className="text-2xl md:text-3xl font-bold text-violet-600">{stat.value}<span className="text-lg">{stat.suffix}</span></div>
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">{stat.label}</div>
               </div>
             ))}
@@ -77,11 +73,11 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="about" className="py-20 px-6 bg-gray-900/30">
+      <section id="about" className="py-20 px-6 bg-gray-50">
         <div className="max-w-7xl mx-auto">
           <div className="max-w-3xl mx-auto text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">A Venture Studio, Reimagined</h2>
-            <p className="text-gray-400 leading-relaxed">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">A Venture Studio, Reimagined</h2>
+            <p className="text-gray-600 leading-relaxed">
               Traditional VCs are fragmented, manual, and relationship-driven. 
               Axal is building a programmable venture network — the AWS for venture capital. 
               We combine data, AI, and global partnerships into a single operating system.
@@ -105,12 +101,12 @@ export default function LandingPage() {
                 desc: 'AI-matched partners bring deals, capital, and expertise. Referral systems create compounding network effects.',
               },
             ].map((item, i) => (
-              <div key={i} className="bg-gray-900 border border-gray-800 rounded-2xl p-8 hover:border-violet-500/30 transition-colors">
-                <div className="w-12 h-12 rounded-xl bg-violet-500/10 flex items-center justify-center mb-5">
-                  <item.icon size={22} className="text-violet-400" />
+              <div key={i} className="bg-white border border-gray-200 rounded-2xl p-8 hover:border-violet-300 hover:shadow-lg transition-all">
+                <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center mb-5">
+                  <item.icon size={22} className="text-violet-600" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
-                <p className="text-sm text-gray-400 leading-relaxed">{item.desc}</p>
+                <h3 className="text-lg font-semibold mb-2 text-gray-900">{item.title}</h3>
+                <p className="text-sm text-gray-600 leading-relaxed">{item.desc}</p>
               </div>
             ))}
           </div>
@@ -120,8 +116,8 @@ export default function LandingPage() {
       <section id="how-it-works" className="py-20 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">The 4-Week Pipeline</h2>
-            <p className="text-gray-400 max-w-xl mx-auto">Every startup goes through a fixed 4-week cycle — fully systematized and partially automated.</p>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">The 4-Week Pipeline</h2>
+            <p className="text-gray-600 max-w-xl mx-auto">Every startup goes through a fixed 4-week cycle — fully systematized and partially automated.</p>
           </div>
           <div className="grid md:grid-cols-4 gap-4">
             {[
@@ -154,20 +150,20 @@ export default function LandingPage() {
                 output: 'Funding Secured',
               },
             ].map((step, i) => (
-              <div key={i} className="bg-gray-900 border border-gray-800 rounded-2xl p-6 relative overflow-hidden">
+              <div key={i} className="bg-white border border-gray-200 rounded-2xl p-6 relative overflow-hidden hover:shadow-lg transition-all">
                 <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${step.color}`} />
                 <div className="text-xs text-gray-500 font-medium mb-1">{step.week}</div>
-                <h3 className="text-lg font-semibold mb-4">{step.title}</h3>
+                <h3 className="text-lg font-semibold mb-4 text-gray-900">{step.title}</h3>
                 <ul className="space-y-2 mb-4">
                   {step.items.map((item, j) => (
-                    <li key={j} className="flex items-center gap-2 text-xs text-gray-400">
-                      <div className="w-1 h-1 rounded-full bg-gray-600" /> {item}
+                    <li key={j} className="flex items-center gap-2 text-xs text-gray-600">
+                      <div className="w-1 h-1 rounded-full bg-gray-400" /> {item}
                     </li>
                   ))}
                 </ul>
-                <div className="pt-3 border-t border-gray-800">
+                <div className="pt-3 border-t border-gray-200">
                   <span className="text-[10px] text-gray-500 uppercase">Output:</span>
-                  <div className="text-xs text-violet-400 font-medium mt-0.5">{step.output}</div>
+                  <div className="text-xs text-violet-600 font-medium mt-0.5">{step.output}</div>
                 </div>
               </div>
             ))}
@@ -175,11 +171,11 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="features" className="py-20 px-6 bg-gray-900/30">
+      <section id="features" className="py-20 px-6 bg-gray-50">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">StudioOS Platform</h2>
-            <p className="text-gray-400 max-w-xl mx-auto">Seven integrated engines powering the entire venture creation lifecycle.</p>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">StudioOS Platform</h2>
+            <p className="text-gray-600 max-w-xl mx-auto">Seven integrated engines powering the entire venture creation lifecycle.</p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
@@ -190,13 +186,13 @@ export default function LandingPage() {
               { icon: Users, title: 'Partner Matchmaking', desc: 'AI-powered matching with referral tracking and deal syndication.' },
               { icon: DollarSign, title: 'Capital Engine', desc: 'Automated capital calls, LP portal, and live portfolio performance.' },
             ].map((f, i) => (
-              <div key={i} className="flex items-start gap-4 bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-violet-500/20 transition-colors">
-                <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-                  <f.icon size={18} className="text-violet-400" />
+              <div key={i} className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all">
+                <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+                  <f.icon size={18} className="text-violet-600" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold mb-1">{f.title}</h3>
-                  <p className="text-xs text-gray-400 leading-relaxed">{f.desc}</p>
+                  <h3 className="text-sm font-semibold mb-1 text-gray-900">{f.title}</h3>
+                  <p className="text-xs text-gray-600 leading-relaxed">{f.desc}</p>
                 </div>
               </div>
             ))}
@@ -206,9 +202,9 @@ export default function LandingPage() {
 
       <section id="partners" className="py-20 px-6">
         <div className="max-w-7xl mx-auto">
-          <div className="bg-gradient-to-br from-violet-600/20 to-violet-900/20 border border-violet-500/20 rounded-3xl p-10 md:p-16 text-center">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Become a Partner</h2>
-            <p className="text-gray-300 max-w-xl mx-auto mb-8 leading-relaxed">
+          <div className="bg-gradient-to-br from-violet-50 to-violet-100 border border-violet-300 rounded-3xl p-10 md:p-16 text-center">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">Become a Partner</h2>
+            <p className="text-gray-700 max-w-xl mx-auto mb-8 leading-relaxed">
               Join our network of investors, operators, and service providers. 
               Get matched with high-potential startups, access proprietary deal flow, 
               and earn through referral commissions and equity participation.
@@ -220,19 +216,19 @@ export default function LandingPage() {
                 { icon: Clock, title: 'Speed', desc: '30-day cycle from idea to funded company' },
               ].map((b, i) => (
                 <div key={i} className="flex items-start gap-3">
-                  <b.icon size={18} className="text-violet-400 mt-0.5 shrink-0" />
+                  <b.icon size={18} className="text-violet-600 mt-0.5 shrink-0" />
                   <div>
-                    <div className="text-sm font-medium">{b.title}</div>
-                    <div className="text-xs text-gray-400">{b.desc}</div>
+                    <div className="text-sm font-medium text-gray-900">{b.title}</div>
+                    <div className="text-xs text-gray-600">{b.desc}</div>
                   </div>
                 </div>
               ))}
             </div>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link to="/register" className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 transition-all px-8 py-3.5 rounded-xl text-sm font-medium shadow-lg shadow-violet-600/20">
+              <Link to="/register" className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-8 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20">
                 Apply Now <ArrowRight size={16} />
               </Link>
-              <Link to="/login" className="flex items-center gap-2 bg-white/10 hover:bg-white/20 transition-colors px-8 py-3.5 rounded-xl text-sm font-medium">
+              <Link to="/login" className="flex items-center gap-2 bg-white hover:bg-gray-100 transition-colors px-8 py-3.5 rounded-xl text-sm font-medium text-gray-900 border border-gray-200">
                 Sign In to Dashboard
               </Link>
             </div>
@@ -240,16 +236,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="py-12 px-6 border-t border-gray-800">
+      <footer className="py-12 px-6 border-t border-gray-200">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center font-bold text-xs">A</div>
-            <span className="text-sm font-semibold">Axal Ventures</span>
+            <img src="/axal-logo.png" alt="Axal Ventures" className="h-6" />
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-gray-600">
             Rue Robert-Ceard 6, 1204 Geneva, Switzerland
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-gray-600">
             &copy; {new Date().getFullYear()} Axal SA. All rights reserved.
           </div>
         </div>
