@@ -105,3 +105,82 @@ class TicketCreate(BaseModel):
     priority: str = "medium"
     submitted_by: Optional[str] = None
     project_id: Optional[int] = None
+
+
+class UserCreate(BaseModel):
+    email: str
+    name: str
+    role: str = Field("founder", pattern="^(admin|founder|partner)$")
+    password: Optional[str] = None
+    founder_id: Optional[int] = None
+    partner_id: Optional[int] = None
+
+
+class DealCreate(BaseModel):
+    project_id: int
+    partner_id: Optional[int] = None
+    status: str = Field("applied", pattern="^(applied|scored|active|funded|rejected)$")
+    notes: Optional[str] = None
+    amount: Optional[float] = None
+
+
+class DealUpdate(BaseModel):
+    status: Optional[str] = None
+    partner_id: Optional[int] = None
+    notes: Optional[str] = None
+    amount: Optional[float] = None
+
+
+class MatchPartnersRequest(BaseModel):
+    sector: Optional[str] = None
+    capital_needed: Optional[float] = None
+    expertise_needed: Optional[str] = None
+    startup_id: Optional[int] = None
+
+
+class GenerateMemoRequest(BaseModel):
+    startup_name: str
+    problem: Optional[str] = None
+    solution: Optional[str] = None
+    traction: Optional[str] = None
+    sector: Optional[str] = None
+    tam: Optional[float] = None
+    team_info: Optional[str] = None
+    funding_needed: Optional[float] = None
+    use_of_funds: Optional[str] = None
+    risks: Optional[str] = None
+
+
+class CapitalCallRequest(BaseModel):
+    startup_id: int
+    amount: float = Field(gt=0, description="Amount must be positive")
+
+
+class FounderSubmitRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    sector: Optional[str] = None
+    founder_name: str
+    founder_email: str
+    problem_statement: Optional[str] = None
+    solution: Optional[str] = None
+    why_now: Optional[str] = None
+    tam: Optional[float] = None
+    sam: Optional[float] = None
+    cost_to_mvp: Optional[float] = None
+    funding_needed: Optional[float] = None
+    use_of_funds: Optional[str] = None
+    market_urgency: float = 5
+    market_trend: float = 3
+    team_expertise: float = 5
+    team_execution: float = 5
+    team_network: float = 2
+    mvp_time_days: float = 60
+    product_complexity: float = 3
+    product_dependencies: float = 2
+    time_to_revenue_months: float = 12
+    burn_risk: float = 2
+    fit_alignment: float = 5
+    fit_synergy: float = 3
+    distribution_channels: float = 3
+    distribution_virality: float = 3

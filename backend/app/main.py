@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from backend.app.database import init_db
-from backend.app.api.routes import scoring, projects, legal, partners, capital, tickets
+from backend.app.api.routes import scoring, projects, legal, partners, capital, tickets, deals, users
 
 app = FastAPI(
     title="Axal VC — StudioOS",
@@ -27,6 +27,8 @@ app.include_router(legal.router, prefix="/api")
 app.include_router(partners.router, prefix="/api")
 app.include_router(capital.router, prefix="/api")
 app.include_router(tickets.router, prefix="/api")
+app.include_router(deals.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
 
 
 @app.on_event("startup")
@@ -43,7 +45,7 @@ def health():
 def dashboard_stats():
     from sqlmodel import Session, select, func
     from backend.app.database import engine
-    from backend.app.models.entities import Project, ScoreSnapshot, Partner, LPInvestor, Ticket, Document
+    from backend.app.models.entities import Project, ScoreSnapshot, Partner, LPInvestor, Ticket, Document, Deal, User
 
     with Session(engine) as session:
         total_projects = session.exec(select(func.count(Project.id))).first() or 0
@@ -62,6 +64,12 @@ def dashboard_stats():
 
         avg_score = session.exec(select(func.avg(ScoreSnapshot.total_score))).first()
 
+        total_deals = session.exec(select(func.count(Deal.id))).first() or 0
+        active_deals = session.exec(
+            select(func.count(Deal.id)).where(Deal.status.in_(["applied", "scored", "active"]))
+        ).first() or 0
+        total_users = session.exec(select(func.count(User.id))).first() or 0
+
     return {
         "total_projects": total_projects,
         "active_projects": active_projects,
@@ -71,6 +79,9 @@ def dashboard_stats():
         "open_tickets": open_tickets,
         "total_documents": total_documents,
         "avg_score": round(avg_score, 1) if avg_score else None,
+        "total_deals": total_deals,
+        "active_deals": active_deals,
+        "total_users": total_users,
     }
 
 

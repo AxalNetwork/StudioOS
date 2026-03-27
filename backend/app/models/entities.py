@@ -63,6 +63,58 @@ class TicketPriority(str, Enum):
     URGENT = "urgent"
 
 
+class DealStatus(str, Enum):
+    APPLIED = "applied"
+    SCORED = "scored"
+    ACTIVE = "active"
+    FUNDED = "funded"
+    REJECTED = "rejected"
+
+
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    FOUNDER = "founder"
+    PARTNER = "partner"
+
+
+class User(SQLModel, table=True):
+    __tablename__ = "users"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    email: str = Field(unique=True, index=True)
+    name: str
+    role: UserRole = UserRole.FOUNDER
+    password_hash: Optional[str] = None
+    founder_id: Optional[int] = Field(default=None, foreign_key="founders.id")
+    partner_id: Optional[int] = Field(default=None, foreign_key="partners.id")
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Deal(SQLModel, table=True):
+    __tablename__ = "deals"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    partner_id: Optional[int] = Field(default=None, foreign_key="partners.id")
+    status: DealStatus = DealStatus.APPLIED
+    notes: Optional[str] = None
+    amount: Optional[float] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ActivityLog(SQLModel, table=True):
+    __tablename__ = "activity_logs"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
+    project_id: Optional[int] = Field(default=None, foreign_key="projects.id")
+    action: str
+    details: Optional[str] = None
+    actor: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class Entity(SQLModel, table=True):
     __tablename__ = "entities"
     id: Optional[int] = Field(default=None, primary_key=True)

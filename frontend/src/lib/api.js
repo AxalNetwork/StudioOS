@@ -50,4 +50,18 @@ export const api = {
 
   listTickets: (status) => request(`/tickets/${status ? `?status=${status}` : ''}`),
   createTicket: (data) => request('/tickets/', { method: 'POST', body: JSON.stringify(data) }),
+
+  listDeals: (status) => request(`/deals/${status ? `?status=${status}` : ''}`),
+  createDeal: (data) => request('/deals/', { method: 'POST', body: JSON.stringify(data) }),
+  getDeal: (id) => request(`/deals/${id}`),
+  updateDeal: (id, data) => request(`/deals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  listUsers: (role) => request(`/users/${role ? `?role=${role}` : ''}`),
+  createUser: (data) => request('/users/', { method: 'POST', body: JSON.stringify(data) }),
+
+  matchPartners: (data) => request('/partners/matchPartners', { method: 'POST', body: JSON.stringify(data) }),
+  generateMemo: (data) => request('/scoring/generateMemo', { method: 'POST', body: JSON.stringify(data) }),
+  capitalCall: (data) => request('/capital/capitalCall', { method: 'POST', body: JSON.stringify(data) }),
+
+  founderSubmit: (data) => request('/projects/submit', { method: 'POST', body: JSON.stringify(data) }),
 };

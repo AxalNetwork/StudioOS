@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from backend.app.database import get_session
-from backend.app.models.entities import Project, ScoreSnapshot, DealMemo, Founder
-from backend.app.schemas.scoring import ScoreRequest
+from backend.app.models.entities import Project, ScoreSnapshot, DealMemo, Founder, Deal, ActivityLog
+from backend.app.schemas.scoring import ScoreRequest, GenerateMemoRequest
 from backend.app.services.scoring import run_full_score, tier_label
+from backend.app.services.ai_memo import generate_memo_with_ai
 from datetime import datetime
 
 router = APIRouter(prefix="/scoring", tags=["Scoring Engine"])
@@ -174,3 +175,27 @@ def scoring_queue(session: Session = Depends(get_session)):
     )
     projects = session.exec(stmt).all()
     return projects
+
+
+@router.post("/generateMemo")
+def generate_memo_standalone(data: GenerateMemoRequest, session: Session = Depends(get_session)):
+    memo_input = {
+        "startup_name": data.startup_name,
+        "problem": data.problem,
+        "solution": data.solution,
+        "traction": data.traction,
+        "sector": data.sector,
+        "tam": data.tam or 0,
+        "team_info": data.team_info,
+        "funding_needed": data.funding_needed or 0,
+        "use_of_funds": data.use_of_funds,
+        "risks": data.risks,
+    }
+
+    result = generate_memo_with_ai(memo_input)
+
+    return {
+        "startup_name": data.startup_name,
+        "ai_generated": result["ai_generated"],
+        "memo": result["memo"],
+    }

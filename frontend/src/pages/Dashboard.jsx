@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, Zap, Users, DollarSign, FileText, Target, Ticket, TrendingUp } from 'lucide-react';
+import { BarChart3, Zap, Users, DollarSign, FileText, Target, Ticket, TrendingUp, Handshake } from 'lucide-react';
 import { api } from '../lib/api';
 
 function StatCard({ icon: Icon, label, value, color = 'violet' }) {
@@ -50,9 +50,9 @@ export default function Dashboard() {
         <StatCard icon={Target} label="Pending Scoring" value={stats?.pending_scoring} color="amber" />
         <StatCard icon={TrendingUp} label="Active Pipeline" value={stats?.active_projects} color="green" />
         <StatCard icon={BarChart3} label="Avg Score" value={stats?.avg_score} color="blue" />
-        <StatCard icon={Users} label="Partners" value={stats?.total_partners} color="violet" />
-        <StatCard icon={DollarSign} label="LP Investors" value={stats?.total_investors} color="green" />
-        <StatCard icon={FileText} label="Documents" value={stats?.total_documents} color="blue" />
+        <StatCard icon={Handshake} label="Active Deals" value={stats?.active_deals} color="violet" />
+        <StatCard icon={Users} label="Partners" value={stats?.total_partners} color="green" />
+        <StatCard icon={DollarSign} label="LP Investors" value={stats?.total_investors} color="blue" />
         <StatCard icon={Ticket} label="Open Tickets" value={stats?.open_tickets} color="red" />
       </div>
 

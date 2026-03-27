@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select, func
 from backend.app.database import get_session
-from backend.app.models.entities import LPInvestor, CapitalCall, Project, ScoreSnapshot
-from backend.app.schemas.scoring import LPInvestorCreate, CapitalCallCreate
+from backend.app.models.entities import LPInvestor, CapitalCall, Project, ScoreSnapshot, Partner
+from backend.app.schemas.scoring import LPInvestorCreate, CapitalCallCreate, CapitalCallRequest
 from datetime import datetime
 
 router = APIRouter(prefix="/capital", tags=["Capital & Investment"])
@@ -86,6 +86,54 @@ def mark_call_paid(call_id: int, session: Session = Depends(get_session)):
 
     session.commit()
     return {"status": "paid", "call": call}
+
+
+@router.post("/capitalCall")
+def capital_call_with_partners(data: CapitalCallRequest, session: Session = Depends(get_session)):
+    project = session.get(Project, data.startup_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Startup/project not found")
+
+    investors = session.exec(select(LPInvestor).where(LPInvestor.status == "active")).all()
+    if not investors:
+        raise HTTPException(status_code=404, detail="No active investors found")
+
+    per_investor = data.amount / len(investors)
+    calls_created = []
+
+    for inv in investors:
+        call = CapitalCall(
+            lp_investor_id=inv.id,
+            project_id=data.startup_id,
+            amount=round(per_investor, 2),
+        )
+        session.add(call)
+        calls_created.append({
+            "investor_id": inv.id,
+            "investor_name": inv.name,
+            "amount": round(per_investor, 2),
+        })
+
+    partners = session.exec(select(Partner).where(Partner.status == "active")).all()
+    participating_partners = []
+    for p in partners:
+        if p.specialization and project.sector and project.sector.lower() in p.specialization.lower():
+            participating_partners.append({
+                "partner_id": p.id,
+                "name": p.name,
+                "company": p.company,
+                "specialization": p.specialization,
+            })
+
+    session.commit()
+
+    return {
+        "startup_id": data.startup_id,
+        "startup_name": project.name,
+        "total_amount": data.amount,
+        "calls_created": calls_created,
+        "participating_partners": participating_partners,
+    }
 
 
 @router.get("/portfolio")

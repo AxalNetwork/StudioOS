@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
-  Ticket, Menu, X, Zap, ChevronRight
+  Ticket, Menu, X, Zap, ChevronRight, Handshake, Rocket, UserCircle
 } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import ScoringPage from './pages/ScoringPage';
@@ -12,15 +12,21 @@ import LegalPage from './pages/LegalPage';
 import PartnersPage from './pages/PartnersPage';
 import CapitalPage from './pages/CapitalPage';
 import TicketsPage from './pages/TicketsPage';
+import DealsPage from './pages/DealsPage';
+import FounderPortal from './pages/FounderPortal';
+import PartnerPortal from './pages/PartnerPortal';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/scoring', icon: Target, label: 'Scoring Engine' },
   { to: '/projects', icon: Zap, label: 'Projects' },
+  { to: '/deals', icon: Handshake, label: 'Deal Flow' },
   { to: '/legal', icon: FileText, label: 'Legal & Compliance' },
   { to: '/partners', icon: Users, label: 'Partners' },
   { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
   { to: '/tickets', icon: Ticket, label: 'Support' },
+  { to: '/founder', icon: Rocket, label: 'Founder Portal', divider: true },
+  { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal' },
 ];
 
 export default function App() {
@@ -45,9 +51,10 @@ export default function App() {
           </button>
         </div>
         <nav className="flex-1 py-3 overflow-y-auto">
-          {navItems.map(({ to, icon: Icon, label }) => (
+          {navItems.map(({ to, icon: Icon, label, divider }) => (
+            <React.Fragment key={to}>
+            {divider && <div className="mx-5 my-2 border-t border-gray-800" />}
             <NavLink
-              key={to}
               to={to}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
@@ -61,6 +68,7 @@ export default function App() {
               <Icon size={16} />
               {label}
             </NavLink>
+            </React.Fragment>
           ))}
         </nav>
         <div className="px-5 py-3 border-t border-gray-800 text-xs text-gray-500">
@@ -90,6 +98,9 @@ export default function App() {
             <Route path="/partners" element={<PartnersPage />} />
             <Route path="/capital" element={<CapitalPage />} />
             <Route path="/tickets" element={<TicketsPage />} />
+            <Route path="/deals" element={<DealsPage />} />
+            <Route path="/founder" element={<FounderPortal />} />
+            <Route path="/partner-portal" element={<PartnerPortal />} />
           </Routes>
         </div>
       </main>
