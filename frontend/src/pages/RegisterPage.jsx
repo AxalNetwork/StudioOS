@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Shield, Smartphone, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Shield, Smartphone, Copy, Check, ChevronDown } from 'lucide-react';
 import QRCode from 'qrcode';
 import { api } from '../lib/api';
 
@@ -111,12 +111,15 @@ export default function RegisterPage() {
                     className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-900 placeholder-gray-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-600 block mb-1">Role</label>
-                  <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:border-violet-500 focus:outline-none">
-                    <option value="partner">Partner / Investor</option>
-                    <option value="founder">Founder</option>
-                  </select>
+                  <label className="text-xs text-gray-600 block mb-1 font-medium">Role</label>
+                  <div className="relative">
+                    <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-900 appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400">
+                      <option value="partner">Partner / Investor</option>
+                      <option value="founder">Founder</option>
+                    </select>
+                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
                 </div>
                 <button onClick={register} disabled={loading}
                   className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white transition-colors">
