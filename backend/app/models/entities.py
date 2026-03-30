@@ -88,6 +88,9 @@ class User(SQLModel, table=True):
     founder_id: Optional[int] = Field(default=None, foreign_key="founders.id")
     partner_id: Optional[int] = Field(default=None, foreign_key="partners.id")
     is_active: bool = True
+    email_verified: bool = False
+    verification_token: Optional[str] = None
+    verification_token_expires: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

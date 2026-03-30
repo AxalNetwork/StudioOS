@@ -23,6 +23,7 @@ import LPPortalPage from './pages/LPPortalPage';
 import LandingPage from './pages/LandingPage';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -152,6 +153,7 @@ export default function App() {
       <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
       <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
 
       <Route path="/dashboard" element={<RequireAuth user={user} onLogout={logout}><Dashboard /></RequireAuth>} />
       <Route path="/scoring" element={<RequireAuth user={user} onLogout={logout}><ScoringPage /></RequireAuth>} />

@@ -71,7 +71,7 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 7. **Capital & Investment Engine** — Capital calls, LP investor portal, portfolio performance tracking
 
 ## Database Tables
-- **users** — id, email, name, role (admin/founder/partner), password_hash
+- **users** — id, email, name, role (admin/founder/partner), password_hash, email_verified, verification_token, verification_token_expires
 - **projects** — Startup pipeline (status, playbook week, sector, financials)
 - **founders** — Founder profiles
 - **partners** — Partner ecosystem with referral codes
@@ -87,16 +87,22 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 
 ## Authentication
 - TOTP-based (passwordless) authentication using pyotp
-- Registration generates a TOTP secret + QR code for authenticator apps
-- Login requires email + 6-digit TOTP code from authenticator
+- **Email verification required before TOTP setup** — prevents impersonation
+- Registration flow: Form → Email verification → TOTP authenticator setup → Dashboard
+- Verification tokens are SHA-256 hashed in DB, expire in 24 hours
+- Resend verification rate limited (max 3/hour per email)
+- Email sending via Resend API (or console logging if no RESEND_API_KEY is set)
 - JWT tokens (24h expiry) for session management
 - Frontend auth guard redirects unauthenticated users to login
-- Public pages: Landing (/), Register (/register), Login (/login)
+- Public pages: Landing (/), Register (/register), Login (/login), Verify Email (/verify-email)
 - All dashboard routes are protected behind authentication
 
 ## API Endpoints
 Auth:
-- POST /api/auth/register — Register + get TOTP QR code
+- POST /api/auth/register — Create pending user + send verification email
+- POST /api/auth/verify-email?token=... — Verify email token, returns setup_token
+- POST /api/auth/setup-totp — Set up TOTP (requires verified email + setup_token)
+- POST /api/auth/resend-verification — Resend verification email (rate limited)
 - POST /api/auth/login — Login with email + TOTP code → JWT
 - GET /api/auth/me — Get current user (requires JWT)
 - POST /api/auth/verify-totp — Verify a TOTP code
@@ -162,6 +168,8 @@ Autoscale deployment: builds frontend, serves via FastAPI with static files.
 - DATABASE_URL — PostgreSQL connection (auto-set by Replit)
 - OPENAI_API_KEY — Optional, for AI advisory + memo generation (falls back to templates)
 - JWT_SECRET — JWT signing key (defaults to dev key if not set)
+- RESEND_API_KEY — Optional, for sending verification emails via Resend (falls back to console logging)
+- FROM_EMAIL — Optional, sender address for verification emails (defaults to noreply@axalventures.com)
 
 ## Auth Packages
 - pyotp — TOTP generation/verification

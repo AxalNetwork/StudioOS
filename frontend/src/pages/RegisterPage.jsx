@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Shield, Smartphone, Copy, Check, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Shield, Smartphone, Copy, Check, ChevronDown, Mail, RefreshCw } from 'lucide-react';
 import QRCode from 'qrcode';
 import { api } from '../lib/api';
 
@@ -12,6 +12,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -24,6 +25,12 @@ export default function RegisterPage() {
     }
   }, [totpData]);
 
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
+
   const register = async () => {
     if (!form.email || !form.name) {
       setError('Please fill in all fields');
@@ -32,9 +39,21 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.register(form);
-      setTotpData(res);
+      await api.register(form);
       setStep(2);
+    } catch (e) {
+      setError(e.message);
+    }
+    setLoading(false);
+  };
+
+  const resendEmail = async () => {
+    if (resendCooldown > 0) return;
+    setLoading(true);
+    setError('');
+    try {
+      await api.resendVerification({ email: form.email });
+      setResendCooldown(60);
     } catch (e) {
       setError(e.message);
     }
@@ -85,6 +104,7 @@ export default function RegisterPage() {
           <div className="flex gap-2 mb-6">
             <div className={`flex-1 h-1 rounded-full ${step >= 1 ? 'bg-violet-600' : 'bg-gray-300'}`} />
             <div className={`flex-1 h-1 rounded-full ${step >= 2 ? 'bg-violet-600' : 'bg-gray-300'}`} />
+            <div className={`flex-1 h-1 rounded-full ${step >= 3 ? 'bg-violet-600' : 'bg-gray-300'}`} />
           </div>
 
           {step === 1 && (
@@ -130,7 +150,43 @@ export default function RegisterPage() {
             </>
           )}
 
-          {step === 2 && totpData && (
+          {step === 2 && (
+            <>
+              <div className="flex items-center justify-center w-16 h-16 bg-violet-100 rounded-full mx-auto mb-6">
+                <Mail size={28} className="text-violet-600" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-1 text-center">Check Your Email</h2>
+              <p className="text-sm text-gray-600 mb-6 text-center">
+                We've sent a verification link to
+              </p>
+              <div className="bg-gray-50 rounded-lg px-4 py-3 mb-6 text-center">
+                <span className="text-sm font-medium text-gray-900">{form.email}</span>
+              </div>
+
+              {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{error}</div>}
+
+              <div className="flex items-start gap-2 bg-violet-50 border border-violet-300 rounded-lg p-3 mb-6">
+                <Mail size={16} className="text-violet-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-violet-700">
+                  Click the link in the email to verify your address and continue setting up your authenticator. The link expires in 24 hours.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <button onClick={resendEmail} disabled={loading || resendCooldown > 0}
+                  className="w-full bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-gray-700 flex items-center justify-center gap-2 transition-colors">
+                  <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                  {resendCooldown > 0 ? `Resend available in ${resendCooldown}s` : loading ? 'Sending...' : 'Resend Verification Email'}
+                </button>
+                <button onClick={() => { setStep(1); setError(''); }}
+                  className="w-full text-sm text-gray-500 hover:text-gray-700 py-1 transition-colors">
+                  Use a different email
+                </button>
+              </div>
+            </>
+          )}
+
+          {step === 3 && totpData && (
             <>
               <h2 className="text-xl font-bold text-gray-900 mb-1">Set Up Authenticator</h2>
               <p className="text-sm text-gray-600 mb-6">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)</p>
