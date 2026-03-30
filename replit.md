@@ -91,7 +91,7 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 - Registration flow: Form → Email verification → TOTP authenticator setup → Dashboard
 - Verification tokens are SHA-256 hashed in DB, expire in 24 hours
 - Resend verification rate limited (max 3/hour per email)
-- Email sending via Resend API (or console logging if no RESEND_API_KEY is set)
+- Email sending via Gmail API with OAuth2 (or console logging if Google credentials not set)
 - JWT tokens (24h expiry) for session management
 - Frontend auth guard redirects unauthenticated users to login
 - Public pages: Landing (/), Register (/register), Login (/login), Verify Email (/verify-email)
@@ -168,8 +168,11 @@ Autoscale deployment: builds frontend, serves via FastAPI with static files.
 - DATABASE_URL — PostgreSQL connection (auto-set by Replit)
 - OPENAI_API_KEY — Optional, for AI advisory + memo generation (falls back to templates)
 - JWT_SECRET — JWT signing key (defaults to dev key if not set)
-- RESEND_API_KEY — Optional, for sending verification emails via Resend (falls back to console logging)
-- FROM_EMAIL — Optional, sender address for verification emails (defaults to noreply@axalventures.com)
+- GOOGLE_CLIENT_ID — Gmail API OAuth2 client ID (from Google Cloud Console)
+- GOOGLE_CLIENT_SECRET — Gmail API OAuth2 client secret
+- GOOGLE_REFRESH_TOKEN — Gmail API OAuth2 refresh token (from OAuth Playground)
+- GMAIL_SENDER_EMAIL — Gmail address used to send verification emails
+- GOOGLE_REDIRECT_URI — OAuth2 redirect URI (defaults to OAuth Playground URL)
 
 ## Auth Packages
 - pyotp — TOTP generation/verification

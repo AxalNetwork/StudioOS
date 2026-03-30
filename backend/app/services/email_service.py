@@ -1,10 +1,16 @@
 import os
+import base64
 import secrets
 import hashlib
 from datetime import datetime, timedelta
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
-FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@axalventures.com")
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "https://developers.google.com/oauthplayground")
+GOOGLE_REFRESH_TOKEN = os.environ.get("GOOGLE_REFRESH_TOKEN")
+GMAIL_SENDER_EMAIL = os.environ.get("GMAIL_SENDER_EMAIL")
 
 
 def generate_verification_token():
@@ -27,9 +33,30 @@ def get_verification_url(raw_token: str) -> str:
     return f"{base_url}/verify-email?token={raw_token}"
 
 
+def _is_gmail_configured() -> bool:
+    return all([GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GMAIL_SENDER_EMAIL])
+
+
+def _get_gmail_service():
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+
+    creds = Credentials(
+        token=None,
+        refresh_token=GOOGLE_REFRESH_TOKEN,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        scopes=["https://www.googleapis.com/auth/gmail.send"],
+    )
+
+    service = build("gmail", "v1", credentials=creds)
+    return service
+
+
 def send_verification_email(to_email: str, name: str, verification_url: str) -> bool:
-    if RESEND_API_KEY:
-        return _send_via_resend(to_email, name, verification_url)
+    if _is_gmail_configured():
+        return _send_via_gmail(to_email, name, verification_url)
     else:
         print(f"\n{'='*60}")
         print(f"EMAIL VERIFICATION LINK (no email provider configured)")
@@ -40,30 +67,38 @@ def send_verification_email(to_email: str, name: str, verification_url: str) -> 
         return True
 
 
-def _send_via_resend(to_email: str, name: str, verification_url: str) -> bool:
+def _send_via_gmail(to_email: str, name: str, verification_url: str) -> bool:
     try:
-        import httpx
-        response = httpx.post(
-            "https://api.resend.com/emails",
-            headers={
-                "Authorization": f"Bearer {RESEND_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "from": FROM_EMAIL,
-                "to": [to_email],
-                "subject": "Verify your email — Axal Ventures",
-                "html": _build_email_html(name, verification_url),
-            },
-            timeout=10.0,
+        service = _get_gmail_service()
+
+        message = MIMEMultipart("alternative")
+        message["to"] = to_email
+        message["from"] = f"Axal Ventures <{GMAIL_SENDER_EMAIL}>"
+        message["subject"] = "Verify your email — Axal Ventures"
+
+        plain_text = (
+            f"Hi {name},\n\n"
+            f"Thanks for signing up for Axal Ventures. "
+            f"Please verify your email by visiting this link:\n\n"
+            f"{verification_url}\n\n"
+            f"This link expires in 24 hours.\n\n"
+            f"If you didn't create an account, you can safely ignore this email."
         )
-        if response.status_code in (200, 201):
-            return True
-        else:
-            print(f"Resend API error: {response.status_code} {response.text}")
-            return False
+        html_content = _build_email_html(name, verification_url)
+
+        message.attach(MIMEText(plain_text, "plain"))
+        message.attach(MIMEText(html_content, "html"))
+
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
+
+        service.users().messages().send(
+            userId="me",
+            body={"raw": raw_message}
+        ).execute()
+
+        return True
     except Exception as e:
-        print(f"Email sending failed: {e}")
+        print(f"Gmail API error: {e}")
         return False
 
 
