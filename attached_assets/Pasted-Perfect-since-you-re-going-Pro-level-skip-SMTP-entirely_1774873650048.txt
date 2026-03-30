@@ -1,0 +1,272 @@
+Perfect — since you’re going **Pro-level**, skip SMTP entirely.
+
+👉 Use **Gmail API with OAuth2**
+This gives you:
+
+* Higher deliverability
+* No “app password” issues
+* Scalable sending (important for Axal onboarding flows)
+* Cleaner long-term infra
+
+---
+
+# 🚀 Replit Prompt — Gmail API (OAuth2, Production-Grade)
+
+Paste this directly into Replit AI 👇
+
+---
+
+## 🧠 PROMPT
+
+Build a production-ready email service using the **Gmail API (OAuth2)** for my Node.js backend instead of SMTP or Resend.
+
+---
+
+## ⚙️ Context
+
+* I have an authentication system with email verification
+* Endpoint: POST `/api/auth/register`
+* Emails currently logged to console
+* I want to send real emails using Google (Gmail API)
+
+---
+
+## ✅ Requirements
+
+### 1. Install dependencies
+
+Use:
+
+```bash
+npm install googleapis nodemailer
+```
+
+---
+
+### 2. Environment variables (Replit Secrets)
+
+Create:
+
+```
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=
+GOOGLE_REFRESH_TOKEN=
+GMAIL_SENDER_EMAIL=
+```
+
+---
+
+### 3. Google Cloud Setup (IMPORTANT)
+
+Also generate instructions for:
+
+1. Go to Google Cloud Console
+2. Create a project
+3. Enable Gmail API
+4. Create OAuth 2.0 credentials
+5. Set redirect URI to:
+
+```
+https://developers.google.com/oauthplayground
+```
+
+6. Use OAuth Playground to:
+
+   * Authorize Gmail API scope:
+
+     ```
+     https://www.googleapis.com/auth/gmail.send
+     ```
+   * Exchange for refresh token
+
+7. Store refresh token in Replit Secrets
+
+---
+
+### 4. Create email service
+
+Create file:
+
+```
+services/emailService.js
+```
+
+---
+
+### 5. Implement OAuth2 transporter
+
+* Use googleapis to create OAuth2 client
+* Use nodemailer with OAuth2 authentication
+
+---
+
+### 6. Implementation details
+
+```js
+const { google } = require("googleapis");
+const nodemailer = require("nodemailer");
+
+const oAuth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
+);
+
+oAuth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN
+});
+
+async function createTransporter() {
+  const accessToken = await oAuth2Client.getAccessToken();
+
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      type: "OAuth2",
+      user: process.env.GMAIL_SENDER_EMAIL,
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      refreshToken: process.env.GOOGLE_REFRESH_TOKEN,
+      accessToken: accessToken.token
+    }
+  });
+}
+```
+
+---
+
+### 7. Create sendVerificationEmail function
+
+```js
+async function sendVerificationEmail({ to, name, token }) {
+  const transporter = await createTransporter();
+
+  const verificationUrl = `http://localhost:8000/verify-email?token=${token}`;
+
+  const html = `
+    <div style="font-family:Arial;padding:20px">
+      <h2>Verify your email</h2>
+      <p>Hello ${name},</p>
+      <p>Click below to verify your account:</p>
+      <a href="${verificationUrl}" style="
+        display:inline-block;
+        padding:10px 20px;
+        background:black;
+        color:white;
+        text-decoration:none;
+        border-radius:6px;
+      ">Verify Email</a>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from: `"Axal" <${process.env.GMAIL_SENDER_EMAIL}>`,
+    to,
+    subject: "Verify your email",
+    html
+  });
+}
+```
+
+Export the function.
+
+---
+
+### 8. Integrate into register endpoint
+
+Replace console log logic:
+
+```js
+await sendVerificationEmail({
+  to: user.email,
+  name: user.name,
+  token: verificationToken
+});
+```
+
+---
+
+### 9. Add fallback for dev
+
+If OAuth creds missing:
+
+```js
+if (!process.env.GOOGLE_CLIENT_ID) {
+  console.log("Verification link:", verificationUrl);
+}
+```
+
+---
+
+### 10. Error handling
+
+* Try/catch around email sending
+* Log errors but do NOT block registration
+
+---
+
+## 🔒 Security Requirements
+
+* Never expose refresh token
+* Store secrets only in Replit Secrets
+* Do not log tokens in production
+
+---
+
+## 🎯 Output
+
+* Full `emailService.js`
+* Updated register route
+* Google OAuth setup guide
+* Clean modular structure
+
+---
+
+# 🧠 Architecture Insight (important for you)
+
+This unlocks:
+
+### 🔑 Identity Layer for Axal
+
+* Verified investors
+* Verified founders
+* Secure onboarding
+
+### 📩 Future Extensions
+
+* Deal flow notifications
+* Investor updates
+* Private data room invites
+
+---
+
+# ⚡ Pro Tips (you should implement next)
+
+After this works:
+
+### 1. Custom domain email
+
+Use:
+
+* Google Workspace (e.g. `noreply@axal.io`)
+
+### 2. Email templates system
+
+* Store templates (HTML)
+* Dynamic variables
+
+### 3. Event-based emails
+
+Trigger on:
+
+* New deal
+* Investor match
+* Partner invite
+
+---
+
+If you want next step, I can:
+
+* Build **Axal-branded email templates (high-end VC style)**
+* Or design a **full notification system (email + in-app + deal alerts)**
