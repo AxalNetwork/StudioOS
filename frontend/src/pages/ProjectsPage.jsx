@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, ChevronDown, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { StatusBadge, WeekBadge } from './Dashboard';
 
@@ -145,18 +145,74 @@ function Input({ label, value, onChange }) {
 }
 
 function SectorSelect({ label = 'Sector', value, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const dropdownRef = useRef(null);
+
+  const filtered = SECTORS.filter(s => s.toLowerCase().includes(search.toLowerCase()));
+
+  const handleSelect = (sector) => {
+    onChange(sector);
+    setIsOpen(false);
+    setSearch('');
+  };
+
+  const handleClear = (e) => {
+    e.stopPropagation();
+    onChange('');
+    setSearch('');
+  };
+
   return (
-    <div>
+    <div className="relative" ref={dropdownRef}>
       <label className="block text-xs text-gray-600 mb-1">{label}</label>
-      <select
-        value={value} onChange={e => onChange(e.target.value)}
-        className="w-full bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 hover:border-violet-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 transition-colors"
       >
-        <option value="">Select a sector...</option>
-        {SECTORS.map(sector => (
-          <option key={sector} value={sector}>{sector}</option>
-        ))}
-      </select>
+        <span className={value ? 'text-gray-900' : 'text-gray-500'}>{value || 'Select a sector...'}</span>
+        <div className="flex items-center gap-1">
+          {value && (
+            <X size={14} className="text-gray-400 hover:text-gray-600" onClick={handleClear} />
+          )}
+          <ChevronDown size={14} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-2 bg-white border border-gray-300 rounded-lg shadow-lg">
+          <div className="p-2 border-b border-gray-200">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search sectors..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
+                autoFocus
+              />
+            </div>
+          </div>
+          <div className="max-h-60 overflow-y-auto">
+            {filtered.length > 0 ? (
+              filtered.map(sector => (
+                <button
+                  key={sector}
+                  onClick={() => handleSelect(sector)}
+                  className={`w-full text-left px-3 py-2 text-sm transition-colors hover:bg-violet-50 ${
+                    value === sector ? 'bg-violet-100 text-violet-700 font-medium' : 'text-gray-900'
+                  }`}
+                >
+                  {sector}
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-4 text-center text-sm text-gray-500">No sectors found</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
