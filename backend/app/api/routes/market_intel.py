@@ -52,6 +52,30 @@ MARKET_PULSE = [
         "hiring_surge": "AppSec and identity engineers up 40%.",
         "gap_opportunity": "AI-powered threat detection for API-first architectures.",
     },
+    {
+        "sector": "Autonomous Robotics",
+        "multiple": 26.3,
+        "sentiment": "Aggressive",
+        "technographic_signal": "Vision-language models enabling 40%+ YoY increase in warehouse and last-mile automation pilots.",
+        "hiring_surge": "Robotics software + perception engineers up 31% across logistics and manufacturing.",
+        "gap_opportunity": "Unified agentic control layer for heterogeneous robot fleets.",
+    },
+    {
+        "sector": "Climate Intelligence",
+        "multiple": 17.9,
+        "sentiment": "Aggressive",
+        "technographic_signal": "Post-IRA extension surge in carbon accounting and Scope 3 automation platforms.",
+        "hiring_surge": "Sustainability AI engineers and emissions data scientists up 37%.",
+        "gap_opportunity": "Real-time MRV (Measurement, Reporting, Verification) API for enterprise net-zero compliance.",
+    },
+    {
+        "sector": "Quantum Infrastructure",
+        "multiple": 12.4,
+        "sentiment": "Wait-and-See",
+        "technographic_signal": "Error-corrected logical qubits crossing 100+ threshold in multiple labs; hybrid quantum-classical workloads entering enterprise pilots.",
+        "hiring_surge": "Quantum algorithm + error-correction researchers up 24% at hyperscalers and national labs.",
+        "gap_opportunity": "Cloud-accessible quantum optimization layer for supply-chain and portfolio risk modeling.",
+    },
 ]
 
 MACRO_DATA = {
