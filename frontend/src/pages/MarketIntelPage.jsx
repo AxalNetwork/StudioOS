@@ -192,15 +192,39 @@ export default function MarketIntelPage() {
       )}
 
       {tab === 'studio' && benchmarks && (
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <BenchmarkCard label="Avg Time to Inc." value={`${benchmarks.avg_time_to_inc_days} days`} target="< 14 days" />
-          <BenchmarkCard label="Founder Match Rate" value={`${benchmarks.founder_match_rate}%`} target="> 80%" />
-          <BenchmarkCard label="API Reusability" value={`${benchmarks.api_reusability_score}%`} target="> 60%" />
-          <BenchmarkCard label="Dry Powder" value={benchmarks.current_dry_powder} target="Active" />
-          <BenchmarkCard label="Time to First Check" value={`${benchmarks.avg_time_to_first_check_days} days`} target="< 30 days" />
-          <BenchmarkCard label="Idea → Funded Rate" value={`${benchmarks.conversion_idea_to_funded}%`} target="> 20%" />
-          <BenchmarkCard label="Active Batch Size" value={benchmarks.active_batch_size} target="5-10" />
-          <BenchmarkCard label="Portfolio Companies" value={benchmarks.portfolio_companies} target="Growing" />
+        <div className="space-y-6">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-3">Studio Operations</div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <BenchmarkCard label="Avg Time to Inc." value={`${benchmarks.avg_time_to_inc_days} days`} target="< 14 days" />
+              <BenchmarkCard label="Founder Match Rate" value={`${benchmarks.founder_match_rate}%`} target="> 80%" />
+              <BenchmarkCard label="API Reusability" value={`${benchmarks.api_reusability_score}%`} target="> 60%" />
+              <BenchmarkCard label="Dry Powder" value={benchmarks.current_dry_powder} target="Active" />
+              <BenchmarkCard label="Time to First Check" value={`${benchmarks.avg_time_to_first_check_days} days`} target="< 30 days" />
+              <BenchmarkCard label="Idea → Funded Rate" value={`${benchmarks.conversion_idea_to_funded}%`} target="> 20%" />
+              <BenchmarkCard label="Active Batch Size" value={benchmarks.active_batch_size} target="5-10" />
+              <BenchmarkCard label="Portfolio Companies" value={benchmarks.portfolio_companies} target="Growing" />
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-3">Decision Gate</div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <BenchmarkCard label="Decision Gate Pass Rate" value={`${benchmarks.decision_gate_pass_rate}%`} target="> 65%" />
+              <BenchmarkCard label="Avg Time to Spin-Out" value={`${benchmarks.avg_time_to_spinout_days} days`} target="< 90 days" />
+              <BenchmarkCard label="Avg Founder Equity at Spin-Out" value={`${benchmarks.avg_founder_equity_at_spinout}%`} target="60-75%" />
+              <BenchmarkCard label="Cost Per Spin-Out" value={benchmarks.cost_per_spinout} target="< $250k" />
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-3">Post Spin-Out Performance</div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <BenchmarkCard label="Follow-On Funding Rate" value={`${benchmarks.followon_funding_rate}%`} target="> 70%" />
+              <BenchmarkCard label="Avg Valuation at First Round" value={benchmarks.avg_valuation_first_round} target="> $8M" />
+              <BenchmarkCard label="Deployment Velocity" value={`${benchmarks.deployment_velocity}%`} target="> 40% / quarter" />
+            </div>
+          </div>
         </div>
       )}
     </div>

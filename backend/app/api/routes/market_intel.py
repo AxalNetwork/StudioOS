@@ -86,6 +86,13 @@ STUDIO_BENCHMARKS = {
     "conversion_idea_to_funded": 23,
     "active_batch_size": 8,
     "portfolio_companies": 12,
+    "decision_gate_pass_rate": 72,
+    "avg_time_to_spinout_days": 68,
+    "avg_founder_equity_at_spinout": 68,
+    "followon_funding_rate": 75,
+    "avg_valuation_first_round": "$9.2M",
+    "cost_per_spinout": "$185k",
+    "deployment_velocity": 35,
 }
 
 
