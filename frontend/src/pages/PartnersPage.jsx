@@ -41,8 +41,8 @@ export default function PartnersPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Partner Ecosystem</h1>
-          <p className="text-sm text-gray-400">Matchmaking, deal flow, and referral dashboard</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Partner Ecosystem</h1>
+          <p className="text-sm text-gray-600">Matchmaking, deal flow, and referral dashboard</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white">
           <Plus size={14} /> Add Partner
@@ -50,55 +50,55 @@ export default function PartnersPage() {
       </div>
 
       {showForm && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
           <div className="grid md:grid-cols-2 gap-4">
             {['name', 'email', 'company', 'specialization'].map(field => (
               <div key={field}>
-                <label className="block text-xs text-gray-400 mb-1 capitalize">{field}</label>
+                <label className="block text-xs text-gray-600 mb-1 capitalize">{field}</label>
                 <input type="text" value={form[field]} onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" />
+                  className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900" />
               </div>
             ))}
           </div>
           <div className="flex gap-3 mt-4">
             <button onClick={submit} className="px-4 py-2 bg-violet-600 rounded-lg text-sm text-white">Add</button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-200 rounded-lg text-sm text-white">Cancel</button>
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-200 rounded-lg text-sm text-gray-900">Cancel</button>
           </div>
         </div>
       )}
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
-        <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-          <Search size={14} className="text-violet-400" /> Partner Matchmaking
+      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <Search size={14} className="text-violet-600" /> Partner Matchmaking
         </h3>
         <div className="flex gap-3">
           <input type="text" placeholder="Sector (e.g. AI, Blockchain)..." value={matchSector}
             onChange={e => setMatchSector(e.target.value)}
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" />
+            className="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900" />
           <button onClick={runMatch} className="px-4 py-2 bg-violet-600 rounded-lg text-sm text-white">Find Matches</button>
         </div>
         {matches && (
-          <div className="mt-3 text-sm text-gray-400">
-            Found <span className="text-white font-medium">{matches.count}</span> matching partner(s)
+          <div className="mt-3 text-sm text-gray-600">
+            Found <span className="text-gray-900 font-medium">{matches.count}</span> matching partner(s)
             {matches.matches.map(m => (
-              <div key={m.id} className="mt-2 px-3 py-2 bg-gray-800 rounded-lg">
-                <span className="text-white">{m.name}</span> — {m.company} ({m.specialization})
+              <div key={m.id} className="mt-2 px-3 py-2 bg-gray-100 rounded-lg">
+                <span className="text-gray-900">{m.name}</span> — {m.company} ({m.specialization})
               </div>
             ))}
           </div>
         )}
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-800">
-          <h3 className="font-semibold text-white text-sm">All Partners & Referral Dashboard</h3>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200">
+          <h3 className="font-semibold text-gray-900 text-sm">All Partners & Referral Dashboard</h3>
         </div>
         {loading ? (
-          <div className="p-8 text-center text-gray-400 text-sm">Loading...</div>
+          <div className="p-8 text-center text-gray-600 text-sm">Loading...</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800 text-gray-400 text-xs uppercase">
+              <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
                 <th className="text-left px-5 py-3">Partner</th>
                 <th className="text-left px-5 py-3 hidden md:table-cell">Company</th>
                 <th className="text-left px-5 py-3 hidden md:table-cell">Specialization</th>
@@ -106,18 +106,18 @@ export default function PartnersPage() {
                 <th className="text-left px-5 py-3">Referrals</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-800">
+            <tbody className="divide-y divide-gray-200">
               {partners.map(p => (
-                <tr key={p.id} className="hover:bg-gray-800/50">
-                  <td className="px-5 py-3 text-white">{p.name}</td>
-                  <td className="px-5 py-3 hidden md:table-cell text-gray-400">{p.company || '—'}</td>
-                  <td className="px-5 py-3 hidden md:table-cell text-gray-400">{p.specialization || '—'}</td>
+                <tr key={p.id} className="hover:bg-gray-50">
+                  <td className="px-5 py-3 text-gray-900">{p.name}</td>
+                  <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.company || '—'}</td>
+                  <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.specialization || '—'}</td>
                   <td className="px-5 py-3">
-                    <button onClick={() => copyCode(p.referral_code)} className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 font-mono">
+                    <button onClick={() => copyCode(p.referral_code)} className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-700 font-mono">
                       {p.referral_code} <Copy size={10} />
                     </button>
                   </td>
-                  <td className="px-5 py-3 text-white font-medium">{p.referrals_count}</td>
+                  <td className="px-5 py-3 text-gray-900 font-medium">{p.referrals_count}</td>
                 </tr>
               ))}
             </tbody>
