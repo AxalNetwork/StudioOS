@@ -103,7 +103,6 @@ class TicketCreate(BaseModel):
     title: str
     description: Optional[str] = None
     priority: str = "medium"
-    submitted_by: Optional[str] = None
     project_id: Optional[int] = None
 
 

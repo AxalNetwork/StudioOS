@@ -319,6 +319,7 @@ class Ticket(SQLModel, table=True):
     status: TicketStatus = TicketStatus.OPEN
     submitted_by: Optional[str] = None
     assigned_to: Optional[str] = None
+    user_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
     project_id: Optional[int] = Field(default=None, foreign_key="projects.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
