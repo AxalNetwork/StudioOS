@@ -30,7 +30,7 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
       capital.py       — Capital & investment ops + POST /capitalCall
       tickets.py       — Support hub
       deals.py         — Deal flow pipeline (applied→scored→active→funded)
-      users.py         — User management with roles (admin/founder/partner/lp)
+      users.py         — User management with roles (admin/founder/partner)
       market_intel.py  — Market intelligence (sector signals, macro, private rounds)
       advisory.py      — AI advisory + financial planner + diligence checker
       activity.py      — Activity/audit log endpoints
@@ -61,7 +61,6 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
       MarketIntelPage.jsx — Market intelligence (pulse, macro, private, conviction, benchmarks)
       AdvisoryPage.jsx  — AI advisory + financial planner + diligence checker
       ActivityPage.jsx  — System activity/audit log
-      LPPortalPage.jsx  — LP investor portal (portfolio, capital calls, returns)
       ApiBridgePage.jsx — API Bridge & Jekyll integration (bridge script, usage examples, config)
 ```
 
@@ -75,7 +74,7 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 7. **Capital & Investment Engine** — Capital calls, LP investor portal, portfolio performance tracking
 
 ## Database Tables
-- **users** — id, email, name, role (admin/founder/partner/lp), password_hash, email_verified, verification_token, verification_token_expires
+- **users** — id, email, name, role (admin/founder/partner), password_hash, email_verified, verification_token, verification_token_expires
 - **projects** — Startup pipeline (status, playbook week, sector, financials)
 - **founders** — Founder profiles
 - **partners** — Partner ecosystem with referral codes
@@ -148,7 +147,7 @@ Admin:
 Private Data API (Jekyll Bridge):
 - GET /api/private-data/profile — User profile + linked founder/partner data (auth required)
 - GET /api/private-data/market/private-signals — Private market signals + conviction status (admin/partner)
-- GET /api/private-data/portfolio/metrics — Role-scoped portfolio metrics (founder: projects/burn, partner: deals, lp: fund/TVPI, admin: all)
+- GET /api/private-data/portfolio/metrics — Role-scoped portfolio metrics (founder: projects/burn, partner: deals+fund/TVPI+portfolio, admin: all)
 - GET /api/private-data/founder/{user_id} — Founder-specific data (admin or self only)
 
 Full CRUD on projects, partners, investors, tickets, deals, users, documents, entities.
@@ -177,15 +176,14 @@ Full CRUD on projects, partners, investors, tickets, deals, users, documents, en
 - F. Distribution (10 pts): Channels (0-5), Virality (0-5)
 
 ## User Portals & RBAC
-Role-based access control with 4 roles: admin, founder, partner, lp
+Role-based access control with 3 roles: admin, founder, partner (partner includes LP investor capabilities)
 
 1. **Admin Console** — User management, role changes, impersonation ("Login As"), portal switcher
 2. **StudioOS Dashboard** — Studio overview (all roles see this)
 3. **Founder Portal** — Multi-step submission with instant scoring results
-4. **Partner Portal** — Deal access + capital call acceptance
-5. **LP Investor Portal** — Portfolio performance, capital calls, returns tracking
+4. **Partner / Investor Portal** — Deal flow, LP investors, capital calls, portfolio performance
 
-**Portal Switcher** (Admin only): A violet bar at the top allows admins to switch between Admin/Founder/Partner/LP views. Sidebar navigation updates dynamically based on the selected view mode.
+**Portal Switcher** (Admin only): A violet bar at the top allows admins to switch between Admin/Founder/Partner views. Sidebar navigation updates dynamically based on the selected view mode.
 
 **Impersonation**: Admins can "Login As" any user to troubleshoot their experience. Original admin session is preserved and can be restored with "Exit Impersonation".
 

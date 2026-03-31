@@ -3,7 +3,7 @@ import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'reac
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
-  Globe, Brain, Activity, Briefcase, LogOut, Shield,
+  Globe, Brain, Activity, LogOut, Shield,
   ChevronDown, Eye, ArrowLeft, Code
 } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
@@ -20,7 +20,6 @@ import PartnerPortal from './pages/PartnerPortal';
 import MarketIntelPage from './pages/MarketIntelPage';
 import AdvisoryPage from './pages/AdvisoryPage';
 import ActivityPage from './pages/ActivityPage';
-import LPPortalPage from './pages/LPPortalPage';
 import AdminPage from './pages/AdminPage';
 import ApiBridgePage from './pages/ApiBridgePage';
 import LandingPage from './pages/LandingPage';
@@ -29,43 +28,39 @@ import LoginPage from './pages/LoginPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 
 const ALL_NAV_ITEMS = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'founder', 'partner', 'lp'] },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'founder', 'partner'] },
   { to: '/admin', icon: Shield, label: 'Admin Console', roles: ['admin'] },
   { to: '/scoring', icon: Target, label: 'Scoring Engine', roles: ['admin', 'partner'] },
   { to: '/projects', icon: Zap, label: 'Projects', roles: ['admin', 'founder', 'partner'] },
   { to: '/deals', icon: Handshake, label: 'Deal Flow', roles: ['admin', 'partner'] },
-  { to: '/market-intel', icon: Globe, label: 'Market Intelligence', roles: ['admin', 'partner'], divider: false },
+  { to: '/market-intel', icon: Globe, label: 'Market Intelligence', roles: ['admin', 'partner'] },
   { to: '/advisory', icon: Brain, label: 'AI Advisory Suite', roles: ['admin', 'founder'] },
   { to: '/legal', icon: FileText, label: 'Legal & Compliance', roles: ['admin', 'founder'] },
   { to: '/partners', icon: Users, label: 'Partners', roles: ['admin', 'partner'] },
-  { to: '/capital', icon: DollarSign, label: 'Capital & Investment', roles: ['admin', 'lp'] },
+  { to: '/capital', icon: DollarSign, label: 'Capital & Investment', roles: ['admin', 'partner'] },
   { to: '/tickets', icon: Ticket, label: 'Support', roles: ['admin', 'founder', 'partner'] },
   { to: '/activity', icon: Activity, label: 'Activity Log', roles: ['admin'] },
   { to: '/api-bridge', icon: Code, label: 'API Bridge', roles: ['admin'] },
   { to: '/founder', icon: Rocket, label: 'Founder Portal', roles: ['admin', 'founder'], divider: true },
-  { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal', roles: ['admin', 'partner'] },
-  { to: '/lp-portal', icon: Briefcase, label: 'LP Investor Portal', roles: ['admin', 'lp'] },
+  { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal', roles: ['admin', 'partner'] },
 ];
 
 const ROLE_LABELS = {
   admin: 'Admin',
   founder: 'Founder',
-  partner: 'Partner',
-  lp: 'LP Investor',
+  partner: 'Partner / Investor',
 };
 
 const ROLE_COLORS = {
   admin: 'bg-violet-100 text-violet-700',
   founder: 'bg-blue-100 text-blue-700',
   partner: 'bg-emerald-100 text-emerald-700',
-  lp: 'bg-amber-100 text-amber-700',
 };
 
 const ROLE_DEFAULT_PATH = {
   admin: '/dashboard',
   founder: '/founder',
   partner: '/partner-portal',
-  lp: '/lp-portal',
 };
 
 const ViewModeContext = createContext(null);
@@ -368,14 +363,14 @@ export default function App() {
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
 
-      <Route path="/dashboard" element={guard(['admin', 'founder', 'partner', 'lp'], <Dashboard />)} />
+      <Route path="/dashboard" element={guard(['admin', 'founder', 'partner'], <Dashboard />)} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
       <Route path="/scoring" element={guard(['admin', 'partner'], <ScoringPage />)} />
       <Route path="/projects" element={guard(['admin', 'founder', 'partner'], <ProjectsPage />)} />
       <Route path="/projects/:id" element={guard(['admin', 'founder', 'partner'], <ProjectDetail />)} />
       <Route path="/legal" element={guard(['admin', 'founder'], <LegalPage />)} />
       <Route path="/partners" element={guard(['admin', 'partner'], <PartnersPage />)} />
-      <Route path="/capital" element={guard(['admin', 'lp'], <CapitalPage />)} />
+      <Route path="/capital" element={guard(['admin', 'partner'], <CapitalPage />)} />
       <Route path="/tickets" element={guard(['admin', 'founder', 'partner'], <TicketsPage />)} />
       <Route path="/deals" element={guard(['admin', 'partner'], <DealsPage />)} />
       <Route path="/market-intel" element={guard(['admin', 'partner'], <MarketIntelPage />)} />
@@ -384,7 +379,6 @@ export default function App() {
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
       <Route path="/partner-portal" element={guard(['admin', 'partner'], <PartnerPortal />)} />
-      <Route path="/lp-portal" element={guard(['admin', 'lp'], <LPPortalPage />)} />
     </Routes>
   );
 }

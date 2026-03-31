@@ -104,8 +104,6 @@ def get_portfolio_metrics(
         return _founder_portfolio(user, session)
     elif role == UserRole.PARTNER:
         return _partner_portfolio(user, session)
-    elif role == UserRole.LP:
-        return _lp_portfolio(user, session)
     elif role == UserRole.ADMIN:
         return _admin_portfolio(session)
     else:
@@ -195,15 +193,6 @@ def _partner_portfolio(user: User, session: Session):
             "created_at": d.created_at.isoformat() if d.created_at else None,
         })
 
-    return {
-        "role": "partner",
-        "deals": deal_results,
-        "total_deals": len(deal_results),
-        "active_deals": sum(1 for d in deal_results if d["status"] in ["applied", "scored", "active"]),
-    }
-
-
-def _lp_portfolio(user: User, session: Session):
     investors = session.exec(select(LPInvestor)).all()
     total_committed = sum(i.committed_capital or 0 for i in investors)
     total_called = sum(i.called_capital or 0 for i in investors)
@@ -237,7 +226,10 @@ def _lp_portfolio(user: User, session: Session):
     tvpi = round(total_committed / total_called, 2) if total_called > 0 else 0
 
     return {
-        "role": "lp",
+        "role": "partner",
+        "deals": deal_results,
+        "total_deals": len(deal_results),
+        "active_deals": sum(1 for d in deal_results if d["status"] in ["applied", "scored", "active"]),
         "fund_metrics": {
             "total_committed": total_committed,
             "total_called": total_called,

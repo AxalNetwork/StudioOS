@@ -6,7 +6,6 @@ const ROLE_BADGES = {
   admin: 'bg-violet-100 text-violet-700',
   founder: 'bg-blue-100 text-blue-700',
   partner: 'bg-emerald-100 text-emerald-700',
-  lp: 'bg-amber-100 text-amber-700',
 };
 
 export default function AdminPage({ onImpersonate }) {
@@ -64,7 +63,6 @@ export default function AdminPage({ onImpersonate }) {
     admin: users.filter(u => u.role === 'admin').length,
     founder: users.filter(u => u.role === 'founder').length,
     partner: users.filter(u => u.role === 'partner').length,
-    lp: users.filter(u => u.role === 'lp').length,
   };
 
   if (loading) return <div className="text-gray-600 text-center py-20">Loading users...</div>;
@@ -77,7 +75,7 @@ export default function AdminPage({ onImpersonate }) {
       </div>
       <p className="text-gray-600 mb-6">Manage users, roles, and portal access</p>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {Object.entries(counts).map(([role, count]) => (
           <button
             key={role}
@@ -89,7 +87,7 @@ export default function AdminPage({ onImpersonate }) {
             }`}
           >
             <div className="text-lg font-bold">{count}</div>
-            <div className="capitalize">{role === 'all' ? 'All Users' : role === 'lp' ? 'LP Investors' : `${role}s`}</div>
+            <div className="capitalize">{role === 'all' ? 'All Users' : role === 'partner' ? 'Partners / Investors' : `${role}s`}</div>
           </button>
         ))}
       </div>
@@ -132,7 +130,6 @@ export default function AdminPage({ onImpersonate }) {
                           <option value="admin">Admin</option>
                           <option value="founder">Founder</option>
                           <option value="partner">Partner</option>
-                          <option value="lp">LP</option>
                         </select>
                         <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
                       </div>

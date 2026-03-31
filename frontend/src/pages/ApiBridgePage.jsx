@@ -167,12 +167,9 @@ const studioos = new StudioOSBridge(STUDIOOS_API);`;
     if (data.role === "founder") {
       // Render founder metrics (burn multiple, LTV/CAC)
       renderFounderDashboard(data.projects);
-    } else if (data.role === "lp") {
-      // Render LP capital account
-      renderLPDashboard(data.fund_metrics, data.capital_calls);
     } else if (data.role === "partner") {
-      // Render partner deal flow
-      renderPartnerDashboard(data.deals);
+      // Render partner deal flow + LP investor data + portfolio
+      renderPartnerDashboard(data.deals, data.fund_metrics, data.capital_calls, data.portfolio);
     }
   });
 
@@ -209,7 +206,6 @@ const studioos = new StudioOSBridge(STUDIOOS_API);`;
           admin: "/admin.html",
           founder: "/founder.html",
           partner: "/partner.html",
-          lp: "/investor.html",
         };
         window.location.href = redirects[user.role] || "/dashboard.html";
       } catch (err) {

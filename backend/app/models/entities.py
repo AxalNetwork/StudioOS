@@ -75,7 +75,6 @@ class UserRole(str, Enum):
     ADMIN = "admin"
     FOUNDER = "founder"
     PARTNER = "partner"
-    LP = "lp"
 
 
 class User(SQLModel, table=True):
