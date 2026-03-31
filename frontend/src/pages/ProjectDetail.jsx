@@ -54,22 +54,22 @@ export default function ProjectDetail() {
     } catch (e) { alert(e.message); }
   };
 
-  if (loading) return <div className="text-gray-400 text-center py-20">Loading...</div>;
-  if (!project) return <div className="text-red-400 text-center py-20">Project not found</div>;
+  if (loading) return <div className="text-gray-600 text-center py-20">Loading...</div>;
+  if (!project) return <div className="text-red-600 text-center py-20">Project not found</div>;
 
   const week = weekLabels[project.playbook_week] || weekLabels.week_1;
   const latestScore = scores[0];
 
   return (
     <div>
-      <Link to="/projects" className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 mb-4">
+      <Link to="/projects" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-4">
         <ArrowLeft size={14} /> Back to Projects
       </Link>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">{project.name}</h1>
-          <p className="text-sm text-gray-400">{project.description || project.sector}</p>
+          <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+          <p className="text-sm text-gray-600">{project.description || project.sector}</p>
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={project.status} />
@@ -103,22 +103,22 @@ export default function ProjectDetail() {
       </div>
 
       {project.founder && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
-          <h3 className="text-sm font-semibold text-white mb-2">Founder</h3>
-          <div className="text-sm text-gray-300">{project.founder.name}</div>
-          <div className="text-xs text-gray-500">{project.founder.email} | {project.founder.domain_expertise} | {project.founder.experience_years}yr exp</div>
-          {project.founder.bio && <div className="text-xs text-gray-400 mt-1">{project.founder.bio}</div>}
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-2">Founder</h3>
+          <div className="text-sm text-gray-900">{project.founder.name}</div>
+          <div className="text-xs text-gray-600">{project.founder.email} | {project.founder.domain_expertise} | {project.founder.experience_years}yr exp</div>
+          {project.founder.bio && <div className="text-xs text-gray-700 mt-1">{project.founder.bio}</div>}
         </div>
       )}
 
       <div className="grid lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-white mb-3">4-Week Playbook</h3>
-          <div className="text-sm font-medium text-violet-400 mb-2">{week.name}</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">4-Week Playbook</h3>
+          <div className="text-sm font-medium text-violet-600 mb-2">{week.name}</div>
           <ul className="space-y-1">
             {week.tasks.map((t, i) => (
-              <li key={i} className="flex items-center gap-2 text-xs text-gray-400">
-                <span className="w-1.5 h-1.5 bg-gray-600 rounded-full" />{t}
+              <li key={i} className="flex items-center gap-2 text-xs text-gray-700">
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full" />{t}
               </li>
             ))}
           </ul>
@@ -127,51 +127,51 @@ export default function ProjectDetail() {
             {['week_1', 'week_2', 'week_3', 'week_4'].map(w => (
               <div key={w} className={`flex-1 h-2 rounded-full ${
                 project.playbook_week === 'complete' || ['week_2','week_3','week_4'].indexOf(project.playbook_week) >= ['week_2','week_3','week_4'].indexOf(w)
-                  ? 'bg-violet-500' : 'bg-gray-200'
+                  ? 'bg-violet-500' : 'bg-gray-300'
               }`} />
             ))}
           </div>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-            <Target size={14} className="text-violet-400" /> Latest Score
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <Target size={14} className="text-violet-600" /> Latest Score
           </h3>
           {latestScore ? (
             <div>
               <div className={`text-4xl font-bold ${
-                latestScore.tier === 'TIER_1' ? 'text-emerald-400' :
-                latestScore.tier === 'TIER_2' ? 'text-blue-400' : 'text-red-400'
+                latestScore.tier === 'TIER_1' ? 'text-emerald-600' :
+                latestScore.tier === 'TIER_2' ? 'text-blue-600' : 'text-red-600'
               }`}>{latestScore.total_score}</div>
-              <div className="text-xs text-gray-400 mt-1">{latestScore.tier.replace('_', ' ')}</div>
+              <div className="text-xs text-gray-600 mt-1">{latestScore.tier.replace('_', ' ')}</div>
               <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
-                <div className="text-gray-400">Market: <span className="text-white">{latestScore.market_total}</span>/25</div>
-                <div className="text-gray-400">Team: <span className="text-white">{latestScore.team_total}</span>/20</div>
-                <div className="text-gray-400">Product: <span className="text-white">{latestScore.product_total}</span>/15</div>
-                <div className="text-gray-400">Capital: <span className="text-white">{latestScore.capital_total}</span>/15</div>
-                <div className="text-gray-400">Fit: <span className="text-white">{latestScore.fit_total}</span>/15</div>
-                <div className="text-gray-400">Distrib: <span className="text-white">{latestScore.distribution_total}</span>/10</div>
+                <div className="text-gray-600">Market: <span className="text-gray-900">{latestScore.market_total}</span>/25</div>
+                <div className="text-gray-600">Team: <span className="text-gray-900">{latestScore.team_total}</span>/20</div>
+                <div className="text-gray-600">Product: <span className="text-gray-900">{latestScore.product_total}</span>/15</div>
+                <div className="text-gray-600">Capital: <span className="text-gray-900">{latestScore.capital_total}</span>/15</div>
+                <div className="text-gray-600">Fit: <span className="text-gray-900">{latestScore.fit_total}</span>/15</div>
+                <div className="text-gray-600">Distrib: <span className="text-gray-900">{latestScore.distribution_total}</span>/10</div>
               </div>
             </div>
           ) : (
-            <div className="text-sm text-gray-500">No score yet. <Link to="/scoring" className="text-violet-400 hover:underline">Run scoring</Link></div>
+            <div className="text-sm text-gray-600">No score yet. <Link to="/scoring" className="text-violet-600 hover:underline">Run scoring</Link></div>
           )}
         </div>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-          <FileText size={14} className="text-violet-400" /> Documents
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <FileText size={14} className="text-violet-600" /> Documents
         </h3>
         {docs.length === 0 ? (
-          <p className="text-sm text-gray-500">No documents generated yet</p>
+          <p className="text-sm text-gray-600">No documents generated yet</p>
         ) : (
           <div className="space-y-2">
             {docs.map(d => (
-              <div key={d.id} className="flex items-center justify-between px-3 py-2 bg-gray-800 rounded-lg text-sm">
+              <div key={d.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg text-sm">
                 <div>
-                  <span className="text-white">{d.title}</span>
-                  <span className="text-xs text-gray-500 ml-2">{d.doc_type}</span>
+                  <span className="text-gray-900">{d.title}</span>
+                  <span className="text-xs text-gray-600 ml-2">{d.doc_type}</span>
                 </div>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${
                   d.status === 'signed' ? 'bg-emerald-100 text-emerald-700' :
@@ -189,9 +189,9 @@ export default function ProjectDetail() {
 
 function InfoCard({ label, value }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
-      <div className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</div>
-      <div className="text-sm text-white font-medium mt-0.5 capitalize">{value || '—'}</div>
+    <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+      <div className="text-[10px] text-gray-600 uppercase tracking-wider">{label}</div>
+      <div className="text-sm text-gray-900 font-medium mt-0.5 capitalize">{value || '—'}</div>
     </div>
   );
 }
