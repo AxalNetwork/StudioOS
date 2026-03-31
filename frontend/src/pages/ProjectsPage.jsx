@@ -48,7 +48,7 @@ export default function ProjectsPage() {
           <h2 className="font-semibold text-gray-900 text-sm mb-4">Add New Project</h2>
           <div className="grid md:grid-cols-2 gap-4">
             <Input label="Project Name" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
-            <Input label="Sector" value={form.sector} onChange={v => setForm(f => ({ ...f, sector: v }))} />
+            <SectorSelect value={form.sector} onChange={v => setForm(f => ({ ...f, sector: v }))} />
             <Input label="Founder Name" value={form.founder_name} onChange={v => setForm(f => ({ ...f, founder_name: v }))} />
             <Input label="Founder Email" value={form.founder_email} onChange={v => setForm(f => ({ ...f, founder_email: v }))} />
             <div className="md:col-span-2">
@@ -113,6 +113,25 @@ export default function ProjectsPage() {
   );
 }
 
+const SECTORS = [
+  '3D Printing / Additive Manufacturing', 'AdTech', 'Advanced Manufacturing', 'Advanced Materials', 'Aerospace',
+  'AgTech / AgriTech', 'AI / Machine Learning', 'AI Agents / Agentic Systems', 'AI Infrastructure', 'Alternative Energy',
+  'AR / VR / XR / Spatial Computing', 'Audiotech', 'Autonomous Robotics', 'Autonomous Vehicles', 'Battery Tech',
+  'B2B SaaS', 'Beauty Tech', 'Big Data / Analytics', 'Bio-Automation', 'Bioinformatics',
+  'Biotech / Life Sciences', 'Blockchain / Crypto / Web3', 'Carbon Capture', 'Clean Energy', 'Climate Intelligence / Climate Tech',
+  'Cloud Computing', 'Construction Tech (ConTech)', 'Consumer Electronics', 'Consumer Internet / Apps', 'Consumer Tech',
+  'Cybersecurity', 'Data Infrastructure', 'Defense Tech / GovTech', 'DeFi', 'Digital Health',
+  'Digital Twins', 'Drone Tech', 'E-commerce / Marketplace', 'EdTech', 'Edge Computing',
+  'Electric Vehicles', 'Embedded Finance', 'Energy Storage / Renewables', 'Energy Tech', 'Enterprise AI Software',
+  'Enterprise Software', 'FinTech', 'Food Tech', 'Gaming / eSports / Entertainment', 'GovTech',
+  'Hardware', 'HealthTech / MedTech', 'HR Tech', 'Industrial IoT', 'InsurTech',
+  'IoT', 'Legal Tech', 'Logistics / Supply Chain Tech', 'Marine Tech', 'Mobility / Transportation Tech',
+  'Music Tech', 'Nanotechnology', 'Neurotech', 'Photonics', 'Precision Medicine',
+  'PropTech / Real Estate Tech', 'Quantum Computing / Infrastructure', 'Regenerative Medicine', 'Robotics & Automation', 'Satellite / Space Tech',
+  'Semiconductors', 'Social Tech / Social Media', 'Sports Tech', 'Supply Chain Tech', 'Sustainability / Cleantech',
+  'Synthetic Biology', 'Vertical SaaS', 'Wearables', 'Web3 / Metaverse'
+];
+
 function Input({ label, value, onChange }) {
   return (
     <div>
@@ -121,6 +140,23 @@ function Input({ label, value, onChange }) {
         type="text" value={value} onChange={e => onChange(e.target.value)}
         className="w-full bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
       />
+    </div>
+  );
+}
+
+function SectorSelect({ label = 'Sector', value, onChange }) {
+  return (
+    <div>
+      <label className="block text-xs text-gray-600 mb-1">{label}</label>
+      <select
+        value={value} onChange={e => onChange(e.target.value)}
+        className="w-full bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
+      >
+        <option value="">Select a sector...</option>
+        {SECTORS.map(sector => (
+          <option key={sector} value={sector}>{sector}</option>
+        ))}
+      </select>
     </div>
   );
 }
