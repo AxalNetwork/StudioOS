@@ -1,4 +1,7 @@
-const BASE = '/api';
+const BACKEND_URL = window.location.hostname === 'axal.vc'
+  ? 'https://1162e933-32b6-4e52-9bfb-42fec8196216-00-36myluq91vtni.worf.replit.dev'
+  : '';
+const BASE = `${BACKEND_URL}/api`;
 
 function getAuthHeaders() {
   const token = localStorage.getItem('token');

@@ -195,13 +195,14 @@ Vite proxies /api/* to the backend.
 4 example projects, 3 partners, 2 LP investors, 2 tickets.
 
 ## GitHub Pages (axal.vc)
-The root of the repo contains a static landing page served by GitHub Pages at axal.vc:
-- `index.html` — Static HTML landing page matching the React LandingPage component
-- `404.html` — Branded 404 error page
-- `.nojekyll` — Disables Jekyll processing
-- `CNAME` — Custom domain (axal.vc)
-- `axal-mark.png` — Logo asset
-Sign In / Get Started / Apply links point to the Replit-hosted StudioOS app.
+The `docs/` directory contains the production build of the React frontend, served by GitHub Pages at axal.vc:
+- Built via `./build-pages.sh` or `cd frontend && npx vite build`
+- Output: `docs/` with index.html, assets/, 404.html, .nojekyll, CNAME
+- SPA routing handled via 404.html redirect trick (GitHub Pages SPA pattern)
+- API calls from axal.vc point to the Replit backend (cross-origin, CORS configured)
+- CORS: backend explicitly allows `https://axal.vc` and `https://www.axal.vc`
+- GitHub Pages source: main branch, `/docs` folder
+- `api.js` auto-detects hostname: uses relative `/api` on Replit, full URL on axal.vc
 
 ## Deployment
 Autoscale deployment: builds frontend, serves via FastAPI with static files.

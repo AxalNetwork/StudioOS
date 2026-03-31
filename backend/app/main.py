@@ -14,12 +14,13 @@ app = FastAPI(
 )
 
 JEKYLL_ORIGIN = os.environ.get("JEKYLL_ORIGIN", "")
-CORS_ORIGINS = [o.strip() for o in JEKYLL_ORIGIN.split(",") if o.strip()] if JEKYLL_ORIGIN else ["*"]
+EXTRA_ORIGINS = [o.strip() for o in JEKYLL_ORIGIN.split(",") if o.strip()] if JEKYLL_ORIGIN else []
+CORS_ORIGINS = ["https://axal.vc", "https://www.axal.vc"] + EXTRA_ORIGINS
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=True if JEKYLL_ORIGIN else False,
+    allow_origins=CORS_ORIGINS if CORS_ORIGINS else ["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
