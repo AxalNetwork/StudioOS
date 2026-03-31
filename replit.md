@@ -35,6 +35,7 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
       advisory.py      — AI advisory + financial planner + diligence checker
       activity.py      — Activity/audit log endpoints
       admin.py         — Admin console (user list, impersonation, role management)
+      private_data.py  — Private data API (role-scoped profile, signals, portfolio)
   seed.py              — Seed data script
 
 /frontend/
@@ -61,6 +62,7 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
       AdvisoryPage.jsx  — AI advisory + financial planner + diligence checker
       ActivityPage.jsx  — System activity/audit log
       LPPortalPage.jsx  — LP investor portal (portfolio, capital calls, returns)
+      ApiBridgePage.jsx — API Bridge & Jekyll integration (bridge script, usage examples, config)
 ```
 
 ## StudioOS Modules (7 Engines)
@@ -143,7 +145,20 @@ Admin:
 - PATCH /api/admin/users/{user_id}/role — Change user role (admin only)
 - PATCH /api/admin/users/{user_id}/toggle-active — Toggle user active status (admin only)
 
+Private Data API (Jekyll Bridge):
+- GET /api/private-data/profile — User profile + linked founder/partner data (auth required)
+- GET /api/private-data/market/private-signals — Private market signals + conviction status (admin/partner)
+- GET /api/private-data/portfolio/metrics — Role-scoped portfolio metrics (founder: projects/burn, partner: deals, lp: fund/TVPI, admin: all)
+- GET /api/private-data/founder/{user_id} — Founder-specific data (admin or self only)
+
 Full CRUD on projects, partners, investors, tickets, deals, users, documents, entities.
+
+## Jekyll Integration (Clean Room Architecture)
+- Private data (PII, financials, auth) stays in Replit PostgreSQL
+- External Jekyll site fetches data via authenticated API calls
+- Set JEKYLL_ORIGIN env var to restrict CORS to Jekyll domain (e.g., https://your-studio.github.io)
+- Frontend bridge script available at /api-bridge page (admin only)
+- Bridge handles JWT auth, session management, impersonation, and role-based data loading
 
 ## Automation Logic
 - Startup submitted via Founder Portal → auto-scored immediately

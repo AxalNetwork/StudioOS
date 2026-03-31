@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from backend.app.database import init_db
-from backend.app.api.routes import scoring, projects, legal, partners, capital, tickets, deals, users, market_intel, advisory, activity, auth, admin
+from backend.app.api.routes import scoring, projects, legal, partners, capital, tickets, deals, users, market_intel, advisory, activity, auth, admin, private_data
 
 app = FastAPI(
     title="Axal VC — StudioOS",
@@ -13,10 +13,13 @@ app = FastAPI(
     version="1.0.0",
 )
 
+JEKYLL_ORIGIN = os.environ.get("JEKYLL_ORIGIN", "")
+CORS_ORIGINS = [o.strip() for o in JEKYLL_ORIGIN.split(",") if o.strip()] if JEKYLL_ORIGIN else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True if JEKYLL_ORIGIN else False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -34,6 +37,7 @@ app.include_router(advisory.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(private_data.router, prefix="/api")
 
 
 @app.on_event("startup")

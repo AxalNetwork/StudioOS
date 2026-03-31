@@ -101,4 +101,9 @@ export const api = {
   adminImpersonate: (userId) => request(`/admin/impersonate/${userId}`, { method: 'POST' }),
   adminUpdateRole: (userId, role) => request(`/admin/users/${userId}/role?role=${role}`, { method: 'PATCH' }),
   adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),
+
+  privateProfile: () => request('/private-data/profile'),
+  privateSignals: () => request('/private-data/market/private-signals'),
+  privatePortfolioMetrics: () => request('/private-data/portfolio/metrics'),
+  privateFounderData: (userId) => request(`/private-data/founder/${userId}`),
 };

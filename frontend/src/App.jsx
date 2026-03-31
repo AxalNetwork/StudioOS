@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, Briefcase, LogOut, Shield,
-  ChevronDown, Eye, ArrowLeft
+  ChevronDown, Eye, ArrowLeft, Code
 } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import ScoringPage from './pages/ScoringPage';
@@ -22,6 +22,7 @@ import AdvisoryPage from './pages/AdvisoryPage';
 import ActivityPage from './pages/ActivityPage';
 import LPPortalPage from './pages/LPPortalPage';
 import AdminPage from './pages/AdminPage';
+import ApiBridgePage from './pages/ApiBridgePage';
 import LandingPage from './pages/LandingPage';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
@@ -40,6 +41,7 @@ const ALL_NAV_ITEMS = [
   { to: '/capital', icon: DollarSign, label: 'Capital & Investment', roles: ['admin', 'lp'] },
   { to: '/tickets', icon: Ticket, label: 'Support', roles: ['admin', 'founder', 'partner'] },
   { to: '/activity', icon: Activity, label: 'Activity Log', roles: ['admin'] },
+  { to: '/api-bridge', icon: Code, label: 'API Bridge', roles: ['admin'] },
   { to: '/founder', icon: Rocket, label: 'Founder Portal', roles: ['admin', 'founder'], divider: true },
   { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal', roles: ['admin', 'partner'] },
   { to: '/lp-portal', icon: Briefcase, label: 'LP Investor Portal', roles: ['admin', 'lp'] },
@@ -379,6 +381,7 @@ export default function App() {
       <Route path="/market-intel" element={guard(['admin', 'partner'], <MarketIntelPage />)} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
       <Route path="/activity" element={guard(['admin'], <ActivityPage />)} />
+      <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
       <Route path="/partner-portal" element={guard(['admin', 'partner'], <PartnerPortal />)} />
       <Route path="/lp-portal" element={guard(['admin', 'lp'], <LPPortalPage />)} />
