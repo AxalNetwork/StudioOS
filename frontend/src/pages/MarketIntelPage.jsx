@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, ChevronDown } from 'lucide-react';
 import { api } from '../lib/api';
 
 export default function MarketIntelPage() {
@@ -9,6 +9,7 @@ export default function MarketIntelPage() {
   const [benchmarks, setBenchmarks] = useState(null);
   const [conviction, setConviction] = useState([]);
   const [tab, setTab] = useState('pulse');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -39,15 +40,53 @@ export default function MarketIntelPage() {
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Market Intelligence</h1>
       <p className="text-sm text-gray-600 mb-6">Signal-to-Action pipeline for competitive advantage</p>
 
-      <div className="flex gap-1 mb-6 overflow-x-auto pb-2">
-        {tabs.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
-              tab === t.key ? 'bg-violet-600 text-white' : 'bg-gray-200 text-gray-700 hover:text-gray-900'
-            }`}>
-            <t.icon size={14} /> {t.label}
+      <div className="mb-6">
+        {/* Desktop tabs */}
+        <div className="hidden md:flex gap-1 overflow-x-auto pb-2">
+          {tabs.map(t => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                tab === t.key ? 'bg-violet-600 text-white' : 'bg-gray-200 text-gray-700 hover:text-gray-900'
+              }`}>
+              <t.icon size={14} /> {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Mobile dropdown */}
+        <div className="md:hidden relative">
+          <button
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-900 hover:bg-gray-50 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              {tabs.find(t => t.key === tab)?.icon && React.createElement(tabs.find(t => t.key === tab).icon, { size: 14 })}
+              {tabs.find(t => t.key === tab)?.label}
+            </span>
+            <ChevronDown size={16} className={`transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
           </button>
-        ))}
+
+          {dropdownOpen && (
+            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg z-50">
+              {tabs.map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => {
+                    setTab(t.key);
+                    setDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b border-gray-100 last:border-b-0 ${
+                    tab === t.key
+                      ? 'bg-violet-50 text-violet-600'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <t.icon size={14} /> {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {tab === 'pulse' && (
