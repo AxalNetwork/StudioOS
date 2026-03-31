@@ -45,8 +45,8 @@ externalPort = 8000
 
 [deployment]
 deploymentTarget = "autoscale"
-build = ["bash", "-c", "export UV_PROJECT_ENVIRONMENT=/home/runner/workspace/.venv && export UV_SYSTEM_PYTHON=0 && uv venv /home/runner/workspace/.venv && uv pip install -e . --python /home/runner/workspace/.venv/bin/python && cd frontend && npx vite build && cp -r dist ../static"]
-run = ["bash", "-c", "export UV_PROJECT_ENVIRONMENT=/home/runner/workspace/.venv && /home/runner/workspace/.venv/bin/python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 5000"]
+build = ["bash", "-c", "python3 -m venv /home/runner/workspace/.deploy_venv && /home/runner/workspace/.deploy_venv/bin/pip install --upgrade pip && /home/runner/workspace/.deploy_venv/bin/pip install -r requirements.txt && cd frontend && npx vite build && cp -r dist ../static"]
+run = ["bash", "-c", "/home/runner/workspace/.deploy_venv/bin/python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 5000"]
 
 [userenv]
 
