@@ -1,9 +1,14 @@
 #!/bin/bash
-cd frontend && npx vite build
-touch ../docs/.nojekyll
-echo "axal.vc" > ../docs/CNAME
+set -e
 
-cat > ../docs/404.html << 'SPAEOF'
+echo "Building React app for GitHub Pages..."
+cd frontend && npx vite build
+cd ..
+
+touch docs/.nojekyll
+echo "axal.vc" > docs/CNAME
+
+cat > docs/404.html << 'SPAEOF'
 <!DOCTYPE html>
 <html>
 <head>
@@ -25,10 +30,17 @@ cat > ../docs/404.html << 'SPAEOF'
 </html>
 SPAEOF
 
-INDEXFILE="../docs/index.html"
+INDEXFILE="docs/index.html"
 if ! grep -q "replaceState" "$INDEXFILE"; then
-  sed -i 's|</title>|</title>\n  <meta name="description" content="Axal Ventures — From Idea to Funded Company in 30 Days. The operating system for venture creation." />\n  <script type="text/javascript">\n    (function(l) {\n      if (l.search[1] === '"'"'/'"'"' ) {\n        var decoded = l.search.slice(1).split('"'"'\&'"'"').map(function(s) { \n          return s.replace(/~and~/g, '"'"'\&'"'"')\n        }).join('"'"'?'"'"');\n        window.history.replaceState(null, null,\n            l.pathname.slice(0, -1) + decoded + l.hash\n        );\n      }\n    }(window.location))\n  </script>|' "$INDEXFILE"
+  sed -i '/<\/title>/a\  <meta name="description" content="Axal Ventures — From Idea to Funded Company in 30 Days." />\n  <script type="text/javascript">(function(l){if(l.search[1]==="/"){var decoded=l.search.slice(1).split("\&").map(function(s){return s.replace(/~and~/g,"\&")}).join("?");window.history.replaceState(null,null,l.pathname.slice(0,-1)+decoded+l.hash)}}(window.location))</script>' "$INDEXFILE"
 fi
 
-echo "Build complete! docs/ is ready for GitHub Pages."
-echo "Push to GitHub and set Pages source to: main branch, /docs folder"
+cp docs/index.html ./index.html
+cp docs/404.html ./404.html
+cp -r docs/assets/ ./assets/
+cp docs/.nojekyll ./.nojekyll
+cp docs/CNAME ./CNAME
+
+echo ""
+echo "Build complete! Files ready for GitHub Pages at both / and /docs."
+echo "Push to GitHub — Pages serves from main branch, / (root)."

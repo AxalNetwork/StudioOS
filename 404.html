@@ -1,32 +1,19 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Page Not Found — Axal Ventures</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
-  </style>
+  <meta charset="utf-8" />
+  <title>Axal VC — StudioOS</title>
+  <script type="text/javascript">
+    var pathSegmentsToKeep = 0;
+    var l = window.location;
+    l.replace(
+      l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+      l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
+      l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+      (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+      l.hash
+    );
+  </script>
 </head>
-<body class="bg-white text-gray-900 min-h-screen flex flex-col">
-  <nav class="border-b border-gray-200 px-6 py-3">
-    <div class="max-w-7xl mx-auto flex items-center justify-between">
-      <a href="/"><img src="/axal-mark.png" alt="Axal Ventures" class="h-8" /></a>
-      <a href="/" class="text-sm text-violet-600 hover:text-violet-700 font-medium">Go Home</a>
-    </div>
-  </nav>
-  <div class="flex-1 flex items-center justify-center px-6">
-    <div class="text-center">
-      <div class="text-6xl font-bold text-violet-600 mb-4">404</div>
-      <h1 class="text-2xl font-bold text-gray-900 mb-2">Page Not Found</h1>
-      <p class="text-gray-600 mb-8">The page you're looking for doesn't exist or has been moved.</p>
-      <a href="/" class="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-6 py-3 rounded-xl text-sm font-medium text-white">
-        Back to Home
-      </a>
-    </div>
-  </div>
-</body>
+<body></body>
 </html>
