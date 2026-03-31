@@ -69,7 +69,7 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 2. **Scoring & Diligence Engine** — 100-pt scoring, automated diligence (legal/tech/financial checks)
 3. **AI Advisory Suite** — AI advisor (strategy/GTM/fundraising), financial planner, diligence automation
 4. **Deal & Match Engine** — Deal flow pipeline, partner matchmaking, referral system
-5. **Legal & Compliance Engine** — Incorporation, templates (SAFE, bylaws, equity, IP), document management, spinout workflow
+5. **Legal & Compliance Engine** — Full VC legal stack across 4 layers: GP governance (operating agreement, carried interest, IC charter, service agreements), Fund formation (LPA, PPM, subscription, management co.), Portfolio execution (SAFE, term sheet, SPA, bylaws, equity split, IP, voting rights), Compliance (Form ADV, AML/KYC, 83(b) election). 18 templates total with preview, generation, and document management.
 6. **Operations & Support Hub** — Ticket support, activity/audit log
 7. **Capital & Investment Engine** — Capital calls, LP investor portal, portfolio performance tracking
 

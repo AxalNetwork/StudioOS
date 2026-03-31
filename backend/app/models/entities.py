@@ -40,6 +40,20 @@ class DocumentType(str, Enum):
     DILIGENCE_REPORT = "diligence_report"
     FINANCIAL_MODEL = "financial_model"
     OTHER = "other"
+    OPERATING_AGREEMENT = "operating_agreement"
+    CARRIED_INTEREST = "carried_interest"
+    IC_CHARTER = "ic_charter"
+    SERVICE_AGREEMENT = "service_agreement"
+    LPA = "lpa"
+    PPM = "ppm"
+    SUBSCRIPTION = "subscription"
+    MGMT_COMPANY = "mgmt_company"
+    TERM_SHEET = "term_sheet"
+    SPA = "spa"
+    VOTING_RIGHTS = "voting_rights"
+    FORM_ADV = "form_adv"
+    AML_KYC = "aml_kyc"
+    SECTION_83B = "section_83b"
 
 
 class DocumentStatus(str, Enum):

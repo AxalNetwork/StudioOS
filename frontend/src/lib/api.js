@@ -49,6 +49,7 @@ export const api = {
   scoringQueue: () => request('/scoring/queue'),
 
   listTemplates: () => request('/legal/templates'),
+  getTemplateContent: (key) => request(`/legal/templates/${key}`),
   generateDocument: (data) => request('/legal/documents/generate', { method: 'POST', body: JSON.stringify(data) }),
   listDocuments: (projectId) => request(`/legal/documents${projectId ? `?project_id=${projectId}` : ''}`),
   incorporateProject: (projectId) => request(`/legal/incorporate?project_id=${projectId}`, { method: 'POST' }),
