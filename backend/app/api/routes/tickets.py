@@ -40,6 +40,9 @@ async def create_ticket(data: TicketCreate, session: Session = Depends(get_sessi
     response = ticket.model_dump() if hasattr(ticket, 'model_dump') else dict(ticket)
     if github_result:
         response["github_issue"] = github_result
+        response["github_sync_status"] = "synced"
+    else:
+        response["github_sync_status"] = "failed"
 
     return response
 

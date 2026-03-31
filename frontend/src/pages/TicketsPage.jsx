@@ -86,8 +86,9 @@ export default function TicketsPage() {
             </div>
             <div>
               <label className="block text-xs text-gray-600 mb-1">Description</label>
-              <input type="text" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                className="w-full bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900" />
+              <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                rows={4}
+                className="w-full bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 resize-vertical min-h-[100px]" />
             </div>
           </div>
           <div className="flex gap-3 mt-4">

@@ -107,6 +107,11 @@ Auth:
 - GET /api/auth/me — Get current user (requires JWT)
 - POST /api/auth/verify-totp — Verify a TOTP code
 
+Support:
+- POST /api/tickets/ — Create ticket + auto-create GitHub issue on AxalNetwork/StudioOS
+- GET /api/tickets/ — List all tickets
+- PUT /api/tickets/{id} — Update ticket status/assignment
+
 Core:
 - POST /api/scoring/score — Score a startup (100-pt algorithm)
 - POST /api/scoring/generateMemo — AI-generated deal memo
@@ -173,6 +178,9 @@ Autoscale deployment: builds frontend, serves via FastAPI with static files.
 - GOOGLE_REFRESH_TOKEN — Gmail API OAuth2 refresh token (from OAuth Playground)
 - GMAIL_SENDER_EMAIL — Gmail address used to send verification emails
 - GOOGLE_REDIRECT_URI — OAuth2 redirect URI (defaults to OAuth Playground URL)
+- GITHUB_ACCESS_TOKEN — GitHub OAuth token (via Replit GitHub connector)
+- GITHUB_REPO_OWNER — GitHub repo owner for ticket issues (AxalNetwork)
+- GITHUB_REPO_NAME — GitHub repo name for ticket issues (StudioOS)
 
 ## Auth Packages
 - pyotp — TOTP generation/verification
