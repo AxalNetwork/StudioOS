@@ -5,7 +5,8 @@ from sqlmodel import Session, select
 from pydantic import BaseModel, Field
 from typing import Optional
 from backend.app.database import get_session
-from backend.app.models.entities import Project, ActivityLog
+from backend.app.models.entities import Project, ActivityLog, User
+from backend.app.api.routes.auth import get_current_user
 from datetime import datetime
 
 router = APIRouter(prefix="/advisory", tags=["AI Advisory"])
@@ -44,7 +45,7 @@ ADVISORY_TEMPLATES = {
 
 
 @router.post("/ask")
-def ask_advisory(req: AdvisoryRequest, session: Session = Depends(get_session)):
+def ask_advisory(req: AdvisoryRequest, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     project = None
     if req.project_id:
         project = session.get(Project, req.project_id)
@@ -142,7 +143,7 @@ Keep responses concise but thorough (3-5 key points with brief explanations)."""
 
 
 @router.post("/financial-plan")
-def generate_financial_plan(req: FinancialPlanRequest, session: Session = Depends(get_session)):
+def generate_financial_plan(req: FinancialPlanRequest, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     project = None
     if req.project_id:
         project = session.get(Project, req.project_id)
@@ -220,7 +221,7 @@ def generate_financial_plan(req: FinancialPlanRequest, session: Session = Depend
 
 
 @router.post("/diligence")
-def run_diligence(req: DiligenceRequest, session: Session = Depends(get_session)):
+def run_diligence(req: DiligenceRequest, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     project = session.get(Project, req.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

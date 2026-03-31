@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from backend.app.database import get_session
-from backend.app.models.entities import Document, Entity, Project, DocumentType, DocumentStatus
+from backend.app.models.entities import Document, Entity, Project, DocumentType, DocumentStatus, User
 from backend.app.schemas.scoring import DocumentCreate
+from backend.app.api.routes.auth import get_current_user
 from datetime import datetime
 
 router = APIRouter(prefix="/legal", tags=["Legal & Compliance"])
@@ -717,7 +718,7 @@ Date: ____________________""",
 
 
 @router.get("/templates")
-def list_templates():
+def list_templates(user: User = Depends(get_current_user)):
     result = []
     for k, v in TEMPLATES.items():
         result.append({
@@ -730,7 +731,7 @@ def list_templates():
 
 
 @router.get("/templates/{template_key}")
-def get_template_content(template_key: str):
+def get_template_content(template_key: str, user: User = Depends(get_current_user)):
     template = TEMPLATES.get(template_key)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -744,7 +745,7 @@ def get_template_content(template_key: str):
 
 
 @router.get("/template-layers")
-def list_template_layers():
+def list_template_layers(user: User = Depends(get_current_user)):
     return [
         {"key": k, "label": v["label"], "description": v["description"]}
         for k, v in TEMPLATE_LAYERS.items()
@@ -752,7 +753,7 @@ def list_template_layers():
 
 
 @router.post("/documents/generate")
-def generate_document(data: DocumentCreate, session: Session = Depends(get_session)):
+def generate_document(data: DocumentCreate, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     template = TEMPLATES.get(data.doc_type)
     content = data.content
     if template and not content:
@@ -778,7 +779,7 @@ def generate_document(data: DocumentCreate, session: Session = Depends(get_sessi
 
 
 @router.get("/documents")
-def list_documents(project_id: int = None, session: Session = Depends(get_session)):
+def list_documents(project_id: int = None, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     stmt = select(Document).order_by(Document.created_at.desc())
     if project_id:
         stmt = stmt.where(Document.project_id == project_id)
@@ -786,7 +787,7 @@ def list_documents(project_id: int = None, session: Session = Depends(get_sessio
 
 
 @router.get("/documents/{doc_id}")
-def get_document(doc_id: int, session: Session = Depends(get_session)):
+def get_document(doc_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     doc = session.get(Document, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -794,7 +795,7 @@ def get_document(doc_id: int, session: Session = Depends(get_session)):
 
 
 @router.post("/documents/{doc_id}/send")
-def send_document(doc_id: int, session: Session = Depends(get_session)):
+def send_document(doc_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     doc = session.get(Document, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -807,7 +808,7 @@ def send_document(doc_id: int, session: Session = Depends(get_session)):
 
 
 @router.post("/documents/{doc_id}/sign")
-def sign_document(doc_id: int, signed_by: str = "system", session: Session = Depends(get_session)):
+def sign_document(doc_id: int, signed_by: str = "system", session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     doc = session.get(Document, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -822,7 +823,7 @@ def sign_document(doc_id: int, signed_by: str = "system", session: Session = Dep
 
 
 @router.post("/incorporate")
-def incorporate_project(project_id: int, jurisdiction: str = "Delaware", session: Session = Depends(get_session)):
+def incorporate_project(project_id: int, jurisdiction: str = "Delaware", session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -862,12 +863,12 @@ def incorporate_project(project_id: int, jurisdiction: str = "Delaware", session
 
 
 @router.get("/entities")
-def list_entities(session: Session = Depends(get_session)):
+def list_entities(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     return session.exec(select(Entity).order_by(Entity.created_at.desc())).all()
 
 
 @router.post("/spinout/{project_id}")
-def spinout_project(project_id: int, session: Session = Depends(get_session)):
+def spinout_project(project_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

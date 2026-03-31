@@ -22,20 +22,20 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
       scoring.py       — 100-point scoring algorithm
       ai_memo.py       — AI-powered deal memo generation (OpenAI)
     api/routes/
-      auth.py          — TOTP authentication (register, login, JWT)
-      scoring.py       — Scoring engine + POST /generateMemo
-      projects.py      — Project CRUD + playbook + auto-scoring (POST /submit)
-      legal.py         — Legal & compliance engine
-      partners.py      — Partner ecosystem + POST /matchPartners
-      capital.py       — Capital & investment ops + POST /capitalCall
-      tickets.py       — Support hub
-      deals.py         — Deal flow pipeline (applied→scored→active→funded)
-      users.py         — User management with roles (admin/founder/partner)
-      market_intel.py  — Market intelligence (sector signals, macro, private rounds)
-      advisory.py      — AI advisory + financial planner + diligence checker
-      activity.py      — Activity/audit log endpoints
-      admin.py         — Admin console (user list, impersonation, role management)
-      private_data.py  — Private data API (role-scoped profile, signals, portfolio)
+      auth.py          — TOTP authentication (register, login, JWT) — JWT_SECRET from env, no fallback
+      scoring.py       — Scoring engine + POST /generateMemo (auth required)
+      projects.py      — Project CRUD + playbook + auto-scoring (auth required)
+      legal.py         — Legal & compliance engine (auth required)
+      partners.py      — Partner ecosystem + POST /matchPartners (auth required)
+      capital.py       — Capital & investment ops + POST /capitalCall (auth required)
+      tickets.py       — Support hub (auth required, user-scoped)
+      deals.py         — Deal flow pipeline (auth required)
+      users.py         — User management (auth required, admin-only create)
+      market_intel.py  — Market intelligence (public data, no auth)
+      advisory.py      — AI advisory + financial planner (auth required)
+      activity.py      — Activity/audit log endpoints (auth required)
+      admin.py         — Admin console (admin-only)
+      private_data.py  — Private data API (role-scoped, auth required)
   seed.py              — Seed data script
 
 /frontend/

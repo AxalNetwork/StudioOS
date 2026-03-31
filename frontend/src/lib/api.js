@@ -1,6 +1,11 @@
-const BACKEND_URL = window.location.hostname === 'axal.vc'
-  ? 'https://1162e933-32b6-4e52-9bfb-42fec8196216-00-36myluq91vtni.worf.replit.dev'
-  : '';
+function getBackendUrl() {
+  const host = window.location.hostname;
+  if (host === 'axal.vc' || host === 'www.axal.vc') {
+    return import.meta.env.VITE_API_URL || 'https://workspace-vjstele.replit.app';
+  }
+  return '';
+}
+const BACKEND_URL = getBackendUrl();
 const BASE = `${BACKEND_URL}/api`;
 
 function getAuthHeaders() {

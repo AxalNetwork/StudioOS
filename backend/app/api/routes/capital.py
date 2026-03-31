@@ -1,20 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select, func
 from backend.app.database import get_session
-from backend.app.models.entities import LPInvestor, CapitalCall, Project, ScoreSnapshot, Partner
+from backend.app.models.entities import LPInvestor, CapitalCall, Project, ScoreSnapshot, Partner, User
 from backend.app.schemas.scoring import LPInvestorCreate, CapitalCallCreate, CapitalCallRequest
+from backend.app.api.routes.auth import get_current_user
 from datetime import datetime
 
 router = APIRouter(prefix="/capital", tags=["Capital & Investment"])
 
 
 @router.get("/investors")
-def list_investors(session: Session = Depends(get_session)):
+def list_investors(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     return session.exec(select(LPInvestor).order_by(LPInvestor.created_at.desc())).all()
 
 
 @router.post("/investors")
-def create_investor(data: LPInvestorCreate, session: Session = Depends(get_session)):
+def create_investor(data: LPInvestorCreate, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     investor = LPInvestor(
         name=data.name,
         email=data.email,
@@ -28,7 +29,7 @@ def create_investor(data: LPInvestorCreate, session: Session = Depends(get_sessi
 
 
 @router.get("/investors/{investor_id}")
-def get_investor(investor_id: int, session: Session = Depends(get_session)):
+def get_investor(investor_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     inv = session.get(LPInvestor, investor_id)
     if not inv:
         raise HTTPException(status_code=404, detail="Investor not found")
@@ -38,7 +39,7 @@ def get_investor(investor_id: int, session: Session = Depends(get_session)):
 
 
 @router.post("/calls")
-def create_capital_call(data: CapitalCallCreate, session: Session = Depends(get_session)):
+def create_capital_call(data: CapitalCallCreate, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     investor = session.get(LPInvestor, data.lp_investor_id)
     if not investor:
         raise HTTPException(status_code=404, detail="Investor not found")
@@ -63,7 +64,7 @@ def create_capital_call(data: CapitalCallCreate, session: Session = Depends(get_
 
 
 @router.get("/calls")
-def list_capital_calls(status: str = None, session: Session = Depends(get_session)):
+def list_capital_calls(status: str = None, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     stmt = select(CapitalCall).order_by(CapitalCall.created_at.desc())
     if status:
         stmt = stmt.where(CapitalCall.status == status)
@@ -71,7 +72,7 @@ def list_capital_calls(status: str = None, session: Session = Depends(get_sessio
 
 
 @router.post("/calls/{call_id}/pay")
-def mark_call_paid(call_id: int, session: Session = Depends(get_session)):
+def mark_call_paid(call_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     call = session.get(CapitalCall, call_id)
     if not call:
         raise HTTPException(status_code=404, detail="Capital call not found")
@@ -89,7 +90,7 @@ def mark_call_paid(call_id: int, session: Session = Depends(get_session)):
 
 
 @router.post("/capitalCall")
-def capital_call_with_partners(data: CapitalCallRequest, session: Session = Depends(get_session)):
+def capital_call_with_partners(data: CapitalCallRequest, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     project = session.get(Project, data.startup_id)
     if not project:
         raise HTTPException(status_code=404, detail="Startup/project not found")
@@ -137,7 +138,7 @@ def capital_call_with_partners(data: CapitalCallRequest, session: Session = Depe
 
 
 @router.get("/portfolio")
-def portfolio_overview(session: Session = Depends(get_session)):
+def portfolio_overview(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     projects = session.exec(
         select(Project).where(Project.status.in_(["spinout", "active", "tier_1", "tier_2"]))
     ).all()

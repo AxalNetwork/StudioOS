@@ -1,17 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from backend.app.database import get_session
-from backend.app.models.entities import Project, ScoreSnapshot, DealMemo, Founder, Deal, ActivityLog
+from backend.app.models.entities import Project, ScoreSnapshot, DealMemo, Founder, Deal, ActivityLog, User
 from backend.app.schemas.scoring import ScoreRequest, GenerateMemoRequest
 from backend.app.services.scoring import run_full_score, tier_label
 from backend.app.services.ai_memo import generate_memo_with_ai
+from backend.app.api.routes.auth import get_current_user
 from datetime import datetime
 
 router = APIRouter(prefix="/scoring", tags=["Scoring Engine"])
 
 
 @router.post("/score")
-def score_startup(req: ScoreRequest, session: Session = Depends(get_session)):
+def score_startup(req: ScoreRequest, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     result = run_full_score(req.model_dump())
 
     if req.project_id:
@@ -65,7 +66,7 @@ def score_startup(req: ScoreRequest, session: Session = Depends(get_session)):
 
 
 @router.post("/score/{project_id}/deal-memo")
-def generate_deal_memo(project_id: int, session: Session = Depends(get_session)):
+def generate_deal_memo(project_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -145,7 +146,7 @@ def generate_deal_memo(project_id: int, session: Session = Depends(get_session))
 
 
 @router.get("/scores/{project_id}")
-def get_project_scores(project_id: int, session: Session = Depends(get_session)):
+def get_project_scores(project_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     stmt = (
         select(ScoreSnapshot)
         .where(ScoreSnapshot.project_id == project_id)

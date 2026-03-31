@@ -1,15 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from backend.app.database import get_session
-from backend.app.models.entities import Deal, Project, Partner
+from backend.app.models.entities import Deal, Project, Partner, User
 from backend.app.schemas.scoring import DealCreate, DealUpdate
+from backend.app.api.routes.auth import get_current_user
 from datetime import datetime
 
 router = APIRouter(prefix="/deals", tags=["Deal Flow"])
 
 
 @router.get("/")
-def list_deals(status: str = None, session: Session = Depends(get_session)):
+def list_deals(status: str = None, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     stmt = select(Deal).order_by(Deal.created_at.desc())
     if status:
         stmt = stmt.where(Deal.status == status)
@@ -29,7 +30,7 @@ def list_deals(status: str = None, session: Session = Depends(get_session)):
 
 
 @router.post("/")
-def create_deal(data: DealCreate, session: Session = Depends(get_session)):
+def create_deal(data: DealCreate, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     project = session.get(Project, data.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -48,7 +49,7 @@ def create_deal(data: DealCreate, session: Session = Depends(get_session)):
 
 
 @router.get("/{deal_id}")
-def get_deal(deal_id: int, session: Session = Depends(get_session)):
+def get_deal(deal_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     deal = session.get(Deal, deal_id)
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
@@ -62,7 +63,7 @@ def get_deal(deal_id: int, session: Session = Depends(get_session)):
 
 
 @router.put("/{deal_id}")
-def update_deal(deal_id: int, data: DealUpdate, session: Session = Depends(get_session)):
+def update_deal(deal_id: int, data: DealUpdate, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     deal = session.get(Deal, deal_id)
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")

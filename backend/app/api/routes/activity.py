@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session, select, func
 from backend.app.database import get_session
-from backend.app.models.entities import ActivityLog
+from backend.app.models.entities import ActivityLog, User
+from backend.app.api.routes.auth import get_current_user
 from typing import Optional
 
 router = APIRouter(prefix="/activity", tags=["Activity Log"])
@@ -36,7 +37,7 @@ def list_activity(
 
 
 @router.get("/summary")
-def activity_summary(session: Session = Depends(get_session)):
+def activity_summary(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     total = session.exec(select(func.count(ActivityLog.id))).first() or 0
 
     recent = session.exec(

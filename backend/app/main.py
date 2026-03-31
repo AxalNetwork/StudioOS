@@ -1,11 +1,12 @@
 import os
 from pathlib import Path
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from backend.app.database import init_db
 from backend.app.api.routes import scoring, projects, legal, partners, capital, tickets, deals, users, market_intel, advisory, activity, auth, admin, private_data
+from backend.app.api.routes.auth import get_current_user
 
 app = FastAPI(
     title="Axal VC — StudioOS",
@@ -14,12 +15,18 @@ app = FastAPI(
 )
 
 JEKYLL_ORIGIN = os.environ.get("JEKYLL_ORIGIN", "")
+REPLIT_DOMAIN = os.environ.get("REPLIT_DEV_DOMAIN", "")
 EXTRA_ORIGINS = [o.strip() for o in JEKYLL_ORIGIN.split(",") if o.strip()] if JEKYLL_ORIGIN else []
+REPLIT_DEPLOY_DOMAIN = os.environ.get("REPL_SLUG", "") + "-" + os.environ.get("REPL_OWNER", "") + ".replit.app"
 CORS_ORIGINS = ["https://axal.vc", "https://www.axal.vc"] + EXTRA_ORIGINS
+if REPLIT_DOMAIN:
+    CORS_ORIGINS.append(f"https://{REPLIT_DOMAIN}")
+if REPLIT_DEPLOY_DOMAIN and REPLIT_DEPLOY_DOMAIN != "-.replit.app":
+    CORS_ORIGINS.append(f"https://{REPLIT_DEPLOY_DOMAIN}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS if CORS_ORIGINS else ["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,7 +59,7 @@ def health():
 
 
 @app.get("/api/dashboard/stats")
-def dashboard_stats():
+def dashboard_stats(user = Depends(get_current_user)):
     from sqlmodel import Session, select, func
     from backend.app.database import engine
     from backend.app.models.entities import Project, ScoreSnapshot, Partner, LPInvestor, Ticket, Document, Deal, User

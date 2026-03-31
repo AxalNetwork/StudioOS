@@ -19,7 +19,9 @@ from backend.app.services.email_service import (
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-JWT_SECRET = os.environ.get("JWT_SECRET", "studioos-jwt-secret-key-change-in-prod")
+JWT_SECRET = os.environ.get("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable must be set")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 24
 

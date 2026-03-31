@@ -1,16 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from backend.app.database import get_session
-from backend.app.models.entities import Project, Founder, ScoreSnapshot, Deal, ActivityLog
+from backend.app.models.entities import Project, Founder, ScoreSnapshot, Deal, ActivityLog, User
 from backend.app.schemas.scoring import ProjectCreate, ProjectUpdate, FounderSubmitRequest
 from backend.app.services.scoring import run_full_score
+from backend.app.api.routes.auth import get_current_user
 from datetime import datetime
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
 
 @router.get("/")
-def list_projects(status: str = None, session: Session = Depends(get_session)):
+def list_projects(status: str = None, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     stmt = select(Project).order_by(Project.created_at.desc())
     if status:
         stmt = stmt.where(Project.status == status)
@@ -18,7 +19,7 @@ def list_projects(status: str = None, session: Session = Depends(get_session)):
 
 
 @router.get("/{project_id}")
-def get_project(project_id: int, session: Session = Depends(get_session)):
+def get_project(project_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -27,7 +28,7 @@ def get_project(project_id: int, session: Session = Depends(get_session)):
 
 
 @router.post("/")
-def create_project(data: ProjectCreate, session: Session = Depends(get_session)):
+def create_project(data: ProjectCreate, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     founder_id = None
     if data.founder_email:
         stmt = select(Founder).where(Founder.email == data.founder_email)
@@ -76,7 +77,7 @@ def create_project(data: ProjectCreate, session: Session = Depends(get_session))
 
 
 @router.post("/submit")
-def founder_submit_startup(data: FounderSubmitRequest, session: Session = Depends(get_session)):
+def founder_submit_startup(data: FounderSubmitRequest, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     stmt = select(Founder).where(Founder.email == data.founder_email)
     founder = session.exec(stmt).first()
     if not founder:
@@ -201,7 +202,7 @@ def founder_submit_startup(data: FounderSubmitRequest, session: Session = Depend
 
 
 @router.put("/{project_id}")
-def update_project(project_id: int, data: ProjectUpdate, session: Session = Depends(get_session)):
+def update_project(project_id: int, data: ProjectUpdate, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -217,7 +218,7 @@ def update_project(project_id: int, data: ProjectUpdate, session: Session = Depe
 
 
 @router.delete("/{project_id}")
-def delete_project(project_id: int, session: Session = Depends(get_session)):
+def delete_project(project_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -227,7 +228,7 @@ def delete_project(project_id: int, session: Session = Depends(get_session)):
 
 
 @router.post("/{project_id}/advance-week")
-def advance_playbook_week(project_id: int, session: Session = Depends(get_session)):
+def advance_playbook_week(project_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

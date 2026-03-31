@@ -1,19 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from backend.app.database import get_session
-from backend.app.models.entities import User, Founder, Partner
+from backend.app.models.entities import User, UserRole, Founder, Partner
 from backend.app.schemas.scoring import UserCreate
-import hashlib
+from backend.app.api.routes.auth import get_current_user
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+def require_admin(user: User = Depends(get_current_user)):
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
 
 
 @router.get("/")
-def list_users(role: str = None, session: Session = Depends(get_session)):
+def list_users(role: str = None, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     stmt = select(User).order_by(User.created_at.desc())
     if role:
         stmt = stmt.where(User.role == role)
@@ -22,7 +24,7 @@ def list_users(role: str = None, session: Session = Depends(get_session)):
 
 
 @router.post("/")
-def create_user(data: UserCreate, session: Session = Depends(get_session)):
+def create_user(data: UserCreate, session: Session = Depends(get_session), admin: User = Depends(require_admin)):
     existing = session.exec(select(User).where(User.email == data.email)).first()
     if existing:
         raise HTTPException(status_code=409, detail="User with this email already exists")
@@ -30,8 +32,7 @@ def create_user(data: UserCreate, session: Session = Depends(get_session)):
     user = User(
         email=data.email,
         name=data.name,
-        role=data.role,
-        password_hash=hash_password(data.password) if data.password else None,
+        role=data.role if data.role in ["founder", "partner"] else "partner",
         founder_id=data.founder_id,
         partner_id=data.partner_id,
     )
@@ -42,38 +43,21 @@ def create_user(data: UserCreate, session: Session = Depends(get_session)):
 
 
 @router.get("/{user_id}")
-def get_user(user_id: int, session: Session = Depends(get_session)):
-    user = session.get(User, user_id)
-    if not user:
+def get_user(user_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    target = session.get(User, user_id)
+    if not target:
         raise HTTPException(status_code=404, detail="User not found")
 
-    result = {k: v for k, v in user.model_dump().items() if k != "password_hash"}
+    result = {k: v for k, v in target.model_dump().items() if k != "password_hash"}
 
-    if user.founder_id:
-        founder = session.get(Founder, user.founder_id)
+    if target.founder_id:
+        founder = session.get(Founder, target.founder_id)
         if founder:
             result["founder"] = founder.model_dump()
 
-    if user.partner_id:
-        partner = session.get(Partner, user.partner_id)
+    if target.partner_id:
+        partner = session.get(Partner, target.partner_id)
         if partner:
             result["partner"] = partner.model_dump()
 
     return result
-
-
-@router.post("/login")
-def login(email: str, password: str, session: Session = Depends(get_session)):
-    user = session.exec(select(User).where(User.email == email)).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    if not user.password_hash:
-        raise HTTPException(status_code=401, detail="Account not configured for password login")
-    if user.password_hash != hash_password(password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {
-        "user_id": user.id,
-        "email": user.email,
-        "name": user.name,
-        "role": user.role,
-    }

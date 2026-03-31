@@ -42,6 +42,7 @@ externalPort = 3001
 [[ports]]
 localPort = 8000
 externalPort = 8000
+exposeLocalhost = true
 
 [deployment]
 deploymentTarget = "autoscale"
@@ -56,3 +57,4 @@ GOOGLE_REDIRECT_URI = "https://developers.google.com/oauthplayground"
 GITHUB_ACCESS_TOKEN = "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"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME = "StudioOS"
+JWT_SECRET = "bd669f5082856350de373085c288a9fe7b0284c8b24defe5d0b49b5a11191504"
