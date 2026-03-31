@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Clock, Activity, Filter } from 'lucide-react';
+import { Clock, Activity, Github, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
 
 export default function ActivityPage() {
   const [logs, setLogs] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
 
   useEffect(() => {
     Promise.all([
@@ -17,6 +19,19 @@ export default function ActivityPage() {
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
+  const handleSyncGithub = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const result = await api.activitySyncGithub();
+      setSyncResult(result);
+    } catch {
+      setSyncResult({ status: 'failed', message: 'Sync request failed' });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const actionColors = {
     ai_advisory_query: 'text-violet-600 bg-violet-100',
     financial_plan_generated: 'text-blue-400 bg-blue-500/10',
@@ -24,14 +39,58 @@ export default function ActivityPage() {
     project_scored: 'text-yellow-400 bg-yellow-500/10',
     project_created: 'text-green-400 bg-green-500/10',
     deal_created: 'text-orange-400 bg-orange-500/10',
+    user_login: 'text-indigo-600 bg-indigo-100',
+    user_registered: 'text-green-600 bg-green-100',
+    admin_impersonate: 'text-red-500 bg-red-100',
+    email_verified: 'text-teal-600 bg-teal-100',
+    user_toggled: 'text-amber-600 bg-amber-100',
   };
 
   if (loading) return <div className="text-gray-600 text-center py-20">Loading...</div>;
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Activity Log</h1>
-      <p className="text-sm text-gray-600 mb-6">Audit trail of all system events</p>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-2xl font-bold text-gray-900">Activity Log</h1>
+        <button
+          onClick={handleSyncGithub}
+          disabled={syncing}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+        >
+          {syncing ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Github size={14} />
+          )}
+          {syncing ? 'Syncing...' : 'Sync to GitHub'}
+        </button>
+      </div>
+      <p className="text-sm text-gray-600 mb-4">Your activity trail</p>
+
+      {syncResult && (
+        <div className={`mb-4 p-3 rounded-lg border text-sm flex items-center gap-2 ${
+          syncResult.status === 'synced'
+            ? 'bg-green-50 border-green-200 text-green-800'
+            : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          {syncResult.status === 'synced' ? (
+            <>
+              <CheckCircle size={14} />
+              <span>Synced {syncResult.entries} entries to GitHub.</span>
+              {syncResult.github_url && (
+                <a href={syncResult.github_url} target="_blank" rel="noopener noreferrer" className="underline ml-1">
+                  View on GitHub
+                </a>
+              )}
+            </>
+          ) : (
+            <>
+              <AlertCircle size={14} />
+              <span>{syncResult.message}</span>
+            </>
+          )}
+        </div>
+      )}
 
       {summary && (
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -60,9 +119,9 @@ export default function ActivityPage() {
             No activity yet. Events are logged as you use the system.
           </div>
         ) : (
-          <div className="divide-y divide-gray-800/50">
+          <div className="divide-y divide-gray-100">
             {logs.map((log) => (
-              <div key={log.id} className="px-4 py-3 hover:bg-gray-50/30 transition-colors">
+              <div key={log.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
                   <div className="flex-1 min-w-0">

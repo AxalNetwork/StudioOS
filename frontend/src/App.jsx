@@ -43,7 +43,7 @@ const ALL_NAV_ITEMS = [
   { to: '/partners', icon: Users, label: 'Partners', roles: ['admin', 'partner'] },
   { to: '/capital', icon: DollarSign, label: 'Capital & Investment', roles: ['admin', 'partner'] },
   { to: '/tickets', icon: Ticket, label: 'Support', roles: ['admin', 'founder', 'partner'] },
-  { to: '/activity', icon: Activity, label: 'Activity Log', roles: ['admin'] },
+  { to: '/activity', icon: Activity, label: 'Activity Log', roles: ['admin', 'founder', 'partner'] },
   { to: '/api-bridge', icon: Code, label: 'API Bridge', roles: ['admin'] },
   { to: '/founder', icon: Rocket, label: 'Founder Portal', roles: ['admin', 'founder'], divider: true },
   { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal', roles: ['admin', 'partner'] },
@@ -379,7 +379,7 @@ export default function App() {
       <Route path="/deals" element={guard(['admin', 'partner'], <DealsPage />)} />
       <Route path="/market-intel" element={guard(['admin', 'partner'], <MarketIntelPage />)} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
-      <Route path="/activity" element={guard(['admin'], <ActivityPage />)} />
+      <Route path="/activity" element={guard(['admin', 'founder', 'partner'], <ActivityPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
       <Route path="/partner-portal" element={guard(['admin', 'partner'], <PartnerPortal />)} />

@@ -105,6 +105,7 @@ export const api = {
 
   activityLog: (params) => request(`/activity/${params ? `?${new URLSearchParams(params)}` : ''}`),
   activitySummary: () => request('/activity/summary'),
+  activitySyncGithub: () => request('/activity/sync-github', { method: 'POST' }),
 
   adminListUsers: () => request('/admin/users'),
   adminImpersonate: (userId) => request(`/admin/impersonate/${userId}`, { method: 'POST' }),

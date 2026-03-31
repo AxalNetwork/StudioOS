@@ -126,6 +126,7 @@ class ActivityLog(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
     project_id: Optional[int] = Field(default=None, foreign_key="projects.id")
+    user_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
     action: str
     details: Optional[str] = None
     actor: Optional[str] = None

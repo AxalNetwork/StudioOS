@@ -33,7 +33,7 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
       users.py         — User management (auth required, admin-only create)
       market_intel.py  — Market intelligence (public data, no auth)
       advisory.py      — AI advisory + financial planner (auth required)
-      activity.py      — Activity/audit log endpoints (auth required)
+      activity.py      — Activity/audit log endpoints (auth required, user-scoped for non-admins, GitHub sync)
       admin.py         — Admin console (admin-only)
       private_data.py  — Private data API (role-scoped, auth required)
   seed.py              — Seed data script
