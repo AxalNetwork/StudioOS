@@ -4,6 +4,7 @@ import {
   Zap, Target, Brain, Globe, FileText, Users, DollarSign,
   Rocket, ChevronRight, Shield, BarChart3, ArrowRight, Clock
 } from 'lucide-react';
+import Footer from '../components/Footer';
 
 export default function LandingPage() {
   return (
@@ -234,17 +235,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="py-12 px-6 border-t border-gray-200">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <img src="/axal-mark.png" alt="Axal Ventures" className="h-5" />
-          <div className="text-xs text-gray-600">
-            Rue Robert-Ceard 6, 1204 Geneva, Switzerland
-          </div>
-          <div className="text-xs text-gray-600">
-            &copy; {new Date().getFullYear()} Axal SA. All rights reserved.
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

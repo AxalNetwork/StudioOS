@@ -26,6 +26,10 @@ import LandingPage from './pages/LandingPage';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
+import TermsPage from './pages/TermsPage';
+import PrivacyPage from './pages/PrivacyPage';
+import RiskDisclosuresPage from './pages/RiskDisclosuresPage';
+import Footer from './components/Footer';
 
 const ALL_NAV_ITEMS = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'founder', 'partner'] },
@@ -379,6 +383,10 @@ export default function App() {
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
       <Route path="/partner-portal" element={guard(['admin', 'partner'], <PartnerPortal />)} />
+      
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/risk-disclosures" element={<RiskDisclosuresPage />} />
     </Routes>
   );
 }
