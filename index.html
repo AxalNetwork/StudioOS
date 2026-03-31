@@ -1,520 +1,333 @@
----
-layout: default
-title: Snowlake - Digital Startup
-meta_title: Snowlake - Digital Startup - Creative Business and Startup Jekyll Theme
-meta_description: |
-  Snowlake Jekyll Theme is a perfectly crafted fast loading and SEO-friendly static site generator theme
-  with a variety of UI elements and countless features. A perfect theme to build your next dream project. 
-custom_color: purple
-custom_font: font2
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Axal Ventures — From Idea to Funded Company in 30 Days</title>
+  <meta name="description" content="Axal Ventures is the operating system for venture creation. AI-powered scoring, automated incorporation, and a global partner network to manufacture startups at scale." />
+  <meta property="og:title" content="Axal Ventures — StudioOS" />
+  <meta property="og:description" content="From Idea to Funded Company in 30 Days. The 30-Day Spin-Out Engine." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://axal.vc" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwindcss.config = {
+      theme: {
+        extend: {
+          colors: {
+            violet: {
+              50: '#f5f3ff', 100: '#ede9fe', 200: '#ddd6fe', 300: '#c4b5fd',
+              400: '#a78bfa', 500: '#8b5cf6', 600: '#7c3aed', 700: '#6d28d9',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    html { scroll-behavior: smooth; }
+  </style>
+</head>
+<body class="bg-white text-gray-900">
+  <nav class="fixed top-0 w-full z-50 bg-white/90 backdrop-blur border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+      <img src="axal-mark.png" alt="Axal Ventures" class="h-8" />
+      <div class="hidden md:flex items-center gap-8">
+        <a href="#about" class="text-sm text-gray-600 hover:text-gray-900 transition-colors">About</a>
+        <a href="#how-it-works" class="text-sm text-gray-600 hover:text-gray-900 transition-colors">How It Works</a>
+        <a href="#features" class="text-sm text-gray-600 hover:text-gray-900 transition-colors">Platform</a>
+        <a href="#partners" class="text-sm text-gray-600 hover:text-gray-900 transition-colors">Partners</a>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="https://1162e933-32b6-4e52-9bfb-42fec8196216-00-36myluq91vtni.worf.replit.dev/login" class="text-sm text-gray-600 hover:text-gray-900 transition-colors px-4 py-2">
+          Sign In
+        </a>
+        <a href="https://1162e933-32b6-4e52-9bfb-42fec8196216-00-36myluq91vtni.worf.replit.dev/register" class="text-sm bg-violet-600 hover:bg-violet-700 transition-colors text-white px-5 py-2 rounded-lg font-medium">
+          Get Started
+        </a>
+      </div>
+    </div>
+  </nav>
 
-hero_area:
-  enable: true
-  bg_image: "/assets/images/art/slider-bg12.webp"
-  title: "Hello! We are a digital and marketing company"
-  btn_text: "Get Started"
-  btn_url: "#"
-three_columns_area:
-  enable: true
-  title: "What We Do?"
-  sub_title: "The full service we are offering is specifically designed to meet your business needs."
-  services:
-
-    - title: "Social Media"
-      description: "Maecenas faucibus mollis interdum. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus."
-      image: "/assets/images/concept/concept14@2x.webp"
-      button_text: "Learn Morn"
-      button_url: "#"
-
-    - title: "Digital Marketing"
-      description: "Maecenas faucibus mollis interdum. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus."
-      image: "/assets/images/concept/concept19@2x.webp"
-      button_text: "Learn Morn"
-      button_url: "#"
-
-    - title: "SEO Optimization"
-      description: "Maecenas faucibus mollis interdum. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus."
-      image: "/assets/images/concept/concept18@2x.webp"
-      button_text: "Learn Morn"
-      button_url: "#"
-
-two_columns_one_area:
-  enable: true
-  title: "How It Works?"
-  sub_title: "Find out everything you need about creating a business process model."
-  image: "/assets/images/concept/concept15@2x.webp"
-  lists:
-
-    - title: "Creative Ideas"
-      description: "Nulla vitae elit libero, a pharetra augue. Donec id elit non mi porta gravida at eget metus cras."
-
-    - title: "Magic Touch"
-      description: "Nulla vitae elit libero, a pharetra augue. Donec id elit non mi porta gravida at eget metus cras."
-
-    - title: "Data Analysis"
-      description: "Nulla vitae elit libero, a pharetra augue. Donec id elit non mi porta gravida at eget metus cras."
-
-    - title: "Finalize Product"
-      description: "Nulla vitae elit libero, a pharetra augue. Donec id elit non mi porta gravida at eget metus cras."
-
-two_columns_two_area: 
-  enable: true
-  title: "Why Choose Us?"
-  sub_title: "So here are a few reasons why our valued customers choose us."
-  image: "/assets/images/concept/concept17.webp"
-  tabs:
-
-    - title: "Money Protection"
-      content: |
-        "Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Cras mattis consectetur purus sit amet fermentum. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Cum sociis natoque penatibus et magnis dis parturient montes."
-
-    - title: "Strategic Development"
-      content: |
-        "Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Cras mattis consectetur purus sit amet fermentum. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Cum sociis natoque penatibus et magnis dis parturient montes."
-
-    - title: "Marketing Management"
-      content: |
-        "Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Cras mattis consectetur purus sit amet fermentum. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Cum sociis natoque penatibus et magnis dis parturient montes."
-
-video_area:
-  enable: true
-  title: "How We Do It?"
-  sub_title: "Find out everything you need to know about creating a business process model."
-  image: "/assets/images/art/bg25.webp"
-  video_url: "https://www.youtube.com/watch?v=26TbMXXOe0I"
-
-blogs_area:
-  enable: true
-  title: "Case Studies"
-  sub_title: "Check out some of our awesome projects with creative ideas and great design."
-  posts_number: 5
-
-testimonials_area:
-  enable: true
-  title: "Happy Customers"
-  sub_title: "Customer satisfaction is our major goal. See what our customers are saying about us."
-  image: "/assets/images/concept/concept16@2x.webp"
-  testimonials:
-
-    - quote: |
-        "Sed posuere consectetur est at lobortis. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis mollis, est non commodo luctus, nisi cras mattis consectetur purus posuere"
-      author: "Cornelia Gibson"
-      bio: "Financial Analyst"
-  
-    - quote: |
-        "Vivamus sagittis lacus vel augue laoreet rutrum faucibus dolor auctor. Vestibulum id ligula porta felis euismod semper. Cras justo odio, posuere consectetur est at lobortis."
-      author: "Coriss Ambady"
-      bio: "Marketing Specialist"
-  
-    - quote: |
-        "Sed posuere consectetur est at lobortis. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis mollis, est non commodo luctus, nisi cras mattis consectetur purus posuere"
-      author: "Coriss Ambady"
-      bio: "Marketing Specialist"
-
-clients_carousel:
-  enable: true
-
-pricing_table:
-  enable: true
-  title: "Our Pricing"
-  sub_title: "We offer great prices, premium products and quality service for your business."
-  btn_url: "#"
-  description: |
-    "Nulla vitae elit libero, a pharetra augue. Donec ullamcorper nulla non metus auctor fringilla. Maecenas sed diam eget risus varius blandit sit amet non magna. Nulla vitae elit libero, a pharetra augue. Cras justo odio, dapibus ac facilisis in, egestas eget quam."
-  plans:
-    - title: "Basic Pricing"
-      monthly_price: 9
-      pricing_url: "#"
-      icon: "/assets/images/icons/ec-mobile.webp"
-      features:
-        - "<strong>1</strong> Project"
-        - "<strong>100K</strong> API Access"
-        - "<strong>100MB</strong> Storage"
-        - "Custom <strong>Cloud</strong> Services"
-        - "Weekly <strong>Reports</strong>"
-        - "7/24 <strong>Support</strong>"
-
-    - title: "Premium Plan"
-      monthly_price: 19
-      pricing_url: "#"
-      icon: "/assets/images/icons/ec-store.webp"
-      features:
-        - "<strong>5</strong> Project"
-        - "<strong>200K</strong> API Access"
-        - "<strong>250MB</strong> Storage"
-        - "Custom <strong>Cloud</strong> Services"
-        - "Weekly <strong>Reports</strong>"
-        - "7/24 <strong>Support</strong>"
-
-faq_area:
-  enable: true
-  title: "FAQ"
-  sub_title: "If you don't see an answer to your question, you can send us an email from our contact form."
-  image: "/assets/images/concept/concept13.webp"
-  tabs:
-    - question: "Can I cancel my subscription?"
-      answer: |
-        Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Cras mattis consectetur purus sit amet fermentum. Praesent commodo cursus magna,  nisl consectetur et. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec sed odio dui. Cras justo odio, dapibus ac facilisis.
-
-    - question: "Which payment methods do you accept"
-      answer: |
-        Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Cras mattis consectetur purus sit amet fermentum. Praesent commodo cursus magna,  nisl consectetur et. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec sed odio dui. Cras justo odio, dapibus ac facilisis.
-
-    - question: "How can I manage my Account?"
-      answer: |
-        Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Cras mattis consectetur purus sit amet fermentum. Praesent commodo cursus magna,  nisl consectetur et. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec sed odio dui. Cras justo odio, dapibus ac facilisis.
-
-    - question: "Is my credit card information secure?"
-      answer: |
-        Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Cras mattis consectetur purus sit amet fermentum. Praesent commodo cursus magna,  nisl consectetur et. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec sed odio dui. Cras justo odio, dapibus ac facilisis.
-
-    - question: "How do I get my subscription receipt?"
-      answer: |
-        Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Cras mattis consectetur purus sit amet fermentum. Praesent commodo cursus magna,  nisl consectetur et. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec sed odio dui. Cras justo odio, dapibus ac facilisis.
-
----
-{% include layouts/nav/nav-1.html drop_search=true %}
-{% if page.hero_area.enable %}
-<div class="wrapper dark-wrapper">
-  <div class="rev_slider_wrapper fullwidth-container">
-    <div id="slider10" class="rev_slider fullwidthbanner" data-version="5.4.7">
-      <ul>
-        <li data-transition="fade" data-thumb="">
-          <img src="{{page.hero_area.bg_image}}" alt="{{page.hero_area.title}}"/>
-          <div class="tp-caption font-weight-600 color-white text-center" 
-               data-x="center" 
-               data-y="middle" 
-               data-voffset="['-45','-45','-45','-45']" 
-               data-fontsize="['50','50','40','36']" 
-               data-lineheight="['65','65','55','51']" 
-               data-width="['550','550','550','340']" 
-               data-textAlign="['center','center','center','center']" 
-               data-whitespace="['normal','normal','normal','normal']" 
-               data-frames='[{"delay":1000,"speed":1500,"frame":"0","from":"z:0;rX:0;rY:0;rZ:0;sX:0.7;sY:0.7;skX:0;skY:0;opacity:0;","to":"o:1;","ease":"Power4.easeInOut"},{"delay":"wait","speed":300,"frame":"999","to":"opacity:0;","ease":"Power3.easeInOut"}]' 
-               data-responsive="on" 
-               data-responsive_offset="on" style="z-index: 9;"> {{page.hero_area.title}}
-          </div>
-          <a class="tp-caption btn btn-l btn-white btn-strong-hover scroll" 
-               data-x="center" 
-               data-y="middle" 
-               data-voffset="['85','85','85','85']" 
-               data-width="['auto','auto','auto','auto']" 
-               data-textAlign="['center','center','center','center']" 
-               data-frames='[{"delay":1500,"speed":1500,"frame":"0","from":"z:0;rX:0;rY:0;rZ:0;sX:0.7;sY:0.7;skX:0;skY:0;opacity:0;","to":"o:1;","ease":"Power4.easeInOut"},{"delay":"wait","speed":300,"frame":"999","to":"opacity:0;","ease":"Power3.easeInOut"}]' 
-               data-responsive="on" 
-               data-responsive_offset="on" style="z-index: 9;" href="{{page.hero_area.btn_url}}"> {{page.hero_area.btn_text}}
+  <section class="pt-32 pb-20 px-6">
+    <div class="max-w-7xl mx-auto">
+      <div class="max-w-4xl mx-auto text-center">
+        <div class="inline-flex items-center gap-2 px-4 py-1.5 bg-violet-100 border border-violet-300 rounded-full text-xs text-violet-700 mb-8">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          The 30-Day Spin-Out Engine
+        </div>
+        <h1 class="text-5xl md:text-7xl font-bold leading-tight mb-6 text-gray-900">
+          From Idea to
+          <span class="text-violet-600"> Funded Company</span>
+          <br />in 30 Days
+        </h1>
+        <p class="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto mb-10 leading-relaxed">
+          Axal Ventures is the operating system for venture creation. We combine AI-powered scoring,
+          automated incorporation, and a global partner network to manufacture startups at scale.
+        </p>
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <a href="https://1162e933-32b6-4e52-9bfb-42fec8196216-00-36myluq91vtni.worf.replit.dev/register" class="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-8 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20 hover:shadow-violet-600/40">
+            Apply as Partner
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
           </a>
-        </li>
-      </ul>
-      <div class="tp-bannertimer tp-bottom"></div>
-    </div>
-    <!-- /.rev_slider -->
-  </div>
-  <!-- /.rev_slider_wrapper -->
-</div>
-<!-- /.wrapper -->
-{% endif %}
-<div class="wrapper white-wrapper">
-  <div class="container inner">
-    {% if page.three_columns_area.enable %}
-    <div class="three-columns-wrapper">
-      <div class="row">
-        <div class="col-md-7 mx-auto">
-          <div class="text-center">
-            <h2 class="title-bg bg-default color-default">{{page.three_columns_area.title}}</h2>
-          </div>
-          <div class="space10"></div>
-          <h3 class="display-3 text-center">{{page.three_columns_area.sub_title}}</h3>
-          <div class="space30"></div>
+          <a href="#how-it-works" class="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 transition-colors px-8 py-3.5 rounded-xl text-sm font-medium text-gray-900">
+            See How It Works
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </a>
         </div>
       </div>
-      <div class="row gutter-60 text-center align-items-end">
-        {% for service in page.three_columns_area.services %}
-        <div class="col-md-4">
-          <figure class="mb-30"><img src="{{service.image}}"  alt="{{service.title}}"/></figure>
-          <h4>{{service.title}}</h4>
-          <p class="mb-15">{{service.description}}</p>
-          <div class="text-center"><a href="{{service.button_url}}" class="more">{{service.button_text}}</a></div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-20 max-w-3xl mx-auto">
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+          <div class="text-2xl md:text-3xl font-bold text-violet-600">30</div>
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider mt-1">Days to Launch</div>
         </div>
-        <div class="space20 d-md-none"></div>
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
-    {% assign colmns_data_one = page.two_columns_one_area %}
-    {% if colmns_data_one.enable %}
-    <div class="two-columns-one">
-      <div class="space140"></div>
-        <div class="row align-items-center">
-          {% if colmns_data_one.image %}
-          <div class="col-lg-6">
-            <figure>
-              <img src="{{colmns_data_one.image}}"  alt="{{colmns_data_one.title}}"/>
-            </figure>
-          </div>
-          <!--/column -->
-          {% endif %}
-          <div class="space20 d-md-none"></div>
-          <div class="space50 d-none d-md-block d-lg-none"></div>
-          <div class="col-lg-6 pl-60 pl-md-15">
-            <h2 class="title-bg bg-default color-default">{{colmns_data_one.title}}</h2>
-            <div class="space10"></div>
-            <h3 class="display-3">{{colmns_data_one.sub_title}}</h3>
-            <div class="space20"></div>
-            <div class="row">
-              {% for list in colmns_data_one.lists %}
-              <div class="col-md-6">
-                <h5><span class="color-default">{{forloop.index}}.</span> {{list.title}}</h5>
-                <p>{{list.description}}</p>
-              </div>
-              {% assign value = forloop.index | modulo:2 %}
-              {% if value == 0 %}
-               <div class="space10 d-none d-md-block"></div>
-              {% endif %}
-              {% endfor %}
-            </div>
-          </div>
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+          <div class="text-2xl md:text-3xl font-bold text-violet-600">100<span class="text-lg">pt</span></div>
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider mt-1">Point Scoring</div>
         </div>
-    </div>
-    {% endif %}
-    {% assign columns_data_two = page.two_columns_two_area %}
-    {% if columns_data_two.enable %}
-    <div class="two-columns-two">
-      <div class="space140"></div>
-        <div class="row align-items-center">
-          {% if columns_data_two.image %}
-          <div class="col-lg-6 order-lg-2 text-center">
-             <figure>
-               <img src="{{columns_data_two.image}}" alt="{{columns_data_two.title}}"/>
-            </figure>
-          </div>
-          {% endif %}
-          <div class="space20 d-md-none"></div>
-          <div class="space50 d-none d-md-block d-lg-none"></div>
-          <div class="col-lg-6 pr-60 pr-md-15">
-            <h2 class="title-bg bg-default color-default">{{columns_data_two.title}}</h2>
-            <div class="space10"></div>
-            <h3 class="display-3">{{columns_data_two.sub_title}}</h3>
-            <div class="space20"></div>
-            <div id="accordion-1" class="accordion-wrapper simple">
-              {% for tabs_data in columns_data_two.tabs %}
-              <div class="card">
-                <div class="card-header" id="accordion-heading-1-{{forloop.index}}">
-                  <h5>
-                    <button data-toggle="collapse" data-target="#accordion-collapse-1-{{forloop.index}}" aria-expanded="true" aria-controls="accordion-collapse-1-{{forloop.index}}">
-                      {{tabs_data.title}}
-                    </button>
-                  </h5>
-                </div>
-                <div id="accordion-collapse-1-{{forloop.index}}" class="collapse {% if forloop.index == 1 %} show {% endif %}" aria-labelledby="accordion-heading-1-{{forloop.index}}" data-parent="#accordion-1">
-                  <div class="card-body">
-                    <p>{{tabs_data.content}}</p>
-                  </div>
-                </div>
-              </div>
-              {% endfor %}
-            </div>
-          </div>
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+          <div class="text-2xl md:text-3xl font-bold text-violet-600">88<span class="text-lg">%</span></div>
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider mt-1">Match Rate</div>
         </div>
-    </div>  
-    {% endif %}
-  </div>
-  {% if page.video_area.enable %}
-  <div class="video-area">
-  <div class="wrapper image-wrapper bg-image gradient-overlay inverse-text" data-image-src="{{page.video_area.image}}">
-    <div class="container inner pt-140 pb-140 text-center">
-      <div class="row">
-        <div class="col-md-7 mx-auto">
-          <h2 class="title-bg bg-white color-dark">{{page.video_area.title}}</h2>
-          <div class="space10"></div>
-          <h3 class="display-3">{{page.video_area.sub_title}}</h3>
-          <div class="space10"></div>
-          <div class="light-gallery-wrapper">
-            <a href="{{page.video_area.video_url}}" class="btn-play lightbox"></a>
-          </div>
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+          <div class="text-2xl md:text-3xl font-bold text-violet-600">11</div>
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider mt-1">Days to Inc.</div>
         </div>
       </div>
     </div>
-  </div>
-  </div>
-  {% endif %}
-   {% if page.blogs_area.enable %}
-    <div class="wrapper light-wrapper">
-      <div class="container inner">
-        <div class="row">
-          <div class="col-md-7 mx-auto">
-            <div class="text-center">
-              <h2 class="title-bg bg-default color-default">{{page.blogs_area.title}}</h2>
-            </div>
-            <div class="space10"></div>
-            <h3 class="display-3 text-center">{{page.blogs_area.sub_title}}</h3>
-            <div class="space40"></div>
+  </section>
+
+  <section id="about" class="py-20 px-6 bg-gray-50">
+    <div class="max-w-7xl mx-auto">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <h2 class="text-3xl md:text-4xl font-bold mb-4 text-gray-900">A Venture Studio, Reimagined</h2>
+        <p class="text-gray-600 leading-relaxed">
+          Traditional VCs are fragmented, manual, and relationship-driven.
+          Axal is building a programmable venture network — the AWS for venture capital.
+          We combine data, AI, and global partnerships into a single operating system.
+        </p>
+      </div>
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="bg-white border border-gray-200 rounded-2xl p-8 hover:border-violet-300 hover:shadow-lg transition-all">
+          <div class="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center mb-5">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 1 8 8v12l-4-4H12a8 8 0 0 1 0-16z"/><path d="M9.5 9h.01"/><path d="M14.5 9h.01"/><path d="M9.5 13a3.5 3.5 0 0 0 5 0"/></svg>
           </div>
+          <h3 class="text-lg font-semibold mb-2 text-gray-900">Intelligence Engine</h3>
+          <p class="text-sm text-gray-600 leading-relaxed">AI-powered scoring, market intelligence, and predictive analytics turn raw data into investment decisions in 24 hours.</p>
         </div>
-        <div class="grid-view">
-          <div class="carousel owl-carousel" data-margin="30" data-dots="true" data-autoplay="false" data-autoplay-timeout="5000" data-responsive='{"0":{"items": "1"}, "768":{"items": "2"}, "992":{"items": "3"}}' data-dotsEach="false">
-            {% for post in site.posts limit: page.blogs_area.posts_number   %}
-            <div class="item blog-posts">
-              {% if post.post_image %}
-              <figure class="overlay overlay1 rounded mb-30"><a href="{{post.url}}"> <img src="{{post.post_image}}" class="post-thumb" alt="{{post.title}}"/></a>
-                <figcaption>
-                  <h5 class="from-top mb-0">Read More</h5>
-                </figcaption>
-              </figure>
-              {% endif %}
-              <h2 class="post-title mb-0"><a href="{{post.url}}">{{post.title}}</a></h2>
-            </div>
-            {% endfor %}
+        <div class="bg-white border border-gray-200 rounded-2xl p-8 hover:border-violet-300 hover:shadow-lg transition-all">
+          <div class="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center mb-5">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
           </div>
-          <!-- /.owl-carousel -->
+          <h3 class="text-lg font-semibold mb-2 text-gray-900">30-Day Spin-Out</h3>
+          <p class="text-sm text-gray-600 leading-relaxed">From validated idea to funded entity in 4 weeks. Automated incorporation, legal frameworks, and capital deployment.</p>
         </div>
-        <!-- /.grid-view -->
+        <div class="bg-white border border-gray-200 rounded-2xl p-8 hover:border-violet-300 hover:shadow-lg transition-all">
+          <div class="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center mb-5">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-2 text-gray-900">Partner Network</h3>
+          <p class="text-sm text-gray-600 leading-relaxed">AI-matched partners bring deals, capital, and expertise. Referral systems create compounding network effects.</p>
+        </div>
       </div>
     </div>
-    {% endif %}
-    {% if page.testimonials_area.enable %}
-    <div class="wrapper white-wrapper inner">
-      <div class="container">
-        <div class="row">
-          <div class="col-md-7 mx-auto">
-            <div class="text-center">
-              <h2 class="title-bg bg-default color-default">
-                {{page.testimonials_area.title}}
-              </h2>
-            </div>
-            <div class="space10"></div>
-            <h3 class="display-3 text-center">
-               {{page.testimonials_area.sub_title}}
-            </h3>
-            <div class="space40"></div>
+  </section>
+
+  <section id="how-it-works" class="py-20 px-6">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16">
+        <h2 class="text-3xl md:text-4xl font-bold mb-4 text-gray-900">The 4-Week Pipeline</h2>
+        <p class="text-gray-600 max-w-xl mx-auto">Every startup goes through a fixed 4-week cycle — fully systematized and partially automated.</p>
+      </div>
+      <div class="grid md:grid-cols-4 gap-4">
+        <div class="bg-white border border-gray-200 rounded-2xl p-6 relative overflow-hidden hover:shadow-lg transition-all">
+          <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500 to-violet-600"></div>
+          <div class="text-xs text-gray-500 font-medium mb-1">Week 1</div>
+          <h3 class="text-lg font-semibold mb-4 text-gray-900">Validate & Score</h3>
+          <ul class="space-y-2 mb-4">
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> AI-powered validation</li>
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> Market data analysis</li>
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> 100-point scoring</li>
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> Partner matching</li>
+          </ul>
+          <div class="pt-3 border-t border-gray-200">
+            <span class="text-[10px] text-gray-500 uppercase">Output:</span>
+            <div class="text-xs text-violet-600 font-medium mt-0.5">Go / No-Go Decision</div>
           </div>
         </div>
-        <div class="row align-items-center">
-          {% if page.testimonials_area.image %}
-          <div class="col-lg-6 pr-60 pr-md-15">
-            <figure><img src="{{page.testimonials_area.image}}"  alt="{{page.testimonials_area.title}}"/></figure>
-          </div>
-          {% endif %}
-          <div class="space20 d-md-none"></div>
-          <div class="space50 d-none d-md-block d-lg-none"></div>
-          <div class="col-lg-5">
-            <div class="basic-slider owl-carousel gap-small dots-left" data-margin="30">
-              {% for testimonial in page.testimonials_area.testimonials %}
-              <div class="item">
-                <blockquote class="icon icon-left larger text-left">
-                  <p>{{testimonial.quote}}</p>
-                  <div class="blockquote-details">
-                    <div class="info p-0">
-                      <h6 class="mb-0">{{testimonial.author}}</h6>
-                      <span class="meta mb-0">{{testimonial.bio}}</span>
-                    </div>
-                  </div>
-                </blockquote>
-              </div>
-              {% endfor %}
-            </div>
+        <div class="bg-white border border-gray-200 rounded-2xl p-6 relative overflow-hidden hover:shadow-lg transition-all">
+          <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-blue-600"></div>
+          <div class="text-xs text-gray-500 font-medium mb-1">Week 2</div>
+          <h3 class="text-lg font-semibold mb-4 text-gray-900">Build & Form</h3>
+          <ul class="space-y-2 mb-4">
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> MVP development</li>
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> Auto incorporation</li>
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> Legal frameworks</li>
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> Financial modeling</li>
+          </ul>
+          <div class="pt-3 border-t border-gray-200">
+            <span class="text-[10px] text-gray-500 uppercase">Output:</span>
+            <div class="text-xs text-violet-600 font-medium mt-0.5">Legal Entity + Deck</div>
           </div>
         </div>
-        {% if page.clients_carousel.enable %}
-        <div class="space80"></div>
-         {% include components/clients/clients-carousel.html %}
-        {% endif %}
+        <div class="bg-white border border-gray-200 rounded-2xl p-6 relative overflow-hidden hover:shadow-lg transition-all">
+          <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-600"></div>
+          <div class="text-xs text-gray-500 font-medium mb-1">Week 3</div>
+          <h3 class="text-lg font-semibold mb-4 text-gray-900">Deal Flow</h3>
+          <ul class="space-y-2 mb-4">
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> Deal activation</li>
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> Partner proposals</li>
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> Referral system</li>
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> Auto diligence</li>
+          </ul>
+          <div class="pt-3 border-t border-gray-200">
+            <span class="text-[10px] text-gray-500 uppercase">Output:</span>
+            <div class="text-xs text-violet-600 font-medium mt-0.5">Investor Conversations</div>
+          </div>
+        </div>
+        <div class="bg-white border border-gray-200 rounded-2xl p-6 relative overflow-hidden hover:shadow-lg transition-all">
+          <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 to-orange-600"></div>
+          <div class="text-xs text-gray-500 font-medium mb-1">Week 4</div>
+          <h3 class="text-lg font-semibold mb-4 text-gray-900">Capital & Launch</h3>
+          <ul class="space-y-2 mb-4">
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> Capital calls</li>
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> Investor dashboards</li>
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> Performance tracking</li>
+            <li class="flex items-center gap-2 text-xs text-gray-600"><div class="w-1 h-1 rounded-full bg-gray-400"></div> Public launch</li>
+          </ul>
+          <div class="pt-3 border-t border-gray-200">
+            <span class="text-[10px] text-gray-500 uppercase">Output:</span>
+            <div class="text-xs text-violet-600 font-medium mt-0.5">Funding Secured</div>
+          </div>
+        </div>
       </div>
     </div>
-    {% endif%}
-    <div class="wrapper light-wrapper">
-      <div class="container inner">
-        {% assign pricing_data = page.pricing_table %}
-        {% if pricing_data.enable %}
-        <div class="row">
-          <div class="col-lg-5 pr-50 pr-md-15">
-            <h2 class="title-color color-gray">{{pricing_data.title}}</h2>
-            <h3 class="display-3">{{pricing_data.sub_title}}</h3>
-            <div class="space20"></div>
-            <p>{{pricing_data.description}}</p>
-            <div class="space10"></div>
-            {% if pricing_data.pricing_url %}
-             <a href="{{pricing_data.pricing_url}}" class="btn">See All Prices</a>
-            {% endif %}
+  </section>
+
+  <section id="features" class="py-20 px-6 bg-gray-50">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16">
+        <h2 class="text-3xl md:text-4xl font-bold mb-4 text-gray-900">StudioOS Platform</h2>
+        <p class="text-gray-600 max-w-xl mx-auto">Seven integrated engines powering the entire venture creation lifecycle.</p>
+      </div>
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all">
+          <div class="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
           </div>
-          <!--/column -->
-          <div class="space70 d-none d-md-block d-lg-none"></div>
-          <div class="space20 d-md-none"></div>
-          <div class="col-lg-7">
-            <div class="pricing-wrapper">
-              <div class="row g-0">
-                {% for pricing in pricing_data.plans %}
-                <div class="col-md-6 {% cycle 'popular', '' %} ">
-                  <div class="pricing panel box bg-white shadow">
-                    <div class="panel-heading">
-                      <div class="prices color-dark">
-                        <div class="price price-show"><span class="price-currency">$</span><span class="price-value">{{pricing.monthly_price}}</span> <span class="price-duration">month</span></div>
-                      </div>
-                      <h4 class="panel-title mb-0">{{pricing.title}}</h4>
-                    </div>
-                    <div class="panel-body">
-                      <table class="table">
-                        {% for features in pricing.features %}
-                          <tr>
-                             <td>{{features}}</td>
-                          </tr>
-                        {% endfor %}
-                      </table>
-                    </div>
-                    <div class="panel-footer"><a href="{{pricing.pricing_url}}" class="btn" role="button">Choose Plan</a></div>
-                  </div>
-                </div>
-               {% endfor %}
-              </div>
-            </div>
+          <div>
+            <h3 class="text-sm font-semibold mb-1 text-gray-900">Market Intelligence</h3>
+            <p class="text-xs text-gray-600 leading-relaxed">Real-time sector signals, competitive data, and gap opportunities.</p>
           </div>
         </div>
-       {% endif %}
+        <div class="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all">
+          <div class="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold mb-1 text-gray-900">Scoring Engine</h3>
+            <p class="text-xs text-gray-600 leading-relaxed">100-point algorithm with AI augmentation for instant Go/No-Go decisions.</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all">
+          <div class="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 1 8 8v12l-4-4H12a8 8 0 0 1 0-16z"/></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold mb-1 text-gray-900">AI Advisory</h3>
+            <p class="text-xs text-gray-600 leading-relaxed">Strategy, GTM, fundraising advice and financial planning for founders.</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all">
+          <div class="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold mb-1 text-gray-900">Legal Engine</h3>
+            <p class="text-xs text-gray-600 leading-relaxed">Auto incorporation, SAFE agreements, equity splits, IP licensing.</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all">
+          <div class="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold mb-1 text-gray-900">Partner Matchmaking</h3>
+            <p class="text-xs text-gray-600 leading-relaxed">AI-powered matching with referral tracking and deal syndication.</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all">
+          <div class="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold mb-1 text-gray-900">Capital Engine</h3>
+            <p class="text-xs text-gray-600 leading-relaxed">Automated capital calls, LP portal, and live portfolio performance.</p>
+          </div>
+        </div>
       </div>
     </div>
-    {% if page.faq_area.enable %}
-    <div class="wrapper light-wrapper inner-bottom">
-        <div class="container">
-            <div class="row">
-              {% if page.faq_area.image %}
-                <div class="col-lg-6">
-                    <figure>
-                      <img src="{{page.faq_area.image}}"  alt="{{page.faq_area.title}}"/>
-                    </figure>
-                </div>
-                {% endif %}
-                <div class="space50 d-none d-md-block d-lg-none"></div>
-                <div class="space10 d-md-none"></div>
-                <div class="col-lg-6 pl-60 pl-md-15">
-                    <h2 class="title-bg bg-default color-default">{{page.faq_area.title}}</h2>
-                    <div class="space10"></div>
-                    <h3 class="display-3">{{page.faq_area.sub_title}}</h3>
-                    <div class="space20"></div>
-                    <div id="accordion-2" class="accordion accordion-wrapper simple">
-                       {% for tab in page.faq_area.tabs %}
-                        <div class="accordion-item card">
-                            <div class="accordion-header card-header" id="accordion-heading-2-1">
-                                <h5>
-                                    <button class="collapsed" data-bs-toggle="collapse" data-bs-target="#accordion-collapse-2-{{forloop.index}}" aria-expanded="false" aria-controls="accordion-collapse-2-1">
-                                     {{tab.question}}
-                                    </button>
-                                </h5>
-                            </div>
-                            <div id="accordion-collapse-2-{{forloop.index}}" class="collapse" aria-labelledby="accordion-heading-2-{{forloop.index}}" data-bs-parent="#accordion-2">
-                                <div class="card-body">
-                                    <p>
-                                       {{tab.answer}}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    <!-- /.accordion-wrapper --> 
-                </div>
+  </section>
+
+  <section id="partners" class="py-20 px-6">
+    <div class="max-w-7xl mx-auto">
+      <div class="bg-gradient-to-br from-violet-50 to-violet-100 border border-violet-300 rounded-3xl p-10 md:p-16 text-center">
+        <h2 class="text-3xl md:text-4xl font-bold mb-4 text-gray-900">Become a Partner</h2>
+        <p class="text-gray-700 max-w-xl mx-auto mb-8 leading-relaxed">
+          Join our network of investors, operators, and service providers.
+          Get matched with high-potential startups, access proprietary deal flow,
+          and earn through referral commissions and equity participation.
+        </p>
+        <div class="grid md:grid-cols-3 gap-6 mb-10 max-w-2xl mx-auto text-left">
+          <div class="flex items-start gap-3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+            <div>
+              <div class="text-sm font-medium text-gray-900">Deal Access</div>
+              <div class="text-xs text-gray-600">AI-scored startups delivered to your dashboard</div>
             </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            <div>
+              <div class="text-sm font-medium text-gray-900">Verified Diligence</div>
+              <div class="text-xs text-gray-600">Automated legal, tech, and financial checks</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <div>
+              <div class="text-sm font-medium text-gray-900">Speed</div>
+              <div class="text-xs text-gray-600">30-day cycle from idea to funded company</div>
+            </div>
+          </div>
         </div>
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <a href="https://1162e933-32b6-4e52-9bfb-42fec8196216-00-36myluq91vtni.worf.replit.dev/register" class="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-8 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20">
+            Apply Now
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+          </a>
+          <a href="https://1162e933-32b6-4e52-9bfb-42fec8196216-00-36myluq91vtni.worf.replit.dev/login" class="flex items-center gap-2 bg-white hover:bg-gray-100 transition-colors px-8 py-3.5 rounded-xl text-sm font-medium text-gray-900 border border-gray-200">
+            Sign In to Dashboard
+          </a>
+        </div>
+      </div>
     </div>
-    {% endif %}
-</div>
-{% include layouts/footer/footer-5.html %}
+  </section>
+
+  <footer class="py-12 px-6 border-t border-gray-200">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      <img src="axal-mark.png" alt="Axal Ventures" class="h-5" />
+      <div class="text-xs text-gray-600">
+        Rue Robert-Ceard 6, 1204 Geneva, Switzerland
+      </div>
+      <div class="text-xs text-gray-600">
+        &copy; 2026 Axal SA. All rights reserved.
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

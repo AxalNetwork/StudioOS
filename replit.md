@@ -194,6 +194,15 @@ Vite proxies /api/* to the backend.
 ## Seed Data
 4 example projects, 3 partners, 2 LP investors, 2 tickets.
 
+## GitHub Pages (axal.vc)
+The root of the repo contains a static landing page served by GitHub Pages at axal.vc:
+- `index.html` — Static HTML landing page matching the React LandingPage component
+- `404.html` — Branded 404 error page
+- `.nojekyll` — Disables Jekyll processing
+- `CNAME` — Custom domain (axal.vc)
+- `axal-mark.png` — Logo asset
+Sign In / Get Started / Apply links point to the Replit-hosted StudioOS app.
+
 ## Deployment
 Autoscale deployment: builds frontend, serves via FastAPI with static files.
 
