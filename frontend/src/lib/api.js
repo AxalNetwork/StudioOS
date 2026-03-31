@@ -1,7 +1,7 @@
 function getBackendUrl() {
   const host = window.location.hostname;
   if (host === 'axal.vc' || host === 'www.axal.vc') {
-    return import.meta.env.VITE_API_URL || 'https://workspace-vjstele.replit.app';
+    return import.meta.env.VITE_API_URL || 'https://studio-os-vjstele.replit.app';
   }
   return '';
 }

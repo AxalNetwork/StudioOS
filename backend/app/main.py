@@ -18,7 +18,7 @@ JEKYLL_ORIGIN = os.environ.get("JEKYLL_ORIGIN", "")
 REPLIT_DOMAIN = os.environ.get("REPLIT_DEV_DOMAIN", "")
 EXTRA_ORIGINS = [o.strip() for o in JEKYLL_ORIGIN.split(",") if o.strip()] if JEKYLL_ORIGIN else []
 REPLIT_DEPLOY_DOMAIN = os.environ.get("REPL_SLUG", "") + "-" + os.environ.get("REPL_OWNER", "") + ".replit.app"
-CORS_ORIGINS = ["https://axal.vc", "https://www.axal.vc"] + EXTRA_ORIGINS
+CORS_ORIGINS = ["https://axal.vc", "https://www.axal.vc", "https://studio-os-vjstele.replit.app"] + EXTRA_ORIGINS
 if REPLIT_DOMAIN:
     CORS_ORIGINS.append(f"https://{REPLIT_DOMAIN}")
 if REPLIT_DEPLOY_DOMAIN and REPLIT_DEPLOY_DOMAIN != "-.replit.app":
