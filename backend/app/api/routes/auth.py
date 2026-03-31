@@ -79,7 +79,7 @@ def _record_resend(email: str):
 class RegisterRequest(BaseModel):
     email: str
     name: str
-    role: str = Field("partner", pattern="^(founder|partner)$")
+    role: str = Field("partner", pattern="^(founder|partner|lp)$")
 
 
 class LoginRequest(BaseModel):

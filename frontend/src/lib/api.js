@@ -96,4 +96,9 @@ export const api = {
 
   activityLog: (params) => request(`/activity/${params ? `?${new URLSearchParams(params)}` : ''}`),
   activitySummary: () => request('/activity/summary'),
+
+  adminListUsers: () => request('/admin/users'),
+  adminImpersonate: (userId) => request(`/admin/impersonate/${userId}`, { method: 'POST' }),
+  adminUpdateRole: (userId, role) => request(`/admin/users/${userId}/role?role=${role}`, { method: 'PATCH' }),
+  adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),
 };

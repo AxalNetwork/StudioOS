@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from backend.app.database import init_db
-from backend.app.api.routes import scoring, projects, legal, partners, capital, tickets, deals, users, market_intel, advisory, activity, auth
+from backend.app.api.routes import scoring, projects, legal, partners, capital, tickets, deals, users, market_intel, advisory, activity, auth, admin
 
 app = FastAPI(
     title="Axal VC — StudioOS",
@@ -33,6 +33,7 @@ app.include_router(market_intel.router, prefix="/api")
 app.include_router(advisory.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 
 
 @app.on_event("startup")

@@ -30,10 +30,11 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
       capital.py       — Capital & investment ops + POST /capitalCall
       tickets.py       — Support hub
       deals.py         — Deal flow pipeline (applied→scored→active→funded)
-      users.py         — User management with roles (admin/founder/partner)
+      users.py         — User management with roles (admin/founder/partner/lp)
       market_intel.py  — Market intelligence (sector signals, macro, private rounds)
       advisory.py      — AI advisory + financial planner + diligence checker
       activity.py      — Activity/audit log endpoints
+      admin.py         — Admin console (user list, impersonation, role management)
   seed.py              — Seed data script
 
 /frontend/
@@ -55,6 +56,7 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
       DealsPage.jsx     — Deal flow pipeline with status progression
       FounderPortal.jsx — Founder submission form with auto-scoring
       PartnerPortal.jsx — Partner view: deals + capital call acceptance
+      AdminPage.jsx     — Admin console: user management, impersonation, role changes
       MarketIntelPage.jsx — Market intelligence (pulse, macro, private, conviction, benchmarks)
       AdvisoryPage.jsx  — AI advisory + financial planner + diligence checker
       ActivityPage.jsx  — System activity/audit log
@@ -71,7 +73,7 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 7. **Capital & Investment Engine** — Capital calls, LP investor portal, portfolio performance tracking
 
 ## Database Tables
-- **users** — id, email, name, role (admin/founder/partner), password_hash, email_verified, verification_token, verification_token_expires
+- **users** — id, email, name, role (admin/founder/partner/lp), password_hash, email_verified, verification_token, verification_token_expires
 - **projects** — Startup pipeline (status, playbook week, sector, financials)
 - **founders** — Founder profiles
 - **partners** — Partner ecosystem with referral codes
@@ -135,6 +137,12 @@ Activity:
 - GET /api/activity/ — Activity log with filtering
 - GET /api/activity/summary — Activity summary + action breakdown
 
+Admin:
+- GET /api/admin/users — List all users (admin only)
+- POST /api/admin/impersonate/{user_id} — Impersonate a user (admin only)
+- PATCH /api/admin/users/{user_id}/role — Change user role (admin only)
+- PATCH /api/admin/users/{user_id}/toggle-active — Toggle user active status (admin only)
+
 Full CRUD on projects, partners, investors, tickets, deals, users, documents, entities.
 
 ## Automation Logic
@@ -153,11 +161,18 @@ Full CRUD on projects, partners, investors, tickets, deals, users, documents, en
 - E. Strategic Fit (15 pts): Alignment (0-10), Synergy (0-5)
 - F. Distribution (10 pts): Channels (0-5), Virality (0-5)
 
-## User Portals
-1. **StudioOS Dashboard** — Studio admin overview (projects, deals, partners, scores)
-2. **Founder Portal** — Multi-step submission with instant scoring results
-3. **Partner Portal** — Deal access + capital call acceptance
-4. **LP Investor Portal** — Portfolio performance, capital calls, returns tracking
+## User Portals & RBAC
+Role-based access control with 4 roles: admin, founder, partner, lp
+
+1. **Admin Console** — User management, role changes, impersonation ("Login As"), portal switcher
+2. **StudioOS Dashboard** — Studio overview (all roles see this)
+3. **Founder Portal** — Multi-step submission with instant scoring results
+4. **Partner Portal** — Deal access + capital call acceptance
+5. **LP Investor Portal** — Portfolio performance, capital calls, returns tracking
+
+**Portal Switcher** (Admin only): A violet bar at the top allows admins to switch between Admin/Founder/Partner/LP views. Sidebar navigation updates dynamically based on the selected view mode.
+
+**Impersonation**: Admins can "Login As" any user to troubleshoot their experience. Original admin session is preserved and can be restored with "Exit Impersonation".
 
 ## Development
 Backend runs on port 8000 (localhost), Frontend on port 5000 (0.0.0.0).
