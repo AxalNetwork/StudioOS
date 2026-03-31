@@ -18,11 +18,15 @@ export default function LoginPage() {
     setError('');
     try {
       const res = await api.login({ email, totp_code: totpCode });
+      if (!res || !res.token || !res.user) {
+        throw new Error('Invalid response from server. Please try again.');
+      }
       localStorage.setItem('token', res.token);
       localStorage.setItem('user', JSON.stringify(res.user));
       window.location.href = '/dashboard';
     } catch (e) {
-      setError(e.message);
+      const errorMsg = e?.message || 'An error occurred. Please try again.';
+      setError(errorMsg);
     }
     setLoading(false);
   };

@@ -14,21 +14,31 @@ function getAuthHeaders() {
 }
 
 async function request(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...options.headers },
-    ...options,
-  });
-  if (!res.ok) {
-    if (res.status === 401 && !path.startsWith('/auth/')) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-      throw new Error('Session expired');
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...options.headers },
+      ...options,
+    });
+    if (!res.ok) {
+      if (res.status === 401 && !path.startsWith('/auth/')) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+        throw new Error('Session expired');
+      }
+      const err = await res.json().catch(() => ({ detail: res.statusText || 'Request failed' }));
+      throw new Error(err.detail || 'Request failed');
     }
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || 'Request failed');
+    const data = await res.json().catch(() => {
+      throw new Error('Invalid response format from server');
+    });
+    return data;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(error.message || 'Network error');
   }
-  return res.json();
 }
 
 export const api = {
