@@ -3,6 +3,7 @@ from sqlmodel import Session, select
 from backend.app.database import get_session
 from backend.app.models.entities import Ticket
 from backend.app.schemas.scoring import TicketCreate
+from backend.app.services.github_service import create_github_issue
 from datetime import datetime
 
 router = APIRouter(prefix="/tickets", tags=["Support"])
@@ -17,7 +18,7 @@ def list_tickets(status: str = None, session: Session = Depends(get_session)):
 
 
 @router.post("/")
-def create_ticket(data: TicketCreate, session: Session = Depends(get_session)):
+async def create_ticket(data: TicketCreate, session: Session = Depends(get_session)):
     ticket = Ticket(
         title=data.title,
         description=data.description,
@@ -28,7 +29,19 @@ def create_ticket(data: TicketCreate, session: Session = Depends(get_session)):
     session.add(ticket)
     session.commit()
     session.refresh(ticket)
-    return ticket
+
+    github_result = await create_github_issue(
+        title=data.title,
+        description=data.description,
+        priority=data.priority,
+        submitted_by=data.submitted_by,
+    )
+
+    response = ticket.model_dump() if hasattr(ticket, 'model_dump') else dict(ticket)
+    if github_result:
+        response["github_issue"] = github_result
+
+    return response
 
 
 @router.get("/{ticket_id}")

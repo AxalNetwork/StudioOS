@@ -53,3 +53,6 @@ run = ["bash", "-c", "cd /home/runner/workspace && python -m uvicorn backend.app
 
 [userenv.shared]
 GOOGLE_REDIRECT_URI = "https://developers.google.com/oauthplayground"
+GITHUB_ACCESS_TOKEN = "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"
+GITHUB_REPO_OWNER = "AxalNetwork"
+GITHUB_REPO_NAME = "StudioOS"
