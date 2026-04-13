@@ -224,3 +224,50 @@ Autoscale deployment: builds frontend, serves via FastAPI with static files.
 - pyotp — TOTP generation/verification
 - PyJWT — JWT token creation/validation
 - qrcode — QR code generation for authenticator setup
+
+## Cloudflare Worker Migration (`cloudflare-worker/`)
+A complete port of the FastAPI backend to Cloudflare Workers (TypeScript/Hono).
+
+### Stack
+- **Runtime**: Cloudflare Workers (edge)
+- **Framework**: Hono (TypeScript)
+- **Database**: PostgreSQL via Cloudflare Hyperdrive
+- **Email**: Resend (transactional email)
+- **Auth**: JWT (jose) + TOTP (otpauth)
+- **KV**: TOKENS (verification tokens), RATE_LIMITS (login/resend throttling)
+
+### Structure
+```
+cloudflare-worker/
+  wrangler.toml       — Cloudflare config (KV, Hyperdrive, vars)
+  package.json        — Dependencies
+  tsconfig.json       — TypeScript config
+  sql/schema.sql      — PostgreSQL schema
+  SETUP.md            — Step-by-step deployment guide
+  src/
+    index.ts          — Main entry (Hono app, CORS, error handling, routes)
+    types.ts          — TypeScript interfaces (Env, User, JWTPayload)
+    db.ts             — Hyperdrive PostgreSQL connection
+    auth.ts           — JWT + TOTP auth helpers
+    services/
+      email.ts        — Resend email service
+      scoring.ts      — 100-point scoring engine
+    routes/
+      auth.ts         — Register, verify, TOTP setup, login
+      scoring.ts      — Score engine, deal memos, queue
+      projects.ts     — Project CRUD, submit + auto-score
+      legal.ts        — 18 legal templates, documents, entities
+      partners.ts     — Partner CRUD, matchmaking, referrals
+      capital.ts      — LP investors, capital calls, portfolio
+      deals.ts        — Deal flow pipeline
+      tickets.ts      — Support tickets + GitHub sync
+      users.ts        — User management
+      admin.ts        — Admin console (impersonation, roles)
+      activity.ts     — Activity/audit logs
+      market-intel.ts — Market intelligence (static data)
+      advisory.ts     — AI advisory, financial planner, diligence
+      private-data.ts — Role-scoped private data API
+```
+
+### Deploy
+See `cloudflare-worker/SETUP.md` for complete deployment instructions.

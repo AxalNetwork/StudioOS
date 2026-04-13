@@ -1,0 +1,33 @@
+name = "studioos-api"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# ---------- KV Namespaces ----------
+# After running: npx wrangler kv:namespace create "TOKENS"
+# and: npx wrangler kv:namespace create "RATE_LIMITS"
+# paste the output IDs below:
+[[kv_namespaces]]
+binding = "TOKENS"
+id = "REPLACE_WITH_TOKENS_KV_ID"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "REPLACE_WITH_RATE_LIMITS_KV_ID"
+
+# ---------- Hyperdrive (PostgreSQL) ----------
+# After running: npx wrangler hyperdrive create studioos-db --connection-string="postgresql://user:pass@host:5432/dbname"
+# paste the ID below:
+[[hyperdrive]]
+binding = "DB"
+id = "REPLACE_WITH_HYPERDRIVE_ID"
+
+# ---------- Environment Variables ----------
+# Set secrets via: npx wrangler secret put <NAME>
+# Required secrets: JWT_SECRET, RESEND_API_KEY
+# Optional secrets: OPENAI_API_KEY, GITHUB_ACCESS_TOKEN
+
+[vars]
+APP_URL = "https://axal.vc"
+GITHUB_REPO_OWNER = "AxalNetwork"
+GITHUB_REPO_NAME = "StudioOS"
