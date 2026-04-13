@@ -1,10 +1,9 @@
 [build]
-  command = "jekyll build"
-  publish = "_site"
+  command = "cd cloudflare-worker && npm install && npx wrangler deploy"
+  publish = "cloudflare-worker"
 
 [build.environment]
-  RUBY_VERSION = "3.1.2"
-  JEKYLL_ENV = "production"
+  NODE_VERSION = "22"
 
 [[headers]]
   for = "/*"
@@ -21,15 +20,14 @@
   status = 200
 
 [context.production]
-  command = "jekyll build"
+  command = "cd cloudflare-worker && npm install && npx wrangler deploy"
 
 [context.preview]
-  command = "jekyll build --drafts --future"
+  command = "cd cloudflare-worker && npm install && npx wrangler deploy"
 
 [context.branch-deploy]
-  command = "jekyll build --drafts --future"
+  command = "cd cloudflare-worker && npm install && npx wrangler deploy"
 
-# Caching and Performance Optimizations
 [[headers]]
   for = "*.css"
   [headers.values]
