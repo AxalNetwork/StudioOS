@@ -16,7 +16,7 @@ id = "be811f14b6f342be961b8daa4513fb5b"
 [[d1_databases]]
 binding = "DB"
 database_name = "studioos-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "16a23acd-c82e-4ff1-a6c0-408e3eb014c8"
 
 # ---------- Environment Variables ----------
 # Set secrets via: npx wrangler secret put <NAME>
