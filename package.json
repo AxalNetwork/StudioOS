@@ -21,5 +21,8 @@
     "recharts": "^3.8.1",
     "tailwindcss": "^4.2.2",
     "vite": "^8.0.8"
+  },
+  "devDependencies": {
+    "wrangler": "^4.82.0"
   }
 }

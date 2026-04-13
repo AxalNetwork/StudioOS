@@ -29,8 +29,15 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
   await sql.end();
 
   const verificationUrl = `${env.APP_URL}/verify-email?token=${rawToken}`;
-  const sent = await sendVerificationEmail(env, email, name, verificationUrl);
-  if (!sent) throw new Error('Failed to send verification email');
+  try {
+    const sent = await sendVerificationEmail(env, email, name, verificationUrl);
+    if (!sent) {
+      console.warn(`[AUTH] Email delivery failed for ${email}. Verification URL: ${verificationUrl}`);
+    }
+  } catch (e) {
+    console.error(`[AUTH] Email service error for ${email}:`, e);
+    console.log(`[AUTH] Manual verification URL: ${verificationUrl}`);
+  }
 }
 
 auth.post('/register', async (c) => {
