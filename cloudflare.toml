@@ -6,7 +6,7 @@
   NODE_VERSION = "22"
 
 [deploy]
-  command = "cd cloudflare-worker && npx wrangler deploy"
+  command = "cd cloudflare-worker && npm run deploy"
 
 [[headers]]
   for = "/*"
@@ -15,7 +15,7 @@
     X-Content-Type-Options = "nosniff"
     X-Frame-Options = "DENY"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'
 
 [[redirects]]
   from = "/*"
