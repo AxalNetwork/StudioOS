@@ -2,8 +2,8 @@ export interface Env {
   DB: D1Database;
   TOKENS: KVNamespace;
   RATE_LIMITS: KVNamespace;
+  EMAIL?: SendEmail;
   JWT_SECRET: string;
-  RESEND_API_KEY: string;
   APP_URL: string;
   OPENAI_API_KEY?: string;
   GITHUB_ACCESS_TOKEN?: string;

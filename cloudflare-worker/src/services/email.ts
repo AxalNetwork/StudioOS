@@ -1,24 +1,33 @@
-import { Resend } from 'resend';
+import { EmailMessage } from 'cloudflare:email';
+import { createMimeMessage } from 'mimetext/browser';
 import type { Env } from '../types';
 
 export async function sendVerificationEmail(env: Env, toEmail: string, name: string, verificationUrl: string): Promise<boolean> {
-  if (!env.RESEND_API_KEY) {
-    console.log(`[EMAIL] Verification link for ${toEmail}: ${verificationUrl}`);
+  if (!env.EMAIL) {
+    console.log(`[EMAIL] No EMAIL binding configured. Verification link for ${toEmail}: ${verificationUrl}`);
     return true;
   }
 
   try {
-    const resend = new Resend(env.RESEND_API_KEY);
-    await resend.emails.send({
-      from: 'Axal Ventures <noreply@axal.vc>',
-      to: [toEmail],
-      subject: 'Verify your email — Axal Ventures',
-      html: buildEmailHTML(name, verificationUrl),
-      text: `Hi ${name},\n\nThanks for signing up for Axal Ventures. Please verify your email by visiting this link:\n\n${verificationUrl}\n\nThis link expires in 24 hours.\n\nIf you didn't create an account, you can safely ignore this email.`,
+    const msg = createMimeMessage();
+    msg.setSender({ name: 'Axal Ventures', addr: 'noreply@axal.vc' });
+    msg.setRecipient(toEmail);
+    msg.setSubject('Verify your email — Axal Ventures');
+    msg.addMessage({
+      contentType: 'text/html',
+      data: buildEmailHTML(name, verificationUrl),
     });
+    msg.addMessage({
+      contentType: 'text/plain',
+      data: `Hi ${name},\n\nThanks for signing up for Axal Ventures. Please verify your email by visiting this link:\n\n${verificationUrl}\n\nThis link expires in 24 hours.\n\nIf you didn't create an account, you can safely ignore this email.`,
+    });
+
+    const message = new EmailMessage('noreply@axal.vc', toEmail, msg.asRaw());
+    await env.EMAIL.send(message);
+    console.log(`[EMAIL] Verification email sent to ${toEmail}`);
     return true;
   } catch (e) {
-    console.error('Resend email error:', e);
+    console.error('[EMAIL] Failed to send verification email:', e);
     return false;
   }
 }
