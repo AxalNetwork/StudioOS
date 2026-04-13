@@ -4,18 +4,13 @@ compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 # ---------- KV Namespaces ----------
-# To enable KV storage for tokens and rate limiting:
-# 1. Run: npx wrangler kv:namespace create "TOKENS"
-# 2. Run: npx wrangler kv:namespace create "RATE_LIMITS"
-# 3. Uncomment the blocks below and paste the output IDs:
-#
-# [[kv_namespaces]]
-# binding = "TOKENS"
-# id = "YOUR_TOKENS_KV_ID"
-#
-# [[kv_namespaces]]
-# binding = "RATE_LIMITS"
-# id = "YOUR_RATE_LIMITS_KV_ID"
+[[kv_namespaces]]
+binding = "TOKENS"
+id = "8dc26ed83d154d0ebbfcbc51f592d67c"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "be811f14b6f342be961b8daa4513fb5b"
 
 # ---------- Hyperdrive (PostgreSQL) ----------
 # To connect your PostgreSQL database via Hyperdrive:
