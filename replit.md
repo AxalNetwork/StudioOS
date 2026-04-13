@@ -7,7 +7,7 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 - **Backend**: Cloudflare Workers (TypeScript/Hono) at `https://studioos.guillaumelauzier.workers.dev`
 - **Frontend**: React 19 + Vite + Tailwind CSS → built to `docs/` → served via GitHub Pages at `axal.vc`
 - **Database**: Cloudflare D1 (SQLite at the edge) — `studioos-db`
-- **Email**: Resend (transactional email via `RESEND_API_KEY` secret)
+- **Email**: Cloudflare Email Routing (native `send_email` binding — no third-party service)
 - **Spam Protection**: Cloudflare Turnstile (optional, via `TURNSTILE_SECRET_KEY` + `VITE_TURNSTILE_SITE_KEY`)
 - **AI**: OpenAI API (optional, for memo generation + advisory)
 - **Architecture**: Monorepo — Replit as code editor only, GitHub Pages for frontend, Cloudflare Workers for API
@@ -93,10 +93,10 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 ## Authentication
 - TOTP-based (passwordless) authentication using otpauth
 - **Email verification required before TOTP setup** — prevents impersonation
-- Registration flow: Form (+ Turnstile) → Email verification via Resend → TOTP authenticator setup → Dashboard
+- Registration flow: Form (+ Turnstile) → Email verification via Cloudflare Email Routing → TOTP authenticator setup → Dashboard
 - Verification tokens are SHA-256 hashed in DB, expire in 24 hours
-- Resend verification rate limited (max 3/hour per email)
-- Email sending via Resend API (falls back to console warning if RESEND_API_KEY not set)
+- Resend-verification endpoint rate limited (max 3/hour per email)
+- Email sending via Cloudflare Email Routing `send_email` binding (falls back to console warning if binding not configured)
 - Cloudflare Turnstile bot protection on registration (optional — skipped if TURNSTILE_SECRET_KEY not configured)
 - JWT tokens (24h expiry) for session management (jose library)
 - Frontend auth guard redirects unauthenticated users to login
@@ -235,7 +235,7 @@ A complete port of the FastAPI backend to Cloudflare Workers (TypeScript/Hono).
 - **Runtime**: Cloudflare Workers (edge)
 - **Framework**: Hono (TypeScript)
 - **Database**: Cloudflare D1 (SQLite at the edge)
-- **Email**: Resend (transactional email)
+- **Email**: Cloudflare Email Routing (native send_email binding)
 - **Auth**: JWT (jose) + TOTP (otpauth)
 - **KV**: TOKENS (verification tokens), RATE_LIMITS (login/resend throttling)
 
@@ -262,7 +262,8 @@ cloudflare-worker/
     db.ts             — D1 tagged-template helper (getSQL)
     auth.ts           — JWT + TOTP auth helpers
     services/
-      email.ts        — Resend email service
+      email.ts        — Cloudflare Email Routing (send_email binding)
+      turnstile.ts    — Cloudflare Turnstile verification
       scoring.ts      — 100-point scoring engine
     routes/
       auth.ts         — Register, verify, TOTP setup, login

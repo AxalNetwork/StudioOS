@@ -33,10 +33,10 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
   try {
     const sent = await sendVerificationEmail(env, email, name, verificationUrl);
     if (!sent) {
-      console.warn(`[AUTH] Email delivery failed for ${email}. Check RESEND_API_KEY configuration.`);
+      console.warn(`[AUTH] Email delivery failed for ${email}. Check Email Routing / SEND_EMAIL binding configuration.`);
     }
-  } catch (e) {
-    console.error(`[AUTH] Email service error for ${email}:`, e);
+  } catch (e: any) {
+    console.error(`[AUTH] Email service error for ${email}: ${e?.message || 'Unknown error'}`);
   }
 }
 

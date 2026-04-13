@@ -1,25 +1,60 @@
-import { Resend } from 'resend';
+import { EmailMessage } from 'cloudflare:email';
+import { createMimeMessage } from 'mimetext/browser';
 import type { Env } from '../types';
 
 export async function sendVerificationEmail(env: Env, toEmail: string, name: string, verificationUrl: string): Promise<boolean> {
-  if (!env.RESEND_API_KEY) {
-    console.warn(`[EMAIL] No RESEND_API_KEY configured — email to ${toEmail} was not sent. Set the secret to enable email delivery.`);
-    return true;
+  if (!env.SEND_EMAIL) {
+    console.warn(`[EMAIL] No SEND_EMAIL binding configured — email to ${toEmail} was not sent. Enable Email Routing and add the send_email binding.`);
+    return false;
   }
 
   try {
-    const resend = new Resend(env.RESEND_API_KEY);
-    await resend.emails.send({
-      from: 'Axal Ventures <noreply@axal.vc>',
-      to: [toEmail],
-      subject: 'Verify your email — Axal Ventures',
-      html: buildEmailHTML(name, verificationUrl),
-      text: `Hi ${name},\n\nThanks for signing up for Axal Ventures. Please verify your email by visiting this link:\n\n${verificationUrl}\n\nThis link expires in 24 hours.\n\nIf you didn't create an account, you can safely ignore this email.`,
+    const msg = createMimeMessage();
+    msg.setSender({ name: 'Axal Ventures', addr: 'noreply@axal.vc' });
+    msg.setRecipient(toEmail);
+    msg.setSubject('Verify your email — Axal Ventures');
+    msg.addMessage({
+      contentType: 'text/html',
+      data: buildEmailHTML(name, verificationUrl),
     });
-    console.log(`[EMAIL] Verification email sent to ${toEmail}`);
+    msg.addMessage({
+      contentType: 'text/plain',
+      data: `Hi ${name},\n\nThanks for signing up for Axal Ventures. Please verify your email by visiting this link:\n\n${verificationUrl}\n\nThis link expires in 24 hours.\n\nIf you didn't create an account, you can safely ignore this email.`,
+    });
+
+    const rawEmail = msg.asRaw();
+    const message = new EmailMessage('noreply@axal.vc', toEmail, rawEmail);
+    await env.SEND_EMAIL.send(message);
+
+    console.log(`[EMAIL] Verification email sent to ${toEmail} via Cloudflare Email Routing`);
     return true;
-  } catch (e) {
-    console.error('[EMAIL] Failed to send verification email:', e);
+  } catch (e: any) {
+    console.error(`[EMAIL] Cloudflare send_email failed: ${e?.message || 'Unknown error'}`);
+    return false;
+  }
+}
+
+export async function sendNotificationEmail(env: Env, toEmail: string, subject: string, htmlBody: string, textBody: string): Promise<boolean> {
+  if (!env.SEND_EMAIL) {
+    console.warn(`[EMAIL] No SEND_EMAIL binding — notification to ${toEmail} skipped.`);
+    return false;
+  }
+
+  try {
+    const msg = createMimeMessage();
+    msg.setSender({ name: 'Axal Ventures', addr: 'noreply@axal.vc' });
+    msg.setRecipient(toEmail);
+    msg.setSubject(subject);
+    msg.addMessage({ contentType: 'text/html', data: htmlBody });
+    msg.addMessage({ contentType: 'text/plain', data: textBody });
+
+    const message = new EmailMessage('noreply@axal.vc', toEmail, msg.asRaw());
+    await env.SEND_EMAIL.send(message);
+
+    console.log(`[EMAIL] Notification sent to ${toEmail}`);
+    return true;
+  } catch (e: any) {
+    console.error(`[EMAIL] Notification send failed: ${e?.message || 'Unknown error'}`);
     return false;
   }
 }
