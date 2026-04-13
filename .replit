@@ -42,6 +42,10 @@ externalPort = 3001
 localPort = 8000
 externalPort = 8000
 
+[[ports]]
+localPort = 8976
+externalPort = 3000
+
 [deployment]
 deploymentTarget = "autoscale"
 build = ["bash", "build-deploy.sh"]
