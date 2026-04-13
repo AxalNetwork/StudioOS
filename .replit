@@ -17,19 +17,18 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Start application"
+args = "Code Repository"
 
 [[workflows.workflow]]
-name = "Start application"
+name = "Code Repository"
 author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python -m uvicorn backend.app.main:app --host localhost --port 8000 & cd frontend && npm run dev"
-waitForPort = 5000
+args = "echo 'This project runs on GitHub Pages (frontend) and Cloudflare Workers (backend). Replit is used as a code editor only.'"
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [[ports]]
 localPort = 5000
