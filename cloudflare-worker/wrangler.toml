@@ -18,14 +18,10 @@ binding = "DB"
 database_name = "studioos-db"
 database_id = "16a23acd-c82e-4ff1-a6c0-408e3eb014c8"
 
-# ---------- Email (Cloudflare Email Routing) ----------
-[[send_email]]
-name = "EMAIL"
-
 # ---------- Environment Variables ----------
 # Set secrets via: npx wrangler secret put <NAME>
-# Required secrets: JWT_SECRET
-# Optional secrets: OPENAI_API_KEY, GITHUB_ACCESS_TOKEN
+# Required secrets: JWT_SECRET, RESEND_API_KEY
+# Optional secrets: TURNSTILE_SECRET_KEY, OPENAI_API_KEY, GITHUB_ACCESS_TOKEN
 
 [vars]
 APP_URL = "https://axal.vc"

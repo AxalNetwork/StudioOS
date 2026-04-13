@@ -1,29 +1,21 @@
-import { EmailMessage } from 'cloudflare:email';
-import { createMimeMessage } from 'mimetext/browser';
+import { Resend } from 'resend';
 import type { Env } from '../types';
 
 export async function sendVerificationEmail(env: Env, toEmail: string, name: string, verificationUrl: string): Promise<boolean> {
-  if (!env.EMAIL) {
-    console.log(`[EMAIL] No EMAIL binding configured. Verification link for ${toEmail}: ${verificationUrl}`);
+  if (!env.RESEND_API_KEY) {
+    console.warn(`[EMAIL] No RESEND_API_KEY configured — email to ${toEmail} was not sent. Set the secret to enable email delivery.`);
     return true;
   }
 
   try {
-    const msg = createMimeMessage();
-    msg.setSender({ name: 'Axal Ventures', addr: 'noreply@axal.vc' });
-    msg.setRecipient(toEmail);
-    msg.setSubject('Verify your email — Axal Ventures');
-    msg.addMessage({
-      contentType: 'text/html',
-      data: buildEmailHTML(name, verificationUrl),
+    const resend = new Resend(env.RESEND_API_KEY);
+    await resend.emails.send({
+      from: 'Axal Ventures <noreply@axal.vc>',
+      to: [toEmail],
+      subject: 'Verify your email — Axal Ventures',
+      html: buildEmailHTML(name, verificationUrl),
+      text: `Hi ${name},\n\nThanks for signing up for Axal Ventures. Please verify your email by visiting this link:\n\n${verificationUrl}\n\nThis link expires in 24 hours.\n\nIf you didn't create an account, you can safely ignore this email.`,
     });
-    msg.addMessage({
-      contentType: 'text/plain',
-      data: `Hi ${name},\n\nThanks for signing up for Axal Ventures. Please verify your email by visiting this link:\n\n${verificationUrl}\n\nThis link expires in 24 hours.\n\nIf you didn't create an account, you can safely ignore this email.`,
-    });
-
-    const message = new EmailMessage('noreply@axal.vc', toEmail, msg.asRaw());
-    await env.EMAIL.send(message);
     console.log(`[EMAIL] Verification email sent to ${toEmail}`);
     return true;
   } catch (e) {

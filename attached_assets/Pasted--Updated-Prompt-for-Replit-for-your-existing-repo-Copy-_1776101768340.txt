@@ -1,0 +1,61 @@
+**✅ Updated Prompt for Replit (for your existing repo)**
+
+Copy and paste this entire prompt into Replit AI chat while your Replit is connected to (or has cloned) the repo **https://github.com/AxalNetwork/StudioOS**.
+
+---
+
+**Prompt for Replit:**
+
+You are an expert full-stack DevOps engineer. This is **not** a fresh Jekyll site — scan and work with the existing repository structure from https://github.com/AxalNetwork/StudioOS.
+
+The site is already a Jekyll site (uses `cloudflare.toml` with `jekyll build` → `_site`, has frontend/, backend/, and especially `cloudflare-worker/` folder with existing Resend setup).
+
+**Task: Complete the secure email confirmation flow using Resend + Cloudflare Worker + Jekyll/Cloudflare Pages.**
+
+1. **Analyze current structure**  
+   - Review `_config.yml`, `cloudflare.toml`, existing forms in frontend/ or root pages.  
+   - Examine the current Cloudflare Worker in `cloudflare-worker/` (especially src/, wrangler.toml, SETUP.md, and any email-related code).
+
+2. **Enhance / Create the Form**  
+   - Locate or create a contact/newsletter/signup form (name, email, optional message).  
+   - Update the form to use Cloudflare Turnstile for spam protection.  
+   - Make it POST to the Cloudflare Worker endpoint.
+
+3. **Improve the Cloudflare Worker for Secure Email Confirmations**  
+   - Update the Worker (TypeScript) to:  
+     • Receive form data securely.  
+     • Validate with Turnstile.  
+     • Rate limit requests.  
+     • Send **secure transactional confirmation email via Resend** (double-opt-in with a confirmation link preferred, or thank-you confirmation).  
+     • Use Resend SDK properly.  
+     • Store confirmed emails/submissions (use KV or Hyperdrive/Postgres if already set up).  
+   - Ensure no secrets are hardcoded — use only `wrangler secret` and env vars.  
+   - Add proper CORS, error handling, and logging.
+
+4. **Deployment & Configuration**  
+   - Update `cloudflare.toml`, `_headers`, `_redirects` if needed.  
+   - Provide updated `wrangler.toml` and deployment commands.  
+   - Give exact steps to:  
+     - Set secrets (`RESEND_API_KEY`, Turnstile keys, etc.).  
+     - Deploy Pages + Worker.  
+     - Connect everything on Cloudflare dashboard.
+
+5. **Documentation**  
+   - Update or create a clear `README.md` section (or new `EMAIL-CONFIRMATION-SETUP.md`) with full checklist, security best practices, and testing instructions.  
+   - Include how to test locally (Jekyll serve + `wrangler dev`).
+
+Start by exploring and listing the current relevant files (especially any existing forms and the worker code). Then propose the exact changes needed and apply them step by step. Ask me for any missing secrets names or preferences (e.g., double-opt-in vs simple confirmation).
+
+Begin analysis now!
+
+---
+
+### Quick Tips While Replit Works
+
+- The repo **already has Resend integration** in the worker and a full `SETUP.md` — Replit should build on top of that.
+- Turnstile is the best free spam protection with Cloudflare.
+- For double-opt-in: Worker sends email with a unique link → another Worker endpoint verifies the token and marks as confirmed.
+
+Paste the prompt above into Replit and let it analyze the repo first. Then reply here with what Replit outputs if you need me to refine further or give manual code patches. 
+
+Ready when you are!

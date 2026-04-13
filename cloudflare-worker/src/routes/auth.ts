@@ -5,6 +5,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { createJWT, hashToken, generateToken, requireAuth } from '../auth';
 import { sendVerificationEmail } from '../services/email';
+import { verifyTurnstile } from '../services/turnstile';
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -32,18 +33,21 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
   try {
     const sent = await sendVerificationEmail(env, email, name, verificationUrl);
     if (!sent) {
-      console.warn(`[AUTH] Email delivery failed for ${email}. Verification URL: ${verificationUrl}`);
+      console.warn(`[AUTH] Email delivery failed for ${email}. Check RESEND_API_KEY configuration.`);
     }
   } catch (e) {
     console.error(`[AUTH] Email service error for ${email}:`, e);
-    console.log(`[AUTH] Manual verification URL: ${verificationUrl}`);
   }
 }
 
 auth.post('/register', async (c) => {
-  const { email, name, role } = await c.req.json();
+  const { email, name, role, turnstileToken } = await c.req.json();
   if (!email || !name) return c.json({ error: 'Email and name required' }, 400);
   if (role && !['founder', 'partner'].includes(role)) return c.json({ error: 'Invalid role' }, 400);
+
+  const clientIp = c.req.header('cf-connecting-ip') || undefined;
+  const turnstileOk = await verifyTurnstile(c.env, turnstileToken, clientIp);
+  if (!turnstileOk) return c.json({ error: 'Bot verification failed. Please try again.' }, 403);
 
   const sql = getSQL(c.env);
   const existing = await sql`SELECT * FROM users WHERE email = ${email}`;

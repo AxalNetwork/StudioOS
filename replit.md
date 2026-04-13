@@ -4,11 +4,13 @@
 A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day startup spin-out model. Built for Axal VC to automate the venture creation pipeline from intake to spinout.
 
 ## Tech Stack
-- **Backend**: Python 3.11 + FastAPI + SQLModel + Uvicorn
-- **Frontend**: React 19 + Vite + Tailwind CSS
-- **Database**: Replit PostgreSQL
+- **Backend**: Cloudflare Workers (TypeScript/Hono) at `https://studioos.guillaumelauzier.workers.dev`
+- **Frontend**: React 19 + Vite + Tailwind CSS → built to `docs/` → served via GitHub Pages at `axal.vc`
+- **Database**: Cloudflare D1 (SQLite at the edge) — `studioos-db`
+- **Email**: Resend (transactional email via `RESEND_API_KEY` secret)
+- **Spam Protection**: Cloudflare Turnstile (optional, via `TURNSTILE_SECRET_KEY` + `VITE_TURNSTILE_SITE_KEY`)
 - **AI**: OpenAI API (optional, for memo generation + advisory)
-- **Architecture**: Monorepo with `/backend` and `/frontend`
+- **Architecture**: Monorepo — Replit as code editor only, GitHub Pages for frontend, Cloudflare Workers for API
 
 ## Project Structure
 ```
@@ -89,13 +91,14 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 - **activity_logs** — System activity/audit tracking
 
 ## Authentication
-- TOTP-based (passwordless) authentication using pyotp
+- TOTP-based (passwordless) authentication using otpauth
 - **Email verification required before TOTP setup** — prevents impersonation
-- Registration flow: Form → Email verification → TOTP authenticator setup → Dashboard
+- Registration flow: Form (+ Turnstile) → Email verification via Resend → TOTP authenticator setup → Dashboard
 - Verification tokens are SHA-256 hashed in DB, expire in 24 hours
 - Resend verification rate limited (max 3/hour per email)
-- Email sending via Gmail API with OAuth2 (or console logging if Google credentials not set)
-- JWT tokens (24h expiry) for session management
+- Email sending via Resend API (falls back to console warning if RESEND_API_KEY not set)
+- Cloudflare Turnstile bot protection on registration (optional — skipped if TURNSTILE_SECRET_KEY not configured)
+- JWT tokens (24h expiry) for session management (jose library)
 - Frontend auth guard redirects unauthenticated users to login
 - Public pages: Landing (/), Register (/register), Login (/login), Verify Email (/verify-email)
 - All dashboard routes are protected behind authentication

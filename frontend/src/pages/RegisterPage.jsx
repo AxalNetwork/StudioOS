@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Shield, Smartphone, Copy, Check, ChevronDown, Mail, RefreshCw } from 'lucide-react';
 import QRCode from 'qrcode';
 import { api } from '../lib/api';
+
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
 export default function RegisterPage() {
   const [step, setStep] = useState(1);
@@ -13,7 +15,10 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [turnstileToken, setTurnstileToken] = useState('');
   const canvasRef = useRef(null);
+  const turnstileRef = useRef(null);
+  const turnstileWidgetId = useRef(null);
 
   useEffect(() => {
     if (totpData?.provisioning_uri && canvasRef.current) {
@@ -31,18 +36,59 @@ export default function RegisterPage() {
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !turnstileRef.current) return;
+    if (typeof window.turnstile === 'undefined') {
+      const interval = setInterval(() => {
+        if (typeof window.turnstile !== 'undefined' && turnstileRef.current) {
+          clearInterval(interval);
+          renderTurnstile();
+        }
+      }, 200);
+      return () => clearInterval(interval);
+    }
+    renderTurnstile();
+
+    function renderTurnstile() {
+      if (turnstileWidgetId.current !== null) {
+        window.turnstile.remove(turnstileWidgetId.current);
+      }
+      turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: (token) => setTurnstileToken(token),
+        'expired-callback': () => setTurnstileToken(''),
+        theme: 'light',
+      });
+    }
+
+    return () => {
+      if (turnstileWidgetId.current !== null) {
+        try { window.turnstile.remove(turnstileWidgetId.current); } catch {}
+        turnstileWidgetId.current = null;
+      }
+    };
+  }, [step]);
+
   const register = async () => {
     if (!form.email || !form.name) {
       setError('Please fill in all fields');
       return;
     }
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      setError('Please complete the verification challenge');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      await api.register(form);
+      await api.register({ ...form, turnstileToken });
       setStep(2);
     } catch (e) {
       setError(e.message);
+      if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
+        window.turnstile.reset(turnstileWidgetId.current);
+        setTurnstileToken('');
+      }
     }
     setLoading(false);
   };
@@ -138,7 +184,10 @@ export default function RegisterPage() {
                     <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                   </div>
                 </div>
-                <button onClick={register} disabled={loading}
+                {TURNSTILE_SITE_KEY && (
+                  <div ref={turnstileRef} className="flex justify-center" />
+                )}
+                <button onClick={register} disabled={loading || (TURNSTILE_SITE_KEY && !turnstileToken)}
                   className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white transition-colors">
                   {loading ? 'Creating Account...' : 'Continue'}
                 </button>
