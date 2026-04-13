@@ -1,9 +1,9 @@
 function getBackendUrl() {
   const host = window.location.hostname;
-  if (host === 'axal.vc' || host === 'www.axal.vc') {
-    return import.meta.env.VITE_API_URL || 'https://studioos.guillaumelauzier.workers.dev';
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return '';
   }
-  return '';
+  return import.meta.env.VITE_API_URL || 'https://studioos.guillaumelauzier.workers.dev';
 }
 const BACKEND_URL = getBackendUrl();
 const BASE = `${BACKEND_URL}/api`;

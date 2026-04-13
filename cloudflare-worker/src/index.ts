@@ -22,7 +22,7 @@ import privateData from './routes/private-data';
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
-  origin: ['https://axal.vc', 'https://www.axal.vc'],
+  origin: ['https://axal.vc', 'https://www.axal.vc', 'https://studioos.guillaumelauzier.workers.dev'],
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
