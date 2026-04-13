@@ -66,3 +66,17 @@ urllib3==2.6.3
 uvicorn==0.42.0
 Werkzeug==3.1.7
 yarl==1.23.0
+alembic
+fastapi
+google-api-python-client
+google-auth
+google-auth-oauthlib
+httpx
+psycopg2-binary
+pydantic
+pyjwt
+pyotp
+python-dotenv
+qrcode
+sqlmodel
+uvicorn

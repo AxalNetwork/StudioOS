@@ -1,0 +1,167 @@
+**✅ Backend setup on Cloudflare Workers (Python + FastAPI) is now possible** — Cloudflare added native **Python Workers** support (via Pyodide) in 2024/2025, and **FastAPI is officially supported**. Your StudioOS backend (`backend/app/main.py` + SQLModel/Postgres) can run at the edge with almost no rewrite.
+
+I’ll give you the **exact steps** to deploy the **backend** to Cloudflare Workers (for `https://axal.vc` or a subdomain like `api.axal.vc`), plus how to connect your existing static frontend (GitHub Pages / `docs/`) and update CORS.
+
+At the end I’ll also give you a **ready-to-copy prompt for Replit** (in case you want to keep or duplicate the full-stack Replit deployment).
+
+### 1. Prerequisites
+- Cloudflare account (free tier works for starters; paid for higher limits/custom domains).
+- Your domain `axal.vc` added to Cloudflare DNS (or you can add it later).
+- `uv` or `pipx` installed locally (recommended).
+- GitHub repo cloned: `git clone https://github.com/AxalNetwork/StudioOS.git && cd StudioOS`
+
+### 2. Deploy Backend as Python Worker (FastAPI)
+
+Cloudflare provides an official FastAPI template + `pywrangler` CLI.
+
+```bash
+# 1. Install the Python Workers tooling
+uv tool install workers-py
+
+# 2. Create a new Python Worker from the official FastAPI template
+pywrangler init --template https://github.com/cloudflare/python-workers-examples/03-fastapi
+cd 03-fastapi   # or whatever folder it creates
+```
+
+Now **port your existing StudioOS backend** into this structure:
+
+1. Copy your code:
+   - Replace the template’s `main.py` content with your `backend/app/main.py` (FastAPI app).
+   - Copy over `backend/app/database.py`, `models/`, `services/`, etc.
+   - Copy `requirements.txt` / `pyproject.toml` / `uv.lock` into the new Worker folder.
+
+2. **Modify `main.py` for Workers** (critical — no Uvicorn needed):
+
+```python
+# backend/app/main.py  (updated for Cloudflare Python Workers)
+from fastapi import FastAPI
+from workers import WorkerEntrypoint   # ← Cloudflare-provided
+import asgi                               # ← Cloudflare ASGI server
+
+app = FastAPI(
+    title="StudioOS API",
+    version="1.0",
+    docs_url="/docs" if __debug__ else None
+)
+
+# ← Paste ALL your existing routes, dependencies, middleware here
+# (auth, scoring, ai_memo, projects, etc.)
+
+# Worker entrypoint (this replaces uvicorn)
+class Worker(WorkerEntrypoint):
+    async def fetch(self, request):
+        return await asgi.fetch(app, request, self.env)  # self.env gives you bindings + env vars
+```
+
+3. **Install dependencies** (FastAPI + your packages are supported):
+```bash
+uv sync --frozen
+```
+
+4. **Local test**:
+```bash
+pywrangler dev
+```
+
+### 3. Database & Environment Variables
+Your app currently uses **PostgreSQL** (Replit DB).
+
+**Best option → Hyperdrive** (Cloudflare’s Postgres accelerator — zero-latency connection from Workers):
+
+1. In Cloudflare dashboard → **Hyperdrive** → Create Hyperdrive (point it to your existing Postgres or a new Neon/Supabase/Postgres instance).
+2. Add the Hyperdrive binding in `wrangler.toml` (created automatically):
+
+```toml
+[[hyperdrive]]
+binding = "DATABASE"
+id = "your-hyperdrive-id"
+```
+
+3. **Environment variables** (all your secrets from `replit.md`):
+   - In `wrangler.toml` or via dashboard:
+     ```toml
+     [vars]
+     JWT_SECRET = "your-secret"
+     OPENAI_API_KEY = "sk-..."
+     # ... all the Google/Github tokens
+     ```
+   - Or use `npx wrangler secret put JWT_SECRET` (recommended for secrets).
+
+**Alternative (simpler for start):** Use **Cloudflare D1** (SQLite) and update SQLModel to use the D1 driver. Cloudflare has examples for this too.
+
+### 4. Deploy the Worker
+```bash
+pywrangler deploy
+```
+
+This gives you a `*.workers.dev` URL.
+
+### 5. Connect to your domain `axal.vc`
+1. In Cloudflare dashboard → **Workers & Pages** → your Worker → **Triggers** → **Add custom domain**.
+2. Add `api.axal.vc` (or `backend.axal.vc`).
+3. Cloudflare will automatically create the DNS record.
+
+Update your **frontend** (the static site in `docs/` or React build):
+- Change all API calls from the old Replit URL → `https://api.axal.vc`
+- In `replit.md` it already mentions setting `JEKYLL_ORIGIN` / CORS — do the same in your FastAPI middleware for `https://axal.vc` and `https://www.axal.vc`.
+
+**CORS quick fix** (add to your FastAPI app):
+```python
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://axal.vc", "https://www.axal.vc"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+### 6. (Optional) Move Frontend to Cloudflare Pages too (full Cloudflare stack)
+- Build the React frontend: `cd frontend && npm run build`
+- Deploy to Cloudflare Pages (it already has `cloudflare.toml` in root).
+- Pages can route `/api/*` directly to your Worker via **Functions** or just use the custom domain `api.axal.vc`.
+
+### 7. Ready-to-use Prompt for Replit (if you want to keep/duplicate there)
+
+Copy-paste this entire block into Replit’s AI chat or “Configure Repl”:
+
+```
+You are an expert Replit deployment assistant. 
+I have the full-stack StudioOS repo: https://github.com/AxalNetwork/StudioOS
+
+It has:
+- Backend: FastAPI + SQLModel + PostgreSQL (Replit DB) in backend/app/main.py
+- Frontend: React 19 + Vite on port 5000
+- Environment variables needed: DATABASE_URL (auto), OPENAI_API_KEY, JWT_SECRET, all Google OAuth + Gmail vars, GitHub token
+
+Setup instructions from replit.md:
+- Backend runs on port 8000 with Uvicorn
+- Frontend on 5000 with Vite proxy /api/* → backend
+- Use Replit PostgreSQL + secrets tab
+
+Please:
+1. Create the Repl with Python + Node.js (or separate if needed)
+2. Install all dependencies from requirements.txt and package.json
+3. Set up the .replit file with run commands for both backend and frontend
+4. Add all required secrets
+5. Enable the PostgreSQL database
+6. Give me the exact commands to run and the live URLs
+
+Make it production-ready with auto-restart and public access.
+```
+
+Just paste that into Replit and it will do everything for you.
+
+---
+
+**You’re done!**  
+Your backend will now run on Cloudflare’s global edge (300+ cities) with **sub-10 ms cold starts** and native FastAPI support.
+
+Need me to:
+- Write the exact `wrangler.toml` for you?
+- Help migrate the DB schema to D1?
+- Update any specific service file?
+
+Just say the word and I’ll give you the exact code/files. Let’s get `api.axal.vc` live! 🚀
