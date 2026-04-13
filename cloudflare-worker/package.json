@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:migrate": "node sql/migrate.mjs"
+    "db:create": "wrangler d1 create studioos-db",
+    "db:schema": "wrangler d1 execute studioos-db --file=sql/schema.sql",
+    "db:schema:remote": "wrangler d1 execute studioos-db --remote --file=sql/schema.sql"
   },
   "dependencies": {
     "hono": "^4.4.0",
-    "postgres": "^3.4.4",
     "jose": "^5.6.0",
     "otpauth": "^9.3.0",
     "resend": "^3.5.0",

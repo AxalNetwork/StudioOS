@@ -61,7 +61,7 @@ capital.post('/calls/:id/pay', async (c) => {
   const sql = getSQL(c.env);
   const calls = await sql`SELECT * FROM capital_calls WHERE id = ${id}`;
   if (calls.length === 0) { await sql.end(); return c.json({ error: 'Capital call not found' }, 404); }
-  await sql`UPDATE capital_calls SET status = 'paid', paid_date = CURRENT_DATE WHERE id = ${id}`;
+  await sql`UPDATE capital_calls SET status = 'paid', paid_date = date('now') WHERE id = ${id}`;
   await sql`UPDATE lp_investors SET called_capital = called_capital + ${calls[0].amount} WHERE id = ${calls[0].lp_investor_id}`;
   const [updated] = await sql`SELECT * FROM capital_calls WHERE id = ${id}`;
   await sql.end();

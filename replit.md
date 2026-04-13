@@ -231,23 +231,32 @@ A complete port of the FastAPI backend to Cloudflare Workers (TypeScript/Hono).
 ### Stack
 - **Runtime**: Cloudflare Workers (edge)
 - **Framework**: Hono (TypeScript)
-- **Database**: PostgreSQL via Cloudflare Hyperdrive
+- **Database**: Cloudflare D1 (SQLite at the edge)
 - **Email**: Resend (transactional email)
 - **Auth**: JWT (jose) + TOTP (otpauth)
 - **KV**: TOKENS (verification tokens), RATE_LIMITS (login/resend throttling)
 
+### D1 Setup (one-time)
+```bash
+cd cloudflare-worker
+npm run db:create           # creates the D1 database, prints the ID
+# → copy the ID into wrangler.toml [d1_databases] database_id
+npm run db:schema:remote    # applies schema.sql to the live D1 database
+npm run deploy              # deploy the worker
+```
+
 ### Structure
 ```
 cloudflare-worker/
-  wrangler.toml       — Cloudflare config (KV, Hyperdrive, vars)
+  wrangler.toml       — Cloudflare config (KV, D1, vars) — replace REPLACE_WITH_D1_DATABASE_ID
   package.json        — Dependencies
   tsconfig.json       — TypeScript config
-  sql/schema.sql      — PostgreSQL schema
+  sql/schema.sql      — SQLite/D1 schema
   SETUP.md            — Step-by-step deployment guide
   src/
     index.ts          — Main entry (Hono app, CORS, error handling, routes)
-    types.ts          — TypeScript interfaces (Env, User, JWTPayload)
-    db.ts             — Hyperdrive PostgreSQL connection
+    types.ts          — TypeScript interfaces (Env uses D1Database)
+    db.ts             — D1 tagged-template helper (getSQL)
     auth.ts           — JWT + TOTP auth helpers
     services/
       email.ts        — Resend email service

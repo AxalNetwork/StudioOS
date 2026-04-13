@@ -1,39 +1,23 @@
-CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    uid TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
-    email TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'founder' CHECK (role IN ('admin', 'founder', 'partner')),
-    password_hash TEXT,
-    founder_id INTEGER REFERENCES founders(id),
-    partner_id INTEGER REFERENCES partners(id),
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    email_verified BOOLEAN NOT NULL DEFAULT false,
-    verification_token TEXT,
-    verification_token_expires TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_uid ON users(uid);
+-- StudioOS D1 (SQLite) Schema
+-- Run via: npx wrangler d1 execute studioos-db --file=sql/schema.sql
 
 CREATE TABLE IF NOT EXISTS founders (
-    id SERIAL PRIMARY KEY,
-    uid TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     linkedin_url TEXT,
     domain_expertise TEXT,
     experience_years INTEGER NOT NULL DEFAULT 0,
     bio TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_founders_email ON founders(email);
 
 CREATE TABLE IF NOT EXISTS partners (
-    id SERIAL PRIMARY KEY,
-    uid TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     name TEXT NOT NULL,
     company TEXT,
     email TEXT UNIQUE NOT NULL,
@@ -41,27 +25,46 @@ CREATE TABLE IF NOT EXISTS partners (
     referral_code TEXT UNIQUE,
     referrals_count INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'active',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_partners_email ON partners(email);
 
 CREATE TABLE IF NOT EXISTS entities (
-    id SERIAL PRIMARY KEY,
-    uid TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     name TEXT NOT NULL,
     entity_type TEXT NOT NULL CHECK (entity_type IN ('holding_company', 'project', 'subsidiary', 'vc_fund')),
     parent_id INTEGER REFERENCES entities(id),
     jurisdiction TEXT,
-    incorporation_date DATE,
+    incorporation_date TEXT,
     status TEXT NOT NULL DEFAULT 'active',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
+    email TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'founder' CHECK (role IN ('admin', 'founder', 'partner')),
+    password_hash TEXT,
+    founder_id INTEGER REFERENCES founders(id),
+    partner_id INTEGER REFERENCES partners(id),
+    is_active INTEGER NOT NULL DEFAULT 1,
+    email_verified INTEGER NOT NULL DEFAULT 0,
+    verification_token TEXT,
+    verification_token_expires TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_uid ON users(uid);
+
 CREATE TABLE IF NOT EXISTS projects (
-    id SERIAL PRIMARY KEY,
-    uid TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     name TEXT NOT NULL,
     description TEXT,
     sector TEXT,
@@ -73,59 +76,59 @@ CREATE TABLE IF NOT EXISTS projects (
     problem_statement TEXT,
     solution TEXT,
     why_now TEXT,
-    tam DOUBLE PRECISION,
-    sam DOUBLE PRECISION,
+    tam REAL,
+    sam REAL,
     users_count INTEGER,
-    revenue DOUBLE PRECISION,
+    revenue REAL,
     growth_signals TEXT,
-    cost_to_mvp DOUBLE PRECISION,
-    funding_needed DOUBLE PRECISION,
+    cost_to_mvp REAL,
+    funding_needed REAL,
     use_of_funds TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name);
 
 CREATE TABLE IF NOT EXISTS score_snapshots (
-    id SERIAL PRIMARY KEY,
-    uid TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     project_id INTEGER NOT NULL REFERENCES projects(id),
-    total_score DOUBLE PRECISION NOT NULL,
+    total_score REAL NOT NULL,
     tier TEXT NOT NULL,
-    market_size DOUBLE PRECISION DEFAULT 0,
-    market_urgency DOUBLE PRECISION DEFAULT 0,
-    market_trend DOUBLE PRECISION DEFAULT 0,
-    market_total DOUBLE PRECISION DEFAULT 0,
-    team_expertise DOUBLE PRECISION DEFAULT 0,
-    team_execution DOUBLE PRECISION DEFAULT 0,
-    team_network DOUBLE PRECISION DEFAULT 0,
-    team_total DOUBLE PRECISION DEFAULT 0,
-    product_mvp_time DOUBLE PRECISION DEFAULT 0,
-    product_complexity DOUBLE PRECISION DEFAULT 0,
-    product_dependency DOUBLE PRECISION DEFAULT 0,
-    product_total DOUBLE PRECISION DEFAULT 0,
-    capital_cost_mvp DOUBLE PRECISION DEFAULT 0,
-    capital_time_revenue DOUBLE PRECISION DEFAULT 0,
-    capital_burn_traction DOUBLE PRECISION DEFAULT 0,
-    capital_total DOUBLE PRECISION DEFAULT 0,
-    fit_alignment DOUBLE PRECISION DEFAULT 0,
-    fit_synergy DOUBLE PRECISION DEFAULT 0,
-    fit_total DOUBLE PRECISION DEFAULT 0,
-    distribution_channels DOUBLE PRECISION DEFAULT 0,
-    distribution_virality DOUBLE PRECISION DEFAULT 0,
-    distribution_total DOUBLE PRECISION DEFAULT 0,
-    ai_adjustment DOUBLE PRECISION DEFAULT 0,
+    market_size REAL DEFAULT 0,
+    market_urgency REAL DEFAULT 0,
+    market_trend REAL DEFAULT 0,
+    market_total REAL DEFAULT 0,
+    team_expertise REAL DEFAULT 0,
+    team_execution REAL DEFAULT 0,
+    team_network REAL DEFAULT 0,
+    team_total REAL DEFAULT 0,
+    product_mvp_time REAL DEFAULT 0,
+    product_complexity REAL DEFAULT 0,
+    product_dependency REAL DEFAULT 0,
+    product_total REAL DEFAULT 0,
+    capital_cost_mvp REAL DEFAULT 0,
+    capital_time_revenue REAL DEFAULT 0,
+    capital_burn_traction REAL DEFAULT 0,
+    capital_total REAL DEFAULT 0,
+    fit_alignment REAL DEFAULT 0,
+    fit_synergy REAL DEFAULT 0,
+    fit_total REAL DEFAULT 0,
+    distribution_channels REAL DEFAULT 0,
+    distribution_virality REAL DEFAULT 0,
+    distribution_total REAL DEFAULT 0,
+    ai_adjustment REAL DEFAULT 0,
     ai_notes TEXT,
     scored_by TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_scores_project ON score_snapshots(project_id);
 
 CREATE TABLE IF NOT EXISTS documents (
-    id SERIAL PRIMARY KEY,
-    uid TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     project_id INTEGER REFERENCES projects(id),
     title TEXT NOT NULL,
     doc_type TEXT NOT NULL DEFAULT 'other',
@@ -133,21 +136,21 @@ CREATE TABLE IF NOT EXISTS documents (
     content TEXT,
     template_name TEXT,
     signed_by TEXT,
-    signed_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    signed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS deal_memos (
-    id SERIAL PRIMARY KEY,
-    uid TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     project_id INTEGER NOT NULL REFERENCES projects(id),
     score_snapshot_id INTEGER REFERENCES score_snapshots(id),
     startup_name TEXT NOT NULL,
     founders TEXT NOT NULL,
     sector TEXT,
     stage TEXT,
-    total_score DOUBLE PRECISION NOT NULL,
+    total_score REAL NOT NULL,
     tier TEXT NOT NULL,
     problem TEXT,
     solution TEXT,
@@ -166,52 +169,52 @@ CREATE TABLE IF NOT EXISTS deal_memos (
     terms_equity TEXT,
     terms_structure TEXT,
     key_insight TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_memos_project ON deal_memos(project_id);
 
 CREATE TABLE IF NOT EXISTS deals (
-    id SERIAL PRIMARY KEY,
-    uid TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     project_id INTEGER NOT NULL REFERENCES projects(id),
     partner_id INTEGER REFERENCES partners(id),
     status TEXT NOT NULL DEFAULT 'applied' CHECK (status IN ('applied', 'scored', 'active', 'funded', 'rejected')),
     notes TEXT,
-    amount DOUBLE PRECISION,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    amount REAL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_deals_project ON deals(project_id);
 
 CREATE TABLE IF NOT EXISTS lp_investors (
-    id SERIAL PRIMARY KEY,
-    uid TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
-    committed_capital DOUBLE PRECISION NOT NULL DEFAULT 0,
-    called_capital DOUBLE PRECISION NOT NULL DEFAULT 0,
+    committed_capital REAL NOT NULL DEFAULT 0,
+    called_capital REAL NOT NULL DEFAULT 0,
     fund_name TEXT,
     status TEXT NOT NULL DEFAULT 'active',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS capital_calls (
-    id SERIAL PRIMARY KEY,
-    uid TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     lp_investor_id INTEGER NOT NULL REFERENCES lp_investors(id),
     project_id INTEGER REFERENCES projects(id),
-    amount DOUBLE PRECISION NOT NULL,
+    amount REAL NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
-    due_date DATE,
-    paid_date DATE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    due_date TEXT,
+    paid_date TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS tickets (
-    id SERIAL PRIMARY KEY,
-    uid TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     title TEXT NOT NULL,
     description TEXT,
     priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
@@ -220,21 +223,21 @@ CREATE TABLE IF NOT EXISTS tickets (
     assigned_to TEXT,
     user_id INTEGER REFERENCES users(id),
     project_id INTEGER REFERENCES projects(id),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_tickets_user ON tickets(user_id);
 
 CREATE TABLE IF NOT EXISTS activity_logs (
-    id SERIAL PRIMARY KEY,
-    uid TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     project_id INTEGER REFERENCES projects(id),
     user_id INTEGER REFERENCES users(id),
     action TEXT NOT NULL,
     details TEXT,
     actor TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_logs(user_id);

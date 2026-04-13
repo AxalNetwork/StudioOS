@@ -46,7 +46,7 @@ privateData.get('/portfolio/metrics', async (c) => {
 
   if (user.role === 'founder') {
     const projects = user.founder_id
-      ? await sql`SELECT p.*, s.total_score, s.tier FROM projects p LEFT JOIN LATERAL (SELECT total_score, tier FROM score_snapshots WHERE project_id = p.id ORDER BY created_at DESC LIMIT 1) s ON true WHERE p.founder_id = ${user.founder_id}`
+      ? await sql`SELECT p.*, (SELECT total_score FROM score_snapshots WHERE project_id = p.id ORDER BY created_at DESC LIMIT 1) as total_score, (SELECT tier FROM score_snapshots WHERE project_id = p.id ORDER BY created_at DESC LIMIT 1) as tier FROM projects p WHERE p.founder_id = ${user.founder_id}`
       : [];
     await sql.end();
     return c.json({ role: 'founder', projects, total_projects: projects.length });
@@ -59,8 +59,8 @@ privateData.get('/portfolio/metrics', async (c) => {
     const portfolio = await sql`SELECT * FROM projects WHERE status IN ('spinout', 'active', 'tier_1', 'tier_2')`;
     await sql.end();
 
-    const tvpi = parseFloat(called[0].total) > 0 ? Math.round(parseFloat(committed[0].total) / parseFloat(called[0].total) * 100) / 100 : 0;
-    return c.json({ role: 'partner', deals, total_deals: deals.length, active_deals: deals.filter((d: any) => ['applied', 'scored', 'active'].includes(d.status)).length, fund_metrics: { total_committed: parseFloat(committed[0].total), total_called: parseFloat(called[0].total), tvpi, portfolio_companies: portfolio.length }, portfolio });
+    const tvpi = Number(called[0].total) > 0 ? Math.round(Number(committed[0].total) / Number(called[0].total) * 100) / 100 : 0;
+    return c.json({ role: 'partner', deals, total_deals: deals.length, active_deals: deals.filter((d: any) => ['applied', 'scored', 'active'].includes(d.status)).length, fund_metrics: { total_committed: Number(committed[0].total), total_called: Number(called[0].total), tvpi, portfolio_companies: portfolio.length }, portfolio });
   }
 
   const allProjects = await sql`SELECT * FROM projects`;
@@ -71,7 +71,7 @@ privateData.get('/portfolio/metrics', async (c) => {
   const activeDeals = await sql`SELECT COUNT(*) as count FROM deals WHERE status IN ('applied', 'scored', 'active')`;
   await sql.end();
 
-  return c.json({ role: 'admin', overview: { total_projects: allProjects.length, active_projects: active.length, total_deals: parseInt(totalDeals[0].count), active_deals: parseInt(activeDeals[0].count), total_committed: parseFloat(committed[0].total), total_called: parseFloat(called[0].total) }, portfolio: active });
+  return c.json({ role: 'admin', overview: { total_projects: allProjects.length, active_projects: active.length, total_deals: Number(totalDeals[0].count), active_deals: Number(activeDeals[0].count), total_committed: Number(committed[0].total), total_called: Number(called[0].total) }, portfolio: active });
 });
 
 privateData.get('/founder/:userId', async (c) => {

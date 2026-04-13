@@ -104,7 +104,7 @@ legal.put('/documents/:id/sign', async (c) => {
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM documents WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Document not found' }, 404); }
-  await sql`UPDATE documents SET status = 'signed', signed_by = ${signed_by || 'Unknown'}, signed_at = now(), updated_at = now() WHERE id = ${id}`;
+  await sql`UPDATE documents SET status = 'signed', signed_by = ${signed_by || 'Unknown'}, signed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   const [updated] = await sql`SELECT * FROM documents WHERE id = ${id}`;
   await sql.end();
   return c.json(updated);

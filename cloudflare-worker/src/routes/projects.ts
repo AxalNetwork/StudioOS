@@ -82,7 +82,7 @@ projects.post('/submit', async (c) => {
   if (result.total_score >= 85) { newStatus = 'tier_1'; newStage = 'build'; dealStatus = 'active'; }
   else if (result.total_score >= 70) { newStatus = 'tier_2'; dealStatus = 'scored'; }
 
-  await sql`UPDATE projects SET status = ${newStatus}, stage = ${newStage}, updated_at = now() WHERE id = ${project.id}`;
+  await sql`UPDATE projects SET status = ${newStatus}, stage = ${newStage}, updated_at = CURRENT_TIMESTAMP WHERE id = ${project.id}`;
   await sql`INSERT INTO deals (project_id, status) VALUES (${project.id}, ${dealStatus})`;
   await sql`INSERT INTO activity_logs (project_id, action, details, actor) VALUES (${project.id}, 'auto_scored', ${`Score: ${result.total_score}, Tier: ${result.tier}, Status: ${newStatus}`}, 'system')`;
   await sql.end();
@@ -108,11 +108,11 @@ projects.put('/:id', async (c) => {
   const values: any[] = [];
 
   for (const f of fields) {
-    if (data[f] !== undefined) { updates.push(`${f} = $${values.length + 1}`); values.push(data[f]); }
+    if (data[f] !== undefined) { updates.push(`${f} = ?`); values.push(data[f]); }
   }
   if (updates.length > 0) {
-    updates.push(`updated_at = now()`);
-    await sql.unsafe(`UPDATE projects SET ${updates.join(', ')} WHERE id = $${values.length + 1}`, [...values, id]);
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    await sql.unsafe(`UPDATE projects SET ${updates.join(', ')} WHERE id = ?`, [...values, id]);
   }
   const [updated] = await sql`SELECT * FROM projects WHERE id = ${id}`;
   await sql.end();
@@ -140,7 +140,7 @@ projects.post('/:id/advance-week', async (c) => {
   const order = ['week_1', 'week_2', 'week_3', 'week_4', 'complete'];
   const idx = order.indexOf(rows[0].playbook_week);
   if (idx >= 0 && idx < order.length - 1) {
-    await sql`UPDATE projects SET playbook_week = ${order[idx + 1]}, updated_at = now() WHERE id = ${id}`;
+    await sql`UPDATE projects SET playbook_week = ${order[idx + 1]}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   }
   const [updated] = await sql`SELECT * FROM projects WHERE id = ${id}`;
   await sql.end();

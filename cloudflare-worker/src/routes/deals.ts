@@ -45,10 +45,10 @@ deals.put('/:id', async (c) => {
   const rows = await sql`SELECT id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
 
-  if (data.status) await sql`UPDATE deals SET status = ${data.status}, updated_at = now() WHERE id = ${id}`;
-  if (data.partner_id !== undefined) await sql`UPDATE deals SET partner_id = ${data.partner_id}, updated_at = now() WHERE id = ${id}`;
-  if (data.notes !== undefined) await sql`UPDATE deals SET notes = ${data.notes}, updated_at = now() WHERE id = ${id}`;
-  if (data.amount !== undefined) await sql`UPDATE deals SET amount = ${data.amount}, updated_at = now() WHERE id = ${id}`;
+  if (data.status) await sql`UPDATE deals SET status = ${data.status}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.partner_id !== undefined) await sql`UPDATE deals SET partner_id = ${data.partner_id}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.notes !== undefined) await sql`UPDATE deals SET notes = ${data.notes}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.amount !== undefined) await sql`UPDATE deals SET amount = ${data.amount}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
 
   const [updated] = await sql`SELECT * FROM deals WHERE id = ${id}`;
   await sql.end();

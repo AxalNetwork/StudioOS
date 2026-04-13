@@ -58,7 +58,7 @@ partners.get('/matchmaking/recommend', async (c) => {
   const sector = c.req.query('sector');
   const sql = getSQL(c.env);
   const rows = sector
-    ? await sql`SELECT * FROM partners WHERE status = 'active' AND specialization ILIKE ${'%' + sector + '%'}`
+    ? await sql`SELECT * FROM partners WHERE status = 'active' AND specialization LIKE ${'%' + sector + '%'}`
     : await sql`SELECT * FROM partners WHERE status = 'active'`;
   await sql.end();
   return c.json({ matches: rows, count: rows.length });

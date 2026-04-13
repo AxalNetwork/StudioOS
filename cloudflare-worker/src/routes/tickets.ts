@@ -67,10 +67,10 @@ tickets.put('/:id', async (c) => {
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Ticket not found' }, 404); }
   if (user.role !== 'admin' && rows[0].user_id !== user.id) { await sql.end(); return c.json({ error: 'Access denied' }, 403); }
 
-  if (data.status) await sql`UPDATE tickets SET status = ${data.status}, updated_at = now() WHERE id = ${id}`;
+  if (data.status) await sql`UPDATE tickets SET status = ${data.status}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   if (data.assigned_to) {
     if (user.role !== 'admin') { await sql.end(); return c.json({ error: 'Only admins can assign tickets' }, 403); }
-    await sql`UPDATE tickets SET assigned_to = ${data.assigned_to}, updated_at = now() WHERE id = ${id}`;
+    await sql`UPDATE tickets SET assigned_to = ${data.assigned_to}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   }
 
   const [updated] = await sql`SELECT * FROM tickets WHERE id = ${id}`;

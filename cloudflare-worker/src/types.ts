@@ -1,5 +1,5 @@
 export interface Env {
-  DB: Hyperdrive;
+  DB: D1Database;
   TOKENS: KVNamespace;
   RATE_LIMITS: KVNamespace;
   JWT_SECRET: string;
