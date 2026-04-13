@@ -1,9 +1,12 @@
 [build]
-  command = "cd cloudflare-worker && npm install && npx wrangler deploy"
+  command = "cd cloudflare-worker && npm install"
   publish = "cloudflare-worker"
 
 [build.environment]
   NODE_VERSION = "22"
+
+[deploy]
+  command = "cd cloudflare-worker && npx wrangler deploy"
 
 [[headers]]
   for = "/*"
@@ -20,13 +23,13 @@
   status = 200
 
 [context.production]
-  command = "cd cloudflare-worker && npm install && npx wrangler deploy"
+  command = "cd cloudflare-worker && npm install"
 
 [context.preview]
-  command = "cd cloudflare-worker && npm install && npx wrangler deploy"
+  command = "cd cloudflare-worker && npm install"
 
 [context.branch-deploy]
-  command = "cd cloudflare-worker && npm install && npx wrangler deploy"
+  command = "cd cloudflare-worker && npm install"
 
 [[headers]]
   for = "*.css"

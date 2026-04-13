@@ -1,26 +1,30 @@
-name = "studioos-api"
+name = "studioos"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 # ---------- KV Namespaces ----------
-# After running: npx wrangler kv:namespace create "TOKENS"
-# and: npx wrangler kv:namespace create "RATE_LIMITS"
-# paste the output IDs below:
-[[kv_namespaces]]
-binding = "TOKENS"
-id = "REPLACE_WITH_TOKENS_KV_ID"
-
-[[kv_namespaces]]
-binding = "RATE_LIMITS"
-id = "REPLACE_WITH_RATE_LIMITS_KV_ID"
+# To enable KV storage for tokens and rate limiting:
+# 1. Run: npx wrangler kv:namespace create "TOKENS"
+# 2. Run: npx wrangler kv:namespace create "RATE_LIMITS"
+# 3. Uncomment the blocks below and paste the output IDs:
+#
+# [[kv_namespaces]]
+# binding = "TOKENS"
+# id = "YOUR_TOKENS_KV_ID"
+#
+# [[kv_namespaces]]
+# binding = "RATE_LIMITS"
+# id = "YOUR_RATE_LIMITS_KV_ID"
 
 # ---------- Hyperdrive (PostgreSQL) ----------
-# After running: npx wrangler hyperdrive create studioos-db --connection-string="postgresql://user:pass@host:5432/dbname"
-# paste the ID below:
-[[hyperdrive]]
-binding = "DB"
-id = "REPLACE_WITH_HYPERDRIVE_ID"
+# To connect your PostgreSQL database via Hyperdrive:
+# 1. Run: npx wrangler hyperdrive create studioos-db --connection-string="postgresql://user:pass@host:5432/dbname"
+# 2. Uncomment the block below and paste the ID:
+#
+# [[hyperdrive]]
+# binding = "DB"
+# id = "YOUR_HYPERDRIVE_ID"
 
 # ---------- Environment Variables ----------
 # Set secrets via: npx wrangler secret put <NAME>
