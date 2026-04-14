@@ -26,8 +26,8 @@ async function request(path, options = {}) {
         window.location.href = '/login';
         throw new Error('Session expired');
       }
-      const err = await res.json().catch(() => ({ detail: res.statusText || 'Request failed' }));
-      throw new Error(err.detail || 'Request failed');
+      const err = await res.json().catch(() => ({ error: res.statusText || 'Request failed' }));
+      throw new Error(err.error || err.detail || err.message || 'Request failed');
     }
     const data = await res.json().catch(() => {
       throw new Error('Invalid response format from server');

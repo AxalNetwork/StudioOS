@@ -39,7 +39,20 @@ app.use('*', async (c, next) => {
   }
 });
 
-app.get('/api/health', (c) => c.json({ status: 'ok', app: 'StudioOS v1.0', tagline: 'The 30-Day Spin-Out Engine', runtime: 'Cloudflare Workers' }));
+app.get('/api/health', (c) => c.json({
+  status: 'ok',
+  app: 'StudioOS v1.0',
+  tagline: 'The 30-Day Spin-Out Engine',
+  runtime: 'Cloudflare Workers',
+  bindings: {
+    d1: !!c.env.DB,
+    kv_tokens: !!c.env.TOKENS,
+    kv_rate_limits: !!c.env.RATE_LIMITS,
+    send_email: !!c.env.SEND_EMAIL,
+    turnstile: !!c.env.TURNSTILE_SECRET_KEY,
+    openai: !!c.env.OPENAI_API_KEY,
+  }
+}));
 
 app.get('/api/dashboard/stats', async (c) => {
   const user = await requireAuth(c);

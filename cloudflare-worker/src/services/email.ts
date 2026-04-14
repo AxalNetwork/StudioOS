@@ -1,10 +1,15 @@
 import { EmailMessage } from 'cloudflare:email';
-import { createMimeMessage } from 'mimetext/browser';
+import { createMimeMessage } from 'mimetext';
 import type { Env } from '../types';
+
+function generateMessageId(): string {
+  const random = crypto.randomUUID().replace(/-/g, '');
+  return `<${random}@axal.vc>`;
+}
 
 export async function sendVerificationEmail(env: Env, toEmail: string, name: string, verificationUrl: string): Promise<boolean> {
   if (!env.SEND_EMAIL) {
-    console.warn(`[EMAIL] No SEND_EMAIL binding configured — email to ${toEmail} was not sent. Enable Email Routing and add the send_email binding.`);
+    console.warn(`[EMAIL] No SEND_EMAIL binding configured — email to ${toEmail} was not sent. Enable Email Routing and add the send_email binding in wrangler.toml.`);
     return false;
   }
 
@@ -13,6 +18,9 @@ export async function sendVerificationEmail(env: Env, toEmail: string, name: str
     msg.setSender({ name: 'Axal Ventures', addr: 'noreply@axal.vc' });
     msg.setRecipient(toEmail);
     msg.setSubject('Verify your email — Axal Ventures');
+    msg.setHeader('Message-ID', generateMessageId());
+    msg.setHeader('Date', new Date().toUTCString());
+    msg.setHeader('MIME-Version', '1.0');
     msg.addMessage({
       contentType: 'text/html',
       data: buildEmailHTML(name, verificationUrl),
@@ -23,13 +31,23 @@ export async function sendVerificationEmail(env: Env, toEmail: string, name: str
     });
 
     const rawEmail = msg.asRaw();
-    const message = new EmailMessage('noreply@axal.vc', toEmail, rawEmail);
+    console.log(`[EMAIL] Constructed MIME message for ${toEmail}, size: ${rawEmail.length} bytes`);
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(rawEmail));
+        controller.close();
+      },
+    });
+
+    const message = new EmailMessage('noreply@axal.vc', toEmail, stream);
     await env.SEND_EMAIL.send(message);
 
     console.log(`[EMAIL] Verification email sent to ${toEmail} via Cloudflare Email Routing`);
     return true;
   } catch (e: any) {
-    console.error(`[EMAIL] Cloudflare send_email failed: ${e?.message || 'Unknown error'}`);
+    console.error(`[EMAIL] Cloudflare send_email failed for ${toEmail}: ${e?.message || 'Unknown error'} (${e?.constructor?.name || 'Error'})`);
     return false;
   }
 }
@@ -45,16 +63,28 @@ export async function sendNotificationEmail(env: Env, toEmail: string, subject: 
     msg.setSender({ name: 'Axal Ventures', addr: 'noreply@axal.vc' });
     msg.setRecipient(toEmail);
     msg.setSubject(subject);
+    msg.setHeader('Message-ID', generateMessageId());
+    msg.setHeader('Date', new Date().toUTCString());
+    msg.setHeader('MIME-Version', '1.0');
     msg.addMessage({ contentType: 'text/html', data: htmlBody });
     msg.addMessage({ contentType: 'text/plain', data: textBody });
 
-    const message = new EmailMessage('noreply@axal.vc', toEmail, msg.asRaw());
+    const rawEmail = msg.asRaw();
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(rawEmail));
+        controller.close();
+      },
+    });
+
+    const message = new EmailMessage('noreply@axal.vc', toEmail, stream);
     await env.SEND_EMAIL.send(message);
 
     console.log(`[EMAIL] Notification sent to ${toEmail}`);
     return true;
   } catch (e: any) {
-    console.error(`[EMAIL] Notification send failed: ${e?.message || 'Unknown error'}`);
+    console.error(`[EMAIL] Notification send failed for ${toEmail}: ${e?.message || 'Unknown error'} (${e?.constructor?.name || 'Error'})`);
     return false;
   }
 }

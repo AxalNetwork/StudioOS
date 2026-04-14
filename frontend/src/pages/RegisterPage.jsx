@@ -16,6 +16,7 @@ export default function RegisterPage() {
   const [copied, setCopied] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [turnstileToken, setTurnstileToken] = useState('');
+  const [emailWarning, setEmailWarning] = useState(false);
   const canvasRef = useRef(null);
   const turnstileRef = useRef(null);
   const turnstileWidgetId = useRef(null);
@@ -81,7 +82,8 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
     try {
-      await api.register({ ...form, turnstileToken });
+      const res = await api.register({ ...form, turnstileToken });
+      setEmailWarning(res.email_sent === false);
       setStep(2);
     } catch (e) {
       setError(e.message);
@@ -206,13 +208,22 @@ export default function RegisterPage() {
               </div>
               <h2 className="text-xl font-bold text-gray-900 mb-1 text-center">Check Your Email</h2>
               <p className="text-sm text-gray-600 mb-6 text-center">
-                We've sent a verification link to
+                {emailWarning ? 'We had trouble sending the verification link to' : 'We\'ve sent a verification link to'}
               </p>
               <div className="bg-gray-50 rounded-lg px-4 py-3 mb-6 text-center">
                 <span className="text-sm font-medium text-gray-900">{form.email}</span>
               </div>
 
               {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{error}</div>}
+
+              {emailWarning && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4">
+                  <Mail size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700">
+                    Your account was created, but we couldn't deliver the verification email. Please click "Resend Verification Email" below, or contact support if the problem persists.
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-start gap-2 bg-violet-50 border border-violet-300 rounded-lg p-3 mb-6">
                 <Mail size={16} className="text-violet-600 shrink-0 mt-0.5" />
