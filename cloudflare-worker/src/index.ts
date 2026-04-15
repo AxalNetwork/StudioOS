@@ -54,6 +54,42 @@ app.get('/api/health', (c) => c.json({
   }
 }));
 
+app.get('/api/debug/test-email', async (c) => {
+  const env = c.env;
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+    return c.json({ error: 'Gmail credentials missing', gmail_client_id: !!env.GMAIL_CLIENT_ID, gmail_client_secret: !!env.GMAIL_CLIENT_SECRET, gmail_refresh_token: !!env.GMAIL_REFRESH_TOKEN }, 500);
+  }
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: env.GMAIL_CLIENT_ID,
+        client_secret: env.GMAIL_CLIENT_SECRET,
+        refresh_token: env.GMAIL_REFRESH_TOKEN,
+        grant_type: 'refresh_token',
+      }),
+    });
+    const tokenData: any = await tokenRes.json();
+    if (!tokenRes.ok) {
+      return c.json({ step: 'oauth_token', status: tokenRes.status, error: tokenData }, 500);
+    }
+    if (!tokenData.access_token) {
+      return c.json({ step: 'oauth_token', error: 'No access_token in response', data: tokenData }, 500);
+    }
+    const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const profileData: any = await profileRes.json();
+    if (!profileRes.ok) {
+      return c.json({ step: 'gmail_profile', status: profileRes.status, error: profileData }, 500);
+    }
+    return c.json({ step: 'all_ok', oauth: 'success', gmail_email: profileData.emailAddress, messages_total: profileData.messagesTotal });
+  } catch (e: any) {
+    return c.json({ step: 'exception', error: e?.message || 'Unknown' }, 500);
+  }
+});
+
 app.get('/api/dashboard/stats', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
