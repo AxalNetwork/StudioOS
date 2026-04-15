@@ -1,0 +1,124 @@
+The error is actually telling you exactly what’s wrong — you’re **not inside a properly configured Worker project** (or your `wrangler.toml` is missing the `name`).
+
+Let’s fix this cleanly.
+
+---
+
+## ⚠️ What’s happening
+
+Wrangler needs to know:
+
+> “Which Worker am I adding secrets to?”
+
+Right now it doesn’t know because:
+
+* either there is **no `wrangler.toml`**
+* or it exists but **has no `name` field**
+
+---
+
+## ✅ Option 1 (best): Fix your project config
+
+In your repo (**StudioOS**), find or create a file:
+
+```bash
+wrangler.toml
+```
+
+Add this:
+
+```toml
+name = "studioos-worker"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+```
+
+👉 The **`name` is mandatory** — this is your Worker identifier in Cloudflare.
+
+---
+
+Then run again:
+
+```bash
+npx wrangler secret put GMAIL_CLIENT_ID
+```
+
+Now it will work.
+
+---
+
+## ✅ Option 2 (quick fix): Pass the Worker name manually
+
+If you don’t want to touch config yet, just do:
+
+```bash
+npx wrangler secret put GMAIL_CLIENT_ID --name studioos-worker
+npx wrangler secret put GMAIL_CLIENT_SECRET --name studioos-worker
+npx wrangler secret put GMAIL_REFRESH_TOKEN --name studioos-worker
+```
+
+👉 Replace `studioos-worker` with whatever you want your Worker to be called (or the one already deployed).
+
+---
+
+## 🔍 How to know your Worker name
+
+Run:
+
+```bash
+npx wrangler deployments list
+```
+
+or check in:
+
+* Cloudflare dashboard → Workers & Pages → your Worker name
+
+---
+
+## 🧠 Why this matters
+
+Right now you're basically telling Wrangler:
+
+> “Store this secret somewhere”
+
+And Wrangler replies:
+
+> “Cool… but WHERE?”
+
+The `name` = the “where”.
+
+---
+
+## ⚡ Most likely your situation
+
+Since you're in:
+
+```bash
+~/workspace
+```
+
+You’re probably:
+
+* in a generic folder (Replit / container)
+* not inside your Worker project folder
+
+👉 You should instead:
+
+```bash
+git clone https://github.com/AxalNetwork/StudioOS.git
+cd StudioOS
+```
+
+Then run the commands there **after confirming `wrangler.toml` exists**.
+
+---
+
+## If you want fast progress
+
+Paste your `wrangler.toml` here and I’ll:
+
+* fix it
+* name your Worker properly
+* align it with your GitHub + Cloudflare setup
+
+Right now you’re one small config away from everything working.
