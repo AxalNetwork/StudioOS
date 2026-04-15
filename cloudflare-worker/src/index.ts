@@ -49,6 +49,9 @@ app.get('/api/health', (c) => c.json({
     kv_tokens: !!c.env.TOKENS,
     kv_rate_limits: !!c.env.RATE_LIMITS,
     gmail: !!(c.env.GMAIL_CLIENT_ID && c.env.GMAIL_CLIENT_SECRET && c.env.GMAIL_REFRESH_TOKEN),
+    gmail_client_id: !!c.env.GMAIL_CLIENT_ID,
+    gmail_client_secret: !!c.env.GMAIL_CLIENT_SECRET,
+    gmail_refresh_token: !!c.env.GMAIL_REFRESH_TOKEN,
     turnstile: !!c.env.TURNSTILE_SECRET_KEY,
     openai: !!c.env.OPENAI_API_KEY,
   }
