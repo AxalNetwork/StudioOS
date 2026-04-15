@@ -2,10 +2,12 @@ export interface Env {
   DB: D1Database;
   TOKENS: KVNamespace;
   RATE_LIMITS: KVNamespace;
-  SEND_EMAIL?: SendEmail;
   JWT_SECRET: string;
   TURNSTILE_SECRET_KEY?: string;
   APP_URL: string;
+  GMAIL_CLIENT_ID?: string;
+  GMAIL_CLIENT_SECRET?: string;
+  GMAIL_REFRESH_TOKEN?: string;
   OPENAI_API_KEY?: string;
   GITHUB_ACCESS_TOKEN?: string;
   GITHUB_REPO_OWNER?: string;
