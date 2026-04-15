@@ -33,7 +33,7 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
   try {
     const sent = await sendVerificationEmail(env, email, name, verificationUrl);
     if (!sent) {
-      console.warn(`[AUTH] Email delivery failed for ${email}. Check Email Routing / SEND_EMAIL binding configuration.`);
+      console.warn(`[AUTH] Email delivery failed for ${email}. Check GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN secrets.`);
     }
     return sent;
   } catch (e: any) {

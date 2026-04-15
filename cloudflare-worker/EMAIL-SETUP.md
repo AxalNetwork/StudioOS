@@ -1,6 +1,6 @@
-# Cloudflare Email Setup — StudioOS
+# Gmail API Email Setup — StudioOS
 
-Secure email confirmations for user registration using **Cloudflare Email Routing** with the native `send_email` Worker binding. No third-party email service required.
+Secure email confirmations for user registration using **Gmail API** with OAuth2 authentication. Emails are sent directly from the Cloudflare Worker via the Gmail REST API.
 
 ## Architecture
 
@@ -9,98 +9,100 @@ User registers on axal.vc
     → Frontend POSTs to Cloudflare Worker (studioos.guillaumelauzier.workers.dev)
     → Worker validates Turnstile token (if configured)
     → Worker creates user in D1 + generates verification token
-    → Worker sends confirmation email via send_email binding (Cloudflare Email Routing)
+    → Worker exchanges OAuth2 refresh token for access token
+    → Worker sends confirmation email via Gmail API (users/me/messages/send)
     → User clicks verification link → completes TOTP setup → enters dashboard
 ```
 
 ## Prerequisites
 
-- `axal.vc` domain on Cloudflare (DNS managed by Cloudflare)
-- Cloudflare Workers plan (Free or Paid)
-- Email Routing enabled on the domain
+- A Google Cloud project (e.g., `axal-email-system`)
+- A Gmail or Google Workspace account to send from
 
-## Setup Checklist
+## Setup
 
-### 1. Enable Email Routing on axal.vc
+### 1. Enable Gmail API
 
-1. Go to **Cloudflare Dashboard → axal.vc → Email → Email Routing**
-2. Click **Get started** or **Enable Email Routing**
-3. Cloudflare will prompt you to add required DNS records:
-   - **MX records** pointing to Cloudflare's email servers
-   - **SPF TXT record** for email authentication
-4. Accept the DNS changes and wait for propagation
+1. Go to **Google Cloud Console → APIs & Services → Library**
+2. Search for **Gmail API**
+3. Click **Enable**
 
-### 2. Add and Verify Destination Address
+### 2. Configure OAuth Consent Screen
 
-1. In **Email Routing → Destination addresses**, click **Add destination address**
-2. Enter the email where you want to receive forwarded mail (e.g., your Gmail)
-3. Check that inbox for a verification email from Cloudflare and click the confirmation link
-4. The address should show as **Verified**
+1. Go to **APIs & Services → OAuth consent screen**
+2. User type: **External** (or **Internal** for Workspace)
+3. Fill in app name, support email
+4. Add your email as a test user (if External)
+5. Save
 
-### 3. Create a Custom Address Route
+### 3. Create OAuth2 Credentials
 
-1. In **Email Routing → Custom addresses**, click **Create address**
-2. Set:
-   - **Custom address**: `noreply`
-   - **Action**: Send to an email
-   - **Destination**: your verified destination email
-3. Save — this creates `noreply@axal.vc`
+1. Go to **APIs & Services → Credentials**
+2. Click **+ Create Credentials → OAuth 2.0 Client ID**
+3. Application type: **Web application**
+4. Name: `StudioOS Worker`
+5. Authorized redirect URIs: `https://developers.google.com/oauthplayground`
+6. Click **Create**
+7. Copy the **Client ID** and **Client Secret**
 
-### 4. Deploy the Worker
+### 4. Get a Refresh Token
+
+1. Open **https://developers.google.com/oauthplayground**
+2. Click the gear icon (top right) → check **Use your own OAuth credentials**
+3. Paste your **Client ID** and **Client Secret**
+4. In Step 1, select scope: `https://www.googleapis.com/auth/gmail.send`
+5. Click **Authorize APIs** → sign in with the Gmail account you want to send from
+6. Click **Exchange authorization code for tokens**
+7. Copy the **Refresh token**
+
+### 5. Set Worker Secrets
 
 ```bash
 cd cloudflare-worker
+npx wrangler secret put GMAIL_CLIENT_ID
+npx wrangler secret put GMAIL_CLIENT_SECRET
+npx wrangler secret put GMAIL_REFRESH_TOKEN
+```
 
-# Set required secrets
-npx wrangler secret put JWT_SECRET
-# Enter a strong random string (e.g., openssl rand -hex 32)
+Or with explicit Worker name:
 
-# Optional: Set Turnstile secret for bot protection
-npx wrangler secret put TURNSTILE_SECRET_KEY
-# Get this from Cloudflare Dashboard → Turnstile → your site → Secret Key
+```bash
+npx wrangler secret put GMAIL_CLIENT_ID --name studioos
+npx wrangler secret put GMAIL_CLIENT_SECRET --name studioos
+npx wrangler secret put GMAIL_REFRESH_TOKEN --name studioos
+```
 
-# Deploy
+### 6. Deploy
+
+```bash
 npm run deploy
 ```
 
-### 5. Apply Database Schema (first time only)
+### 7. Verify
 
 ```bash
-npm run db:schema:remote
+curl https://studioos.guillaumelauzier.workers.dev/api/health
 ```
 
-### 6. (Optional) Set Up Cloudflare Turnstile
-
-1. Go to **Cloudflare Dashboard → Turnstile**
-2. Click **Add site**
-3. Configure:
-   - **Site name**: Axal VC StudioOS
-   - **Domain**: axal.vc
-   - **Widget type**: Managed (recommended)
-4. Copy the **Site Key** → set as `VITE_TURNSTILE_SITE_KEY` in frontend build
-5. Copy the **Secret Key** → set via `npx wrangler secret put TURNSTILE_SECRET_KEY`
-6. Rebuild frontend: `cd frontend && npx vite build`
+You should see:
+```json
+"gmail": true
+```
 
 ## How It Works
 
-### send_email Binding
+### OAuth2 Token Exchange
 
-The Worker uses Cloudflare's native `send_email` binding declared in `wrangler.toml`:
-
-```toml
-[[send_email]]
-name = "SEND_EMAIL"
-```
-
-This binding provides the `SendEmail` interface, which accepts an `EmailMessage` constructed from raw MIME content. The `mimetext` package builds RFC-compliant MIME messages with HTML and plain text parts.
+The Worker uses the stored refresh token to obtain a short-lived access token from Google's OAuth2 endpoint (`https://oauth2.googleapis.com/token`). This access token is used to authenticate the Gmail API request.
 
 ### Email Flow
 
 1. Worker generates a verification token, hashes it (SHA-256), stores the hash in D1
 2. Constructs a branded HTML email with the verification link
-3. Builds MIME message using `mimetext`
-4. Sends via `env.SEND_EMAIL.send(new EmailMessage(from, to, rawMime))`
-5. User clicks link → Worker verifies token hash → marks email as verified
+3. Builds RFC-compliant MIME message with multipart/alternative (text + HTML)
+4. Base64url-encodes the raw MIME content
+5. Sends via Gmail API `POST /gmail/v1/users/me/messages/send`
+6. User clicks link → Worker verifies token hash → marks email as verified
 
 ### Security Measures
 
@@ -110,14 +112,7 @@ This binding provides the `SendEmail` interface, which accepts an `EmailMessage`
 - **Turnstile** bot protection on registration (optional but recommended)
 - **No secrets in logs** — verification URLs are never logged
 - **CORS** restricted to `axal.vc` and `www.axal.vc`
-
-## Important Limitations
-
-1. **Email Routing must be enabled** on the domain in Cloudflare Dashboard
-2. **Sender address** (`noreply@axal.vc`) must be configured as a custom address in Email Routing
-3. **MX records** must point to Cloudflare — if you have existing email (e.g., Google Workspace), you need to configure Email Routing to coexist with your existing MX setup
-4. **Deliverability** depends on proper SPF/DKIM/DMARC records on the domain
-5. If the `SEND_EMAIL` binding is not configured, the Worker logs a warning and registration still succeeds (email just won't be sent)
+- **Gmail credentials** stored as Worker secrets, never exposed in code or health endpoint
 
 ## Local Testing
 
@@ -133,28 +128,21 @@ curl -X POST http://localhost:8787/api/auth/register \
   -d '{"email":"test@example.com","name":"Test User","role":"partner"}'
 ```
 
-Note: `send_email` binding is **not available in local dev** (`wrangler dev`). The Worker will log a warning and skip email sending. Check Worker Logs in the Cloudflare Dashboard after deploying to production to verify emails are being sent.
+Note: Gmail API works in local dev if the secrets are set in a `.dev.vars` file:
+
+```
+GMAIL_CLIENT_ID=your-client-id
+GMAIL_CLIENT_SECRET=your-client-secret
+GMAIL_REFRESH_TOKEN=your-refresh-token
+```
 
 ## File Reference
 
 | File | Purpose |
 |------|---------|
-| `wrangler.toml` | Worker config with send_email, D1, KV bindings |
-| `src/services/email.ts` | Email sending via Cloudflare EmailMessage + mimetext |
+| `wrangler.toml` | Worker config with D1, KV bindings |
+| `src/services/email.ts` | Gmail API email service (OAuth2 token exchange + MIME construction) |
 | `src/services/turnstile.ts` | Cloudflare Turnstile verification |
 | `src/routes/auth.ts` | Registration, verification, TOTP setup, login |
-| `src/types.ts` | TypeScript env interface with SEND_EMAIL binding |
+| `src/types.ts` | TypeScript env interface with GMAIL_* secrets |
 | `sql/schema.sql` | D1 database schema |
-
-## DNS Records Checklist
-
-After enabling Email Routing, verify these records exist on axal.vc:
-
-| Type | Name | Content | Priority |
-|------|------|---------|----------|
-| MX | axal.vc | `route1.mx.cloudflare.net` | 69 |
-| MX | axal.vc | `route2.mx.cloudflare.net` | 36 |
-| MX | axal.vc | `route3.mx.cloudflare.net` | 90 |
-| TXT | axal.vc | `v=spf1 include:_spf.mx.cloudflare.net ~all` | — |
-
-If you already have MX records (e.g., Google Workspace), see [Cloudflare Email Routing docs](https://developers.cloudflare.com/email-routing/) for coexistence setup.

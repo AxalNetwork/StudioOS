@@ -8,7 +8,7 @@ Complete step-by-step instructions to deploy the Axal VC StudioOS API on Cloudfl
 
 - Node.js 18+ and npm installed
 - A Cloudflare account (free tier works)
-- `axal.vc` domain managed by Cloudflare (for Email Routing)
+- A Google Cloud project with Gmail API enabled (for sending verification emails)
 
 ---
 
@@ -78,18 +78,21 @@ This applies `sql/schema.sql` to the live D1 database.
 
 ---
 
-## Step 6: Enable Email Routing
+## Step 6: Set Up Gmail API for Email
 
-1. Go to **Cloudflare Dashboard → axal.vc → Email → Email Routing**
-2. Enable Email Routing and accept the DNS record changes
-3. Add a **destination address** (e.g., your Gmail) and verify it
-4. Create a **custom address**: `noreply@axal.vc` → forward to your verified destination
+See `EMAIL-SETUP.md` for detailed Gmail API configuration instructions.
 
-See `EMAIL-SETUP.md` for detailed email configuration instructions.
+Required secrets:
+
+```bash
+npx wrangler secret put GMAIL_CLIENT_ID
+npx wrangler secret put GMAIL_CLIENT_SECRET
+npx wrangler secret put GMAIL_REFRESH_TOKEN
+```
 
 ---
 
-## Step 7: Set Secrets
+## Step 7: Set Other Secrets
 
 ```bash
 npx wrangler secret put JWT_SECRET
@@ -160,7 +163,7 @@ Cloudflare Workers (Edge)
 ├── Hono (Router + Middleware)
 ├── JWT Auth (jose)
 ├── TOTP 2FA (otpauth)
-├── Email (Cloudflare Email Routing / send_email binding)
+├── Email (Gmail API OAuth2)
 ├── Turnstile (bot protection)
 ├── KV: TOKENS (verification tokens)
 ├── KV: RATE_LIMITS (login/resend throttling)
@@ -173,5 +176,5 @@ Cloudflare Workers (Edge)
 
 - **"Too many subrequests"**: Cloudflare Workers have a 50-subrequest limit per request. The D1 driver uses one subrequest per query. Complex endpoints may hit this — optimize by combining queries.
 - **KV eventually consistent**: KV writes may take up to 60 seconds to propagate globally. Rate limiting is best-effort.
-- **Email not sending**: Ensure Email Routing is enabled on the domain, `noreply@axal.vc` is configured as a custom address, and the destination email is verified. Check Worker Logs in the dashboard.
-- **send_email not available locally**: The `SEND_EMAIL` binding does not work in `wrangler dev`. Emails are skipped in local development with a console warning.
+- **Email not sending**: Ensure `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, and `GMAIL_REFRESH_TOKEN` are set as Worker secrets. Check Worker Logs in the Cloudflare Dashboard.
+- **Gmail OAuth token expired**: Refresh tokens are long-lived but can be revoked. Re-authorize via OAuth Playground if needed.
