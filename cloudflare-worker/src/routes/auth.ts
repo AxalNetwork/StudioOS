@@ -95,8 +95,9 @@ auth.post('/resend-verification', async (c) => {
   }
 
   const user = users[0];
+  const hasIncompleteSetup = !user.email_verified || !user.password_hash;
 
-  if (user.email_verified && user.password_hash) {
+  if (hasIncompleteSetup) {
     await sql`UPDATE users SET email_verified = false, password_hash = NULL WHERE id = ${user.id}`;
   }
 
