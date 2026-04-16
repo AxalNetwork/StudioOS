@@ -6,7 +6,7 @@ import { runFullScore } from '../services/scoring';
 
 const projects = new Hono<{ Bindings: Env }>();
 
-projects.get('/', async (c) => {
+async function listProjectsHandler(c: any) {
   await requireAuth(c);
   const status = c.req.query('status');
   const sql = getSQL(c.env);
@@ -15,7 +15,10 @@ projects.get('/', async (c) => {
     : await sql`SELECT * FROM projects ORDER BY created_at DESC`;
   await sql.end();
   return c.json(rows);
-});
+}
+
+projects.get('/', listProjectsHandler);
+projects.get('', listProjectsHandler);
 
 projects.get('/:id', async (c) => {
   await requireAuth(c);
@@ -33,7 +36,7 @@ projects.get('/:id', async (c) => {
   return c.json({ ...project, founder });
 });
 
-projects.post('/', async (c) => {
+async function createProjectHandler(c: any) {
   await requireAuth(c);
   const data = await c.req.json();
   const sql = getSQL(c.env);
@@ -55,7 +58,10 @@ projects.post('/', async (c) => {
   await sql`INSERT INTO activity_logs (project_id, action, details) VALUES (${project.id}, 'project_created', ${`Project '${project.name}' submitted`})`;
   await sql.end();
   return c.json(project, 201);
-});
+}
+
+projects.post('/', createProjectHandler);
+projects.post('', createProjectHandler);
 
 projects.post('/submit', async (c) => {
   await requireAuth(c);

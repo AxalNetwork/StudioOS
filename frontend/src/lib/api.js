@@ -53,9 +53,9 @@ export const api = {
   health: () => request('/health'),
   stats: () => request('/dashboard/stats'),
 
-  listProjects: (status) => request(`/projects/${status ? `?status=${status}` : ''}`),
+  listProjects: (status) => request(`/projects${status ? `?status=${status}` : ''}`),
   getProject: (id) => request(`/projects/${id}`),
-  createProject: (data) => request('/projects/', { method: 'POST', body: JSON.stringify(data) }),
+  createProject: (data) => request('/projects', { method: 'POST', body: JSON.stringify(data) }),
   updateProject: (id, data) => request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteProject: (id) => request(`/projects/${id}`, { method: 'DELETE' }),
   advanceWeek: (id) => request(`/projects/${id}/advance-week`, { method: 'POST' }),
@@ -74,8 +74,8 @@ export const api = {
   spinoutProject: (projectId) => request(`/legal/spinout/${projectId}`, { method: 'POST' }),
   listEntities: () => request('/legal/entities'),
 
-  listPartners: () => request('/partners/'),
-  createPartner: (data) => request('/partners/', { method: 'POST', body: JSON.stringify(data) }),
+  listPartners: () => request('/partners'),
+  createPartner: (data) => request('/partners', { method: 'POST', body: JSON.stringify(data) }),
   recommendPartners: (sector) => request(`/partners/matchmaking/recommend${sector ? `?sector=${sector}` : ''}`),
 
   listInvestors: () => request('/capital/investors'),
@@ -92,13 +92,13 @@ export const api = {
   updateTicket: (id, data) => request(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   syncTickets: () => request('/tickets/sync', { method: 'POST' }),
 
-  listDeals: (status) => request(`/deals/${status ? `?status=${status}` : ''}`),
-  createDeal: (data) => request('/deals/', { method: 'POST', body: JSON.stringify(data) }),
+  listDeals: (status) => request(`/deals${status ? `?status=${status}` : ''}`),
+  createDeal: (data) => request('/deals', { method: 'POST', body: JSON.stringify(data) }),
   getDeal: (id) => request(`/deals/${id}`),
   updateDeal: (id, data) => request(`/deals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
-  listUsers: (role) => request(`/users/${role ? `?role=${role}` : ''}`),
-  createUser: (data) => request('/users/', { method: 'POST', body: JSON.stringify(data) }),
+  listUsers: (role) => request(`/users${role ? `?role=${role}` : ''}`),
+  createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
 
   matchPartners: (data) => request('/partners/matchPartners', { method: 'POST', body: JSON.stringify(data) }),
   generateMemo: (data) => request('/scoring/generateMemo', { method: 'POST', body: JSON.stringify(data) }),
