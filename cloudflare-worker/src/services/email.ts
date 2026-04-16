@@ -39,13 +39,13 @@ function buildRawEmail(to: string, subject: string, html: string, text: string):
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     ``,
     `--${boundary}`,
-    `Content-Type: text/plain; charset=utf-8`,
+    `Content-Type: text/plain; charset="UTF-8"`,
     `Content-Transfer-Encoding: base64`,
     ``,
     b64encode(text),
     ``,
     `--${boundary}`,
-    `Content-Type: text/html; charset=utf-8`,
+    `Content-Type: text/html; charset="UTF-8"`,
     `Content-Transfer-Encoding: base64`,
     ``,
     b64encode(html),
@@ -53,65 +53,6 @@ function buildRawEmail(to: string, subject: string, html: string, text: string):
     `--${boundary}--`,
   ];
   return lines.join('\r\n');
-}
-
-async function sendViaGmailAPI(env: Env, to: string, subject: string, html: string, text: string): Promise<void> {
-  const accessToken = await getGmailAccessToken(env);
-  const raw = buildRawEmail(to, subject, html, text);
-  const encoded = btoa(unescape(encodeURIComponent(raw)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-
-  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ raw: encoded }),
-  });
-
-  if (!res.ok) {
-    const err: any = await res.json().catch(() => ({}));
-    throw new Error(`Gmail API error: ${err?.error?.message || res.statusText}`);
-  }
-}
-
-export async function sendVerificationEmail(env: Env, toEmail: string, name: string, verificationUrl: string): Promise<boolean> {
-  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
-    console.warn(`[EMAIL] Gmail credentials not configured — email to ${toEmail} not sent. Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN secrets.`);
-    return false;
-  }
-
-  try {
-    const subject = 'Verify your email — Axal Ventures';
-    const html = buildEmailHTML(name, verificationUrl);
-    const text = `Hi ${name},\n\nThanks for signing up for Axal Ventures. Please verify your email by visiting this link:\n\n${verificationUrl}\n\nThis link expires in 24 hours.\n\nIf you didn't create an account, you can safely ignore this email.`;
-
-    await sendViaGmailAPI(env, toEmail, subject, html, text);
-    console.log(`[EMAIL] Verification email sent to ${toEmail} via Gmail API`);
-    return true;
-  } catch (e: any) {
-    console.error(`[EMAIL] Gmail send failed for ${toEmail}: ${e?.message || 'Unknown error'}`);
-    return false;
-  }
-}
-
-export async function sendNotificationEmail(env: Env, toEmail: string, subject: string, htmlBody: string, textBody: string): Promise<boolean> {
-  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
-    console.warn(`[EMAIL] Gmail credentials not configured — notification to ${toEmail} not sent.`);
-    return false;
-  }
-
-  try {
-    await sendViaGmailAPI(env, toEmail, subject, htmlBody, textBody);
-    console.log(`[EMAIL] Notification sent to ${toEmail} via Gmail API`);
-    return true;
-  } catch (e: any) {
-    console.error(`[EMAIL] Gmail notification failed for ${toEmail}: ${e?.message || 'Unknown error'}`);
-    return false;
-  }
 }
 
 function buildEmailHTML(name: string, verificationUrl: string): string {
@@ -130,7 +71,7 @@ function buildEmailHTML(name: string, verificationUrl: string): string {
   <table cellpadding="0" cellspacing="0">
     <tr>
       <td style="vertical-align:middle;padding-right:10px;">
-        <img src="https://axal.vc/axal-logo-mark.png" alt="Axal VC" width="36" height="36" style="display:block;border:0;" />
+        <img src="https://axal.vc/axal-mark.png" alt="Axal VC" width="36" height="36" style="display:block;border:0;object-fit:cover;border-radius:8px;" />
       </td>
       <td style="vertical-align:middle;">
         <span style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.01em;">Axal VC</span>
@@ -147,29 +88,48 @@ function buildEmailHTML(name: string, verificationUrl: string): string {
 <tr><td style="padding:0 32px;">
   <table width="100%" cellpadding="0" cellspacing="0">
   <tr><td align="center" style="padding:8px 0 24px;">
-    <a href="${verificationUrl}" style="display:inline-block;background:#7c3aed;color:#ffffff;font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;text-decoration:none;padding:13px 36px;border-radius:10px;letter-spacing:-0.01em;">
-      Verify Email Address
-    </a>
+    <a href="${verificationUrl}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:16px 28px;border-radius:14px;">Verify Email Address</a>
   </td></tr>
   </table>
 </td></tr>
-<tr><td style="padding:0 32px 24px;">
-  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;">
-    <p style="font-size:12px;color:#6b7280;margin:0 0 4px;">Or copy and paste this link into your browser:</p>
-    <p style="font-size:12px;color:#7c3aed;margin:0;word-break:break-all;">${verificationUrl}</p>
-  </div>
-</td></tr>
 <tr><td style="padding:0 32px 32px;">
-  <p style="font-size:12px;color:#9ca3af;margin:0;line-height:1.5;">
-    This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.
-  </p>
-</td></tr>
-<tr><td style="padding:16px 32px;background:#f9fafb;border-top:1px solid #f3f4f6;">
-  <p style="font-size:11px;color:#d1d5db;margin:0;text-align:center;">© 2026 Axal Management, LLC · <a href="https://axal.vc" style="color:#d1d5db;text-decoration:none;">axal.vc</a></p>
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:18px 20px;">
+    <p style="margin:0 0 8px;color:#6b7280;font-size:14px;">Or copy and paste this link into your browser:</p>
+    <a href="${verificationUrl}" style="color:#2563eb;word-break:break-all;font-size:14px;">${verificationUrl}</a>
+  </div>
+  <p style="font-size:12px;color:#9ca3af;margin:24px 0 0;line-height:1.6;">This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.</p>
 </td></tr>
 </table>
 </td></tr>
 </table>
 </body>
 </html>`;
+}
+
+export async function sendVerificationEmail(env: Env, to: string, name: string, verificationUrl: string): Promise<boolean> {
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+    console.error('[EMAIL] Gmail credentials missing');
+    return false;
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const html = buildEmailHTML(name, verificationUrl);
+    const text = `Verify your email: ${verificationUrl}`;
+    const rawEmail = buildRawEmail(to, 'Verify Your Email - Axal VC', html, text);
+    const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+    if (!res.ok) {
+      const err: any = await res.json().catch(() => ({}));
+      console.error('[EMAIL] Gmail send failed:', err);
+      return false;
+    }
+    return true;
+  } catch (e: any) {
+    console.error(`[EMAIL] Gmail notification failed for ${to}: ${e?.message || 'Unknown error'}`);
+    return false;
+  }
 }
