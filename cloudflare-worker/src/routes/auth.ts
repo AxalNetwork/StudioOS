@@ -88,13 +88,21 @@ auth.post('/resend-verification', async (c) => {
   const genericMsg = 'If an account exists with that email, a verification link has been sent.';
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE email = ${email}`;
-  await sql.end();
 
-  if (users.length === 0 || (users[0].email_verified && users[0].password_hash)) {
+  if (users.length === 0) {
+    await sql.end();
     return c.json({ message: genericMsg });
   }
 
-  try { await sendVerification(c.env, email, users[0].name, users[0].id); } catch {}
+  const user = users[0];
+
+  if (user.email_verified && user.password_hash) {
+    await sql`UPDATE users SET email_verified = false, password_hash = NULL WHERE id = ${user.id}`;
+  }
+
+  await sql.end();
+
+  try { await sendVerification(c.env, email, user.name, user.id); } catch {}
   return c.json({ message: genericMsg });
 });
 
