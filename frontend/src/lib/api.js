@@ -86,8 +86,8 @@ export const api = {
   payCapitalCall: (id) => request(`/capital/calls/${id}/pay`, { method: 'POST' }),
   portfolio: () => request('/capital/portfolio'),
 
-  listTickets: (status) => request(`/tickets/${status ? `?status=${status}` : ''}`),
-  createTicket: (data) => request('/tickets/', { method: 'POST', body: JSON.stringify(data) }),
+  listTickets: (status) => request(`/tickets${status ? `?status=${status}` : ''}`),
+  createTicket: (data) => request('/tickets', { method: 'POST', body: JSON.stringify(data) }),
 
   listDeals: (status) => request(`/deals/${status ? `?status=${status}` : ''}`),
   createDeal: (data) => request('/deals/', { method: 'POST', body: JSON.stringify(data) }),

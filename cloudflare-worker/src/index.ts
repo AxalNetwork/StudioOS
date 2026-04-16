@@ -38,6 +38,13 @@ app.use('*', async (c, next) => {
   }
 });
 
+app.onError((err: any, c) => {
+  if (err.message === 'Unauthorized') return c.json({ detail: 'Not authenticated' }, 401);
+  if (err.message === 'Admin required') return c.json({ detail: 'Admin access required' }, 403);
+  console.error('Unhandled app error:', err);
+  return c.json({ detail: 'Internal server error' }, 500);
+});
+
 app.get('/api/health', (c) => c.json({
   status: 'ok',
   app: 'StudioOS v1.0',
