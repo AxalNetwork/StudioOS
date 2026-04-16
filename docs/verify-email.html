@@ -1,201 +1,417 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Verify Email — Axal VC StudioOS</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+  <title>Verify Email — Axal VC</title>
+  <link rel="icon" href="/axal-logo-mark.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; background: #030712; color: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
-    .card {
-      background: #111827;
-      border: 1px solid #1f2937;
-      border-radius: 16px;
-      padding: 40px 36px;
-      width: 100%;
-      max-width: 460px;
-      text-align: center;
+
+    html, body {
+      height: 100%;
+      background: #ffffff;
+      color: #111827;
+      font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    .logo { font-size: 22px; font-weight: 700; color: #7c3aed; margin-bottom: 8px; }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      padding: 16px 32px;
+      border-bottom: 1px solid #f3f4f6;
+      background: #fff;
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .nav-logo img {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+    }
+
+    .nav-logo-text {
+      font-size: 17px;
+      font-weight: 700;
+      color: #111827;
+      letter-spacing: -0.01em;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 24px;
+      background: #f9fafb;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 20px;
+      padding: 44px 40px;
+      width: 100%;
+      max-width: 480px;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 24px rgba(0,0,0,0.04);
+    }
+
+    .card-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    .card-logo img {
+      width: 36px;
+      height: 36px;
+      object-fit: contain;
+    }
+
+    .card-logo-text {
+      font-size: 20px;
+      font-weight: 700;
+      color: #111827;
+      letter-spacing: -0.01em;
+    }
+
     .progress {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 0;
-      margin: 24px 0 32px;
+      margin-bottom: 36px;
     }
+
     .step {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 32px; height: 32px;
+      width: 34px;
+      height: 34px;
       border-radius: 50%;
       font-size: 13px;
       font-weight: 600;
-      background: #1f2937;
-      color: #6b7280;
-      border: 2px solid #374151;
+      background: #f3f4f6;
+      color: #9ca3af;
+      border: 2px solid #e5e7eb;
       transition: all 0.3s;
       position: relative;
       z-index: 1;
     }
-    .step.active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
-    .step.done { background: #059669; color: #fff; border-color: #059669; }
-    .step-line { width: 40px; height: 2px; background: #1f2937; }
-    .step-line.done { background: #059669; }
-    h1 { font-size: 22px; font-weight: 700; color: #f9fafb; margin-bottom: 8px; }
-    p.sub { font-size: 14px; color: #9ca3af; line-height: 1.6; margin-bottom: 24px; }
+
+    .step.active {
+      background: #7c3aed;
+      color: #fff;
+      border-color: #7c3aed;
+    }
+
+    .step.done {
+      background: #059669;
+      color: #fff;
+      border-color: #059669;
+    }
+
+    .step-line {
+      width: 48px;
+      height: 2px;
+      background: #e5e7eb;
+    }
+
+    .step-line.done {
+      background: #059669;
+    }
+
     .spinner {
-      width: 48px; height: 48px;
-      border: 3px solid #1f2937;
+      width: 48px;
+      height: 48px;
+      border: 3px solid #e5e7eb;
       border-top-color: #7c3aed;
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
       margin: 0 auto 24px;
     }
+
     @keyframes spin { to { transform: rotate(360deg); } }
-    .icon { font-size: 48px; margin-bottom: 16px; }
+
+    .icon {
+      font-size: 44px;
+      margin-bottom: 16px;
+      line-height: 1;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+
+    p.sub {
+      font-size: 14px;
+      color: #6b7280;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+
     .alert {
       padding: 12px 16px;
-      border-radius: 8px;
+      border-radius: 10px;
       font-size: 13px;
       margin-bottom: 20px;
       text-align: left;
+      line-height: 1.5;
     }
-    .alert.error { background: #1f0a0a; border: 1px solid #7f1d1d; color: #fca5a5; }
-    .alert.success { background: #052e16; border: 1px solid #14532d; color: #86efac; }
-    .qr-wrap {
-      background: #fff;
-      border-radius: 12px;
-      padding: 16px;
-      display: inline-block;
-      margin: 0 auto 20px;
+
+    .alert.error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #b91c1c;
     }
-    .qr-wrap img { display: block; width: 180px; height: 180px; }
-    .secret-box {
-      background: #0f172a;
-      border: 1px solid #1e293b;
-      border-radius: 8px;
-      padding: 12px 16px;
-      font-family: 'Courier New', monospace;
-      font-size: 13px;
-      color: #a78bfa;
-      word-break: break-all;
-      margin-bottom: 20px;
-      text-align: left;
+
+    .alert.success {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #15803d;
     }
-    .secret-label { font-size: 11px; color: #6b7280; margin-bottom: 6px; font-family: inherit; text-transform: uppercase; letter-spacing: 0.05em; }
-    .btn {
-      display: inline-block;
-      width: 100%;
-      padding: 12px 24px;
-      background: #7c3aed;
-      color: #fff;
-      font-size: 14px;
-      font-weight: 600;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      text-decoration: none;
-      transition: background 0.2s;
-    }
-    .btn:hover { background: #6d28d9; }
-    .btn.secondary { background: transparent; border: 1px solid #374151; color: #9ca3af; margin-top: 10px; }
-    .btn.secondary:hover { background: #1f2937; color: #f9fafb; }
-    .steps-info {
-      background: #0f172a;
-      border: 1px solid #1e293b;
-      border-radius: 8px;
-      padding: 16px;
-      text-align: left;
-      margin-bottom: 24px;
-    }
-    .steps-info ol { padding-left: 20px; }
-    .steps-info li { font-size: 13px; color: #9ca3af; margin-bottom: 6px; line-height: 1.5; }
-    .steps-info li strong { color: #e5e7eb; }
+
     .user-badge {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      background: #0f172a;
-      border: 1px solid #1e293b;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
       border-radius: 8px;
       padding: 10px 16px;
       margin-bottom: 24px;
     }
-    .user-badge-dot { width: 8px; height: 8px; border-radius: 50%; background: #059669; }
-    .user-badge-text { font-size: 13px; color: #9ca3af; }
-    .user-badge-email { font-size: 13px; color: #e5e7eb; font-weight: 500; }
-    a.link { color: #7c3aed; text-decoration: none; font-size: 13px; }
+
+    .user-badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #059669;
+      flex-shrink: 0;
+    }
+
+    .user-badge-text {
+      font-size: 13px;
+      color: #6b7280;
+    }
+
+    .user-badge-email {
+      font-size: 13px;
+      color: #111827;
+      font-weight: 600;
+    }
+
+    .qr-wrap {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 16px;
+      display: inline-block;
+      margin: 0 auto 20px;
+    }
+
+    .qr-wrap img {
+      display: block;
+      width: 176px;
+      height: 176px;
+    }
+
+    .steps-info {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 16px 20px;
+      text-align: left;
+      margin-bottom: 20px;
+    }
+
+    .steps-info ol {
+      padding-left: 18px;
+    }
+
+    .steps-info li {
+      font-size: 13px;
+      color: #6b7280;
+      margin-bottom: 6px;
+      line-height: 1.5;
+    }
+
+    .steps-info li:last-child { margin-bottom: 0; }
+    .steps-info li strong { color: #374151; }
+
+    .secret-box {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #7c3aed;
+      word-break: break-all;
+      margin-bottom: 24px;
+      text-align: left;
+    }
+
+    .secret-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px;
+      color: #9ca3af;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 13px 24px;
+      background: #7c3aed;
+      color: #fff;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s;
+      text-align: center;
+    }
+
+    .btn:hover { background: #6d28d9; }
+
+    .btn.secondary {
+      background: transparent;
+      border: 1px solid #e5e7eb;
+      color: #6b7280;
+      margin-top: 10px;
+    }
+
+    .btn.secondary:hover {
+      background: #f9fafb;
+      color: #374151;
+    }
+
+    hr.divider {
+      border: none;
+      border-top: 1px solid #f3f4f6;
+      margin: 20px 0;
+    }
+
+    a.link {
+      color: #7c3aed;
+      text-decoration: none;
+      font-size: 13px;
+    }
+
     a.link:hover { text-decoration: underline; }
-    .divider { border: none; border-top: 1px solid #1f2937; margin: 20px 0; }
+
+    .footer-note {
+      font-size: 13px;
+      color: #9ca3af;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
-<div class="card" id="card">
-  <div class="logo">⚡ AXAL Ventures</div>
 
-  <div class="progress" id="progress">
-    <div class="step active" id="s1">1</div>
-    <div class="step-line" id="l1"></div>
-    <div class="step" id="s2">2</div>
-    <div class="step-line" id="l2"></div>
-    <div class="step" id="s3">3</div>
-  </div>
+<nav>
+  <a href="/" class="nav-logo">
+    <img src="/axal-logo-mark.png" alt="Axal VC" />
+    <span class="nav-logo-text">Axal VC</span>
+  </a>
+</nav>
 
-  <div id="view-verifying">
-    <div class="spinner"></div>
-    <h1>Verifying your email…</h1>
-    <p class="sub">Please wait while we confirm your email address.</p>
-  </div>
-
-  <div id="view-setup-totp" style="display:none;">
-    <div class="icon">🔐</div>
-    <h1>Set up two-factor auth</h1>
-    <p class="sub">Your email is verified. Scan the QR code below with an authenticator app to secure your account.</p>
-    <div id="user-badge" class="user-badge" style="display:none;">
-      <div class="user-badge-dot"></div>
-      <span class="user-badge-text">Verified as</span>
-      <span class="user-badge-email" id="verified-email"></span>
+<main>
+  <div class="card">
+    <div class="card-logo">
+      <img src="/axal-logo-mark.png" alt="Axal VC" />
+      <span class="card-logo-text">Axal VC</span>
     </div>
-    <div class="qr-wrap">
-      <img id="qr-img" src="" alt="QR Code" />
-    </div>
-    <div class="steps-info">
-      <ol>
-        <li>Open <strong>Google Authenticator</strong>, <strong>Authy</strong>, or any TOTP app</li>
-        <li>Tap <strong>+</strong> and choose <strong>Scan QR code</strong></li>
-        <li>Scan the code above — it will add <strong>Axal VC StudioOS</strong></li>
-        <li>Use the 6-digit code it shows to <a href="/" class="link">sign in</a></li>
-      </ol>
-    </div>
-    <div class="secret-box">
-      <div class="secret-label">Manual entry key (if camera unavailable)</div>
-      <span id="totp-secret"></span>
-    </div>
-    <a href="/" class="btn">Go to Sign In</a>
-  </div>
 
-  <div id="view-error" style="display:none;">
-    <div class="icon">⚠️</div>
-    <h1 id="error-title">Verification failed</h1>
-    <div class="alert error" id="error-msg"></div>
-    <a href="/" class="btn">Back to Home</a>
-    <hr class="divider">
-    <p style="font-size:13px;color:#6b7280;">Didn't get a fresh link?<br>
-      <a href="/" class="link">Request a new verification email</a>
-    </p>
-  </div>
+    <div class="progress">
+      <div class="step active" id="s1">1</div>
+      <div class="step-line" id="l1"></div>
+      <div class="step" id="s2">2</div>
+      <div class="step-line" id="l2"></div>
+      <div class="step" id="s3">3</div>
+    </div>
 
-  <div id="view-already-verified" style="display:none;">
-    <div class="icon">✅</div>
-    <h1>Already verified</h1>
-    <p class="sub">This verification link has already been used. You can sign in directly.</p>
-    <a href="/" class="btn">Go to Sign In</a>
+    <div id="view-verifying">
+      <div class="spinner"></div>
+      <h1>Verifying your email…</h1>
+      <p class="sub">Please wait while we confirm your email address.</p>
+    </div>
+
+    <div id="view-setup-totp" style="display:none;">
+      <div class="icon">🔐</div>
+      <h1>Set up two-factor auth</h1>
+      <p class="sub">Your email is verified. Scan the QR code with an authenticator app to secure your account.</p>
+      <div id="user-badge" class="user-badge" style="display:none;">
+        <div class="user-badge-dot"></div>
+        <span class="user-badge-text">Verified as</span>
+        <span class="user-badge-email" id="verified-email"></span>
+      </div>
+      <div class="qr-wrap">
+        <img id="qr-img" src="" alt="QR Code" />
+      </div>
+      <div class="steps-info">
+        <ol>
+          <li>Open <strong>Google Authenticator</strong>, <strong>Authy</strong>, or any TOTP app</li>
+          <li>Tap <strong>+</strong> and choose <strong>Scan QR code</strong></li>
+          <li>Scan the code above — it will add <strong>Axal VC StudioOS</strong></li>
+          <li>Use the 6-digit code it shows to <a href="/" class="link">sign in</a></li>
+        </ol>
+      </div>
+      <div class="secret-box">
+        <div class="secret-label">Manual entry key (if camera unavailable)</div>
+        <span id="totp-secret"></span>
+      </div>
+      <a href="/" class="btn">Go to Sign In</a>
+    </div>
+
+    <div id="view-error" style="display:none;">
+      <div class="icon">⚠️</div>
+      <h1 id="error-title">Verification failed</h1>
+      <div class="alert error" id="error-msg"></div>
+      <a href="/" class="btn">Back to Home</a>
+      <hr class="divider" />
+      <p class="footer-note">
+        Didn't get a fresh link?<br />
+        <a href="/" class="link">Request a new verification email</a>
+      </p>
+    </div>
+
+    <div id="view-already-verified" style="display:none;">
+      <div class="icon">✅</div>
+      <h1>Already verified</h1>
+      <p class="sub">This verification link has already been used. You can sign in directly.</p>
+      <a href="/" class="btn">Go to Sign In</a>
+    </div>
   </div>
-</div>
+</main>
 
 <script>
   const API = 'https://studioos.guillaumelauzier.workers.dev/api/auth';
@@ -266,7 +482,6 @@
       }
 
       const { email, name, setup_token } = confirmData;
-
       setStep(3);
 
       const totpRes = await fetch(`${API}/setup-totp`, {
