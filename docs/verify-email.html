@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -232,7 +233,7 @@
       margin: 0 auto 20px;
     }
 
-    .qr-wrap img {
+    .qr-wrap canvas {
       display: block;
       width: 176px;
       height: 176px;
@@ -375,7 +376,7 @@
         <span class="user-badge-email" id="verified-email"></span>
       </div>
       <div class="qr-wrap">
-        <img id="qr-img" src="" alt="QR Code" />
+        <canvas id="qr-canvas"></canvas>
       </div>
       <div class="steps-info">
         <ol>
@@ -511,7 +512,8 @@
         return;
       }
 
-      document.getElementById('qr-img').src = 'data:image/png;base64,' + totpData.qr_code;
+      const canvas = document.getElementById('qr-canvas');
+      await QRCode.toCanvas(canvas, totpData.provisioning_uri, { width: 176, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
       document.getElementById('totp-secret').textContent = totpData.totp_secret;
       document.getElementById('verified-email').textContent = email;
       document.getElementById('user-badge').style.display = 'inline-flex';
