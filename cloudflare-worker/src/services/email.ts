@@ -24,7 +24,7 @@ function buildRawEmail(to: string, subject: string, html: string, text: string):
   const boundary = `boundary_${crypto.randomUUID().replace(/-/g, '')}`;
   const lines = [
     `To: ${to}`,
-    `From: Axal Ventures <noreply@axal.vc>`,
+    `From: Axal Ventures <guillaume.lauzier@axal.vc>`,
     `Subject: ${subject}`,
     `MIME-Version: 1.0`,
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
