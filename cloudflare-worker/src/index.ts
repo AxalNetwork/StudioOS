@@ -18,8 +18,6 @@ import activity from './routes/activity';
 import marketIntel from './routes/market-intel';
 import advisory from './routes/advisory';
 import privateData from './routes/private-data';
-import authEmail from './services/email';
-
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
