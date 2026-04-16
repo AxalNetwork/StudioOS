@@ -163,7 +163,7 @@ export default function VerifyEmailPage() {
                   className="block w-full bg-violet-600 hover:bg-violet-700 rounded-lg py-2.5 text-sm font-medium text-white text-center transition-colors">
                   Register Again
                 </Link>
-                <Link to="/login"
+                <Link to="https://axal.vc/login"
                   className="block w-full text-sm text-gray-500 hover:text-gray-700 py-1 text-center transition-colors">
                   Back to Sign In
                 </Link>
