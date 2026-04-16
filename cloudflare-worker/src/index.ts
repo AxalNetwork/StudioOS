@@ -79,7 +79,7 @@ app.get('/api/debug/test-email', async (c) => {
     const boundary = `boundary_test`;
     const rawEmail = [
       `To: guillaume.lauzier@axal.vc`,
-      `From: Axal Ventures <guillaume.lauzier@axal.vc>`,
+      `From: Axal VC <noreply@axal.vc>`,
       `Subject: Debug Test`,
       `MIME-Version: 1.0`,
       `Content-Type: text/plain; charset=utf-8`,

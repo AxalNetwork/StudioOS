@@ -398,10 +398,21 @@
       <div class="alert error" id="error-msg"></div>
       <a href="/" class="btn">Back to Home</a>
       <hr class="divider" />
-      <p class="footer-note">
-        Didn't get a fresh link?<br />
-        <a href="/" class="link">Request a new verification email</a>
-      </p>
+      <div id="resend-section">
+        <p class="footer-note">Didn't get a fresh link?</p>
+        <button class="btn secondary" onclick="showResendForm()" id="resend-toggle-btn">Request a new verification email</button>
+      </div>
+      <div id="resend-form" style="display:none;margin-top:16px;">
+        <label style="font-size:13px;color:#6b7280;display:block;text-align:left;margin-bottom:6px;">Your email address</label>
+        <input
+          type="email"
+          id="resend-email"
+          placeholder="you@example.com"
+          style="width:100%;padding:11px 14px;border:1px solid #e5e7eb;border-radius:10px;font-family:'Space Grotesk',sans-serif;font-size:14px;color:#111827;background:#fff;outline:none;margin-bottom:10px;"
+        />
+        <button class="btn" onclick="submitResend()" id="resend-submit-btn">Send verification email</button>
+        <div id="resend-result" style="margin-top:12px;font-size:13px;display:none;"></div>
+      </div>
     </div>
 
     <div id="view-already-verified" style="display:none;">
@@ -509,6 +520,48 @@
 
     } catch (e) {
       showError('Connection error', 'Could not reach the server. Please check your connection and try again.');
+    }
+  }
+
+  function showResendForm() {
+    document.getElementById('resend-toggle-btn').style.display = 'none';
+    document.getElementById('resend-form').style.display = 'block';
+    document.getElementById('resend-email').focus();
+  }
+
+  async function submitResend() {
+    const email = document.getElementById('resend-email').value.trim();
+    const resultEl = document.getElementById('resend-result');
+    const btn = document.getElementById('resend-submit-btn');
+
+    if (!email) {
+      resultEl.style.display = 'block';
+      resultEl.style.color = '#b91c1c';
+      resultEl.textContent = 'Please enter your email address.';
+      return;
+    }
+
+    btn.textContent = 'Sending…';
+    btn.disabled = true;
+    resultEl.style.display = 'none';
+
+    try {
+      const res = await fetch(`${API}/resend-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      resultEl.style.display = 'block';
+      resultEl.style.color = '#15803d';
+      resultEl.textContent = data.message || 'If an account exists with that email, a verification link has been sent.';
+      btn.textContent = 'Email sent';
+    } catch (e) {
+      resultEl.style.display = 'block';
+      resultEl.style.color = '#b91c1c';
+      resultEl.textContent = 'Could not reach the server. Please try again.';
+      btn.textContent = 'Send verification email';
+      btn.disabled = false;
     }
   }
 
