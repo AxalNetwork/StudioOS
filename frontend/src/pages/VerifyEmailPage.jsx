@@ -111,7 +111,7 @@ export default function VerifyEmailPage() {
 
         <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
           <div className="flex items-center gap-2 mb-6">
-            <img src="/axal-mark.png" alt="Axal VC" className="h-8" />
+            <img src="/axal-logo.png" alt="Axal VC" className="h-8" />
             <span style={{fontFamily:"'Space Grotesk', sans-serif"}} className="text-lg font-bold text-gray-900">Axal VC</span>
           </div>
 

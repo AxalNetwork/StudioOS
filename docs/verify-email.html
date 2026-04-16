@@ -3,55 +3,571 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Verify Email - Axal VC</title>
+  <title>Verify Email — Axal VC</title>
   <link rel="icon" href="/axal-logo-mark.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.js"></script>
   <style>
-    :root {
-      --bg: #ffffff;
-      --card: #ffffff;
-      --border: #e5e7eb;
-      --text: #111827;
-      --muted: #6b7280;
-      --accent: #7c3aed;
-      --accent-light: #ede9fe;
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: #ffffff;
+      color: #111827;
+      font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    body { margin: 0; font-family: Arial, sans-serif; background: #f9fafb; color: var(--text); }
-    nav, main { max-width: 960px; margin: 0 auto; }
-    nav { padding: 24px 16px; }
-    .nav-logo, .card-logo { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
-    .nav-logo img, .card-logo img { width: 36px; height: 36px; object-fit: cover; border-radius: 8px; }
-    .nav-logo-text, .card-logo-text { font-weight: 700; font-size: 20px; }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 24px; margin: 24px 16px; padding: 32px; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
-    .title { font-size: 44px; font-weight: 800; margin: 32px 0 16px; }
-    .subtitle { font-size: 22px; line-height: 1.5; color: var(--muted); max-width: 720px; }
-    .button { display: inline-block; margin: 32px 0; padding: 18px 28px; background: var(--accent); color: #fff; border-radius: 16px; font-size: 18px; font-weight: 700; text-decoration: none; }
-    .box { border: 1px solid var(--border); background: #f9fafb; border-radius: 18px; padding: 20px; }
-    .link { color: #2563eb; word-break: break-all; }
-    .footer-note { color: #9ca3af; margin-top: 24px; line-height: 1.5; }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      padding: 16px 32px;
+      border-bottom: 1px solid #f3f4f6;
+      background: #fff;
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .nav-logo img {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+    }
+
+    .nav-logo-text {
+      font-size: 17px;
+      font-weight: 700;
+      color: #111827;
+      letter-spacing: -0.01em;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 24px;
+      background: #f9fafb;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 20px;
+      padding: 44px 40px;
+      width: 100%;
+      max-width: 480px;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 24px rgba(0,0,0,0.04);
+    }
+
+    .card-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    .card-logo img {
+      width: 36px;
+      height: 36px;
+      object-fit: contain;
+    }
+
+    .card-logo-text {
+      font-size: 20px;
+      font-weight: 700;
+      color: #111827;
+      letter-spacing: -0.01em;
+    }
+
+    .progress {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 36px;
+    }
+
+    .step {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      font-size: 13px;
+      font-weight: 600;
+      background: #f3f4f6;
+      color: #9ca3af;
+      border: 2px solid #e5e7eb;
+      transition: all 0.3s;
+      position: relative;
+      z-index: 1;
+    }
+
+    .step.active {
+      background: #7c3aed;
+      color: #fff;
+      border-color: #7c3aed;
+    }
+
+    .step.done {
+      background: #059669;
+      color: #fff;
+      border-color: #059669;
+    }
+
+    .step-line {
+      width: 48px;
+      height: 2px;
+      background: #e5e7eb;
+    }
+
+    .step-line.done {
+      background: #059669;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #7c3aed;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 24px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .icon {
+      font-size: 44px;
+      margin-bottom: 16px;
+      line-height: 1;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+
+    p.sub {
+      font-size: 14px;
+      color: #6b7280;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+
+    .alert {
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      margin-bottom: 20px;
+      text-align: left;
+      line-height: 1.5;
+    }
+
+    .alert.error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #b91c1c;
+    }
+
+    .alert.success {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #15803d;
+    }
+
+    .user-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px 16px;
+      margin-bottom: 24px;
+    }
+
+    .user-badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #059669;
+      flex-shrink: 0;
+    }
+
+    .user-badge-text {
+      font-size: 13px;
+      color: #6b7280;
+    }
+
+    .user-badge-email {
+      font-size: 13px;
+      color: #111827;
+      font-weight: 600;
+    }
+
+    .qr-wrap {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 16px;
+      display: inline-block;
+      margin: 0 auto 20px;
+    }
+
+    .qr-wrap canvas {
+      display: block;
+      width: 176px;
+      height: 176px;
+    }
+
+    .steps-info {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 16px 20px;
+      text-align: left;
+      margin-bottom: 20px;
+    }
+
+    .steps-info ol {
+      padding-left: 18px;
+    }
+
+    .steps-info li {
+      font-size: 13px;
+      color: #6b7280;
+      margin-bottom: 6px;
+      line-height: 1.5;
+    }
+
+    .steps-info li:last-child { margin-bottom: 0; }
+    .steps-info li strong { color: #374151; }
+
+    .secret-box {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #7c3aed;
+      word-break: break-all;
+      margin-bottom: 24px;
+      text-align: left;
+    }
+
+    .secret-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px;
+      color: #9ca3af;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 13px 24px;
+      background: #7c3aed;
+      color: #fff;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s;
+      text-align: center;
+    }
+
+    .btn:hover { background: #6d28d9; }
+
+    .btn.secondary {
+      background: transparent;
+      border: 1px solid #e5e7eb;
+      color: #6b7280;
+      margin-top: 10px;
+    }
+
+    .btn.secondary:hover {
+      background: #f9fafb;
+      color: #374151;
+    }
+
+    hr.divider {
+      border: none;
+      border-top: 1px solid #f3f4f6;
+      margin: 20px 0;
+    }
+
+    a.link {
+      color: #7c3aed;
+      text-decoration: none;
+      font-size: 13px;
+    }
+
+    a.link:hover { text-decoration: underline; }
+
+    .footer-note {
+      font-size: 13px;
+      color: #9ca3af;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
-  <nav>
-    <a href="/" class="nav-logo">
-      <img src="/axal-mark.png" alt="Axal VC" />
-      <span class="nav-logo-text">Axal VC</span>
-    </a>
-  </nav>
-  <main>
-    <div class="card">
-      <div class="card-logo">
-        <img src="/axal-mark.png" alt="Axal VC" />
-        <span class="card-logo-text">Axal VC</span>
-      </div>
-      <div class="title">Verify Your Email</div>
-      <div class="subtitle">Please verify your email address to continue setting up your account.</div>
-      <a class="button" href="#">Verify Email Address</a>
-      <div class="box">
-        <div style="color: var(--muted); margin-bottom: 8px;">Or copy and paste this link into your browser:</div>
-        <a href="#" class="link">https://axal.vc/verify-email?token=...</a>
-      </div>
-      <div class="footer-note">This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.</div>
+
+<nav>
+  <a href="/" class="nav-logo">
+    <img src="/axal-logo-mark.png" alt="Axal VC" />
+    <span class="nav-logo-text">Axal VC</span>
+  </a>
+</nav>
+
+<main>
+  <div class="card">
+    <div class="card-logo">
+      <img src="/axal-logo-mark.png" alt="Axal VC" />
+      <span class="card-logo-text">Axal VC</span>
     </div>
-  </main>
+
+    <div class="progress">
+      <div class="step active" id="s1">1</div>
+      <div class="step-line" id="l1"></div>
+      <div class="step" id="s2">2</div>
+      <div class="step-line" id="l2"></div>
+      <div class="step" id="s3">3</div>
+    </div>
+
+    <div id="view-verifying">
+      <div class="spinner"></div>
+      <h1>Verifying your email…</h1>
+      <p class="sub">Please wait while we confirm your email address.</p>
+    </div>
+
+    <div id="view-setup-totp" style="display:none;">
+      <div class="icon">🔐</div>
+      <h1>Set up two-factor auth</h1>
+      <p class="sub">Your email is verified. Scan the QR code with an authenticator app to secure your account.</p>
+      <div id="user-badge" class="user-badge" style="display:none;">
+        <div class="user-badge-dot"></div>
+        <span class="user-badge-text">Verified as</span>
+        <span class="user-badge-email" id="verified-email"></span>
+      </div>
+      <div class="qr-wrap">
+        <canvas id="qr-canvas"></canvas>
+      </div>
+      <div class="steps-info">
+        <ol>
+          <li>Open <strong>Google Authenticator</strong>, <strong>Authy</strong>, or any TOTP app</li>
+          <li>Tap <strong>+</strong> and choose <strong>Scan QR code</strong></li>
+          <li>Scan the code above — it will add <strong>Axal VC StudioOS</strong></li>
+          <li>Use the 6-digit code it shows to <a href="/" class="link">sign in</a></li>
+        </ol>
+      </div>
+      <div class="secret-box">
+        <div class="secret-label">Manual entry key (if camera unavailable)</div>
+        <span id="totp-secret"></span>
+      </div>
+      <a href="/" class="btn">Go to Sign In</a>
+    </div>
+
+    <div id="view-error" style="display:none;">
+      <div class="icon">⚠️</div>
+      <h1 id="error-title">Verification failed</h1>
+      <div class="alert error" id="error-msg"></div>
+      <a href="/" class="btn">Back to Home</a>
+      <hr class="divider" />
+      <div id="resend-section">
+        <p class="footer-note">Didn't get a fresh link?</p>
+        <button class="btn secondary" onclick="showResendForm()" id="resend-toggle-btn">Request a new verification email</button>
+      </div>
+      <div id="resend-form" style="display:none;margin-top:16px;">
+        <label style="font-size:13px;color:#6b7280;display:block;text-align:left;margin-bottom:6px;">Your email address</label>
+        <input
+          type="email"
+          id="resend-email"
+          placeholder="you@example.com"
+          style="width:100%;padding:11px 14px;border:1px solid #e5e7eb;border-radius:10px;font-family:'Space Grotesk',sans-serif;font-size:14px;color:#111827;background:#fff;outline:none;margin-bottom:10px;"
+        />
+        <button class="btn" onclick="submitResend()" id="resend-submit-btn">Send verification email</button>
+        <div id="resend-result" style="margin-top:12px;font-size:13px;display:none;"></div>
+      </div>
+    </div>
+
+    <div id="view-already-verified" style="display:none;">
+      <div class="icon">✅</div>
+      <h1>Already verified</h1>
+      <p class="sub">This verification link has already been used. You can sign in directly.</p>
+      <a href="/" class="btn">Go to Sign In</a>
+    </div>
+  </div>
+</main>
+
+<script>
+  const API = 'https://studioos.guillaumelauzier.workers.dev/api/auth';
+
+  function show(id) {
+    ['view-verifying','view-setup-totp','view-error','view-already-verified']
+      .forEach(v => document.getElementById(v).style.display = v === id ? '' : 'none');
+  }
+
+  function setStep(n) {
+    for (let i = 1; i <= 3; i++) {
+      const s = document.getElementById('s' + i);
+      if (i < n) { s.className = 'step done'; s.textContent = '✓'; }
+      else if (i === n) { s.className = 'step active'; s.textContent = i; }
+      else { s.className = 'step'; s.textContent = i; }
+    }
+    for (let i = 1; i <= 2; i++) {
+      document.getElementById('l' + i).className = 'step-line' + (i < n ? ' done' : '');
+    }
+  }
+
+  function showError(title, msg) {
+    document.getElementById('error-title').textContent = title;
+    document.getElementById('error-msg').textContent = msg;
+    show('view-error');
+  }
+
+  async function run() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+
+    if (!token) {
+      showError('No token found', 'The verification link is missing a token. Please use the link from your email.');
+      return;
+    }
+
+    setStep(1);
+
+    try {
+      const checkRes = await fetch(`${API}/verify-email?token=${encodeURIComponent(token)}`);
+      const checkData = await checkRes.json();
+
+      if (!checkRes.ok) {
+        if (checkData.error && checkData.error.toLowerCase().includes('expired')) {
+          showError('Link expired', 'This verification link has expired. Please request a new one.');
+        } else {
+          showError('Invalid link', checkData.error || 'This verification link is not valid.');
+        }
+        return;
+      }
+
+      setStep(2);
+
+      const confirmRes = await fetch(`${API}/confirm-verify-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const confirmData = await confirmRes.json();
+
+      if (!confirmRes.ok) {
+        if (confirmData.error && confirmData.error.toLowerCase().includes('already')) {
+          show('view-already-verified');
+          return;
+        }
+        showError('Verification failed', confirmData.error || 'Could not confirm your email. Please try again.');
+        return;
+      }
+
+      const { email, name, setup_token } = confirmData;
+      setStep(3);
+
+      const totpRes = await fetch(`${API}/setup-totp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, token: setup_token }),
+      });
+      const totpData = await totpRes.json();
+
+      if (!totpRes.ok) {
+        if (totpData.error && totpData.error.toLowerCase().includes('already')) {
+          show('view-already-verified');
+          return;
+        }
+        showError('Setup failed', totpData.error || 'Could not set up two-factor authentication.');
+        return;
+      }
+
+      const canvas = document.getElementById('qr-canvas');
+      await QRCode.toCanvas(canvas, totpData.provisioning_uri, { width: 176, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
+      document.getElementById('totp-secret').textContent = totpData.totp_secret;
+      document.getElementById('verified-email').textContent = email;
+      document.getElementById('user-badge').style.display = 'inline-flex';
+
+      show('view-setup-totp');
+
+    } catch (e) {
+      showError('Connection error', 'Could not reach the server. Please check your connection and try again.');
+    }
+  }
+
+  function showResendForm() {
+    document.getElementById('resend-toggle-btn').style.display = 'none';
+    document.getElementById('resend-form').style.display = 'block';
+    document.getElementById('resend-email').focus();
+  }
+
+  async function submitResend() {
+    const email = document.getElementById('resend-email').value.trim();
+    const resultEl = document.getElementById('resend-result');
+    const btn = document.getElementById('resend-submit-btn');
+
+    if (!email) {
+      resultEl.style.display = 'block';
+      resultEl.style.color = '#b91c1c';
+      resultEl.textContent = 'Please enter your email address.';
+      return;
+    }
+
+    btn.textContent = 'Sending…';
+    btn.disabled = true;
+    resultEl.style.display = 'none';
+
+    try {
+      const res = await fetch(`${API}/resend-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      resultEl.style.display = 'block';
+      resultEl.style.color = '#15803d';
+      resultEl.textContent = data.message || 'If an account exists with that email, a verification link has been sent.';
+      btn.textContent = 'Email sent';
+    } catch (e) {
+      resultEl.style.display = 'block';
+      resultEl.style.color = '#b91c1c';
+      resultEl.textContent = 'Could not reach the server. Please try again.';
+      btn.textContent = 'Send verification email';
+      btn.disabled = false;
+    }
+  }
+
+  run();
+</script>
 </body>
 </html>
