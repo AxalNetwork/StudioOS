@@ -23,7 +23,7 @@ export default function LoginPage() {
       }
       localStorage.setItem('token', res.token);
       localStorage.setItem('user', JSON.stringify(res.user));
-      window.location.href = '/dashboard';
+      window.location.href = 'https://axal.vc';
     } catch (e) {
       const errorMsg = e?.message || 'An error occurred. Please try again.';
       setError(errorMsg);
