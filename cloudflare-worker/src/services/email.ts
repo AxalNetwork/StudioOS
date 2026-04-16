@@ -108,30 +108,44 @@ export async function sendNotificationEmail(env: Env, toEmail: string, subject: 
 function buildEmailHTML(name: string, verificationUrl: string): string {
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
 <tr><td align="center">
 <table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
+<tr><td style="padding:32px 32px 24px;border-bottom:1px solid #f3f4f6;">
+  <table cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="vertical-align:middle;padding-right:10px;">
+        <img src="https://axal.vc/axal-logo-mark.png" alt="Axal VC" width="36" height="36" style="display:block;border:0;" />
+      </td>
+      <td style="vertical-align:middle;">
+        <span style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.01em;">Axal VC</span>
+      </td>
+    </tr>
+  </table>
+</td></tr>
 <tr><td style="padding:32px 32px 0;">
-  <div style="font-size:20px;font-weight:700;color:#7c3aed;margin-bottom:24px;">&#9889; AXAL Ventures</div>
-  <div style="width:100%;height:3px;background:linear-gradient(90deg,#7c3aed 50%,#e5e7eb 50%);border-radius:2px;margin-bottom:24px;"></div>
-  <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;">Verify Your Email</h1>
+  <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">Verify Your Email</h1>
   <p style="font-size:14px;color:#6b7280;margin:0 0 24px;line-height:1.6;">
-    Hi ${name}, thanks for signing up for Axal Ventures. Please verify your email address to continue setting up your account.
+    Hi ${name}, thanks for signing up for Axal VC. Please verify your email address to continue setting up your account.
   </p>
 </td></tr>
 <tr><td style="padding:0 32px;">
   <table width="100%" cellpadding="0" cellspacing="0">
   <tr><td align="center" style="padding:8px 0 24px;">
-    <a href="${verificationUrl}" style="display:inline-block;background:#7c3aed;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 32px;border-radius:8px;">
+    <a href="${verificationUrl}" style="display:inline-block;background:#7c3aed;color:#ffffff;font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;text-decoration:none;padding:13px 36px;border-radius:10px;letter-spacing:-0.01em;">
       Verify Email Address
     </a>
   </td></tr>
   </table>
 </td></tr>
 <tr><td style="padding:0 32px 24px;">
-  <div style="background:#f3f4f6;border-radius:8px;padding:16px;">
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;">
     <p style="font-size:12px;color:#6b7280;margin:0 0 4px;">Or copy and paste this link into your browser:</p>
     <p style="font-size:12px;color:#7c3aed;margin:0;word-break:break-all;">${verificationUrl}</p>
   </div>
@@ -140,6 +154,9 @@ function buildEmailHTML(name: string, verificationUrl: string): string {
   <p style="font-size:12px;color:#9ca3af;margin:0;line-height:1.5;">
     This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.
   </p>
+</td></tr>
+<tr><td style="padding:16px 32px;background:#f9fafb;border-top:1px solid #f3f4f6;">
+  <p style="font-size:11px;color:#d1d5db;margin:0;text-align:center;">© 2026 Axal Management, LLC · <a href="https://axal.vc" style="color:#d1d5db;text-decoration:none;">axal.vc</a></p>
 </td></tr>
 </table>
 </td></tr>
