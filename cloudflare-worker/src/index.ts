@@ -76,14 +76,28 @@ app.get('/api/debug/test-email', async (c) => {
     if (!tokenData.access_token) {
       return c.json({ step: 'oauth_token', error: 'No access_token in response', data: tokenData }, 500);
     }
-    const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    const boundary = `boundary_test`;
+    const rawEmail = [
+      `To: debug-test@axal.vc`,
+      `From: Axal Ventures <noreply@axal.vc>`,
+      `Subject: Debug Test`,
+      `MIME-Version: 1.0`,
+      `Content-Type: text/plain; charset=utf-8`,
+      ``,
+      `This is a debug test email.`,
+    ].join('\r\n');
+    const encoded = btoa(unescape(encodeURIComponent(rawEmail)))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const sendRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tokenData.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw: encoded }),
     });
-    const profileData: any = await profileRes.json();
-    if (!profileRes.ok) {
-      return c.json({ step: 'gmail_profile', status: profileRes.status, error: profileData }, 500);
+    const sendData: any = await sendRes.json();
+    if (!sendRes.ok) {
+      return c.json({ step: 'gmail_send', status: sendRes.status, error: sendData }, 500);
     }
-    return c.json({ step: 'all_ok', oauth: 'success', gmail_email: profileData.emailAddress, messages_total: profileData.messagesTotal });
+    return c.json({ step: 'all_ok', oauth: 'success', gmail_send: 'success', message_id: sendData.id });
   } catch (e: any) {
     return c.json({ step: 'exception', error: e?.message || 'Unknown' }, 500);
   }
