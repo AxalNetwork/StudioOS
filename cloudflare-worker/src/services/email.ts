@@ -20,26 +20,35 @@ async function getGmailAccessToken(env: Env): Promise<string> {
   return data.access_token;
 }
 
+function b64encode(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const b64 = btoa(binary);
+  return b64.match(/.{1,76}/g)!.join('\r\n');
+}
+
 function buildRawEmail(to: string, subject: string, html: string, text: string): string {
   const boundary = `boundary_${crypto.randomUUID().replace(/-/g, '')}`;
+  const subjectEncoded = `=?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
   const lines = [
     `To: ${to}`,
     `From: Axal VC <noreply@axal.vc>`,
-    `Subject: ${subject}`,
+    `Subject: ${subjectEncoded}`,
     `MIME-Version: 1.0`,
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     ``,
     `--${boundary}`,
     `Content-Type: text/plain; charset=utf-8`,
-    `Content-Transfer-Encoding: quoted-printable`,
+    `Content-Transfer-Encoding: base64`,
     ``,
-    text,
+    b64encode(text),
     ``,
     `--${boundary}`,
     `Content-Type: text/html; charset=utf-8`,
-    `Content-Transfer-Encoding: quoted-printable`,
+    `Content-Transfer-Encoding: base64`,
     ``,
-    html,
+    b64encode(html),
     ``,
     `--${boundary}--`,
   ];
