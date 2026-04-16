@@ -88,6 +88,9 @@ export const api = {
 
   listTickets: (status) => request(`/tickets${status ? `?status=${status}` : ''}`),
   createTicket: (data) => request('/tickets', { method: 'POST', body: JSON.stringify(data) }),
+  getTicket: (id) => request(`/tickets/${id}`),
+  updateTicket: (id, data) => request(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  syncTickets: () => request('/tickets/sync', { method: 'POST' }),
 
   listDeals: (status) => request(`/deals/${status ? `?status=${status}` : ''}`),
   createDeal: (data) => request('/deals/', { method: 'POST', body: JSON.stringify(data) }),

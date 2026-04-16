@@ -223,6 +223,8 @@ CREATE TABLE IF NOT EXISTS tickets (
     assigned_to TEXT,
     user_id INTEGER REFERENCES users(id),
     project_id INTEGER REFERENCES projects(id),
+    github_issue_number INTEGER,
+    github_issue_url TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
