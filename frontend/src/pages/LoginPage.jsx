@@ -35,11 +35,14 @@ export default function LoginPage() {
     <div className="min-h-screen bg-white flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <Link to="/" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-8">
-          <ArrowLeft size={14} /> Back to Axal Ventures
+          <ArrowLeft size={14} /> Back to Axal VC
         </Link>
 
         <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-          <img src="/axal-mark.png" alt="Axal" className="h-8 mb-6" />
+          <div className="flex items-center gap-2 mb-6">
+            <img src="/axal-mark.png" alt="Axal VC" className="h-8" />
+            <span style={{fontFamily:"'Space Grotesk', sans-serif"}} className="text-lg font-bold text-gray-900">Axal VC</span>
+          </div>
 
           <h2 className="text-xl font-bold text-gray-900 mb-1">Welcome Back</h2>
           <p className="text-sm text-gray-600 mb-6">Sign in with your email and authenticator code.</p>

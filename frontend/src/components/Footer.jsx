@@ -7,7 +7,10 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-6 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
           <div>
-            <img src="/axal-mark.png" alt="Axal" className="h-8 mb-4" />
+            <div className="flex items-center gap-2 mb-4">
+              <img src="/axal-mark.png" alt="Axal VC" className="h-8" />
+              <span style={{fontFamily:"'Space Grotesk', sans-serif"}} className="text-lg font-bold text-gray-900">Axal VC</span>
+            </div>
             <p className="text-sm text-gray-600">The 30-Day Spin-Out Engine for venture capital operations.</p>
           </div>
           
