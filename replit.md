@@ -298,3 +298,19 @@ See `cloudflare-worker/SETUP.md` for complete deployment instructions.
   - `POST /cleanup` — purges metrics/logs > 30 days.
 - **Frontend**: `frontend/src/pages/MonitoringPage.jsx`, admin-only nav at `/monitoring`. Uses recharts (already installed) and polls every 15s.
 - **Deploy**: `bash cloudflare-worker/deploy-workers.sh` applies the migration then deploys the worker. Requires `CLOUDFLARE_API_TOKEN` with D1 + Workers Scripts edit permissions.
+
+### Liquidity & Secondary Market
+- **D1 schema**: `cloudflare-worker/sql/liquidity.sql` adds `liquidity_events`, `secondary_listings`, `exit_matches` (all money columns are integer cents). Apply once via `npx wrangler d1 execute studioos-db --file=sql/liquidity.sql --remote` (add this line to `deploy-workers.sh`).
+- **AI worker**: `cloudflare-worker/ai-workers/valuation.ts` exposes `aiValueAsset` (Llama 3.1 8B → cents-clamped fair value) and `aiMatchBuyers` (deterministic feature-scoring + a single anonymized AI call for explanations — emails and exact capital amounts are NOT sent; only role + sector + capital band).
+- **Models**: `cloudflare-worker/src/models/liquidity.ts` (`Listings`, `Matches`, `LiquidityEvents`).
+- **Routes** (`/api/liquidity/*`):
+  - `POST /list` — create listing. Role-scoped: admin & partner allowed; founder must own the underlying project (joined via `projects.founder_id → founders.email = users.email`); other users need an active LP record. Auto-enqueues `liquidity_valuation`.
+  - `GET /marketplace` — open + matched listings, filtered to `shares > 0 AND asking_price_cents > 0` so auto-generated valuation placeholders don't surface.
+  - `POST /match` (admin/partner) — clears prior `proposed` matches and enqueues `liquidity_matching`.
+  - `GET /listings/:id/matches` (admin/partner) — ranked buyer matches with AI explanation.
+  - `POST /execute-exit` (admin) — atomic conditional UPDATE (`WHERE status IN ('open','matched') RETURNING id`) prevents double-execution; records a `liquidity_event`, distributes the price across the seller's LP rows (returns column is legacy dollars — converted with `/100`), and marks the chosen `exit_match` as `executed`.
+  - `GET /my-portfolio` — LP holdings + my listings + recent exit history.
+  - `GET /events` (admin/partner) — recent 100 liquidity events for observability.
+- **Queue handlers** (extend `services/queueWorker.ts`): `liquidity_valuation`, `liquidity_matching`. Both included in the per-drain AI cap (5 AI jobs/min).
+- **Event-driven hook**: `legalcap.ts /spinout/go-independent` now also creates a 0-share placeholder `secondary_listing` and enqueues `liquidity_valuation` so AI fair-value is precomputed for the marketplace.
+- **Frontend**: `frontend/src/pages/LiquidityPage.jsx` — Marketplace grid (with AI valuation badges), List-My-Shares wizard, AI Buyer Matches modal (admin can execute), My Portfolio (LP rows + listings + exit history), Exit Pipeline funnel (admin/partner). Mounted at `/liquidity` for all roles.

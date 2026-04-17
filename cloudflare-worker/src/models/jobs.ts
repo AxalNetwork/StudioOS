@@ -13,7 +13,9 @@ export type JobType =
   | 'metrics_aggregation'
   | 'capital_call'
   | 'pipeline_advance'
-  | 'traction_review';
+  | 'traction_review'
+  | 'liquidity_valuation'
+  | 'liquidity_matching';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

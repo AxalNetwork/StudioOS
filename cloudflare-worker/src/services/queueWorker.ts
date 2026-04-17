@@ -11,6 +11,8 @@ import { Jobs, QueueJob } from '../models/jobs';
 import { aiScoreDeal } from '../../ai-workers/scoring';
 import { aiTractionReview } from '../../ai-workers/traction';
 import { aiRecommendEquity } from '../../ai-workers/equity';
+import { aiValueAsset, aiMatchBuyers, BuyerCandidate } from '../../ai-workers/valuation';
+import { Listings, Matches } from '../models/liquidity';
 
 async function meter(env: Env, jobType: string, status: 'completed' | 'failed', latency: number) {
   try {
@@ -83,13 +85,78 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       ).bind(totals?.n ?? 0).run();
       return;
     }
+    case 'liquidity_valuation': {
+      const listingId = payload.listing_id;
+      const subId = payload.subsidiary_id;
+      if (!listingId || !subId) throw new Error('missing listing_id/subsidiary_id');
+      const sub: any = await env.DB.prepare(
+        `SELECT s.*, p.sector, p.stage FROM subsidiaries s
+         LEFT JOIN projects p ON p.id = s.deal_id WHERE s.id = ?`
+      ).bind(subId).first();
+      const lastScore: any = await env.DB.prepare(
+        `SELECT total_score FROM score_snapshots WHERE project_id = ?
+         ORDER BY id DESC LIMIT 1`
+      ).bind(sub?.deal_id ?? 0).first();
+      const momentum: any = await env.DB.prepare(
+        `SELECT value FROM metrics_snapshots WHERE scope='project' AND scope_id=? AND metric_name='ai_momentum'
+         ORDER BY id DESC LIMIT 1`
+      ).bind(sub?.deal_id ?? 0).first();
+      const result = await aiValueAsset(env, {
+        subsidiary_id: subId,
+        subsidiary_name: sub?.subsidiary_name,
+        deal_id: sub?.deal_id,
+        sector: sub?.sector,
+        stage: sub?.stage,
+        total_score: lastScore?.total_score,
+        momentum: momentum?.value,
+      });
+      await Listings.updateValuation(env, listingId, result.valuation_cents);
+      return;
+    }
+    case 'liquidity_matching': {
+      const listingId = payload.listing_id;
+      if (!listingId) throw new Error('missing listing_id');
+      const listing = await Listings.getById(env, listingId);
+      if (!listing) throw new Error(`listing ${listingId} not found`);
+      const subRow: any = await env.DB.prepare(
+        `SELECT s.subsidiary_name, p.sector FROM subsidiaries s
+         LEFT JOIN projects p ON p.id = s.deal_id WHERE s.id = ?`
+      ).bind(listing.subsidiary_id).first();
+      // Candidates: any partner + any LP user (excluding the seller themself).
+      const cands = await env.DB.prepare(
+        `SELECT u.id AS user_id, u.email, u.name, u.role,
+                COALESCE(SUM(lp.commitment_amount - lp.invested_amount), 0) AS available_capital
+           FROM users u LEFT JOIN limited_partners lp ON lp.user_id = u.id
+          WHERE u.id != ? AND (u.role = 'partner' OR lp.id IS NOT NULL)
+          GROUP BY u.id LIMIT 50`
+      ).bind(listing.user_id).all<{ user_id: number; email: string; name: string; role: any; available_capital: number }>();
+      const candidates: BuyerCandidate[] = (cands.results || []).map(r => ({
+        user_id: r.user_id,
+        email: r.email,
+        name: r.name,
+        role: r.role,
+        available_capital_cents: Math.round((r.available_capital || 0) * 100),
+        preferred_sectors: subRow?.sector ? [subRow.sector] : [],
+      }));
+      const matches = await aiMatchBuyers(env, {
+        id: listing.id,
+        subsidiary_name: subRow?.subsidiary_name,
+        sector: subRow?.sector,
+        shares: listing.shares,
+        asking_price_cents: listing.asking_price_cents,
+        ai_valuation_cents: listing.ai_valuation_cents,
+      }, candidates, 5);
+      await Matches.insertMany(env, listing.id, matches);
+      if (matches.length) await Listings.markMatched(env, listing.id);
+      return;
+    }
     default:
       throw new Error(`unknown job type ${job.job_type}`);
   }
 }
 
 // AI calls are expensive — cap per drain so a backlog doesn't burn the AI quota.
-const AI_JOB_TYPES = new Set(['ai_scoring', 'traction_review']);
+const AI_JOB_TYPES = new Set(['ai_scoring', 'traction_review', 'liquidity_valuation', 'liquidity_matching']);
 const MAX_AI_PER_DRAIN = 5;
 
 export async function processQueueBatch(env: Env, batchSize = 10): Promise<{ processed: number; failed: number; deferred: number }> {

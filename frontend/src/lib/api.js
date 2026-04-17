@@ -267,4 +267,15 @@ export const api = {
   fundAddLP: (id, data) => request(`/funds/${id}/lps`, { method: 'POST', body: JSON.stringify(data) }),
   fundCapitalCall: (id, amount, note) =>
     request(`/funds/${id}/capital-call`, { method: 'POST', body: JSON.stringify({ amount, note }) }),
+
+  // ---------- Liquidity / Secondary market ----------
+  liquidityMarketplace: () => request('/liquidity/marketplace'),
+  liquidityList: (data) => request('/liquidity/list', { method: 'POST', body: JSON.stringify(data) }),
+  liquidityMatch: (listing_id) =>
+    request('/liquidity/match', { method: 'POST', body: JSON.stringify({ listing_id }) }),
+  liquidityListingMatches: (id) => request(`/liquidity/listings/${id}/matches`),
+  liquidityExecuteExit: (data) =>
+    request('/liquidity/execute-exit', { method: 'POST', body: JSON.stringify(data) }),
+  liquidityMyPortfolio: () => request('/liquidity/my-portfolio'),
+  liquidityEvents: () => request('/liquidity/events'),
 };

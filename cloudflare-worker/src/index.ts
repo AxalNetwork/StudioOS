@@ -31,6 +31,7 @@ import legalcap from './routes/legalcap';
 import monitoring from './routes/monitoring';
 import infra from './routes/infra';
 import funds from './routes/funds';
+import liquidity from './routes/liquidity';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { processQueueBatch } from './services/queueWorker';
@@ -220,6 +221,7 @@ app.route('/api/legalcap', legalcap);
 app.route('/api/monitoring', monitoring);
 app.route('/api/infra', infra);
 app.route('/api/funds', funds);
+app.route('/api/liquidity', liquidity);
 
 // Cloudflare cron + fetch entry point.
 // Cron drains the job queue every minute (configured in wrangler.toml).
