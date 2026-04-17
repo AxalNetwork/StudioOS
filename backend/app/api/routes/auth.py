@@ -138,7 +138,7 @@ def get_current_user(authorization: Optional[str] = Header(None), session: Sessi
     return user
 
 
-def _send_verification(email: str, name: str, session: Session, user: User):
+def _send_verification(email: str, name: str, session: Session, user: User) -> dict:
     raw_token, token_hash, expires = generate_verification_token()
     user.verification_token = token_hash
     user.verification_token_expires = expires
@@ -147,8 +147,7 @@ def _send_verification(email: str, name: str, session: Session, user: User):
 
     verification_url = get_verification_url(raw_token)
     sent = send_verification_email(email, name, verification_url)
-    if not sent:
-        raise HTTPException(status_code=500, detail="Failed to send verification email. Please try again.")
+    return {"sent": sent, "verification_url": None if sent else verification_url}
 
 
 @router.post("/register")
@@ -159,12 +158,14 @@ def register(req: RegisterRequest, session: Session = Depends(get_session)):
             raise HTTPException(status_code=409, detail="Email already registered")
         existing.name = req.name
         existing.role = req.role
-        _send_verification(req.email, req.name, session, existing)
+        result = _send_verification(req.email, req.name, session, existing)
         return {
-            "message": "Verification email sent",
+            "message": "Verification email sent" if result["sent"] else "Account created — email service not configured",
             "email": req.email,
             "name": req.name,
             "requires_verification": True,
+            "email_sent": result["sent"],
+            "verification_url": result["verification_url"],
         }
 
     user = User(
@@ -177,7 +178,7 @@ def register(req: RegisterRequest, session: Session = Depends(get_session)):
     session.commit()
     session.refresh(user)
 
-    _send_verification(req.email, req.name, session, user)
+    result = _send_verification(req.email, req.name, session, user)
 
     log = ActivityLog(
         action="user_registered",
@@ -188,10 +189,12 @@ def register(req: RegisterRequest, session: Session = Depends(get_session)):
     session.commit()
 
     return {
-        "message": "Verification email sent",
+        "message": "Verification email sent" if result["sent"] else "Account created — email service not configured",
         "email": user.email,
         "name": user.name,
         "requires_verification": True,
+        "email_sent": result["sent"],
+        "verification_url": result["verification_url"],
     }
 
 
@@ -213,13 +216,21 @@ def resend_verification(req: ResendRequest, session: Session = Depends(get_sessi
         session.add(user)
         session.commit()
         verification_url = get_verification_url(raw_token)
-        send_verification_email(req.email, user.name, verification_url)
+        sent = send_verification_email(req.email, user.name, verification_url)
         _record_resend(req.email)
-        return {"message": generic_msg}
+        return {
+            "message": generic_msg,
+            "email_sent": sent,
+            "verification_url": None if sent else verification_url,
+        }
 
-    _send_verification(req.email, user.name, session, user)
+    result = _send_verification(req.email, user.name, session, user)
     _record_resend(req.email)
-    return {"message": generic_msg}
+    return {
+        "message": generic_msg,
+        "email_sent": result["sent"],
+        "verification_url": result["verification_url"],
+    }
 
 
 @router.get("/verify-email")

@@ -14,9 +14,11 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [turnstileToken, setTurnstileToken] = useState('');
   const [emailWarning, setEmailWarning] = useState(false);
+  const [verificationUrl, setVerificationUrl] = useState('');
   const [refCode, setRefCode] = useState('');
 
   useEffect(() => {
@@ -101,6 +103,7 @@ export default function RegisterPage() {
     try {
       const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined });
       setEmailWarning(res?.email_sent === false);
+      if (res?.verification_url) setVerificationUrl(res.verification_url);
       setStep(2);
     } catch (e) {
       setError(e.message);
@@ -152,7 +155,11 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
     try {
-      await api.resendVerification({ email: form.email });
+      const res = await api.resendVerification({ email: form.email });
+      if (res?.verification_url) {
+        setVerificationUrl(res.verification_url);
+        setEmailWarning(true);
+      }
       setResendCooldown(60);
     } catch (e) { setError(e.message); }
     setLoading(false);
@@ -307,13 +314,17 @@ export default function RegisterPage() {
               <div className="flex items-center justify-center w-16 h-16 bg-violet-100 rounded-full mx-auto mb-6">
                 <Mail size={28} className="text-violet-600" />
               </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1 text-center">Check Your Email</h2>
-              <p className="text-sm text-gray-600 mb-6 text-center">
-                {emailWarning ? 'We had trouble sending the verification link to' : "We've sent a verification link to"}
+              <h2 className="text-xl font-bold text-gray-900 mb-1 text-center">
+                {emailWarning ? 'Verify Your Email' : 'Check Your Email'}
+              </h2>
+              <p className="text-sm text-gray-600 mb-3 text-center">
+                {emailWarning ? 'Email delivery is not configured. Use the link below to verify:' : `We've sent a verification link to`}
               </p>
-              <div className="bg-gray-50 rounded-lg px-4 py-3 mb-6 text-center">
-                <span className="text-sm font-medium text-gray-900">{form.email}</span>
-              </div>
+              {!emailWarning && (
+                <div className="bg-gray-50 rounded-lg px-4 py-3 mb-6 text-center">
+                  <span className="text-sm font-medium text-gray-900">{form.email}</span>
+                </div>
+              )}
 
               {profileSaved && (
                 <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-300 rounded-lg p-3 mb-4">
@@ -326,21 +337,36 @@ export default function RegisterPage() {
 
               {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{error}</div>}
 
-              {emailWarning && (
-                <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4">
-                  <Mail size={16} className="text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-700">
-                    Your account was created, but we couldn't deliver the verification email. Please click "Resend Verification Email" below.
+              {emailWarning && verificationUrl ? (
+                <div className="mb-5">
+                  <a
+                    href={verificationUrl}
+                    className="block w-full text-center bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg py-3 transition-colors mb-3"
+                  >
+                    Click Here to Verify Your Email
+                  </a>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <p className="text-[10px] text-gray-500 mb-1 uppercase font-medium">Or copy this verification link:</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-violet-600 break-all flex-1">{verificationUrl}</p>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(verificationUrl); setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2000); }}
+                        className="shrink-0 text-gray-500 hover:text-gray-800 p-1"
+                      >
+                        {copiedLink ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-400 text-center mt-2">This link expires in 24 hours.</p>
+                </div>
+              ) : !emailWarning && (
+                <div className="flex items-start gap-2 bg-violet-50 border border-violet-300 rounded-lg p-3 mb-6">
+                  <Mail size={16} className="text-violet-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-violet-700">
+                    Click the link in the email to verify your address and continue setting up your authenticator. The link expires in 24 hours.
                   </p>
                 </div>
               )}
-
-              <div className="flex items-start gap-2 bg-violet-50 border border-violet-300 rounded-lg p-3 mb-6">
-                <Mail size={16} className="text-violet-600 shrink-0 mt-0.5" />
-                <p className="text-xs text-violet-700">
-                  Click the link in the email to verify your address and continue setting up your authenticator. The link expires in 24 hours.
-                </p>
-              </div>
 
               <div className="space-y-3">
                 <button onClick={resendEmail} disabled={loading || resendCooldown > 0}
@@ -348,7 +374,7 @@ export default function RegisterPage() {
                   <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                   {resendCooldown > 0 ? `Resend available in ${resendCooldown}s` : loading ? 'Sending...' : 'Resend Verification Email'}
                 </button>
-                <button onClick={() => { setStep(1); setError(''); }}
+                <button onClick={() => { setStep(1); setError(''); setVerificationUrl(''); setEmailWarning(false); }}
                   className="w-full text-sm text-gray-500 hover:text-gray-700 py-1 transition-colors">
                   Use a different email
                 </button>

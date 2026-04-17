@@ -64,7 +64,7 @@ def send_verification_email(to_email: str, name: str, verification_url: str) -> 
         print(f"Name: {name}")
         print(f"Link: {verification_url}")
         print(f"{'='*60}\n")
-        return True
+        return False
 
 
 def _send_via_gmail(to_email: str, name: str, verification_url: str) -> bool:
