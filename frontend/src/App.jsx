@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
-  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles
+  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase
 } from 'lucide-react';
 import { api } from './lib/api';
 import Dashboard from './pages/Dashboard';
@@ -32,6 +32,7 @@ import ReferEarnPage from './pages/ReferEarnPage';
 import PayoutsPage from './pages/PayoutsPage';
 import NetworkPage from './pages/NetworkPage';
 import MatchesPage from './pages/MatchesPage';
+import StudioOpsPage from './pages/StudioOpsPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import RiskDisclosuresPage from './pages/RiskDisclosuresPage';
@@ -55,6 +56,7 @@ const ALL_NAV_ITEMS = [
   { to: '/payouts', icon: Wallet, label: 'Payouts', roles: ['admin', 'founder', 'partner'] },
   { to: '/network', icon: Network, label: 'Referral Network', roles: ['admin', 'founder', 'partner'] },
   { to: '/matches', icon: Sparkles, label: 'AI Matches', roles: ['admin', 'partner'] },
+  { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops', roles: ['admin', 'founder', 'partner'] },
   { to: '/api-bridge', icon: Code, label: 'API Bridge', roles: ['admin'] },
   { to: '/founder', icon: Rocket, label: 'Founder Portal', roles: ['admin', 'founder'], divider: true },
   { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal', roles: ['admin', 'partner'] },
@@ -445,6 +447,7 @@ export default function App() {
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner'], <PayoutsPage />)} />
       <Route path="/network" element={guard(['admin', 'founder', 'partner'], <NetworkPage />)} />
       <Route path="/matches" element={guard(['admin', 'partner'], <MatchesPage />)} />
+      <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner'], <StudioOpsPage />)} />
       <Route path="/partner-portal" element={guard(['admin', 'partner'], <PartnerPortal />)} />
 
       <Route path="/terms" element={<TermsPage />} />

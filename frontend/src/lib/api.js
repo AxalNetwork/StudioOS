@@ -161,4 +161,21 @@ export const api = {
   matchReferralScores: () => request('/matches/referral-scores'),
   matchScore: (data) => request('/matches/score', { method: 'POST', body: JSON.stringify(data) }),
   matchAdminAll: () => request('/matches/admin/all'),
+
+  studioOpsTemplates: () => request('/studioops/templates'),
+  studioOpsWorkflows: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([_, v]) => v != null && v !== '')).toString();
+    return request('/studioops/workflows' + (q ? '?' + q : ''));
+  },
+  studioOpsWorkflow: (id) => request(`/studioops/workflows/${id}`),
+  studioOpsCreateWorkflow: (data) => request('/studioops/workflows', { method: 'POST', body: JSON.stringify(data) }),
+  studioOpsUpdateWorkflow: (id, data) => request(`/studioops/workflows/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  studioOpsDeleteWorkflow: (id) => request(`/studioops/workflows/${id}`, { method: 'DELETE' }),
+  studioOpsExecuteTemplate: (data) => request('/studioops/execute-template', { method: 'POST', body: JSON.stringify(data) }),
+  studioOpsCreateTask: (data) => request('/studioops/tasks', { method: 'POST', body: JSON.stringify(data) }),
+  studioOpsUpdateTask: (id, data) => request(`/studioops/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  studioOpsStrategicReview: (projectId) => request(`/studioops/strategic-review/${projectId}`),
+  studioOpsAiAssist: (data) => request('/studioops/ai-assist', { method: 'POST', body: JSON.stringify(data) }),
+  studioOpsAudit: () => request('/studioops/audit'),
+  studioOpsStats: () => request('/studioops/stats'),
 };

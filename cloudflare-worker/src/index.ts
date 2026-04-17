@@ -22,6 +22,7 @@ import profiling from './routes/profiling';
 import kyc from './routes/kyc';
 import network from './routes/network';
 import matches from './routes/matches';
+import studioops from './routes/studioops';
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
@@ -191,5 +192,6 @@ app.route('/api/profiling', profiling);
 app.route('/api/kyc', kyc);
 app.route('/api/network', network);
 app.route('/api/matches', matches);
+app.route('/api/studioops', studioops);
 
 export default app;

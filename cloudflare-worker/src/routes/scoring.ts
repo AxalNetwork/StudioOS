@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import { runFullScore, tierLabel } from '../services/scoring';
+import { autoCreateStudioOpsForProject } from './studioops';
 
 const scoring = new Hono<{ Bindings: Env }>();
 
@@ -20,8 +21,12 @@ scoring.post('/score', async (c) => {
     const [snapshot] = await sql`INSERT INTO score_snapshots (project_id, total_score, tier, market_size, market_urgency, market_trend, market_total, team_expertise, team_execution, team_network, team_total, product_mvp_time, product_complexity, product_dependency, product_total, capital_cost_mvp, capital_time_revenue, capital_burn_traction, capital_total, fit_alignment, fit_synergy, fit_total, distribution_channels, distribution_virality, distribution_total, ai_adjustment) VALUES (${body.project_id}, ${result.total_score}, ${result.tier}, ${b.market.size}, ${b.market.urgency}, ${b.market.trend}, ${b.market.total}, ${b.team.expertise}, ${b.team.execution}, ${b.team.network}, ${b.team.total}, ${b.product.mvp_time}, ${b.product.complexity}, ${b.product.dependency}, ${b.product.total}, ${b.capital.cost_mvp}, ${b.capital.time_revenue}, ${b.capital.burn_traction}, ${b.capital.total}, ${b.fit.alignment}, ${b.fit.synergy}, ${b.fit.total}, ${b.distribution.channels}, ${b.distribution.virality}, ${b.distribution.total}, ${result.ai_adjustment}) RETURNING id`;
 
     const newStatus = result.total_score >= 85 ? 'tier_1' : result.total_score >= 70 ? 'tier_2' : 'rejected';
+    const prevStatus = projects[0].status;
     await sql`UPDATE projects SET status = ${newStatus}, updated_at = CURRENT_TIMESTAMP WHERE id = ${body.project_id}`;
     await sql.end();
+    if (newStatus !== prevStatus && (newStatus === 'tier_1' || newStatus === 'tier_2')) {
+      await autoCreateStudioOpsForProject(c.env, body.project_id, newStatus, user.id);
+    }
     return c.json({ ...result, snapshot_id: snapshot.id });
   }
 

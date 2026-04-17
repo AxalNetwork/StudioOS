@@ -92,6 +92,10 @@ projects.post('/submit', async (c) => {
   await sql`INSERT INTO deals (project_id, status) VALUES (${project.id}, ${dealStatus})`;
   await sql`INSERT INTO activity_logs (project_id, action, details, actor) VALUES (${project.id}, 'auto_scored', ${`Score: ${result.total_score}, Tier: ${result.tier}, Status: ${newStatus}`}, 'system')`;
   await sql.end();
+  if (newStatus === 'tier_1' || newStatus === 'tier_2') {
+    const { autoCreateStudioOpsForProject } = await import('./studioops');
+    await autoCreateStudioOpsForProject(c.env, project.id, newStatus, founderId || 1);
+  }
 
   return c.json({
     project: { ...project, status: newStatus, stage: newStage },
