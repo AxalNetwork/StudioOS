@@ -25,6 +25,7 @@ import matches from './routes/matches';
 import studioops from './routes/studioops';
 import networkfx from './routes/networkfx';
 import dashboard from './routes/dashboard';
+import pipeline from './routes/pipeline';
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
@@ -197,5 +198,6 @@ app.route('/api/matches', matches);
 app.route('/api/studioops', studioops);
 app.route('/api/networkfx', networkfx);
 app.route('/api/dashboard', dashboard);
+app.route('/api/pipeline', pipeline);
 
 export default app;
