@@ -222,15 +222,29 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           )}
 
           <main className="flex-1 overflow-y-auto">
-            <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-gray-200 px-4 py-3 flex items-center gap-3">
-              <button className="lg:hidden text-gray-600" onClick={() => setSidebarOpen(true)}>
-                <Menu size={20} />
-              </button>
+            <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-gray-200 px-4 py-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 lg:hidden">
+                <img src="/axal-mark.png" alt="Axal VC" className="h-8 w-8 rounded-lg object-contain flex-shrink-0" />
+                <div>
+                  <div className="text-sm font-bold text-gray-900 leading-tight">Axal VC</div>
+                  <div className="text-[10px] text-gray-500 leading-tight">StudioOS v1.0</div>
+                </div>
+              </div>
+              <div className="hidden lg:block flex-1">
+                {isImpersonating && (
+                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                    Impersonating {user.name}
+                  </span>
+                )}
+              </div>
               {isImpersonating && (
-                <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                <span className="lg:hidden text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
                   Impersonating {user.name}
                 </span>
               )}
+              <button className="lg:hidden text-gray-600" onClick={() => setSidebarOpen(true)}>
+                <Menu size={20} />
+              </button>
             </header>
             <div className="p-4 md:p-6 max-w-7xl mx-auto">
               {children}
