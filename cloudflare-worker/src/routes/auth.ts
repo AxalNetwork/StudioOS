@@ -20,7 +20,7 @@ async function checkRateLimit(env: Env, key: string, max: number, windowSec: num
   return true;
 }
 
-async function sendVerification(env: Env, email: string, name: string, userId: number): Promise<boolean> {
+async function sendVerification(env: Env, email: string, name: string, userId: number): Promise<{ sent: boolean; verificationUrl: string }> {
   const rawToken = generateToken();
   const tokenHash = await hashToken(rawToken);
   const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -35,10 +35,10 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
     if (!sent) {
       console.warn(`[AUTH] Email delivery failed for ${email}. Check GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN secrets.`);
     }
-    return sent;
+    return { sent, verificationUrl };
   } catch (e: any) {
     console.error(`[AUTH] Email service error for ${email}: ${e?.message || 'Unknown error'}`);
-    return false;
+    return { sent: false, verificationUrl };
   }
 }
 
@@ -64,10 +64,10 @@ auth.post('/register', async (c) => {
     }
     await sql`UPDATE users SET name = ${name}, role = ${role || 'partner'} WHERE id = ${user.id}`;
     await sql.end();
-    const emailSent = await sendVerification(c.env, email, name, user.id);
+    const { sent: emailSent, verificationUrl } = await sendVerification(c.env, email, name, user.id);
     return c.json({
       message: emailSent ? 'Verification email sent' : 'Account created but email delivery failed',
-      email, name, requires_verification: true, email_sent: emailSent
+      email, name, requires_verification: true, email_sent: emailSent, verification_url: !emailSent ? verificationUrl : undefined
     });
   }
 
@@ -87,10 +87,10 @@ auth.post('/register', async (c) => {
     } catch (e) { console.error('attachReferral failed:', e); }
   }
 
-  const emailSent = await sendVerification(c.env, email, name, user.id);
+  const { sent: emailSent, verificationUrl } = await sendVerification(c.env, email, name, user.id);
   return c.json({
     message: emailSent ? 'Verification email sent' : 'Account created but email delivery failed',
-    email: user.email, name: user.name, requires_verification: true, email_sent: emailSent
+    email: user.email, name: user.name, requires_verification: true, email_sent: emailSent, verification_url: !emailSent ? verificationUrl : undefined
   });
 });
 
@@ -117,8 +117,12 @@ auth.post('/resend-verification', async (c) => {
 
   await sql.end();
 
-  try { await sendVerification(c.env, email, user.name, user.id); } catch {}
-  return c.json({ message: genericMsg });
+  try {
+    const { sent, verificationUrl } = await sendVerification(c.env, email, user.name, user.id);
+    return c.json({ message: genericMsg, email_sent: sent, verification_url: !sent ? verificationUrl : undefined });
+  } catch {
+    return c.json({ message: genericMsg });
+  }
 });
 
 auth.get('/verify-email', async (c) => {
