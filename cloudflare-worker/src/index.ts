@@ -34,9 +34,12 @@ import funds from './routes/funds';
 import liquidity from './routes/liquidity';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
+import { securityHeadersMiddleware } from './middleware/securityHeaders';
 import { processQueueBatch } from './services/queueWorker';
 import { Jobs } from './models/jobs';
 const app = new Hono<{ Bindings: Env }>();
+
+app.use('*', securityHeadersMiddleware());
 
 app.use('*', cors({
   origin: ['https://axal.vc', 'https://www.axal.vc', 'https://studioos.guillaumelauzier.workers.dev'],
@@ -76,7 +79,6 @@ const KYC_EXEMPT_PREFIXES = [
   '/api/profiling',
   '/api/dashboard/stats',
   '/api/legal/templates',
-  '/api/debug/',
   '/api/network/referral/code',
   '/api/network/graph',
   '/api/monitoring/',
@@ -114,6 +116,10 @@ app.get('/api/health', (c) => c.json({
 }));
 
 app.get('/api/debug/test-email', async (c) => {
+  // Admin-only: this endpoint sends a real email via Gmail OAuth and burns
+  // quota. It must never be publicly callable.
+  const user = await requireAuth(c);
+  if (user.role !== 'admin') return c.json({ detail: 'Admin access required' }, 403);
   const env = c.env;
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
     return c.json({ error: 'Gmail credentials missing', gmail_client_id: !!env.GMAIL_CLIENT_ID, gmail_client_secret: !!env.GMAIL_CLIENT_SECRET, gmail_refresh_token: !!env.GMAIL_REFRESH_TOKEN }, 500);
