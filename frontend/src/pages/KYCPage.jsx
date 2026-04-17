@@ -299,7 +299,7 @@ function CountrySelect({ label, required, value, onChange }) {
   };
 
   return (
-    <div className="block" ref={containerRef}>
+    <div className="relative block" ref={containerRef}>
       <span className="text-xs font-medium text-gray-700">
         {label}{required && <span className="text-red-500"> *</span>}
       </span>
