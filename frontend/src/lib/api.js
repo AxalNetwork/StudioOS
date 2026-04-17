@@ -195,4 +195,7 @@ export const api = {
   },
   networkFxRequestIntro: (data) => request('/networkfx/marketplace/request-intro', { method: 'POST', body: JSON.stringify(data) }),
   networkFxMarketplaceMatch: (data) => request('/networkfx/marketplace/match', { method: 'POST', body: JSON.stringify(data) }),
+
+  getDashboard: (fresh = false) => request('/dashboard' + (fresh ? '?fresh=1' : '')),
+  refreshDashboardScores: () => request('/dashboard/refresh-scores', { method: 'POST', body: JSON.stringify({}) }),
 };
