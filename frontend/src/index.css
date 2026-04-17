@@ -15,6 +15,33 @@ body {
   background: #f9fafb;
 }
 
+/* Force legible input text regardless of OS/browser color-scheme detection.
+   The dark CSS custom properties above (--color-surface) can cause browsers
+   to infer dark-mode and render input text nearly white. */
+input,
+input[type='text'],
+input[type='email'],
+input[type='password'],
+input[type='number'],
+input[type='date'],
+input[type='tel'],
+input[type='search'],
+input[type='url'],
+select,
+textarea {
+  color: #111827;
+  background-color: #ffffff;
+  color-scheme: light;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #111827;
+  box-shadow: 0 0 0px 1000px #ffffff inset;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
 }
