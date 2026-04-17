@@ -32,6 +32,22 @@ APP_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME = "StudioOS"
 
+# ---------- Observability ----------
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
+
 # ---------- Cron Triggers ----------
 # Drain the async job queue every minute. Cleanup runs at 03:00 UTC daily
 # inside the same handler.
