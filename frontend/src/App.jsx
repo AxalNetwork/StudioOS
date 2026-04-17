@@ -226,7 +226,6 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               <button className="lg:hidden text-gray-600" onClick={() => setSidebarOpen(true)}>
                 <Menu size={20} />
               </button>
-              <div className="text-sm font-medium text-gray-700">Axal VC StudioOS</div>
               {isImpersonating && (
                 <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
                   Impersonating {user.name}

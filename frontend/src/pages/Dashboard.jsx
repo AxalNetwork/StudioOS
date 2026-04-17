@@ -42,7 +42,6 @@ export default function Dashboard() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Studio Dashboard</h1>
-        <p className="text-sm text-gray-600">The 30-Day Spin-Out Engine — Overview</p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
