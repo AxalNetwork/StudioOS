@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Upload, AlertTriangle, CheckCircle2, Clock, XCircle, Loader2 } from 'lucide-react';
+import { ShieldCheck, Upload, AlertTriangle, CheckCircle2, Clock, XCircle, Loader2, Search, ChevronDown, X } from 'lucide-react';
 import { api } from '../lib/api';
 
 const ID_TYPES = [
@@ -11,18 +11,32 @@ const ID_TYPES = [
   { value: 'residence_permit', label: 'Residence Permit' },
 ];
 
-const COUNTRIES = [
-  { value: '', label: 'Select country' },
-  { value: 'United States', label: 'United States' },
-  { value: 'Canada', label: 'Canada' },
-  { value: 'United Kingdom', label: 'United Kingdom' },
-  { value: 'Singapore', label: 'Singapore' },
-  { value: 'France', label: 'France' },
-  { value: 'Germany', label: 'Germany' },
-  { value: 'Australia', label: 'Australia' },
-  { value: 'United Arab Emirates', label: 'United Arab Emirates' },
-  { value: 'Switzerland', label: 'Switzerland' },
-  { value: 'Other', label: 'Other' },
+const ALL_COUNTRIES = [
+  'Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia',
+  'Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium',
+  'Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei',
+  'Bulgaria','Burkina Faso','Burundi','Cabo Verde','Cambodia','Cameroon','Canada',
+  'Central African Republic','Chad','Chile','China','Colombia','Comoros','Congo (Brazzaville)',
+  'Congo (Kinshasa)','Costa Rica','Croatia','Cuba','Cyprus','Czech Republic','Denmark','Djibouti',
+  'Dominica','Dominican Republic','Ecuador','Egypt','El Salvador','Equatorial Guinea','Eritrea',
+  'Estonia','Eswatini','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany',
+  'Ghana','Greece','Grenada','Guatemala','Guinea','Guinea-Bissau','Guyana','Haiti','Honduras',
+  'Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Jamaica',
+  'Japan','Jordan','Kazakhstan','Kenya','Kiribati','Kosovo','Kuwait','Kyrgyzstan','Laos','Latvia',
+  'Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar',
+  'Malawi','Malaysia','Maldives','Mali','Malta','Marshall Islands','Mauritania','Mauritius','Mexico',
+  'Micronesia','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar (Burma)',
+  'Namibia','Nauru','Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea',
+  'North Macedonia','Norway','Oman','Pakistan','Palau','Palestine','Panama','Papua New Guinea',
+  'Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda',
+  'Saint Kitts and Nevis','Saint Lucia','Saint Vincent and the Grenadines','Samoa','San Marino',
+  'São Tomé and Príncipe','Saudi Arabia','Senegal','Serbia','Seychelles','Sierra Leone','Singapore',
+  'Slovakia','Slovenia','Solomon Islands','Somalia','South Africa','South Korea','South Sudan',
+  'Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan',
+  'Tanzania','Thailand','Timor-Leste','Togo','Tonga','Trinidad and Tobago','Tunisia','Turkey',
+  'Turkmenistan','Tuvalu','Uganda','Ukraine','United Arab Emirates','United Kingdom',
+  'United States','Uruguay','Uzbekistan','Vanuatu','Vatican City','Venezuela','Vietnam',
+  'Yemen','Zambia','Zimbabwe',
 ];
 
 const STATUS_META = {
@@ -52,7 +66,6 @@ export default function KYCPage() {
     try {
       const s = await api.kycStatus();
       setStatus(s);
-      // refresh /me so that the App-level status updates
       try {
         const me = await api.getMe();
         const stored = JSON.parse(localStorage.getItem('user') || '{}');
@@ -158,7 +171,12 @@ export default function KYCPage() {
           <div>
             <h2 className="text-sm font-semibold text-gray-900 mb-3">Residential Address</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Select label="Country" required value={form.country} onChange={v => setForm(f => ({ ...f, country: v }))} options={COUNTRIES} />
+              <CountrySelect
+                label="Country"
+                required
+                value={form.country}
+                onChange={v => setForm(f => ({ ...f, country: v }))}
+              />
               <Input label="Address Line 1" required value={form.address_line1} onChange={v => setForm(f => ({ ...f, address_line1: v }))} />
               <Input label="Address Line 2" value={form.address_line2} onChange={v => setForm(f => ({ ...f, address_line2: v }))} />
               <Input label="City" required value={form.city} onChange={v => setForm(f => ({ ...f, city: v }))} />
@@ -226,9 +244,9 @@ function Select({ label, required, value, onChange, options }) {
         className="mt-1 w-full appearance-none border border-gray-300 rounded-xl px-4 py-3 pr-10 text-sm font-medium text-gray-900 bg-white shadow-sm outline-none transition focus:ring-2 focus:ring-violet-500 focus:border-violet-500 hover:border-gray-400"
         style={{
           backgroundImage:
-            'linear-gradient(45deg, transparent 50%, #9ca3af 50%), linear-gradient(135deg, #9ca3af 50%, transparent 50%), linear-gradient(to right, #fff, #fff)',
-          backgroundPosition: 'calc(100% - 20px) calc(1em + 2px), calc(100% - 15px) calc(1em + 2px), 100% 0',
-          backgroundSize: '5px 5px, 5px 5px, 2.5em 2.5em',
+            'linear-gradient(45deg, transparent 50%, #9ca3af 50%), linear-gradient(135deg, #9ca3af 50%, transparent 50%)',
+          backgroundPosition: 'calc(100% - 20px) calc(1em + 2px), calc(100% - 15px) calc(1em + 2px)',
+          backgroundSize: '5px 5px, 5px 5px',
           backgroundRepeat: 'no-repeat',
         }}
       >
@@ -239,5 +257,123 @@ function Select({ label, required, value, onChange, options }) {
         ))}
       </select>
     </label>
+  );
+}
+
+function CountrySelect({ label, required, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef(null);
+  const searchRef = useRef(null);
+  const listRef = useRef(null);
+
+  const filtered = query.trim()
+    ? ALL_COUNTRIES.filter(c => c.toLowerCase().includes(query.toLowerCase()))
+    : ALL_COUNTRIES;
+
+  useEffect(() => {
+    if (open && searchRef.current) searchRef.current.focus();
+  }, [open]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const select = (country) => {
+    onChange(country);
+    setOpen(false);
+    setQuery('');
+  };
+
+  const clear = (e) => {
+    e.stopPropagation();
+    onChange('');
+    setQuery('');
+  };
+
+  return (
+    <div className="block" ref={containerRef}>
+      <span className="text-xs font-medium text-gray-700">
+        {label}{required && <span className="text-red-500"> *</span>}
+      </span>
+
+      <div
+        className={`mt-1 relative w-full border rounded-xl px-4 py-3 text-sm bg-white shadow-sm cursor-pointer flex items-center justify-between gap-2 transition
+          ${open ? 'border-violet-500 ring-2 ring-violet-500' : 'border-gray-300 hover:border-gray-400'}`}
+        onClick={() => setOpen(o => !o)}
+      >
+        <span className={value ? 'text-gray-900 font-medium' : 'text-gray-400'}>
+          {value || 'Select country'}
+        </span>
+        <span className="flex items-center gap-1 text-gray-400 flex-shrink-0">
+          {value && (
+            <button type="button" onClick={clear} className="hover:text-gray-600 p-0.5 rounded">
+              <X size={13} />
+            </button>
+          )}
+          <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        </span>
+      </div>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+          <div className="p-2 border-b border-gray-100">
+            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+              <Search size={13} className="text-gray-400 flex-shrink-0" />
+              <input
+                ref={searchRef}
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search countries…"
+                className="flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder-gray-400"
+                onClick={e => e.stopPropagation()}
+              />
+              {query && (
+                <button type="button" onClick={() => setQuery('')} className="text-gray-400 hover:text-gray-600">
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <ul ref={listRef} className="max-h-56 overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <li className="px-4 py-3 text-sm text-gray-400 text-center">No results for "{query}"</li>
+            ) : (
+              filtered.map(country => (
+                <li
+                  key={country}
+                  onClick={() => select(country)}
+                  className={`px-4 py-2 text-sm cursor-pointer flex items-center justify-between
+                    ${country === value ? 'bg-violet-50 text-violet-700 font-medium' : 'text-gray-800 hover:bg-gray-50'}`}
+                >
+                  {country}
+                  {country === value && <CheckCircle2 size={13} className="text-violet-500 flex-shrink-0" />}
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
+
+      {required && !value && (
+        <input
+          tabIndex={-1}
+          required
+          value=""
+          onChange={() => {}}
+          className="absolute opacity-0 w-0 h-0 pointer-events-none"
+          aria-hidden="true"
+        />
+      )}
+    </div>
   );
 }
