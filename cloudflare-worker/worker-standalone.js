@@ -43,7 +43,7 @@ async function sendGmailEmail(env, to, subject, html, text) {
   const accessToken = await getGmailAccessToken(env);
   const raw = buildRawEmail(
     to,
-    `Axal Ventures <noreply@axal.vc>`,
+    `Axal VC <noreply@axal.vc>`,
     subject,
     html,
     text
@@ -73,7 +73,7 @@ async function sendVerificationEmail(env, toEmail, name, verificationUrl) {
     console.warn('[EMAIL] Gmail credentials not configured');
     return false;
   }
-  const subject = 'Verify your email — Axal Ventures';
+  const subject = 'Verify your email — Axal VC';
   const text = `Hi ${name},\n\nPlease verify your email:\n\n${verificationUrl}\n\nThis link expires in 24 hours.`;
   const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#f9fafb;padding:40px 20px;">
 <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;border:1px solid #e5e7eb;padding:32px;">

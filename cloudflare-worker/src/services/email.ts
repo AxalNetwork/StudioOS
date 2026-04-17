@@ -115,7 +115,7 @@ export async function sendVerificationEmail(env: Env, to: string, name: string, 
     const accessToken = await getGmailAccessToken(env);
     const html = buildEmailHTML(name, verificationUrl);
     const text = `Verify your email: ${verificationUrl}`;
-    const rawEmail = buildRawEmail(to, 'Verify Your Email - Axal VC', html, text);
+    const rawEmail = buildRawEmail(to, 'Verify your email — Axal VC', html, text);
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST',
