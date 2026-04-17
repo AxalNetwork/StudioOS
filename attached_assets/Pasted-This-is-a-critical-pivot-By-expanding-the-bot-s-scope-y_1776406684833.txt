@@ -1,0 +1,73 @@
+This is a critical pivot. By expanding the bot's scope, you are moving from a **"Startup Factory"** (30-day spin-outs) to a **"Global Venture Network"** (growth, scaling, and strategic synergies). 
+
+To implement this, you need to change the "Founder Path" into a more sophisticated **"Builder Path"** that distinguishes between *Incubation* (New) and *Acceleration/Partnership* (Existing).
+
+---
+
+### 1. The Updated Conversation Logic
+You should instruct the Replit Agent to implement a **"Gatekeeping Question"** immediately after the user selects "Founder."
+
+**New Logic Flow:**
+1.  **Bot:** "As a Founder, are you looking to spin out a new venture in 30 days, or do you have an existing company looking for a strategic partner, capital, or a product push?"
+2.  **User Choice A: "New Venture"** → *Proceed with the 30-Day Spin-Out flow (Jurisdiction, Industry, MVP).*
+3.  **User Choice B: "Existing Company"** → *Proceed with the "Scale & Partner" flow.*
+
+---
+
+### 2. The "Existing Company" Branch (Profiling Questions)
+For those who already have a company, the AI needs to extract different data for the Admin's "Closing Binder":
+
+* **Current Traction:** "What is your current stage? (Pre-seed, Seed, Series A+)"
+* **The "Need":** "What is your primary goal for this partnership? (e.g., Capital, AI Integration via StudioOS, Distribution, M&A/Liquidity)."
+* **Existing Legal Info:** "Where is your entity currently registered? (e.g., USA, UK, etc.)"
+* **Product Push:** "Are we scaling an existing product, or launching a new sub-project/subsidiary under your current brand?"
+
+---
+
+### 3. The "Partnership" Branch (Non-Founders)
+You mentioned "people that need partners." Your bot should have a dedicated path for **Strategic Partners** who aren't necessarily looking for VC funding but want to use the Axal ecosystem.
+
+| Partner Category | Their Goal | Admin Proposal |
+| :--- | :--- | :--- |
+| **Growth/GTM Partner** | Wants to push Axal products to their own network. | **Referral / Agency Agreement** |
+| **Product Partner** | Wants to integrate their tech into Axal's AI stack. | **Technology Integration / JV** |
+| **Strategic LP** | Wants to fund a specific sector (e.g., Cybersecurity). | **Side Letter / Focused SPV** |
+
+---
+
+### 4. Updating the Replit/Cloudflare Code
+Here is the specific code logic to give to Replit for this expansion:
+
+```javascript
+// Example logic for the "Existing vs New" branch
+async function handleFounderChoice(isNew) {
+  if (isNew) {
+    return "Great! We'll use the 30-Day Engine. Which jurisdiction: Delaware, UK, or Singapore?";
+  } else {
+    return "Understood. Since you're already established, are you looking for a Product Push, Capital, or Strategic AI Integration?";
+  }
+}
+```
+
+### 5. Revised D1 Database Fields
+Add these to your `partner_profiles` table to handle existing companies:
+
+```sql
+ALTER TABLE partner_profiles ADD COLUMN current_revenue TEXT; -- Optional field
+ALTER TABLE partner_profiles ADD COLUMN partnership_goal TEXT; -- Push, Capital, Tech
+ALTER TABLE partner_profiles ADD COLUMN existing_investors TEXT;
+```
+
+### How to phrase it to your Replit Agent:
+> "Update the AI Chatbot to be inclusive of existing companies. 
+> 1. If a user identifies as a 'Founder', ask if they are **'Starting New'** or **'Scaling Existing'**. 
+> 2. For 'Scaling Existing', the AI should focus on identifying their 'Partnership Goal' (Product Push, M&A, or AI Integration). 
+> 3. For 'Starting New', stay with the 30-Day Spin-Out Engine script. 
+> 4. Ensure the D1 database captures whether the company is a 'Spin-Out' or a 'Strategic Scale' partner."
+
+---
+
+### Why this is better for Axal VC:
+By adding this, you aren't just a "factory" for tiny startups; you become a **Venture Studio for Grown-ups**. You can now capture Series A companies that want to use your AI Workers to modernize their legacy codebases (as seen in your GitHub scan) or Founders who need a "Special Forces" team to launch a new product line without distracting their main company.
+
+**Would you like me to draft the specific "Strategic Partner" Agreement template name for these existing company types?**

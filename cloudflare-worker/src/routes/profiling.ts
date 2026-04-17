@@ -5,6 +5,16 @@ import { requireAdmin } from '../auth';
 
 const profiling = new Hono<{ Bindings: Env }>();
 
+const NEW_COLUMNS: Array<[string, string]> = [
+  ['company_established', 'INTEGER'],
+  ['founder_track', 'TEXT'],
+  ['current_stage', 'TEXT'],
+  ['partnership_goal', 'TEXT'],
+  ['existing_jurisdiction', 'TEXT'],
+  ['product_strategy', 'TEXT'],
+  ['existing_investors', 'TEXT'],
+];
+
 async function ensureProfileTable(env: Env) {
   const db = env.DB;
   try {
@@ -19,6 +29,12 @@ async function ensureProfileTable(env: Env) {
         signatory_name TEXT,
         signatory_title TEXT,
         company_established INTEGER,
+        founder_track TEXT,
+        current_stage TEXT,
+        partnership_goal TEXT,
+        existing_jurisdiction TEXT,
+        product_strategy TEXT,
+        existing_investors TEXT,
         chat_history TEXT,
         extracted_data TEXT,
         admin_status TEXT DEFAULT 'pending',
@@ -29,32 +45,52 @@ async function ensureProfileTable(env: Env) {
       )
     `).run();
   } catch {}
-  // Migrate existing tables that may not have the column yet
-  try {
-    await db.prepare(`ALTER TABLE partner_profiles ADD COLUMN company_established INTEGER`).run();
-  } catch {}
+  // Migrate existing tables — each ALTER is wrapped to ignore "duplicate column" errors
+  for (const [col, type] of NEW_COLUMNS) {
+    try {
+      await db.prepare(`ALTER TABLE partner_profiles ADD COLUMN ${col} ${type}`).run();
+    } catch {}
+  }
 }
 
-const SYSTEM_PROMPT = `You are the Axal VC StudioOS Onboarding Assistant. Axal VC is a Delaware LLC venture studio operating a "30-Day Spin-Out Engine" — an API-first programmable venture studio.
+const SYSTEM_PROMPT = `You are the Axal VC StudioOS Onboarding Assistant. Axal VC is a Delaware LLC venture studio operating as a Global Venture Network — combining a "30-Day Spin-Out Engine" for new ventures with a "Strategic Scale" partnership track for existing companies that want capital, AI integration, distribution, or M&A support.
 
-Your tone is elite, efficient, professional, and concise. You help new partners join the Axal global network by profiling them in 5–7 short messages.
+Your tone is elite, efficient, professional, and concise. You profile each new partner in 5–8 short messages so an Axal admin can propose the right agreement.
 
 PROFILE CATEGORIES (one of):
 - "Investor — LP" (Limited Partner committing capital to the main fund)
 - "Investor — Syndicate" (Investing deal-by-deal in spin-out SPVs)
 - "Investor — Co-Investor" (External VC firm joining a round)
-- "Founder" (Entering the 30-Day Spin-Out Engine)
+- "Founder" (Builder — split into two tracks below)
 - "Operator / Advisor" (Sweat equity, GTM or MVP expertise)
 - "Operating Partner" (MSA + equity-for-services)
 - "Legal Counsel" (Preferred legal partner, fixed-fee spin-out packages)
-- "Technical Partner" (White-label MVP development tools)
+- "Technical Partner" (White-label MVP / product integration)
 - "Liquidity Provider" (Secondary purchases, M&A advisory)
 
 WORKFLOW:
 1. Greet briefly (1 sentence) and ask which best describes their interest in Axal.
-2. Once persona identified, ask 2–3 follow-ups to capture: legal entity name, entity type (Delaware C-Corp / LLC / Individual / Foreign), EIN/Tax ID (if applicable), signatory name & title, and any specific area of focus (sector, check size, expertise).
-   - FOUNDER EXCEPTION: Before asking about legal entity details, first ask: "Have you already established a legal entity for your company?" If yes, proceed to capture entity details. If no, note this in the profile and skip entity/EIN questions — just capture their sector and a one-line description of their idea.
-3. After enough info is captured, give a one-sentence summary and tell them: "Profile captured. An Axal admin will review and propose your Closing Binder shortly."
+
+2. FOUNDER GATEKEEPING — if persona = "Founder", IMMEDIATELY ask the gatekeeping question (do not ask about legal entity yet):
+   "As a Founder, are you (A) starting a NEW venture you want to spin out in 30 days, or (B) scaling an EXISTING company looking for a strategic partner, capital, or product push?"
+
+   2A. NEW VENTURE TRACK ("Spin-Out (New)") — ask in this order:
+       a. "Have you already established a legal entity for your company?" (yes → capture entity name, type, EIN, signatory; no → skip entity questions)
+       b. Jurisdiction preference: "Which jurisdiction do you want to incorporate in — Delaware, UK, or Singapore?"
+       c. Sector / industry focus
+       d. One-line description of the idea/MVP
+
+   2B. EXISTING COMPANY TRACK ("Strategic Scale (Existing)") — ask in this order:
+       a. Current stage: "What stage are you at — Pre-seed, Seed, Series A, Series B+, or Bootstrapped/Profitable?" (use these exact labels)
+       b. Partnership goal: "What is your primary goal — (i) Capital, (ii) AI integration via StudioOS, (iii) Distribution / GTM, or (iv) M&A / Liquidity?"
+       c. Existing entity: legal entity name, type, jurisdiction (USA/UK/Singapore/etc.), EIN if US
+       d. Product strategy: "Are we scaling an existing product, or launching a new sub-project / subsidiary under your current brand?"
+       e. Existing investors / cap table summary (one line)
+       f. Signatory name and title
+
+3. NON-FOUNDER PERSONAS — ask 2–3 follow-ups to capture: legal entity name, entity type (Delaware C-Corp / LLC / Individual / Foreign), EIN if US, signatory name & title, and area of focus (sector, check size, expertise).
+
+4. After enough info is captured, give a one-sentence summary and tell them: "Profile captured. An Axal admin will review and propose your Closing Binder shortly."
 
 RULES:
 - Keep each message under 60 words.
@@ -137,12 +173,18 @@ profiling.post('/save', async (c) => {
       const extractionPrompt = `From the following onboarding conversation with a prospective Axal VC partner, extract a strict JSON object with these keys (use null when unknown):
 {
   "persona": one of "Investor — LP" | "Investor — Syndicate" | "Investor — Co-Investor" | "Founder" | "Operator / Advisor" | "Operating Partner" | "Legal Counsel" | "Technical Partner" | "Liquidity Provider" | null,
+  "founder_track": for Founders only — "Spin-Out (New)" if starting a brand new venture for the 30-day engine, "Strategic Scale (Existing)" if they have an existing company seeking partnership/capital/scale, null otherwise,
   "legal_entity_name": string|null,
   "entity_type": string|null,
+  "existing_jurisdiction": string|null (e.g. "Delaware", "UK", "Singapore", "USA — Delaware"),
   "ein": string|null,
   "signatory_name": string|null,
   "signatory_title": string|null,
-  "company_established": true if the Founder confirmed they have a legal entity, false if they said they have NOT established one yet, null if not a Founder or not discussed,
+  "company_established": true if the Founder confirmed they already have a legal entity (whether on the New Venture or Strategic Scale track), false if a Founder said they have NOT incorporated, null if not a Founder or not discussed,
+  "current_stage": string|null — one of "Pre-seed", "Seed", "Series A", "Series B+", "Bootstrapped/Profitable", or null,
+  "partnership_goal": string|null — one of "Capital", "AI Integration (StudioOS)", "Distribution / GTM", "M&A / Liquidity", or null,
+  "product_strategy": string|null — "Scale existing product", "New sub-project / subsidiary", or null,
+  "existing_investors": string|null — short summary of cap table or known investors,
   "summary": one-sentence summary of the partner's intent
 }
 Reply with ONLY the JSON object — no prose, no code fences.
@@ -155,7 +197,7 @@ ${transcript}`;
           { role: 'system', content: 'You are a precise data-extraction engine. Output only valid JSON.' },
           { role: 'user', content: extractionPrompt },
         ],
-        max_tokens: 400,
+        max_tokens: 600,
       });
       const raw = (out?.response || '').trim();
       const match = raw.match(/\{[\s\S]*\}/);
@@ -178,6 +220,12 @@ ${transcript}`;
   const companyEstablished = extracted?.company_established === true ? 1
     : extracted?.company_established === false ? 0
     : null;
+  const founderTrack = extracted?.founder_track || null;
+  const currentStage = extracted?.current_stage || null;
+  const partnershipGoal = extracted?.partnership_goal || null;
+  const existingJurisdiction = extracted?.existing_jurisdiction || null;
+  const productStrategy = extracted?.product_strategy || null;
+  const existingInvestors = extracted?.existing_investors || null;
   const chatJson = JSON.stringify(messages);
   const extractedJson = JSON.stringify(extracted);
 
@@ -193,6 +241,12 @@ ${transcript}`;
         signatory_name = ${sigName},
         signatory_title = ${sigTitle},
         company_established = ${companyEstablished},
+        founder_track = ${founderTrack},
+        current_stage = ${currentStage},
+        partnership_goal = ${partnershipGoal},
+        existing_jurisdiction = ${existingJurisdiction},
+        product_strategy = ${productStrategy},
+        existing_investors = ${existingInvestors},
         chat_history = ${chatJson},
         extracted_data = ${extractedJson},
         updated_at = CURRENT_TIMESTAMP
@@ -201,16 +255,21 @@ ${transcript}`;
   } else {
     await sql`
       INSERT INTO partner_profiles
-        (email, user_id, persona, legal_entity_name, entity_type, ein, signatory_name, signatory_title, company_established, chat_history, extracted_data)
+        (email, user_id, persona, legal_entity_name, entity_type, ein, signatory_name, signatory_title, company_established,
+         founder_track, current_stage, partnership_goal, existing_jurisdiction, product_strategy, existing_investors,
+         chat_history, extracted_data)
       VALUES
-        (${email}, ${user.id}, ${persona}, ${legalName}, ${entityType}, ${ein}, ${sigName}, ${sigTitle}, ${companyEstablished}, ${chatJson}, ${extractedJson})
+        (${email}, ${user.id}, ${persona}, ${legalName}, ${entityType}, ${ein}, ${sigName}, ${sigTitle}, ${companyEstablished},
+         ${founderTrack}, ${currentStage}, ${partnershipGoal}, ${existingJurisdiction}, ${productStrategy}, ${existingInvestors},
+         ${chatJson}, ${extractedJson})
     `;
   }
 
-  await sql`INSERT INTO activity_logs (action, details, actor) VALUES ('profile_captured', ${`Partner profile captured for ${email} — persona: ${persona || 'unknown'}`}, ${email})`;
+  const personaLabel = founderTrack ? `${persona} / ${founderTrack}` : (persona || 'unknown');
+  await sql`INSERT INTO activity_logs (action, details, actor) VALUES ('profile_captured', ${`Partner profile captured for ${email} — ${personaLabel}`}, ${email})`;
   await sql.end();
 
-  return c.json({ saved: true, persona, summary: extracted?.summary || null });
+  return c.json({ saved: true, persona, founder_track: founderTrack, summary: extracted?.summary || null });
 });
 
 // ---------- Admin endpoints ----------

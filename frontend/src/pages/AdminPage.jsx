@@ -16,18 +16,37 @@ const STATUS_BADGES = {
 
 const AGREEMENT_OPTIONS = [
   { value: '', label: '— Select agreement —' },
-  { value: 'Subscription Booklet & LPA', label: 'Subscription Booklet & LPA (LP)' },
-  { value: 'SPV Joinder Agreement', label: 'SPV Joinder Agreement (Syndicate)' },
-  { value: 'Co-Investment Side Letter', label: 'Co-Investment Side Letter' },
-  { value: 'Venture Share Agreement (FAST)', label: 'Venture Share Agreement / FAST (Advisor)' },
-  { value: 'MSA + Equity-for-Services', label: 'MSA + Equity-for-Services (Operating Partner)' },
-  { value: 'Engagement Letter (Spin-Out Package)', label: 'Engagement Letter (Legal Counsel)' },
-  { value: 'White-Label Service Agreement', label: 'White-Label Service Agreement (Technical Partner)' },
-  { value: 'Founder Collaboration Agreement', label: 'Founder Collaboration Agreement' },
-  { value: 'Spin-Out Subsidiary SPA + IP Transfer', label: 'Spin-Out Subsidiary SPA (Founder)' },
-  { value: 'Secondary Purchase Agreement', label: 'Secondary Purchase Agreement (Liquidity)' },
-  { value: 'M&A Advisory Mandate', label: 'M&A Advisory Mandate' },
+  { group: 'Investors', options: [
+    { value: 'Subscription Booklet & LPA', label: 'Subscription Booklet & LPA (LP)' },
+    { value: 'SPV Joinder Agreement', label: 'SPV Joinder Agreement (Syndicate)' },
+    { value: 'Co-Investment Side Letter', label: 'Co-Investment Side Letter' },
+    { value: 'Strategic Side Letter / Focused SPV', label: 'Strategic Side Letter / Focused SPV (Sector LP)' },
+  ]},
+  { group: 'Founders — New Venture (Spin-Out)', options: [
+    { value: 'Founder Collaboration Agreement', label: 'Founder Collaboration Agreement' },
+    { value: 'Spin-Out Subsidiary SPA + IP Transfer', label: 'Spin-Out Subsidiary SPA (Founder)' },
+  ]},
+  { group: 'Founders — Strategic Scale (Existing Company)', options: [
+    { value: 'Strategic Scale Partnership Agreement', label: 'Strategic Scale Partnership Agreement' },
+    { value: 'Technology Integration / JV Agreement', label: 'Technology Integration / JV (StudioOS AI)' },
+    { value: 'Referral / Agency Agreement', label: 'Referral / Agency Agreement (Distribution / GTM)' },
+    { value: 'M&A Advisory Mandate', label: 'M&A Advisory Mandate' },
+  ]},
+  { group: 'Operators & Service Partners', options: [
+    { value: 'Venture Share Agreement (FAST)', label: 'Venture Share Agreement / FAST (Advisor)' },
+    { value: 'MSA + Equity-for-Services', label: 'MSA + Equity-for-Services (Operating Partner)' },
+    { value: 'Engagement Letter (Spin-Out Package)', label: 'Engagement Letter (Legal Counsel)' },
+    { value: 'White-Label Service Agreement', label: 'White-Label Service Agreement (Technical Partner)' },
+  ]},
+  { group: 'Liquidity', options: [
+    { value: 'Secondary Purchase Agreement', label: 'Secondary Purchase Agreement (Liquidity)' },
+  ]},
 ];
+
+const TRACK_BADGES = {
+  'Spin-Out (New)': 'bg-blue-100 text-blue-700',
+  'Strategic Scale (Existing)': 'bg-indigo-100 text-indigo-700',
+};
 
 export default function AdminPage({ onImpersonate }) {
   const [tab, setTab] = useState('users');
@@ -219,13 +238,25 @@ export default function AdminPage({ onImpersonate }) {
                       <td className="px-4 py-3">
                         <div className="text-gray-700">{p.persona || <span className="text-gray-400">—</span>}</div>
                         {p.persona === 'Founder' && (
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                            p.company_established === 1 ? 'bg-emerald-100 text-emerald-700'
-                            : p.company_established === 0 ? 'bg-amber-100 text-amber-700'
-                            : 'bg-gray-100 text-gray-500'
-                          }`}>
-                            {p.company_established === 1 ? 'Incorporated' : p.company_established === 0 ? 'Not incorporated' : 'Formation unknown'}
-                          </span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {p.founder_track && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${TRACK_BADGES[p.founder_track] || 'bg-gray-100 text-gray-600'}`}>
+                                {p.founder_track}
+                              </span>
+                            )}
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                              p.company_established === 1 ? 'bg-emerald-100 text-emerald-700'
+                              : p.company_established === 0 ? 'bg-amber-100 text-amber-700'
+                              : 'bg-gray-100 text-gray-500'
+                            }`}>
+                              {p.company_established === 1 ? 'Incorporated' : p.company_established === 0 ? 'Not incorporated' : 'Formation unknown'}
+                            </span>
+                            {p.partnership_goal && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700">
+                                {p.partnership_goal}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-gray-700">{p.legal_entity_name || <span className="text-gray-400">—</span>}</td>
@@ -322,30 +353,64 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
           </div>
 
           {profile.persona === 'Founder' && (
-            <div className={`flex items-start gap-2 rounded-lg p-3 border ${
-              profile.company_established === 0
-                ? 'bg-amber-50 border-amber-300'
-                : profile.company_established === 1
-                ? 'bg-emerald-50 border-emerald-300'
-                : 'bg-gray-50 border-gray-200'
+            <div className={`rounded-lg p-3 border ${
+              profile.founder_track === 'Strategic Scale (Existing)' ? 'bg-indigo-50 border-indigo-300'
+              : profile.founder_track === 'Spin-Out (New)' ? 'bg-blue-50 border-blue-300'
+              : 'bg-gray-50 border-gray-200'
             }`}>
-              <div className="flex-1">
-                <div className="text-xs font-semibold mb-0.5 text-gray-700">Company Established?</div>
-                <div className={`text-sm font-medium ${
-                  profile.company_established === 0 ? 'text-amber-800'
-                  : profile.company_established === 1 ? 'text-emerald-800'
-                  : 'text-gray-500'
-                }`}>
-                  {profile.company_established === 1
-                    ? 'Yes — legal entity already in place'
-                    : profile.company_established === 0
-                    ? 'No — company not yet established'
-                    : 'Not answered'}
-                </div>
-                {profile.company_established === 0 && (
-                  <p className="text-xs text-amber-700 mt-1">This founder has not yet incorporated. The Axal spin-out engine can assist with formation as part of their Closing Binder.</p>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-semibold text-gray-700">Founder Track</div>
+                {profile.founder_track && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${TRACK_BADGES[profile.founder_track] || 'bg-gray-100 text-gray-600'}`}>
+                    {profile.founder_track}
+                  </span>
                 )}
               </div>
+
+              {profile.founder_track === 'Strategic Scale (Existing)' ? (
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <div className="text-gray-500">Current Stage</div>
+                    <div className="text-gray-900 font-medium">{profile.current_stage || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Partnership Goal</div>
+                    <div className="text-gray-900 font-medium">{profile.partnership_goal || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Existing Jurisdiction</div>
+                    <div className="text-gray-900 font-medium">{profile.existing_jurisdiction || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Product Strategy</div>
+                    <div className="text-gray-900 font-medium">{profile.product_strategy || '—'}</div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-gray-500">Existing Investors / Cap Table</div>
+                    <div className="text-gray-900 font-medium">{profile.existing_investors || '—'}</div>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className={`text-sm font-medium ${
+                    profile.company_established === 0 ? 'text-amber-800'
+                    : profile.company_established === 1 ? 'text-emerald-800'
+                    : 'text-gray-600'
+                  }`}>
+                    {profile.company_established === 1
+                      ? 'Company already incorporated'
+                      : profile.company_established === 0
+                      ? 'Not yet incorporated — Axal will handle formation'
+                      : 'Formation status not answered'}
+                  </div>
+                  {profile.existing_jurisdiction && (
+                    <div className="text-xs text-gray-600 mt-1">Preferred jurisdiction: <span className="font-medium text-gray-900">{profile.existing_jurisdiction}</span></div>
+                  )}
+                  {profile.company_established === 0 && (
+                    <p className="text-xs text-amber-700 mt-2">This founder has not yet incorporated. The Axal 30-Day Spin-Out Engine will handle formation as part of their Closing Binder.</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -379,7 +444,15 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
               <label className="text-xs text-gray-700 font-medium block mb-1">Propose Closing Binder / Agreement</label>
               <select value={agreement} onChange={(e) => setAgreement(e.target.value)}
                 className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none">
-                {AGREEMENT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                {AGREEMENT_OPTIONS.map((opt, i) => (
+                  opt.group ? (
+                    <optgroup key={opt.group} label={opt.group}>
+                      {opt.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </optgroup>
+                  ) : (
+                    <option key={opt.value || `placeholder-${i}`} value={opt.value}>{opt.label}</option>
+                  )
+                ))}
               </select>
             </div>
             <div>
