@@ -20,25 +20,32 @@ async function checkRateLimit(env: Env, key: string, max: number, windowSec: num
   return true;
 }
 
-async function sendVerification(env: Env, email: string, name: string, userId: number): Promise<{ sent: boolean; verificationUrl: string }> {
+async function sendVerification(env: Env, email: string, name: string, userId: number): Promise<{ sent: boolean; verificationUrl: string; tokenStored: boolean }> {
   const rawToken = generateToken();
   const tokenHash = await hashToken(rawToken);
   const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-  const sql = getSQL(env);
-  await sql`UPDATE users SET verification_token = ${tokenHash}, verification_token_expires = ${expires} WHERE id = ${userId}`;
-  await sql.end();
-
   const verificationUrl = `${env.APP_URL}/verify-email?token=${rawToken}`;
+
+  let tokenStored = false;
+  try {
+    const sql = getSQL(env);
+    await sql`UPDATE users SET verification_token = ${tokenHash}, verification_token_expires = ${expires} WHERE id = ${userId}`;
+    await sql.end();
+    tokenStored = true;
+  } catch (e: any) {
+    console.error(`[AUTH] Failed to persist verification token for ${email}: ${e?.message || 'Unknown error'}`);
+    return { sent: false, verificationUrl, tokenStored: false };
+  }
+
   try {
     const sent = await sendVerificationEmail(env, email, name, verificationUrl);
     if (!sent) {
       console.warn(`[AUTH] Email delivery failed for ${email}. Check GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN secrets.`);
     }
-    return { sent, verificationUrl };
+    return { sent, verificationUrl, tokenStored };
   } catch (e: any) {
     console.error(`[AUTH] Email service error for ${email}: ${e?.message || 'Unknown error'}`);
-    return { sent: false, verificationUrl };
+    return { sent: false, verificationUrl, tokenStored };
   }
 }
 
@@ -64,10 +71,10 @@ auth.post('/register', async (c) => {
     }
     await sql`UPDATE users SET name = ${name}, role = ${role || 'partner'} WHERE id = ${user.id}`;
     await sql.end();
-    const { sent: emailSent, verificationUrl } = await sendVerification(c.env, email, name, user.id);
+    const { sent: emailSent, verificationUrl, tokenStored } = await sendVerification(c.env, email, name, user.id);
     return c.json({
       message: emailSent ? 'Verification email sent' : 'Account created but email delivery failed',
-      email, name, requires_verification: true, email_sent: emailSent, verification_url: !emailSent ? verificationUrl : undefined
+      email, name, requires_verification: true, email_sent: emailSent, verification_url: !emailSent && tokenStored ? verificationUrl : undefined
     });
   }
 
@@ -87,41 +94,64 @@ auth.post('/register', async (c) => {
     } catch (e) { console.error('attachReferral failed:', e); }
   }
 
-  const { sent: emailSent, verificationUrl } = await sendVerification(c.env, email, name, user.id);
+  const { sent: emailSent, verificationUrl, tokenStored } = await sendVerification(c.env, email, name, user.id);
   return c.json({
     message: emailSent ? 'Verification email sent' : 'Account created but email delivery failed',
-    email: user.email, name: user.name, requires_verification: true, email_sent: emailSent, verification_url: !emailSent ? verificationUrl : undefined
+    email: user.email, name: user.name, requires_verification: true, email_sent: emailSent, verification_url: !emailSent && tokenStored ? verificationUrl : undefined
   });
 });
 
 auth.post('/resend-verification', async (c) => {
-  const { email } = await c.req.json();
+  const { email } = await c.req.json().catch(() => ({} as any));
+  const genericMsg = 'If an account exists with that email, a verification link has been sent.';
+
+  if (!email || typeof email !== 'string') {
+    return c.json({ error: 'Email required' }, 400);
+  }
+
   const allowed = await checkRateLimit(c.env, `resend:${email.toLowerCase()}`, 3, 3600);
   if (!allowed) return c.json({ error: 'Maximum resend limit reached. Please try again in an hour.' }, 429);
 
-  const genericMsg = 'If an account exists with that email, a verification link has been sent.';
-  const sql = getSQL(c.env);
-  const users = await sql`SELECT * FROM users WHERE email = ${email}`;
+  let users: any[] = [];
+  try {
+    const sql = getSQL(c.env);
+    users = await sql`SELECT * FROM users WHERE email = ${email}`;
+    await sql.end();
+  } catch (e: any) {
+    console.error(`[AUTH] resend lookup failed for ${email}: ${e?.message || 'Unknown error'}`);
+    return c.json({ message: genericMsg, email_sent: false });
+  }
 
   if (users.length === 0) {
-    await sql.end();
-    return c.json({ message: genericMsg });
+    return c.json({ message: genericMsg, email_sent: false });
   }
 
   const user = users[0];
-  const hasIncompleteSetup = !user.email_verified || !user.password_hash;
 
-  if (hasIncompleteSetup) {
-    await sql`UPDATE users SET email_verified = false, password_hash = NULL WHERE id = ${user.id}`;
+  if (user.email_verified && user.password_hash) {
+    return c.json({ message: genericMsg, email_sent: false, already_verified: true });
   }
 
-  await sql.end();
+  if (!user.email_verified || !user.password_hash) {
+    try {
+      const sql = getSQL(c.env);
+      await sql`UPDATE users SET email_verified = false, password_hash = NULL WHERE id = ${user.id}`;
+      await sql.end();
+    } catch (e: any) {
+      console.error(`[AUTH] resend reset failed for ${email}: ${e?.message || 'Unknown error'}`);
+    }
+  }
 
   try {
-    const { sent, verificationUrl } = await sendVerification(c.env, email, user.name, user.id);
-    return c.json({ message: genericMsg, email_sent: sent, verification_url: !sent ? verificationUrl : undefined });
-  } catch {
-    return c.json({ message: genericMsg });
+    const { sent, verificationUrl, tokenStored } = await sendVerification(c.env, email, user.name, user.id);
+    return c.json({
+      message: genericMsg,
+      email_sent: sent,
+      verification_url: !sent && tokenStored ? verificationUrl : undefined,
+    });
+  } catch (e: any) {
+    console.error(`[AUTH] resend send failed for ${email}: ${e?.message || 'Unknown error'}`);
+    return c.json({ message: genericMsg, email_sent: false });
   }
 });
 
