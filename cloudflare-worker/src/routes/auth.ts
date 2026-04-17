@@ -45,6 +45,8 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
 auth.post('/register', async (c) => {
   const { email, name, role, turnstileToken, ref_code } = await c.req.json();
   if (!email || !name) return c.json({ error: 'Email and name required' }, 400);
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!emailRe.test(String(email).trim())) return c.json({ error: 'Please enter a valid email address' }, 400);
   if (role && !['founder', 'partner'].includes(role)) return c.json({ error: 'Invalid role' }, 400);
 
   const clientIp = c.req.header('cf-connecting-ip') || undefined;

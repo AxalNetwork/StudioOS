@@ -92,7 +92,9 @@ export default function RegisterPage() {
   }, [step]);
 
   const register = async () => {
-    if (!form.email || !form.name) { setError('Please fill in all fields'); return; }
+    if (!form.name.trim()) { setError('Please enter your full name'); return; }
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!form.email.trim() || !emailRe.test(form.email.trim())) { setError('Please enter a valid email address (e.g. you@example.com)'); return; }
     if (TURNSTILE_SITE_KEY && !turnstileToken) { setError('Please complete the verification challenge'); return; }
     setLoading(true);
     setError('');
