@@ -17,35 +17,43 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Code Repository"
+args = "Backend API"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
 
 [[workflows.workflow]]
-name = "Code Repository"
+name = "Backend API"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "echo 'This project runs on GitHub Pages (frontend) and Cloudflare Workers (backend). Replit is used as a code editor only.'"
+args = "cd /home/runner/workspace && python3 -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload"
+waitForPort = 8000
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd /home/runner/workspace/frontend && npm run dev"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [[ports]]
 localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 5001
-externalPort = 3001
-
-[[ports]]
 localPort = 8000
 externalPort = 8000
-
-[[ports]]
-localPort = 8787
-externalPort = 3002
-exposeLocalhost = true
 
 [[ports]]
 localPort = 8976
@@ -60,9 +68,7 @@ run = ["bash", "run-deploy.sh"]
 
 [userenv.shared]
 GOOGLE_REDIRECT_URI = "https://developers.google.com/oauthplayground"
-GITHUB_ACCESS_TOKEN = "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"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME = "StudioOS"
-JWT_SECRET = "bd669f5082856350de373085c288a9fe7b0284c8b24defe5d0b49b5a11191504"
 UV_PROJECT_ENVIRONMENT = "/home/runner/workspace/.venv"
 UV_SYSTEM_PYTHON = "0"
