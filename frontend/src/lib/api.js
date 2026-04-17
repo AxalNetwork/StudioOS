@@ -142,4 +142,15 @@ export const api = {
   privateSignals: () => request('/private-data/market/private-signals'),
   privatePortfolioMetrics: () => request('/private-data/portfolio/metrics'),
   privateFounderData: (userId) => request(`/private-data/founder/${userId}`),
+
+  referralCode: () => request('/network/referral/code'),
+  referralList: () => request('/network/referral/list'),
+  commissionsMe: () => request('/network/commissions/me'),
+  payoutsMe: () => request('/network/payouts/me'),
+  payoutRequest: (data) => request('/network/payout/request', { method: 'POST', body: JSON.stringify(data) }),
+  networkGraph: () => request('/network/graph'),
+  adminCommissions: () => request('/network/admin/commissions'),
+  adminCommissionRules: () => request('/network/admin/commission-rules'),
+  adminPayouts: () => request('/network/admin/payouts'),
+  adminProcessPayout: (id, data) => request(`/network/admin/payouts/${id}/process`, { method: 'PATCH', body: JSON.stringify(data) }),
 };

@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
-  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck
+  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network
 } from 'lucide-react';
 import { api } from './lib/api';
 import Dashboard from './pages/Dashboard';
@@ -28,6 +28,9 @@ import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import KYCPage from './pages/KYCPage';
+import ReferEarnPage from './pages/ReferEarnPage';
+import PayoutsPage from './pages/PayoutsPage';
+import NetworkPage from './pages/NetworkPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import RiskDisclosuresPage from './pages/RiskDisclosuresPage';
@@ -47,6 +50,9 @@ const ALL_NAV_ITEMS = [
   { to: '/tickets', icon: Ticket, label: 'Support', roles: ['admin', 'founder', 'partner'] },
   { to: '/activity', icon: Activity, label: 'Activity Log', roles: ['admin', 'founder', 'partner'] },
   { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification', roles: ['founder', 'partner'] },
+  { to: '/refer', icon: Share2, label: 'Refer & Earn', roles: ['admin', 'founder', 'partner'] },
+  { to: '/payouts', icon: Wallet, label: 'Payouts', roles: ['admin', 'founder', 'partner'] },
+  { to: '/network', icon: Network, label: 'Referral Network', roles: ['admin', 'founder', 'partner'] },
   { to: '/api-bridge', icon: Code, label: 'API Bridge', roles: ['admin'] },
   { to: '/founder', icon: Rocket, label: 'Founder Portal', roles: ['admin', 'founder'], divider: true },
   { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal', roles: ['admin', 'partner'] },
@@ -433,6 +439,9 @@ export default function App() {
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner'], <KYCPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
+      <Route path="/refer" element={guard(['admin', 'founder', 'partner'], <ReferEarnPage />)} />
+      <Route path="/payouts" element={guard(['admin', 'founder', 'partner'], <PayoutsPage />)} />
+      <Route path="/network" element={guard(['admin', 'founder', 'partner'], <NetworkPage />)} />
       <Route path="/partner-portal" element={guard(['admin', 'partner'], <PartnerPortal />)} />
 
       <Route path="/terms" element={<TermsPage />} />

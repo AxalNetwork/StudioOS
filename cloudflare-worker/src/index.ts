@@ -20,6 +20,7 @@ import advisory from './routes/advisory';
 import privateData from './routes/private-data';
 import profiling from './routes/profiling';
 import kyc from './routes/kyc';
+import network from './routes/network';
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
@@ -61,6 +62,8 @@ const KYC_EXEMPT_PREFIXES = [
   '/api/dashboard/stats',
   '/api/legal/templates',
   '/api/debug/',
+  '/api/network/referral/code',
+  '/api/network/graph',
 ];
 
 app.use('/api/*', async (c, next) => {
@@ -185,5 +188,6 @@ app.route('/api/advisory', advisory);
 app.route('/api/private-data', privateData);
 app.route('/api/profiling', profiling);
 app.route('/api/kyc', kyc);
+app.route('/api/network', network);
 
 export default app;

@@ -43,7 +43,7 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
 }
 
 auth.post('/register', async (c) => {
-  const { email, name, role, turnstileToken } = await c.req.json();
+  const { email, name, role, turnstileToken, ref_code } = await c.req.json();
   if (!email || !name) return c.json({ error: 'Email and name required' }, 400);
   if (role && !['founder', 'partner'].includes(role)) return c.json({ error: 'Invalid role' }, 400);
 
@@ -72,6 +72,18 @@ auth.post('/register', async (c) => {
   const [user] = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${name}, ${role || 'partner'}, false) RETURNING *`;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`User ${name} (${email}) registered as ${role || 'partner'} — pending email verification`}, ${email}, ${user.id})`;
   await sql.end();
+
+  if (ref_code) {
+    try {
+      const { attachReferral } = await import('./network');
+      const linked = await attachReferral(c.env, user.id, String(ref_code).toUpperCase());
+      if (linked) {
+        const sql2 = getSQL(c.env);
+        await sql2`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('referral_attached', ${`Joined via referral code ${ref_code}`}, ${email}, ${user.id})`;
+        await sql2.end();
+      }
+    } catch (e) { console.error('attachReferral failed:', e); }
+  }
 
   const emailSent = await sendVerification(c.env, email, name, user.id);
   return c.json({

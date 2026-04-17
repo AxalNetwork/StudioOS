@@ -17,6 +17,13 @@ export default function RegisterPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [turnstileToken, setTurnstileToken] = useState('');
   const [emailWarning, setEmailWarning] = useState(false);
+  const [refCode, setRefCode] = useState('');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const r = params.get('ref');
+    if (r) setRefCode(r.toUpperCase());
+  }, []);
 
   // Chatbot state (step 2)
   const [chatMessages, setChatMessages] = useState([
@@ -90,7 +97,7 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.register({ ...form, turnstileToken });
+      const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined });
       setEmailWarning(res?.email_sent === false);
       setStep(2);
     } catch (e) {
@@ -199,6 +206,12 @@ export default function RegisterPage() {
             <>
               <h2 className="text-xl font-bold text-gray-900 mb-1">Create Your Account</h2>
               <p className="text-sm text-gray-600 mb-6">Join the Axal partner network. We use TOTP for secure, passwordless authentication.</p>
+
+              {refCode && (
+                <div className="bg-violet-50 border border-violet-300 rounded-lg px-3 py-2 mb-4 text-xs text-violet-700">
+                  Joining via referral code <span className="font-mono font-bold">{refCode}</span>
+                </div>
+              )}
 
               {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{error}</div>}
 

@@ -228,6 +228,13 @@ kyc.patch('/admin/:userId/approve', async (c) => {
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_approved_by_admin', ${`Admin ${adminUser.name} approved KYC for ${target.name} (${target.email})`}, ${adminUser.email}, ${adminUser.id})`;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_approved', ${`Your KYC verification was approved by Axal compliance.`}, ${target.email}, ${target.id})`;
   await sql.end();
+
+  // Fire commission event for the referrer (if any)
+  try {
+    const { fireCommissionEvent } = await import('./network');
+    await fireCommissionEvent(c.env, userId, 'referral_kyc_approved', `kyc:${userId}`);
+  } catch (e) { console.error('fireCommissionEvent failed:', e); }
+
   return c.json({ kyc_status: 'approved', user_id: userId });
 });
 
