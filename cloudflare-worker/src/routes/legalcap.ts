@@ -907,6 +907,15 @@ legalcap.post('/spinout/go-independent', async (c) => {
   await logSpinoutEvent(c.env, sub.id, 'independent_scale', { dashboard_url: dashUrl }, user.id);
   await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'spinout', entityId: sub.id, metadata: { step: 'independent', deal_id: dealId } });
 
+  // Event-driven: enqueue downstream work asynchronously so this endpoint stays fast.
+  try {
+    const { Jobs } = await import('../models/jobs');
+    await Jobs.enqueue(c.env, 'metrics_aggregation', { trigger: 'spinout_independent', subsidiary_id: sub.id });
+    await Jobs.enqueue(c.env, 'traction_review', { project_id: dealId });
+  } catch (e) {
+    console.error('post-independent enqueue failed', e);
+  }
+
   return c.json({ ok: true, spinout_status: 'independent', independent_scaling_enabled: true, dashboard_url: dashUrl });
 });
 

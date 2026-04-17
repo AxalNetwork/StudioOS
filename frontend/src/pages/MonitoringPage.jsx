@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import InfrastructureTab from './InfrastructureTab';
 import { Activity, AlertTriangle, RefreshCw, Sparkles, ShieldAlert, Zap, Server, Clock, TrendingUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from 'recharts';
 import { api } from '../lib/api';
@@ -82,6 +83,7 @@ export default function MonitoringPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState('');
   const [window, setWindow] = useState(60);
+  const [tab, setTab] = useState('overview');
 
   const loadAll = async (minutes = window) => {
     setRefreshing(true);
@@ -165,6 +167,28 @@ export default function MonitoringPage() {
         </div>
       )}
 
+      {/* Tab nav */}
+      <div className="border-b border-gray-200 flex gap-1">
+        {[
+          { id: 'overview', label: 'Overview' },
+          { id: 'infra', label: 'Infrastructure' },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === t.id
+                ? 'border-violet-600 text-violet-700'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'infra' ? <InfrastructureTab /> : (
+      <>
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard icon={Server} label="Total Requests" value={(s.total_requests || 0).toLocaleString()} sub={`Window: ${metrics?.window_minutes}m`} accent="violet" />
@@ -299,6 +323,8 @@ export default function MonitoringPage() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

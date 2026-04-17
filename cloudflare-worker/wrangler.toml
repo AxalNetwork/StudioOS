@@ -31,3 +31,9 @@ binding = "AI"
 APP_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME = "StudioOS"
+
+# ---------- Cron Triggers ----------
+# Drain the async job queue every minute. Cleanup runs at 03:00 UTC daily
+# inside the same handler.
+[triggers]
+crons = ["* * * * *"]

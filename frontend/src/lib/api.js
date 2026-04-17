@@ -248,4 +248,23 @@ export const api = {
   monitoringAnomalies: () => request('/monitoring/anomalies'),
   monitoringThroughput: () => request('/monitoring/throughput'),
   monitoringCleanup: () => request('/monitoring/cleanup', { method: 'POST' }),
+
+  // ---------- Infrastructure (admin) ----------
+  infraQueue: () => request('/infra/queue'),
+  infraMetrics: (minutes = 60) => request(`/infra/metrics?minutes=${minutes}`),
+  infraProcess: (batch = 10) => request(`/infra/process?batch=${batch}`, { method: 'POST' }),
+  infraEnqueue: (job_type, payload, max_retries) =>
+    request('/infra/enqueue', { method: 'POST', body: JSON.stringify({ job_type, payload, max_retries }) }),
+  infraDLQ: () => request('/infra/dlq'),
+  infraCleanup: () => request('/infra/cleanup', { method: 'POST' }),
+
+  // ---------- Funds & LPs ----------
+  fundsList: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
+  fundGet: (id) => request(`/funds/${id}`),
+  fundCreate: (data) => request('/funds', { method: 'POST', body: JSON.stringify(data) }),
+  fundUpdate: (id, data) => request(`/funds/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  fundLPs: (id) => request(`/funds/${id}/lps`),
+  fundAddLP: (id, data) => request(`/funds/${id}/lps`, { method: 'POST', body: JSON.stringify(data) }),
+  fundCapitalCall: (id, amount, note) =>
+    request(`/funds/${id}/capital-call`, { method: 'POST', body: JSON.stringify({ amount, note }) }),
 };

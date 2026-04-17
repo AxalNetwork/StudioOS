@@ -29,8 +29,12 @@ import pipeline from './routes/pipeline';
 import partnernet from './routes/partnernet';
 import legalcap from './routes/legalcap';
 import monitoring from './routes/monitoring';
+import infra from './routes/infra';
+import funds from './routes/funds';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
+import { processQueueBatch } from './services/queueWorker';
+import { Jobs } from './models/jobs';
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
@@ -214,5 +218,56 @@ app.route('/api/pipeline', pipeline);
 app.route('/api/partnernet', partnernet);
 app.route('/api/legalcap', legalcap);
 app.route('/api/monitoring', monitoring);
+app.route('/api/infra', infra);
+app.route('/api/funds', funds);
 
-export default app;
+// Cloudflare cron + fetch entry point.
+// Cron drains the job queue every minute (configured in wrangler.toml).
+//
+// Operational hardening:
+//  - KV-based lease so overlapping cron runs (slow drain >60s) don't both pull jobs.
+//  - Per-run AI-call budget enforced inside processQueueBatch via env hint.
+//  - Errors re-thrown so the Workers platform records cron failures.
+export default {
+  fetch: app.fetch.bind(app),
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    const work = (async () => {
+      // Acquire a 90s lease — longer than the cron interval so an in-progress
+      // drain blocks the next tick.
+      const LEASE_KEY = 'cron:queue:lease';
+      const leaseHolder = crypto.randomUUID();
+      try {
+        const existing = await env.RATE_LIMITS.get(LEASE_KEY);
+        if (existing) {
+          console.log('[cron] drain skipped — lease held');
+          return;
+        }
+        await env.RATE_LIMITS.put(LEASE_KEY, leaseHolder, { expirationTtl: 90 });
+      } catch (e) {
+        console.error('[cron] lease acquire failed', e);
+      }
+
+      try {
+        const r = await processQueueBatch(env, 25);
+        if (r.processed || r.failed) {
+          console.log(`[cron] drain processed=${r.processed} failed=${r.failed}`);
+        }
+        const now = new Date();
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
+          await Jobs.cleanup(env);
+        }
+      } finally {
+        // Best-effort lease release.
+        try {
+          const cur = await env.RATE_LIMITS.get(LEASE_KEY);
+          if (cur === leaseHolder) await env.RATE_LIMITS.delete(LEASE_KEY);
+        } catch {}
+      }
+    })();
+
+    // Surface failures to the Workers platform (better observability) AND keep
+    // the work alive past the response.
+    ctx.waitUntil(work);
+    await work;
+  },
+};
