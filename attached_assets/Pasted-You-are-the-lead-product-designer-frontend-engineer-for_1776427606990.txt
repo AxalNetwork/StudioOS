@@ -1,0 +1,111 @@
+You are the lead product designer + frontend engineer for Axal StudioOS. We have the full production platform already built in this Replit (Partner Dashboard, Pipeline Board, VC Fund / LP Portal, Liquidity & Exits, Studio Ops, spin-out automation, Legal/Capital Engine, AI matching, network effects, integrations, monitoring, etc.).
+
+The current frontend/ folder and index.html are still the old static marketing skeleton.
+
+Rebrand and rebuild the entire front page (index.html + any supporting files in frontend/) to exactly match the live https://axal.vc homepage while showcasing the complete platform we built. Use these exact requirements:
+
+1. **Branding & Layout**
+
+   - Use existing Axal logos (axal-logo.png, axal-mark.png) and color scheme (keep the same).
+
+   - Modern, clean, high-conversion single-page layout (hero → metrics → pipeline → engines → partner network → CTA).
+
+   - Fully responsive, mobile-first, with smooth scroll and subtle animations (CSS/JS only — no external libraries).
+
+2. **Hero Section** (exact match to axal.vc)
+
+   - Headline: “Axal VC — StudioOS”
+
+   - Subheadline: “The 30-Day Spin-Out Engine”
+
+   - Tagline: “From Idea to Funded Company in 30 Days. The operating system for venture creation.”
+
+   - Prominent CTAs:
+
+     - “Become a Partner” (links to /partner or onboarding flow)
+
+     - “Login to Partner Dashboard” (links to the real dynamic dashboard we built)
+
+     - “Watch the 4-Week Pipeline” (scrolls to pipeline section)
+
+3. **Metrics Bar**
+
+   - 30 Days to Launch
+
+   - 100-Point AI Scoring
+
+   - 88% Match Rate
+
+   - 11 Days to Incorporation
+
+4. **4-Week Pipeline Section**
+
+   - Visual timeline / cards exactly as on axal.vc:
+
+     - Week 1: Validate & Score (AI + partner matching)
+
+     - Week 2: Build & Form (MVP + auto-incorporation)
+
+     - Week 3: Deal Flow (proposals + diligence)
+
+     - Week 4: Capital & Launch (capital calls + funding)
+
+   - Add subtle “Live in Replit” badge or “Try the Pipeline” button linking to /pipeline.html
+
+5. **StudioOS Engines**
+
+   - Showcase the 7 engines with icons/descriptions (pull from axal.vc):
+
+     - Market Intelligence Engine
+
+     - Scoring Engine
+
+     - AI Advisory Engine
+
+     - Legal Engine
+
+     - Partner Matchmaking Engine
+
+     - Capital Engine
+
+     - (Orchestration / Spin-Out Engine)
+
+   - Make each card clickable — link to relevant dynamic pages (e.g. Capital Engine → /vc-fund.html)
+
+6. **Global Partner Network**
+
+   - Exact copy of axal.vc section: AI-matched partners, compounding referrals, syndication, etc.
+
+   - Add “Access the Full Partner Dashboard” teaser with screenshot or live preview of the dashboard we built.
+
+7. **Footer & Navigation**
+
+   - Update nav and footer with new links: Home, Pipeline, Dashboard, VC Fund, Liquidity, Become a Partner, Docs.
+
+   - Include GitHub link and “Built with Replit + Cloudflare” credit.
+
+8. **Technical Requirements**
+
+   - Keep everything static HTML/JS/CSS (compatible with existing Cloudflare Pages deployment).
+
+   - Use existing component system (headers, nav, footers) where possible — extend them.
+
+   - Make the page load fast (optimize images, minify JS).
+
+   - Add meta tags for SEO: title “Axal VC — StudioOS | 30-Day Spin-Out Engine”, description matching axal.vc.
+
+   - Ensure seamless integration with the backend (Replit Auth login button works).
+
+Build this step-by-step:
+
+1. First rebuild index.html with the new hero, metrics, and navigation.
+
+2. Then add the Pipeline and Engines sections.
+
+3. Then add Partner Network and CTAs.
+
+4. Finally polish footer, SEO, and responsiveness.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
