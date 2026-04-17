@@ -26,6 +26,7 @@ import studioops from './routes/studioops';
 import networkfx from './routes/networkfx';
 import dashboard from './routes/dashboard';
 import pipeline from './routes/pipeline';
+import partnernet from './routes/partnernet';
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
@@ -199,5 +200,6 @@ app.route('/api/studioops', studioops);
 app.route('/api/networkfx', networkfx);
 app.route('/api/dashboard', dashboard);
 app.route('/api/pipeline', pipeline);
+app.route('/api/partnernet', partnernet);
 
 export default app;

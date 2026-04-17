@@ -35,6 +35,7 @@ import MatchesPage from './pages/MatchesPage';
 import StudioOpsPage from './pages/StudioOpsPage';
 import NetworkEffectsPage from './pages/NetworkEffectsPage';
 import PipelinePage from './pages/PipelinePage';
+import RelationshipsPage from './pages/RelationshipsPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import RiskDisclosuresPage from './pages/RiskDisclosuresPage';
@@ -61,6 +62,7 @@ const ALL_NAV_ITEMS = [
   { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops', roles: ['admin', 'founder', 'partner'] },
   { to: '/network-effects', icon: TrendingUp, label: 'Network Effects', roles: ['admin', 'founder', 'partner'] },
   { to: '/pipeline', icon: Layers, label: 'Pipeline Board', roles: ['admin', 'founder', 'partner'] },
+  { to: '/relationships', icon: Handshake, label: 'Relationships', roles: ['admin', 'founder', 'partner'] },
   { to: '/api-bridge', icon: Code, label: 'API Bridge', roles: ['admin'] },
   { to: '/founder', icon: Rocket, label: 'Founder Portal', roles: ['admin', 'founder'], divider: true },
   { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal', roles: ['admin', 'partner'] },
@@ -454,6 +456,7 @@ export default function App() {
       <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner'], <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner'], <NetworkEffectsPage />)} />
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner'], <PipelinePage />)} />
+      <Route path="/relationships" element={guard(['admin', 'founder', 'partner'], <RelationshipsPage />)} />
       <Route path="/partner-portal" element={guard(['admin', 'partner'], <PartnerPortal />)} />
 
       <Route path="/terms" element={<TermsPage />} />
