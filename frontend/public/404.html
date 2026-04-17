@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Axal VC — StudioOS</title>
+  <script>
+    // GitHub Pages SPA redirect
+    // When a non-root path is loaded (e.g. /dashboard), GitHub Pages 404s.
+    // This encodes the path+search+hash into the query string and redirects to /?p=...
+    // index.html then decodes it and uses history.replaceState to restore the route
+    // before React Router initialises.
+    var l = window.location;
+    var origin = l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '');
+    var path = l.pathname.slice(1);          // strip leading /
+    var search = l.search ? '~and~' + l.search.slice(1) : '';
+    var hash = l.hash ? '#' + l.hash.slice(1) : '';
+    if (path !== '') {
+      l.replace(
+        origin + '/?p=' + encodeURIComponent('/' + path + search) + hash
+      );
+    }
+  </script>
+</head>
+<body></body>
+</html>

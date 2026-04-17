@@ -10,6 +10,17 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <script>
+    // GitHub Pages SPA — restore path encoded by 404.html
+    (function() {
+      var q = window.location.search;
+      if (q && q.indexOf('?p=') === 0) {
+        var decoded = decodeURIComponent(q.slice(3)).replace('~and~', '?');
+        var hash = window.location.hash || '';
+        window.history.replaceState(null, null, decoded + hash);
+      }
+    })();
+  </script>
 </head>
 <body class="bg-gray-950 text-gray-100">
   <div id="root"></div>
