@@ -1,5 +1,25 @@
 # Axal VC — StudioOS v1.0
 
+## VC Fund / Investment Entity core (Apr 2026)
+- Tables: `vc_funds` (+ `lpa_doc_id`, `fund_size_cents`, `carried_interest`, `management_fee`),
+  `limited_partners` (+ `lpa_signed`, `lpa_signed_at`, `commitment_date`, `distribution_history`),
+  `legal_documents` (+ `fund_id`), new `fund_distributions` (cents).
+- Migration: `cloudflare-worker/sql/funds_v2.sql`. AI worker: `ai-workers/lpa.ts` (Llama 3.1 8B + deterministic fallback).
+- Job types: `lpa_generation`, `capital_call_notice`, `returns_distribution` (in `services/queueWorker.ts`).
+- Routes (`/api/funds`): admin CRUD, `POST /` auto-enqueues LPA, `POST /:id/regenerate-lpa`,
+  `GET /:id/lpa`, `GET /lp-portal` (LP-only), `GET /syndication`, `POST /:id/capital-call`
+  enqueues notices, `POST /lps/:lpId/sign-lpa`, `GET /distributions?fund_id=`,
+  `POST /distributions/execute` (admin), `POST /distributions/:id/mark-paid`.
+- Liquidity `/execute-exit` records the event and returns a `distribution_hint`; the operator
+  must call `POST /api/funds/distributions/execute` with an explicit `fund_id` (auto fan-out is
+  refused to prevent cross-fund LP ledger corruption).
+- Idempotency: unique index `(source_liquidity_event_id, fund_id, lp_id)` + `INSERT OR IGNORE`
+  so retried jobs cannot double-pay; `mark-paid` is atomic via conditional batch.
+- `capital_call_notice` job sends pro-rata notices AND bumps `vc_funds.deployed_capital`
+  (preserves legacy financial invariant when `/funds/:id/capital-call` is used).
+- Frontend: `pages/FundsPage.jsx` mounted at `/funds` (admin: fund ops + LPA viewer + capital call
+  + distribute + mark-paid; LP: portfolio + TVPI/DPI charts + sign LPA + view distributions).
+
 ## Overview
 A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day startup spin-out model. Built for Axal VC to automate the venture creation pipeline from intake to spinout.
 

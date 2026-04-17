@@ -278,4 +278,25 @@ export const api = {
     request('/liquidity/execute-exit', { method: 'POST', body: JSON.stringify(data) }),
   liquidityMyPortfolio: () => request('/liquidity/my-portfolio'),
   liquidityEvents: () => request('/liquidity/events'),
+
+  // ---------- VC Funds / LP Portal / Distributions ----------
+  fundsList: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
+  fundsGet: (id) => request(`/funds/${id}`),
+  fundsCreateV2: (data) => request('/funds', { method: 'POST', body: JSON.stringify(data) }),
+  fundsRegenerateLpa: (id) => request(`/funds/${id}/regenerate-lpa`, { method: 'POST' }),
+  fundsLpa: (id) => request(`/funds/${id}/lpa`),
+  fundsCapitalCallV2: (id, amount_cents, note) =>
+    request(`/funds/${id}/capital-call`, { method: 'POST', body: JSON.stringify({ amount_cents, note }) }),
+  fundsLpsList: (id) => request(`/funds/${id}/lps`),
+  fundsAddLpV2: (id, data) =>
+    request(`/funds/${id}/lps`, { method: 'POST', body: JSON.stringify(data) }),
+  fundsSignLpa: (lpId) =>
+    request(`/funds/lps/${lpId}/sign-lpa`, { method: 'POST', body: JSON.stringify({}) }),
+  fundsLpPortal: () => request('/funds/lp-portal'),
+  fundsSyndication: () => request('/funds/syndication'),
+  fundsDistributions: (fund_id) => request(`/funds/distributions?fund_id=${fund_id}`),
+  fundsExecuteDistribution: (data) =>
+    request('/funds/distributions/execute', { method: 'POST', body: JSON.stringify(data) }),
+  fundsMarkDistributionPaid: (id) =>
+    request(`/funds/distributions/${id}/mark-paid`, { method: 'POST', body: JSON.stringify({}) }),
 };

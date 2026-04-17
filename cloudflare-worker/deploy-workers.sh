@@ -18,6 +18,12 @@ else
   echo "    activity_logs columns already applied — skipping."
 fi
 
+echo "==> Applying liquidity schema (one-shot; safe to fail on re-run)…"
+npx wrangler d1 execute studioos-db --file=sql/liquidity.sql --remote || true
+
+echo "==> Applying VC fund v2 schema (one-shot; ALTERs fail noisily on re-run)…"
+npx wrangler d1 execute studioos-db --file=sql/funds_v2.sql --remote || true
+
 echo "==> Deploying worker to edge…"
 npx wrangler deploy
 

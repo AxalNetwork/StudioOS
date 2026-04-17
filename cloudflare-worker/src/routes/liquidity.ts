@@ -191,7 +191,19 @@ liquidity.post('/execute-exit', async (c) => {
     metadata: { price_cents: priceCents, buyer_user_id: body.buyer_user_id },
   }).catch(() => {});
 
-  return c.json({ ok: true, event: evt, listing_id: body.listing_id });
+  // Returns distribution is intentionally NOT auto-enqueued here. Distributing
+  // across unrelated funds is dangerous; an operator must call
+  // POST /api/funds/distributions/execute with an explicit fund_id (using
+  // event.id below as liquidity_event_id) so the right LP ledgers are credited.
+  return c.json({
+    ok: true,
+    event: evt,
+    listing_id: body.listing_id,
+    distribution_hint: {
+      action: 'POST /api/funds/distributions/execute',
+      payload: { fund_id: '<required>', liquidity_event_id: evt?.id, proceeds_cents: priceCents },
+    },
+  });
 });
 
 // GET /api/liquidity/my-portfolio

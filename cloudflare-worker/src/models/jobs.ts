@@ -15,7 +15,10 @@ export type JobType =
   | 'pipeline_advance'
   | 'traction_review'
   | 'liquidity_valuation'
-  | 'liquidity_matching';
+  | 'liquidity_matching'
+  | 'lpa_generation'
+  | 'capital_call_notice'
+  | 'returns_distribution';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
