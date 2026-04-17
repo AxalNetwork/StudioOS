@@ -125,6 +125,12 @@ export const api = {
   adminUpdateRole: (userId, role) => request(`/admin/users/${userId}/role?role=${role}`, { method: 'PATCH' }),
   adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),
 
+  profilingChat: (data) => request('/profiling/chat', { method: 'POST', body: JSON.stringify(data) }),
+  profilingSave: (data) => request('/profiling/save', { method: 'POST', body: JSON.stringify(data) }),
+  adminListProfiles: () => request('/profiling/admin/list'),
+  adminGetProfile: (email) => request(`/profiling/admin/${encodeURIComponent(email)}`),
+  adminVerifyProfile: (email, data) => request(`/profiling/admin/${encodeURIComponent(email)}/verify`, { method: 'POST', body: JSON.stringify(data) }),
+
   privateProfile: () => request('/private-data/profile'),
   privateSignals: () => request('/private-data/market/private-signals'),
   privatePortfolioMetrics: () => request('/private-data/portfolio/metrics'),

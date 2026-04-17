@@ -18,6 +18,7 @@ import activity from './routes/activity';
 import marketIntel from './routes/market-intel';
 import advisory from './routes/advisory';
 import privateData from './routes/private-data';
+import profiling from './routes/profiling';
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
@@ -155,5 +156,6 @@ app.route('/api/activity', activity);
 app.route('/api/market-intel', marketIntel);
 app.route('/api/advisory', advisory);
 app.route('/api/private-data', privateData);
+app.route('/api/profiling', profiling);
 
 export default app;

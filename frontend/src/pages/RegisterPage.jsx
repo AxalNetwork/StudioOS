@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Shield, Smartphone, Copy, Check, ChevronDown, Mail, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Shield, Smartphone, Copy, Check, Mail, RefreshCw, Send, Sparkles } from 'lucide-react';
 import QRCode from 'qrcode';
 import { api } from '../lib/api';
 
@@ -8,7 +8,7 @@ const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
 export default function RegisterPage() {
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ email: '', name: '', role: 'partner' });
+  const [form, setForm] = useState({ email: '', name: '' });
   const [totpData, setTotpData] = useState(null);
   const [verifyCode, setVerifyCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,6 +17,16 @@ export default function RegisterPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [turnstileToken, setTurnstileToken] = useState('');
   const [emailWarning, setEmailWarning] = useState(false);
+
+  // Chatbot state (step 2)
+  const [chatMessages, setChatMessages] = useState([
+    { role: 'assistant', content: "Welcome to Axal VC. I'm here to understand how you'd like to engage with our 30-Day Spin-Out Engine. Are you joining as an Investor (LP / Syndicate / Co-Investor), a Founder, an Operator/Advisor, a Legal or Technical Partner, or a Liquidity Provider?" },
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+  const chatScrollRef = useRef(null);
+
   const canvasRef = useRef(null);
   const turnstileRef = useRef(null);
   const turnstileWidgetId = useRef(null);
@@ -24,9 +34,7 @@ export default function RegisterPage() {
   useEffect(() => {
     if (totpData?.provisioning_uri && canvasRef.current) {
       QRCode.toCanvas(canvasRef.current, totpData.provisioning_uri, {
-        width: 200,
-        margin: 2,
-        color: { dark: '#000000', light: '#ffffff' },
+        width: 200, margin: 2, color: { dark: '#000000', light: '#ffffff' },
       });
     }
   }, [totpData]);
@@ -38,7 +46,13 @@ export default function RegisterPage() {
   }, [resendCooldown]);
 
   useEffect(() => {
-    if (!TURNSTILE_SITE_KEY || !turnstileRef.current) return;
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, chatLoading]);
+
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !turnstileRef.current || step !== 1) return;
     if (typeof window.turnstile === 'undefined') {
       const interval = setInterval(() => {
         if (typeof window.turnstile !== 'undefined' && turnstileRef.current) {
@@ -52,7 +66,7 @@ export default function RegisterPage() {
 
     function renderTurnstile() {
       if (turnstileWidgetId.current !== null) {
-        window.turnstile.remove(turnstileWidgetId.current);
+        try { window.turnstile.remove(turnstileWidgetId.current); } catch {}
       }
       turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
         sitekey: TURNSTILE_SITE_KEY,
@@ -71,26 +85,55 @@ export default function RegisterPage() {
   }, [step]);
 
   const register = async () => {
-    if (!form.email || !form.name) {
-      setError('Please fill in all fields');
-      return;
+    if (!form.email || !form.name) { setError('Please fill in all fields'); return; }
+    if (TURNSTILE_SITE_KEY && !turnstileToken) { setError('Please complete the verification challenge'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.register({ ...form, turnstileToken });
+      setEmailWarning(res?.email_sent === false);
+      setStep(2);
+    } catch (e) {
+      setError(e.message);
+      if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
+        try { window.turnstile.reset(turnstileWidgetId.current); } catch {}
+        setTurnstileToken('');
+      }
     }
-    if (TURNSTILE_SITE_KEY && !turnstileToken) {
-      setError('Please complete the verification challenge');
+    setLoading(false);
+  };
+
+  const sendChat = async () => {
+    const text = chatInput.trim();
+    if (!text || chatLoading) return;
+    const newMessages = [...chatMessages, { role: 'user', content: text }];
+    setChatMessages(newMessages);
+    setChatInput('');
+    setChatLoading(true);
+    setError('');
+    try {
+      const res = await api.profilingChat({ email: form.email, messages: newMessages });
+      setChatMessages([...newMessages, { role: 'assistant', content: res.reply }]);
+    } catch (e) {
+      setError(e.message);
+      setChatMessages([...newMessages, { role: 'assistant', content: "I had trouble responding. Please try again, or click 'Save profile & continue' when ready." }]);
+    }
+    setChatLoading(false);
+  };
+
+  const finishProfiling = async () => {
+    if (chatMessages.filter(m => m.role === 'user').length < 1) {
+      setError('Please answer at least one question before continuing.');
       return;
     }
     setLoading(true);
     setError('');
     try {
-      const res = await api.register({ ...form, turnstileToken });
-      setEmailWarning(res.email_sent === false);
-      setStep(2);
+      await api.profilingSave({ email: form.email, messages: chatMessages });
+      setProfileSaved(true);
+      setStep(3);
     } catch (e) {
       setError(e.message);
-      if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
-        window.turnstile.reset(turnstileWidgetId.current);
-        setTurnstileToken('');
-      }
     }
     setLoading(false);
   };
@@ -102,17 +145,12 @@ export default function RegisterPage() {
     try {
       await api.resendVerification({ email: form.email });
       setResendCooldown(60);
-    } catch (e) {
-      setError(e.message);
-    }
+    } catch (e) { setError(e.message); }
     setLoading(false);
   };
 
   const verify = async () => {
-    if (!verifyCode || verifyCode.length !== 6) {
-      setError('Please enter a 6-digit code');
-      return;
-    }
+    if (!verifyCode || verifyCode.length !== 6) { setError('Please enter a 6-digit code'); return; }
     setLoading(true);
     setError('');
     try {
@@ -125,9 +163,7 @@ export default function RegisterPage() {
       } else {
         setError('Invalid code. Make sure your authenticator app is synced correctly.');
       }
-    } catch (e) {
-      setError(e.message);
-    }
+    } catch (e) { setError(e.message); }
     setLoading(false);
   };
 
@@ -140,7 +176,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-4">
+    <div className="min-h-screen bg-white flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
         <Link to="/" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-8">
           <ArrowLeft size={14} /> Back to Axal VC
@@ -152,10 +188,11 @@ export default function RegisterPage() {
             <span style={{fontFamily:"'Space Grotesk', sans-serif"}} className="text-lg font-bold text-gray-900">Axal VC</span>
           </div>
 
+          {/* 4-step progress bar */}
           <div className="flex gap-2 mb-6">
-            <div className={`flex-1 h-1 rounded-full ${step >= 1 ? 'bg-violet-600' : 'bg-gray-300'}`} />
-            <div className={`flex-1 h-1 rounded-full ${step >= 2 ? 'bg-violet-600' : 'bg-gray-300'}`} />
-            <div className={`flex-1 h-1 rounded-full ${step >= 3 ? 'bg-violet-600' : 'bg-gray-300'}`} />
+            {[1, 2, 3, 4].map(n => (
+              <div key={n} className={`flex-1 h-1 rounded-full ${step >= n ? 'bg-violet-600' : 'bg-gray-300'}`} />
+            ))}
           </div>
 
           {step === 1 && (
@@ -178,17 +215,6 @@ export default function RegisterPage() {
                     placeholder="john@company.com"
                     className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-900 placeholder-gray-500 focus:border-violet-500 focus:outline-none" />
                 </div>
-                <div>
-                  <label className="text-xs text-gray-600 block mb-1 font-medium">Role</label>
-                  <div className="relative">
-                    <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-900 appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400">
-                      <option value="partner">Partner / Investor</option>
-                      <option value="founder">Founder</option>
-                    </select>
-                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                  </div>
-                </div>
                 {TURNSTILE_SITE_KEY && (
                   <div ref={turnstileRef} className="flex justify-center" />
                 )}
@@ -206,16 +232,82 @@ export default function RegisterPage() {
 
           {step === 2 && (
             <>
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles size={18} className="text-violet-600" />
+                <h2 className="text-xl font-bold text-gray-900">Tell us about yourself</h2>
+              </div>
+              <p className="text-sm text-gray-600 mb-4">Our AI assistant will profile your interest so an Axal admin can propose the right partnership agreement.</p>
+
+              {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">{error}</div>}
+
+              <div ref={chatScrollRef} className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3 h-72 overflow-y-auto space-y-2">
+                {chatMessages.map((m, i) => (
+                  <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] text-xs px-3 py-2 rounded-lg whitespace-pre-wrap leading-relaxed ${
+                      m.role === 'user'
+                        ? 'bg-violet-600 text-white rounded-br-sm'
+                        : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm'
+                    }`}>{m.content}</div>
+                  </div>
+                ))}
+                {chatLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-white border border-gray-200 text-gray-500 text-xs px-3 py-2 rounded-lg rounded-bl-sm">
+                      <span className="inline-flex gap-1">
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '120ms' }} />
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '240ms' }} />
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+                  placeholder="Type your reply..."
+                  disabled={chatLoading}
+                  className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-500 focus:border-violet-500 focus:outline-none disabled:opacity-50"
+                />
+                <button onClick={sendChat} disabled={chatLoading || !chatInput.trim()}
+                  className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg px-3 text-white transition-colors">
+                  <Send size={14} />
+                </button>
+              </div>
+
+              <button onClick={finishProfiling} disabled={loading || chatLoading}
+                className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white transition-colors">
+                {loading ? 'Saving profile...' : 'Save profile & continue'}
+              </button>
+              <p className="text-[11px] text-gray-500 text-center mt-2">An admin will review your profile and propose a Closing Binder.</p>
+            </>
+          )}
+
+          {step === 3 && (
+            <>
               <div className="flex items-center justify-center w-16 h-16 bg-violet-100 rounded-full mx-auto mb-6">
                 <Mail size={28} className="text-violet-600" />
               </div>
               <h2 className="text-xl font-bold text-gray-900 mb-1 text-center">Check Your Email</h2>
               <p className="text-sm text-gray-600 mb-6 text-center">
-                {emailWarning ? 'We had trouble sending the verification link to' : 'We\'ve sent a verification link to'}
+                {emailWarning ? 'We had trouble sending the verification link to' : "We've sent a verification link to"}
               </p>
               <div className="bg-gray-50 rounded-lg px-4 py-3 mb-6 text-center">
                 <span className="text-sm font-medium text-gray-900">{form.email}</span>
               </div>
+
+              {profileSaved && (
+                <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-300 rounded-lg p-3 mb-4">
+                  <Check size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-emerald-700">
+                    Profile captured. An Axal admin will review it and propose your partnership agreement once your email is verified.
+                  </p>
+                </div>
+              )}
 
               {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{error}</div>}
 
@@ -223,7 +315,7 @@ export default function RegisterPage() {
                 <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4">
                   <Mail size={16} className="text-amber-600 shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-700">
-                    Your account was created, but we couldn't deliver the verification email. Please click "Resend Verification Email" below, or contact support if the problem persists.
+                    Your account was created, but we couldn't deliver the verification email. Please click "Resend Verification Email" below.
                   </p>
                 </div>
               )}
@@ -249,7 +341,7 @@ export default function RegisterPage() {
             </>
           )}
 
-          {step === 3 && totpData && (
+          {step === 4 && totpData && (
             <>
               <h2 className="text-xl font-bold text-gray-900 mb-1">Set Up Authenticator</h2>
               <p className="text-sm text-gray-600 mb-6">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)</p>

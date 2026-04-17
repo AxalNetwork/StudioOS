@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown } from 'lucide-react';
+import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check } from 'lucide-react';
 
 const ROLE_BADGES = {
   admin: 'bg-violet-100 text-violet-700',
@@ -8,53 +8,62 @@ const ROLE_BADGES = {
   partner: 'bg-emerald-100 text-emerald-700',
 };
 
+const STATUS_BADGES = {
+  pending: 'bg-amber-100 text-amber-700',
+  verified: 'bg-emerald-100 text-emerald-700',
+  rejected: 'bg-red-100 text-red-700',
+};
+
+const AGREEMENT_OPTIONS = [
+  { value: '', label: '— Select agreement —' },
+  { value: 'Subscription Booklet & LPA', label: 'Subscription Booklet & LPA (LP)' },
+  { value: 'SPV Joinder Agreement', label: 'SPV Joinder Agreement (Syndicate)' },
+  { value: 'Co-Investment Side Letter', label: 'Co-Investment Side Letter' },
+  { value: 'Venture Share Agreement (FAST)', label: 'Venture Share Agreement / FAST (Advisor)' },
+  { value: 'MSA + Equity-for-Services', label: 'MSA + Equity-for-Services (Operating Partner)' },
+  { value: 'Engagement Letter (Spin-Out Package)', label: 'Engagement Letter (Legal Counsel)' },
+  { value: 'White-Label Service Agreement', label: 'White-Label Service Agreement (Technical Partner)' },
+  { value: 'Founder Collaboration Agreement', label: 'Founder Collaboration Agreement' },
+  { value: 'Spin-Out Subsidiary SPA + IP Transfer', label: 'Spin-Out Subsidiary SPA (Founder)' },
+  { value: 'Secondary Purchase Agreement', label: 'Secondary Purchase Agreement (Liquidity)' },
+  { value: 'M&A Advisory Mandate', label: 'M&A Advisory Mandate' },
+];
+
 export default function AdminPage({ onImpersonate }) {
+  const [tab, setTab] = useState('users');
   const [users, setUsers] = useState([]);
+  const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [openProfile, setOpenProfile] = useState(null);
 
-  useEffect(() => {
-    loadUsers();
-  }, []);
+  useEffect(() => { loadAll(); }, []);
 
-  const loadUsers = async () => {
+  const loadAll = async () => {
+    setLoading(true);
     try {
-      const data = await api.adminListUsers();
-      setUsers(data);
+      const [u, p] = await Promise.all([
+        api.adminListUsers(),
+        api.adminListProfiles().catch(() => []),
+      ]);
+      setUsers(u);
+      setProfiles(p);
     } catch (e) {
-      console.error('Failed to load users:', e);
-    } finally {
-      setLoading(false);
-    }
+      console.error('Failed to load admin data:', e);
+    } finally { setLoading(false); }
   };
 
   const handleImpersonate = async (userId) => {
     try {
       const res = await api.adminImpersonate(userId);
-      if (onImpersonate) {
-        onImpersonate(res.token, res.user);
-      }
-    } catch (e) {
-      alert(e.message);
-    }
+      if (onImpersonate) onImpersonate(res.token, res.user);
+    } catch (e) { alert(e.message); }
   };
-
   const handleToggleActive = async (userId) => {
-    try {
-      await api.adminToggleActive(userId);
-      loadUsers();
-    } catch (e) {
-      alert(e.message);
-    }
+    try { await api.adminToggleActive(userId); loadAll(); } catch (e) { alert(e.message); }
   };
-
   const handleRoleChange = async (userId, newRole) => {
-    try {
-      await api.adminUpdateRole(userId, newRole);
-      loadUsers();
-    } catch (e) {
-      alert(e.message);
-    }
+    try { await api.adminUpdateRole(userId, newRole); loadAll(); } catch (e) { alert(e.message); }
   };
 
   const filtered = filter === 'all' ? users : users.filter(u => u.role === filter);
@@ -64,8 +73,9 @@ export default function AdminPage({ onImpersonate }) {
     founder: users.filter(u => u.role === 'founder').length,
     partner: users.filter(u => u.role === 'partner').length,
   };
+  const pendingProfiles = profiles.filter(p => p.admin_status === 'pending').length;
 
-  if (loading) return <div className="text-gray-600 text-center py-20">Loading users...</div>;
+  if (loading) return <div className="text-gray-600 text-center py-20">Loading admin console...</div>;
 
   return (
     <div>
@@ -73,109 +83,289 @@ export default function AdminPage({ onImpersonate }) {
         <Shield size={24} className="text-violet-600" />
         <h1 className="text-2xl font-bold text-gray-900">Admin Console</h1>
       </div>
-      <p className="text-gray-600 mb-6">Manage users, roles, and portal access</p>
+      <p className="text-gray-600 mb-6">Manage users, roles, and partner profiles</p>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        {Object.entries(counts).map(([role, count]) => (
-          <button
-            key={role}
-            onClick={() => setFilter(role)}
-            className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-              filter === role
-                ? 'bg-violet-600 text-white shadow-sm'
-                : 'bg-white border border-gray-200 text-gray-700 hover:border-violet-300'
-            }`}
-          >
-            <div className="text-lg font-bold">{count}</div>
-            <div className="capitalize">{role === 'all' ? 'All Users' : role === 'partner' ? 'Partners / Investors' : `${role}s`}</div>
-          </button>
-        ))}
+      <div className="flex gap-2 mb-6 border-b border-gray-200">
+        <button onClick={() => setTab('users')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'users' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+          <Users size={14} className="inline mr-1.5" /> Users
+        </button>
+        <button onClick={() => setTab('profiles')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'profiles' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+          <Briefcase size={14} className="inline mr-1.5" /> Partner Profiles
+          {pendingProfiles > 0 && (
+            <span className="ml-2 bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">{pendingProfiles} pending</span>
+          )}
+        </button>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
-          <Users size={16} className="text-gray-600" />
-          <h3 className="text-sm font-semibold text-gray-900">User Management</h3>
-          <span className="text-xs text-gray-500 ml-auto">{filtered.length} users</span>
+      {tab === 'users' && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            {Object.entries(counts).map(([role, count]) => (
+              <button key={role} onClick={() => setFilter(role)}
+                className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                  filter === role ? 'bg-violet-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:border-violet-300'
+                }`}>
+                <div className="text-lg font-bold">{count}</div>
+                <div className="capitalize">{role === 'all' ? 'All Users' : role === 'partner' ? 'Partners / Investors' : `${role}s`}</div>
+              </button>
+            ))}
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
+              <Users size={16} className="text-gray-600" />
+              <h3 className="text-sm font-semibold text-gray-900">User Management</h3>
+              <span className="text-xs text-gray-500 ml-auto">{filtered.length} users</span>
+            </div>
+
+            {filtered.length === 0 ? (
+              <div className="p-8 text-center text-gray-500 text-sm">No users found</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Name</th>
+                      <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Email</th>
+                      <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Role</th>
+                      <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Status</th>
+                      <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Verified</th>
+                      <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Joined</th>
+                      <th className="text-right px-4 py-2.5 text-gray-600 font-medium text-xs">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map(u => (
+                      <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50/50">
+                        <td className="px-4 py-3 text-gray-900 font-medium">{u.name}</td>
+                        <td className="px-4 py-3 text-gray-600">{u.email}</td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="relative inline-block">
+                            <select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                              className={`appearance-none text-xs font-medium px-3 py-1 pr-6 rounded-full cursor-pointer border-0 ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>
+                              <option value="admin">Admin</option>
+                              <option value="founder">Founder</option>
+                              <option value="partner">Partner</option>
+                            </select>
+                            <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {u.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {u.email_verified ? <UserCheck size={16} className="text-green-500 mx-auto" /> : <UserX size={16} className="text-gray-400 mx-auto" />}
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center gap-1 justify-end">
+                            <button onClick={() => handleImpersonate(u.id)}
+                              className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors flex items-center gap-1"
+                              title="Login as this user">
+                              <LogIn size={12} /> View As
+                            </button>
+                            <button onClick={() => handleToggleActive(u.id)}
+                              className={`px-2.5 py-1.5 text-xs rounded-lg font-medium transition-colors ${
+                                u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'
+                              }`}>
+                              {u.is_active ? 'Disable' : 'Enable'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {tab === 'profiles' && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
+            <Briefcase size={16} className="text-gray-600" />
+            <h3 className="text-sm font-semibold text-gray-900">Partner Profiles</h3>
+            <span className="text-xs text-gray-500 ml-auto">{profiles.length} profiles</span>
+          </div>
+
+          {profiles.length === 0 ? (
+            <div className="p-8 text-center text-gray-500 text-sm">No profiles captured yet. New users will appear here after completing the onboarding chatbot.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">User</th>
+                    <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Persona</th>
+                    <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Legal Entity</th>
+                    <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Agreement</th>
+                    <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Status</th>
+                    <th className="text-right px-4 py-2.5 text-gray-600 font-medium text-xs">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profiles.map(p => (
+                    <tr key={p.email} className="border-b border-gray-100 hover:bg-gray-50/50 cursor-pointer" onClick={() => setOpenProfile(p)}>
+                      <td className="px-4 py-3">
+                        <div className="text-gray-900 font-medium">{p.user_name || '—'}</div>
+                        <div className="text-xs text-gray-500">{p.email}</div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">{p.persona || <span className="text-gray-400">—</span>}</td>
+                      <td className="px-4 py-3 text-gray-700">{p.legal_entity_name || <span className="text-gray-400">—</span>}</td>
+                      <td className="px-4 py-3 text-gray-700 text-xs">{p.agreement_type || <span className="text-gray-400">— not assigned —</span>}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_BADGES[p.admin_status] || 'bg-gray-100 text-gray-700'}`}>
+                          {p.admin_status || 'pending'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button onClick={(e) => { e.stopPropagation(); setOpenProfile(p); }}
+                          className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors">
+                          Review
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {openProfile && (
+        <ProfileReviewModal
+          profile={openProfile}
+          onClose={() => setOpenProfile(null)}
+          onSaved={() => { setOpenProfile(null); loadAll(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ProfileReviewModal({ profile, onClose, onSaved }) {
+  const [agreement, setAgreement] = useState(profile.agreement_type || '');
+  const [notes, setNotes] = useState(profile.admin_notes || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  let chatMessages = [];
+  try { chatMessages = JSON.parse(profile.chat_history || '[]'); } catch {}
+  let extracted = {};
+  try { extracted = JSON.parse(profile.extracted_data || '{}'); } catch {}
+
+  const submit = async (status) => {
+    setSaving(true);
+    setError('');
+    try {
+      await api.adminVerifyProfile(profile.email, { agreement_type: agreement, admin_notes: notes, status });
+      onSaved();
+    } catch (e) { setError(e.message); }
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">{profile.user_name || profile.email}</h3>
+            <p className="text-xs text-gray-500">{profile.email}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={20} /></button>
         </div>
 
-        {filtered.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 text-sm">No users found</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Name</th>
-                  <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Email</th>
-                  <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Role</th>
-                  <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Status</th>
-                  <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Verified</th>
-                  <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Joined</th>
-                  <th className="text-right px-4 py-2.5 text-gray-600 font-medium text-xs">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(u => (
-                  <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50/50">
-                    <td className="px-4 py-3 text-gray-900 font-medium">{u.name}</td>
-                    <td className="px-4 py-3 text-gray-600">{u.email}</td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="relative inline-block">
-                        <select
-                          value={u.role}
-                          onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                          className={`appearance-none text-xs font-medium px-3 py-1 pr-6 rounded-full cursor-pointer border-0 ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}
-                        >
-                          <option value="admin">Admin</option>
-                          <option value="founder">Founder</option>
-                          <option value="partner">Partner</option>
-                        </select>
-                        <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {u.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {u.email_verified ? (
-                        <UserCheck size={16} className="text-green-500 mx-auto" />
-                      ) : (
-                        <UserX size={16} className="text-gray-400 mx-auto" />
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">
-                      {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center gap-1 justify-end">
-                        <button
-                          onClick={() => handleImpersonate(u.id)}
-                          className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors flex items-center gap-1"
-                          title="Login as this user"
-                        >
-                          <LogIn size={12} /> View As
-                        </button>
-                        <button
-                          onClick={() => handleToggleActive(u.id)}
-                          className={`px-2.5 py-1.5 text-xs rounded-lg font-medium transition-colors ${
-                            u.is_active
-                              ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                              : 'bg-green-50 text-green-600 hover:bg-green-100'
-                          }`}
-                        >
-                          {u.is_active ? 'Disable' : 'Enable'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div className="text-xs text-gray-500 mb-0.5">Persona (AI extracted)</div>
+              <div className="text-gray-900 font-medium">{profile.persona || '—'}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-0.5">Entity Type</div>
+              <div className="text-gray-900 font-medium">{profile.entity_type || '—'}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-0.5">Legal Entity Name</div>
+              <div className="text-gray-900 font-medium">{profile.legal_entity_name || '—'}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-0.5">EIN / Tax ID</div>
+              <div className="text-gray-900 font-medium">{profile.ein || '—'}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-0.5">Signatory</div>
+              <div className="text-gray-900 font-medium">{profile.signatory_name || '—'}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-0.5">Title</div>
+              <div className="text-gray-900 font-medium">{profile.signatory_title || '—'}</div>
+            </div>
           </div>
-        )}
+
+          {extracted.summary && (
+            <div className="bg-violet-50 border border-violet-200 rounded-lg p-3">
+              <div className="text-xs text-violet-700 font-semibold mb-1">AI Summary</div>
+              <div className="text-sm text-violet-900">{extracted.summary}</div>
+            </div>
+          )}
+
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <MessageSquare size={14} className="text-gray-600" />
+              <h4 className="text-sm font-semibold text-gray-900">Onboarding Conversation</h4>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-64 overflow-y-auto space-y-2">
+              {chatMessages.length === 0 ? (
+                <div className="text-xs text-gray-500">No transcript available.</div>
+              ) : chatMessages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] text-xs px-3 py-2 rounded-lg whitespace-pre-wrap ${
+                    m.role === 'user' ? 'bg-violet-600 text-white' : 'bg-white border border-gray-200 text-gray-800'
+                  }`}>{m.content}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 pt-4 space-y-3">
+            <div>
+              <label className="text-xs text-gray-700 font-medium block mb-1">Propose Closing Binder / Agreement</label>
+              <select value={agreement} onChange={(e) => setAgreement(e.target.value)}
+                className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none">
+                {AGREEMENT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-700 font-medium block mb-1">Admin Notes (internal)</label>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
+                placeholder="Any context for the legal engine or follow-up..."
+                className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none resize-none" />
+            </div>
+            {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between gap-2">
+          <button onClick={() => submit('rejected')} disabled={saving}
+            className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg disabled:opacity-50 transition-colors">
+            Reject
+          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button onClick={() => submit('verified')} disabled={saving}
+              className="px-4 py-2 text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 rounded-lg disabled:opacity-50 transition-colors flex items-center gap-1.5">
+              <Check size={14} /> {saving ? 'Saving...' : 'Verify & Assign Agreement'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

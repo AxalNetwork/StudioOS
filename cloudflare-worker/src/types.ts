@@ -12,6 +12,7 @@ export interface Env {
   GITHUB_ACCESS_TOKEN?: string;
   GITHUB_REPO_OWNER?: string;
   GITHUB_REPO_NAME?: string;
+  AI?: any;
 }
 
 export interface User {

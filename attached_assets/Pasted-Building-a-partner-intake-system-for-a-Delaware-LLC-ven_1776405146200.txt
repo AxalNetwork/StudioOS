@@ -1,0 +1,90 @@
+Building a partner-intake system for a Delaware LLC venture studio like **Axal VC** requires a clear bridge between conversational AI and structured legal data. 
+
+To build this in **Replit** using your Cloudflare-centric stack (Jekyll, D1, Workers AI), you need to organize the code around the **StudioOS logic** you provided: Identifying the persona, gated email verification, and then deep-profiling for the Delaware formation/participation requirements.
+
+### 1. The D1 SQLite Schema
+In your Replit project, create a `schema.sql` file. This structure handles the transition from an anonymous visitor to a "Verified Partner."
+
+```sql
+-- Track user sessions and verification
+CREATE TABLE users (
+    id TEXT PRIMARY KEY, 
+    email TEXT UNIQUE, 
+    otp TEXT, 
+    is_verified INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Store the specific StudioOS partnership data
+CREATE TABLE partner_profiles (
+    user_id TEXT PRIMARY KEY,
+    persona TEXT, -- Investor (LP/Syndicate), Legal, Advisory (Operator), Liquidity
+    legal_entity_name TEXT,
+    entity_type TEXT, -- e.g., Delaware C-Corp, LLC, Individual
+    tax_id TEXT, -- EIN
+    signatory_name TEXT,
+    signatory_title TEXT,
+    referral_code TEXT,
+    admin_approval_status TEXT DEFAULT 'pending', -- pending, verified, rejected
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+-- Store chat history for stateful AI memory
+CREATE TABLE chat_history (
+    session_id TEXT,
+    role TEXT, -- 'user' or 'assistant'
+    content TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 2. The Cloudflare AI Worker Logic
+The "Brain" of your system needs to change its **System Prompt** based on the user's state. You can prompt Replit to generate a script with this logic:
+
+* **STATE 0 (Anonymous):** The AI acts as a "Gatekeeper." It explains the StudioOS model and tries to categorize the user into the five categories (Investor, Legal, Advisory, Liquidity, or Project Founder).
+* **STATE 1 (Verifying):** Once the persona is found, the UI triggers the email OTP. The Worker saves the email to D1.
+* **STATE 2 (Profiling):** After verification, the AI becomes a "Legal Intake Officer." It specifically asks for the **Delaware LLC/C-Corp** details (EIN, Signatory) required for Axal's automated legal engine.
+
+---
+
+### 3. The "Master Prompt" for Replit Agent
+Copy and paste this into **Replit Agent** to generate the full application.
+
+> **Role:** Expert Full-Stack Developer for Venture Capital Systems.
+> **Context:** Build a partner intake portal for **Axal VC**, a Delaware LLC venture studio using **StudioOS**.
+> 
+> **Tech Stack:**
+> - **Frontend:** Single-page Jekyll-compatible HTML/JS using Tailwind CSS.
+> - **Backend:** Cloudflare Worker (using Hono) connected to Cloudflare D1 and Workers AI (`@cf/meta/llama-3.1-8b-instruct`).
+> 
+> **Workflow:**
+> 1. **Phase 1 (Chatbot Persona):** The AI starts by explaining StudioOS (AI-scored startups, 30-day spin-outs). It must identify if the user is an Investor (LP/Syndicate), Legal Partner, Operator/Advisor, or Liquidity Provider.
+> 2. **Phase 2 (Auth Gate):** Once categorized, the AI asks for an email. The Worker generates a 6-digit OTP, saves it to D1, and shows a verification UI on the frontend.
+> 3. **Phase 3 (Deep Profile):** Once verified, the AI continues the chat to collect: Legal Entity Name, EIN/Tax ID, and Authorized Signatory details. 
+> 4. **Phase 4 (Structured Data):** Use the AI to extract this info into a JSON object and update the `partner_profiles` table in D1.
+> 
+> **Design:** Professional, dark-themed VC aesthetic. Show a "Verification Status: Pending Admin Approval" banner post-onboarding.
+> 
+> **Prompt for the AI Worker:** "You are the Axal StudioOS Assistant. Your tone is elite, efficient, and technical. You help partners join the Axal global network. If they are an LP, ask about their capital participation interests. If an Operator, ask about GTM or MVP expertise."
+
+---
+
+### 4. Admin Verification Process
+Since you mentioned admins need to verify, the system should allow you (the admin) to run a simple SQL command in your Cloudflare D1 console to "Officialize" the partner.
+
+**To approve a partner:**
+```sql
+UPDATE partner_profiles 
+SET admin_approval_status = 'verified' 
+WHERE user_id = '[User_ID_From_Chat]';
+```
+
+### How to add to StudioOS (from your GitHub Scan)
+Since **StudioOS** is designed as an API-first "Spin-Out Engine," you should instruct Replit to add a final "Sync" function:
+
+* When a profile reaches `admin_approval_status = 'verified'`, the Worker should be capable of sending a **WebHook** to the StudioOS backend.
+* This WebHook would trigger the **Automated Diligence** and **Incorporation** modules you mentioned (Stripe Atlas / Capital Engine).
+
+
+
+**Next Step:** Once Replit gives you the `worker.js` and `index.html`, you simply need to run `npx wrangler d1 execute axal_db --file=schema.sql` to set up your database in Cloudflare. Do you want the specific JavaScript code for the **AI JSON extraction** part?

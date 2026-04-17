@@ -18,6 +18,10 @@ binding = "DB"
 database_name = "studioos-db"
 database_id = "16a23acd-c82e-4ff1-a6c0-408e3eb014c8"
 
+# ---------- Workers AI ----------
+[ai]
+binding = "AI"
+
 # ---------- Environment Variables ----------
 # Set secrets via: npx wrangler secret put <NAME>
 # Required secrets: JWT_SECRET, GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN
