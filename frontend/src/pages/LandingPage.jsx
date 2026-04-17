@@ -15,11 +15,13 @@ export default function LandingPage() {
             <img src="/axal-mark.png" alt="Axal VC" className="h-8" />
             <span style={{fontFamily:"'Space Grotesk', sans-serif"}} className="text-lg font-bold text-gray-900">Axal VC</span>
           </div>
-          <div className="hidden md:flex items-center gap-8">
-            <a href="#about" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">About</a>
-            <a href="#how-it-works" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">How It Works</a>
+          <div className="hidden md:flex items-center gap-7">
+            <a href="#how-it-works" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Pipeline</a>
             <a href="#features" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Platform</a>
+            <Link to="/funds" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">VC Fund</Link>
+            <Link to="/liquidity" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Liquidity</Link>
             <a href="#partners" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Partners</a>
+            <a href="https://github.com/guillaumelauzier/axal-vc-studioos" target="_blank" rel="noopener" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Docs</a>
           </div>
           <div className="flex items-center gap-3">
             <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 transition-colors px-4 py-2">
@@ -49,12 +51,15 @@ export default function LandingPage() {
               Axal Ventures is the operating system for venture creation. We combine AI-powered scoring, 
               automated incorporation, and a global partner network to manufacture startups at scale.
             </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link to="/register" className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-8 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20 hover:shadow-violet-600/40">
-                Apply as Partner <ArrowRight size={16} />
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link to="/register" className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-7 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20 hover:shadow-violet-600/40">
+                Become a Partner <ArrowRight size={16} />
               </Link>
-              <a href="#how-it-works" className="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 transition-colors px-8 py-3.5 rounded-xl text-sm font-medium text-gray-900">
-                See How It Works <ChevronRight size={16} />
+              <Link to="/login" className="flex items-center gap-2 bg-white hover:bg-gray-50 border border-gray-300 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium text-gray-900">
+                Login to Dashboard <ChevronRight size={16} />
+              </Link>
+              <a href="#how-it-works" className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium text-gray-700">
+                Watch the 4-Week Pipeline <ChevronRight size={16} />
               </a>
             </div>
           </div>
@@ -118,6 +123,9 @@ export default function LandingPage() {
       <section id="how-it-works" className="py-20 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-[11px] text-emerald-700 mb-4">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live in Production
+            </div>
             <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">The 4-Week Pipeline</h2>
             <p className="text-gray-600 max-w-xl mx-auto">Every startup goes through a fixed 4-week cycle — fully systematized and partially automated.</p>
           </div>
@@ -170,6 +178,11 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
+          <div className="text-center mt-10">
+            <Link to="/pipeline" className="inline-flex items-center gap-2 text-sm text-violet-600 hover:text-violet-700 font-medium">
+              Try the Live Pipeline Board <ArrowRight size={14} />
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -181,23 +194,100 @@ export default function LandingPage() {
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
-              { icon: BarChart3, title: 'Market Intelligence', desc: 'Real-time sector signals, competitive data, and gap opportunities.' },
-              { icon: Target, title: 'Scoring Engine', desc: '100-point algorithm with AI augmentation for instant Go/No-Go decisions.' },
-              { icon: Brain, title: 'AI Advisory', desc: 'Strategy, GTM, fundraising advice and financial planning for founders.' },
-              { icon: FileText, title: 'Legal Engine', desc: 'Auto incorporation, SAFE agreements, equity splits, IP licensing.' },
-              { icon: Users, title: 'Partner Matchmaking', desc: 'AI-powered matching with referral tracking and deal syndication.' },
-              { icon: DollarSign, title: 'Capital Engine', desc: 'Automated capital calls, LP portal, and live portfolio performance.' },
+              { icon: BarChart3, title: 'Market Intelligence', desc: 'Real-time sector signals, competitive data, and gap opportunities.', to: '/market-intel' },
+              { icon: Target, title: 'Scoring Engine', desc: '100-point algorithm with AI augmentation for instant Go/No-Go decisions.', to: '/scoring' },
+              { icon: Brain, title: 'AI Advisory', desc: 'Strategy, GTM, fundraising advice and financial planning for founders.', to: '/advisory' },
+              { icon: FileText, title: 'Legal Engine', desc: 'Auto incorporation, SAFE agreements, equity splits, IP licensing.', to: '/legal' },
+              { icon: Users, title: 'Partner Matchmaking', desc: 'AI-powered matching with referral tracking and deal syndication.', to: '/matches' },
+              { icon: DollarSign, title: 'Capital Engine', desc: 'Automated capital calls, LP portal, and live portfolio performance.', to: '/funds' },
+              { icon: Rocket, title: 'Orchestration / Spin-Out', desc: 'The 30-day workflow engine that drives every venture from intake to launch.', to: '/studio-ops' },
             ].map((f, i) => (
-              <div key={i} className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all">
+              <Link key={i} to={f.to} className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all group">
                 <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
                   <f.icon size={18} className="text-violet-600" />
                 </div>
-                <div>
-                  <h3 className="text-sm font-semibold mb-1 text-gray-900">{f.title}</h3>
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold mb-1 text-gray-900 flex items-center gap-1.5">
+                    {f.title}
+                    <ChevronRight size={12} className="text-gray-400 group-hover:text-violet-600 group-hover:translate-x-0.5 transition-all" />
+                  </h3>
                   <p className="text-xs text-gray-600 leading-relaxed">{f.desc}</p>
                 </div>
-              </div>
+              </Link>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="dashboard-preview" className="py-20 px-6 bg-white">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-10 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-violet-100 border border-violet-200 rounded-full text-[11px] text-violet-700 mb-4">
+                <BarChart3 size={11} /> The Partner Dashboard
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">Access the Full Partner Dashboard</h2>
+              <p className="text-gray-600 mb-6 leading-relaxed">
+                Live deal flow, AI-scored startups, capital call tracking, LP portal with TVPI/DPI charts,
+                liquidity & secondary markets, and a global partner network — all in one place.
+              </p>
+              <ul className="space-y-3 mb-8">
+                {[
+                  ['Pipeline Board', 'Track every deal through the 4-week cycle'],
+                  ['VC Fund / LP Portal', 'Capital calls, distributions, performance metrics'],
+                  ['Liquidity & Exits', 'Secondary market for early liquidity'],
+                  ['Studio Ops', 'Automated workflows for spin-out execution'],
+                ].map(([t, d]) => (
+                  <li key={t} className="flex gap-3">
+                    <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mt-0.5">
+                      <ChevronRight size={12} className="text-violet-600" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{t}</div>
+                      <div className="text-xs text-gray-600">{d}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <Link to="/dashboard" className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-6 py-3 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20">
+                Open the Dashboard <ArrowRight size={14} />
+              </Link>
+            </div>
+            <div className="relative">
+              <div className="absolute -inset-4 bg-gradient-to-br from-violet-200/40 to-blue-200/40 rounded-3xl blur-2xl" />
+              <div className="relative bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden">
+                <div className="flex items-center gap-1.5 px-4 py-3 border-b border-gray-200 bg-gray-50">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
+                  <div className="ml-3 text-[10px] text-gray-500 font-mono">studioos.axal.vc / dashboard</div>
+                </div>
+                <div className="p-5 space-y-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    {[['12', 'Active'], ['$2.4M', 'Deployed'], ['88%', 'Match']].map(([v, l]) => (
+                      <div key={l} className="bg-gray-50 rounded-lg p-2.5">
+                        <div className="text-[10px] text-gray-500 uppercase tracking-wide">{l}</div>
+                        <div className="text-base font-bold text-gray-900">{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <div className="text-[10px] text-gray-500 uppercase mb-2">Pipeline</div>
+                    <div className="space-y-2">
+                      {[['Acme AI', 92, 'bg-emerald-500'], ['Northwind Bio', 78, 'bg-violet-500'], ['Helix Labs', 64, 'bg-blue-500']].map(([n, s, c]) => (
+                        <div key={n} className="flex items-center gap-2">
+                          <div className="text-xs text-gray-700 w-24 truncate">{n}</div>
+                          <div className="flex-1 bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                            <div className={`h-full ${c}`} style={{ width: `${s}%` }} />
+                          </div>
+                          <div className="text-xs text-gray-500 w-7 text-right">{s}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
