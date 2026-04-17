@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check } from 'lucide-react';
+import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, Clock, XCircle, CheckCircle2 } from 'lucide-react';
 
 const ROLE_BADGES = {
   admin: 'bg-violet-100 text-violet-700',
@@ -52,11 +52,16 @@ export default function AdminPage({ onImpersonate }) {
   const [tab, setTab] = useState('users');
   const [users, setUsers] = useState([]);
   const [profiles, setProfiles] = useState([]);
+  const [kycQueue, setKycQueue] = useState([]);
+  const [kycFilter, setKycFilter] = useState('pending');
+  const [kycDetail, setKycDetail] = useState(null);
+  const [kycRejectReason, setKycRejectReason] = useState('');
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [openProfile, setOpenProfile] = useState(null);
 
   useEffect(() => { loadAll(); }, []);
+  useEffect(() => { loadKyc(kycFilter); }, [kycFilter]);
 
   const loadAll = async () => {
     setLoading(true);
@@ -70,6 +75,34 @@ export default function AdminPage({ onImpersonate }) {
     } catch (e) {
       console.error('Failed to load admin data:', e);
     } finally { setLoading(false); }
+  };
+
+  const loadKyc = async (status) => {
+    try {
+      const q = await api.kycAdminQueue(status);
+      setKycQueue(q);
+    } catch (e) {
+      console.error('Failed to load KYC queue:', e);
+      setKycQueue([]);
+    }
+  };
+
+  const approveKyc = async (userId) => {
+    try {
+      await api.kycAdminApprove(userId);
+      setKycDetail(null);
+      loadKyc(kycFilter);
+    } catch (e) { alert(e.message); }
+  };
+
+  const rejectKyc = async (userId) => {
+    if (!kycRejectReason || kycRejectReason.trim().length < 5) { alert('Reason must be at least 5 characters.'); return; }
+    try {
+      await api.kycAdminReject(userId, kycRejectReason.trim());
+      setKycDetail(null);
+      setKycRejectReason('');
+      loadKyc(kycFilter);
+    } catch (e) { alert(e.message); }
   };
 
   const handleImpersonate = async (userId) => {
@@ -114,6 +147,13 @@ export default function AdminPage({ onImpersonate }) {
           <Briefcase size={14} className="inline mr-1.5" /> Partner Profiles
           {pendingProfiles > 0 && (
             <span className="ml-2 bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">{pendingProfiles} pending</span>
+          )}
+        </button>
+        <button onClick={() => setTab('kyc')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'kyc' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+          <ShieldCheck size={14} className="inline mr-1.5" /> KYC Queue
+          {kycFilter === 'pending' && kycQueue.length > 0 && (
+            <span className="ml-2 bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">{kycQueue.length} pending</span>
           )}
         </button>
       </div>
@@ -278,6 +318,128 @@ export default function AdminPage({ onImpersonate }) {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'kyc' && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 flex-wrap">
+            <ShieldCheck size={16} className="text-gray-600" />
+            <h3 className="text-sm font-semibold text-gray-900">KYC / AML Queue</h3>
+            <div className="ml-auto flex gap-1">
+              {['pending', 'approved', 'rejected', 'not_started'].map(s => (
+                <button key={s} onClick={() => setKycFilter(s)}
+                  className={`text-xs px-2.5 py-1 rounded-md font-medium ${kycFilter === s ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  {s.replace('_', ' ')}
+                </button>
+              ))}
+            </div>
+          </div>
+          {kycQueue.length === 0 ? (
+            <div className="p-8 text-center text-gray-500 text-sm">No submissions in <strong>{kycFilter.replace('_', ' ')}</strong> status.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">User</th>
+                    <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Role</th>
+                    <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Provider</th>
+                    <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Submitted</th>
+                    <th className="text-right px-4 py-2.5 text-gray-600 font-medium text-xs">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {kycQueue.map(k => (
+                    <tr key={k.id} className="border-b border-gray-100 hover:bg-gray-50/50">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">{k.name}</div>
+                        <div className="text-xs text-gray-500">{k.email}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_BADGES[k.role] || 'bg-gray-100 text-gray-700'}`}>{k.role}</span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-600">{k.kyc_provider || '—'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{k.submitted_at ? new Date(k.submitted_at).toLocaleString() : '—'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button onClick={() => { setKycDetail(k); setKycRejectReason(''); }}
+                          className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors">
+                          Review
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {kycDetail && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setKycDetail(null)}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-3 sticky top-0 bg-white">
+              <ShieldCheck size={18} className="text-violet-600" />
+              <h3 className="font-semibold text-gray-900">KYC Review — {kycDetail.name}</h3>
+              <button onClick={() => setKycDetail(null)} className="ml-auto text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <div className="px-6 py-5 space-y-4 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <KV label="Email" value={kycDetail.email} />
+                <KV label="Role" value={kycDetail.role} />
+                <KV label="Status" value={kycDetail.kyc_status} />
+                <KV label="Provider" value={kycDetail.kyc_provider || '—'} />
+                <KV label="Submitted" value={kycDetail.submitted_at ? new Date(kycDetail.submitted_at).toLocaleString() : '—'} />
+                <KV label="Reviewed" value={kycDetail.reviewed_at ? new Date(kycDetail.reviewed_at).toLocaleString() : '—'} />
+              </div>
+              {kycDetail.kyc_data && (
+                <div className="border-t border-gray-100 pt-4">
+                  <h4 className="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">Submitted Information</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <KV label="Legal Name" value={`${kycDetail.kyc_data.legal_first_name || ''} ${kycDetail.kyc_data.legal_last_name || ''}`.trim()} />
+                    <KV label="Date of Birth" value={kycDetail.kyc_data.date_of_birth} />
+                    <KV label="Nationality" value={kycDetail.kyc_data.nationality || '—'} />
+                    <KV label="Country" value={kycDetail.kyc_data.country} />
+                    <KV label="Address" value={[kycDetail.kyc_data.address_line1, kycDetail.kyc_data.address_line2, kycDetail.kyc_data.city, kycDetail.kyc_data.state_region, kycDetail.kyc_data.postal_code].filter(Boolean).join(', ')} />
+                    <KV label="Phone" value={kycDetail.kyc_data.phone || '—'} />
+                    <KV label="ID Type" value={kycDetail.kyc_data.id_type} />
+                    <KV label="ID Number" value={kycDetail.kyc_data.id_number} />
+                    <KV label="Document Uploaded" value={kycDetail.kyc_data.document_uploaded ? 'Yes' : 'No'} />
+                    <KV label="PEP Disclosed" value={kycDetail.kyc_data.pep_self_disclosed ? 'Yes' : 'No'} />
+                  </div>
+                  {kycDetail.kyc_data.provider_result && (
+                    <div className="mt-3 bg-gray-50 rounded-lg p-3 text-xs">
+                      <div className="font-semibold text-gray-700 mb-1">Automated Provider Result: <span className="font-mono">{kycDetail.kyc_data.provider_result.result}</span></div>
+                      <pre className="text-gray-600 whitespace-pre-wrap text-[11px]">{JSON.stringify(kycDetail.kyc_data.provider_result.checks, null, 2)}</pre>
+                    </div>
+                  )}
+                </div>
+              )}
+              {kycDetail.rejection_reason && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+                  <strong>Previous rejection:</strong> {kycDetail.rejection_reason}
+                </div>
+              )}
+              {(kycDetail.kyc_status === 'pending' || kycDetail.kyc_status === 'rejected') && (
+                <div className="border-t border-gray-100 pt-4 space-y-3">
+                  <textarea value={kycRejectReason} onChange={e => setKycRejectReason(e.target.value)}
+                    rows={2} placeholder="Rejection reason (required if rejecting; min 5 chars)"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 outline-none" />
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => rejectKyc(kycDetail.id)}
+                      className="px-3 py-2 text-sm bg-red-50 text-red-700 hover:bg-red-100 rounded-lg font-medium flex items-center gap-1.5">
+                      <XCircle size={14} /> Reject
+                    </button>
+                    <button onClick={() => approveKyc(kycDetail.id)}
+                      className="px-3 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium flex items-center gap-1.5">
+                      <CheckCircle2 size={14} /> Approve
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -479,6 +641,15 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function KV({ label, value }) {
+  return (
+    <div>
+      <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{label}</div>
+      <div className="text-sm text-gray-900 break-words">{value || '—'}</div>
     </div>
   );
 }

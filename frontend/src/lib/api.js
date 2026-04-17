@@ -128,6 +128,13 @@ export const api = {
   profilingChat: (data) => request('/profiling/chat', { method: 'POST', body: JSON.stringify(data) }),
   profilingSave: (data) => request('/profiling/save', { method: 'POST', body: JSON.stringify(data) }),
   adminListProfiles: () => request('/profiling/admin/list'),
+
+  kycStatus: () => request('/kyc/status'),
+  kycSubmit: (data) => request('/kyc/submit', { method: 'POST', body: JSON.stringify(data) }),
+  kycAdminQueue: (status = 'pending') => request(`/kyc/admin/queue?status=${encodeURIComponent(status)}`),
+  kycAdminGet: (userId) => request(`/kyc/admin/${userId}`),
+  kycAdminApprove: (userId) => request(`/kyc/admin/${userId}/approve`, { method: 'PATCH' }),
+  kycAdminReject: (userId, reason) => request(`/kyc/admin/${userId}/reject`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
   adminGetProfile: (email) => request(`/profiling/admin/${encodeURIComponent(email)}`),
   adminVerifyProfile: (email, data) => request(`/profiling/admin/${encodeURIComponent(email)}/verify`, { method: 'POST', body: JSON.stringify(data) }),
 

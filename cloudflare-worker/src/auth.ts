@@ -59,6 +59,13 @@ export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<User>
   return user;
 }
 
+export async function requireApprovedKyc(c: Context<{ Bindings: Env }>): Promise<User> {
+  const user = await requireAuth(c);
+  if (user.role === 'admin') return user;
+  if ((user as any).kyc_status === 'approved') return user;
+  throw new Error('KYC required');
+}
+
 export async function hashToken(token: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(token);

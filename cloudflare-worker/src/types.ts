@@ -12,6 +12,8 @@ export interface Env {
   GITHUB_ACCESS_TOKEN?: string;
   GITHUB_REPO_OWNER?: string;
   GITHUB_REPO_NAME?: string;
+  PERSONA_API_KEY?: string;
+  SUMSUB_API_KEY?: string;
   AI?: any;
 }
 

@@ -4,8 +4,9 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
-  ChevronDown, Eye, ArrowLeft, Code
+  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck
 } from 'lucide-react';
+import { api } from './lib/api';
 import Dashboard from './pages/Dashboard';
 import ScoringPage from './pages/ScoringPage';
 import ProjectsPage from './pages/ProjectsPage';
@@ -26,6 +27,7 @@ import LandingPage from './pages/LandingPage';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
+import KYCPage from './pages/KYCPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import RiskDisclosuresPage from './pages/RiskDisclosuresPage';
@@ -44,6 +46,7 @@ const ALL_NAV_ITEMS = [
   { to: '/capital', icon: DollarSign, label: 'Capital & Investment', roles: ['admin', 'partner'] },
   { to: '/tickets', icon: Ticket, label: 'Support', roles: ['admin', 'founder', 'partner'] },
   { to: '/activity', icon: Activity, label: 'Activity Log', roles: ['admin', 'founder', 'partner'] },
+  { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification', roles: ['founder', 'partner'] },
   { to: '/api-bridge', icon: Code, label: 'API Bridge', roles: ['admin'] },
   { to: '/founder', icon: Rocket, label: 'Founder Portal', roles: ['admin', 'founder'], divider: true },
   { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal', roles: ['admin', 'partner'] },
@@ -258,9 +261,43 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
 function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate }) {
   const location = useLocation();
+  const [kycStatus, setKycStatus] = useState(user?.kyc_status || null);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await api.getMe();
+        if (cancelled) return;
+        setKycStatus(me.kyc_status || 'not_started');
+        const stored = JSON.parse(localStorage.getItem('user') || '{}');
+        if (stored.kyc_status !== me.kyc_status) {
+          localStorage.setItem('user', JSON.stringify({ ...stored, kyc_status: me.kyc_status }));
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
+
+  // Onboarding gate: non-admin users must complete KYC before accessing other pages.
+  // Admins (and impersonation sessions) bypass the gate. Activity log + KYC pages are always allowed.
+  const effectiveRole = (realUser || user)?.role;
+  const ALLOWED_BEFORE_KYC = ['/kyc', '/activity', '/tickets'];
+  if (
+    effectiveRole !== 'admin' &&
+    !isImpersonating &&
+    kycStatus &&
+    kycStatus !== 'approved' &&
+    !ALLOWED_BEFORE_KYC.includes(location.pathname)
+  ) {
+    return <Navigate to="/kyc" replace />;
+  }
+
   return (
     <ProtectedLayout
       user={user}
@@ -393,6 +430,7 @@ export default function App() {
       <Route path="/market-intel" element={guard(['admin', 'partner'], <MarketIntelPage />)} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner'], <ActivityPage />)} />
+      <Route path="/kyc" element={guard(['admin', 'founder', 'partner'], <KYCPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
       <Route path="/partner-portal" element={guard(['admin', 'partner'], <PartnerPortal />)} />

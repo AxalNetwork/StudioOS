@@ -1,0 +1,94 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). We already have Replit Auth, a D1 `users` table with roles and kyc_status, RBAC middleware, and onboarding flow from the previous build.
+
+Current structure:
+- backend/ and main.py (Python/FastAPI-style)
+- cloudflare-worker/ (Workers + D1 bindings)
+- frontend/ (static HTML/JS)
+- Use existing Replit Auth and D1 database
+
+Add a complete **Referral/Commission Tracking + Payout System + Network Graph** with these exact requirements:
+
+1. **Database Models (D1 tables)**  
+   Create these new tables (with proper indexes and foreign keys to users.id):
+   - `referrals`  
+     • id (PK)  
+     • referrer_id (FK to users.id)  
+     • referred_id (FK to users.id)  
+     • referral_code (text, unique)  
+     • status (text: 'pending', 'approved', 'converted')  
+     • created_at, converted_at (timestamp)
+   - `commissions`  
+     • id (PK)  
+     • referral_id (FK) or user_id (who earned it)  
+     • amount (decimal)  
+     • currency (text, default 'USD')  
+     • source_type (text: 'deal_funding', 'spinout', 'syndication', 'partner_fee')  
+     • source_id (text)  
+     • status (text: 'pending', 'accrued', 'paid')  
+     • created_at, paid_at
+   - `payouts`  
+     • id (PK)  
+     • user_id (FK)  
+     • amount (decimal)  
+     • status (text: 'requested', 'processing', 'completed', 'failed')  
+     • payout_method (text: 'stripe', 'wire', 'crypto')  
+     • payout_details (json)  
+     • created_at, completed_at
+
+2. **Referral System**  
+   - Every KYC-approved user automatically gets a unique referral_code (e.g. AXAL-USER1234).  
+   - Referral link: https://yourdomain.com/?ref=CODE  
+   - On signup, if ?ref=CODE is present, link the new user to the referrer.  
+   - Backend endpoint: GET /api/referral/code (returns user’s code and link).
+
+3. **Commission Tracking**  
+   - Configurable commission rules (store in a simple JSON config or new `commission_rules` table).  
+     Example rules: 2% on funded spin-outs, $5k flat for successful LP onboarding, etc.  
+   - When a referred user reaches a milestone (e.g. kyc_approved or deal_funded), auto-create commission record.
+
+4. **Payout System**  
+   - User wallet balance = sum of accrued commissions.  
+   - POST /api/payout/request → create payout record.  
+   - Mock payout processing first (change status to 'completed' after 5 seconds).  
+   - Placeholder for real Stripe Connect payout (use environment variable STRIPE_SECRET_KEY).  
+   - Admin-only endpoint: PATCH /api/admin/payouts/{id}/process.
+
+5. **Network Graph**  
+   - Backend endpoint: GET /api/network/graph → returns JSON in a format ready for visualization (nodes + edges).  
+     Nodes: users (id, name, role, avatar).  
+     Edges: referral relationships.  
+   - Frontend: Add a new page /network.html that renders an interactive graph using D3.js or vis-network (include the library via CDN).  
+     Show referral tree, total commissions earned, and top referrers.
+
+6. **Backend Endpoints (add to main.py or new routers)**  
+   - GET /api/referral/code  
+   - POST /api/referral/track  
+   - GET /api/commissions/me  
+   - GET /api/payouts/me  
+   - POST /api/payout/request  
+   - GET /api/network/graph  
+   - GET /api/admin/commissions (admin-only)  
+   - All endpoints protected by existing RBAC middleware.
+
+7. **Frontend**  
+   - Add a “Refer & Earn” section on the partner dashboard (show referral link, QR code, stats: total referred, total earned).  
+   - New /payouts page with balance, history, and request payout button.  
+   - New /network page with the interactive graph.  
+   - Use fetch() and update UI dynamically.
+
+8. **Security & Best Practices**  
+   - Prevent self-referrals.  
+   - Rate limit referral tracking.  
+   - All money amounts use Decimal or integer cents.  
+   - Store secrets in Replit Secrets.  
+   - Add audit logging for commission and payout changes.
+
+Build this step-by-step:  
+1. First create the new D1 tables and migration script.  
+2. Then implement referral code generation and tracking.  
+3. Then commission logic and payout system.  
+4. Finally the network graph (backend + frontend).  
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

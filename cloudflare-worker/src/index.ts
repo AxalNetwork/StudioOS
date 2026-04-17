@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env } from './types';
 import { getSQL } from './db';
-import { requireAuth } from './auth';
+import { requireAuth, requireApprovedKyc } from './auth';
 
 import auth from './routes/auth';
 import scoring from './routes/scoring';
@@ -19,6 +19,7 @@ import marketIntel from './routes/market-intel';
 import advisory from './routes/advisory';
 import privateData from './routes/private-data';
 import profiling from './routes/profiling';
+import kyc from './routes/kyc';
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
@@ -42,8 +43,34 @@ app.use('*', async (c, next) => {
 app.onError((err: any, c) => {
   if (err.message === 'Unauthorized') return c.json({ detail: 'Not authenticated' }, 401);
   if (err.message === 'Admin required') return c.json({ detail: 'Admin access required' }, 403);
+  if (err.message === 'KYC required') return c.json({ detail: 'KYC verification required to access this resource', kyc_required: true }, 403);
   console.error('Unhandled app error:', err);
   return c.json({ detail: 'Internal server error' }, 500);
+});
+
+// Server-side KYC gate: for any authenticated request to a protected API path,
+// require kyc_status='approved'. Admins are exempt. The list below is what a
+// non-approved user is still allowed to call so they can complete KYC and basic account ops.
+const KYC_EXEMPT_PREFIXES = [
+  '/api/health',
+  '/api/auth/',
+  '/api/kyc/',
+  '/api/activity',
+  '/api/tickets',
+  '/api/profiling',
+  '/api/dashboard/stats',
+  '/api/legal/templates',
+  '/api/debug/',
+];
+
+app.use('/api/*', async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  if (KYC_EXEMPT_PREFIXES.some(p => path.startsWith(p))) return next();
+  const authHeader = c.req.header('Authorization');
+  // No auth header → let the route's own requireAuth handle the 401.
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return next();
+  await requireApprovedKyc(c);
+  return next();
 });
 
 app.get('/api/health', (c) => c.json({
@@ -157,5 +184,6 @@ app.route('/api/market-intel', marketIntel);
 app.route('/api/advisory', advisory);
 app.route('/api/private-data', privateData);
 app.route('/api/profiling', profiling);
+app.route('/api/kyc', kyc);
 
 export default app;

@@ -223,7 +223,11 @@ auth.post('/login', async (c) => {
 
 auth.get('/me', async (c) => {
   const user = await requireAuth(c);
-  return c.json({ id: user.id, email: user.email, name: user.name, role: user.role, is_active: user.is_active, created_at: user.created_at });
+  return c.json({
+    id: user.id, email: user.email, name: user.name, role: user.role,
+    is_active: user.is_active, created_at: user.created_at,
+    kyc_status: (user as any).kyc_status || 'not_started',
+  });
 });
 
 auth.post('/verify-totp', async (c) => {
