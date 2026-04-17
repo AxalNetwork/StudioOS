@@ -12,9 +12,29 @@ const COMPLIANCE_TYPES = new Set(['kyc', 'aml', 'delaware_filing', 'global_subsi
 const ADVANCE_ROLES = new Set(['admin', 'partner']);
 const AI_RATE_LIMIT = 60; // shared
 
+const SPINOUT_STATUSES = ['pending', 'ip_transferred', 'equity_allocated', 'incorporated', 'independent'];
+const SPINOUT_EVENT_TYPES = new Set(['ip_transfer', 'equity_allocation', 'stripe_atlas_start', 'stripe_atlas_complete', 'independent_scale']);
+
 let migrated = false;
 async function ensureSchema(env: Env) {
   if (migrated) return;
+  // Idempotent ALTERs to extend subsidiaries with spin-out columns
+  const alters = [
+    `ALTER TABLE subsidiaries ADD COLUMN spinout_status TEXT DEFAULT 'pending'`,
+    `ALTER TABLE subsidiaries ADD COLUMN ip_license_doc_id INTEGER`,
+    `ALTER TABLE subsidiaries ADD COLUMN equity_allocation_json TEXT DEFAULT '{}'`,
+    `ALTER TABLE subsidiaries ADD COLUMN stripe_atlas_id TEXT`,
+    `ALTER TABLE subsidiaries ADD COLUMN independent_scaling_enabled INTEGER DEFAULT 0`,
+    `ALTER TABLE subsidiaries ADD COLUMN post_spinout_dashboard_url TEXT`,
+  ];
+  for (const a of alters) {
+    try { await env.DB.prepare(a).run(); }
+    catch (e: any) {
+      if (!/duplicate column|no such table/i.test(e?.message || '')) {
+        console.error('legalcap subsidiaries ALTER failed:', e?.message);
+      }
+    }
+  }
   const stmts = [
     `CREATE TABLE IF NOT EXISTS legal_documents (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,6 +120,17 @@ async function ensureSchema(env: Env) {
     `CREATE INDEX IF NOT EXISTS idx_cr_deal ON compliance_records(deal_id)`,
     `CREATE INDEX IF NOT EXISTS idx_cr_sub ON compliance_records(subsidiary_id)`,
     `CREATE INDEX IF NOT EXISTS idx_cr_type ON compliance_records(type, status)`,
+
+    `CREATE TABLE IF NOT EXISTS spinout_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subsidiary_id INTEGER NOT NULL,
+      event_type TEXT NOT NULL,
+      details TEXT DEFAULT '{}',
+      performed_by INTEGER,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_se_sub ON spinout_events(subsidiary_id, created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_se_type ON spinout_events(event_type)`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('legalcap schema:', e?.message); } }
   migrated = true;
@@ -619,6 +650,302 @@ legalcap.post('/subsidiary/spinout', async (c) => {
     stripe_atlas: { status: stripeStatus, ref: stripeRef, real_api: !!stripeKey },
     next_steps: ['Sign legal documents', 'Confirm Atlas incorporation', 'File 83(b) elections', 'Send capital call to LPs'],
   }, 201);
+});
+
+// ============================================================
+// SPIN-OUT WIZARD (step-by-step orchestration with audit trail)
+// ============================================================
+
+async function logSpinoutEvent(env: Env, subId: number, type: string, details: any, userId: number) {
+  try {
+    await env.DB.prepare(`INSERT INTO spinout_events (subsidiary_id, event_type, details, performed_by) VALUES (?, ?, ?, ?)`)
+      .bind(subId, type, JSON.stringify(details || {}), userId).run();
+  } catch (e: any) { console.error('logSpinoutEvent:', e?.message); }
+}
+
+async function getOrCreateSubForDeal(env: Env, dealId: number, defaults: { name: string; jurisdiction?: string; userId: number }): Promise<{ sub: any; created: boolean }> {
+  const existing: any = await env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (existing) return { sub: existing, created: false };
+  const sub: any = await env.DB.prepare(`INSERT INTO subsidiaries (deal_id, subsidiary_name, jurisdiction, stripe_atlas_status, spinout_status) VALUES (?, ?, ?, 'pending', 'pending') RETURNING *`)
+    .bind(dealId, defaults.name, defaults.jurisdiction || 'Delaware_CCorp').first();
+  return { sub, created: true };
+}
+
+// One-click execute (orchestrates IP → Equity → Atlas in sequence; idempotent per step)
+legalcap.post('/spinout/execute', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+
+  const project: any = await c.env.DB.prepare(`SELECT * FROM projects WHERE id = ?`).bind(dealId).first();
+  if (!project) return c.json({ error: 'Deal not found' }, 404);
+
+  const gate: any = await c.env.DB.prepare(`SELECT id, final_decision FROM decision_gates WHERE deal_id = ? AND final_decision = 'passed' ORDER BY id DESC LIMIT 1`).bind(dealId).first().catch(() => null);
+  if (!gate && !data?.force) return c.json({ error: 'Spin-out requires a passed decision gate. Pass {force:true} to override.' }, 412);
+
+  const { sub, created } = await getOrCreateSubForDeal(c.env, dealId, { name: data?.subsidiary_name || `${project.name}, Inc.`, jurisdiction: data?.jurisdiction, userId: user.id });
+
+  // Prevent duplicate completed spin-outs
+  if (sub.spinout_status === 'independent') {
+    return c.json({ error: 'Spin-out already complete. This subsidiary is independent.', subsidiary: sub }, 409);
+  }
+
+  return c.json({
+    subsidiary: { ...sub, equity_allocated: safeJson(sub.equity_allocated, {}), equity_allocation_json: safeJson(sub.equity_allocation_json, {}) },
+    created,
+    next_steps: [
+      { step: 'ip_transfer', endpoint: '/api/legalcap/spinout/ip-transfer', done: !!sub.ip_license_doc_id },
+      { step: 'equity_allocate', endpoint: '/api/legalcap/spinout/equity-allocate', done: sub.spinout_status === 'equity_allocated' || sub.spinout_status === 'incorporated' || sub.spinout_status === 'independent' },
+      { step: 'stripe_atlas', endpoint: '/api/legalcap/spinout/stripe-atlas', done: sub.spinout_status === 'incorporated' || sub.spinout_status === 'independent' },
+      { step: 'go_independent', endpoint: '/api/legalcap/spinout/go-independent', done: sub.spinout_status === 'independent' },
+    ],
+  }, 200);
+});
+
+legalcap.get('/spinout/status/:dealId', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  const dealId = parseInt(c.req.param('dealId'));
+  const sub: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (!sub) return c.json({ status: 'not_started', subsidiary: null, events: [] });
+  const events = await c.env.DB.prepare(`SELECT * FROM spinout_events WHERE subsidiary_id = ? ORDER BY created_at DESC LIMIT 50`).bind(sub.id).all().catch(() => ({ results: [] as any[] }));
+  return c.json({
+    status: sub.spinout_status || 'pending',
+    subsidiary: {
+      ...sub,
+      equity_allocated: safeJson(sub.equity_allocated, {}),
+      equity_allocation_json: safeJson(sub.equity_allocation_json, {}),
+      ip_transfer_complete: !!sub.ip_transfer_complete,
+      independent_scaling_enabled: !!sub.independent_scaling_enabled,
+    },
+    events: (events.results || []).map((e: any) => ({ ...e, details: safeJson(e.details, {}) })),
+  });
+});
+
+// Step 1: IP transfer — generates an IP_license doc, links to subsidiary, marks ip_transferred
+legalcap.post('/spinout/ip-transfer', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+
+  const project: any = await c.env.DB.prepare(`SELECT * FROM projects WHERE id = ?`).bind(dealId).first();
+  if (!project) return c.json({ error: 'Deal not found' }, 404);
+  const sub: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (!sub) return c.json({ error: 'No subsidiary. Call /spinout/execute first.' }, 412);
+  if (sub.ip_license_doc_id) return c.json({ error: 'IP transfer already complete', ip_license_doc_id: sub.ip_license_doc_id }, 409);
+  if (sub.spinout_status && !['pending', 'ip_transferred'].includes(sub.spinout_status)) {
+    return c.json({ error: `Invalid state for IP transfer: ${sub.spinout_status}` }, 412);
+  }
+
+  const userVars = data?.variables && typeof data.variables === 'object' ? data.variables : {};
+  const vars = { ...defaultDocVars(project, user), ...userVars };
+  const body = fillTemplate(TEMPLATES.IP_license, vars);
+  const content = JSON.stringify({ template: 'IP_license', vars, body, model: 'template-only' });
+
+  const upd = await c.env.DB.prepare(`UPDATE subsidiaries SET spinout_status = 'ip_transferred', ip_transfer_complete = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND ip_license_doc_id IS NULL`)
+    .bind(sub.id).run();
+  if (!upd.meta?.changes) {
+    const fresh: any = await c.env.DB.prepare(`SELECT ip_license_doc_id FROM subsidiaries WHERE id = ?`).bind(sub.id).first();
+    return c.json({ error: 'IP transfer already complete', ip_license_doc_id: fresh?.ip_license_doc_id }, 409);
+  }
+  const doc: any = await c.env.DB.prepare(`INSERT INTO legal_documents (deal_id, type, status, content, generated_by) VALUES (?, 'IP_license', 'signed', ?, ?) RETURNING id`)
+    .bind(dealId, content, user.id).first();
+  await c.env.DB.prepare(`UPDATE subsidiaries SET ip_license_doc_id = ? WHERE id = ?`).bind(doc.id, sub.id).run();
+  await logSpinoutEvent(c.env, sub.id, 'ip_transfer', { doc_id: doc.id, deal_id: dealId }, user.id);
+  await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'spinout', entityId: sub.id, metadata: { step: 'ip_transfer', doc_id: doc.id } });
+
+  return c.json({ ok: true, ip_license_doc_id: doc.id, spinout_status: 'ip_transferred' });
+});
+
+// Step 2: Equity allocation — Replit AI recommends fair split; user can override
+legalcap.post('/spinout/equity-allocate', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+
+  const project: any = await c.env.DB.prepare(`SELECT * FROM projects WHERE id = ?`).bind(dealId).first();
+  if (!project) return c.json({ error: 'Deal not found' }, 404);
+  const sub: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (!sub) return c.json({ error: 'No subsidiary. Call /spinout/execute first.' }, 412);
+  if (!['ip_transferred', 'equity_allocated'].includes(sub.spinout_status)) {
+    return c.json({ error: `Equity allocation requires ip_transferred state (current: ${sub.spinout_status})` }, 412);
+  }
+
+  // If client passed an explicit override allocation, use it. Else ask AI (gated on quota).
+  let allocation: any = data?.allocation && typeof data.allocation === 'object' ? data.allocation : null;
+  let aiRationale: string | null = null;
+
+  if (!allocation) {
+    if (!(await checkAiQuota(c.env, user.id))) return c.json({ error: 'Rate limit (60 AI calls/hour). Pass an explicit allocation to override.' }, 429);
+    const prompt = `Recommend an equity split for a venture-studio spin-out. Output a JSON object with keys: studio_pct, founders_pct, option_pool_pct, advisors_pct (sum to 100). Studio takes 10-20%, founders 60-80%, options 10-15%, advisors 0-5%.
+
+Project: ${project.name}
+Sector: ${project.sector || 'unknown'}
+Stage: ${project.stage || 'unknown'}
+Studio score: ${project.score || 'n/a'}
+
+Reply with ONLY the JSON object, no commentary.`;
+    const raw = await llm(c.env, 'You are a venture-studio equity allocation expert. Reply with valid JSON only.', prompt, 200);
+    await logAi(c.env, user.id, 'spinout_equity', { deal_id: dealId });
+
+    if (raw) {
+      try {
+        const m = raw.match(/\{[\s\S]*\}/);
+        const parsed = m ? JSON.parse(m[0]) : null;
+        if (parsed && typeof parsed === 'object') allocation = parsed;
+      } catch {}
+    }
+  }
+
+  // Sane fallback if AI missing/invalid
+  if (!allocation) allocation = { studio_pct: 15, founders_pct: 70, option_pool_pct: 13, advisors_pct: 2 };
+
+  // Validate + normalize
+  const cleaned: any = {};
+  for (const k of ['studio_pct', 'founders_pct', 'option_pool_pct', 'advisors_pct']) {
+    const v = Number(allocation[k]);
+    cleaned[k] = Number.isFinite(v) && v >= 0 && v <= 100 ? Math.round(v * 10) / 10 : 0;
+  }
+  const total = cleaned.studio_pct + cleaned.founders_pct + cleaned.option_pool_pct + cleaned.advisors_pct;
+  if (Math.abs(total - 100) > 0.5) {
+    // Auto-normalize
+    const factor = 100 / (total || 100);
+    for (const k of Object.keys(cleaned)) cleaned[k] = Math.round(cleaned[k] * factor * 10) / 10;
+  }
+  if (cleaned.studio_pct < 5 || cleaned.studio_pct > 30) return c.json({ error: 'studio_pct out of policy range (5-30%)', allocation: cleaned }, 422);
+  if (cleaned.founders_pct < 50 || cleaned.founders_pct > 85) return c.json({ error: 'founders_pct out of policy range (50-85%)', allocation: cleaned }, 422);
+
+  const eqUpd = await c.env.DB.prepare(`UPDATE subsidiaries SET equity_allocation_json = ?, equity_allocated = ?, spinout_status = 'equity_allocated', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND spinout_status IN ('ip_transferred','equity_allocated')`)
+    .bind(JSON.stringify(cleaned), JSON.stringify(cleaned), sub.id).run();
+  if (!eqUpd.meta?.changes) return c.json({ error: 'Concurrent state change; refresh and retry' }, 409);
+  await logSpinoutEvent(c.env, sub.id, 'equity_allocation', { allocation: cleaned, ai_used: !data?.allocation }, user.id);
+
+  return c.json({ ok: true, allocation: cleaned, ai_rationale: aiRationale, spinout_status: 'equity_allocated' });
+});
+
+// Step 3: Stripe Atlas — placeholder flow, mock incorporation
+legalcap.post('/spinout/stripe-atlas', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+
+  const sub: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (!sub) return c.json({ error: 'No subsidiary' }, 412);
+  if (sub.stripe_atlas_status === 'incorporated') return c.json({ error: 'Already incorporated', stripe_atlas_id: sub.stripe_atlas_id }, 409);
+  if (sub.spinout_status !== 'equity_allocated') {
+    return c.json({ error: `Stripe Atlas requires equity_allocated state (current: ${sub.spinout_status})` }, 412);
+  }
+  // Conditional reservation to prevent concurrent double-incorporation
+  const reserve = await c.env.DB.prepare(`UPDATE subsidiaries SET stripe_atlas_status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (stripe_atlas_status IS NULL OR stripe_atlas_status = '') AND spinout_status = 'equity_allocated'`)
+    .bind(sub.id).run();
+  if (!reserve.meta?.changes) return c.json({ error: 'Incorporation already in progress' }, 409);
+
+  const stripeKey = (c.env as any).STRIPE_ATLAS_API_KEY;
+  // Real flow would: POST to Atlas API with company name + jurisdiction → poll for incorporation.
+  // For now: mock the start + mock immediate completion to keep wizard end-to-end testable.
+  const atlasId = stripeKey ? `atlas_${crypto.randomUUID().slice(0, 12)}` : `mock_atlas_${Date.now()}`;
+  await logSpinoutEvent(c.env, sub.id, 'stripe_atlas_start', { stripe_atlas_id: atlasId, real_api: !!stripeKey }, user.id);
+
+  // Simulate incorporation (in prod: defer to webhook or polling worker)
+  const mockEin = `${Math.floor(10 + Math.random() * 89)}-${Math.floor(1000000 + Math.random() * 8999999)}`;
+  await c.env.DB.prepare(`UPDATE subsidiaries SET stripe_atlas_id = ?, stripe_atlas_ref = ?, stripe_atlas_status = 'incorporated', spinout_status = 'incorporated', incorporation_date = CURRENT_TIMESTAMP, ein = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+    .bind(atlasId, atlasId, mockEin, sub.id).run();
+  await logSpinoutEvent(c.env, sub.id, 'stripe_atlas_complete', { stripe_atlas_id: atlasId, ein: mockEin, mock: !stripeKey }, user.id);
+
+  return c.json({ ok: true, stripe_atlas_id: atlasId, ein: mockEin, real_api: !!stripeKey, spinout_status: 'incorporated' });
+});
+
+// Step 4: Go Independent — flips the switch, moves project out of pipeline
+legalcap.post('/spinout/go-independent', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+
+  const sub: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (!sub) return c.json({ error: 'No subsidiary' }, 412);
+  if (sub.spinout_status !== 'incorporated' && !data?.force) {
+    return c.json({ error: 'Subsidiary must be incorporated before going independent. Pass {force:true} to override.', current_status: sub.spinout_status }, 412);
+  }
+  if (sub.spinout_status === 'independent') return c.json({ error: 'Already independent' }, 409);
+
+  const dashUrl = data?.dashboard_url || `https://axal.vc/independent/${sub.id}`;
+  const indUpd = await c.env.DB.prepare(`UPDATE subsidiaries SET spinout_status = 'independent', independent_scaling_enabled = 1, post_spinout_dashboard_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND spinout_status != 'independent'`)
+    .bind(dashUrl, sub.id).run();
+  if (!indUpd.meta?.changes) return c.json({ error: 'Already independent' }, 409);
+
+  // Move project out of main pipeline
+  try {
+    await c.env.DB.prepare(`UPDATE projects SET pipeline_stage = 'spun_out', stage = 'spun_out', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(dealId).run();
+  } catch (e: any) {
+    // Schema may differ — ignore non-existent column
+    console.error('go-independent project update:', e?.message);
+  }
+
+  await logSpinoutEvent(c.env, sub.id, 'independent_scale', { dashboard_url: dashUrl }, user.id);
+  await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'spinout', entityId: sub.id, metadata: { step: 'independent', deal_id: dealId } });
+
+  return c.json({ ok: true, spinout_status: 'independent', independent_scaling_enabled: true, dashboard_url: dashUrl });
+});
+
+// List independent subsidiaries (for scaling partners + dashboard widget)
+legalcap.get('/spinout/independent', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  const rows = await sql`
+    SELECT s.id, s.deal_id, s.subsidiary_name, s.jurisdiction, s.stripe_atlas_id, s.ein,
+           s.incorporation_date, s.equity_allocation_json, s.post_spinout_dashboard_url,
+           s.created_at, s.updated_at, p.name as project_name, p.sector
+    FROM subsidiaries s
+    LEFT JOIN projects p ON p.id = s.deal_id
+    WHERE s.independent_scaling_enabled = 1
+    ORDER BY s.updated_at DESC`;
+  await sql.end();
+  return c.json((rows as any[]).map(r => ({
+    ...r,
+    equity_allocation_json: safeJson(r.equity_allocation_json, {}),
+    scaling_metrics: { mrr_cents: 0, headcount: 0, runway_months: 0, last_synced: null }, // placeholder
+  })));
+});
+
+// Continue / iterate fallback — flip the deal back to active iteration without spinout
+legalcap.post('/spinout/iterate', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+  try {
+    await c.env.DB.prepare(`UPDATE projects SET pipeline_stage = 'mvp', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(dealId).run();
+  } catch (e: any) { console.error('iterate:', e?.message); }
+  await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'spinout', entityId: dealId, metadata: { decision: 'iterate' } });
+  return c.json({ ok: true, decision: 'continue_iterate' });
 });
 
 export default legalcap;

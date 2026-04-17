@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Scale, Banknote, Building2, ClipboardCheck, Plus, Loader2, X, FileText, Sparkles, ShieldCheck, Send, CheckCircle2, AlertTriangle, Rocket } from 'lucide-react';
 import { api } from '../lib/api';
+import SpinoutWizard from '../components/SpinoutWizard';
 
 const DOC_TYPES = [
   { id: 'SAFE', label: 'SAFE Note' },
@@ -202,6 +203,7 @@ function SpinoutTab({ dealId, canEdit, deal }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [err, setErr] = useState('');
+  const [showWizard, setShowWizard] = useState(false);
   const [form, setForm] = useState({ subsidiary_name: '', jurisdiction: 'Delaware_CCorp', capital_call_amount: 250000, force: false });
 
   const load = async () => { setLoading(true); try { setSub(await api.subsidiaryFor(dealId)); } finally { setLoading(false); } };
@@ -252,9 +254,15 @@ function SpinoutTab({ dealId, canEdit, deal }) {
     <div className="space-y-4">
       {err && <Alert text={err} />}
       <div className="bg-gradient-to-br from-violet-600 to-violet-800 text-white rounded-2xl p-6">
-        <div className="flex items-center gap-3 mb-3"><Rocket size={24} /><h2 className="text-xl font-bold">One-Click Subsidiary Spin-Out</h2></div>
-        <p className="text-sm opacity-90">Generates SAFE + IP License + Equity Allocation, kicks off Stripe Atlas incorporation, creates a capital call, and opens a Studio Ops coordination workflow — all atomically.</p>
+        <div className="flex items-center gap-3 mb-3"><Rocket size={24} /><h2 className="text-xl font-bold">Subsidiary Spin-Out</h2></div>
+        <p className="text-sm opacity-90 mb-3">Step-by-step wizard: IP transfer → AI-recommended equity → Stripe Atlas → Independent. Or use the one-click bundle below.</p>
+        {canEdit && (
+          <button onClick={() => setShowWizard(true)} className="bg-white text-violet-700 hover:bg-violet-50 text-sm font-bold px-4 py-2 rounded-lg flex items-center gap-2">
+            <Rocket size={14} /> Launch Spin-Out Wizard
+          </button>
+        )}
       </div>
+      {showWizard && <SpinoutWizard deal={{ id: dealId, name: deal?.name || `Deal ${dealId}` }} onClose={() => { setShowWizard(false); load(); }} onComplete={load} />}
 
       {canEdit ? (
         <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-3">

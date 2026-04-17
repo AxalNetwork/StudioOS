@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Layers, Plus, Loader2, Sparkles, X, Zap, TrendingUp, CheckCircle2, RotateCcw, AlertTriangle, Activity, Target } from 'lucide-react';
 import { api } from '../lib/api';
+import SpinoutWizard from '../components/SpinoutWizard';
 
 const STAGES = [
   { id: 'idea', label: 'Idea', color: 'bg-gray-100 text-gray-700', border: 'border-gray-300' },
@@ -17,6 +18,7 @@ export default function PipelinePage() {
   const [openId, setOpenId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [me, setMe] = useState(null);
+  const [spinoutDeal, setSpinoutDeal] = useState(null);
 
   const reload = async () => { setLoading(true); try { setDeals(await api.pipelineActive()); } finally { setLoading(false); } };
   useEffect(() => { (async () => { try { setMe(await api.getCurrentUser()); } catch {} reload(); })(); }, []);
@@ -54,7 +56,7 @@ export default function PipelinePage() {
                 <div className={`bg-gray-50 border ${stage.border} border-t-0 rounded-b-lg min-h-[400px] p-2 space-y-2`}>
                   {grouped[stage.id].length === 0 ? (
                     <div className="text-xs text-gray-400 text-center py-8">Empty</div>
-                  ) : grouped[stage.id].map(d => <DealCard key={d.id} deal={d} onOpen={() => setOpenId(d.id)} />)}
+                  ) : grouped[stage.id].map(d => <DealCard key={d.id} deal={d} onOpen={() => setOpenId(d.id)} onSpinout={() => setSpinoutDeal(d)} />)}
                 </div>
               </div>
             ))}
@@ -64,11 +66,12 @@ export default function PipelinePage() {
 
       {openId && <DealDrawer dealId={openId} canEdit={canEdit} onClose={() => setOpenId(null)} onChanged={reload} />}
       {creating && <CreateModal onClose={() => setCreating(false)} onCreated={() => { setCreating(false); reload(); }} />}
+      {spinoutDeal && <SpinoutWizard deal={spinoutDeal} onClose={() => { setSpinoutDeal(null); reload(); }} onComplete={reload} />}
     </div>
   );
 }
 
-function DealCard({ deal, onOpen }) {
+function DealCard({ deal, onOpen, onSpinout }) {
   const tot = deal.task_counts.todo + deal.task_counts.in_progress + deal.task_counts.done;
   const pct = tot ? Math.round((deal.task_counts.done / tot) * 100) : 0;
   const traction = deal.latest_metrics?.traction_score;
@@ -103,6 +106,11 @@ function DealCard({ deal, onOpen }) {
           <Sparkles size={10} /> AI: {(gate.ai_recommendation || '').replace('_', ' ')}
           {gate.final_decision && <span className="ml-auto font-bold">→ {gate.final_decision}</span>}
         </div>
+      )}
+      {deal.pipeline_stage === 'spinout_ready' && onSpinout && (
+        <button onClick={(e) => { e.stopPropagation(); onSpinout(); }} className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1.5 rounded flex items-center justify-center gap-1">
+          🚀 Execute Spin-Out
+        </button>
       )}
     </div>
   );

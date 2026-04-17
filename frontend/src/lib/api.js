@@ -231,4 +231,13 @@ export const api = {
   complianceFor: (dealId) => request(`/legalcap/compliance/${dealId}`),
   subsidiaryFor: (dealId) => request(`/legalcap/subsidiaries/${dealId}`),
   spinout: (data) => request('/legalcap/subsidiary/spinout', { method: 'POST', body: JSON.stringify(data) }),
+
+  spinoutExecute: (data) => request('/legalcap/spinout/execute', { method: 'POST', body: JSON.stringify(data) }),
+  spinoutStatus: (dealId) => request(`/legalcap/spinout/status/${dealId}`),
+  spinoutIpTransfer: (data) => request('/legalcap/spinout/ip-transfer', { method: 'POST', body: JSON.stringify(data) }),
+  spinoutEquity: (data) => request('/legalcap/spinout/equity-allocate', { method: 'POST', body: JSON.stringify(data) }),
+  spinoutAtlas: (data) => request('/legalcap/spinout/stripe-atlas', { method: 'POST', body: JSON.stringify(data) }),
+  spinoutGoIndependent: (data) => request('/legalcap/spinout/go-independent', { method: 'POST', body: JSON.stringify(data) }),
+  spinoutIterate: (data) => request('/legalcap/spinout/iterate', { method: 'POST', body: JSON.stringify(data) }),
+  independentSubsidiaries: () => request('/legalcap/spinout/independent').catch(() => []),
 };

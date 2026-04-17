@@ -228,9 +228,39 @@ export default function Dashboard() {
           </Card>
 
           <QuickLinks role={role_view} />
+          <IndependentSubsidiariesWidget />
         </div>
       </div>
     </div>
+  );
+}
+
+function IndependentSubsidiariesWidget() {
+  const [subs, setSubs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { (async () => { try { setSubs(await api.independentSubsidiaries()); } finally { setLoading(false); } })(); }, []);
+  if (loading) return null;
+  if (!subs.length) return null;
+  return (
+    <Card title="Independent Subsidiaries" icon={Briefcase} link="/legal-capital" linkLabel="Manage">
+      <div className="space-y-2">
+        {subs.slice(0, 5).map(s => (
+          <div key={s.id} className="border border-emerald-100 bg-emerald-50/40 rounded-lg p-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-medium text-sm truncate">{s.subsidiary_name}</div>
+              <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded">SCALING</span>
+            </div>
+            <div className="text-[10px] text-gray-600 mt-0.5">{s.jurisdiction} {s.ein && `• EIN ${s.ein}`}</div>
+            {s.equity_allocation_json && Object.keys(s.equity_allocation_json).length > 0 && (
+              <div className="text-[10px] text-gray-500 mt-1">Studio: {s.equity_allocation_json.studio_pct}% • Founders: {s.equity_allocation_json.founders_pct}%</div>
+            )}
+            {s.post_spinout_dashboard_url && (
+              <a href={s.post_spinout_dashboard_url} className="text-[10px] text-violet-600 hover:underline">Open dashboard →</a>
+            )}
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
