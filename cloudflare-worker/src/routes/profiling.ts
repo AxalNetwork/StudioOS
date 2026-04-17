@@ -266,7 +266,7 @@ ${transcript}`;
   }
 
   const personaLabel = founderTrack ? `${persona} / ${founderTrack}` : (persona || 'unknown');
-  await sql`INSERT INTO activity_logs (action, details, actor) VALUES ('profile_captured', ${`Partner profile captured for ${email} — ${personaLabel}`}, ${email})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_captured', ${`Profile captured — ${personaLabel} — pending admin verification`}, ${email}, ${user.id})`;
   await sql.end();
 
   return c.json({ saved: true, persona, founder_track: founderTrack, summary: extracted?.summary || null });
@@ -324,7 +324,13 @@ profiling.post('/admin/:email/verify', async (c) => {
         updated_at = CURRENT_TIMESTAMP
     WHERE email = ${email}
   `;
-  await sql`INSERT INTO activity_logs (action, details, actor) VALUES ('profile_verified', ${`Admin ${adminUser.name} marked ${email} as ${newStatus}${agreement_type ? ` — agreement: ${agreement_type}` : ''}`}, ${adminUser.email})`;
+  // Log on the admin's record AND on the target user's record so the target sees it in their private feed.
+  const targetUsers = await sql`SELECT id FROM users WHERE email = ${email}`;
+  const targetUserId = targetUsers[0]?.id || null;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_verified', ${`Admin ${adminUser.name} marked ${email} as ${newStatus}${agreement_type ? ` — agreement: ${agreement_type}` : ''}`}, ${adminUser.email}, ${adminUser.id})`;
+  if (targetUserId) {
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_reviewed_by_admin', ${`Your profile was ${newStatus} by an Axal admin${agreement_type ? ` — proposed Closing Binder: ${agreement_type}` : ''}`}, ${email}, ${targetUserId})`;
+  }
   await sql.end();
   return c.json({ updated: true, status: newStatus, agreement_type, admin_notes });
 });

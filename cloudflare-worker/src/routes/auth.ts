@@ -70,7 +70,7 @@ auth.post('/register', async (c) => {
   }
 
   const [user] = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${name}, ${role || 'partner'}, false) RETURNING *`;
-  await sql`INSERT INTO activity_logs (action, details, actor) VALUES ('user_registered', ${`User ${name} (${email}) registered as ${role || 'partner'} — pending email verification`}, ${email})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`User ${name} (${email}) registered as ${role || 'partner'} — pending email verification`}, ${email}, ${user.id})`;
   await sql.end();
 
   const emailSent = await sendVerification(c.env, email, name, user.id);
@@ -145,7 +145,7 @@ auth.post('/confirm-verify-email', async (c) => {
   const setupExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
   await sql`UPDATE users SET email_verified = true, verification_token = ${setupHash}, verification_token_expires = ${setupExpires} WHERE id = ${user.id}`;
-  await sql`INSERT INTO activity_logs (action, details, actor) VALUES ('email_verified', ${`User ${user.name} (${user.email}) verified their email`}, ${user.email})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('email_verified', ${`User ${user.name} (${user.email}) verified their email`}, ${user.email}, ${user.id})`;
   await sql.end();
 
   return c.json({ verified: true, email: user.email, name: user.name, setup_token: setupToken });
@@ -211,7 +211,7 @@ auth.post('/login', async (c) => {
   if (delta === null) { await sql.end(); return c.json({ error: 'Invalid TOTP code' }, 401); }
 
   const jwtToken = await createJWT(c.env, user.id, user.email, user.role);
-  await sql`INSERT INTO activity_logs (action, details, actor) VALUES ('user_login', ${`User ${user.name} logged in`}, ${user.email})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_login', ${`User ${user.name} logged in`}, ${user.email}, ${user.id})`;
   await sql.end();
 
   return c.json({
