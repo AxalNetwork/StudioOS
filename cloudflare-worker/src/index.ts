@@ -27,6 +27,7 @@ import networkfx from './routes/networkfx';
 import dashboard from './routes/dashboard';
 import pipeline from './routes/pipeline';
 import partnernet from './routes/partnernet';
+import legalcap from './routes/legalcap';
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
@@ -201,5 +202,6 @@ app.route('/api/networkfx', networkfx);
 app.route('/api/dashboard', dashboard);
 app.route('/api/pipeline', pipeline);
 app.route('/api/partnernet', partnernet);
+app.route('/api/legalcap', legalcap);
 
 export default app;

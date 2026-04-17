@@ -217,4 +217,18 @@ export const api = {
   activityLogs: (limit = 50, offset = 0, action = '') => request(`/partnernet/activity/logs?limit=${limit}&offset=${offset}${action ? `&action_type=${action}` : ''}`),
   logActivity: (data) => request('/partnernet/activity/log', { method: 'POST', body: JSON.stringify(data) }),
   partnerLeaderboard: () => request('/partnernet/leaderboard').catch(() => request('/partnernet/leaderboard/public')),
+
+  legalGenerate: (data) => request('/legalcap/legal/generate', { method: 'POST', body: JSON.stringify(data) }),
+  legalDocs: (dealId) => request(`/legalcap/legal/docs/${dealId}`),
+  legalSign: (id) => request(`/legalcap/legal/docs/${id}/sign`, { method: 'PATCH', body: JSON.stringify({}) }),
+  createCapitalCall: (data) => request('/legalcap/capital/call', { method: 'POST', body: JSON.stringify(data) }),
+  capitalSend: (id) => request(`/legalcap/capital/call/${id}/send`, { method: 'PATCH', body: JSON.stringify({}) }),
+  respondCapitalCall: (id, data) => request(`/legalcap/capital/call/${id}/respond`, { method: 'POST', body: JSON.stringify(data) }),
+  lpPortal: () => request('/legalcap/capital/lp-portal'),
+  capitalCalls: () => request('/legalcap/capital/calls').catch(() => []),
+  diligenceReview: (data) => request('/legalcap/diligence/review', { method: 'POST', body: JSON.stringify(data) }),
+  diligenceFor: (dealId) => request(`/legalcap/diligence/${dealId}`),
+  complianceFor: (dealId) => request(`/legalcap/compliance/${dealId}`),
+  subsidiaryFor: (dealId) => request(`/legalcap/subsidiaries/${dealId}`),
+  spinout: (data) => request('/legalcap/subsidiary/spinout', { method: 'POST', body: JSON.stringify(data) }),
 };
