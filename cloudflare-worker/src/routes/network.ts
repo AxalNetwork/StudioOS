@@ -146,6 +146,13 @@ export async function fireCommissionEvent(
       const dollars = (amountCents / 100).toFixed(2);
       await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('commission_earned', ${`You earned $${dollars} commission (${rule.description})`}, ${referrerRow[0].email}, ${referrerRow[0].id})`;
     }
+    // Fire L2/L3 compounding bonuses (idempotent via UNIQUE index on commissions(user_id, source_type, source_id))
+    try {
+      const { fireCompoundingBonuses } = await import('./networkfx');
+      await fireCompoundingBonuses(env, referredUserId, amountCents, rule.source_type, sourceId);
+    } catch (e: any) {
+      console.error('[networkfx] fireCompoundingBonuses failed', { referredUserId, sourceId, err: String(e?.message || e) });
+    }
   } finally { await sql.end(); }
 }
 
@@ -162,6 +169,13 @@ export async function attachReferral(env: Env, newUserId: number, refCode: strin
     const existing = await sql`SELECT id FROM referrals WHERE referred_id = ${newUserId}`;
     if (existing.length) return false;
     await sql`INSERT INTO referrals (referrer_id, referred_id, referral_code, status) VALUES (${referrerId}, ${newUserId}, ${refCode}, 'pending')`;
+    // Build compounding chain (L1, L2, L3) — log any failure so silent revenue loss is detectable
+    try {
+      const { buildReferralChain } = await import('./networkfx');
+      await buildReferralChain(env, newUserId, referrerId);
+    } catch (e: any) {
+      console.error('[networkfx] buildReferralChain failed', { newUserId, referrerId, err: String(e?.message || e) });
+    }
     return true;
   } finally { await sql.end(); }
 }

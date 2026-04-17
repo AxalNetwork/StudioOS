@@ -178,4 +178,21 @@ export const api = {
   studioOpsAiAssist: (data) => request('/studioops/ai-assist', { method: 'POST', body: JSON.stringify(data) }),
   studioOpsAudit: () => request('/studioops/audit'),
   studioOpsStats: () => request('/studioops/stats'),
+
+  networkFxEffects: () => request('/networkfx/effects'),
+  networkFxCompounding: () => request('/networkfx/referrals/compounding'),
+  networkFxSyndicates: (status) => request('/networkfx/syndicates' + (status ? `?status=${status}` : '')),
+  networkFxSyndicate: (id) => request(`/networkfx/syndicates/${id}`),
+  networkFxCreateSyndicate: (data) => request('/networkfx/syndicates', { method: 'POST', body: JSON.stringify(data) }),
+  networkFxJoinSyndicate: (id, data) => request(`/networkfx/syndicates/${id}/join`, { method: 'POST', body: JSON.stringify(data) }),
+  networkFxCloseSyndicate: (id) => request(`/networkfx/syndicates/${id}/close`, { method: 'POST', body: JSON.stringify({}) }),
+  networkFxSyndicateRecs: (id) => request(`/networkfx/syndicates/${id}/recommendations`),
+  networkFxMarketplaceMe: () => request('/networkfx/marketplace/me'),
+  networkFxSaveMarketplace: (data) => request('/networkfx/marketplace/me', { method: 'PUT', body: JSON.stringify(data) }),
+  networkFxMarketplaceSearch: (filters = {}) => {
+    const q = new URLSearchParams(Object.entries(filters).filter(([_, v]) => v != null && v !== '')).toString();
+    return request('/networkfx/marketplace/search' + (q ? '?' + q : ''));
+  },
+  networkFxRequestIntro: (data) => request('/networkfx/marketplace/request-intro', { method: 'POST', body: JSON.stringify(data) }),
+  networkFxMarketplaceMatch: (data) => request('/networkfx/marketplace/match', { method: 'POST', body: JSON.stringify(data) }),
 };

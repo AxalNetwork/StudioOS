@@ -23,6 +23,7 @@ import kyc from './routes/kyc';
 import network from './routes/network';
 import matches from './routes/matches';
 import studioops from './routes/studioops';
+import networkfx from './routes/networkfx';
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
@@ -193,5 +194,6 @@ app.route('/api/kyc', kyc);
 app.route('/api/network', network);
 app.route('/api/matches', matches);
 app.route('/api/studioops', studioops);
+app.route('/api/networkfx', networkfx);
 
 export default app;
