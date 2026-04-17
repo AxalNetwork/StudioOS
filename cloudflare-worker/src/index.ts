@@ -21,6 +21,7 @@ import privateData from './routes/private-data';
 import profiling from './routes/profiling';
 import kyc from './routes/kyc';
 import network from './routes/network';
+import matches from './routes/matches';
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
@@ -189,5 +190,6 @@ app.route('/api/private-data', privateData);
 app.route('/api/profiling', profiling);
 app.route('/api/kyc', kyc);
 app.route('/api/network', network);
+app.route('/api/matches', matches);
 
 export default app;

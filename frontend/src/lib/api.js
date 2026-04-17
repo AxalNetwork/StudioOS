@@ -153,4 +153,12 @@ export const api = {
   adminCommissionRules: () => request('/network/admin/commission-rules'),
   adminPayouts: () => request('/network/admin/payouts'),
   adminProcessPayout: (id, data) => request(`/network/admin/payouts/${id}/process`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  matchPreferences: () => request('/matches/preferences'),
+  matchPreferencesSave: (data) => request('/matches/preferences', { method: 'PUT', body: JSON.stringify(data) }),
+  matchDealFlow: () => request('/matches/deal-flow'),
+  matchCoInvest: () => request('/matches/co-invest'),
+  matchReferralScores: () => request('/matches/referral-scores'),
+  matchScore: (data) => request('/matches/score', { method: 'POST', body: JSON.stringify(data) }),
+  matchAdminAll: () => request('/matches/admin/all'),
 };
