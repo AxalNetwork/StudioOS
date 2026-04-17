@@ -1,0 +1,77 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). We already have Replit Auth, full RBAC middleware, Replit AI integration, complete D1 tables (users, deals/projects, project_stages, decision_gates, subsidiaries/spin-outs, legal_documents, capital_calls, spinout_events, workflows, activity_logs, system_metrics, syndicates, funds-related data from prior builds, etc.), Partner Dashboard, Pipeline Board, Legal/Capital Engine, Spin-Out Wizard, and monitoring/rate-limiting from all previous builds.
+
+Current structure:
+- backend/ and main.py (Python/FastAPI-style — currently no routers or event-driven architecture)
+- cloudflare-worker/ (Workers + D1 bindings; AI Workers directory exists but is empty/unimplemented)
+- frontend/ (static HTML/JS)
+
+Add complete **High-throughput infrastructure** with these exact requirements:
+
+1. **Full Database Schema / Lightweight ORM (D1 only)**  
+   - Consolidate and complete all D1 models for:
+     • projects/deals (already exist — add any missing columns)
+     • spin-outs/subsidiaries (already exist — ensure full coverage)
+     • funds (new table: `vc_funds` with id, name, total_commitment, deployed_capital, lp_count, status)
+     • LPs (new table: `limited_partners` with id, user_id FK, fund_id FK, commitment_amount, invested_amount, returns, status)
+     • metrics (already exist — expand `metrics_snapshots` with fund-level metrics)
+   - Create a lightweight "ORM" layer in backend/models.py:
+     • Pydantic models for every table
+     • Helper functions (get_by_id, create, update, query_with_filters, etc.) that use prepared D1 statements
+     • No heavy ORM (SQLAlchemy forbidden — keep it lightweight and edge-friendly)
+
+2. **Async Job Queues / Workers**  
+   - Implement async job queue using D1 + background tasks (FastAPI) + Cloudflare Queues binding where possible.
+   - New table: `job_queue`
+     • id (PK), job_type (text: 'ai_scoring', 'spinout_processing', 'metrics_aggregation', 'capital_call', 'pipeline_advance'), payload (json), status ('queued', 'processing', 'completed', 'failed'), created_at, started_at, completed_at, retry_count
+   - Background worker in backend/workers.py that polls the queue every 10s (or use Cloudflare Queue consumer in cloudflare-worker/).
+   - Support dozens/hundreds of simultaneous projects: each pipeline step, AI review, spin-out, or capital call is enqueued and processed asynchronously.
+   - Retry logic (max 3 retries) + dead-letter queue.
+
+3. **Scalable Backend Services (routers + event-driven architecture)**  
+   - Refactor main.py to use FastAPI routers (create backend/routers/ folder with pipeline.py, spinout.py, capital.py, etc.).
+   - Add full event-driven architecture:
+     • After decision_gate 'spinout_ready' → automatically enqueue spin-out job
+     • After metrics snapshot → enqueue AI traction review
+     • After LP commitment → enqueue capital call processing
+   - All high-volume endpoints now dispatch to the job queue instead of blocking.
+
+4. **AI/ML Layer (fill the empty cloudflare-worker/ai-workers/ directory)**  
+   - Implement Cloudflare AI Workers (use the existing empty directory).
+   - Create worker scripts:
+     • ai-scoring-worker.js → uses Cloudflare AI bindings (@cf/meta/llama or similar) for deal-flow scoring, traction review, equity recommendation
+     • No LangChain — pure Cloudflare AI + simple prompt templates stored in D1
+   - Backend integration: enqueue "ai_scoring" jobs that invoke the Cloudflare AI Worker via fetch() or binding.
+   - Fallback to Replit AI for dev/testing.
+   - Support real-time scoring for hundreds of parallel projects.
+
+5. **Backend Integration & Endpoints**  
+   - Update all existing endpoints to use the new ORM, routers, and job queue.
+   - New admin endpoints:
+     • GET /api/infra/queue (view queued jobs, admin-only)
+     • GET /api/infra/metrics (high-throughput stats)
+   - Add wrangler.toml updates for Cloudflare Queues + AI Workers bindings.
+
+6. **Frontend**  
+   - Add an "Infrastructure" tab to the existing /monitoring.html (admin-only) showing:
+     • Live job queue dashboard (queued/processing/completed counts)
+     • High-throughput charts (projects in parallel, jobs processed/min)
+     • AI Worker status
+   - No changes needed for normal partner dashboard — everything stays responsive because heavy work is now async.
+
+7. **Security & Best Practices**  
+   - RBAC: Only admins/operators see queue/infra views.
+   - Rate limiting (already built) now applies to job enqueuing.
+   - Full observability: every job logs to system_metrics and activity_logs.
+   - Horizontal scaling note: Cloudflare Workers + Queues auto-scale; Replit is dev/admin layer.
+   - Cleanup old jobs after 7 days.
+
+Build this step-by-step:  
+1. First create the full D1 schema updates + lightweight ORM (models.py).  
+2. Then implement the async job queue + background workers (D1 + Cloudflare Queues).  
+3. Then refactor backend to use FastAPI routers + event-driven architecture.  
+4. Then implement the Cloudflare AI Workers layer (fill the empty directory).  
+5. Finally update all existing endpoints, add infra monitoring tab, and provide deployment scripts.  
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

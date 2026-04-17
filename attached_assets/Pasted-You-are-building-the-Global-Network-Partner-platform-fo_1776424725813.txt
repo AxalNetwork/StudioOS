@@ -1,0 +1,95 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). We already have Replit Auth, full RBAC middleware, Replit AI integration, Cloudflare AI Workers, async job queue, lightweight D1 ORM, and complete D1 tables (users, deals, subsidiaries/spin-outs, vc_funds, limited_partners, capital_calls, legal_documents, spinout_events, liquidity_events, syndicates, syndicate_members, activity_logs, system_metrics, and all others from previous builds). We also have the Partner Dashboard, Pipeline Board, Spin-Out Wizard, Liquidity & Exits, Legal/Capital Engine, and monitoring.
+
+Current structure:
+- backend/ and main.py (Python/FastAPI-style with routers)
+- cloudflare-worker/ (Workers + D1 + AI Workers + Queues)
+- frontend/ (static HTML/JS)
+
+Add the complete **VC Fund / Investment Entity core** (LPA handling, automated capital calls via Capital Engine, LP portal, returns distribution, co-investment syndication) with these exact requirements:
+
+1. **Database Models (extend existing tables)**  
+   - Extend `vc_funds` table with:
+     • lpa_doc_id (FK to legal_documents.id)
+     • fund_size (decimal)
+     • carried_interest (decimal, default 0.20)
+     • management_fee (decimal, default 0.02)
+     • vintage_year (integer)
+     • status (text: 'open', 'closed', 'deployed')
+   - Extend `limited_partners` table with:
+     • lpa_signed (boolean)
+     • commitment_date (timestamp)
+     • distribution_history (json)
+   - Create one new table:
+     - `fund_distributions`
+       • id (PK)
+       • fund_id (FK)
+       • lp_id (FK)
+       • amount (decimal)
+       • distribution_type (text: 'return_of_capital', 'profit_share', 'exit_proceeds')
+       • source_liquidity_event_id (FK to liquidity_events.id, optional)
+       • status (text)
+       • distributed_at
+
+2. **LPA Handling & Automation**  
+   - When a new `vc_fund` is created, auto-generate LPA document via Legal Engine (using Replit AI + standard template stored in D1).
+   - LP onboarding flow: after KYC, allow signing LPA (mock signature + store in legal_documents).
+   - Auto-link new LPs to the fund and trigger first capital call.
+
+3. **Capital Engine Enhancements (automated capital calls)**  
+   - Fully automate capital calls via job queue:
+     • On syndicate formation or spin-out funding → enqueue capital call
+     • Send notices to LPs (mock email + LP portal update)
+     • Track payments and update limited_partners.invested_amount
+   - Integrate with existing Capital Engine endpoints.
+
+4. **LP Portal**  
+   - Dedicated read-only view for Limited Partners showing:
+     • Their commitments, capital calls, funded spin-outs/subsidiaries
+     • Portfolio performance (TVPI, DPI, IRR — calculated via Replit AI or simple formulas)
+     • Liquidity opportunities (link to existing secondary market)
+
+5. **Returns Distribution**  
+   - On any liquidity/exit event, enqueue job to:
+     • Calculate pro-rata distributions (after carry)
+     • Create fund_distributions records
+     • Update LP balances and trigger payout via existing Payout System
+   - Admin/operator can manually trigger distributions.
+
+6. **Co-Investment Syndication**  
+   - Deep integration with existing syndicates:
+     • Any LP can co-invest via syndicate (auto-create syndicate_member + capital call)
+     • AI-powered syndicate recommendations (using existing match_scores)
+     • Track syndicate-level returns back to the main VC Fund
+
+7. **Backend Endpoints (add to backend/routers/fund.py)**  
+   - POST /api/funds/create (operator/admin only — triggers LPA generation)
+   - GET /api/funds/lp-portal (LP-only view of their fund activity)
+   - POST /api/capital/call (enhanced automated version)
+   - POST /api/distributions/execute (admin only)
+   - GET /api/funds/syndication (co-investment opportunities)
+   - All endpoints protected by RBAC and routed through job queue.
+
+8. **Frontend**  
+   - New "VC Fund" tab in Partner Dashboard (role-based):
+     • For LPs: full LP Portal with capital calls, distributions, performance charts (Chart.js)
+     • For operators/admins: fund overview, LPA status, capital call manager, returns distribution wizard
+   - "Create New Fund" button + LPA preview
+   - Integrate seamlessly with existing Liquidity, Syndicates, and Dashboard sidebar.
+
+9. **Security & Best Practices**  
+   - RBAC: LPs see only their own portal; operators/admins manage funds.
+   - All monetary calculations use integer cents.
+   - Full audit via activity_logs + fund_distributions.
+   - Use existing job queue for all automated flows (non-blocking).
+   - Rate limiting already in place.
+
+Build this step-by-step:  
+1. First extend the D1 tables + migration + seed a sample VC Fund and LPA template.  
+2. Then implement LPA generation + LP onboarding automation.  
+3. Then enhance Capital Engine with automated calls + returns distribution logic.  
+4. Then build the LP Portal backend endpoints.  
+5. Finally create the frontend VC Fund / LP Portal tab and integrate with the Partner Dashboard.  
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

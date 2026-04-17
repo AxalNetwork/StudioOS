@@ -240,4 +240,12 @@ export const api = {
   spinoutGoIndependent: (data) => request('/legalcap/spinout/go-independent', { method: 'POST', body: JSON.stringify(data) }),
   spinoutIterate: (data) => request('/legalcap/spinout/iterate', { method: 'POST', body: JSON.stringify(data) }),
   independentSubsidiaries: () => request('/legalcap/spinout/independent').catch(() => []),
+
+  // ---------- Monitoring (admin) ----------
+  monitoringMetrics: (minutes = 60) => request(`/monitoring/metrics?minutes=${minutes}`),
+  monitoringRateLimits: (minutes = 60) => request(`/monitoring/rate-limits?minutes=${minutes}`),
+  monitoringErrors: (limit = 50) => request(`/monitoring/errors?limit=${limit}`),
+  monitoringAnomalies: () => request('/monitoring/anomalies'),
+  monitoringThroughput: () => request('/monitoring/throughput'),
+  monitoringCleanup: () => request('/monitoring/cleanup', { method: 'POST' }),
 };

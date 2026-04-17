@@ -28,6 +28,9 @@ import dashboard from './routes/dashboard';
 import pipeline from './routes/pipeline';
 import partnernet from './routes/partnernet';
 import legalcap from './routes/legalcap';
+import monitoring from './routes/monitoring';
+import { rateLimitMiddleware } from './middleware/rateLimit';
+import { observabilityMiddleware } from './middleware/observability';
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
@@ -71,6 +74,7 @@ const KYC_EXEMPT_PREFIXES = [
   '/api/debug/',
   '/api/network/referral/code',
   '/api/network/graph',
+  '/api/monitoring/',
 ];
 
 app.use('/api/*', async (c, next) => {
@@ -82,6 +86,12 @@ app.use('/api/*', async (c, next) => {
   await requireApprovedKyc(c);
   return next();
 });
+
+// Observability + rate limiting for all API requests.
+// Order: observability OUTERMOST (so it captures rate-limit 429s in metrics),
+// then rateLimit, then route handlers.
+app.use('/api/*', observabilityMiddleware());
+app.use('/api/*', rateLimitMiddleware());
 
 app.get('/api/health', (c) => c.json({
   status: 'ok',
@@ -203,5 +213,6 @@ app.route('/api/dashboard', dashboard);
 app.route('/api/pipeline', pipeline);
 app.route('/api/partnernet', partnernet);
 app.route('/api/legalcap', legalcap);
+app.route('/api/monitoring', monitoring);
 
 export default app;

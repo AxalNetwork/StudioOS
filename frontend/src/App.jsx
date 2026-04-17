@@ -40,6 +40,7 @@ import LegalCapitalPage from './pages/LegalCapitalPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import RiskDisclosuresPage from './pages/RiskDisclosuresPage';
+import MonitoringPage from './pages/MonitoringPage';
 import Footer from './components/Footer';
 
 const ALL_NAV_ITEMS = [
@@ -65,6 +66,7 @@ const ALL_NAV_ITEMS = [
   { to: '/pipeline', icon: Layers, label: 'Pipeline Board', roles: ['admin', 'founder', 'partner'] },
   { to: '/relationships', icon: Handshake, label: 'Relationships', roles: ['admin', 'founder', 'partner'] },
   { to: '/legal-capital', icon: Scale, label: 'Legal & Capital', roles: ['admin', 'founder', 'partner'] },
+  { to: '/monitoring', icon: Activity, label: 'Monitoring', roles: ['admin'] },
   { to: '/api-bridge', icon: Code, label: 'API Bridge', roles: ['admin'] },
   { to: '/founder', icon: Rocket, label: 'Founder Portal', roles: ['admin', 'founder'], divider: true },
   { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal', roles: ['admin', 'partner'] },
@@ -450,6 +452,7 @@ export default function App() {
       <Route path="/activity" element={guard(['admin', 'founder', 'partner'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner'], <KYCPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
+      <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner'], <ReferEarnPage />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner'], <PayoutsPage />)} />

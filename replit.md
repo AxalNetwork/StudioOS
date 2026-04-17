@@ -283,3 +283,18 @@ cloudflare-worker/
 
 ### Deploy
 See `cloudflare-worker/SETUP.md` for complete deployment instructions.
+
+### Monitoring & Observability
+- **D1 schema**: `cloudflare-worker/sql/monitoring.sql` adds `system_metrics`, `rate_limit_logs`, `error_logs`, `queue_jobs` and extends `activity_logs` with `latency_ms`, `status_code`, `endpoint`, `method`. Apply once via `npx wrangler d1 execute studioos-db --file=sql/monitoring.sql --remote`.
+- **Middleware**:
+  - `src/middleware/observability.ts` — measures request latency, persists to `system_metrics` + `activity_logs` (asynchronously via `ctx.waitUntil`), logs 5xx + thrown errors to `error_logs`.
+  - `src/middleware/rateLimit.ts` — KV (RATE_LIMITS) sliding-window counter. Buckets: `user` 60/min, `ai` 10/min (scoring/matches/advisory), `spinout` 5/hour (admin/partner only), `global` 1000/min. Returns 429 + `Retry-After` header.
+- **Routes** (`/api/monitoring/*`, all admin-only except throughput):
+  - `GET /metrics?minutes=60` — RPM, AI calls, spin-outs, top endpoints, health (green/yellow/red).
+  - `GET /rate-limits?minutes=60` — blocked requests + heatmap.
+  - `GET /errors?limit=50` — recent 5xx with stack snippets.
+  - `GET /anomalies` — Workers-AI summary (`@cf/meta/llama-3.1-8b-instruct`) over last hour.
+  - `GET /throughput` — admin/partner-visible limited stats.
+  - `POST /cleanup` — purges metrics/logs > 30 days.
+- **Frontend**: `frontend/src/pages/MonitoringPage.jsx`, admin-only nav at `/monitoring`. Uses recharts (already installed) and polls every 15s.
+- **Deploy**: `bash cloudflare-worker/deploy-workers.sh` applies the migration then deploys the worker. Requires `CLOUDFLARE_API_TOKEN` with D1 + Workers Scripts edit permissions.
