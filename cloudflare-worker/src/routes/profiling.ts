@@ -18,6 +18,7 @@ async function ensureProfileTable(env: Env) {
         ein TEXT,
         signatory_name TEXT,
         signatory_title TEXT,
+        company_established INTEGER,
         chat_history TEXT,
         extracted_data TEXT,
         admin_status TEXT DEFAULT 'pending',
@@ -27,6 +28,10 @@ async function ensureProfileTable(env: Env) {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `).run();
+  } catch {}
+  // Migrate existing tables that may not have the column yet
+  try {
+    await db.prepare(`ALTER TABLE partner_profiles ADD COLUMN company_established INTEGER`).run();
   } catch {}
 }
 
@@ -48,6 +53,7 @@ PROFILE CATEGORIES (one of):
 WORKFLOW:
 1. Greet briefly (1 sentence) and ask which best describes their interest in Axal.
 2. Once persona identified, ask 2–3 follow-ups to capture: legal entity name, entity type (Delaware C-Corp / LLC / Individual / Foreign), EIN/Tax ID (if applicable), signatory name & title, and any specific area of focus (sector, check size, expertise).
+   - FOUNDER EXCEPTION: Before asking about legal entity details, first ask: "Have you already established a legal entity for your company?" If yes, proceed to capture entity details. If no, note this in the profile and skip entity/EIN questions — just capture their sector and a one-line description of their idea.
 3. After enough info is captured, give a one-sentence summary and tell them: "Profile captured. An Axal admin will review and propose your Closing Binder shortly."
 
 RULES:
@@ -136,6 +142,7 @@ profiling.post('/save', async (c) => {
   "ein": string|null,
   "signatory_name": string|null,
   "signatory_title": string|null,
+  "company_established": true if the Founder confirmed they have a legal entity, false if they said they have NOT established one yet, null if not a Founder or not discussed,
   "summary": one-sentence summary of the partner's intent
 }
 Reply with ONLY the JSON object — no prose, no code fences.
@@ -168,6 +175,9 @@ ${transcript}`;
   const ein = extracted?.ein || null;
   const sigName = extracted?.signatory_name || null;
   const sigTitle = extracted?.signatory_title || null;
+  const companyEstablished = extracted?.company_established === true ? 1
+    : extracted?.company_established === false ? 0
+    : null;
   const chatJson = JSON.stringify(messages);
   const extractedJson = JSON.stringify(extracted);
 
@@ -182,6 +192,7 @@ ${transcript}`;
         ein = ${ein},
         signatory_name = ${sigName},
         signatory_title = ${sigTitle},
+        company_established = ${companyEstablished},
         chat_history = ${chatJson},
         extracted_data = ${extractedJson},
         updated_at = CURRENT_TIMESTAMP
@@ -190,9 +201,9 @@ ${transcript}`;
   } else {
     await sql`
       INSERT INTO partner_profiles
-        (email, user_id, persona, legal_entity_name, entity_type, ein, signatory_name, signatory_title, chat_history, extracted_data)
+        (email, user_id, persona, legal_entity_name, entity_type, ein, signatory_name, signatory_title, company_established, chat_history, extracted_data)
       VALUES
-        (${email}, ${user.id}, ${persona}, ${legalName}, ${entityType}, ${ein}, ${sigName}, ${sigTitle}, ${chatJson}, ${extractedJson})
+        (${email}, ${user.id}, ${persona}, ${legalName}, ${entityType}, ${ein}, ${sigName}, ${sigTitle}, ${companyEstablished}, ${chatJson}, ${extractedJson})
     `;
   }
 

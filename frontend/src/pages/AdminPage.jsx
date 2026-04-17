@@ -216,7 +216,18 @@ export default function AdminPage({ onImpersonate }) {
                         <div className="text-gray-900 font-medium">{p.user_name || '—'}</div>
                         <div className="text-xs text-gray-500">{p.email}</div>
                       </td>
-                      <td className="px-4 py-3 text-gray-700">{p.persona || <span className="text-gray-400">—</span>}</td>
+                      <td className="px-4 py-3">
+                        <div className="text-gray-700">{p.persona || <span className="text-gray-400">—</span>}</div>
+                        {p.persona === 'Founder' && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                            p.company_established === 1 ? 'bg-emerald-100 text-emerald-700'
+                            : p.company_established === 0 ? 'bg-amber-100 text-amber-700'
+                            : 'bg-gray-100 text-gray-500'
+                          }`}>
+                            {p.company_established === 1 ? 'Incorporated' : p.company_established === 0 ? 'Not incorporated' : 'Formation unknown'}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-gray-700">{p.legal_entity_name || <span className="text-gray-400">—</span>}</td>
                       <td className="px-4 py-3 text-gray-700 text-xs">{p.agreement_type || <span className="text-gray-400">— not assigned —</span>}</td>
                       <td className="px-4 py-3 text-center">
@@ -309,6 +320,34 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
               <div className="text-gray-900 font-medium">{profile.signatory_title || '—'}</div>
             </div>
           </div>
+
+          {profile.persona === 'Founder' && (
+            <div className={`flex items-start gap-2 rounded-lg p-3 border ${
+              profile.company_established === 0
+                ? 'bg-amber-50 border-amber-300'
+                : profile.company_established === 1
+                ? 'bg-emerald-50 border-emerald-300'
+                : 'bg-gray-50 border-gray-200'
+            }`}>
+              <div className="flex-1">
+                <div className="text-xs font-semibold mb-0.5 text-gray-700">Company Established?</div>
+                <div className={`text-sm font-medium ${
+                  profile.company_established === 0 ? 'text-amber-800'
+                  : profile.company_established === 1 ? 'text-emerald-800'
+                  : 'text-gray-500'
+                }`}>
+                  {profile.company_established === 1
+                    ? 'Yes — legal entity already in place'
+                    : profile.company_established === 0
+                    ? 'No — company not yet established'
+                    : 'Not answered'}
+                </div>
+                {profile.company_established === 0 && (
+                  <p className="text-xs text-amber-700 mt-1">This founder has not yet incorporated. The Axal spin-out engine can assist with formation as part of their Closing Binder.</p>
+                )}
+              </div>
+            </div>
+          )}
 
           {extracted.summary && (
             <div className="bg-violet-50 border border-violet-200 rounded-lg p-3">
