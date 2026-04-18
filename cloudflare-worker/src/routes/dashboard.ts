@@ -9,6 +9,17 @@ const dashboard = new Hono<{ Bindings: Env }>();
 const CACHE_TTL_MS = 30_000;
 const cache = new Map<number, { data: any; expires: number }>();
 
+// Wrap a query so a single missing table or SQL error doesn't 500 the whole dashboard.
+// Returns the fallback value and logs the underlying error for observability.
+async function safeQuery<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn();
+  } catch (e: any) {
+    console.error(`[dashboard:${label}]`, String(e?.message || e));
+    return fallback;
+  }
+}
+
 dashboard.get('/', async (c) => {
   const user = await requireAuth(c);
   const fresh = c.req.query('fresh') === '1';
@@ -22,55 +33,56 @@ dashboard.get('/', async (c) => {
   const isPartner = user.role === 'partner';
   const isFounder = user.role === 'founder';
 
-  // Run all queries in parallel for speed (Cloudflare Workers loves this)
+  // Run all queries in parallel for speed (Cloudflare Workers loves this).
+  // Each query is wrapped in safeQuery so one missing table cannot 500 the whole dashboard.
   const [
     deals, scoresMine, syndicatesAll, mySyndicateMemberships, marketplaceCount,
     monthEarnings, lifetimeEarnings, compoundEarnings, pendingPayouts,
     chainCounts, topReferrers, recentCommissions, earningsSeries, myTasks,
     notifications,
   ] = await Promise.all([
-    // Recent deal flow — RBAC-scoped:
-    // - admin: all active deals
-    // - founder: only their own submitted projects
-    // - partner: only deals they have a match_score on, plus tier_1/tier_2 (publicly investable)
-    isAdmin
-      ? sql`SELECT id, name, sector, stage, status, score, ai_decision, created_at FROM projects WHERE status NOT IN ('rejected', 'archived') ORDER BY created_at DESC LIMIT 12`
-      : isFounder
-        ? sql`SELECT id, name, sector, stage, status, score, ai_decision, created_at FROM projects WHERE submitted_by = ${user.id} AND status NOT IN ('rejected', 'archived') ORDER BY created_at DESC LIMIT 12`
-        : sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.score, p.ai_decision, p.created_at FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} WHERE p.status NOT IN ('rejected', 'archived') AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT 12`,
-    // My top match scores (any score_type)
-    sql`
+    safeQuery('deals', () =>
+      isAdmin
+        ? sql`SELECT id, name, sector, stage, status, score, ai_decision, created_at FROM projects WHERE status NOT IN ('rejected', 'archived') ORDER BY created_at DESC LIMIT 12`
+        : isFounder
+          ? sql`SELECT id, name, sector, stage, status, score, ai_decision, created_at FROM projects WHERE submitted_by = ${user.id} AND status NOT IN ('rejected', 'archived') ORDER BY created_at DESC LIMIT 12`
+          : sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.score, p.ai_decision, p.created_at FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} WHERE p.status NOT IN ('rejected', 'archived') AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT 12`,
+      [] as any[]),
+    safeQuery('scoresMine', () => sql`
       SELECT ms.*, p.name as deal_name, p.sector, p.stage
       FROM match_scores ms LEFT JOIN projects p ON p.id = ms.deal_id
       WHERE ms.user_id = ${user.id} ORDER BY ms.score DESC LIMIT 10
-    `,
-    // Open syndicates (user can join)
-    sql`
+    `, [] as any[]),
+    safeQuery('syndicatesAll', () => sql`
       SELECT s.id, s.name, s.description, s.target_cents, s.min_commitment_cents, s.created_at,
         (SELECT COUNT(*) FROM syndicate_members WHERE syndicate_id = s.id) as members,
         (SELECT COALESCE(SUM(commitment_cents), 0) FROM syndicate_members WHERE syndicate_id = s.id) as committed_cents
       FROM syndicates s WHERE s.status = 'open' ORDER BY s.created_at DESC LIMIT 8
-    `,
-    // My syndicate memberships
-    sql`
+    `, [] as any[]),
+    safeQuery('mySyndicateMemberships', () => sql`
       SELECT sm.commitment_cents, sm.joined_at, s.id, s.name, s.status, s.target_cents
       FROM syndicate_members sm JOIN syndicates s ON s.id = sm.syndicate_id
       WHERE sm.user_id = ${user.id} ORDER BY sm.joined_at DESC LIMIT 10
-    `,
-    // Marketplace size
-    sql`SELECT COUNT(*) as n FROM marketplace_profiles WHERE availability = 'available'`,
-    // This month's earnings
-    sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND created_at >= datetime('now', 'start of month')`,
-    // Lifetime
-    sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id}`,
-    // Compounding
-    sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND source_type LIKE '%_compound'`,
-    // Pending payouts (accrued not yet paid)
-    sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND status = 'accrued'`,
-    // Network reach
-    sql`SELECT level, COUNT(*) as n FROM referral_chains WHERE root_referrer_id = ${user.id} GROUP BY level`,
-    // Top referrers in MY chain — for each L1 referral I made, count their distinct downstream people
-    sql`
+    `, [] as any[]),
+    safeQuery('marketplaceCount', () =>
+      sql`SELECT COUNT(*) as n FROM marketplace_profiles WHERE availability = 'available'`,
+      [{ n: 0 }] as any[]),
+    safeQuery('monthEarnings', () =>
+      sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND created_at >= datetime('now', 'start of month')`,
+      [{ c: 0 }] as any[]),
+    safeQuery('lifetimeEarnings', () =>
+      sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id}`,
+      [{ c: 0 }] as any[]),
+    safeQuery('compoundEarnings', () =>
+      sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND source_type LIKE '%_compound'`,
+      [{ c: 0 }] as any[]),
+    safeQuery('pendingPayouts', () =>
+      sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND status = 'accrued'`,
+      [{ c: 0 }] as any[]),
+    safeQuery('chainCounts', () =>
+      sql`SELECT level, COUNT(*) as n FROM referral_chains WHERE root_referrer_id = ${user.id} GROUP BY level`,
+      [] as any[]),
+    safeQuery('topReferrers', () => sql`
       SELECT u.id, u.name, u.email, COUNT(DISTINCT rc.user_id) as downstream
       FROM referral_chains my_l1
       JOIN users u ON u.id = my_l1.user_id
@@ -79,28 +91,26 @@ dashboard.get('/', async (c) => {
       GROUP BY u.id, u.name, u.email
       HAVING COUNT(DISTINCT rc.user_id) > 0
       ORDER BY downstream DESC LIMIT 5
-    `,
-    // Recent commissions
-    sql`SELECT id, amount_cents, source_type, description, status, created_at FROM commissions WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 10`,
-    // Earnings over last 30 days, daily buckets
-    sql`
+    `, [] as any[]),
+    safeQuery('recentCommissions', () =>
+      sql`SELECT id, amount_cents, source_type, description, status, created_at FROM commissions WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 10`,
+      [] as any[]),
+    safeQuery('earningsSeries', () => sql`
       SELECT DATE(created_at) as day, SUM(amount_cents) as cents
       FROM commissions WHERE user_id = ${user.id} AND created_at >= datetime('now', '-30 days')
       GROUP BY DATE(created_at) ORDER BY day
-    `,
-    // My open Studio Ops tasks (operators/advisors care about this)
-    sql`
+    `, [] as any[]),
+    safeQuery('myTasks', () => sql`
       SELECT t.id, t.title, t.status, t.priority, t.due_date, w.title as workflow_title, w.type
       FROM workflow_tasks t JOIN workflows w ON w.id = t.workflow_id
       WHERE t.assignee_user_id = ${user.id} AND t.status != 'done' ORDER BY t.due_date IS NULL, t.due_date LIMIT 10
-    `,
-    // Notifications: recent activity affecting this user (commissions accrued, new syndicates with their deal interests, intro requests)
-    sql`
+    `, [] as any[]),
+    safeQuery('notifications', () => sql`
       SELECT 'commission' as kind, id, description as title, amount_cents, created_at FROM commissions WHERE user_id = ${user.id} AND created_at >= datetime('now', '-7 days')
       UNION ALL
       SELECT 'syndicate' as kind, id, name as title, NULL as amount_cents, created_at FROM syndicates WHERE created_by != ${user.id} AND status = 'open' AND created_at >= datetime('now', '-7 days')
       ORDER BY created_at DESC LIMIT 12
-    `,
+    `, [] as any[]),
   ]);
 
   // Build chain counts map
@@ -115,17 +125,17 @@ dashboard.get('/', async (c) => {
   // Personalized "AI-recommended syndicates" for partners — open syndicates whose deal_id has a high match_score for the user
   let recommendedSyndicates: any[] = [];
   if (isPartner || isAdmin) {
-    recommendedSyndicates = await sql`
+    recommendedSyndicates = await safeQuery('recommendedSyndicates', () => sql`
       SELECT s.id, s.name, s.description, s.target_cents, s.min_commitment_cents, ms.score, ms.explanation
       FROM syndicates s
       JOIN match_scores ms ON ms.deal_id = s.deal_id AND ms.user_id = ${user.id}
       WHERE s.status = 'open' AND s.created_by != ${user.id}
         AND s.id NOT IN (SELECT syndicate_id FROM syndicate_members WHERE user_id = ${user.id})
       ORDER BY ms.score DESC LIMIT 5
-    `;
+    `, [] as any[]);
   }
 
-  await sql.end();
+  try { await sql.end(); } catch {}
 
   // Audit dashboard view (admins only, low volume)
   if (isAdmin) {
