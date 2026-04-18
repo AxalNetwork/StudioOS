@@ -38,6 +38,7 @@ import NetworkEffectsPage from './pages/NetworkEffectsPage';
 import PipelinePage from './pages/PipelinePage';
 import RelationshipsPage from './pages/RelationshipsPage';
 import LegalCapitalPage from './pages/LegalCapitalPage';
+import SpinOutsPage from './pages/SpinOutsPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import RiskDisclosuresPage from './pages/RiskDisclosuresPage';
@@ -59,6 +60,7 @@ const NAV_BY_ROLE = {
     { to: '/projects', icon: Zap, label: 'Projects' },
     { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
     { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
+    { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
 
     { section: 'Intelligence' },
     { to: '/scoring', icon: Target, label: 'Scoring Engine' },
@@ -70,13 +72,11 @@ const NAV_BY_ROLE = {
     { section: 'Network' },
     { to: '/partners', icon: Users, label: 'Partners' },
     { to: '/refer', icon: Share2, label: 'Refer & Earn' },
-    { to: '/network', icon: Network, label: 'Referral Network' },
     { to: '/relationships', icon: Handshake, label: 'Relationships' },
     { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
 
     { section: 'Capital & Liquidity' },
     { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
-    { to: '/funds', icon: DollarSign, label: 'VC Funds' },
     { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     { to: '/payouts', icon: Wallet, label: 'Payouts' },
 
@@ -88,9 +88,8 @@ const NAV_BY_ROLE = {
     { to: '/activity', icon: Activity, label: 'Activity Log' },
     { to: '/tickets', icon: Ticket, label: 'Support' },
     { to: '/integrations', icon: Plug, label: 'Integrations' },
-    { to: '/api-bridge', icon: Code, label: 'API Bridge' },
 
-    { divider: true },
+    { section: 'Portals' },
     { to: '/founder', icon: Rocket, label: 'Founder Portal' },
     { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
   ],
@@ -102,6 +101,7 @@ const NAV_BY_ROLE = {
     { to: '/projects', icon: Zap, label: 'Projects' },
     { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
     { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
+    { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
 
     { section: 'Intelligence' },
     { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
@@ -111,7 +111,6 @@ const NAV_BY_ROLE = {
 
     { section: 'Network & Growth' },
     { to: '/refer', icon: Share2, label: 'Refer & Earn' },
-    { to: '/network', icon: Network, label: 'Referral Network' },
     { to: '/relationships', icon: Handshake, label: 'Relationships' },
     { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
 
@@ -125,13 +124,12 @@ const NAV_BY_ROLE = {
     { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
 
     { divider: true },
-    { to: '/founder', icon: Rocket, label: 'Founder Portal' },
+    { to: '/founder', icon: Rocket, label: 'Founder Portal', highlight: true },
   ],
 
   partner: [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-
     { section: 'Intelligence' },
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/scoring', icon: Target, label: 'Scoring Engine' },
     { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
     { to: '/matches', icon: Sparkles, label: 'AI Matches' },
@@ -144,21 +142,16 @@ const NAV_BY_ROLE = {
     { section: 'Network' },
     { to: '/partners', icon: Users, label: 'Partners' },
     { to: '/refer', icon: Share2, label: 'Refer & Earn' },
-    { to: '/network', icon: Network, label: 'Referral Network' },
     { to: '/relationships', icon: Handshake, label: 'Relationships' },
     { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
 
     { section: 'Capital & Liquidity' },
     { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
-    { to: '/funds', icon: DollarSign, label: 'VC Funds' },
     { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     { to: '/payouts', icon: Wallet, label: 'Payouts' },
 
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-
-    { section: 'Tools' },
-    { to: '/integrations', icon: Plug, label: 'Integrations' },
 
     { section: 'Support' },
     { to: '/activity', icon: Activity, label: 'Activity Log' },
@@ -166,7 +159,7 @@ const NAV_BY_ROLE = {
     { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
 
     { divider: true },
-    { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
+    { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal', highlight: true },
   ],
 };
 
@@ -314,7 +307,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 if (item.divider) {
                   return <div key={`divider-${idx}`} className="mx-5 my-2 border-t border-gray-200" />;
                 }
-                const { to, icon: Icon, label } = item;
+                const { to, icon: Icon, label, highlight } = item;
                 return (
                   <NavLink
                     key={to}
@@ -324,7 +317,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                       `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
                         isActive
                           ? 'text-violet-600 bg-violet-50 border-r-2 border-violet-600'
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                          : highlight
+                            ? 'text-violet-700 font-medium bg-violet-50/60 hover:bg-violet-100'
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                       }`
                     }
                   >
@@ -564,6 +559,7 @@ export default function App() {
       <Route path="/activity" element={guard(['admin', 'founder', 'partner'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner'], <KYCPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
+      <Route path="/spinouts" element={guard(['admin', 'founder', 'partner'], <SpinOutsPage />)} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/liquidity" element={guard(['admin', 'founder', 'partner'], <LiquidityPage currentUser={user} />)} />
       <Route path="/funds" element={guard(['admin', 'partner'], <FundsPage currentUser={user} />)} />
