@@ -1,0 +1,132 @@
+**✅ Here are the exact configs you need for Cloudflare Queues** (before you prompt Replit).
+
+### 1. `wrangler.toml` (add/replace this section)
+
+```toml
+# wrangler.toml
+name = "axal-studioos"
+main = "backend/main.py"
+compatibility_date = "2026-04-01"
+
+# === D1 Database ===
+[[d1_databases]]
+binding = "DB"
+database_name = "axal_d1"
+database_id = "your-d1-database-id-here"   # ← replace with real ID from Cloudflare
+
+# === Cloudflare Queues (new) ===
+[[queues]]
+binding = "JOB_QUEUE"
+queue_name = "studioos-job-queue"
+
+# === AI Workers ===
+[ai]
+binding = "AI"
+
+# Optional but recommended
+[observability]
+enabled = true
+```
+
+### 2. New consumer Worker (create this file)
+
+Create `cloudflare-worker/queue-consumer.js`:
+
+```js
+export default {
+  async queue(batch, env) {
+    for (const message of batch.messages) {
+      const { job_type, payload } = message.body;
+
+      try {
+        console.log(`Processing job: ${job_type}`, payload);
+
+        if (job_type === 'ai_scoring') {
+          // Call your scoring-worker
+          await env.AI.run('@cf/meta/llama-3-8b-instruct', { /* prompt */ });
+        } else if (job_type === 'spinout_execute') {
+          // Call spin-out logic
+        } else if (job_type === 'traction_review') {
+          // etc.
+        }
+
+        message.ack(); // Mark as processed
+      } catch (err) {
+        console.error(`Job failed: ${job_type}`, err);
+        // Optional: retry or dead-letter
+      }
+    }
+  }
+};
+```
+
+### 3. How to send jobs from FastAPI (example)
+
+In `backend/jobs.py` (or wherever you enqueue):
+
+```python
+await env.JOB_QUEUE.send({
+    "job_type": "spinout_execute",
+    "payload": { "deal_id": 123, "user_id": 456 }
+})
+```
+
+---
+
+**Now here is the ready-to-copy prompt** for Replit Agent.
+
+**Paste this directly into the Agent tab:**
+
+```
+You are the senior Cloudflare engineer for Axal StudioOS. We currently use a D1-polling job queue. Replace it completely with native **Cloudflare Queues** for true high-throughput async processing (hundreds of parallel projects/spin-outs).
+
+Use the exact configurations below:
+
+1. Update wrangler.toml with the [[queues]] binding:
+   [[queues]]
+   binding = "JOB_QUEUE"
+   queue_name = "studioos-job-queue"
+
+2. Create cloudflare-worker/queue-consumer.js as the queue consumer (use the code I provided earlier).
+
+3. In backend/jobs.py (or equivalent):
+   - Replace all enqueue_job() calls with env.JOB_QUEUE.send({ job_type, payload })
+   - Remove the old D1-polling background worker.
+
+4. Update backend/main.py to bind the queue (use lifespan or startup event).
+
+5. Update all routers that trigger jobs (pipeline, spinout, capital, liquidity, etc.) to use the new queue producer.
+
+6. Keep the same job types we already have:
+   - ai_scoring
+   - traction_review
+   - spinout_execute
+   - capital_call
+   - liquidity_match
+   - returns_distribution
+   - etc.
+
+7. Add queue monitoring endpoint: GET /api/infra/queue (shows queue stats via Cloudflare API if possible).
+
+8. Keep full backward compatibility during migration (allow old D1 queue as fallback for 24h).
+
+Build this step-by-step:
+1. First update wrangler.toml with the Queues binding.
+2. Then create cloudflare-worker/queue-consumer.js.
+3. Then replace the old job queue system in backend/jobs.py and main.py.
+4. Then update all routers to use JOB_QUEUE.send().
+5. Finally add queue monitoring and test end-to-end (trigger a spin-out and confirm it processes via queue).
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+**Next steps after you run the prompt:**
+1. Paste the prompt into Replit Agent.
+2. After it finishes, run `wrangler deploy` (or use the CI/CD we set up earlier).
+3. Create the queue in the Cloudflare dashboard if it doesn't exist yet (`wrangler queues create studioos-job-queue`).
+
+Would you like me to also give you the prompt for **R2 + Durable Objects** next (the two most valuable additional Cloudflare products for this platform)? Just say the word.
