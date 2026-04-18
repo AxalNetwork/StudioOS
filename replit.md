@@ -334,3 +334,10 @@ See `cloudflare-worker/SETUP.md` for complete deployment instructions.
 - **Queue handlers** (extend `services/queueWorker.ts`): `liquidity_valuation`, `liquidity_matching`. Both included in the per-drain AI cap (5 AI jobs/min).
 - **Event-driven hook**: `legalcap.ts /spinout/go-independent` now also creates a 0-share placeholder `secondary_listing` and enqueues `liquidity_valuation` so AI fair-value is precomputed for the marketplace.
 - **Frontend**: `frontend/src/pages/LiquidityPage.jsx` — Marketplace grid (with AI valuation badges), List-My-Shares wizard, AI Buyer Matches modal (admin can execute), My Portfolio (LP rows + listings + exit history), Exit Pipeline funnel (admin/partner). Mounted at `/liquidity` for all roles.
+
+## Recent Changes (Apr 18 2026)
+- **Backend modernization** (`backend/app/main.py`): replaced deprecated `@app.on_event("startup")` with an `asynccontextmanager` `lifespan`; added `TrustedHostMiddleware` (allows axal.vc, *.replit.dev/app, localhost); added a security-headers middleware (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, conditional HSTS); added global structured-JSON exception handlers for `StarletteHTTPException`, `RequestValidationError`, and unhandled `Exception` (response shape `{ok: false, error: {...}}`). Title bumped to "Axal StudioOS". Router list and `/api/dashboard/stats` left intact — no destructive directory move or event-bus rewrite.
+- **Refer & Earn enhancements** (`frontend/src/pages/ReferEarnPage.jsx`):
+    - **Quick Share**: X/Twitter, LinkedIn, WhatsApp, Email buttons with pre-filled, branded messages and `mailto:` deep links.
+    - **Import Contacts**: client-side CSV parser (handles quoted fields, CRLF, commas-in-quotes; ≤1 MB, ≤500 rows) generating per-row personalized invite links + one-click email buttons. Header row must include `email` (and optionally `name`).
+    - **Editable invite templates**: in-page editor with `{{link}}` / `{{code}}` placeholders, persisted to `localStorage` under `axal:invite_templates_v1`, with reset-to-defaults.
