@@ -1,0 +1,52 @@
+Please update the sidebar navigation UI for our platform to reflect a new, optimized structure. The current sidebar has grown too long, so we need to merge duplicates, add logical groupings, and implement strict role-based rendering for Admin, Founder, and Partner/Investor views.
+
+Here are the specific requirements:
+
+1. MERGE & RENAME:
+- Merge "Legal & Compliance" and "Legal & Capital" into a single item: "Legal & Capital".
+- Merge "Refer & Earn" and "Referral Network" into "Refer & Earn".
+- Merge "Capital & Investment" and "VC Funds" into "Capital & Investment".
+- Rename "API Bridge" to "Integrations".
+
+2. ADD MISSING ITEMS:
+- Add "Spin-Outs" to the Core section.
+- Add "Identity Verification" to the Support/Advanced section.
+
+3. IMPLEMENT SECTION HEADERS (Visual dividers or small uppercase labels):
+Group the navigation items visually using these headers: Core, Intelligence, Network, Capital & Liquidity, Legal & Compliance, Advanced/Support, and Portals.
+
+4. IMPLEMENT ROLE-BASED RENDER LOGIC:
+Use a state or context variable (e.g., `userRole`) controlled by a "View as: Admin / Founder / Partner" dropdown at the top or bottom of the sidebar. Render the sidebar exactly like this based on the selected role:
+
+ADMIN VIEW:
+- Core: Dashboard, Projects, Pipeline Board, Studio Ops, Spin-Outs
+- Intelligence: Scoring Engine, Market Intelligence, AI Advisory Suite, AI Matches, Deal Flow
+- Network: Partners, Refer & Earn, Relationships, Network Effects
+- Capital & Liquidity: Capital & Investment, Liquidity & Exits, Payouts
+- Legal & Compliance: Legal & Capital
+- Advanced: Monitoring, Activity Log, Support, Integrations
+- Portals: Founder Portal, Partner / Investor Portal
+
+FOUNDER VIEW:
+- Core: Dashboard, Projects, Pipeline Board, Studio Ops, Spin-Outs
+- Intelligence: AI Advisory Suite
+- Legal & Compliance: Legal & Capital
+- Network & Growth: Refer & Earn, Relationships, Network Effects
+- Capital & Liquidity: Liquidity & Exits, Payouts
+- Support: Activity Log, Support, Identity Verification
+- Highlighted Action: Founder Portal
+
+PARTNER / INVESTOR VIEW:
+- Intelligence: Dashboard, Scoring Engine, Market Intelligence, AI Matches, Deal Flow
+- Core: Projects, Pipeline Board
+- Network: Partners, Refer & Earn, Relationships, Network Effects
+- Capital & Liquidity: Capital & Investment, Liquidity & Exits, Payouts
+- Legal & Compliance: Legal & Capital
+- Support: Activity Log, Support, Identity Verification
+- Highlighted Action: Partner / Investor Portal
+
+5. STYLING INSTRUCTIONS:
+- Use Tailwind CSS to make the sidebar clean and scannable.
+- Ensure the section headers (Core, Intelligence, etc.) are styled as small, muted uppercase text (e.g., text-xs text-gray-500 uppercase tracking-wider).
+- Include standard, clean icons for each link.
+- Make sure the "View as" dropdown is clearly visible to toggle between these three states for testing.

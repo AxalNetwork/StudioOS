@@ -105,6 +105,8 @@ class User(SQLModel, table=True):
     email_verified: bool = False
     verification_token: Optional[str] = None
     verification_token_expires: Optional[datetime] = None
+    admin_notes: Optional[str] = None
+    last_active_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

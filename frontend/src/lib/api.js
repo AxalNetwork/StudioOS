@@ -146,6 +146,10 @@ export const api = {
   adminPayouts: () => request('/network/admin/payouts'),
   adminProcessPayout: (id, data) => request(`/network/admin/payouts/${id}/process`, { method: 'PATCH', body: JSON.stringify(data) }),
 
+  adminUserProfile: (userId) => request(`/admin/users/${userId}/profile`),
+  adminUpdateNotes: (userId, admin_notes) => request(`/admin/users/${userId}/notes`, { method: 'POST', body: JSON.stringify({ admin_notes }) }),
+  adminResendVerification: (userId) => request(`/admin/users/${userId}/resend-verification`, { method: 'POST' }),
+
   integrationsAvailable: () => request('/integrations/available'),
   integrationsList: () => request('/integrations'),
   integrationsConnect: (data) => request('/integrations/connect', { method: 'POST', body: JSON.stringify(data) }),

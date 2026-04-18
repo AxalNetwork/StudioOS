@@ -59,6 +59,7 @@ export default function AdminPage({ onImpersonate }) {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [openProfile, setOpenProfile] = useState(null);
+  const [openUser, setOpenUser] = useState(null);
 
   useEffect(() => { loadAll(); }, []);
   useEffect(() => { loadKyc(kycFilter); }, [kycFilter]);
@@ -197,10 +198,11 @@ export default function AdminPage({ onImpersonate }) {
                   </thead>
                   <tbody>
                     {filtered.map(u => (
-                      <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50/50">
+                      <tr key={u.id} onClick={() => setOpenUser(u)}
+                        className="border-b border-gray-100 hover:bg-violet-50/40 cursor-pointer">
                         <td className="px-4 py-3 text-gray-900 font-medium">{u.name}</td>
                         <td className="px-4 py-3 text-gray-600">{u.email}</td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <div className="relative inline-block">
                             <select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value)}
                               className={`appearance-none text-xs font-medium px-3 py-1 pr-6 rounded-full cursor-pointer border-0 ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>
@@ -220,7 +222,7 @@ export default function AdminPage({ onImpersonate }) {
                           {u.email_verified ? <UserCheck size={16} className="text-green-500 mx-auto" /> : <UserX size={16} className="text-gray-400 mx-auto" />}
                         </td>
                         <td className="px-4 py-3 text-gray-500 text-xs">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1 justify-end">
                             <button onClick={() => handleImpersonate(u.id)}
                               className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors flex items-center gap-1"
@@ -450,6 +452,231 @@ export default function AdminPage({ onImpersonate }) {
           onSaved={() => { setOpenProfile(null); loadAll(); }}
         />
       )}
+
+      {openUser && (
+        <UserDetailModal
+          userRow={openUser}
+          onClose={() => setOpenUser(null)}
+          onImpersonate={() => { handleImpersonate(openUser.id); setOpenUser(null); }}
+          onToggleActive={() => { handleToggleActive(openUser.id); setOpenUser(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive }) {
+  const [data, setData] = useState(null);
+  const [tab, setTab] = useState('profile');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await api.adminUserProfile(userRow.id);
+        if (!alive) return;
+        setData(res);
+        setNotes(res.user.admin_notes || '');
+      } catch (e) {
+        if (alive) setErr(e.message || 'Failed to load profile');
+      }
+    })();
+    return () => { alive = false; };
+  }, [userRow.id]);
+
+  const flash = (kind, msg) => {
+    setToast({ kind, msg });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const saveNotes = async () => {
+    setSaving(true);
+    try {
+      await api.adminUpdateNotes(userRow.id, notes);
+      flash('ok', 'Notes saved');
+    } catch (e) { flash('err', e.message || 'Failed to save'); }
+    finally { setSaving(false); }
+  };
+
+  const resend = async () => {
+    if (!confirm(`Resend verification email to ${userRow.email}?`)) return;
+    setResending(true);
+    try {
+      const r = await api.adminResendVerification(userRow.id);
+      flash('ok', r.already_verified ? 'User is already verified' : 'Verification email sent');
+    } catch (e) { flash('err', e.message || 'Failed to send'); }
+    finally { setResending(false); }
+  };
+
+  const u = data?.user || userRow;
+  const stats = data?.stats || {};
+  const activity = data?.activity || [];
+  const tickets = data?.tickets || [];
+  const integrations = data?.integrations || [];
+  const kyc = data?.kyc || {};
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-bold text-gray-900">{u.name}</h3>
+              <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>{u.role}</span>
+              <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{u.is_active ? 'Active' : 'Inactive'}</span>
+              {u.email_verified ? (
+                <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">Verified</span>
+              ) : (
+                <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">Unverified</span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">{u.email} · joined {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg"><X size={18} /></button>
+        </div>
+
+        {toast && (
+          <div className={`mx-6 mt-3 px-3 py-2 rounded-lg text-xs ${toast.kind === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{toast.msg}</div>
+        )}
+
+        <div className="px-6 pt-3 border-b border-gray-200 flex gap-1">
+          {['profile', 'kyc', 'activity', 'notes'].map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px capitalize transition-colors ${tab === t ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+              {t === 'kyc' ? 'KYC & Verification' : t}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {err && <div className="text-sm text-red-600 mb-4">{err}</div>}
+          {!data && !err && <div className="text-sm text-gray-500">Loading…</div>}
+
+          {data && tab === 'profile' && (
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <Field label="Name" value={u.name} />
+              <Field label="Email" value={u.email} />
+              <Field label="Role" value={u.role} />
+              <Field label="UID" value={u.uid} mono />
+              <Field label="Founder ID" value={u.founder_id ?? '—'} />
+              <Field label="Partner ID" value={u.partner_id ?? '—'} />
+              <Field label="Joined" value={u.created_at ? new Date(u.created_at).toLocaleString() : '—'} />
+              <Field label="Last active" value={u.last_active_at ? new Date(u.last_active_at).toLocaleString() : '—'} />
+              <div className="col-span-2 grid grid-cols-3 gap-3 mt-2">
+                <Stat label="Activity events" value={stats.activity_count ?? 0} />
+                <Stat label="Tickets" value={stats.ticket_count ?? 0} />
+                <Stat label="Integrations" value={stats.integration_count ?? 0} />
+              </div>
+              {integrations.length > 0 && (
+                <div className="col-span-2 mt-3">
+                  <div className="text-xs font-semibold text-gray-700 mb-2">Connected integrations</div>
+                  <div className="space-y-1.5">
+                    {integrations.map(i => (
+                      <div key={i.uid} className="flex items-center justify-between text-xs bg-gray-50 px-3 py-2 rounded-lg">
+                        <span className="font-medium text-gray-900">{i.display_name || i.provider_name}</span>
+                        <span className="text-gray-500">{i.status} · {i.last_synced_at ? new Date(i.last_synced_at).toLocaleString() : 'never synced'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {data && tab === 'kyc' && (
+            <div className="space-y-3 text-sm">
+              <Field label="KYC status" value={kyc.status || 'unknown'} />
+              <Field label="Email verified" value={u.email_verified ? 'Yes' : 'No'} />
+              <Field label="TOTP enabled" value={kyc.totp_enabled ? 'Yes (required at login)' : 'No'} />
+              <Field label="ID document uploaded" value={kyc.id_uploaded ? 'Yes' : 'No'} />
+              <div className="pt-2">
+                <button onClick={resend} disabled={resending || u.email_verified}
+                  className="px-3 py-2 text-xs bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:bg-gray-300">
+                  {resending ? 'Sending…' : u.email_verified ? 'Already verified' : 'Resend verification email'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {data && tab === 'activity' && (
+            <div className="space-y-2">
+              {activity.length === 0 && <div className="text-sm text-gray-500">No activity recorded.</div>}
+              {activity.map(a => (
+                <div key={a.id} className="text-xs border border-gray-200 rounded-lg p-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-gray-900">{a.action}</span>
+                    <span className="text-gray-500">{a.created_at ? new Date(a.created_at).toLocaleString() : ''}</span>
+                  </div>
+                  {a.details && <div className="text-gray-600 mt-1">{a.details}</div>}
+                </div>
+              ))}
+              {tickets.length > 0 && (
+                <>
+                  <div className="text-xs font-semibold text-gray-700 mt-4 mb-2">Recent tickets</div>
+                  {tickets.map(t => (
+                    <div key={t.id} className="text-xs border border-gray-200 rounded-lg p-2.5 flex items-center justify-between">
+                      <span className="font-medium text-gray-900">{t.title}</span>
+                      <span className="text-gray-500">{t.status} · {t.priority}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+
+          {data && tab === 'notes' && (
+            <div className="space-y-3">
+              <label className="text-xs font-semibold text-gray-700">Admin notes (visible only to admins)</label>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={8}
+                className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                placeholder="Internal notes about this user…" />
+              <div className="flex gap-2">
+                <button onClick={saveNotes} disabled={saving}
+                  className="px-3 py-2 text-xs bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:bg-gray-300">
+                  {saving ? 'Saving…' : 'Save notes'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+          <div className="flex gap-2">
+            <button onClick={onImpersonate}
+              className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium flex items-center gap-1">
+              <LogIn size={12} /> View As
+            </button>
+            <button onClick={onToggleActive}
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium ${u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+              {u.is_active ? 'Disable account' : 'Enable account'}
+            </button>
+          </div>
+          <button onClick={onClose} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900">Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, value, mono }) {
+  return (
+    <div>
+      <div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">{label}</div>
+      <div className={`text-gray-900 ${mono ? 'font-mono text-xs' : ''} mt-0.5 break-all`}>{value || '—'}</div>
+    </div>
+  );
+}
+
+function Stat({ label, value }) {
+  return (
+    <div className="bg-violet-50 border border-violet-200 rounded-lg p-3">
+      <div className="text-2xl font-bold text-violet-700">{value}</div>
+      <div className="text-[11px] text-gray-600 mt-0.5">{label}</div>
     </div>
   );
 }
