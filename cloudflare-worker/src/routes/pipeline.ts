@@ -135,11 +135,27 @@ pipeline.get('/active', async (c) => {
   const sql = getSQL(c.env);
   const isAdmin = user.role === 'admin';
   const isFounder = user.role === 'founder';
+  // NOTE: projects table has no `score` column — score lives in score_snapshots.
+  // We pull the latest snapshot's total_score per project via a correlated subquery.
+  // Founder scoping joins through users.founder_id (founders has no user_id column).
   const rows = isAdmin
-    ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.score, p.status as project_status, p.created_at FROM projects p WHERE p.status NOT IN ('rejected', 'archived') ORDER BY p.created_at DESC LIMIT 100`
+    ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage,
+                  (SELECT total_score FROM score_snapshots WHERE project_id = p.id ORDER BY id DESC LIMIT 1) AS score,
+                  p.status as project_status, p.created_at
+                FROM projects p WHERE p.status NOT IN ('rejected', 'archived')
+                ORDER BY p.created_at DESC LIMIT 100`
     : isFounder
-      ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.score, p.status as project_status, p.created_at FROM projects p JOIN founders f ON f.id = p.founder_id WHERE f.user_id = ${user.id} ORDER BY p.created_at DESC LIMIT 100`
-      : await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.score, p.status as project_status, p.created_at FROM projects p WHERE p.status NOT IN ('rejected', 'archived') ORDER BY p.created_at DESC LIMIT 100`;
+      ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage,
+                    (SELECT total_score FROM score_snapshots WHERE project_id = p.id ORDER BY id DESC LIMIT 1) AS score,
+                    p.status as project_status, p.created_at
+                  FROM projects p
+                  WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
+                  ORDER BY p.created_at DESC LIMIT 100`
+      : await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage,
+                    (SELECT total_score FROM score_snapshots WHERE project_id = p.id ORDER BY id DESC LIMIT 1) AS score,
+                    p.status as project_status, p.created_at
+                  FROM projects p WHERE p.status NOT IN ('rejected', 'archived')
+                  ORDER BY p.created_at DESC LIMIT 100`;
 
   const ids = (rows as any[]).map(r => r.id);
   if (!ids.length) { await sql.end(); return c.json([]); }

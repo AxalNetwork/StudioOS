@@ -109,6 +109,23 @@ async function ensureSchema(env: Env) {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_as_date ON activity_stats(stat_date)`,
 
+    // Defensive copies of tables referenced by the partner_summary view.
+    // These are also created by network.ts / networkfx.ts ensureSchema, but
+    // partner_summary's SELECT will explode with "no such table" if those
+    // routes haven't been hit yet on a fresh DB.
+    `CREATE TABLE IF NOT EXISTS commissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+      amount_cents INTEGER NOT NULL DEFAULT 0, source TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS partner_relationships (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, partner_a_id INTEGER NOT NULL, partner_b_id INTEGER NOT NULL,
+      relationship_type TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS referral_chains (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, root_referrer_id INTEGER NOT NULL,
+      referred_user_id INTEGER NOT NULL, depth INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+
     `DROP VIEW IF EXISTS partner_summary`,
     `CREATE VIEW partner_summary AS
       SELECT u.id, u.email, u.name, u.role, u.kyc_status,
