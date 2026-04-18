@@ -115,7 +115,7 @@ export const api = {
   financialPlan: (data) => request('/advisory/financial-plan', { method: 'POST', body: JSON.stringify(data) }),
   runDiligence: (data) => request('/advisory/diligence', { method: 'POST', body: JSON.stringify(data) }),
 
-  activityLog: (params) => request(`/activity/${params ? `?${new URLSearchParams(params)}` : ''}`),
+  activityLog: (params) => request(`/activity${params ? `?${new URLSearchParams(params)}` : ''}`),
   activitySummary: () => request('/activity/summary'),
   activitySyncGithub: () => request('/activity/sync-github', { method: 'POST' }),
 
