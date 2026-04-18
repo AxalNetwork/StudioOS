@@ -604,18 +604,21 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
           <div className="border-t border-gray-200 pt-4 space-y-3">
             <div>
               <label className="text-xs text-gray-700 font-medium block mb-1">Propose Closing Binder / Agreement</label>
-              <select value={agreement} onChange={(e) => setAgreement(e.target.value)}
-                className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none">
-                {AGREEMENT_OPTIONS.map((opt, i) => (
-                  opt.group ? (
-                    <optgroup key={opt.group} label={opt.group}>
-                      {opt.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </optgroup>
-                  ) : (
-                    <option key={opt.value || `placeholder-${i}`} value={opt.value}>{opt.label}</option>
-                  )
-                ))}
-              </select>
+              <div className="relative">
+                <select value={agreement} onChange={(e) => setAgreement(e.target.value)}
+                  className="w-full appearance-none bg-white border border-gray-300 rounded-lg px-3 pr-9 py-2 text-sm text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer">
+                  {AGREEMENT_OPTIONS.map((opt, i) => (
+                    opt.group ? (
+                      <optgroup key={opt.group} label={opt.group}>
+                        {opt.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </optgroup>
+                    ) : (
+                      <option key={opt.value || `placeholder-${i}`} value={opt.value}>{opt.label}</option>
+                    )
+                  ))}
+                </select>
+                <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              </div>
             </div>
             <div>
               <label className="text-xs text-gray-700 font-medium block mb-1">Admin Notes (internal)</label>
