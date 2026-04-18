@@ -132,7 +132,15 @@ def get_current_user(authorization: Optional[str] = Header(None), session: Sessi
         raise HTTPException(status_code=401, detail="Not authenticated")
     token = authorization.split(" ", 1)[1]
     payload = decode_jwt(token)
-    user = session.get(User, payload["user_id"])
+
+    user = None
+    # Primary lookup: numeric user_id (local FastAPI-issued tokens)
+    if "user_id" in payload:
+        user = session.get(User, payload["user_id"])
+    # Fallback: email in "sub" (Cloudflare Worker-issued tokens or legacy tokens)
+    if user is None and "sub" in payload:
+        user = session.exec(select(User).where(User.email == payload["sub"])).first()
+
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
     return user
