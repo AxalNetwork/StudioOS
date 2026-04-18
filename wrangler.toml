@@ -36,6 +36,13 @@ ENVIRONMENT       = "production"
 # jobs finish. Flip to "false" to roll back to D1-only.
 USE_CF_QUEUE      = "true"
 
+# ---------- Cloudflare Turnstile (bot protection) ----------
+# The Worker only needs the SECRET (set via `wrangler secret put TURNSTILE_SECRET_KEY`);
+# it's read in cloudflare-worker/src/services/turnstile.ts.
+# When the secret is unset, verifyTurnstile() fails-open with a console warning so
+# local dev / preview deploys aren't blocked. The frontend reads the public site
+# key from the build-time env var VITE_TURNSTILE_SITE_KEY (see frontend/.env.example).
+
 # ---------- D1 Database ----------
 [[d1_databases]]
 binding       = "DB"

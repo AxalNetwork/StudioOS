@@ -67,7 +67,33 @@ auth.post('/register', async (c) => {
 
   const clientIp = c.req.header('cf-connecting-ip') || undefined;
   const turnstileOk = await verifyTurnstile(c.env, turnstileToken, clientIp);
-  if (!turnstileOk) return c.json({ error: 'Bot verification failed. Please try again.' }, 403);
+  if (!turnstileOk) {
+    // Audit-log the failed attempt so we can spot abuse patterns. We store
+    // a SHA-256 hash of the email + a /24-truncated IP rather than raw PII —
+    // the failed submitter never authenticated and we have no consent /
+    // legitimate-interest basis to retain their plain email indefinitely.
+    try {
+      const enc = new TextEncoder();
+      const emailHashBuf = await crypto.subtle.digest('SHA-256', enc.encode(String(email).toLowerCase().trim()));
+      const emailHash = Array.from(new Uint8Array(emailHashBuf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+      // /24 for IPv4, /48 for IPv6 — coarse enough for abuse clustering, fine
+      // enough to drop unique-host info.
+      let ipBucket = 'unknown';
+      if (clientIp) {
+        if (clientIp.includes(':')) ipBucket = clientIp.split(':').slice(0, 3).join(':') + '::/48';
+        else ipBucket = clientIp.split('.').slice(0, 3).join('.') + '.0/24';
+      }
+      const sql = getSQL(c.env);
+      await sql`INSERT INTO activity_logs (action, details, actor)
+                VALUES ('turnstile_failed',
+                        ${`register attempt blocked: email_hash=${emailHash} ip_bucket=${ipBucket} ref=${ref_code ?? 'none'}`},
+                        ${ipBucket})`;
+      await sql.end();
+    } catch (e) {
+      console.error('[AUTH] failed to log turnstile failure', e);
+    }
+    return c.json({ error: 'Bot verification failed. Please try again.' }, 403);
+  }
 
   const sql = getSQL(c.env);
   const existing = await sql`SELECT * FROM users WHERE email = ${email}`;
