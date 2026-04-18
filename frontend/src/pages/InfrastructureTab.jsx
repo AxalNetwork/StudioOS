@@ -93,7 +93,7 @@ export default function InfrastructureTab() {
           <Play size={13} /> Drain queue now
         </button>
         <button onClick={load} disabled={busy}
-          className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 rounded-lg flex items-center gap-1.5">
+          className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5">
           <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Refresh
         </button>
         <button onClick={runCleanup} disabled={busy}
