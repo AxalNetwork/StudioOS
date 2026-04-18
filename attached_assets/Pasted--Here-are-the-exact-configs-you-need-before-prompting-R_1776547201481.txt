@@ -1,0 +1,88 @@
+**✅ Here are the exact configs you need** before prompting Replit.
+
+### 1. `wrangler.toml` (add/update these sections)
+
+```toml
+# wrangler.toml
+[observability]
+enabled = true
+head_sampling_rate = 1   # 100% sampling for now (adjust later)
+
+# Enable Cloudflare Web Analytics (via script injection)
+[analytics]
+enabled = true
+```
+
+### 2. `.env.example` (add these lines)
+
+```env
+# === Cloudflare Observability & Analytics ===
+CLOUDFLARE_WEB_ANALYTICS_TOKEN=xxxxxxxxxxxxxxxx   # Optional: for custom tracking
+```
+
+---
+
+**Now copy-paste this full prompt into Replit Agent:**
+
+```
+You are the senior observability engineer for Axal StudioOS. Implement **Web Analytics + Observability** for automatic metrics across the entire platform.
+
+Use the exact wrangler.toml configuration I provided.
+
+Exact requirements:
+
+1. **Cloudflare Observability Setup**
+   - Update wrangler.toml with [observability] section enabled.
+   - Enable automatic logging for all Workers and Pages requests.
+
+2. **Web Analytics**
+   - Add Cloudflare Web Analytics script to all frontend pages (index.html, dashboard.html, pipeline.html, refer-earn.html, etc.).
+   - Use the standard Cloudflare Web Analytics beacon script with proper site token.
+
+3. **Custom Metrics & Logging**
+   - Create `backend/observability.py` with helpers:
+     - log_event(name, metadata) → sends custom metric to Cloudflare
+     - track_page_view(page_name, user_role)
+     - track_job_execution(job_type, duration_ms, success)
+   - Log key business events: spinout_completed, capital_call_sent, referral_converted, deal_scored, etc.
+
+4. **Real-time Dashboard**
+   - Add a new "Observability" or enhance the existing Monitoring page (/monitoring.html) with:
+     - Live requests per minute
+     - Active users
+     - Job queue throughput
+     - AI calls count
+     - Error rate
+   - Pull data from Cloudflare Analytics + custom logs stored in D1/KV.
+
+5. **Error Tracking**
+   - Automatically capture and log exceptions with context (user_id, endpoint, stack trace summary).
+   - Send critical errors as custom events.
+
+6. **Integration**
+   - Add observability middleware to FastAPI that logs every request (latency, status, user_role).
+   - Update all major flows (Pipeline, Spin-Out, Refer & Earn, Legal Engine) to emit metrics.
+
+Build this step-by-step:
+1. First update wrangler.toml with observability and analytics settings.
+2. Then add the Web Analytics script to all frontend HTML pages.
+3. Then create backend/observability.py with logging helpers.
+4. Then enhance the Monitoring page with live metrics and charts.
+5. Finally add middleware and business event tracking across the platform.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+This prompt will give you:
+- Automatic Cloudflare Web Analytics on all pages
+- Rich observability (logs, metrics, traces)
+- A useful Monitoring dashboard with business-level insights
+- Proper error tracking
+
+Just copy the configs above first, then paste the prompt into Replit Agent.
+
+Would you like the next prompt for **R2 file storage** or for **syncing the entire codebase to GitHub + deployment checklist**? Just say the word.

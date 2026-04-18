@@ -1,0 +1,91 @@
+**Best and safest place for user passports and IDs (KYC/AML documents):**
+
+**Cloudflare R2 (private bucket) + metadata only in D1.**
+
+### Why R2 is the best Cloudflare solution
+- **Private by default** — you control access with signed URLs (short-lived, e.g. 5–15 minutes).
+- **Encrypted at rest** — automatic server-side encryption.
+- **Global, low-latency, cheap** — perfect for documents.
+- **Compliant-friendly** — you can enable Cloudflare Logs for full audit trail of every access.
+- **No public URLs** — unlike Pages or public buckets.
+- Better than:
+  - D1 (too small, not for binary files)
+  - KV (not designed for files)
+  - Durable Objects (not for storage)
+
+**Best practice architecture:**
+- Store the actual file (passport PDF/JPG) in a **private R2 bucket**.
+- Store **only metadata** in D1 (`file_key`, `hash`, `uploaded_at`, `verification_status`, `expires_at`).
+- Generate temporary signed URLs only when needed (admin review, Persona/Sumsub verification, audit).
+
+### Ready-to-copy prompt for Replit Agent
+
+Paste this directly into the Agent tab:
+
+```
+You are the senior security + Cloudflare engineer for Axal StudioOS. Implement secure storage for KYC/AML documents (passports, IDs, etc.) using **Cloudflare R2**.
+
+Exact requirements:
+
+1. **R2 Configuration**
+   - Update wrangler.toml with:
+     [[r2_buckets]]
+     binding = "R2"
+     bucket_name = "axal-kyc-documents"
+
+2. **Backend Helpers**
+   - Create `backend/r2.py` with:
+     - async def upload_kyc_document(user_id, file_bytes, filename, content_type) → returns file_key and public signed URL (short-lived)
+     - async def get_kyc_signed_url(file_key, expires_seconds=900) → 15-minute signed URL
+     - async def delete_kyc_document(file_key)
+
+3. **Database Integration**
+   - Add to the existing `kyc_documents` or `legal_documents` table (or create if missing):
+     - file_key (text)
+     - original_filename (text)
+     - content_type (text)
+     - file_hash (text)
+     - uploaded_at (timestamp)
+     - verification_status (pending/approved/rejected)
+   - Store ONLY the file_key in D1, never the full file.
+
+4. **KYC/AML Flow Integration**
+   - On the Identity Verification page (KYC form), when user uploads ID document:
+     - Upload to R2
+     - Save metadata to D1
+     - Trigger verification (Persona/Sumsub or manual admin review)
+   - In Admin Console user profile modal, show secure "View Document" button that generates a short-lived signed URL.
+
+5. **Security & Compliance**
+   - Bucket must remain private (no public access).
+   - All access via signed URLs only.
+   - Log every upload and URL generation to activity_logs (action_type = "kyc_document_access").
+   - Add file size limit (max 6MB as shown in the form).
+   - Add virus/malware scanning placeholder (ready for future Cloudflare integration).
+
+6. **Frontend**
+   - Update the KYC form to upload directly to R2 (presigned URL flow).
+   - Show upload progress and success state.
+
+Build this step-by-step:
+1. First update wrangler.toml with the R2 binding.
+2. Then create backend/r2.py with upload, signed URL, and delete helpers.
+3. Then update the KYC database schema and integration.
+4. Then modify the Identity Verification page and Admin Console modal to use the new R2 flow.
+5. Finally test end-to-end (upload a test ID → verify it's in R2 and only accessible via signed URL).
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+**Next steps after running the prompt:**
+1. Run `wrangler r2 bucket create axal-kyc-documents` (or let the Agent do it).
+2. Set the bucket to **private** (default) in the Cloudflare dashboard.
+3. (Optional but recommended) Enable Cloudflare Logs for the bucket for full audit trail.
+
+This is the most secure and compliant Cloudflare-native solution for sensitive KYC documents.
+
+Would you like the next prompt for **Durable Objects** (real-time features) or for **full GitHub sync + deployment**? Just let me know.

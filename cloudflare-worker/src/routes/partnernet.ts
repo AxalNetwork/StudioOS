@@ -36,6 +36,24 @@ async function ensureSchema(env: Env) {
     }
   }
 
+  // The legacy activity_logs table (pre-partnernet) only had
+  // (action, details, actor, ...) columns. partnernet writes/reads a
+  // different set; gracefully add them when the legacy table exists.
+  // If activity_logs doesn't exist yet, these ALTERs will fail with
+  // "no such table" — also benign because the CREATE IF NOT EXISTS below
+  // covers the fresh-DB case.
+  const activityAlters = [
+    `ALTER TABLE activity_logs ADD COLUMN action_type TEXT`,
+    `ALTER TABLE activity_logs ADD COLUMN entity_type TEXT`,
+    `ALTER TABLE activity_logs ADD COLUMN entity_id TEXT`,
+    `ALTER TABLE activity_logs ADD COLUMN ip_address TEXT`,
+    `ALTER TABLE activity_logs ADD COLUMN user_agent TEXT`,
+    `ALTER TABLE activity_logs ADD COLUMN metadata TEXT DEFAULT '{}'`,
+  ];
+  for (const a of activityAlters) {
+    try { await env.DB.prepare(a).run(); } catch {}
+  }
+
   const stmts = [
     `CREATE TABLE IF NOT EXISTS partner_relationships (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,10 +82,13 @@ async function ensureSchema(env: Env) {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_re_rel ON relationship_events(relationship_id, created_at)`,
 
+    // activity_logs may already exist from the legacy schema with columns
+    // (action, details, actor, ...). The CREATE IF NOT EXISTS below covers
+    // a fresh DB; the ALTERs below cover an existing legacy DB. Keep both.
     `CREATE TABLE IF NOT EXISTS activity_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
-      action_type TEXT NOT NULL,
+      action_type TEXT,
       entity_type TEXT,
       entity_id TEXT,
       ip_address TEXT,
@@ -76,8 +97,6 @@ async function ensureSchema(env: Env) {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE INDEX IF NOT EXISTS idx_al_user ON activity_logs(user_id, created_at DESC)`,
-    `CREATE INDEX IF NOT EXISTS idx_al_action ON activity_logs(action_type, created_at DESC)`,
-    `CREATE INDEX IF NOT EXISTS idx_al_entity ON activity_logs(entity_type, entity_id)`,
 
     `CREATE TABLE IF NOT EXISTS activity_stats (
       user_id INTEGER NOT NULL,
