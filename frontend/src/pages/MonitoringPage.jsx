@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import InfrastructureTab from './InfrastructureTab';
-import { Activity, AlertTriangle, RefreshCw, Sparkles, ShieldAlert, Zap, Server, Clock, TrendingUp } from 'lucide-react';
+import { Activity, AlertTriangle, RefreshCw, Sparkles, ShieldAlert, Zap, Server, Clock, TrendingUp, ChevronDown } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from 'recharts';
 import { api } from '../lib/api';
 
@@ -141,16 +141,19 @@ export default function MonitoringPage() {
         </div>
         <div className="flex items-center gap-3">
           <HealthBadge health={metrics?.health || 'green'} />
-          <select
-            value={window}
-            onChange={e => setWindow(parseInt(e.target.value))}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-900"
-          >
-            <option value={15}>Last 15 min</option>
-            <option value={60}>Last 60 min</option>
-            <option value={240}>Last 4 hours</option>
-            <option value={1440}>Last 24 hours</option>
-          </select>
+          <div className="relative">
+            <select
+              value={window}
+              onChange={e => setWindow(parseInt(e.target.value))}
+              className="appearance-none border border-gray-300 rounded-lg pl-3 pr-9 py-1.5 text-sm bg-white text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none cursor-pointer"
+            >
+              <option value={15}>Last 15 min</option>
+              <option value={60}>Last 60 min</option>
+              <option value={240}>Last 4 hours</option>
+              <option value={1440}>Last 24 hours</option>
+            </select>
+            <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          </div>
           <button
             onClick={() => { loadAll(); loadAnomalies(); }}
             disabled={refreshing}
@@ -191,7 +194,7 @@ export default function MonitoringPage() {
       <>
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <StatCard icon={Server} label="Total Requests" value={(s.total_requests || 0).toLocaleString()} sub={`Window: ${metrics?.window_minutes}m`} accent="violet" />
+        <StatCard icon={Server} label="Total Requests" value={(s.total_requests || 0).toLocaleString()} sub={`Window: ${metrics?.window_minutes || window}m`} accent="violet" />
         <StatCard icon={Clock} label="Avg Latency" value={`${s.avg_latency_ms || 0}ms`} sub="P50 across all endpoints" accent="blue" />
         <StatCard icon={AlertTriangle} label="5xx Errors" value={s.errors_5xx || 0} sub={`${s.error_rate_pct || 0}% error rate`} accent="red" />
         <StatCard icon={ShieldAlert} label="Rate-Limited" value={s.rate_limited || 0} sub="HTTP 429 responses" accent="amber" />
