@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Layers, Plus, Loader2, Sparkles, X, Zap, TrendingUp, CheckCircle2, RotateCcw, AlertTriangle, Activity, Target } from 'lucide-react';
 import { api } from '../lib/api';
 import SpinoutWizard from '../components/SpinoutWizard';
@@ -19,13 +19,130 @@ export default function PipelinePage() {
   const [creating, setCreating] = useState(false);
   const [me, setMe] = useState(null);
   const [spinoutDeal, setSpinoutDeal] = useState(null);
+  const [dragId, setDragId] = useState(null);
+  const [dragOverStage, setDragOverStage] = useState(null);
+  const [pendingMoves, setPendingMoves] = useState({}); // { dealId: true } — cards mid-flight
+  const [moveError, setMoveError] = useState('');
 
-  const reload = async () => { setLoading(true); try { setDeals(await api.pipelineActive()); } finally { setLoading(false); } };
+  // Per-deal op versioning so concurrent moves and reloads can't clobber each
+  // other. `opSeq` increments on every write per deal; `latestOpRef` records
+  // the latest op id per deal so we only roll back if we're still the most
+  // recent in-flight write. `reloadGen` lets us discard stale `reload()`
+  // responses that landed after a newer optimistic write.
+  const latestOpRef = useRef({});            // { dealId: opId }
+  const reloadGenRef = useRef(0);
+  const pendingDealsRef = useRef(new Set()); // mid-flight deal ids (sync ref)
+  const opCounterRef = useRef(0);
+
+  const reload = async () => {
+    const gen = ++reloadGenRef.current;
+    setLoading(true);
+    try {
+      const data = await api.pipelineActive();
+      // Discard if a newer reload was kicked off, or if the snapshot would
+      // overwrite an in-flight optimistic state.
+      if (gen !== reloadGenRef.current) return;
+      const inFlight = pendingDealsRef.current;
+      if (inFlight.size > 0) {
+        setDeals(curr => {
+          const byId = new Map(curr.map(d => [d.id, d]));
+          return data.map(d => inFlight.has(d.id) && byId.has(d.id)
+            ? { ...d, pipeline_stage: byId.get(d.id).pipeline_stage }
+            : d);
+        });
+      } else {
+        setDeals(data);
+      }
+    } finally {
+      if (gen === reloadGenRef.current) setLoading(false);
+    }
+  };
   useEffect(() => { (async () => { try { setMe(await api.getCurrentUser()); } catch {} reload(); })(); }, []);
 
   const canEdit = me && (me.role === 'admin' || me.role === 'partner');
+
+  // Optimistic stage-move with versioned, deal-scoped rollback. Single source
+  // of truth for both drag-and-drop and button-based advances so the UI never
+  // diverges from the database.
+  const moveDealToStage = async (dealId, toStage) => {
+    // Block additional concurrent writes for this deal BEFORE any state
+    // mutation — otherwise we'd leave a stale optimistic stage in place.
+    if (pendingDealsRef.current.has(dealId)) return;
+
+    // Snapshot only the field we touched for this one deal — never replace the
+    // whole list on rollback.
+    let fromStage = null;
+    let dealName = '';
+    setDeals(curr => {
+      const target = curr.find(d => d.id === dealId);
+      if (!target || target.pipeline_stage === toStage) return curr;
+      fromStage = target.pipeline_stage;
+      dealName = target.name;
+      return curr.map(d => d.id === dealId ? { ...d, pipeline_stage: toStage } : d);
+    });
+    if (fromStage == null) return; // no-op (same column or unknown deal)
+
+    pendingDealsRef.current.add(dealId);
+
+    const opId = ++opCounterRef.current;
+    latestOpRef.current[dealId] = opId;
+
+    setPendingMoves(p => ({ ...p, [dealId]: true }));
+    setMoveError('');
+
+    let failure = null;
+    try {
+      await api.pipelineAdvance(dealId, toStage);
+    } catch (e) {
+      failure = e;
+    } finally {
+      pendingDealsRef.current.delete(dealId);
+      setPendingMoves(p => { const n = { ...p }; delete n[dealId]; return n; });
+    }
+
+    // Only act if we're still the latest op for this deal — protects against
+    // out-of-order completion where a newer move already overwrote our state.
+    if (latestOpRef.current[dealId] !== opId) return;
+
+    if (failure) {
+      // Per-field, per-deal rollback. Other deals and other fields untouched.
+      setDeals(curr => curr.map(d => d.id === dealId ? { ...d, pipeline_stage: fromStage } : d));
+      setMoveError(`Couldn't move "${dealName}" — ${failure.message || 'request failed'}. Reverted.`);
+      throw failure;
+    }
+  };
+
   const grouped = STAGES.reduce((acc, s) => ({ ...acc, [s.id]: [] }), {});
   for (const d of deals) (grouped[d.pipeline_stage] || grouped.idea).push(d);
+
+  const onCardDragStart = (deal) => (e) => {
+    // Block dragging a card that already has an in-flight write — prevents
+    // out-of-order operations on the same deal.
+    if (!canEdit || pendingDealsRef.current.has(deal.id)) {
+      e.preventDefault();
+      return;
+    }
+    setDragId(deal.id);
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(deal.id)); } catch {}
+  };
+  const onCardDragEnd = () => { setDragId(null); setDragOverStage(null); };
+  const onColDragOver = (stageId) => (e) => {
+    if (!canEdit || dragId == null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverStage !== stageId) setDragOverStage(stageId);
+  };
+  const onColDragLeave = (stageId) => () => {
+    if (dragOverStage === stageId) setDragOverStage(null);
+  };
+  const onColDrop = (stageId) => (e) => {
+    e.preventDefault();
+    const id = dragId ?? parseInt(e.dataTransfer.getData('text/plain'), 10);
+    setDragId(null); setDragOverStage(null);
+    if (!canEdit || !id) return;
+    moveDealToStage(id, stageId);
+  };
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
@@ -34,7 +151,7 @@ export default function PipelinePage() {
           <Layers className="text-violet-600" size={24} />
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Pipeline Board</h1>
-            <p className="text-sm text-gray-600">Parallel MVP development with AI-driven decision gates.</p>
+            <p className="text-sm text-gray-600">Parallel MVP development with AI-driven decision gates.{canEdit ? ' Drag cards between columns to advance.' : ''}</p>
           </div>
         </div>
         {canEdit && (
@@ -44,40 +161,76 @@ export default function PipelinePage() {
         )}
       </div>
 
+      {moveError && (
+        <div className="mb-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2 flex items-start justify-between gap-3">
+          <span>{moveError}</span>
+          <button onClick={() => setMoveError('')} className="text-red-500 hover:text-red-700"><X size={12} /></button>
+        </div>
+      )}
+
       {loading ? <Loading text="Loading pipeline…" /> : (
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-3 min-w-max">
-            {STAGES.map(stage => (
-              <div key={stage.id} className="w-72 flex-shrink-0">
-                <div className={`px-3 py-2 rounded-t-lg ${stage.color} font-semibold text-sm flex items-center justify-between border ${stage.border} border-b-0`}>
-                  <span>{stage.label}</span>
-                  <span className="bg-white/70 text-xs px-2 py-0.5 rounded-full">{grouped[stage.id].length}</span>
+            {STAGES.map(stage => {
+              const isOver = dragOverStage === stage.id && dragId != null;
+              return (
+                <div key={stage.id} className="w-72 flex-shrink-0">
+                  <div className={`px-3 py-2 rounded-t-lg ${stage.color} font-semibold text-sm flex items-center justify-between border ${stage.border} border-b-0`}>
+                    <span>{stage.label}</span>
+                    <span className="bg-white/70 text-xs px-2 py-0.5 rounded-full">{grouped[stage.id].length}</span>
+                  </div>
+                  <div
+                    onDragOver={onColDragOver(stage.id)}
+                    onDragLeave={onColDragLeave(stage.id)}
+                    onDrop={onColDrop(stage.id)}
+                    className={`bg-gray-50 border ${stage.border} border-t-0 rounded-b-lg min-h-[400px] p-2 space-y-2 transition-colors ${isOver ? 'bg-violet-50 ring-2 ring-violet-400 ring-inset' : ''}`}
+                  >
+                    {grouped[stage.id].length === 0 ? (
+                      <div className="text-xs text-gray-400 text-center py-8">{isOver ? 'Drop to move here' : 'Empty'}</div>
+                    ) : grouped[stage.id].map(d => (
+                      <DealCard
+                        key={d.id}
+                        deal={d}
+                        onOpen={() => setOpenId(d.id)}
+                        onSpinout={() => setSpinoutDeal(d)}
+                        draggable={canEdit}
+                        onDragStart={onCardDragStart(d)}
+                        onDragEnd={onCardDragEnd}
+                        isDragging={dragId === d.id}
+                        isPending={!!pendingMoves[d.id]}
+                      />
+                    ))}
+                  </div>
                 </div>
-                <div className={`bg-gray-50 border ${stage.border} border-t-0 rounded-b-lg min-h-[400px] p-2 space-y-2`}>
-                  {grouped[stage.id].length === 0 ? (
-                    <div className="text-xs text-gray-400 text-center py-8">Empty</div>
-                  ) : grouped[stage.id].map(d => <DealCard key={d.id} deal={d} onOpen={() => setOpenId(d.id)} onSpinout={() => setSpinoutDeal(d)} />)}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
 
-      {openId && <DealDrawer dealId={openId} canEdit={canEdit} onClose={() => setOpenId(null)} onChanged={reload} />}
+      {openId && <DealDrawer dealId={openId} canEdit={canEdit} onClose={() => setOpenId(null)} onChanged={reload} onAdvance={moveDealToStage} />}
       {creating && <CreateModal onClose={() => setCreating(false)} onCreated={() => { setCreating(false); reload(); }} />}
       {spinoutDeal && <SpinoutWizard deal={spinoutDeal} onClose={() => { setSpinoutDeal(null); reload(); }} onComplete={reload} />}
     </div>
   );
 }
 
-function DealCard({ deal, onOpen, onSpinout }) {
+function DealCard({ deal, onOpen, onSpinout, draggable, onDragStart, onDragEnd, isDragging, isPending }) {
   const tot = deal.task_counts.todo + deal.task_counts.in_progress + deal.task_counts.done;
   const pct = tot ? Math.round((deal.task_counts.done / tot) * 100) : 0;
   const traction = deal.latest_metrics?.traction_score;
   const gate = deal.latest_gate;
   return (
-    <div onClick={onOpen} className="bg-white border border-gray-200 rounded-lg p-3 cursor-pointer hover:border-violet-400 hover:shadow-sm transition-all">
+    <div
+      onClick={onOpen}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={`bg-white border border-gray-200 rounded-lg p-3 hover:border-violet-400 hover:shadow-sm transition-all relative ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${isDragging ? 'opacity-40' : ''} ${isPending ? 'ring-1 ring-violet-300' : ''}`}
+    >
+      {isPending && (
+        <div className="absolute top-1 right-1 text-violet-500" title="Saving…"><Loader2 className="animate-spin" size={10} /></div>
+      )}
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="font-semibold text-sm text-gray-900 truncate flex-1">{deal.name}</div>
         {traction != null && <ScorePill score={traction} small />}
@@ -116,7 +269,7 @@ function DealCard({ deal, onOpen, onSpinout }) {
   );
 }
 
-function DealDrawer({ dealId, canEdit, onClose, onChanged }) {
+function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('overview');
@@ -133,7 +286,25 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged }) {
     finally { setBusy(false); }
   };
   const advance = async (stage) => {
-    setBusy(true); setErr('');
+    // Route through the parent's optimistic mover so the board state and the
+    // drawer can never disagree if the API fails. `busy` is set throughout so
+    // the user can't fire concurrent advances on the same deal.
+    setErr('');
+    if (onAdvance) {
+      const prevStage = data?.current_stage;
+      setBusy(true);
+      setData(d => d ? { ...d, current_stage: stage } : d);
+      try {
+        await onAdvance(dealId, stage);
+      } catch (e) {
+        setData(d => d ? { ...d, current_stage: prevStage } : d);
+        setErr(e.message || 'Failed to advance');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    setBusy(true);
     try { await api.pipelineAdvance(dealId, stage); await load(); onChanged?.(); }
     catch (e) { setErr(e.message); }
     finally { setBusy(false); }
