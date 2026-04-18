@@ -273,9 +273,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <div className="flex flex-1 overflow-hidden">
           <aside className={`
             fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200
+            flex flex-col
             transform transition-transform duration-200
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-            lg:relative lg:translate-x-0 lg:flex lg:flex-col
+            lg:relative lg:translate-x-0
           `}>
             <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-200">
               <img src="/axal-mark.png" alt="Axal VC" className="h-8 w-8 rounded-lg object-cover flex-shrink-0" />
