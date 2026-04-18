@@ -56,7 +56,7 @@ export async function getRealtimeStats(env: Env): Promise<{ pipeline_rooms: numb
     pipeline_rooms: env.PIPELINE_ROOM ? -1 : 0,
     onboarding_rooms: env.ONBOARDING_CHAT ? -1 : 0,
     note: env.PIPELINE_ROOM && env.ONBOARDING_CHAT
-      ? 'DOs bound. -1 means "not enumerable" — query a specific room via /api/infra/realtime/:room/:id for an exact count.'
+      ? 'DOs bound. -1 means "not enumerable" — query a specific room via /api/realtime/room/:kind/:id/count for an exact count.'
       : 'DOs not bound. Real-time fan-out is disabled.',
   };
 }

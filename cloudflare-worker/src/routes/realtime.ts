@@ -32,19 +32,26 @@ async function checkUpgradeRate(env: Env, userId: number): Promise<boolean> {
   return true;
 }
 
-async function authenticateForUpgrade(c: any): Promise<{ id: number; email: string; role: string } | null> {
+async function authenticateForUpgrade(c: any): Promise<{ id: number; email: string; role: string; kyc_status: string | null } | null> {
   const token = c.req.query('token');
   if (!token) return null;
   try {
     const payload = await decodeJWT(c.env, token);
     const sql = getSQL(c.env);
-    const rows = await sql`SELECT id, email, role, is_active FROM users WHERE id = ${payload.user_id}`;
+    const rows = await sql`SELECT id, email, role, is_active, kyc_status FROM users WHERE id = ${payload.user_id}`;
     await sql.end();
     if (!rows.length || !rows[0].is_active) return null;
-    return { id: rows[0].id, email: rows[0].email, role: rows[0].role };
+    return { id: rows[0].id, email: rows[0].email, role: rows[0].role, kyc_status: rows[0].kyc_status ?? null };
   } catch {
     return null;
   }
+}
+
+// Mirror the global /api/* KYC gate for WS upgrades, which bypass the
+// Authorization-header-based middleware because browsers can only auth via
+// ?token=. Admins are exempt — same policy as the HTTP gate.
+function kycOk(user: { role: string; kyc_status: string | null }): boolean {
+  return user.role === 'admin' || user.kyc_status === 'approved';
 }
 
 // GET /api/pipeline/ws/:deal_id — broadcasts pipeline events for one deal.
@@ -58,6 +65,7 @@ realtime.get('/pipeline/ws/:deal_id', async (c) => {
   const user = await authenticateForUpgrade(c);
   if (!user) return c.json({ error: 'Unauthorized' }, 401);
   if (!['admin', 'partner'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403);
+  if (!kycOk(user)) return c.json({ error: 'KYC verification required', kyc_required: true }, 403);
   if (!(await checkUpgradeRate(c.env, user.id))) return c.json({ error: 'Too many WS upgrades' }, 429);
 
   const dealId = c.req.param('deal_id');
@@ -97,6 +105,8 @@ realtime.get('/onboarding/ws/:user_id', async (c) => {
   const isAdmin = user.role === 'admin';
   const isSelf = String(user.id) === targetUserId;
   if (!isAdmin && !isSelf) return c.json({ error: 'Forbidden' }, 403);
+  // Note: NO KYC gate here. Founders self-watching their onboarding chat
+  // is part of the pre-KYC onboarding flow itself. Admins are always exempt.
   if (!(await checkUpgradeRate(c.env, user.id))) return c.json({ error: 'Too many WS upgrades' }, 429);
 
   const id = c.env.ONBOARDING_CHAT.idFromName(`user:${targetUserId}`);

@@ -72,7 +72,17 @@ export default function PipelinePage() {
     enabled: !!canEdit,
     onMessage: (msg) => {
       if (!msg || !msg.type) return;
-      if (msg.type === 'stage_advanced' || msg.type === 'project_created') {
+      // All backend events that mutate the board state. Keep this list in
+      // sync with notifyPipelineRoom call sites in routes/pipeline.ts so a
+      // new event type is not silently swallowed (which would leave the
+      // board stale until the user pressed Refresh).
+      const BOARD_EVENTS = new Set([
+        'stage_advanced',
+        'project_created',
+        'gate_review_created',
+        'gate_decided',
+      ]);
+      if (BOARD_EVENTS.has(msg.type)) {
         if (pendingDealsRef.current.size === 0) reload();
         setLiveTick(t => t + 1);
       }

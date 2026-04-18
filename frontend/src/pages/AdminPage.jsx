@@ -691,7 +691,10 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
   // Unified dedupe key — must match between persisted seed and live DO frames
   // (architect review caught the prior `seed:` vs `do:` schema split that
   // caused duplicates when the DO replayed `recent` on hello).
-  const msgKey = (m) => `${m.role}:${(m.content || '').slice(0, 64)}`;
+  // Use full content (not first 64 chars) to avoid collapsing distinct
+  // messages with the same prefix; bucket by ts when present so retried
+  // sends with identical text don't collapse either.
+  const msgKey = (m) => `${m.ts || ''}:${m.role}:${m.content || ''}`;
   const seenKeysRef = useRef(new Set(initialChat.map(msgKey)));
   // Subscribe to the founder's onboarding chat room. profile.user_id is
   // the foreign key to users.id; admins are authorized server-side to
