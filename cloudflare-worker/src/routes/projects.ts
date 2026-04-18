@@ -72,6 +72,8 @@ async function createProjectHandler(c: any) {
   await sql`INSERT INTO deals (project_id, status) VALUES (${project.id}, 'applied')`;
   await sql`INSERT INTO activity_logs (project_id, action, details) VALUES (${project.id}, 'project_created', ${`Project '${project.name}' submitted`})`;
   await sql.end();
+  // Re-index for semantic search. Best-effort — failure is non-fatal.
+  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'project', id: project.id }); } catch {}
   return c.json(project, 201);
 }
 
@@ -104,6 +106,7 @@ projects.post('/submit', async (c) => {
   else if (result.total_score >= 70) { newStatus = 'tier_2'; dealStatus = 'scored'; }
 
   await sql`UPDATE projects SET status = ${newStatus}, stage = ${newStage}, updated_at = CURRENT_TIMESTAMP WHERE id = ${project.id}`;
+  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'project', id: project.id }); } catch {}
   await sql`INSERT INTO deals (project_id, status) VALUES (${project.id}, ${dealStatus})`;
   await sql`INSERT INTO activity_logs (project_id, action, details, actor) VALUES (${project.id}, 'auto_scored', ${`Score: ${result.total_score}, Tier: ${result.tier}, Status: ${newStatus}`}, 'system')`;
   await sql.end();
@@ -153,6 +156,7 @@ projects.put('/:id', async (c) => {
   }
   const [updated] = await sql`SELECT * FROM projects WHERE id = ${id}`;
   await sql.end();
+  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'project', id }); } catch {}
   return c.json(updated);
 });
 
@@ -163,6 +167,7 @@ projects.delete('/:id', async (c) => {
   const rows = await sql`SELECT id FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   await sql`DELETE FROM projects WHERE id = ${id}`;
+  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_delete', { type: 'project', id }); } catch {}
   await sql.end();
   return c.json({ ok: true });
 });

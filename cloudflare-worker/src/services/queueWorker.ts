@@ -266,6 +266,24 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       }
       return;
     }
+    case 'embed_entity': {
+      // Vectorize re-index for a single entity. Cheap (Workers AI bge-base) so
+      // we run it inline; failures are non-fatal — search just lags by one job.
+      const { embedAndUpsertById } = await import('./vectorize');
+      const type = payload.type;
+      const id = Number(payload.id);
+      if (!type || !id) throw new Error('embed_entity requires {type,id}');
+      await embedAndUpsertById(env, type, id);
+      return;
+    }
+    case 'embed_delete': {
+      const { deleteEntity } = await import('./vectorize');
+      const type = payload.type;
+      const id = Number(payload.id);
+      if (!type || !id) throw new Error('embed_delete requires {type,id}');
+      await deleteEntity(env, type, id);
+      return;
+    }
     default:
       throw new Error(`unknown job type ${job.job_type}`);
   }

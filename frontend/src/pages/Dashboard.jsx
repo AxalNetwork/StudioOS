@@ -2,9 +2,11 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   BarChart3, Zap, Users, DollarSign, Target, TrendingUp, Sparkles, Bell,
-  RefreshCw, Loader2, Layers, Briefcase, Store, ArrowRight, ChevronRight, Wallet, Activity
+  RefreshCw, Loader2, Layers, Briefcase, Store, ArrowRight, ChevronRight, Wallet, Activity,
+  Search, FileText, User as UserIcon
 } from 'lucide-react';
 import { api } from '../lib/api';
+import SemanticSearch from '../components/SemanticSearch';
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
@@ -55,6 +57,7 @@ export default function Dashboard() {
             <RoleBadge role={user.role} />
           </div>
           <p className="text-sm text-gray-600">Here's your venture studio at a glance.</p>
+          <div className="mt-3"><SemanticSearch /></div>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">

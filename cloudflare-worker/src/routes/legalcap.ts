@@ -337,6 +337,7 @@ legalcap.post('/legal/generate', async (c) => {
   const doc: any = await c.env.DB.prepare(`INSERT INTO legal_documents (deal_id, type, status, content, generated_by) VALUES (?, ?, 'generated', ?, ?) RETURNING id, deal_id, type, status, generated_by, created_at`)
     .bind(dealId, type, contentJson, user.id).first();
 
+  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'document', id: doc.id }); } catch {}
   await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'legal_doc', entityId: doc.id, metadata: { type, deal_id: dealId } });
   return c.json({ ...doc, body, vars }, 201);
 });

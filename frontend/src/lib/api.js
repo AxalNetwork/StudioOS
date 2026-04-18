@@ -168,6 +168,14 @@ export const api = {
     return request(`/integrations/${encodeURIComponent(uid)}/logs${q ? `?${q}` : ''}`);
   },
 
+  searchSemantic: (q, type, limit = 10) => {
+    const params = new URLSearchParams({ q });
+    if (type) params.set('type', type);
+    if (limit) params.set('limit', String(limit));
+    return request(`/search?${params.toString()}`);
+  },
+  searchBackfill: (types) => request('/search/backfill', { method: 'POST', body: JSON.stringify({ types }) }),
+
   matchPreferences: () => request('/matches/preferences'),
   matchPreferencesSave: (data) => request('/matches/preferences', { method: 'PUT', body: JSON.stringify(data) }),
   matchDealFlow: () => request('/matches/deal-flow'),

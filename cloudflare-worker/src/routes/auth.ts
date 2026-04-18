@@ -106,6 +106,7 @@ auth.post('/register', async (c) => {
     }
     await sql`UPDATE users SET name = ${name}, role = ${role || 'partner'} WHERE id = ${user.id}`;
     await sql.end();
+    try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'partner', id: user.id }); } catch {}
     const { sent: emailSent, verificationUrl, tokenStored } = await sendVerification(c.env, email, name, user.id);
     return c.json({
       message: emailSent ? 'Verification email sent' : 'Account created but email delivery failed',
@@ -116,6 +117,7 @@ auth.post('/register', async (c) => {
   const [user] = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${name}, ${role || 'partner'}, false) RETURNING *`;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`User ${name} (${email}) registered as ${role || 'partner'} — pending email verification`}, ${email}, ${user.id})`;
   await sql.end();
+  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'partner', id: user.id }); } catch {}
 
   if (ref_code) {
     try {

@@ -18,7 +18,9 @@ export type JobType =
   | 'liquidity_matching'
   | 'lpa_generation'
   | 'capital_call_notice'
-  | 'returns_distribution';
+  | 'returns_distribution'
+  | 'embed_entity'
+  | 'embed_delete';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

@@ -39,6 +39,7 @@ admin.patch('/users/:userId/role', async (c) => {
 
   const oldRole = rows[0].role;
   await sql`UPDATE users SET role = ${role} WHERE id = ${userId}`;
+  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'partner', id: userId }); } catch {}
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('role_changed', ${`Admin ${adminUser.name} changed ${rows[0].name}'s role from ${oldRole} to ${role}`}, ${adminUser.email}, ${adminUser.id})`;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('your_role_changed', ${`Your role was changed from ${oldRole} to ${role} by ${adminUser.name}`}, ${rows[0].email}, ${rows[0].id})`;
   await sql.end();

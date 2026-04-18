@@ -30,6 +30,10 @@ export interface Env {
   // when these are undefined.
   PIPELINE_ROOM?: DurableObjectNamespace;
   ONBOARDING_CHAT?: DurableObjectNamespace;
+  // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
+  // Optional so unit-test envs without the binding still type-check; the
+  // search service no-ops gracefully when undefined.
+  VECTORIZE?: VectorizeIndex;
 }
 
 // Cloudflare Queues message envelope (matches the body shape the producer sends).

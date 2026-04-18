@@ -113,6 +113,14 @@ tag                = "v1-realtime"
 # SQLite-backed storage is the default and only supported mode going forward.
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 
+# ---------- Vectorize (semantic search) ----------
+# Index `axal-search` (768-dim, cosine) backs the global search bar on the
+# Dashboard. Embeddings are produced by Workers AI `@cf/baai/bge-base-en-v1.5`.
+# Vector IDs follow `{type}:{id}` so we can scope deletes by entity.
+[[vectorize]]
+binding    = "VECTORIZE"
+index_name = "axal-search"
+
 # ---------- R2 (object storage) ----------
 # Stores KYC documents (passport / ID images) under key prefix `kyc/{user_id}/`.
 # Bucket is private — access is gated by Worker routes that re-check auth on
