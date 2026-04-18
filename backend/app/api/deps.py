@@ -32,3 +32,22 @@ def require_role(*roles: str):
 
 
 require_admin_or_partner = require_role("partner")
+
+
+def is_privileged(user: User) -> bool:
+    """Admin/partner roles bypass per-row ownership checks."""
+    return user.role in (UserRole.ADMIN, UserRole.PARTNER)
+
+
+def can_access_founder_resource(user: User, owner_founder_id: int | None) -> bool:
+    """IDOR guard: True iff the user may read/touch a row owned by `owner_founder_id`."""
+    if is_privileged(user):
+        return True
+    if owner_founder_id is None:
+        return False
+    return bool(user.founder_id) and user.founder_id == owner_founder_id
+
+
+def ensure_founder_access(user: User, owner_founder_id: int | None) -> None:
+    if not can_access_founder_resource(user, owner_founder_id):
+        raise HTTPException(status_code=403, detail="Forbidden: you do not own this resource")

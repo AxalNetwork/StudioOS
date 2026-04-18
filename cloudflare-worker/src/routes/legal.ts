@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth } from '../auth';
+import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
 
 const legal = new Hono<{ Bindings: Env }>();
 
@@ -51,59 +51,113 @@ legal.get('/templates/:key', async (c) => {
 });
 
 legal.post('/templates/:key/generate', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const key = c.req.param('key');
   const template = TEMPLATES[key];
   if (!template) return c.json({ error: 'Template not found' }, 404);
 
   const body = await c.req.json();
+  const sql = getSQL(c.env);
+  // IDOR guard: when generating against a project, founders may only do so for their own.
+  // Founders may NOT generate unattached documents (no project_id).
+  const isPrivileged = user.role === 'admin' || user.role === 'partner';
+  if (body.project_id) {
+    const p = await sql`SELECT founder_id FROM projects WHERE id = ${body.project_id}`;
+    if (p.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+    if (!canAccessFounderResource(user, (p[0] as any).founder_id)) {
+      await sql.end();
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+  } else if (!isPrivileged) {
+    await sql.end();
+    return c.json({ error: 'Forbidden' }, 403);
+  }
   let content = template.content;
   if (body.company_name) content = content.replace(/\{company_name\}/g, body.company_name);
   if (body.project_id) content = content.replace(/\{project_id\}/g, body.project_id);
 
-  const sql = getSQL(c.env);
   const [doc] = await sql`INSERT INTO documents (project_id, title, doc_type, status, content, template_name) VALUES (${body.project_id || null}, ${template.title}, ${key}, 'generated', ${content}, ${key}) RETURNING *`;
   await sql.end();
   return c.json(doc, 201);
 });
 
 legal.get('/documents', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const projectId = c.req.query('project_id');
   const sql = getSQL(c.env);
-  const docs = projectId
-    ? await sql`SELECT * FROM documents WHERE project_id = ${parseInt(projectId)} ORDER BY created_at DESC`
-    : await sql`SELECT * FROM documents ORDER BY created_at DESC`;
+  const isPrivileged = user.role === 'admin' || user.role === 'partner';
+  let docs: any;
+  if (isPrivileged) {
+    // Admins/partners see everything (optionally filtered by project_id).
+    docs = projectId
+      ? await sql`SELECT d.* FROM documents d WHERE d.project_id = ${parseInt(projectId)} ORDER BY d.created_at DESC`
+      : await sql`SELECT d.* FROM documents d ORDER BY d.created_at DESC`;
+  } else {
+    // Founders only see documents tied to their own projects.
+    if (!user.founder_id) { await sql.end(); return c.json([]); }
+    if (projectId) {
+      const p = await sql`SELECT founder_id FROM projects WHERE id = ${parseInt(projectId)}`;
+      if (p.length === 0 || (p[0] as any).founder_id !== user.founder_id) {
+        await sql.end();
+        return c.json([]);
+      }
+      docs = await sql`SELECT d.* FROM documents d WHERE d.project_id = ${parseInt(projectId)} ORDER BY d.created_at DESC`;
+    } else {
+      docs = await sql`SELECT d.* FROM documents d JOIN projects p ON d.project_id = p.id WHERE p.founder_id = ${user.founder_id} ORDER BY d.created_at DESC`;
+    }
+  }
   await sql.end();
   return c.json(docs);
 });
 
 legal.get('/documents/:id', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT * FROM documents WHERE id = ${id}`;
+  const rows = await sql`SELECT d.*, p.founder_id as project_founder_id FROM documents d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${id}`;
   await sql.end();
   if (rows.length === 0) return c.json({ error: 'Document not found' }, 404);
+  // IDOR guard: founders may only read documents tied to their own project.
+  if (!canAccessFounderResource(user, (rows[0] as any).project_founder_id)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
   return c.json(rows[0]);
 });
 
 legal.post('/documents', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const data = await c.req.json();
   const sql = getSQL(c.env);
+  // IDOR guard: founders can only create documents under their own project.
+  if (data.project_id) {
+    const p = await sql`SELECT founder_id FROM projects WHERE id = ${data.project_id}`;
+    if (p.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+    if (!canAccessFounderResource(user, (p[0] as any).founder_id)) {
+      await sql.end();
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+  } else if (user.role === 'founder') {
+    // Founders may not create unattached documents.
+    await sql.end();
+    return c.json({ error: 'Forbidden' }, 403);
+  }
   const [doc] = await sql`INSERT INTO documents (project_id, title, doc_type, content, template_name) VALUES (${data.project_id || null}, ${data.title}, ${data.doc_type || 'other'}, ${data.content || null}, ${data.template_name || null}) RETURNING *`;
   await sql.end();
   return c.json(doc, 201);
 });
 
 legal.put('/documents/:id/sign', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   const { signed_by } = await c.req.json();
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT * FROM documents WHERE id = ${id}`;
+  const rows = await sql`SELECT d.*, p.founder_id as project_founder_id FROM documents d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Document not found' }, 404); }
+  // IDOR guard: founders may only sign documents on their own project.
+  if (!canAccessFounderResource(user, (rows[0] as any).project_founder_id)) {
+    await sql.end();
+    return c.json({ error: 'Forbidden' }, 403);
+  }
   await sql`UPDATE documents SET status = 'signed', signed_by = ${signed_by || 'Unknown'}, signed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   const [updated] = await sql`SELECT * FROM documents WHERE id = ${id}`;
   await sql.end();

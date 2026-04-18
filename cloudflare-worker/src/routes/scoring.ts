@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireRole } from '../auth';
+import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
 import { runFullScore, tierLabel } from '../services/scoring';
 import { autoCreateStudioOpsForProject } from './studioops';
 
@@ -16,6 +16,11 @@ scoring.post('/score', async (c) => {
     const sql = getSQL(c.env);
     const projects = await sql`SELECT * FROM projects WHERE id = ${body.project_id}`;
     if (projects.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+    // IDOR guard: founders may only score their own project; partner/admin can score any.
+    if (!canAccessFounderResource(user, projects[0].founder_id)) {
+      await sql.end();
+      return c.json({ error: 'Forbidden' }, 403);
+    }
 
     const b = result.breakdown;
     const [snapshot] = await sql`INSERT INTO score_snapshots (project_id, total_score, tier, market_size, market_urgency, market_trend, market_total, team_expertise, team_execution, team_network, team_total, product_mvp_time, product_complexity, product_dependency, product_total, capital_cost_mvp, capital_time_revenue, capital_burn_traction, capital_total, fit_alignment, fit_synergy, fit_total, distribution_channels, distribution_virality, distribution_total, ai_adjustment) VALUES (${body.project_id}, ${result.total_score}, ${result.tier}, ${b.market.size}, ${b.market.urgency}, ${b.market.trend}, ${b.market.total}, ${b.team.expertise}, ${b.team.execution}, ${b.team.network}, ${b.team.total}, ${b.product.mvp_time}, ${b.product.complexity}, ${b.product.dependency}, ${b.product.total}, ${b.capital.cost_mvp}, ${b.capital.time_revenue}, ${b.capital.burn_traction}, ${b.capital.total}, ${b.fit.alignment}, ${b.fit.synergy}, ${b.fit.total}, ${b.distribution.channels}, ${b.distribution.virality}, ${b.distribution.total}, ${result.ai_adjustment}) RETURNING id`;
@@ -34,7 +39,8 @@ scoring.post('/score', async (c) => {
 });
 
 scoring.post('/score/:projectId/deal-memo', async (c) => {
-  const user = await requireAuth(c);
+  // Memo creation is partner/admin only — founders can never generate one against any project.
+  const user = await requireRole(c, 'partner');
   const projectId = parseInt(c.req.param('projectId'));
   const sql = getSQL(c.env);
 
@@ -71,9 +77,16 @@ scoring.post('/score/:projectId/deal-memo', async (c) => {
 });
 
 scoring.get('/scores/:projectId', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const projectId = parseInt(c.req.param('projectId'));
   const sql = getSQL(c.env);
+  // IDOR guard: a founder can only see scores for their own project.
+  const owners = await sql`SELECT founder_id FROM projects WHERE id = ${projectId}`;
+  if (owners.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+  if (!canAccessFounderResource(user as any, owners[0].founder_id)) {
+    await sql.end();
+    return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
+  }
   const snapshots = await sql`SELECT * FROM score_snapshots WHERE project_id = ${projectId} ORDER BY created_at DESC`;
   await sql.end();
   return c.json(snapshots);

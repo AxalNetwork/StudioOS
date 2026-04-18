@@ -4,7 +4,10 @@ from backend.app.database import get_session
 from backend.app.models.entities import Document, Entity, Project, DocumentType, DocumentStatus, User
 from backend.app.schemas.scoring import DocumentCreate
 from backend.app.api.routes.auth import get_current_user
+from backend.app.api.deps import require_role, ensure_founder_access, is_privileged
 from datetime import datetime
+
+require_partner = require_role("partner")
 
 router = APIRouter(prefix="/legal", tags=["Legal & Compliance"])
 
@@ -754,6 +757,14 @@ def list_template_layers(user: User = Depends(get_current_user)):
 
 @router.post("/documents/generate")
 def generate_document(data: DocumentCreate, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    # IDOR guard: founders may only generate docs against their own project.
+    if data.project_id:
+        project = session.get(Project, data.project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        ensure_founder_access(user, project.founder_id)
+    elif not is_privileged(user):
+        raise HTTPException(status_code=403, detail="Founders cannot create unattached documents")
     template = TEMPLATES.get(data.doc_type)
     content = data.content
     if template and not content:
@@ -778,9 +789,21 @@ def generate_document(data: DocumentCreate, session: Session = Depends(get_sessi
     return doc
 
 
+def _doc_owner_founder_id(session: Session, doc: Document):
+    if not doc.project_id:
+        return None
+    p = session.get(Project, doc.project_id)
+    return p.founder_id if p else None
+
+
 @router.get("/documents")
 def list_documents(project_id: int = None, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     stmt = select(Document).order_by(Document.created_at.desc())
+    # IDOR guard: founders only see documents tied to their own projects.
+    if not is_privileged(user):
+        if not user.founder_id:
+            return []
+        stmt = stmt.join(Project, Project.id == Document.project_id).where(Project.founder_id == user.founder_id)
     if project_id:
         stmt = stmt.where(Document.project_id == project_id)
     return session.exec(stmt).all()
@@ -791,6 +814,7 @@ def get_document(doc_id: int, session: Session = Depends(get_session), user: Use
     doc = session.get(Document, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    ensure_founder_access(user, _doc_owner_founder_id(session, doc))
     return doc
 
 
@@ -799,6 +823,7 @@ def send_document(doc_id: int, session: Session = Depends(get_session), user: Us
     doc = session.get(Document, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    ensure_founder_access(user, _doc_owner_founder_id(session, doc))
     doc.status = DocumentStatus.SENT
     doc.updated_at = datetime.utcnow()
     session.add(doc)
@@ -812,6 +837,7 @@ def sign_document(doc_id: int, signed_by: str = "system", session: Session = Dep
     doc = session.get(Document, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    ensure_founder_access(user, _doc_owner_founder_id(session, doc))
     doc.status = DocumentStatus.SIGNED
     doc.signed_by = signed_by
     doc.signed_at = datetime.utcnow()
@@ -823,7 +849,8 @@ def sign_document(doc_id: int, signed_by: str = "system", session: Session = Dep
 
 
 @router.post("/incorporate")
-def incorporate_project(project_id: int, jurisdiction: str = "Delaware", session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def incorporate_project(project_id: int, jurisdiction: str = "Delaware", session: Session = Depends(get_session), user: User = Depends(require_partner)):
+    # Incorporation is a partner/admin action — never founder-self-service.
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -868,7 +895,7 @@ def list_entities(session: Session = Depends(get_session), user: User = Depends(
 
 
 @router.post("/spinout/{project_id}")
-def spinout_project(project_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def spinout_project(project_id: int, session: Session = Depends(get_session), user: User = Depends(require_partner)):
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

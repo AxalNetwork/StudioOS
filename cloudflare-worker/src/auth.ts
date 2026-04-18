@@ -74,6 +74,17 @@ export async function requireRole(
   return user;
 }
 
+/**
+ * IDOR guard. Returns true if the user is allowed to read/touch a row that
+ * belongs to `ownerFounderId`. Admins and partners always pass; founders only
+ * pass when the row's founder_id matches their own.
+ */
+export function canAccessFounderResource(user: User, ownerFounderId: number | null | undefined): boolean {
+  if (user.role === 'admin' || user.role === 'partner') return true;
+  if (ownerFounderId == null) return false;
+  return !!user.founder_id && user.founder_id === ownerFounderId;
+}
+
 export async function requireApprovedKyc(c: Context<{ Bindings: Env }>): Promise<User> {
   const user = await requireAuth(c);
   if (user.role === 'admin') return user;

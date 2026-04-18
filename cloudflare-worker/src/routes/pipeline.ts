@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth } from '../auth';
+import { requireAuth, canAccessFounderResource } from '../auth';
 
 const pipeline = new Hono<{ Bindings: Env }>();
 
@@ -214,12 +214,17 @@ pipeline.post('/projects/:id/advance', async (c) => {
 // ============================================================
 
 pipeline.get('/projects/:id/detail', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   await ensureSchema(c.env);
   const dealId = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
   const [project] = await sql`SELECT * FROM projects WHERE id = ${dealId}`;
   if (!project) { await sql.end(); return c.json({ error: 'Not found' }, 404); }
+  // IDOR guard: founders may only see their own pipeline.
+  if (!canAccessFounderResource(user as any, project.founder_id)) {
+    await sql.end();
+    return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
+  }
   const stages = await sql`SELECT * FROM project_stages WHERE deal_id = ${dealId} ORDER BY id`;
   const tasks = await sql`SELECT * FROM mvp_tasks WHERE deal_id = ${dealId} ORDER BY status, created_at`;
   const metrics = await sql`SELECT * FROM metrics_snapshots WHERE deal_id = ${dealId} ORDER BY snapshot_date DESC LIMIT 30`;

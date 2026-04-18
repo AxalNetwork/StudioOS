@@ -5,28 +5,25 @@ from backend.app.models.entities import Project, Founder, ScoreSnapshot, Deal, A
 from backend.app.schemas.scoring import ProjectCreate, ProjectUpdate, FounderSubmitRequest
 from backend.app.services.scoring import run_full_score
 from backend.app.api.routes.auth import get_current_user
-from backend.app.api.deps import require_admin
+from backend.app.api.deps import require_admin, is_privileged, ensure_founder_access
 from backend.app.models.entities import UserRole
 from datetime import datetime
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
 
-def _is_privileged(user: User) -> bool:
-    return user.role in (UserRole.ADMIN, UserRole.PARTNER)
-
-
 def _ensure_can_edit(user: User, project: Project) -> None:
-    if _is_privileged(user):
-        return
-    if user.founder_id and project.founder_id == user.founder_id:
-        return
-    raise HTTPException(status_code=403, detail="Forbidden: you do not own this project")
+    ensure_founder_access(user, project.founder_id)
 
 
 @router.get("/")
 def list_projects(status: str = None, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     stmt = select(Project).order_by(Project.created_at.desc())
+    # IDOR guard: founders may only see their own projects.
+    if not is_privileged(user):
+        if not user.founder_id:
+            return []
+        stmt = stmt.where(Project.founder_id == user.founder_id)
     if status:
         stmt = stmt.where(Project.status == status)
     return session.exec(stmt).all()
@@ -37,6 +34,8 @@ def get_project(project_id: int, session: Session = Depends(get_session), user: 
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    # IDOR guard: founders may only read their own project.
+    ensure_founder_access(user, project.founder_id)
     founder = session.get(Founder, project.founder_id) if project.founder_id else None
     return {**project.model_dump(), "founder": founder.model_dump() if founder else None}
 
@@ -225,7 +224,7 @@ def update_project(project_id: int, data: ProjectUpdate, session: Session = Depe
 
     update_data = data.model_dump(exclude_unset=True)
     # Founders may not change status, stage, or playbook week — only privileged roles.
-    if not _is_privileged(user):
+    if not is_privileged(user):
         for protected in ("status", "stage", "playbook_week"):
             update_data.pop(protected, None)
     for key, val in update_data.items():
@@ -252,7 +251,7 @@ def advance_playbook_week(project_id: int, session: Session = Depends(get_sessio
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    if not _is_privileged(user):
+    if not is_privileged(user):
         raise HTTPException(status_code=403, detail="Only admin/partner can advance playbook week")
 
     order = ["week_1", "week_2", "week_3", "week_4", "complete"]

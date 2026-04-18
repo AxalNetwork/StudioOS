@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireAdmin } from '../auth';
+import { requireAuth, requireAdmin, canAccessFounderResource } from '../auth';
 
 const studioops = new Hono<{ Bindings: Env }>();
 
@@ -333,6 +333,11 @@ studioops.get('/strategic-review/:projectId', async (c) => {
   const projects = await sql`SELECT * FROM projects WHERE id = ${projectId}`;
   if (!projects.length) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const p: any = projects[0];
+  // IDOR guard: founders can only run strategic review on their own project.
+  if (!canAccessFounderResource(user as any, p.founder_id)) {
+    await sql.end();
+    return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
+  }
   const snapshots = await sql`SELECT * FROM score_snapshots WHERE project_id = ${projectId} ORDER BY created_at DESC LIMIT 1`;
   const snap: any = snapshots[0] || null;
   await sql.end();

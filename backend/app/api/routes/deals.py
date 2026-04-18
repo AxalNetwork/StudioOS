@@ -4,7 +4,10 @@ from backend.app.database import get_session
 from backend.app.models.entities import Deal, Project, Partner, User
 from backend.app.schemas.scoring import DealCreate, DealUpdate
 from backend.app.api.routes.auth import get_current_user
+from backend.app.api.deps import is_privileged, ensure_founder_access, require_role
 from datetime import datetime
+
+require_partner = require_role("partner")
 
 router = APIRouter(prefix="/deals", tags=["Deal Flow"])
 
@@ -12,6 +15,11 @@ router = APIRouter(prefix="/deals", tags=["Deal Flow"])
 @router.get("/")
 def list_deals(status: str = None, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     stmt = select(Deal).order_by(Deal.created_at.desc())
+    # IDOR guard: founders can only list deals on their own projects.
+    if not is_privileged(user):
+        if not user.founder_id:
+            return []
+        stmt = stmt.join(Project, Project.id == Deal.project_id).where(Project.founder_id == user.founder_id)
     if status:
         stmt = stmt.where(Deal.status == status)
     deals = session.exec(stmt).all()
@@ -34,6 +42,8 @@ def create_deal(data: DealCreate, session: Session = Depends(get_session), user:
     project = session.get(Project, data.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    # IDOR guard: founders may only create deals against their own project.
+    ensure_founder_access(user, project.founder_id)
 
     deal = Deal(
         project_id=data.project_id,
@@ -54,6 +64,8 @@ def get_deal(deal_id: int, session: Session = Depends(get_session), user: User =
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
     project = session.get(Project, deal.project_id)
+    # IDOR guard: founders can only see deals tied to their own projects.
+    ensure_founder_access(user, project.founder_id if project else None)
     partner = session.get(Partner, deal.partner_id) if deal.partner_id else None
     return {
         **deal.model_dump(),
@@ -63,7 +75,8 @@ def get_deal(deal_id: int, session: Session = Depends(get_session), user: User =
 
 
 @router.put("/{deal_id}")
-def update_deal(deal_id: int, data: DealUpdate, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def update_deal(deal_id: int, data: DealUpdate, session: Session = Depends(get_session), user: User = Depends(require_partner)):
+    # Deal mutation is partner/admin only.
     deal = session.get(Deal, deal_id)
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")

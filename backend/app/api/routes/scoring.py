@@ -6,7 +6,7 @@ from backend.app.schemas.scoring import ScoreRequest, GenerateMemoRequest
 from backend.app.services.scoring import run_full_score, tier_label
 from backend.app.services.ai_memo import generate_memo_with_ai
 from backend.app.api.routes.auth import get_current_user
-from backend.app.api.deps import require_role
+from backend.app.api.deps import require_role, ensure_founder_access
 from datetime import datetime
 
 router = APIRouter(prefix="/scoring", tags=["Scoring Engine"])
@@ -22,6 +22,8 @@ def score_startup(req: ScoreRequest, session: Session = Depends(get_session), us
         project = session.get(Project, req.project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
+        # IDOR guard: founders may only score their own project; partner/admin can score any.
+        ensure_founder_access(user, project.founder_id)
 
         snapshot = ScoreSnapshot(
             project_id=project.id,
@@ -69,7 +71,8 @@ def score_startup(req: ScoreRequest, session: Session = Depends(get_session), us
 
 
 @router.post("/score/{project_id}/deal-memo")
-def generate_deal_memo(project_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def generate_deal_memo(project_id: int, session: Session = Depends(get_session), user: User = Depends(require_partner)):
+    # Memo creation is partner/admin only.
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -150,6 +153,11 @@ def generate_deal_memo(project_id: int, session: Session = Depends(get_session),
 
 @router.get("/scores/{project_id}")
 def get_project_scores(project_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    # IDOR guard: founders may only see their own project's scores.
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    ensure_founder_access(user, project.founder_id)
     stmt = (
         select(ScoreSnapshot)
         .where(ScoreSnapshot.project_id == project_id)

@@ -1,18 +1,28 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireRole, requireAdmin } from '../auth';
+import { requireAuth, requireRole, requireAdmin, canAccessFounderResource } from '../auth';
 import { runFullScore } from '../services/scoring';
 
 const projects = new Hono<{ Bindings: Env }>();
 
 async function listProjectsHandler(c: any) {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const status = c.req.query('status');
   const sql = getSQL(c.env);
-  const rows = status
-    ? await sql`SELECT * FROM projects WHERE status = ${status} ORDER BY created_at DESC`
-    : await sql`SELECT * FROM projects ORDER BY created_at DESC`;
+  const isPrivileged = user.role === 'admin' || user.role === 'partner';
+  // IDOR guard: founders can only see their OWN projects.
+  let rows: any;
+  if (isPrivileged) {
+    rows = status
+      ? await sql`SELECT * FROM projects WHERE status = ${status} ORDER BY created_at DESC`
+      : await sql`SELECT * FROM projects ORDER BY created_at DESC`;
+  } else {
+    if (!user.founder_id) { await sql.end(); return c.json([]); }
+    rows = status
+      ? await sql`SELECT * FROM projects WHERE status = ${status} AND founder_id = ${user.founder_id} ORDER BY created_at DESC`
+      : await sql`SELECT * FROM projects WHERE founder_id = ${user.founder_id} ORDER BY created_at DESC`;
+  }
   await sql.end();
   return c.json(rows);
 }
@@ -21,12 +31,17 @@ projects.get('/', listProjectsHandler);
 projects.get('', listProjectsHandler);
 
 projects.get('/:id', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = rows[0];
+  // IDOR guard: a founder can only read their own project; admins/partners read all.
+  if (!canAccessFounderResource(user as any, project.founder_id)) {
+    await sql.end();
+    return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
+  }
   let founder = null;
   if (project.founder_id) {
     const f = await sql`SELECT * FROM founders WHERE id = ${project.founder_id}`;
