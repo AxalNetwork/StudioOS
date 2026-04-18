@@ -30,7 +30,6 @@ export default function Footer() {
             <ul className="space-y-2">
               <li><a href="mailto:hello@axal.vc" className="text-sm text-gray-600 hover:text-gray-900">Contact</a></li>
               <li><a href="mailto:support@axal.vc" className="text-sm text-gray-600 hover:text-gray-900">Support</a></li>
-              <li><a href="https://github.com/guillaumelauzier/axal-vc-studioos" target="_blank" rel="noopener" className="text-sm text-gray-600 hover:text-gray-900">Docs</a></li>
             </ul>
           </div>
 
