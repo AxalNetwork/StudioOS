@@ -1,47 +1,191 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select, func
-from backend.app.database import get_session
-from backend.app.models.entities import LPInvestor, CapitalCall, Project, ScoreSnapshot, Partner, User
-from backend.app.schemas.scoring import LPInvestorCreate, CapitalCallCreate, CapitalCallRequest
-from backend.app.api.routes.auth import get_current_user
+"""Capital & Investment routes.
+
+Backed by the canonical `vc_funds` + `limited_partners` tables. The legacy
+`lp_investors` table is no longer written to; the startup migration in
+`backend/app/models/migrations.py` keeps any historical rows mirrored into
+the new tables.
+
+Response shapes preserve the legacy field names (`committed_capital`,
+`called_capital`, `fund_name`) so the existing frontend continues to work
+without changes.
+"""
+
 from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlmodel import Session, func, select
+
+from backend.app.api.routes.auth import get_current_user
+from backend.app.database import get_session
+from backend.app.models.entities import (
+    CapitalCall,
+    LimitedPartner,
+    LPInvestor,
+    Partner,
+    Project,
+    ScoreSnapshot,
+    User,
+    VCFund,
+)
+from backend.app.schemas.scoring import (
+    CapitalCallCreate,
+    CapitalCallRequest,
+    LPInvestorCreate,
+)
 
 router = APIRouter(prefix="/capital", tags=["Capital & Investment"])
 
 
+# ---------------------------------------------------------------------------
+# Serialization helpers — preserve legacy keys for the frontend.
+# ---------------------------------------------------------------------------
+def _lp_dto(lp: LimitedPartner, fund: VCFund | None) -> dict:
+    return {
+        "id": lp.id,
+        "uid": lp.uid,
+        "name": lp.name,
+        "email": lp.email,
+        "fund_id": lp.fund_id,
+        "fund_name": fund.name if fund else None,
+        "commitment_amount": lp.commitment_amount,
+        "invested_amount": lp.invested_amount,
+        "returns": lp.returns,
+        # Backward-compatible aliases:
+        "committed_capital": lp.commitment_amount,
+        "called_capital": lp.invested_amount,
+        "status": lp.status,
+        "created_at": lp.created_at.isoformat() if lp.created_at else None,
+    }
+
+
+def _call_dto(c: CapitalCall) -> dict:
+    # For frontend compat the legacy `lp_investor_id` field is aliased to the
+    # canonical FK. If the canonical FK is missing (legacy row not yet
+    # backfilled), fall back to the original legacy column so the value is
+    # never spuriously null.
+    lp_id = c.limited_partner_id or c.lp_investor_id
+    return {
+        "id": c.id,
+        "uid": c.uid,
+        "limited_partner_id": c.limited_partner_id,
+        "lp_investor_id": lp_id,  # backward-compat alias
+        "project_id": c.project_id,
+        "amount": c.amount,
+        "status": c.status,
+        "due_date": str(c.due_date) if c.due_date else None,
+        "paid_date": str(c.paid_date) if c.paid_date else None,
+        "created_at": c.created_at.isoformat() if c.created_at else None,
+    }
+
+
+def _get_or_create_fund(session: Session, name: str) -> VCFund:
+    fund = session.exec(select(VCFund).where(VCFund.name == name)).first()
+    if not fund:
+        fund = VCFund(name=name, status="active")
+        session.add(fund)
+        session.commit()
+        session.refresh(fund)
+    return fund
+
+
+# ---------------------------------------------------------------------------
+# Investors (LPs)
+# ---------------------------------------------------------------------------
 @router.get("/investors")
 def list_investors(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
-    return session.exec(select(LPInvestor).order_by(LPInvestor.created_at.desc())).all()
+    lps = session.exec(select(LimitedPartner).order_by(LimitedPartner.created_at.desc())).all()
+    funds = {f.id: f for f in session.exec(select(VCFund)).all()}
+    return [_lp_dto(lp, funds.get(lp.fund_id)) for lp in lps]
 
 
 @router.post("/investors")
-def create_investor(data: LPInvestorCreate, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
-    investor = LPInvestor(
+def create_investor(
+    data: LPInvestorCreate,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    fund_name = data.fund_name or "Axal Fund I"
+    fund = _get_or_create_fund(session, fund_name)
+
+    # Enforce uniqueness on (email, fund_id) — same person may LP into multiple funds.
+    existing = session.exec(
+        select(LimitedPartner).where(
+            LimitedPartner.email == data.email,
+            LimitedPartner.fund_id == fund.id,
+        )
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Investor {data.email} already exists for fund '{fund.name}'",
+        )
+
+    lp = LimitedPartner(
+        fund_id=fund.id,
         name=data.name,
         email=data.email,
-        committed_capital=data.committed_capital,
-        fund_name=data.fund_name,
+        commitment_amount=data.committed_capital,
+        invested_amount=0,
+        status="active",
     )
-    session.add(investor)
+    session.add(lp)
+    # Keep fund.lp_count + total_commitment aggregate in sync.
+    fund.lp_count += 1
+    fund.total_commitment += data.committed_capital
+    fund.updated_at = datetime.utcnow()
+    session.add(fund)
     session.commit()
-    session.refresh(investor)
-    return investor
+    session.refresh(lp)
+    return _lp_dto(lp, fund)
 
 
 @router.get("/investors/{investor_id}")
-def get_investor(investor_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
-    inv = session.get(LPInvestor, investor_id)
-    if not inv:
+def get_investor(
+    investor_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    lp = session.get(LimitedPartner, investor_id)
+    if not lp:
         raise HTTPException(status_code=404, detail="Investor not found")
-    stmt = select(CapitalCall).where(CapitalCall.lp_investor_id == investor_id)
-    calls = session.exec(stmt).all()
-    return {**inv.model_dump(), "capital_calls": [c.model_dump() for c in calls]}
+    fund = session.get(VCFund, lp.fund_id)
+    calls = session.exec(
+        select(CapitalCall).where(CapitalCall.limited_partner_id == investor_id)
+    ).all()
+    return {**_lp_dto(lp, fund), "capital_calls": [_call_dto(c) for c in calls]}
 
 
+# ---------------------------------------------------------------------------
+# Capital calls
+# ---------------------------------------------------------------------------
 @router.post("/calls")
-def create_capital_call(data: CapitalCallCreate, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
-    investor = session.get(LPInvestor, data.lp_investor_id)
-    if not investor:
+def create_capital_call(
+    data: CapitalCallCreate,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    lp_id = data.limited_partner_id or data.lp_investor_id
+    if not lp_id:
+        raise HTTPException(status_code=422, detail="limited_partner_id is required")
+
+    lp = session.get(LimitedPartner, lp_id)
+    if not lp and data.lp_investor_id is not None and data.limited_partner_id is None:
+        # Backward compat: caller may have sent a TRUE legacy `lp_investors.id`.
+        # Map it to the canonical `limited_partners.id` via (email, fund_name).
+        legacy = session.get(LPInvestor, data.lp_investor_id)
+        if legacy and legacy.email:
+            # Deterministic pick on the off-chance pre-unique-index history
+            # left a duplicate (fund_id, email) row behind: lowest id wins.
+            lp = session.exec(
+                select(LimitedPartner)
+                .join(VCFund, VCFund.id == LimitedPartner.fund_id)
+                .where(
+                    LimitedPartner.email == legacy.email,
+                    VCFund.name == (legacy.fund_name or "Axal Fund I"),
+                )
+                .order_by(LimitedPartner.id)
+            ).first()
+    if not lp:
         raise HTTPException(status_code=404, detail="Investor not found")
 
     due = None
@@ -52,7 +196,7 @@ def create_capital_call(data: CapitalCallCreate, session: Session = Depends(get_
             raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.")
 
     call = CapitalCall(
-        lp_investor_id=data.lp_investor_id,
+        limited_partner_id=lp.id,
         project_id=data.project_id,
         amount=data.amount,
         due_date=due,
@@ -60,59 +204,85 @@ def create_capital_call(data: CapitalCallCreate, session: Session = Depends(get_
     session.add(call)
     session.commit()
     session.refresh(call)
-    return call
+    return _call_dto(call)
 
 
 @router.get("/calls")
-def list_capital_calls(status: str = None, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def list_capital_calls(
+    status: str | None = None,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
     stmt = select(CapitalCall).order_by(CapitalCall.created_at.desc())
     if status:
         stmt = stmt.where(CapitalCall.status == status)
-    return session.exec(stmt).all()
+    return [_call_dto(c) for c in session.exec(stmt).all()]
 
 
 @router.post("/calls/{call_id}/pay")
-def mark_call_paid(call_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def mark_call_paid(
+    call_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
     call = session.get(CapitalCall, call_id)
     if not call:
         raise HTTPException(status_code=404, detail="Capital call not found")
+    if call.status == "paid":
+        return {"status": "paid", "call": _call_dto(call)}
+
     call.status = "paid"
     call.paid_date = datetime.utcnow().date()
     session.add(call)
 
-    investor = session.get(LPInvestor, call.lp_investor_id)
-    if investor:
-        investor.called_capital += call.amount
-        session.add(investor)
+    lp_id = call.limited_partner_id
+    if lp_id:
+        lp = session.get(LimitedPartner, lp_id)
+        if lp:
+            lp.invested_amount += call.amount
+            lp.updated_at = datetime.utcnow()
+            session.add(lp)
+            fund = session.get(VCFund, lp.fund_id)
+            if fund:
+                fund.deployed_capital += call.amount
+                fund.updated_at = datetime.utcnow()
+                session.add(fund)
 
     session.commit()
-    return {"status": "paid", "call": call}
+    session.refresh(call)
+    return {"status": "paid", "call": _call_dto(call)}
 
 
 @router.post("/capitalCall")
-def capital_call_with_partners(data: CapitalCallRequest, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def capital_call_with_partners(
+    data: CapitalCallRequest,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
     project = session.get(Project, data.startup_id)
     if not project:
         raise HTTPException(status_code=404, detail="Startup/project not found")
 
-    investors = session.exec(select(LPInvestor).where(LPInvestor.status == "active")).all()
-    if not investors:
+    lps = session.exec(
+        select(LimitedPartner).where(LimitedPartner.status == "active")
+    ).all()
+    if not lps:
         raise HTTPException(status_code=404, detail="No active investors found")
 
-    per_investor = data.amount / len(investors)
+    per_lp = round(data.amount / len(lps), 2)
     calls_created = []
 
-    for inv in investors:
+    for lp in lps:
         call = CapitalCall(
-            lp_investor_id=inv.id,
+            limited_partner_id=lp.id,
             project_id=data.startup_id,
-            amount=round(per_investor, 2),
+            amount=per_lp,
         )
         session.add(call)
         calls_created.append({
-            "investor_id": inv.id,
-            "investor_name": inv.name,
-            "amount": round(per_investor, 2),
+            "investor_id": lp.id,
+            "investor_name": lp.name,
+            "amount": per_lp,
         })
 
     partners = session.exec(select(Partner).where(Partner.status == "active")).all()
@@ -137,6 +307,34 @@ def capital_call_with_partners(data: CapitalCallRequest, session: Session = Depe
     }
 
 
+# ---------------------------------------------------------------------------
+# Funds
+# ---------------------------------------------------------------------------
+@router.get("/funds")
+def list_funds(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    """Canonical fund listing. Replaces the old `entities` rows with type=vc_fund."""
+    funds = session.exec(select(VCFund).order_by(VCFund.created_at.desc())).all()
+    return [
+        {
+            "id": f.id,
+            "uid": f.uid,
+            "name": f.name,
+            "vintage_year": f.vintage_year,
+            "total_commitment": f.total_commitment,
+            "deployed_capital": f.deployed_capital,
+            "lp_count": f.lp_count,
+            "status": f.status,
+            "jurisdiction": f.jurisdiction,
+            "uncalled_capital": (f.total_commitment or 0) - (f.deployed_capital or 0),
+            "created_at": f.created_at.isoformat() if f.created_at else None,
+        }
+        for f in funds
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Portfolio
+# ---------------------------------------------------------------------------
 @router.get("/portfolio")
 def portfolio_overview(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     projects = session.exec(
@@ -163,8 +361,8 @@ def portfolio_overview(session: Session = Depends(get_session), user: User = Dep
             "users": p.users_count,
         })
 
-    total_committed = session.exec(select(func.sum(LPInvestor.committed_capital))).first() or 0
-    total_called = session.exec(select(func.sum(LPInvestor.called_capital))).first() or 0
+    total_committed = session.exec(select(func.sum(LimitedPartner.commitment_amount))).first() or 0
+    total_called = session.exec(select(func.sum(LimitedPartner.invested_amount))).first() or 0
 
     return {
         "projects": portfolio,

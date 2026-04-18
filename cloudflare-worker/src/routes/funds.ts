@@ -35,12 +35,14 @@ funds.get('/lp-portal', async (c) => {
   // Aggregate cash flows per-fund for TVPI / DPI
   const distRows = await Distributions.listByUser(c.env, user.id, 200);
 
+  // Joins through canonical limited_partners (matches by user_id when set,
+  // falls back to denormalized email for legacy LPs migrated from lp_investors).
   const calls = await c.env.DB.prepare(
     `SELECT cc.* FROM capital_calls cc
-       JOIN lp_investors li ON li.id = cc.lp_investor_id
-      WHERE LOWER(li.email) = LOWER(?)
+       JOIN limited_partners lp ON lp.id = cc.limited_partner_id
+      WHERE lp.user_id = ? OR LOWER(lp.email) = LOWER(?)
       ORDER BY cc.created_at DESC LIMIT 50`
-  ).bind(user.email).all().catch(() => ({ results: [] }));
+  ).bind(user.id, user.email).all().catch(() => ({ results: [] }));
 
   // Performance per-LP-row: TVPI = (returns + distributions) / invested ; DPI = distributions / invested
   const perfByLp = lpRows.map((lp: any) => {

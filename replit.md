@@ -104,9 +104,11 @@ A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day st
 - **score_snapshots** — Historical scoring records
 - **deal_memos** — Structured investment memos
 - **documents** — Legal documents
-- **entities** — Legal entities (holding company, subsidiary, VC fund)
-- **lp_investors** — Limited Partners
-- **capital_calls** — Capital call tracking
+- **entities** — Legal entities (holding company, subsidiary). `vc_fund` type is DEPRECATED; funds now live in `vc_funds`.
+- **vc_funds** — Canonical fund table (name, vintage_year, total_commitment, deployed_capital, lp_count, status). Mirrored on Cloudflare D1.
+- **limited_partners** — Canonical LP table, scoped to a fund via `fund_id` FK. Replaces the legacy flat `lp_investors`. Fields: fund_id, user_id (nullable), name, email, commitment_amount, invested_amount, returns, status.
+- **lp_investors** — DEPRECATED, retained read-only as historical archive. New writes always go to `limited_partners`. Startup migration `consolidate_capital_tables()` keeps the two in sync for legacy rows.
+- **capital_calls** — Capital call tracking. Canonical FK is `limited_partner_id`; legacy `lp_investor_id` retained nullable for old rows. Migration backfills `limited_partner_id` from the LP id mapping.
 - **tickets** — Support tickets
 - **activity_logs** — System activity/audit tracking
 

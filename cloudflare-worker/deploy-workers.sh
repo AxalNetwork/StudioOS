@@ -24,6 +24,21 @@ npx wrangler d1 execute studioos-db --file=sql/liquidity.sql --remote || true
 echo "==> Applying VC fund v2 schema (one-shot; ALTERs fail noisily on re-run)…"
 npx wrangler d1 execute studioos-db --file=sql/funds_v2.sql --remote || true
 
+echo "==> Consolidating capital tables (lp_investors → vc_funds + limited_partners)…"
+# Phase 1: ALTERs (errors tolerated on re-run — duplicate column).
+npx wrangler d1 execute studioos-db --file=sql/consolidate_capital_alters.sql --remote || true
+
+# Phase 2: capital_calls table rebuild. The SQL itself is now fully
+# self-recovering — it drops any leftover `capital_calls_new`, rebuilds the
+# table to the canonical shape (a no-op on second run since columns already
+# match), and uses `INSERT OR IGNORE` for the marker. Always-run is safer
+# than a brittle JSON-parsed gate.
+echo "    rebuilding capital_calls to relax lp_investor_id NOT NULL (idempotent)…"
+npx wrangler d1 execute studioos-db --file=sql/consolidate_capital_rebuild.sql --remote
+
+# Phase 3: data backfill (always run; fully idempotent via NOT EXISTS guards).
+npx wrangler d1 execute studioos-db --file=sql/consolidate_capital_backfill.sql --remote
+
 echo "==> Deploying worker to edge…"
 npx wrangler deploy
 

@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sqlmodel import Session
 from backend.app.database import engine, init_db
 from backend.app.models.entities import (
-    Entity, Founder, Project, Partner, LPInvestor, Ticket,
+    Entity, Founder, Project, Partner, LimitedPartner, VCFund, Ticket,
 )
 
 def seed():
@@ -15,8 +15,11 @@ def seed():
         holdco = Entity(name="Axal VC HoldCo", entity_type="holding_company", jurisdiction="Delaware", status="active")
         session.add(holdco)
 
-        fund = Entity(name="Axal Fund I", entity_type="vc_fund", jurisdiction="Delaware", status="active")
+        # Funds now live in the canonical `vc_funds` table (not `entities`).
+        fund = VCFund(name="Axal Fund I", jurisdiction="Delaware", status="active")
         session.add(fund)
+        session.commit()
+        session.refresh(fund)
 
         f1 = Founder(name="Sarah Chen", email="sarah@nexusai.io", domain_expertise="AI/ML Infrastructure", experience_years=8, bio="Ex-Google ML engineer, 2x founder")
         f2 = Founder(name="Marcus Johnson", email="marcus@chainflow.xyz", domain_expertise="Blockchain/DeFi", experience_years=6, bio="Former Coinbase engineer, built DeFi protocols")
@@ -66,8 +69,8 @@ def seed():
         session.add_all(partners)
 
         investors = [
-            LPInvestor(name="Horizon Capital", email="invest@horizoncap.com", committed_capital=5_000_000, fund_name="Axal Fund I"),
-            LPInvestor(name="Pacific Ventures", email="lp@pacificvc.com", committed_capital=2_500_000, fund_name="Axal Fund I"),
+            LimitedPartner(fund_id=fund.id, name="Horizon Capital", email="invest@horizoncap.com", commitment_amount=5_000_000),
+            LimitedPartner(fund_id=fund.id, name="Pacific Ventures", email="lp@pacificvc.com", commitment_amount=2_500_000),
         ]
         session.add_all(investors)
 

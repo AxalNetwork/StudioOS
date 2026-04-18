@@ -85,7 +85,9 @@ class LPInvestorCreate(BaseModel):
 
 
 class CapitalCallCreate(BaseModel):
-    lp_investor_id: int
+    # New canonical FK; either field may be supplied for backward compat.
+    limited_partner_id: Optional[int] = None
+    lp_investor_id: Optional[int] = None  # legacy alias accepted by the API
     project_id: Optional[int] = None
     amount: float
     due_date: Optional[str] = None

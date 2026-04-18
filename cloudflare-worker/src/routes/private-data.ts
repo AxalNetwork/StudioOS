@@ -54,8 +54,8 @@ privateData.get('/portfolio/metrics', async (c) => {
 
   if (user.role === 'partner') {
     const deals = user.partner_id ? await sql`SELECT d.*, p.name as project_name, p.sector FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.partner_id = ${user.partner_id} ORDER BY d.created_at DESC` : [];
-    const committed = await sql`SELECT COALESCE(SUM(committed_capital), 0) as total FROM lp_investors`;
-    const called = await sql`SELECT COALESCE(SUM(called_capital), 0) as total FROM lp_investors`;
+    const committed = await sql`SELECT COALESCE(SUM(commitment_amount), 0) as total FROM limited_partners`;
+    const called = await sql`SELECT COALESCE(SUM(invested_amount), 0) as total FROM limited_partners`;
     const portfolio = await sql`SELECT * FROM projects WHERE status IN ('spinout', 'active', 'tier_1', 'tier_2')`;
     await sql.end();
 
@@ -65,8 +65,8 @@ privateData.get('/portfolio/metrics', async (c) => {
 
   const allProjects = await sql`SELECT * FROM projects`;
   const active = allProjects.filter((p: any) => ['spinout', 'active', 'tier_1', 'tier_2'].includes(p.status));
-  const committed = await sql`SELECT COALESCE(SUM(committed_capital), 0) as total FROM lp_investors`;
-  const called = await sql`SELECT COALESCE(SUM(called_capital), 0) as total FROM lp_investors`;
+  const committed = await sql`SELECT COALESCE(SUM(commitment_amount), 0) as total FROM limited_partners`;
+  const called = await sql`SELECT COALESCE(SUM(invested_amount), 0) as total FROM limited_partners`;
   const totalDeals = await sql`SELECT COUNT(*) as count FROM deals`;
   const activeDeals = await sql`SELECT COUNT(*) as count FROM deals WHERE status IN ('applied', 'scored', 'active')`;
   await sql.end();

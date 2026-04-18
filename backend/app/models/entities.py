@@ -9,7 +9,7 @@ class EntityType(str, Enum):
     HOLDING_COMPANY = "holding_company"
     PROJECT = "project"
     SUBSIDIARY = "subsidiary"
-    VC_FUND = "vc_fund"
+    VC_FUND = "vc_fund"  # DEPRECATED — funds now live in `vc_funds` table; kept for legacy rows
 
 
 class ProjectStatus(str, Enum):
@@ -289,7 +289,44 @@ class Partner(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class VCFund(SQLModel, table=True):
+    """Canonical fund container. Replaces `entities` rows of type 'vc_fund'."""
+    __tablename__ = "vc_funds"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    name: str = Field(unique=True, index=True)
+    vintage_year: Optional[int] = None
+    total_commitment: float = 0
+    deployed_capital: float = 0
+    lp_count: int = 0
+    status: str = "active"  # fundraising | active | closed | wound_down
+    jurisdiction: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class LimitedPartner(SQLModel, table=True):
+    """Canonical LP record. Replaces the legacy flat `lp_investors` table.
+    Each LP is scoped to exactly one fund via `fund_id`."""
+    __tablename__ = "limited_partners"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    fund_id: int = Field(foreign_key="vc_funds.id", index=True)
+    user_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
+    name: str
+    email: str = Field(index=True)
+    commitment_amount: float = 0
+    invested_amount: float = 0  # equivalent to legacy `called_capital`
+    returns: float = 0
+    status: str = "active"  # committed | active | redeemed
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class LPInvestor(SQLModel, table=True):
+    """DEPRECATED — superseded by `LimitedPartner` + `VCFund`. Retained as a
+    read-only legacy table so the consolidation migration can backfill, and so
+    historical rows remain queryable. Do not write new rows here."""
     __tablename__ = "lp_investors"
     id: Optional[int] = Field(default=None, primary_key=True)
     uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
@@ -306,7 +343,12 @@ class CapitalCall(SQLModel, table=True):
     __tablename__ = "capital_calls"
     id: Optional[int] = Field(default=None, primary_key=True)
     uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
-    lp_investor_id: int = Field(foreign_key="lp_investors.id")
+    # Canonical FK going forward:
+    limited_partner_id: Optional[int] = Field(default=None, foreign_key="limited_partners.id", index=True)
+    # Legacy FK retained for backward compatibility with old rows. New code should
+    # always populate `limited_partner_id`. The startup migration backfills this
+    # column for any rows that still only have `lp_investor_id`.
+    lp_investor_id: Optional[int] = Field(default=None, foreign_key="lp_investors.id")
     project_id: Optional[int] = Field(default=None, foreign_key="projects.id")
     amount: float
     status: str = "pending"

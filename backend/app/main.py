@@ -46,6 +46,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 async def lifespan(app: FastAPI):
     logger.info("StudioOS starting up — initializing database")
     init_db()
+    try:
+        from backend.app.models.migrations import consolidate_capital_tables
+        consolidate_capital_tables()
+        logger.info("StudioOS migrations: capital tables consolidated")
+    except Exception as exc:  # noqa: BLE001
+        # Migrations are best-effort: a failure here must not prevent the API
+        # from booting (e.g. fresh DB, missing legacy tables).
+        logger.warning("StudioOS migrations: consolidate_capital_tables skipped: %s", exc)
     logger.info("StudioOS ready")
     yield
     logger.info("StudioOS shutting down")
@@ -215,7 +223,7 @@ def dashboard_stats(user=Depends(get_current_user)):
     from backend.app.models.entities import (
         Deal,
         Document,
-        LPInvestor,
+        LimitedPartner,
         Partner,
         Project,
         ScoreSnapshot,
@@ -232,7 +240,7 @@ def dashboard_stats(user=Depends(get_current_user)):
             select(func.count(Project.id)).where(Project.status.in_(["intake", "scoring"]))
         ).first() or 0
         total_partners = session.exec(select(func.count(Partner.id))).first() or 0
-        total_investors = session.exec(select(func.count(LPInvestor.id))).first() or 0
+        total_investors = session.exec(select(func.count(LimitedPartner.id))).first() or 0
         open_tickets = session.exec(
             select(func.count(Ticket.id)).where(Ticket.status.in_(["open", "in_progress"]))
         ).first() or 0

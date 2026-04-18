@@ -4,7 +4,7 @@ from datetime import datetime
 from backend.app.database import get_session
 from backend.app.models.entities import (
     User, UserRole, Project, ScoreSnapshot, Founder, Partner,
-    LPInvestor, CapitalCall, Deal, ActivityLog
+    LimitedPartner, CapitalCall, Deal, ActivityLog
 )
 from backend.app.api.routes.auth import get_current_user
 from backend.app.api.routes.market_intel import MARKET_PULSE, STUDIO_BENCHMARKS
@@ -193,9 +193,9 @@ def _partner_portfolio(user: User, session: Session):
             "created_at": d.created_at.isoformat() if d.created_at else None,
         })
 
-    investors = session.exec(select(LPInvestor)).all()
-    total_committed = sum(i.committed_capital or 0 for i in investors)
-    total_called = sum(i.called_capital or 0 for i in investors)
+    investors = session.exec(select(LimitedPartner)).all()
+    total_committed = sum(i.commitment_amount or 0 for i in investors)
+    total_called = sum(i.invested_amount or 0 for i in investors)
 
     calls = session.exec(
         select(CapitalCall).order_by(CapitalCall.created_at.desc())
@@ -255,8 +255,8 @@ def _admin_portfolio(session: Session):
     all_projects = session.exec(select(Project)).all()
     active = [p for p in all_projects if p.status in ("spinout", "active", "tier_1", "tier_2")]
 
-    total_committed = session.exec(select(func.sum(LPInvestor.committed_capital))).first() or 0
-    total_called = session.exec(select(func.sum(LPInvestor.called_capital))).first() or 0
+    total_committed = session.exec(select(func.sum(LimitedPartner.commitment_amount))).first() or 0
+    total_called = session.exec(select(func.sum(LimitedPartner.invested_amount))).first() or 0
     total_deals = session.exec(select(func.count(Deal.id))).first() or 0
     active_deals = session.exec(
         select(func.count(Deal.id)).where(Deal.status.in_(["applied", "scored", "active"]))
