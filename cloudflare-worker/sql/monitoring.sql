@@ -68,6 +68,11 @@ CREATE INDEX IF NOT EXISTS idx_queue_type ON queue_jobs(job_type);
 -- D1/SQLite has no `ALTER TABLE … ADD COLUMN IF NOT EXISTS`, so the safe pattern
 -- is to apply ALTERs in a separate file (sql/monitoring_alter_activity.sql) and
 -- track them in `_migrations`. See deploy-workers.sh for orchestration.
+--
+-- Indexes that depend on columns added by the ALTER file (e.g. `endpoint`) must
+-- NOT live here — they are created in monitoring_alter_activity.sql AND
+-- re-asserted (IF NOT EXISTS) by the deploy script after the ALTER step, so
+-- they exist regardless of whether the marker has already been set on a given
+-- environment. Only column-independent indexes should live in this file.
 
-CREATE INDEX IF NOT EXISTS idx_activity_endpoint ON activity_logs(endpoint);
 CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_logs(created_at);

@@ -4,15 +4,14 @@
 -- relax the legacy NOT NULL constraint on `lp_investor_id` so new inserts
 -- can be written via `limited_partner_id` only.
 --
--- Idempotency model: the deploy script always invokes this file. The script
--- below is wrapped in a single transaction so a partial failure rolls back
--- to the original `capital_calls` table; on retry the rebuild starts from a
--- clean state. The leading `DROP TABLE IF EXISTS capital_calls_new` defends
--- against any rare residue from a non-transactional execution path. On a
--- second clean run the rebuild is a no-op (same column shape, INSERT/SELECT
--- copies the same rows back, DROP+RENAME yields an identical table).
-
-BEGIN IMMEDIATE;
+-- Idempotency model: the deploy script always invokes this file. D1 forbids
+-- explicit BEGIN/COMMIT in user SQL (wrangler manages its own transaction
+-- boundaries per file), so atomicity is delegated to the wrangler executor
+-- which rolls the file back on failure. The leading
+-- `DROP TABLE IF EXISTS capital_calls_new` defends against any residue from
+-- a prior interrupted run. On a second clean run the rebuild is a no-op
+-- (same column shape, INSERT/SELECT copies the same rows back, DROP+RENAME
+-- yields an identical table).
 
 CREATE TABLE IF NOT EXISTS _capital_migrations (
     name TEXT PRIMARY KEY,
@@ -52,5 +51,3 @@ CREATE INDEX IF NOT EXISTS idx_capital_calls_project   ON capital_calls(project_
 
 -- Idempotent marker insert: tolerates duplicates on re-runs.
 INSERT OR IGNORE INTO _capital_migrations (name) VALUES ('capital_calls_relax_lp_investor_id_notnull');
-
-COMMIT;

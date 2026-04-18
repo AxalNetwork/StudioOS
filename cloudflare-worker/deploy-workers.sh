@@ -18,6 +18,19 @@ else
   echo "    activity_logs columns already applied — skipping."
 fi
 
+# Re-assert column-dependent indexes idempotently. Safe even if the gated ALTER
+# step above was skipped on this environment (covers older deployments that
+# applied the marker before these indexes were tracked here).
+npx wrangler d1 execute studioos-db --remote \
+  --command="CREATE INDEX IF NOT EXISTS idx_activity_endpoint ON activity_logs(endpoint);" || true
+
+echo "==> Ensuring canonical capital tables exist (vc_funds, limited_partners)…"
+# Minimal, fully idempotent prereqs for the consolidation pipeline. We do NOT
+# run the full infrastructure.sql because it references a `metrics_snapshots`
+# table whose column shape collides with a legacy same-named table in this DB
+# and rolls the entire script back.
+npx wrangler d1 execute studioos-db --file=sql/consolidate_capital_prereqs.sql --remote
+
 echo "==> Applying liquidity schema (one-shot; safe to fail on re-run)…"
 npx wrangler d1 execute studioos-db --file=sql/liquidity.sql --remote || true
 

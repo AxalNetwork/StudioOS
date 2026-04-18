@@ -8,4 +8,8 @@ ALTER TABLE activity_logs ADD COLUMN status_code INTEGER;
 ALTER TABLE activity_logs ADD COLUMN endpoint TEXT;
 ALTER TABLE activity_logs ADD COLUMN method TEXT;
 
+-- Indexes that depend on the columns added above. Living here ensures they
+-- are created in the same script that adds the columns.
+CREATE INDEX IF NOT EXISTS idx_activity_endpoint ON activity_logs(endpoint);
+
 INSERT OR IGNORE INTO _migrations (name) VALUES ('activity_logs_observability_columns');
