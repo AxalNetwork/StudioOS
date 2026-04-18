@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, Clock, XCircle, CheckCircle2 } from 'lucide-react';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 const ROLE_BADGES = {
   admin: 'bg-violet-100 text-violet-700',
@@ -681,8 +682,45 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  let chatMessages = [];
-  try { chatMessages = JSON.parse(profile.chat_history || '[]'); } catch {}
+  // Persisted transcript from D1 — used as the initial render. New messages
+  // streamed in via the OnboardingChat Durable Object are appended below.
+  const initialChat = (() => {
+    try { return JSON.parse(profile.chat_history || '[]'); } catch { return []; }
+  })();
+  const [liveChat, setLiveChat] = useState(initialChat);
+  // Unified dedupe key — must match between persisted seed and live DO frames
+  // (architect review caught the prior `seed:` vs `do:` schema split that
+  // caused duplicates when the DO replayed `recent` on hello).
+  const msgKey = (m) => `${m.role}:${(m.content || '').slice(0, 64)}`;
+  const seenKeysRef = useRef(new Set(initialChat.map(msgKey)));
+  // Subscribe to the founder's onboarding chat room. profile.user_id is
+  // the foreign key to users.id; admins are authorized server-side to
+  // view any user's room.
+  const wsPath = profile.user_id ? `/api/onboarding/ws/${profile.user_id}` : null;
+  const { status: wsStatus } = useWebSocket(wsPath, {
+    enabled: !!profile.user_id,
+    onMessage: (msg) => {
+      if (!msg) return;
+      // The DO sends { type:'hello', recent:[...] } on connect, then
+      // { type:'chat_message', message:{role,content,ts} } per new turn.
+      if (msg.type === 'hello' && Array.isArray(msg.recent)) {
+        const fresh = msg.recent.filter(m => {
+          const key = msgKey(m);
+          if (seenKeysRef.current.has(key)) return false;
+          seenKeysRef.current.add(key);
+          return true;
+        });
+        if (fresh.length) setLiveChat(curr => [...curr, ...fresh]);
+      } else if (msg.type === 'chat_message' && msg.message) {
+        const m = msg.message;
+        const key = msgKey(m);
+        if (seenKeysRef.current.has(key)) return;
+        seenKeysRef.current.add(key);
+        setLiveChat(curr => [...curr, m]);
+      }
+    },
+  });
+  const chatMessages = liveChat;
   let extracted = {};
   try { extracted = JSON.parse(profile.extracted_data || '{}'); } catch {}
 
@@ -808,6 +846,16 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
             <div className="flex items-center gap-2 mb-2">
               <MessageSquare size={14} className="text-gray-600" />
               <h4 className="text-sm font-semibold text-gray-900">Onboarding Conversation</h4>
+              {profile.user_id && (
+                <span className={`ml-auto inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                  wsStatus === 'open' ? 'bg-emerald-100 text-emerald-700'
+                  : wsStatus === 'connecting' ? 'bg-amber-100 text-amber-700'
+                  : 'bg-gray-100 text-gray-500'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${wsStatus === 'open' ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
+                  {wsStatus === 'open' ? 'live' : wsStatus === 'connecting' ? 'connecting' : 'offline'}
+                </span>
+              )}
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-64 overflow-y-auto space-y-2">
               {chatMessages.length === 0 ? (

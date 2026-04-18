@@ -219,6 +219,25 @@ Vite proxies /api/* to the backend.
 ## Seed Data
 4 example projects, 3 partners, 2 LP investors, 2 tickets.
 
+## Real-time (Cloudflare Durable Objects)
+
+Two SQLite-backed Durable Object classes provide WebSocket fan-out:
+
+- **PipelineRoom** — one instance per `deal:<id>` plus a global `overview` room. The worker emits `project_created` / `stage_advanced` from `routes/pipeline.ts`. The frontend `PipelinePage` subscribes to `overview` so the board live-updates without polling.
+- **OnboardingChat** — one instance per `user:<id>`. The worker emits `chat_message` from `POST /api/profiling/chat` (both the user's question and the AI reply). The Admin `ProfileReviewModal` subscribes per profile so admins watch transcripts grow live.
+
+Both classes use Hibernatable WebSockets (`state.acceptWebSocket`) so idle sockets incur no duration billing. A 25s server-initiated heartbeat alarm prunes half-open connections; the frontend hook also pings every 20s.
+
+Auth flow: WS upgrade routes (`GET /api/{pipeline,onboarding}/ws/...`) accept a `?token=` query param (browsers can't send Authorization on the WS handshake). The token is verified by the same `decodeJWT` used by every other route, RBAC-checked (admin/partner for pipeline; admin or self for onboarding), and rate-limited at 30 upgrades / minute / user via the existing `RATE_LIMITS` KV.
+
+Code map:
+- `cloudflare-worker/src/durable-objects/{pipeline-room,onboarding-chat}.ts` — DO classes (re-exported from `index.ts` so the runtime can find them).
+- `cloudflare-worker/src/services/realtime.ts` — `notifyPipelineRoom`, `notifyOnboardingChat` fire-and-forget broadcast helpers.
+- `cloudflare-worker/src/routes/realtime.ts` — WS upgrade routes mounted at `/api`.
+- `frontend/src/hooks/useWebSocket.js` — auto-reconnecting WS hook with backoff + heartbeat.
+
+`/api/infra/queue` reports binding presence under `realtime`. Rollback: comment the `[[durable_objects.bindings]]` blocks in `wrangler.toml` and redeploy — frontend hook degrades to silent no-op since the routes return 503.
+
 ## GitHub Pages (axal.vc)
 The `docs/` directory contains the production build of the React frontend, served by GitHub Pages at axal.vc:
 - Built via `./build-pages.sh` or `cd frontend && npx vite build`

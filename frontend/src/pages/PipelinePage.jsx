@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Layers, Plus, Loader2, Sparkles, X, Zap, TrendingUp, CheckCircle2, RotateCcw, AlertTriangle, Activity, Target } from 'lucide-react';
 import { api } from '../lib/api';
 import SpinoutWizard from '../components/SpinoutWizard';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 const STAGES = [
   { id: 'idea', label: 'Idea', color: 'bg-gray-100 text-gray-700', border: 'border-gray-300' },
@@ -60,6 +61,23 @@ export default function PipelinePage() {
   useEffect(() => { (async () => { try { setMe(await api.getCurrentUser()); } catch {} reload(); })(); }, []);
 
   const canEdit = me && (me.role === 'admin' || me.role === 'partner');
+
+  // Live board updates: subscribe to the global pipeline 'overview' room
+  // once we know the user has board-edit access. Any stage_advanced /
+  // project_created event triggers a quick reload so cards reflect the
+  // change without the user pressing refresh. Skipped while a local move
+  // is in flight to avoid clobbering the optimistic UI.
+  const [liveTick, setLiveTick] = useState(0);
+  useWebSocket('/api/pipeline/ws/overview', {
+    enabled: !!canEdit,
+    onMessage: (msg) => {
+      if (!msg || !msg.type) return;
+      if (msg.type === 'stage_advanced' || msg.type === 'project_created') {
+        if (pendingDealsRef.current.size === 0) reload();
+        setLiveTick(t => t + 1);
+      }
+    },
+  });
 
   // Optimistic stage-move with versioned, deal-scoped rollback. Single source
   // of truth for both drag-and-drop and button-based advances so the UI never

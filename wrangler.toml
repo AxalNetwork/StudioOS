@@ -86,6 +86,33 @@ max_batch_timeout  = 10
 max_retries        = 5
 dead_letter_queue  = "studioos-job-queue-dlq"
 
+# ---------- Durable Objects (real-time fan-out) ----------
+# PIPELINE_ROOM   – one DO instance per pipeline deal_id; broadcasts stage /
+#                   metric / AI-recommendation events to every connected
+#                   admin/partner WebSocket viewer.
+# ONBOARDING_CHAT – one DO instance per founder user_id; broadcasts new
+#                   /api/profiling/chat messages so admins watching the
+#                   ProfileReviewModal see the transcript update live.
+#
+# Both classes use Hibernatable WebSockets so idle connections incur no
+# duration billing. Class registrations live in
+# `cloudflare-worker/src/durable-objects/`; index.ts re-exports them so the
+# Workers runtime can find them at the bound class names.
+[[durable_objects.bindings]]
+name       = "PIPELINE_ROOM"
+class_name = "PipelineRoom"
+
+[[durable_objects.bindings]]
+name       = "ONBOARDING_CHAT"
+class_name = "OnboardingChat"
+
+[[migrations]]
+tag                = "v1-realtime"
+# Cloudflare requires `new_sqlite_classes` for all newly created Durable
+# Object namespaces (the legacy `new_classes` is no longer accepted).
+# SQLite-backed storage is the default and only supported mode going forward.
+new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
+
 # ---------- R2 (object storage, optional) ----------
 # Uncomment after running `npx wrangler r2 bucket create studioos-files`
 # [[r2_buckets]]

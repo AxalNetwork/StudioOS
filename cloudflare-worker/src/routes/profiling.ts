@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAdmin } from '../auth';
+import { notifyOnboardingChat } from '../services/realtime';
 
 const profiling = new Hono<{ Bindings: Env }>();
 
@@ -142,6 +143,16 @@ profiling.post('/chat', async (c) => {
   }
 
   await sql.end();
+
+  // Real-time tail: push the latest user message + AI reply into the
+  // founder's OnboardingChat room so any admin watching the modal sees
+  // the conversation update live. Best-effort — never blocks the response.
+  const latestUser = [...messages].reverse().find((m: any) => m?.role === 'user');
+  if (latestUser?.content) {
+    await notifyOnboardingChat(c.env, users[0].id, { role: 'user', content: String(latestUser.content) });
+  }
+  await notifyOnboardingChat(c.env, users[0].id, { role: 'assistant', content: assistantReply });
+
   return c.json({ reply: assistantReply });
 });
 

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, canAccessFounderResource } from '../auth';
+import { notifyPipelineRoom } from '../services/realtime';
 
 const pipeline = new Hono<{ Bindings: Env }>();
 
@@ -192,6 +193,15 @@ pipeline.post('/projects', async (c) => {
   await c.env.DB.prepare(`INSERT INTO project_stages (deal_id, stage_name, status) VALUES (?, 'idea', 'active')`).bind(project.id).run();
   await sql.end();
   await logAction(c.env, 'pipeline_project_created', user.id, { deal_id: project.id, name: project.name });
+  // Real-time fan-out: any admin viewing the board sees the new card immediately.
+  await notifyPipelineRoom(c.env, project.id, {
+    type: 'project_created',
+    deal_id: project.id,
+    name: project.name,
+    sector: project.sector,
+    stage: 'idea',
+    by_user_id: user.id,
+  });
   return c.json(project, 201);
 });
 
@@ -206,6 +216,12 @@ pipeline.post('/projects/:id/advance', async (c) => {
   if (!STAGES.includes(target)) return c.json({ error: `Invalid stage. Allowed: ${STAGES.join(', ')}` }, 400);
   await transitionStage(c.env, dealId, target, { advanced_by: user.id });
   await logAction(c.env, 'pipeline_stage_advanced', user.id, { deal_id: dealId, stage: target });
+  await notifyPipelineRoom(c.env, dealId, {
+    type: 'stage_advanced',
+    deal_id: dealId,
+    stage: target,
+    by_user_id: user.id,
+  });
   return c.json({ ok: true, stage: target });
 });
 
@@ -359,6 +375,17 @@ pipeline.post('/decision-gate/review', async (c) => {
   const cur = await getCurrentStage(c.env, dealId);
   if (cur !== 'decision_gate') await transitionStage(c.env, dealId, 'decision_gate', { gate_id: gate.id });
 
+  // Fan out to anyone watching this deal or the overview board.
+  await notifyPipelineRoom(c.env, dealId, {
+    type: 'gate_review_created',
+    deal_id: dealId,
+    gate_id: gate.id,
+    recommendation: aiRec,
+    traction_score: traction,
+    by: user.id,
+    ts: Date.now(),
+  });
+
   // Auto-create a Studio Ops strategic oversight task for human review
   try {
     let wf: any = await c.env.DB.prepare(`SELECT id FROM workflows WHERE template_key = 'pipeline.gate_review' AND project_id = ? LIMIT 1`).bind(dealId).first();
@@ -410,6 +437,17 @@ pipeline.patch('/decision-gate/decide', async (c) => {
   }
 
   await logAction(c.env, 'decision_gate_decided', user.id, { gate_id: gateId, decision, deal_id: gate.deal_id });
+
+  // Fan out — board needs to refresh because stage and/or project status changed.
+  await notifyPipelineRoom(c.env, gate.deal_id, {
+    type: 'gate_decided',
+    deal_id: gate.deal_id,
+    gate_id: gateId,
+    decision,
+    by: user.id,
+    ts: Date.now(),
+  });
+
   return c.json({ ok: true, decision });
 });
 

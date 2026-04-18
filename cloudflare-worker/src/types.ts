@@ -22,6 +22,11 @@ export interface Env {
   JOB_QUEUE?: Queue<JobMessage>;
   // Feature flag — string "true" enables the native CF Queue path.
   USE_CF_QUEUE?: string;
+  // Durable Objects for real-time WebSocket fan-out. Optional so unit-test
+  // envs without DO bindings don't crash; the realtime route returns 503
+  // when these are undefined.
+  PIPELINE_ROOM?: DurableObjectNamespace;
+  ONBOARDING_CHAT?: DurableObjectNamespace;
 }
 
 // Cloudflare Queues message envelope (matches the body shape the producer sends).

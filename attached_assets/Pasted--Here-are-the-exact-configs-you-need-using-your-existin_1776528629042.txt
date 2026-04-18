@@ -1,0 +1,77 @@
+**✅ Here are the exact configs you need** (using your existing Gmail account).
+
+### 1. `.env.example` (add these lines)
+```env
+# === Gmail SMTP (for deal@axal.vc and join@axal.vc emails) ===
+GMAIL_EMAIL=your-existing-gmail@gmail.com          # ← the Gmail address you want to send FROM
+GMAIL_APP_PASSWORD=abcd efgh ijkl mnop             # ← 16-character App Password from Google (NOT your normal password)
+```
+
+### 2. How to create the App Password (do this once)
+1. Go to your Google Account → Security → 2-Step Verification → App passwords
+2. Select “Mail” and “Other (Custom name)” → name it “Axal StudioOS”
+3. Copy the 16-character code → paste it into Replit Secrets as `GMAIL_APP_PASSWORD`
+
+---
+
+**Now copy-paste this full prompt into Replit Agent:**
+
+```
+You are the senior full-stack engineer for Axal StudioOS. Implement a complete email system using the existing Gmail account (via SMTP) instead of Resend.
+
+Use the exact environment variables: GMAIL_EMAIL and GMAIL_APP_PASSWORD (from the configs I provided).
+
+Exact requirements:
+
+1. **Backend Email Service**
+   - Create `backend/email.py`
+   - Use smtplib + SSL to connect to smtp.gmail.com:465
+   - Helper functions:
+     - send_deal_email(to_list, subject, html_body) → sent from GMAIL_EMAIL
+     - send_referral_invite(to_email, referrer_name, referral_code, referral_link) → sent from GMAIL_EMAIL with "join@axal.vc" style branding in the subject/from name
+   - Support nice HTML templates (branded with Axal logo and clear CTA buttons).
+   - Log every email sent to activity_logs (action_type = "email_sent", metadata includes to, subject, type="deal" or "referral").
+
+2. **API Endpoints** (add to backend/routers/)
+   - POST /api/email/send-deal → admin/operator only (send deal notification to founders/partners)
+   - POST /api/email/send-referral-invites → from Refer & Earn page (bulk send to imported contacts)
+
+3. **Refer & Earn Integration**
+   - On the Refer & Earn page, after importing contacts (CSV), add a "Send Invites via Email" button.
+   - Allow user to select which contacts to email and send personalized invitations using their own referral code/link.
+   - Use GMAIL_EMAIL as the sender, but make the subject/from name look like "join@axal.vc" for branding.
+
+4. **Email Templates**
+   - Create simple HTML templates in backend/email_templates/:
+     - deal_notification.html
+     - referral_invite.html (with referrer name, referral link, and strong CTA to register with ?ref=CODE)
+
+5. **Security & Best Practices**
+   - Load credentials only from Replit Secrets (GMAIL_EMAIL and GMAIL_APP_PASSWORD).
+   - Add rate limiting (max 20 emails per minute per user to respect Gmail limits).
+   - Log all sends and failures to activity_logs.
+   - Include unsubscribe/opt-out link in every email.
+
+Build this step-by-step:
+1. First create backend/email.py with Gmail SMTP sender.
+2. Then create the two API endpoints.
+3. Then update the Refer & Earn page with "Send Invites via Email" button + contact selection.
+4. Finally create the HTML templates and test end-to-end (send a test deal email and a referral invite).
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+**What this gives you:**
+- Emails sent from your existing Gmail account
+- Branded as `deal@axal.vc` and `join@axal.vc` in the subject/from name
+- Fully integrated with the Refer & Earn contact import + "Send Invites" button
+- Proper logging to activity_logs
+- Rate-limited to stay within Gmail’s safe limits
+
+Just add the two lines to `.env.example`, create the App Password in Google, then paste the prompt into Replit Agent.
+
+Would you like me to also give you a prompt for **R2 (to store generated legal PDFs)** next? Just say the word.

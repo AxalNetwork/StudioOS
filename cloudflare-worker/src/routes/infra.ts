@@ -7,6 +7,7 @@ import { requireAdmin } from '../auth';
 import { Jobs, JobType } from '../models/jobs';
 import { enqueueJob } from '../services/queue';
 import { processQueueBatch } from '../services/queueWorker';
+import { getRealtimeStats } from '../services/realtime';
 
 const infra = new Hono<{ Bindings: Env }>();
 
@@ -28,12 +29,15 @@ infra.get('/queue', async (c) => {
       GROUP BY status`
   ).all<{ status: string; n: number }>();
 
+  const realtime = await getRealtimeStats(c.env);
+
   return c.json({
     ok: true,
     transport_active: c.env.USE_CF_QUEUE === 'true' && !!c.env.JOB_QUEUE ? 'cf_queue' : 'd1',
     use_cf_queue_flag: c.env.USE_CF_QUEUE === 'true',
     cf_queue_binding_present: !!c.env.JOB_QUEUE,
     cf_queue_1h: cfWindow.results || [],
+    realtime,
     ...stats,
   });
 });

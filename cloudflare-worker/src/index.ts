@@ -32,6 +32,7 @@ import monitoring from './routes/monitoring';
 import infra from './routes/infra';
 import funds from './routes/funds';
 import liquidity from './routes/liquidity';
+import realtime from './routes/realtime';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
@@ -232,6 +233,11 @@ app.route('/api/monitoring', monitoring);
 app.route('/api/infra', infra);
 app.route('/api/funds', funds);
 app.route('/api/liquidity', liquidity);
+// Real-time WebSocket fan-out (Durable Objects).
+// Routes: GET /api/pipeline/ws/:deal_id, GET /api/onboarding/ws/:user_id,
+// GET /api/realtime/room/:kind/:id/count. Auth via ?token= query param
+// because browsers can't set Authorization headers on the WS handshake.
+app.route('/api', realtime);
 
 // Cloudflare cron + fetch entry point.
 // Cron drains the job queue every minute (configured in wrangler.toml).
@@ -290,3 +296,9 @@ export default {
     await queueConsumer(batch, env, ctx);
   },
 };
+
+// Durable Object class re-exports — REQUIRED by the Workers runtime so it
+// can find the classes named in wrangler.toml's [[durable_objects.bindings]].
+// Removing these will cause the deploy to fail with "class not found".
+export { PipelineRoom } from './durable-objects/pipeline-room';
+export { OnboardingChat } from './durable-objects/onboarding-chat';
