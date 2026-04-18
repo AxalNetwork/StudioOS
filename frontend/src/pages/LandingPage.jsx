@@ -21,7 +21,6 @@ export default function LandingPage() {
             <Link to="/funds" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">VC Fund</Link>
             <Link to="/liquidity" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Liquidity</Link>
             <a href="#partners" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Partners</a>
-            <a href="https://github.com/guillaumelauzier/axal-vc-studioos" target="_blank" rel="noopener" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Docs</a>
           </div>
           <div className="flex items-center gap-3">
             <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 transition-colors px-4 py-2">
