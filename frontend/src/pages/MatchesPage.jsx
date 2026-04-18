@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, Target, TrendingUp, Users, Settings, Loader2, Save, RefreshCw, Brain } from 'lucide-react';
+import { Sparkles, Target, TrendingUp, Users, Settings, Loader2, Save, RefreshCw, Brain, ChevronDown } from 'lucide-react';
 import { api } from '../lib/api';
 
 const SECTORS = ['AI', 'Fintech', 'Climate', 'Health', 'B2B SaaS', 'Consumer', 'Crypto', 'DevTools', 'Marketplaces', 'Hardware'];
@@ -312,12 +312,18 @@ function PreferencesModal({ initial, onSave, onClose, saving }) {
 
           <div>
             <label className="text-xs text-gray-700 font-medium block mb-1">Risk Tolerance</label>
-            <select value={form.risk_tolerance} onChange={e => setForm(f => ({ ...f, risk_tolerance: e.target.value }))}
-              className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none">
-              <option value="low">Low — proven traction only</option>
-              <option value="medium">Medium — balanced</option>
-              <option value="high">High — early/contrarian bets</option>
-            </select>
+            <div className="relative">
+              <select
+                value={form.risk_tolerance}
+                onChange={e => setForm(f => ({ ...f, risk_tolerance: e.target.value }))}
+                className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 pr-9 py-2 text-sm text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer"
+              >
+                <option value="low">Low — proven traction only</option>
+                <option value="medium">Medium — balanced</option>
+                <option value="high">High — early/contrarian bets</option>
+              </select>
+              <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            </div>
           </div>
 
           <div>
