@@ -1,0 +1,84 @@
+**✅ Here are the exact configs you need** before prompting Replit.
+
+### 1. `wrangler.toml` (add this section)
+
+```toml
+# wrangler.toml
+[[kv_namespaces]]
+binding = "KV"
+id = "axal_kv"          # ← Cloudflare will create this automatically when you run `wrangler deploy`
+preview_id = "axal_kv_preview"   # optional but recommended
+```
+
+### 2. `.env.example` (no new secrets needed — KV is bound automatically)
+
+```env
+# Cloudflare KV Namespace is bound via wrangler.toml
+# No additional environment variables required for basic KV usage
+```
+
+---
+
+**Now copy-paste this full prompt into Replit Agent:**
+
+```
+You are the senior Cloudflare engineer for Axal StudioOS. Implement a dedicated **KV Namespace** for:
+
+- User sessions / auth tokens
+- Rate limiting counters
+- Simple caching (dashboard data, match scores)
+
+Use the exact wrangler.toml configuration I provided above.
+
+Exact requirements:
+
+1. **KV Namespace Setup**
+   - Update wrangler.toml with the [[kv_namespaces]] binding exactly as shown in the config I gave you.
+   - Create a new file `cloudflare-worker/kv.js` with helper functions:
+     - get(key), put(key, value, ttl), delete(key), list()
+
+2. **Python Helpers (for FastAPI backend)**
+   - Create `backend/kv.py` with:
+     - async def kv_get(key)
+     - async def kv_put(key, value, ttl_seconds=None)
+     - async def kv_delete(key)
+   - These functions should access env.KV (the binding from wrangler.toml).
+
+3. **Usage in the Platform**
+   - User sessions / auth tokens: store Replit Auth session data in KV with short TTL.
+   - Rate limiting: store counters under keys like "rate:userid:endpoint:timestamp"
+   - Caching: cache dashboard data and match scores with appropriate TTL (e.g. 60 seconds for live data).
+
+4. **Integration**
+   - Update the existing RateLimitMiddleware to use KV instead of D1.
+   - Update any session/auth code to use KV for token storage.
+   - Add a simple cache helper for dashboard and AI match scores.
+   - Update main.py to make the KV binding available.
+
+5. **Best Practices**
+   - Use JSON serialization for complex values.
+   - Add proper error handling and logging.
+   - Set reasonable TTLs (default 1 hour, max 24 hours for most cache).
+
+Build this step-by-step:
+1. First update wrangler.toml with the KV binding.
+2. Then create cloudflare-worker/kv.js with helper functions.
+3. Then create backend/kv.py with Python async helpers.
+4. Then update RateLimitMiddleware, auth, and dashboard code to use the new KV helpers.
+5. Finally test KV operations (store a session, rate limit counter, and cached dashboard data).
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+**What this gives you:**
+- A proper dedicated KV namespace bound as `env.KV`
+- Clean helper functions for both Workers and FastAPI
+- Immediate improvements to rate limiting, sessions, and caching
+
+Just copy the configs above first, then paste the prompt into Replit Agent.
+
+Would you like the next prompt for **R2 (file storage for legal PDFs)** or for **Durable Objects (real-time Pipeline Board)**? Just say the word.

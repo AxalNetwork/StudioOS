@@ -2,12 +2,20 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { kvGetJSON, kvPutJSON, kvDelete, createL1 } from '../kv';
 
 const dashboard = new Hono<{ Bindings: Env }>();
 
-// Lightweight in-memory cache: { userId -> {data, expires} }
-const CACHE_TTL_MS = 30_000;
-const cache = new Map<number, { data: any; expires: number }>();
+// Two-tier cache:
+//   L1 — per-isolate Map, 10s TTL. Sub-millisecond, but only the isolate
+//        that wrote it gets a hit. Useful for tight refresh loops.
+//   L2 — KV (TOKENS namespace, `cache:dash:<userId>` key), 60s TTL. Shared
+//        across all worker isolates worldwide, ~150ms read.
+// Origin (D1) is the source of truth on miss.
+const L1_TTL_MS = 10_000;
+const KV_TTL_SEC = 60;
+const l1 = createL1<any>(L1_TTL_MS);
+const kvKey = (userId: number) => `cache:dash:${userId}`;
 
 // Wrap a query so a single missing table or SQL error doesn't 500 the whole dashboard.
 // Returns the fallback value and logs the underlying error for observability.
@@ -23,9 +31,22 @@ async function safeQuery<T>(label: string, fn: () => Promise<T>, fallback: T): P
 dashboard.get('/', async (c) => {
   const user = await requireAuth(c);
   const fresh = c.req.query('fresh') === '1';
-  const cached = cache.get(user.id);
-  if (!fresh && cached && cached.expires > Date.now()) {
-    return c.json({ ...cached.data, cached: true });
+  const now = Date.now();
+
+  // L1 — per-isolate
+  if (!fresh) {
+    const l1Hit = l1.map.get(String(user.id));
+    if (l1Hit && l1Hit.exp > now) {
+      return c.json({ ...l1Hit.v, cached: 'l1' });
+    }
+    // L2 — KV (only attempt if binding exists; falls through to origin otherwise)
+    if (c.env.TOKENS) {
+      const kvHit = await kvGetJSON<any>(c.env.TOKENS, kvKey(user.id));
+      if (kvHit) {
+        l1.map.set(String(user.id), { v: kvHit, exp: now + L1_TTL_MS });
+        return c.json({ ...kvHit, cached: 'kv' });
+      }
+    }
   }
 
   const sql = getSQL(c.env);
@@ -189,14 +210,22 @@ dashboard.get('/', async (c) => {
     generated_at: new Date().toISOString(),
   };
 
-  cache.set(user.id, { data: payload, expires: Date.now() + CACHE_TTL_MS });
+  // Write through both tiers. KV write is fire-and-forget via waitUntil so
+  // the response stays fast; KV failure is logged but never blocks.
+  l1.map.set(String(user.id), { v: payload, exp: Date.now() + L1_TTL_MS });
+  if (c.env.TOKENS) {
+    const ctx = (c.executionCtx as any);
+    const writeP = kvPutJSON(c.env.TOKENS, kvKey(user.id), payload, KV_TTL_SEC);
+    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(writeP); else void writeP;
+  }
   return c.json(payload);
 });
 
 dashboard.post('/refresh-scores', async (c) => {
   const user = await requireAuth(c);
-  // Invalidate cache for this user; client will get fresh on next fetch
-  cache.delete(user.id);
+  // Invalidate both cache tiers for this user.
+  l1.map.delete(String(user.id));
+  if (c.env.TOKENS) await kvDelete(c.env.TOKENS, kvKey(user.id));
   return c.json({ ok: true, message: 'Cache cleared. Next fetch will re-aggregate.' });
 });
 
