@@ -553,7 +553,19 @@ function MyMarketplaceProfile() {
         <Field label="Skills (comma-separated)"><input value={skillsInput} onChange={e => setSkillsInput(e.target.value)} placeholder="growth, fundraising, product strategy" className={inputCls} /></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Hourly Rate (cents)"><input type="number" value={p.hourly_rate_cents || ''} onChange={e => setP({...p, hourly_rate_cents: e.target.value})} className={inputCls} placeholder="e.g. 30000 = $300" /></Field>
-          <Field label="Availability"><select value={p.availability} onChange={e => setP({...p, availability: e.target.value})} className={inputCls}><option value="available">Available</option><option value="booked">Booked</option></select></Field>
+          <Field label="Availability">
+            <div className="relative">
+              <select
+                value={p.availability}
+                onChange={e => setP({ ...p, availability: e.target.value })}
+                className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 pr-9 py-2 text-sm text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer"
+              >
+                <option value="available">Available</option>
+                <option value="booked">Booked</option>
+              </select>
+              <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            </div>
+          </Field>
         </div>
         {err && <div className="text-xs text-red-600">{err}</div>}
         {saved && <div className="text-xs text-emerald-600">Saved.</div>}
