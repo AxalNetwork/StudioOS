@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, Users, Store, Layers, Plus, Loader2, Sparkles, X, Save, Search, Send, Brain, Star, Briefcase } from 'lucide-react';
+import { TrendingUp, Users, Store, Layers, Plus, Loader2, Sparkles, X, Save, Search, Send, Brain, Star, Briefcase, ChevronDown } from 'lucide-react';
 import { api } from '../lib/api';
 
 export default function NetworkEffectsPage() {
@@ -374,16 +374,68 @@ function MarketplaceSearch() {
 
   return (
     <div>
-      <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 flex flex-wrap gap-2 items-end">
-        <input placeholder="Skill keyword" value={filters.skill} onChange={e => setFilters(f => ({...f, skill: e.target.value}))} className={`${inputCls} w-40`} />
-        <select value={filters.role} onChange={e => setFilters(f => ({...f, role: e.target.value}))} className={`${inputCls} w-36`}>
-          <option value="">Any role</option><option value="partner">Partner</option><option value="founder">Founder</option><option value="admin">Admin</option>
-        </select>
-        <select value={filters.availability} onChange={e => setFilters(f => ({...f, availability: e.target.value}))} className={`${inputCls} w-36`}>
-          <option value="">Any availability</option><option value="available">Available</option><option value="booked">Booked</option>
-        </select>
-        <input type="number" min="0" max="5" step="0.5" placeholder="Min rating" value={filters.min_rating} onChange={e => setFilters(f => ({...f, min_rating: e.target.value}))} className={`${inputCls} w-28`} />
-        <button onClick={search} className="bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 py-2 rounded-lg flex items-center gap-1"><Search size={14} /> Search</button>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Skill</label>
+          <input
+            placeholder="e.g. React, GTM, Finance"
+            value={filters.skill}
+            onChange={e => setFilters(f => ({...f, skill: e.target.value}))}
+            className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Role</label>
+          <div className="relative">
+            <select
+              value={filters.role}
+              onChange={e => setFilters(f => ({...f, role: e.target.value}))}
+              className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-lg pl-3 pr-9 py-2 text-sm text-gray-800 focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer"
+            >
+              <option value="">Any role</option>
+              <option value="partner">Partner</option>
+              <option value="founder">Founder</option>
+              <option value="admin">Admin</option>
+            </select>
+            <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Availability</label>
+          <div className="relative">
+            <select
+              value={filters.availability}
+              onChange={e => setFilters(f => ({...f, availability: e.target.value}))}
+              className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-lg pl-3 pr-9 py-2 text-sm text-gray-800 focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer"
+            >
+              <option value="">Any availability</option>
+              <option value="available">Available now</option>
+              <option value="booked">Booked</option>
+            </select>
+            <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Min rating</label>
+          <div className="flex gap-2 items-center">
+            <input
+              type="number" min="0" max="5" step="0.5"
+              placeholder="0 – 5"
+              value={filters.min_rating}
+              onChange={e => setFilters(f => ({...f, min_rating: e.target.value}))}
+              className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition"
+            />
+            <button
+              onClick={search}
+              className="bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm"
+            >
+              <Search size={14} /> Search
+            </button>
+          </div>
+        </div>
       </div>
 
       {loading ? <Loading text="Searching…" /> : results.length === 0 ? (
