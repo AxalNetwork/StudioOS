@@ -82,6 +82,7 @@ class RegisterRequest(BaseModel):
     email: str
     name: str
     role: str = Field("partner", pattern="^(founder|partner)$")
+    ref_code: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -158,14 +159,36 @@ def _send_verification(email: str, name: str, session: Session, user: User) -> d
     return {"sent": sent, "verification_url": None if sent else verification_url}
 
 
+def _resolve_referrer(session: Session, ref_code: Optional[str], email: str):
+    """Return (partner_id, normalized_code) or (None, None). Graceful on invalid input."""
+    if not ref_code:
+        return None, None
+    code = ref_code.strip().upper()
+    if not code:
+        return None, None
+    from backend.app.models.entities import Partner
+    partner = session.exec(select(Partner).where(Partner.referral_code == code)).first()
+    if not partner or partner.status != "active":
+        return None, None
+    if partner.email and partner.email.lower() == (email or "").lower():
+        return None, None  # prevent self-referral
+    return partner.id, code
+
+
 @router.post("/register")
 def register(req: RegisterRequest, session: Session = Depends(get_session)):
+    referrer_id, ref_code_norm = _resolve_referrer(session, req.ref_code, req.email)
+
     existing = session.exec(select(User).where(User.email == req.email)).first()
     if existing:
         if existing.email_verified and existing.password_hash:
             raise HTTPException(status_code=409, detail="Email already registered")
         existing.name = req.name
         existing.role = req.role
+        # Only set referrer if not already attributed (first valid wins)
+        if referrer_id and not existing.referrer_partner_id:
+            existing.referrer_partner_id = referrer_id
+            existing.referrer_code_used = ref_code_norm
         result = _send_verification(req.email, req.name, session, existing)
         return {
             "message": "Verification email sent" if result["sent"] else "Account created — email service not configured",
@@ -174,6 +197,7 @@ def register(req: RegisterRequest, session: Session = Depends(get_session)):
             "requires_verification": True,
             "email_sent": result["sent"],
             "verification_url": result["verification_url"],
+            "referred_by_partner_id": existing.referrer_partner_id,
         }
 
     user = User(
@@ -181,10 +205,20 @@ def register(req: RegisterRequest, session: Session = Depends(get_session)):
         name=req.name,
         role=req.role,
         email_verified=False,
+        referrer_partner_id=referrer_id,
+        referrer_code_used=ref_code_norm,
     )
     session.add(user)
     session.commit()
     session.refresh(user)
+
+    if referrer_id:
+        session.add(ActivityLog(
+            action="referral_pending",
+            details=f"User {req.email} registered via referral code {ref_code_norm} (partner_id={referrer_id})",
+            actor=req.email,
+        ))
+        session.commit()
 
     result = _send_verification(req.email, req.name, session, user)
 
@@ -270,6 +304,7 @@ def confirm_verify_email(req: ConfirmVerifyRequest, session: Session = Depends(g
     if user.verification_token_expires and datetime.utcnow() > user.verification_token_expires:
         raise HTTPException(status_code=400, detail="Verification link has expired. Please request a new one.")
 
+    was_unverified = not user.email_verified
     user.email_verified = True
 
     setup_token_raw, setup_hash, setup_expires = generate_verification_token()
@@ -284,6 +319,21 @@ def confirm_verify_email(req: ConfirmVerifyRequest, session: Session = Depends(g
         actor=user.email,
     )
     session.add(log)
+
+    # Attribute referral on first verification
+    if was_unverified and user.referrer_partner_id and not user.referral_attributed_at:
+        from backend.app.models.entities import Partner
+        partner = session.get(Partner, user.referrer_partner_id)
+        if partner:
+            partner.referrals_count = (partner.referrals_count or 0) + 1
+            user.referral_attributed_at = datetime.utcnow()
+            session.add(partner)
+            session.add(user)
+            session.add(ActivityLog(
+                action="referral_converted",
+                details=f"Referral converted: {user.email} → partner {partner.email} (code {user.referrer_code_used})",
+                actor=user.email,
+            ))
     session.commit()
 
     return {
