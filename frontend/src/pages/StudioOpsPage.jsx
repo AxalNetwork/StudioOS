@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Briefcase, DollarSign, Users, Scale, ShieldCheck, Plus, Loader2, Brain, X, ChevronRight, Sparkles, RefreshCw, Zap } from 'lucide-react';
+import { Briefcase, DollarSign, Users, Scale, ShieldCheck, Plus, Loader2, Brain, X, ChevronRight, Sparkles, RefreshCw, Zap, ChevronDown } from 'lucide-react';
 import { api } from '../lib/api';
 
 const TYPE_META = {
@@ -246,11 +246,17 @@ function StrategicReview() {
       <p className="text-xs text-gray-600 mb-4">AI-powered metrics summary + continue / iterate / spin-out / kill recommendation.</p>
 
       <div className="flex gap-2 mb-4">
-        <select value={projectId} onChange={e => setProjectId(e.target.value)}
-          className="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none">
-          <option value="">Select a project…</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.name} ({p.status})</option>)}
-        </select>
+        <div className="relative flex-1">
+          <select
+            value={projectId}
+            onChange={e => setProjectId(e.target.value)}
+            className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 pr-9 py-2 text-sm text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer"
+          >
+            <option value="">Select a project…</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name} ({p.status})</option>)}
+          </select>
+          <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        </div>
         <button onClick={run} disabled={!projectId || loading}
           className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
           {loading ? <Loader2 className="animate-spin" size={14} /> : <Brain size={14} />}
