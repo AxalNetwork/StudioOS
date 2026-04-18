@@ -45,36 +45,125 @@ import LiquidityPage from './pages/LiquidityPage';
 import FundsPage from './pages/FundsPage';
 import Footer from './components/Footer';
 
-const ALL_NAV_ITEMS = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'founder', 'partner'] },
-  { to: '/admin', icon: Shield, label: 'Admin Console', roles: ['admin'] },
-  { to: '/scoring', icon: Target, label: 'Scoring Engine', roles: ['admin', 'partner'] },
-  { to: '/projects', icon: Zap, label: 'Projects', roles: ['admin', 'founder', 'partner'] },
-  { to: '/deals', icon: Handshake, label: 'Deal Flow', roles: ['admin', 'partner'] },
-  { to: '/market-intel', icon: Globe, label: 'Market Intelligence', roles: ['admin', 'partner'] },
-  { to: '/advisory', icon: Brain, label: 'AI Advisory Suite', roles: ['admin', 'founder'] },
-  { to: '/legal', icon: FileText, label: 'Legal & Compliance', roles: ['admin', 'founder'] },
-  { to: '/partners', icon: Users, label: 'Partners', roles: ['admin', 'partner'] },
-  { to: '/capital', icon: DollarSign, label: 'Capital & Investment', roles: ['admin', 'partner'] },
-  { to: '/tickets', icon: Ticket, label: 'Support', roles: ['admin', 'founder', 'partner'] },
-  { to: '/activity', icon: Activity, label: 'Activity Log', roles: ['admin', 'founder', 'partner'] },
-  { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification', roles: ['founder', 'partner'] },
-  { to: '/refer', icon: Share2, label: 'Refer & Earn', roles: ['admin', 'founder', 'partner'] },
-  { to: '/payouts', icon: Wallet, label: 'Payouts', roles: ['admin', 'founder', 'partner'] },
-  { to: '/network', icon: Network, label: 'Referral Network', roles: ['admin', 'founder', 'partner'] },
-  { to: '/matches', icon: Sparkles, label: 'AI Matches', roles: ['admin', 'partner'] },
-  { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops', roles: ['admin', 'founder', 'partner'] },
-  { to: '/network-effects', icon: TrendingUp, label: 'Network Effects', roles: ['admin', 'founder', 'partner'] },
-  { to: '/pipeline', icon: Layers, label: 'Pipeline Board', roles: ['admin', 'founder', 'partner'] },
-  { to: '/relationships', icon: Handshake, label: 'Relationships', roles: ['admin', 'founder', 'partner'] },
-  { to: '/legal-capital', icon: Scale, label: 'Legal & Capital', roles: ['admin', 'founder', 'partner'] },
-  { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', roles: ['admin', 'founder', 'partner'] },
-  { to: '/funds', icon: DollarSign, label: 'VC Funds', roles: ['admin', 'partner'] },
-  { to: '/monitoring', icon: Activity, label: 'Monitoring', roles: ['admin'] },
-  { to: '/api-bridge', icon: Code, label: 'API Bridge', roles: ['admin'] },
-  { to: '/founder', icon: Rocket, label: 'Founder Portal', roles: ['admin', 'founder'], divider: true },
-  { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal', roles: ['admin', 'partner'] },
-];
+// Item shapes:
+//   { to, icon, label }                         -> nav link
+//   { section: 'Core' }                         -> section header
+//   { divider: true }                           -> horizontal rule
+const NAV_BY_ROLE = {
+  admin: [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/admin', icon: Shield, label: 'Admin Console' },
+
+    { section: 'Core' },
+    { to: '/projects', icon: Zap, label: 'Projects' },
+    { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
+    { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
+
+    { section: 'Intelligence' },
+    { to: '/scoring', icon: Target, label: 'Scoring Engine' },
+    { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
+    { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
+    { to: '/matches', icon: Sparkles, label: 'AI Matches' },
+    { to: '/deals', icon: Handshake, label: 'Deal Flow' },
+
+    { section: 'Network' },
+    { to: '/partners', icon: Users, label: 'Partners' },
+    { to: '/refer', icon: Share2, label: 'Refer & Earn' },
+    { to: '/network', icon: Network, label: 'Referral Network' },
+    { to: '/relationships', icon: Handshake, label: 'Relationships' },
+    { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
+
+    { section: 'Capital & Liquidity' },
+    { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
+    { to: '/funds', icon: DollarSign, label: 'VC Funds' },
+    { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
+    { to: '/payouts', icon: Wallet, label: 'Payouts' },
+
+    { section: 'Legal & Compliance' },
+    { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+
+    { section: 'Advanced' },
+    { to: '/monitoring', icon: Activity, label: 'Monitoring' },
+    { to: '/activity', icon: Activity, label: 'Activity Log' },
+    { to: '/tickets', icon: Ticket, label: 'Support' },
+    { to: '/api-bridge', icon: Code, label: 'API Bridge' },
+
+    { divider: true },
+    { to: '/founder', icon: Rocket, label: 'Founder Portal' },
+    { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
+  ],
+
+  founder: [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+
+    { section: 'Core' },
+    { to: '/projects', icon: Zap, label: 'Projects' },
+    { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
+    { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
+
+    { section: 'Intelligence' },
+    { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
+
+    { section: 'Legal & Compliance' },
+    { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+
+    { section: 'Network & Growth' },
+    { to: '/refer', icon: Share2, label: 'Refer & Earn' },
+    { to: '/network', icon: Network, label: 'Referral Network' },
+    { to: '/relationships', icon: Handshake, label: 'Relationships' },
+    { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
+
+    { section: 'Capital & Liquidity' },
+    { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
+    { to: '/payouts', icon: Wallet, label: 'Payouts' },
+
+    { section: 'Support' },
+    { to: '/activity', icon: Activity, label: 'Activity Log' },
+    { to: '/tickets', icon: Ticket, label: 'Support' },
+    { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
+
+    { divider: true },
+    { to: '/founder', icon: Rocket, label: 'Founder Portal' },
+  ],
+
+  partner: [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+
+    { section: 'Intelligence' },
+    { to: '/scoring', icon: Target, label: 'Scoring Engine' },
+    { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
+    { to: '/matches', icon: Sparkles, label: 'AI Matches' },
+    { to: '/deals', icon: Handshake, label: 'Deal Flow' },
+
+    { section: 'Core' },
+    { to: '/projects', icon: Zap, label: 'Projects' },
+    { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
+
+    { section: 'Network' },
+    { to: '/partners', icon: Users, label: 'Partners' },
+    { to: '/refer', icon: Share2, label: 'Refer & Earn' },
+    { to: '/network', icon: Network, label: 'Referral Network' },
+    { to: '/relationships', icon: Handshake, label: 'Relationships' },
+    { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
+
+    { section: 'Capital & Liquidity' },
+    { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
+    { to: '/funds', icon: DollarSign, label: 'VC Funds' },
+    { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
+    { to: '/payouts', icon: Wallet, label: 'Payouts' },
+
+    { section: 'Legal & Compliance' },
+    { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+
+    { section: 'Support' },
+    { to: '/activity', icon: Activity, label: 'Activity Log' },
+    { to: '/tickets', icon: Ticket, label: 'Support' },
+    { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
+
+    { divider: true },
+    { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
+  ],
+};
 
 const ROLE_LABELS = {
   admin: 'Admin',
@@ -98,7 +187,7 @@ const ViewModeContext = createContext(null);
 export const useViewMode = () => useContext(ViewModeContext);
 
 function getNavItems(role) {
-  return ALL_NAV_ITEMS.filter(item => item.roles.includes(role));
+  return NAV_BY_ROLE[role] || NAV_BY_ROLE.founder;
 }
 
 function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, impersonatedUser }) {
@@ -206,25 +295,39 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               </button>
             </div>
             <nav className="flex-1 py-3 overflow-y-auto">
-              {navItems.map(({ to, icon: Icon, label, divider }) => (
-                <React.Fragment key={to}>
-                {divider && <div className="mx-5 my-2 border-t border-gray-200" />}
-                <NavLink
-                  to={to}
-                  onClick={() => setSidebarOpen(false)}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-5 py-2.5 text-sm transition-colors ${
-                      isActive
-                        ? 'text-violet-600 bg-violet-50 border-r-2 border-violet-600'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                    }`
-                  }
-                >
-                  <Icon size={16} />
-                  {label}
-                </NavLink>
-                </React.Fragment>
-              ))}
+              {navItems.map((item, idx) => {
+                if (item.section) {
+                  return (
+                    <div
+                      key={`section-${idx}`}
+                      className="px-5 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400"
+                    >
+                      {item.section}
+                    </div>
+                  );
+                }
+                if (item.divider) {
+                  return <div key={`divider-${idx}`} className="mx-5 my-2 border-t border-gray-200" />;
+                }
+                const { to, icon: Icon, label } = item;
+                return (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    onClick={() => setSidebarOpen(false)}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
+                        isActive
+                          ? 'text-violet-600 bg-violet-50 border-r-2 border-violet-600'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                      }`
+                    }
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </NavLink>
+                );
+              })}
             </nav>
             <div className="px-5 py-3 border-t border-gray-200">
               {user && (
