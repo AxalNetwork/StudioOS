@@ -4,7 +4,13 @@
   "description": "Header folder consists of 8 variations of Page Header with Titles",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "cd frontend && npm run build",
+    "deploy": "wrangler deploy --env production",
+    "deploy:preview": "wrangler deploy --env preview",
+    "tail": "wrangler tail",
+    "tail:preview": "wrangler tail --env preview",
+    "d1:migrate": "wrangler d1 execute studioos-db --remote --file=cloudflare-worker/sql/schema.sql"
   },
   "keywords": [],
   "author": "",

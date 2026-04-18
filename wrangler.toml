@@ -1,0 +1,143 @@
+#:schema node_modules/wrangler/config-schema.json
+# ---------------------------------------------------------------------------
+# Axal StudioOS – Cloudflare Worker configuration (root, canonical)
+# ---------------------------------------------------------------------------
+# This is the production-ready Wrangler config for the StudioOS API Worker.
+#
+# NOTE on architecture:
+#   * The Cloudflare Worker is a TypeScript Hono app at
+#     `cloudflare-worker/src/index.ts`. That is the live API at axal.vc.
+#   * The Python FastAPI in `backend/` is a Replit-only dev backend used for
+#     local iteration; it is NOT deployed to Cloudflare (Workers do not run
+#     FastAPI). Do not change `main` to a Python file.
+#
+# Deploy:
+#   npx wrangler deploy                       # production
+#   npx wrangler deploy --env preview         # preview / staging
+#
+# Secrets are managed via `wrangler secret put <NAME>` (see .env.example).
+# ---------------------------------------------------------------------------
+
+name = "studioos"
+main = "cloudflare-worker/src/index.ts"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# ---------- Public (non-secret) variables ----------
+[vars]
+APP_URL = "https://axal.vc"
+GITHUB_REPO_OWNER = "AxalNetwork"
+GITHUB_REPO_NAME  = "StudioOS"
+ENVIRONMENT       = "production"
+
+# ---------- D1 Database ----------
+[[d1_databases]]
+binding       = "DB"
+database_name = "studioos-db"
+database_id   = "16a23acd-c82e-4ff1-a6c0-408e3eb014c8"
+
+# ---------- KV Namespaces ----------
+# TOKENS      – session / refresh tokens, short-lived caches
+# RATE_LIMITS – sliding-window rate-limit counters
+[[kv_namespaces]]
+binding = "TOKENS"
+id      = "8dc26ed83d154d0ebbfcbc51f592d67c"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id      = "be811f14b6f342be961b8daa4513fb5b"
+
+# ---------- Workers AI ----------
+[ai]
+binding = "AI"
+
+# ---------- Queues (job queue) ----------
+# StudioOS currently uses a D1-backed `queue_jobs` table drained by the
+# cron trigger below. The CF Queues binding is provisioned for future
+# fan-out / retry workloads. Create the queue once via:
+#   npx wrangler queues create studioos-queue
+# then uncomment the producer/consumer blocks.
+#
+# [[queues.producers]]
+# binding    = "JOB_QUEUE"
+# queue      = "studioos-queue"
+#
+# [[queues.consumers]]
+# queue                 = "studioos-queue"
+# max_batch_size        = 25
+# max_batch_timeout     = 10
+# max_retries           = 5
+# dead_letter_queue     = "studioos-queue-dlq"
+
+# ---------- R2 (object storage, optional) ----------
+# Uncomment after running `npx wrangler r2 bucket create studioos-files`
+# [[r2_buckets]]
+# binding     = "FILES"
+# bucket_name = "studioos-files"
+
+# ---------- Cron Triggers ----------
+# Drains the in-DB queue every minute; daily cleanup runs at 03:00 UTC
+# inside the same handler.
+[triggers]
+crons = ["* * * * *"]
+
+# ---------- Observability ----------
+[observability]
+enabled            = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled            = true
+head_sampling_rate = 1
+persist            = true
+invocation_logs    = true
+
+[observability.traces]
+enabled            = false
+persist            = true
+head_sampling_rate = 1
+
+# ===========================================================================
+# Environment: production (explicit – inherits everything above)
+# ===========================================================================
+[env.production]
+name = "studioos"
+
+[env.production.vars]
+APP_URL     = "https://axal.vc"
+ENVIRONMENT = "production"
+
+# ===========================================================================
+# Environment: preview / staging
+# ---------------------------------------------------------------------------
+# Disabled by default. To enable, run the commands below and replace the
+# REPLACE_WITH_PREVIEW_* placeholders, then uncomment the [env.preview.*]
+# blocks. Until then, the GitHub Action skips the preview deploy job.
+#
+#   npx wrangler d1 create studioos-db-preview
+#   npx wrangler kv namespace create TOKENS      --preview
+#   npx wrangler kv namespace create RATE_LIMITS --preview
+# ===========================================================================
+# [env.preview]
+# name = "studioos-preview"
+#
+# [env.preview.vars]
+# APP_URL     = "https://preview.axal.vc"
+# ENVIRONMENT = "preview"
+#
+# [[env.preview.d1_databases]]
+# binding       = "DB"
+# database_name = "studioos-db-preview"
+# database_id   = "REPLACE_WITH_PREVIEW_D1_ID"
+#
+# [[env.preview.kv_namespaces]]
+# binding = "TOKENS"
+# id      = "REPLACE_WITH_PREVIEW_KV_TOKENS_ID"
+#
+# [[env.preview.kv_namespaces]]
+# binding = "RATE_LIMITS"
+# id      = "REPLACE_WITH_PREVIEW_KV_RATE_LIMITS_ID"
+#
+# [env.preview.ai]
+# binding = "AI"

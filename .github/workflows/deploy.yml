@@ -1,0 +1,192 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lint + type-check the Worker (TypeScript) and basic FastAPI sanity
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint & type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: cloudflare-worker/package-lock.json
+
+      - name: Install Worker deps
+        working-directory: cloudflare-worker
+        run: npm ci
+
+      - name: TypeScript type-check (Worker)
+        working-directory: cloudflare-worker
+        run: npx tsc --noEmit
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend deps
+        run: pip install -r requirements.txt
+
+      - name: Backend import smoke test
+        run: python -c "from backend.app.main import app; print('FastAPI imports OK')"
+
+  # ---------------------------------------------------------------------------
+  # Build the React/Vite frontend → docs/  (served by GitHub Pages)
+  # ---------------------------------------------------------------------------
+  build-frontend:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload built frontend
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: docs/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Preview deploy for pull requests
+  # ---------------------------------------------------------------------------
+  deploy-preview:
+    name: Deploy preview Worker
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: [lint, build-frontend]
+    environment:
+      name: preview
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check that preview env is configured
+        id: preview_check
+        run: |
+          if grep -q '^\[env.preview\]' wrangler.toml && ! grep -q 'REPLACE_WITH_PREVIEW' wrangler.toml; then
+            echo "ready=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::[env.preview] is not configured in wrangler.toml — skipping preview deploy."
+          fi
+
+      - name: Setup Node
+        if: steps.preview_check.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Wrangler
+        if: steps.preview_check.outputs.ready == 'true'
+        run: npm i -g wrangler@4
+
+      - name: Deploy Worker (preview)
+        if: steps.preview_check.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: wrangler deploy --env preview
+
+  # ---------------------------------------------------------------------------
+  # Production deploy on push to main
+  # ---------------------------------------------------------------------------
+  deploy-production:
+    name: Deploy production Worker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [lint, build-frontend]
+    permissions:
+      contents: write
+    environment:
+      name: production
+      url: https://axal.vc
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Wrangler
+        run: npm i -g wrangler@4
+
+      - name: Deploy Worker (production)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: wrangler deploy --env production
+
+      - name: Clean docs/ before restoring artifact
+        run: rm -rf docs && mkdir -p docs
+
+      - name: Download built frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: docs/
+
+      - name: Commit refreshed docs/ bundle
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain docs/)" ]; then
+            git add docs/
+            git commit -m "ci: rebuild frontend bundle [skip ci]"
+            git push
+          else
+            echo "No frontend changes to commit."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Notify on failure
+  # ---------------------------------------------------------------------------
+  notify-failure:
+    name: Notify on failure
+    if: failure() && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [lint, build-frontend, deploy-production]
+    steps:
+      - name: Slack notification
+        if: ${{ secrets.SLACK_DEPLOY_WEBHOOK_URL != '' }}
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_DEPLOY_WEBHOOK_URL }}
+        run: |
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\":x: Deploy failed for *studioos* on commit \`${GITHUB_SHA::7}\` — <https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}|view run>\"}" \
+            "$SLACK_WEBHOOK"
