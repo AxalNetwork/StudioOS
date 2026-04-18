@@ -10,13 +10,22 @@ import { verifyTurnstile } from '../services/turnstile';
 const auth = new Hono<{ Bindings: Env }>();
 
 async function checkRateLimit(env: Env, key: string, max: number, windowSec: number): Promise<boolean> {
-  const data = await env.RATE_LIMITS.get(key);
-  const now = Date.now();
-  let attempts: number[] = data ? JSON.parse(data) : [];
-  attempts = attempts.filter(t => now - t < windowSec * 1000);
-  if (attempts.length >= max) return false;
-  attempts.push(now);
-  await env.RATE_LIMITS.put(key, JSON.stringify(attempts), { expirationTtl: windowSec });
+  // Fail-open on any KV error (incl. daily-write-limit exceeded on the free
+  // plan). Auth/registration must keep working; a small over-allowance during
+  // a KV outage is acceptable for a venture-studio scale workload.
+  let attempts: number[] = [];
+  try {
+    const data = await env.RATE_LIMITS.get(key);
+    const now = Date.now();
+    attempts = data ? JSON.parse(data) : [];
+    attempts = attempts.filter(t => now - t < windowSec * 1000);
+    if (attempts.length >= max) return false;
+    attempts.push(now);
+    await env.RATE_LIMITS.put(key, JSON.stringify(attempts), { expirationTtl: windowSec });
+  } catch (e) {
+    console.error('checkRateLimit KV error (failing open)', key, e);
+    return true;
+  }
   return true;
 }
 
