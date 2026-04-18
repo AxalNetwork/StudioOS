@@ -174,12 +174,6 @@ export default function AdminPage({ onImpersonate }) {
           </div>
 
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
-              <Users size={16} className="text-gray-600" />
-              <h3 className="text-sm font-semibold text-gray-900">User Management</h3>
-              <span className="text-xs text-gray-500 ml-auto">{filtered.length} users</span>
-            </div>
-
             {filtered.length === 0 ? (
               <div className="p-8 text-center text-gray-500 text-sm">No users found</div>
             ) : (
