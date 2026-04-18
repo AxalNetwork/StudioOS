@@ -48,7 +48,7 @@ export default function LandingPage() {
               <br />in 30 Days
             </h1>
             <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto mb-10 leading-relaxed">
-              Axal Ventures is the operating system for venture creation. We combine AI-powered scoring, 
+              StudioOS is the operating system for venture creation. We combine AI-powered scoring, 
               automated incorporation, and a global partner network to manufacture startups at scale.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
