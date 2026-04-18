@@ -56,10 +56,7 @@ export default function Footer() {
         <div className="border-t border-gray-200 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-xs text-gray-500">
-              © 2026 Axal Management, LLC. All rights reserved. Built with{' '}
-              <a href="https://replit.com" target="_blank" rel="noopener" className="text-violet-600 hover:text-violet-700">Replit</a>
-              {' '}+{' '}
-              <a href="https://www.cloudflare.com/developer-platform/workers/" target="_blank" rel="noopener" className="text-violet-600 hover:text-violet-700">Cloudflare Workers</a>.
+              © 2026 Axal Management, LLC. All rights reserved.
             </p>
             <p className="text-xs text-gray-500 max-w-md text-right">
               <strong>Disclosure:</strong> Investment in startups involves a high degree of risk and may result in the loss of your entire investment.
