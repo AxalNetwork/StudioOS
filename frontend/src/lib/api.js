@@ -313,4 +313,12 @@ export const api = {
     request('/funds/distributions/execute', { method: 'POST', body: JSON.stringify(data) }),
   fundsMarkDistributionPaid: (id) =>
     request(`/funds/distributions/${id}/mark-paid`, { method: 'POST', body: JSON.stringify({}) }),
+
+  // ---------- Branded email (Gmail) ----------
+  emailSendDeal: (data) => request('/email/send-deal', { method: 'POST', body: JSON.stringify(data) }),
+  emailSendReferralInvites: (contacts, custom_message) =>
+    request('/email/send-referral-invites', {
+      method: 'POST',
+      body: JSON.stringify({ contacts, custom_message }),
+    }),
 };

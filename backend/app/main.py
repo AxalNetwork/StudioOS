@@ -152,6 +152,9 @@ app.include_router(funds.router, prefix="/api")
 app.include_router(liquidity.router, prefix="/api")
 app.include_router(partnernet.router, prefix="/api")
 app.include_router(integrations.router, prefix="/api")
+from backend.app.api.routes import email as email_routes  # noqa: E402
+app.include_router(email_routes.router, prefix="/api")
+app.include_router(email_routes.unsubscribe_router, prefix="/api")
 
 
 # ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Copy, Check, Users, DollarSign, Share2, ExternalLink, Network as NetworkIcon,
   Twitter, Linkedin, MessageCircle, Mail, Upload, Edit3, X, AlertCircle, Save,
+  Send, Loader2,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { api } from '../lib/api';
@@ -47,7 +48,11 @@ export default function ReferEarnPage() {
   const [editingTemplates, setEditingTemplates] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [imported, setImported] = useState([]);
+  const [selected, setSelected] = useState(() => new Set());
   const [importError, setImportError] = useState('');
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState(null); // { sent, failed:[] } | { error }
   const qrRef = useRef(null);
   const fileRef = useRef(null);
 
@@ -129,7 +134,12 @@ export default function ReferEarnPage() {
         setImportError('No valid rows found. CSV needs at least an "email" column.');
         return;
       }
-      const personalized = rows.slice(0, 500).map(r => {
+      if (rows.length > 100) {
+        setImportError(`CSV had ${rows.length} rows — only the first 100 will be imported (per-send limit).`);
+      }
+      // Backend caps a single send-invites request at 100 contacts; keep the
+      // import preview aligned so users don't queue invites we'd reject.
+      const personalized = rows.slice(0, 100).map(r => {
         const params = new URLSearchParams({ ref: code });
         if (r.email) params.set('invitee', r.email);
         const personalizedLink = `${link.split('?')[0]}?${params.toString()}`;
@@ -141,10 +151,52 @@ export default function ReferEarnPage() {
         };
       });
       setImported(personalized);
+      setSelected(new Set(personalized.map((_, i) => i))); // pre-select all
+      setSendResult(null);
     } catch (err) {
       setImportError('Could not parse CSV: ' + err.message);
     } finally {
       if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const toggleRow = (i) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      return next;
+    });
+  };
+  const toggleAll = () => {
+    setSelected(prev =>
+      prev.size === imported.length ? new Set() : new Set(imported.map((_, i) => i))
+    );
+  };
+  const sendInvites = async () => {
+    if (sending || selected.size === 0) return;
+    setSending(true);
+    setSendResult(null);
+    try {
+      const contacts = imported
+        .map((c, i) => ({ idx: i, ...c }))
+        .filter(c => selected.has(c.idx))
+        .map(c => ({ email: c.email, name: c.name }));
+      const res = await api.emailSendReferralInvites(contacts, inviteMessage || undefined);
+      setSendResult(res);
+      // Drop successfully-sent rows from the selection so a second click
+      // doesn't re-send to the same people.
+      const failedSet = new Set((res.failed || []).map(f => f.email));
+      setSelected(prev => {
+        const next = new Set();
+        imported.forEach((c, i) => {
+          if (prev.has(i) && failedSet.has(c.email)) next.add(i);
+        });
+        return next;
+      });
+    } catch (e) {
+      setSendResult({ error: e.message || 'Send failed' });
+    } finally {
+      setSending(false);
     }
   };
 
@@ -283,33 +335,91 @@ export default function ReferEarnPage() {
         )}
 
         {imported.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr className="text-left text-xs text-gray-600">
-                  <th className="px-6 py-3 font-medium">Name</th>
-                  <th className="px-6 py-3 font-medium">Email</th>
-                  <th className="px-6 py-3 font-medium">Personalized link</th>
-                  <th className="px-6 py-3 font-medium text-right">Send</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {imported.map((c, i) => (
-                  <tr key={`${c.email}-${i}`}>
-                    <td className="px-6 py-3 text-gray-900">{c.name || '—'}</td>
-                    <td className="px-6 py-3 text-gray-600">{c.email}</td>
-                    <td className="px-6 py-3">
-                      <code className="text-[11px] text-violet-700 font-mono truncate inline-block max-w-[260px] align-middle">{c.link}</code>
-                      <button onClick={() => copy(c.link)} className="ml-2 text-[11px] text-violet-600 hover:underline">copy</button>
-                    </td>
-                    <td className="px-6 py-3 text-right">
-                      <a href={c.mailto} className="text-[11px] text-violet-600 hover:underline">Email →</a>
-                    </td>
+          <>
+            <div className="px-6 py-3 bg-violet-50 border-b border-violet-100">
+              <label className="block text-[11px] font-semibold text-violet-900 mb-1">
+                Personal note (optional) — sent at the top of every invite
+              </label>
+              <textarea
+                rows={2}
+                value={inviteMessage}
+                onChange={(e) => setInviteMessage(e.target.value)}
+                placeholder="Hey — thought you'd find this interesting. Let me know what you think."
+                className="w-full text-xs border border-violet-200 rounded-md px-3 py-2 focus:ring-2 focus:ring-violet-100 focus:border-violet-300 outline-none bg-white"
+                maxLength={2000}
+              />
+            </div>
+            {sendResult && (
+              <div className={`px-6 py-3 border-b text-xs flex items-center gap-2 ${
+                sendResult.error ? 'bg-red-50 border-red-200 text-red-700' :
+                (sendResult.failed?.length ? 'bg-amber-50 border-amber-200 text-amber-800'
+                                           : 'bg-emerald-50 border-emerald-200 text-emerald-800')
+              }`}>
+                {sendResult.error ? <AlertCircle size={12} /> : <Check size={12} />}
+                {sendResult.error
+                  ? sendResult.error
+                  : `Sent ${sendResult.sent} invite${sendResult.sent === 1 ? '' : 's'}` +
+                    (sendResult.failed?.length ? ` — ${sendResult.failed.length} failed (kept selected to retry)` : '')}
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr className="text-left text-xs text-gray-600">
+                    <th className="px-6 py-3 font-medium w-10">
+                      <input
+                        type="checkbox"
+                        checked={selected.size === imported.length && imported.length > 0}
+                        onChange={toggleAll}
+                        aria-label="Select all"
+                      />
+                    </th>
+                    <th className="px-6 py-3 font-medium">Name</th>
+                    <th className="px-6 py-3 font-medium">Email</th>
+                    <th className="px-6 py-3 font-medium">Personalized link</th>
+                    <th className="px-6 py-3 font-medium text-right">Mailto</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {imported.map((c, i) => (
+                    <tr key={`${c.email}-${i}`} className={selected.has(i) ? 'bg-violet-50/40' : ''}>
+                      <td className="px-6 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(i)}
+                          onChange={() => toggleRow(i)}
+                          aria-label={`Select ${c.email}`}
+                        />
+                      </td>
+                      <td className="px-6 py-3 text-gray-900">{c.name || '—'}</td>
+                      <td className="px-6 py-3 text-gray-600">{c.email}</td>
+                      <td className="px-6 py-3">
+                        <code className="text-[11px] text-violet-700 font-mono truncate inline-block max-w-[260px] align-middle">{c.link}</code>
+                        <button onClick={() => copy(c.link)} className="ml-2 text-[11px] text-violet-600 hover:underline">copy</button>
+                      </td>
+                      <td className="px-6 py-3 text-right">
+                        <a href={c.mailto} className="text-[11px] text-violet-600 hover:underline">Open in mail app →</a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between flex-wrap gap-3">
+              <div className="text-xs text-gray-600">
+                {selected.size} of {imported.length} selected
+                <span className="text-gray-400"> · sent from your account, branded as Axal Network</span>
+              </div>
+              <button
+                onClick={sendInvites}
+                disabled={sending || selected.size === 0}
+                className="bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-medium px-4 py-2 rounded-lg flex items-center gap-1.5"
+              >
+                {sending ? <><Loader2 size={12} className="animate-spin" /> Sending…</>
+                         : <><Send size={12} /> Send {selected.size || ''} invite{selected.size === 1 ? '' : 's'}</>}
+              </button>
+            </div>
+          </>
         ) : (
           <div className="p-6 text-center text-xs text-gray-500">
             No contacts imported yet. Your CSV should have a header row including at least <code className="bg-gray-100 px-1 rounded">email</code> (and optionally <code className="bg-gray-100 px-1 rounded">name</code>).
