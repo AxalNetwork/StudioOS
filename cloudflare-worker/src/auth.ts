@@ -59,6 +59,21 @@ export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<User>
   return user;
 }
 
+/**
+ * RBAC: ensure the authenticated user has one of the allowed roles.
+ * Throws "Forbidden" (mapped to 403 by the global error handler) otherwise.
+ * Admin always passes.
+ */
+export async function requireRole(
+  c: Context<{ Bindings: Env }>,
+  ...roles: Array<'admin' | 'partner' | 'founder' | 'investor' | 'guest'>
+): Promise<User> {
+  const user = await requireAuth(c);
+  if (user.role === 'admin') return user;
+  if (!roles.includes(user.role as any)) throw new Error('Forbidden');
+  return user;
+}
+
 export async function requireApprovedKyc(c: Context<{ Bindings: Env }>): Promise<User> {
   const user = await requireAuth(c);
   if (user.role === 'admin') return user;

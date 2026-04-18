@@ -5,9 +5,23 @@ from backend.app.models.entities import Project, Founder, ScoreSnapshot, Deal, A
 from backend.app.schemas.scoring import ProjectCreate, ProjectUpdate, FounderSubmitRequest
 from backend.app.services.scoring import run_full_score
 from backend.app.api.routes.auth import get_current_user
+from backend.app.api.deps import require_admin
+from backend.app.models.entities import UserRole
 from datetime import datetime
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
+
+
+def _is_privileged(user: User) -> bool:
+    return user.role in (UserRole.ADMIN, UserRole.PARTNER)
+
+
+def _ensure_can_edit(user: User, project: Project) -> None:
+    if _is_privileged(user):
+        return
+    if user.founder_id and project.founder_id == user.founder_id:
+        return
+    raise HTTPException(status_code=403, detail="Forbidden: you do not own this project")
 
 
 @router.get("/")
@@ -207,7 +221,13 @@ def update_project(project_id: int, data: ProjectUpdate, session: Session = Depe
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    _ensure_can_edit(user, project)
+
     update_data = data.model_dump(exclude_unset=True)
+    # Founders may not change status, stage, or playbook week — only privileged roles.
+    if not _is_privileged(user):
+        for protected in ("status", "stage", "playbook_week"):
+            update_data.pop(protected, None)
     for key, val in update_data.items():
         setattr(project, key, val)
     project.updated_at = datetime.utcnow()
@@ -218,7 +238,7 @@ def update_project(project_id: int, data: ProjectUpdate, session: Session = Depe
 
 
 @router.delete("/{project_id}")
-def delete_project(project_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def delete_project(project_id: int, session: Session = Depends(get_session), admin: User = Depends(require_admin)):
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -232,6 +252,8 @@ def advance_playbook_week(project_id: int, session: Session = Depends(get_sessio
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if not _is_privileged(user):
+        raise HTTPException(status_code=403, detail="Only admin/partner can advance playbook week")
 
     order = ["week_1", "week_2", "week_3", "week_4", "complete"]
     current_idx = order.index(project.playbook_week) if project.playbook_week in order else 0

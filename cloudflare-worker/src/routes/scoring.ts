@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth } from '../auth';
+import { requireAuth, requireRole } from '../auth';
 import { runFullScore, tierLabel } from '../services/scoring';
 import { autoCreateStudioOpsForProject } from './studioops';
 
@@ -80,6 +80,7 @@ scoring.get('/scores/:projectId', async (c) => {
 });
 
 scoring.get('/deal-memos/:projectId', async (c) => {
+  await requireRole(c, 'partner');
   const projectId = parseInt(c.req.param('projectId'));
   const sql = getSQL(c.env);
   const memos = await sql`SELECT * FROM deal_memos WHERE project_id = ${projectId} ORDER BY created_at DESC`;
@@ -88,6 +89,7 @@ scoring.get('/deal-memos/:projectId', async (c) => {
 });
 
 scoring.get('/queue', async (c) => {
+  await requireRole(c, 'partner');
   const sql = getSQL(c.env);
   const projects = await sql`SELECT * FROM projects WHERE status IN ('intake', 'scoring') ORDER BY created_at DESC`;
   await sql.end();
@@ -95,6 +97,7 @@ scoring.get('/queue', async (c) => {
 });
 
 scoring.post('/generateMemo', async (c) => {
+  await requireRole(c, 'partner');
   const data = await c.req.json();
   return c.json({
     startup_name: data.startup_name, ai_generated: false,

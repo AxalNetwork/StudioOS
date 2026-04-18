@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth } from '../auth';
+import { requireAuth, requireRole, requireAdmin } from '../auth';
 import { runFullScore } from '../services/scoring';
 
 const projects = new Hono<{ Bindings: Env }>();
@@ -105,7 +105,7 @@ projects.post('/submit', async (c) => {
 });
 
 projects.put('/:id', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   const data = await c.req.json();
   const sql = getSQL(c.env);
@@ -113,7 +113,19 @@ projects.put('/:id', async (c) => {
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
 
-  const fields = ['name', 'description', 'sector', 'stage', 'status', 'playbook_week', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds'];
+  // RBAC: admins/partners can edit any project; founders can only edit their own.
+  const project = rows[0];
+  const isPrivileged = user.role === 'admin' || user.role === 'partner';
+  const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
+  if (!isPrivileged && !isOwner) {
+    await sql.end();
+    return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
+  }
+
+  // Only admin/partner may change status, stage, or playbook week.
+  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds'];
+  const privilegedFields = ['stage', 'status', 'playbook_week'];
+  const fields = isPrivileged ? [...baseFields, ...privilegedFields] : baseFields;
   const updates: string[] = [];
   const values: any[] = [];
 
@@ -130,7 +142,7 @@ projects.put('/:id', async (c) => {
 });
 
 projects.delete('/:id', async (c) => {
-  await requireAuth(c);
+  await requireAdmin(c);
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
   const rows = await sql`SELECT id FROM projects WHERE id = ${id}`;
@@ -141,7 +153,7 @@ projects.delete('/:id', async (c) => {
 });
 
 projects.post('/:id/advance-week', async (c) => {
-  await requireAuth(c);
+  await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;

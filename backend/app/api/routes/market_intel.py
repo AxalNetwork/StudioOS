@@ -1,7 +1,15 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from datetime import datetime
 
-router = APIRouter(prefix="/market-intel", tags=["Market Intelligence"])
+from backend.app.api.routes.auth import get_current_user
+from backend.app.models.entities import User
+
+# Every market-intel endpoint requires an authenticated session.
+router = APIRouter(
+    prefix="/market-intel",
+    tags=["Market Intelligence"],
+    dependencies=[Depends(get_current_user)],
+)
 
 MARKET_PULSE = [
     {

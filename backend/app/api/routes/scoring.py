@@ -6,9 +6,12 @@ from backend.app.schemas.scoring import ScoreRequest, GenerateMemoRequest
 from backend.app.services.scoring import run_full_score, tier_label
 from backend.app.services.ai_memo import generate_memo_with_ai
 from backend.app.api.routes.auth import get_current_user
+from backend.app.api.deps import require_role
 from datetime import datetime
 
 router = APIRouter(prefix="/scoring", tags=["Scoring Engine"])
+
+require_partner = require_role("partner")
 
 
 @router.post("/score")
@@ -157,7 +160,7 @@ def get_project_scores(project_id: int, session: Session = Depends(get_session),
 
 
 @router.get("/deal-memos/{project_id}")
-def get_deal_memos(project_id: int, session: Session = Depends(get_session)):
+def get_deal_memos(project_id: int, session: Session = Depends(get_session), _: User = Depends(require_partner)):
     stmt = (
         select(DealMemo)
         .where(DealMemo.project_id == project_id)
@@ -168,7 +171,7 @@ def get_deal_memos(project_id: int, session: Session = Depends(get_session)):
 
 
 @router.get("/queue")
-def scoring_queue(session: Session = Depends(get_session)):
+def scoring_queue(session: Session = Depends(get_session), _: User = Depends(require_partner)):
     stmt = (
         select(Project)
         .where(Project.status.in_(["intake", "scoring"]))
@@ -179,7 +182,7 @@ def scoring_queue(session: Session = Depends(get_session)):
 
 
 @router.post("/generateMemo")
-def generate_memo_standalone(data: GenerateMemoRequest, session: Session = Depends(get_session)):
+def generate_memo_standalone(data: GenerateMemoRequest, session: Session = Depends(get_session), _: User = Depends(require_partner)):
     memo_input = {
         "startup_name": data.startup_name,
         "problem": data.problem,

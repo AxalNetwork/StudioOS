@@ -54,6 +54,7 @@ app.use('*', async (c, next) => {
   } catch (err: any) {
     if (err.message === 'Unauthorized') return c.json({ detail: 'Not authenticated' }, 401);
     if (err.message === 'Admin required') return c.json({ detail: 'Admin access required' }, 403);
+    if (err.message === 'Forbidden') return c.json({ detail: 'Forbidden: insufficient role' }, 403);
     console.error('Unhandled error:', err);
     return c.json({ detail: 'Internal server error' }, 500);
   }
@@ -62,6 +63,7 @@ app.use('*', async (c, next) => {
 app.onError((err: any, c) => {
   if (err.message === 'Unauthorized') return c.json({ detail: 'Not authenticated' }, 401);
   if (err.message === 'Admin required') return c.json({ detail: 'Admin access required' }, 403);
+  if (err.message === 'Forbidden') return c.json({ detail: 'Forbidden: insufficient role' }, 403);
   if (err.message === 'KYC required') return c.json({ detail: 'KYC verification required to access this resource', kyc_required: true }, 403);
   console.error('Unhandled app error:', err);
   return c.json({ detail: 'Internal server error' }, 500);

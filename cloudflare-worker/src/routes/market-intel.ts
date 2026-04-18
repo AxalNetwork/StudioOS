@@ -1,7 +1,14 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
+import { requireAuth } from '../auth';
 
 const marketIntel = new Hono<{ Bindings: Env }>();
+
+// All market-intel endpoints require an authenticated session.
+marketIntel.use('*', async (c, next) => {
+  await requireAuth(c);
+  await next();
+});
 
 const MARKET_PULSE = [
   { sector: 'Agentic B2B', multiple: 22.4, sentiment: 'Aggressive', technographic_signal: 'High churn in legacy CRM; 40% migration to AI-first middleware.', hiring_surge: 'DevOps/SRE hiring up 18% in mid-market SaaS.', gap_opportunity: 'Unified API for autonomous agent billing.' },
