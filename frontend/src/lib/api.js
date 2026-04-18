@@ -146,6 +146,17 @@ export const api = {
   adminPayouts: () => request('/network/admin/payouts'),
   adminProcessPayout: (id, data) => request(`/network/admin/payouts/${id}/process`, { method: 'PATCH', body: JSON.stringify(data) }),
 
+  integrationsAvailable: () => request('/integrations/available'),
+  integrationsList: () => request('/integrations'),
+  integrationsConnect: (data) => request('/integrations/connect', { method: 'POST', body: JSON.stringify(data) }),
+  integrationsDisconnect: (uid) => request(`/integrations/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  integrationsSync: (uid) => request(`/integrations/${encodeURIComponent(uid)}/sync`, { method: 'POST' }),
+  integrationsPush: (uid, data) => request(`/integrations/${encodeURIComponent(uid)}/push`, { method: 'POST', body: JSON.stringify(data) }),
+  integrationsLogs: (uid, params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([_, v]) => v != null && v !== '')).toString();
+    return request(`/integrations/${encodeURIComponent(uid)}/logs${q ? `?${q}` : ''}`);
+  },
+
   matchPreferences: () => request('/matches/preferences'),
   matchPreferencesSave: (data) => request('/matches/preferences', { method: 'PUT', body: JSON.stringify(data) }),
   matchDealFlow: () => request('/matches/deal-flow'),

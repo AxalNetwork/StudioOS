@@ -341,3 +341,18 @@ See `cloudflare-worker/SETUP.md` for complete deployment instructions.
     - **Quick Share**: X/Twitter, LinkedIn, WhatsApp, Email buttons with pre-filled, branded messages and `mailto:` deep links.
     - **Import Contacts**: client-side CSV parser (handles quoted fields, CRLF, commas-in-quotes; ≤1 MB, ≤500 rows) generating per-row personalized invite links + one-click email buttons. Header row must include `email` (and optionally `name`).
     - **Editable invite templates**: in-page editor with `{{link}}` / `{{code}}` placeholders, persisted to `localStorage` under `axal:invite_templates_v1`, with reset-to-defaults.
+
+## Integrations module (Apr 18 2026)
+- **Schema**: new `integrations` and `integration_logs` tables (SQLModel) auto-created on backend startup. Secrets (`api_key_encrypted`, `webhook_secret_encrypted`) are Fernet-encrypted at rest using a key derived from `JWT_SECRET` via PBKDF2-HMAC-SHA256 (200k iterations, fixed app-scoped salt). See `backend/app/services/crypto_box.py`.
+- **Router** (`backend/app/api/routes/integrations.py`, mounted at `/api/integrations`):
+  - `GET /available` — provider catalogue (HubSpot, Salesforce, Sumsub, Stripe Atlas, Cooley GO, PitchBook, Custom).
+  - `GET /` — list current user's integrations (admins see all). Secrets returned as masked previews only.
+  - `POST /connect` — create or update; upserts on (user_id, provider_name).
+  - `DELETE /{uid}` — disconnect; owner or admin only.
+  - `POST /{uid}/sync` — synchronous sync trigger (logs entry; no remote call in dev).
+  - `POST /{uid}/push` — outbound push (logs payload; queueing layer not yet present).
+  - `GET /{uid}/logs` — paginated logs.
+  - `POST /webhook/{provider}/{uid}` — public, HMAC-SHA256 validated against the stored webhook secret (`X-Axal-Signature` header, hex of raw body). No auth dep by design.
+- **RBAC**: gated to admin / operator / service_provider / partner / founder roles via `_ensure_role`. Tenancy check via `_load_owned`.
+- **Frontend**: `/integrations` route (admin + partner) with marketplace cards, connection list, log viewer modal, and connect/update modal supporting API key, webhook secret, JSON config, and per-provider docs links. Sidebar entry added for admin and partner roles.
+- **Skipped intentionally** (per scope decision A): Python/JS SDKs and event-driven automation (no job queue exists in the FastAPI dev backend).

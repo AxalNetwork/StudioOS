@@ -324,3 +324,36 @@ class Ticket(SQLModel, table=True):
     project_id: Optional[int] = Field(default=None, foreign_key="projects.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Integration(SQLModel, table=True):
+    __tablename__ = "integrations"
+    __table_args__ = (
+        __import__("sqlalchemy").Index("ix_integration_user_provider", "user_id", "provider_name"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    integration_type: str = Field(index=True)  # crm | legal_provider | data_feed | custom
+    provider_name: str = Field(index=True)     # hubspot | salesforce | sumsub | stripe_atlas | cooley | custom
+    display_name: Optional[str] = None
+    api_key_encrypted: Optional[str] = None     # Fernet-encrypted
+    webhook_secret_encrypted: Optional[str] = None
+    config_json: Optional[str] = None           # JSON-encoded extra settings
+    status: str = Field(default="active", index=True)  # active | paused | error
+    last_synced_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class IntegrationLog(SQLModel, table=True):
+    __tablename__ = "integration_logs"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    integration_id: int = Field(foreign_key="integrations.id", index=True)
+    direction: str = Field(index=True)   # inbound | outbound
+    event_type: str = Field(index=True)
+    status: str = Field(default="ok", index=True)  # ok | error
+    payload_json: Optional[str] = None
+    response_summary: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)

@@ -19,6 +19,7 @@ from backend.app.api.routes import (
     capital,
     deals,
     funds,
+    integrations,
     legal,
     liquidity,
     market_intel,
@@ -142,6 +143,7 @@ app.include_router(monitoring.router, prefix="/api")
 app.include_router(funds.router, prefix="/api")
 app.include_router(liquidity.router, prefix="/api")
 app.include_router(partnernet.router, prefix="/api")
+app.include_router(integrations.router, prefix="/api")
 
 
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
-  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale
+  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug
 } from 'lucide-react';
 import { api } from './lib/api';
 import Dashboard from './pages/Dashboard';
@@ -29,6 +29,7 @@ import LoginPage from './pages/LoginPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import KYCPage from './pages/KYCPage';
 import ReferEarnPage from './pages/ReferEarnPage';
+import IntegrationsPage from './pages/IntegrationsPage';
 import PayoutsPage from './pages/PayoutsPage';
 import NetworkPage from './pages/NetworkPage';
 import MatchesPage from './pages/MatchesPage';
@@ -86,6 +87,7 @@ const NAV_BY_ROLE = {
     { to: '/monitoring', icon: Activity, label: 'Monitoring' },
     { to: '/activity', icon: Activity, label: 'Activity Log' },
     { to: '/tickets', icon: Ticket, label: 'Support' },
+    { to: '/integrations', icon: Plug, label: 'Integrations' },
     { to: '/api-bridge', icon: Code, label: 'API Bridge' },
 
     { divider: true },
@@ -154,6 +156,9 @@ const NAV_BY_ROLE = {
 
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+
+    { section: 'Tools' },
+    { to: '/integrations', icon: Plug, label: 'Integrations' },
 
     { section: 'Support' },
     { to: '/activity', icon: Activity, label: 'Activity Log' },
@@ -564,6 +569,7 @@ export default function App() {
       <Route path="/funds" element={guard(['admin', 'partner'], <FundsPage currentUser={user} />)} />
       <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner'], <ReferEarnPage />)} />
+      <Route path="/integrations" element={guard(['admin', 'partner'], <IntegrationsPage />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner'], <PayoutsPage />)} />
       <Route path="/network" element={guard(['admin', 'founder', 'partner'], <NetworkPage />)} />
       <Route path="/matches" element={guard(['admin', 'partner'], <MatchesPage />)} />

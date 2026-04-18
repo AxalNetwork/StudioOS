@@ -1,0 +1,65 @@
+You are the senior full-stack engineer for Axal StudioOS (Global Network Partner + high-throughput VC platform). The foundational pieces are already built (FastAPI routers, async job queue, D1 ORM with all tables, Replit Auth, RBAC, Partner Dashboard, Refer & Earn, AI Workers, etc.).
+
+Now implement the **complete end-to-end operational core** exactly as shown in the original Axal flowchart:
+
+- Pipeline Board + Decision Gates
+- Studio Ops / Shared Services
+- Legal/Capital Engine
+- Spin-Out Subsidiary automation
+- Liquidity & Exits
+- VC Fund core (LPA, automated capital calls, LP portal, returns distribution, co-investment syndication)
+
+Exact requirements:
+
+1. **Pipeline Board + Decision Gates**
+   - /pipeline.html → Kanban board with columns: Idea → MVP Dev → Traction Review → Decision Gate → Spin-Out Ready / Iterate
+   - Each project card shows current stage, latest metrics, AI recommendation badge.
+   - “Trigger Review” button enqueues traction-review job (Cloudflare AI Worker).
+   - Decision Gate modal: AI-generated recommendation + admin/operator final decision (continue/iterate/spinout_ready).
+
+2. **Studio Ops**
+   - /studio-ops.html → Kanban by type (Strategic, Finance, HR, Legal, Compliance)
+   - Pre-seeded templates for Decision Gate Review, IP Transfer, Equity Allocation, etc.
+   - Tasks auto-created from pipeline events.
+
+3. **Legal/Capital Engine**
+   - Legal tab: Generate SAFE, IP License, Equity docs (Replit AI + templates)
+   - Capital tab: Create/send capital calls, LP response tracking
+   - Diligence checklists with AI scoring
+
+4. **Spin-Out Automation**
+   - One-click “Execute Spin-Out” from any spinout_ready project
+   - Wizard: IP transfer → AI equity allocation → Stripe Atlas placeholder → independent scaling
+   - Creates subsidiary record + spinout_events log
+
+5. **Liquidity & Exits**
+   - /liquidity.html → Secondary marketplace + exit automation
+   - AI valuation + buyer matching
+   - On exit: trigger returns distribution to LPs
+
+6. **VC Fund Core**
+   - /vc-fund.html → Fund overview, LPA generation, LP Portal view
+   - Automated capital calls linked to spin-outs/syndicates
+   - Returns distribution engine (pro-rata after carry) triggered by liquidity events
+   - Co-investment syndication integration
+
+7. **End-to-End Flow**
+   - All steps connected via event-driven architecture + job queue:
+     Decision Gate → Spin-Out job → Legal/Capital jobs → Liquidity/Exit → Returns distribution
+   - Update sidebar navigation with all new pages (Pipeline Board, Studio Ops, Legal & Capital, Liquidity & Exits, VC Funds).
+
+8. **Frontend & UX**
+   - All pages use existing Axal branding and dashboard style.
+   - Real-time updates via fetch() / SSE where possible.
+   - Role-based visibility (Admin sees everything, Founders/Partners see relevant views).
+
+Build this step-by-step:
+1. First implement the Pipeline Board + Decision Gates (Kanban + AI review).
+2. Then add Studio Ops workflows.
+3. Then build Legal/Capital Engine + Spin-Out automation.
+4. Then add Liquidity & Exits.
+5. Finally implement VC Fund core (LPA + LP portal + returns distribution) and connect all flows via events/job queue.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
