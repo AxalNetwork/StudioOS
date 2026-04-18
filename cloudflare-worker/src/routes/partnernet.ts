@@ -19,6 +19,7 @@ let migrated = false;
 async function ensureSchema(env: Env) {
   if (migrated) return;
   const alters = [
+    `ALTER TABLE users ADD COLUMN kyc_status TEXT DEFAULT 'pending'`,
     `ALTER TABLE users ADD COLUMN partner_since TIMESTAMP`,
     `ALTER TABLE users ADD COLUMN total_earnings INTEGER DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN network_score REAL DEFAULT 0`,
@@ -110,20 +111,32 @@ async function ensureSchema(env: Env) {
     `CREATE INDEX IF NOT EXISTS idx_as_date ON activity_stats(stat_date)`,
 
     // Defensive copies of tables referenced by the partner_summary view.
-    // These are also created by network.ts / networkfx.ts ensureSchema, but
-    // partner_summary's SELECT will explode with "no such table" if those
-    // routes haven't been hit yet on a fresh DB.
+    // SHAPES MUST MATCH CANONICAL DEFINITIONS in network.ts / networkfx.ts —
+    // CREATE TABLE IF NOT EXISTS is a no-op when the table exists, so a
+    // mismatched shape here would silently win the race on a fresh DB and
+    // later canonical inserts would 500 on missing columns.
+    // commissions: canonical from network.ts ensureSchema()
     `CREATE TABLE IF NOT EXISTS commissions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
-      amount_cents INTEGER NOT NULL DEFAULT 0, source TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      referral_id INTEGER,
+      amount_cents INTEGER NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      source_type TEXT NOT NULL,
+      source_id TEXT,
+      status TEXT NOT NULL DEFAULT 'accrued',
+      description TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      paid_at TIMESTAMP
     )`,
-    `CREATE TABLE IF NOT EXISTS partner_relationships (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, partner_a_id INTEGER NOT NULL, partner_b_id INTEGER NOT NULL,
-      relationship_type TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`,
+    // referral_chains: canonical from networkfx.ts ensureSchema()
     `CREATE TABLE IF NOT EXISTS referral_chains (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, root_referrer_id INTEGER NOT NULL,
-      referred_user_id INTEGER NOT NULL, depth INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      root_referrer_id INTEGER NOT NULL,
+      level INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      multiplier_bps INTEGER NOT NULL DEFAULT 10000,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
 
     `DROP VIEW IF EXISTS partner_summary`,

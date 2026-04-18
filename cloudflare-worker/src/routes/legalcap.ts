@@ -89,6 +89,40 @@ async function ensureSchema(env: Env) {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_cc_deal ON capital_calls(deal_id)`,
     `CREATE INDEX IF NOT EXISTS idx_cc_syn ON capital_calls(syndicate_id)`,
+
+    // Syndicates + member roster — referenced by /capital/lp-portal,
+    // /capital/calls/:id/respond, and the auto-call path in /spinout/independent.
+    // SHAPES MUST MATCH CANONICAL DEFINITIONS in networkfx.ts ensureSchema().
+    // CREATE TABLE IF NOT EXISTS is a no-op when the table exists, so a
+    // mismatched shape would silently win the race on a fresh DB and break
+    // networkfx syndicate inserts later.
+    `CREATE TABLE IF NOT EXISTS syndicates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      created_by INTEGER NOT NULL,
+      deal_id INTEGER,
+      target_cents INTEGER,
+      min_commitment_cents INTEGER NOT NULL DEFAULT 100000,
+      status TEXT DEFAULT 'open',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      closed_at TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_syn_deal ON syndicates(deal_id, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_syn_status ON syndicates(status)`,
+
+    // syndicate_members canonical shape (also from networkfx.ts).
+    `CREATE TABLE IF NOT EXISTS syndicate_members (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      syndicate_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      commitment_cents INTEGER NOT NULL,
+      status TEXT DEFAULT 'pending',
+      joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (syndicate_id) REFERENCES syndicates(id)
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_sm_syn_user ON syndicate_members(syndicate_id, user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_sm_user ON syndicate_members(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_cc_status ON capital_calls(status, due_date)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS uq_cc_idem ON capital_calls(created_by, idempotency_key) WHERE idempotency_key IS NOT NULL`,
 

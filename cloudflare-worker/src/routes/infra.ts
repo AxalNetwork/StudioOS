@@ -11,6 +11,65 @@ import { getRealtimeStats } from '../services/realtime';
 
 const infra = new Hono<{ Bindings: Env }>();
 
+// Defensive self-heal — the three tables /queue and /dlq read from were
+// created by migrations, but if any deploy lands on a D1 instance where
+// those migrations didn't run, every infra route 500s with "no such table".
+let infraMigrated = false;
+async function ensureInfraSchema(env: Env) {
+  if (infraMigrated) return;
+  // queue_jobs MUST match the canonical shape used by models/jobs.ts
+  // (max_retries / updated_at / dead_at). A defensive CREATE TABLE IF NOT
+  // EXISTS that omitted these would let the table win the race on a fresh
+  // DB and break Jobs.enqueue/markFailed downstream.
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS queue_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_type TEXT NOT NULL,
+      payload TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_retries INTEGER NOT NULL DEFAULT 3,
+      error TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      started_at TIMESTAMP,
+      completed_at TIMESTAMP,
+      dead_at TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_qj_status ON queue_jobs(status, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_qj_type ON queue_jobs(job_type, status)`,
+    `CREATE TABLE IF NOT EXISTS dead_letter_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      original_job_id INTEGER,
+      job_type TEXT NOT NULL,
+      payload TEXT,
+      last_error TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      moved_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_dlq_type ON dead_letter_queue(job_type, moved_at)`,
+    `CREATE TABLE IF NOT EXISTS system_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      metric_name TEXT NOT NULL,
+      value REAL NOT NULL,
+      labels TEXT DEFAULT '{}',
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_sm_name_time ON system_metrics(metric_name, timestamp)`,
+  ];
+  // Only flip infraMigrated=true when every statement succeeds — otherwise
+  // a transient D1 hiccup would lock the warm isolate into a partial schema.
+  let allOk = true;
+  for (const s of stmts) {
+    try { await env.DB.prepare(s).run(); }
+    catch (e: any) {
+      allOk = false;
+      console.error('infra ensureSchema:', e?.message);
+    }
+  }
+  if (allOk) infraMigrated = true;
+}
+
 // GET /api/infra/queue — admin queue dashboard.
 // Reports both the legacy D1 queue (still drained by cron during the
 // migration window) AND the native CF Queue throughput. CF doesn't expose
@@ -18,6 +77,7 @@ const infra = new Hono<{ Bindings: Env }>();
 // completions/failures recorded in `system_metrics` over the last hour.
 infra.get('/queue', async (c) => {
   await requireAdmin(c);
+  await ensureInfraSchema(c.env);
   const stats = await Jobs.stats(c.env);
 
   const cfWindow = await c.env.DB.prepare(
@@ -45,6 +105,7 @@ infra.get('/queue', async (c) => {
 // GET /api/infra/metrics — high-throughput stats
 infra.get('/metrics', async (c) => {
   await requireAdmin(c);
+  await ensureInfraSchema(c.env);
   const minutes = Math.max(5, Math.min(1440, parseInt(c.req.query('minutes') || '60', 10)));
   const since = new Date(Date.now() - minutes * 60_000).toISOString().replace('T', ' ').slice(0, 19);
 
@@ -108,6 +169,7 @@ infra.post('/cleanup', async (c) => {
 
 // GET /api/infra/dlq — dead letter inspection
 infra.get('/dlq', async (c) => {
+  await ensureInfraSchema(c.env);
   await requireAdmin(c);
   const rows = await c.env.DB.prepare(
     `SELECT * FROM dead_letter_queue ORDER BY moved_at DESC LIMIT 100`
