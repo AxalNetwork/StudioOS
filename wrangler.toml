@@ -30,6 +30,11 @@ APP_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
 ENVIRONMENT       = "production"
+# Feature flag for the Queues migration. While "true" the worker enqueues
+# new jobs onto the native CF Queue (`JOB_QUEUE`); the legacy D1
+# `queue_jobs` cron drain stays alive in parallel so any in-flight legacy
+# jobs finish. Flip to "false" to roll back to D1-only.
+USE_CF_QUEUE      = "true"
 
 # ---------- D1 Database ----------
 [[d1_databases]]
@@ -53,22 +58,26 @@ id      = "be811f14b6f342be961b8daa4513fb5b"
 binding = "AI"
 
 # ---------- Queues (job queue) ----------
-# StudioOS currently uses a D1-backed `queue_jobs` table drained by the
-# cron trigger below. The CF Queues binding is provisioned for future
-# fan-out / retry workloads. Create the queue once via:
-#   npx wrangler queues create studioos-queue
-# then uncomment the producer/consumer blocks.
+# Native Cloudflare Queues replace the D1-polling job queue for true async
+# processing with retry + dead-letter semantics. The D1 `queue_jobs` table
+# and its cron drain remain in place during the migration window so
+# in-flight legacy jobs continue to drain (controlled by the USE_CF_QUEUE
+# feature flag — see [vars] above).
 #
-# [[queues.producers]]
-# binding    = "JOB_QUEUE"
-# queue      = "studioos-queue"
-#
-# [[queues.consumers]]
-# queue                 = "studioos-queue"
-# max_batch_size        = 25
-# max_batch_timeout     = 10
-# max_retries           = 5
-# dead_letter_queue     = "studioos-queue-dlq"
+# Queues created on the account:
+#   studioos-job-queue       (main)
+#   studioos-job-queue-dlq   (dead letter)
+
+[[queues.producers]]
+binding = "JOB_QUEUE"
+queue   = "studioos-job-queue"
+
+[[queues.consumers]]
+queue              = "studioos-job-queue"
+max_batch_size     = 25
+max_batch_timeout  = 10
+max_retries        = 5
+dead_letter_queue  = "studioos-job-queue-dlq"
 
 # ---------- R2 (object storage, optional) ----------
 # Uncomment after running `npx wrangler r2 bucket create studioos-files`
