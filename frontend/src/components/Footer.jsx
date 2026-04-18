@@ -1,6 +1,5 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Github } from 'lucide-react';
 
 export default function Footer() {
   return (
@@ -13,14 +12,6 @@ export default function Footer() {
               <span style={{fontFamily:"'Space Grotesk', sans-serif"}} className="text-lg font-bold text-gray-900">Axal VC</span>
             </div>
             <p className="text-sm text-gray-600 mb-4">The 30-Day Spin-Out Engine for venture capital operations.</p>
-            <a
-              href="https://github.com/guillaumelauzier/axal-vc-studioos"
-              target="_blank"
-              rel="noopener"
-              className="inline-flex items-center gap-2 text-xs text-gray-600 hover:text-gray-900"
-            >
-              <Github size={14} /> View on GitHub
-            </a>
           </div>
 
           <div>
