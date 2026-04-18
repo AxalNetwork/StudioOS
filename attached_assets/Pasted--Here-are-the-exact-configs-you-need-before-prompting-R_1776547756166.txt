@@ -1,0 +1,101 @@
+**✅ Here are the exact configs you need** before prompting Replit.
+
+### 1. `wrangler.toml` (add/update these sections)
+
+```toml
+# wrangler.toml
+name = "axal-studioos"
+main = "backend/main.py"
+compatibility_date = "2026-04-01"
+
+# === Durable Objects (real-time features) ===
+[[durable_objects]]
+name = "PIPELINE_ROOM"
+class_name = "PipelineRoom"
+
+[[durable_objects]]
+name = "ONBOARDING_CHAT"
+class_name = "OnboardingChat"
+
+[[durable_objects]]
+name = "SYNDICATE_ROOM"
+class_name = "SyndicateRoom"
+
+[[durable_objects]]
+name = "METRICS_ROOM"
+class_name = "MetricsRoom"
+
+# Migration for new classes
+[[migrations]]
+tag = "v2"
+new_classes = ["PipelineRoom", "OnboardingChat", "SyndicateRoom", "MetricsRoom"]
+```
+
+### 2. `.env.example` (no new secrets needed)
+
+```env
+# Durable Objects are automatically bound via wrangler.toml
+# No additional environment variables required
+```
+
+---
+
+**Now copy-paste this full prompt into Replit Agent:**
+
+```
+You are the senior real-time systems engineer for Axal StudioOS. The repo already has some Durable Objects for chat and pipeline (per recent commits). Extend and complete **Durable Objects** for all requested real-time features:
+
+- Live Pipeline Board updates (stage changes, metrics, AI recommendations)
+- Live onboarding chat (in the admin user profile modal)
+- Collaborative syndicates (real-time member joining, commitment updates)
+- Live metrics (dashboard counters, queue status, AI calls)
+
+Use the exact wrangler.toml configuration I provided.
+
+Exact requirements:
+
+1. **Durable Objects Classes**
+   - Create / update in `durable-objects/`:
+     - pipeline-room.js → broadcasts Pipeline Board changes
+     - onboarding-chat.js → real-time chat messages
+     - syndicate-room.js → collaborative syndicate updates
+     - metrics-room.js → live platform metrics
+
+2. **WebSocket Endpoints**
+   - Add to backend/main.py and routers:
+     - GET /api/pipeline/ws/{deal_id}
+     - GET /api/onboarding/chat/ws/{user_id}
+     - GET /api/syndicate/ws/{syndicate_id}
+     - GET /api/metrics/ws (global live metrics)
+
+3. **Frontend Integration**
+   - Update /pipeline.html → live updates on stage changes, metrics, AI badges
+   - Update Admin Console user profile modal → real-time onboarding chat
+   - Add collaborative view in Syndicate pages
+   - Update Monitoring / Dashboard with live metrics via WebSocket
+
+4. **Security**
+   - Authenticate every WebSocket connection using existing Replit Auth / RBAC
+   - Rate-limit connections per user
+
+5. **Build Step-by-Step**
+   - First update wrangler.toml with all four Durable Objects + migration.
+   - Then create the four Durable Object classes.
+   - Then add WebSocket routes in main.py and routers.
+   - Then update the relevant frontend pages (Pipeline Board, onboarding modal, syndicates, monitoring).
+   - Finally test end-to-end (change pipeline stage → see live update; send chat message; join syndicate live; see live metrics).
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+This prompt will extend the existing Durable Objects implementation (already partially in the repo) to fully cover live Pipeline Board, onboarding chat, collaborative syndicates, and live metrics.
+
+Just copy the configs above first, then paste the prompt into Replit Agent.
+
+After it finishes, you’ll have true real-time collaboration across the platform.
+
+Would you like the next prompt for **R2 (secure KYC document storage)** or for **full GitHub sync + deployment**? Just say the word.

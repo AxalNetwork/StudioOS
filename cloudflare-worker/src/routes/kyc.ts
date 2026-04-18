@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireAdmin } from '../auth';
+import { putKycDocumentFromDataUri, getKycDocument, deleteKycDocument } from '../services/r2';
 
 const kyc = new Hono<{ Bindings: Env }>();
 
@@ -38,9 +39,17 @@ function safeParse(s: any): any {
 function publicKycData(raw: any) {
   const d = safeParse(raw);
   if (!d) return null;
-  // strip raw document base64 from responses to keep payload small
-  const { id_document_base64, ...safe } = d;
-  return { ...safe, document_uploaded: !!id_document_base64 };
+  // strip raw document bytes from responses to keep payload small.
+  // Newer records store an `id_document` metadata object pointing at R2;
+  // legacy records inlined `id_document_base64`. Both must be hidden but
+  // surfaced as a presence flag.
+  const { id_document_base64, id_document, ...safe } = d;
+  const hasDoc = !!id_document_base64 || !!(id_document && id_document.file_key);
+  return {
+    ...safe,
+    document_uploaded: hasDoc,
+    document_storage: id_document?.file_key ? 'r2' : (id_document_base64 ? 'legacy_d1' : null),
+  };
 }
 
 async function runMockKyc(payload: any): Promise<{ provider: string; result: 'pass' | 'review' | 'fail'; checks: Record<string, boolean>; ref_id: string }> {
@@ -116,12 +125,27 @@ kyc.post('/submit', async (c) => {
 
   const sql = getSQL(c.env);
 
-  // Block re-submission unless rejected or not_started
-  const existing = await sql`SELECT kyc_status FROM users WHERE id = ${user.id}`;
+  // Block re-submission unless rejected or not_started — do this BEFORE any
+  // R2 upload so we never orphan an object on a 409.
+  const existing = await sql`SELECT kyc_status, kyc_data FROM users WHERE id = ${user.id}`;
   const status = existing[0]?.kyc_status || 'not_started';
   if (!['not_started', 'rejected'].includes(status)) {
     await sql.end();
     return c.json({ error: `Cannot resubmit while status is '${status}'` }, 409);
+  }
+  const previousFileKey: string | undefined = safeParse(existing[0]?.kyc_data)?.id_document?.file_key;
+
+  // Upload to R2. On any post-upload failure below, we delete this object
+  // before bailing — see the catch around the UPDATE.
+  let documentMeta: Awaited<ReturnType<typeof putKycDocumentFromDataUri>> | null = null;
+  if (body.id_document_base64 && c.env.FILES) {
+    try {
+      documentMeta = await putKycDocumentFromDataUri(c.env, user.id, body.id_document_base64);
+    } catch (e: any) {
+      console.error('R2 KYC upload failed:', e?.message);
+      await sql.end();
+      return c.json({ error: 'Failed to store ID document. Please try again.' }, 500);
+    }
   }
 
   // Provider selection
@@ -151,7 +175,10 @@ kyc.post('/submit', async (c) => {
     postal_code: body.postal_code,
     id_type: body.id_type,
     id_number: body.id_number,
-    id_document_base64: body.id_document_base64 || null,
+    // Store R2 metadata pointer (preferred) OR fall back to inline base64
+    // when no R2 binding is configured (dev). Never store both.
+    id_document: documentMeta,
+    id_document_base64: documentMeta ? null : (body.id_document_base64 || null),
     phone: body.phone || null,
     pep_self_disclosed: !!body.pep_self_disclosed,
     sanctions_acknowledged: !!body.sanctions_acknowledged,
@@ -162,9 +189,24 @@ kyc.post('/submit', async (c) => {
   const newStatus = providerResult.result === 'fail' ? 'rejected' : 'pending';
   const rejectionReason = providerResult.result === 'fail' ? 'Automated checks failed — please correct your information and resubmit.' : null;
 
-  await sql`UPDATE users SET kyc_status = ${newStatus}, kyc_data = ${JSON.stringify(kycPayload)}, kyc_provider = ${providerName}, kyc_submitted_at = CURRENT_TIMESTAMP, kyc_rejection_reason = ${rejectionReason} WHERE id = ${user.id}`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_submitted', ${`KYC verification submitted via ${providerName} (auto-result: ${providerResult.result})`}, ${user.email}, ${user.id})`;
+  try {
+    await sql`UPDATE users SET kyc_status = ${newStatus}, kyc_data = ${JSON.stringify(kycPayload)}, kyc_provider = ${providerName}, kyc_submitted_at = CURRENT_TIMESTAMP, kyc_rejection_reason = ${rejectionReason} WHERE id = ${user.id}`;
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_submitted', ${`KYC verification submitted via ${providerName} (auto-result: ${providerResult.result})`}, ${user.email}, ${user.id})`;
+  } catch (e) {
+    // Compensating delete: roll back the R2 upload if DB write failed,
+    // otherwise we'd orphan PII.
+    if (documentMeta) await deleteKycDocument(c.env, documentMeta.file_key).catch(() => {});
+    await sql.end();
+    throw e;
+  }
   await sql.end();
+
+  // Resubmission cleanup: delete the previously-stored document, if any.
+  // Done after the UPDATE so a failure here doesn't leave the user without
+  // a valid pointer; we just log it as a soft leak.
+  if (previousFileKey && previousFileKey !== documentMeta?.file_key) {
+    await deleteKycDocument(c.env, previousFileKey).catch(e => console.error('R2 cleanup of previous KYC doc failed:', e?.message, previousFileKey));
+  }
 
   return c.json({
     kyc_status: newStatus,
@@ -214,6 +256,62 @@ kyc.get('/admin/:userId', async (c) => {
   });
 });
 
+// Stream a KYC document from R2 back to an admin reviewer.
+// Auth is re-checked here, so links are safe to share with other admins
+// (their session still has to be valid). Every access is audit-logged.
+kyc.get('/admin/:userId/document', async (c) => {
+  const adminUser = await requireAdmin(c);
+  await ensureColumns(c.env);
+  const userId = parseInt(c.req.param('userId'));
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT id, email, kyc_data FROM users WHERE id = ${userId}`;
+  if (!rows.length) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
+  const target: any = rows[0];
+  const data = safeParse(target.kyc_data);
+  const fileKey: string | undefined = data?.id_document?.file_key;
+  const legacyB64: string | undefined = data?.id_document_base64;
+
+  // Fall back to legacy inline base64 for records uploaded before R2 migration.
+  if (!fileKey && legacyB64) {
+    const commaIdx = legacyB64.indexOf(',');
+    const meta = legacyB64.slice(5, commaIdx);
+    const contentType = meta.replace(';base64', '').trim();
+    // Defense-in-depth: re-check the stored MIME against the allowlist on
+    // read, in case the row was tampered with via a direct SQL path.
+    if (!ALLOWED_DOC_MIME.includes(contentType)) {
+      await sql.end();
+      return c.json({ error: 'Stored document has disallowed content type' }, 415);
+    }
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_document_access', ${`Admin ${adminUser.email} viewed KYC document for user ${target.email} (legacy D1 storage)`}, ${adminUser.email}, ${adminUser.id})`;
+    await sql.end();
+    const bin = atob(legacyB64.slice(commaIdx + 1));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Response(bytes, { headers: { 'content-type': contentType, 'cache-control': 'private, no-store' } });
+  }
+
+  if (!fileKey) { await sql.end(); return c.json({ error: 'No document on file' }, 404); }
+
+  const obj = await getKycDocument(c.env, fileKey);
+  if (!obj) { await sql.end(); return c.json({ error: 'Document not found in storage' }, 404); }
+  const objContentType = obj.httpMetadata?.contentType || '';
+  if (!ALLOWED_DOC_MIME.includes(objContentType)) {
+    await sql.end();
+    return c.json({ error: 'Stored document has disallowed content type' }, 415);
+  }
+
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_document_access', ${`Admin ${adminUser.email} viewed KYC document for user ${target.email} (${fileKey})`}, ${adminUser.email}, ${adminUser.id})`;
+  await sql.end();
+
+  return new Response(obj.body, {
+    headers: {
+      'content-type': objContentType,
+      'cache-control': 'private, no-store',
+      'content-length': String(obj.size),
+    },
+  });
+});
+
 kyc.patch('/admin/:userId/approve', async (c) => {
   const adminUser = await requireAdmin(c);
   await ensureColumns(c.env);
@@ -246,12 +344,20 @@ kyc.patch('/admin/:userId/reject', async (c) => {
   if (!reason || String(reason).trim().length < 5) return c.json({ error: 'Rejection reason required (min 5 chars)' }, 400);
 
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id, email, name, kyc_status FROM users WHERE id = ${userId}`;
+  const rows = await sql`SELECT id, email, name, kyc_status, kyc_data FROM users WHERE id = ${userId}`;
   if (!rows.length) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
   const target: any = rows[0];
 
+  // Delete the stored ID document on rejection — we should not retain
+  // PII for users we've explicitly told to start over. The metadata
+  // pointer in kyc_data stays for audit history but the bytes are gone.
+  const rejectFileKey: string | undefined = safeParse(target.kyc_data)?.id_document?.file_key;
+  if (rejectFileKey) {
+    await deleteKycDocument(c.env, rejectFileKey).catch(e => console.error('R2 cleanup on reject failed:', e?.message, rejectFileKey));
+  }
+
   await sql`UPDATE users SET kyc_status = 'rejected', kyc_reviewed_at = CURRENT_TIMESTAMP, kyc_reviewed_by = ${adminUser.id}, kyc_rejection_reason = ${reason} WHERE id = ${userId}`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_rejected_by_admin', ${`Admin ${adminUser.name} rejected KYC for ${target.name} — reason: ${reason}`}, ${adminUser.email}, ${adminUser.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_rejected_by_admin', ${`Admin ${adminUser.name} rejected KYC for ${target.name} — reason: ${reason} (document purged: ${!!rejectFileKey})`}, ${adminUser.email}, ${adminUser.id})`;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_rejected', ${`Your KYC submission was rejected by Axal compliance. Reason: ${reason}. You may resubmit.`}, ${target.email}, ${target.id})`;
   await sql.end();
   return c.json({ kyc_status: 'rejected', user_id: userId, reason });

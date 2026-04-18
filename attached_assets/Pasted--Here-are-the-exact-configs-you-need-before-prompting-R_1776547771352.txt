@@ -1,0 +1,87 @@
+**✅ Here are the exact configs you need** before prompting Replit.
+
+### 1. `wrangler.toml` (add this section at the end)
+
+```toml
+# wrangler.toml
+# === Vectorize (semantic search) ===
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "axal-search"   # This is the name of your vector index
+```
+
+### 2. `.env.example` (no new secrets needed)
+
+```env
+# Vectorize index is bound automatically via wrangler.toml
+# No additional environment variables required for basic usage
+```
+
+**After you run the prompt, you will also need to create the index once** (Replit Agent will remind you, but you can run this manually):
+
+```bash
+wrangler vectorize create axal-search --dimensions=768 --metric=cosine
+```
+
+---
+
+**Now copy-paste this full prompt into Replit Agent:**
+
+```
+You are the senior AI + search engineer for Axal StudioOS. Implement **Cloudflare Vectorize** for semantic search across deals, partners, documents, and AI-scored opportunities, with a search bar in the Partner Dashboard.
+
+Use the exact wrangler.toml configuration I provided.
+
+Exact requirements:
+
+1. **Vectorize Setup**
+   - Update wrangler.toml with the [[vectorize]] binding exactly as shown (binding = "VECTORIZE", index_name = "axal-search").
+
+2. **Backend Helpers**
+   - Create `backend/vectorize.py` with:
+     - async def insert_embedding(key: str, vector: list[float], metadata: dict)
+     - async def semantic_search(query: str, top_k: int = 10, filters: dict = None) → returns list of matches with scores and metadata
+   - Use the existing Cloudflare AI Worker to generate embeddings (768 dimensions, cosine similarity).
+
+3. **Data to Index**
+   - Automatically embed and insert:
+     - Deals/projects (title, description, metrics, AI score)
+     - Partners (profile, skills, bio)
+     - Documents (legal docs, SAFE, IP licenses – text extracted)
+     - AI-scored opportunities (match scores, explanations)
+   - Run on creation/update events via the existing job queue.
+
+4. **API Endpoint**
+   - Add to backend/routers/dashboard.py or a new search.py:
+     - GET /api/search/semantic?query=...&type=deal|partner|document
+   - Return ranked results with relevance score and direct links.
+
+5. **Frontend Integration**
+   - Add a prominent search bar to the Partner Dashboard (top of the page).
+   - On search, call the semantic search endpoint and display results in cards (with score badges).
+   - Support filtering by type (deals, partners, documents).
+
+6. **Security & Best Practices**
+   - Only KYC-approved users can search.
+   - Use the existing job queue for embedding generation (non-blocking).
+   - Log search queries to activity_logs.
+
+Build this step-by-step:
+1. First update wrangler.toml with the Vectorize binding.
+2. Then create backend/vectorize.py with insert and search helpers.
+3. Then integrate embedding generation into creation/update flows (deals, partners, documents).
+4. Then add the semantic search API endpoint.
+5. Finally add the search bar to the Partner Dashboard and test end-to-end.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+Just copy the configs above first, then paste the prompt into Replit Agent.
+
+This will give you a powerful semantic search engine for the Partner Dashboard (exactly what you asked for).
+
+Would you like the next prompt for **R2 (KYC document storage)** or for **full GitHub sync + deployment checklist**? Just say the word.

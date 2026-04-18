@@ -15,6 +15,9 @@ export interface Env {
   PERSONA_API_KEY?: string;
   SUMSUB_API_KEY?: string;
   AI?: any;
+  // R2 bucket for KYC documents and other large/private blobs.
+  // Optional so unit-test envs without R2 bindings still type-check.
+  FILES?: R2Bucket;
   // Native Cloudflare Queues binding. Optional so unit-test envs and
   // older deploys that haven't been re-deployed against the updated
   // wrangler.toml don't crash on absence — the producer falls back to

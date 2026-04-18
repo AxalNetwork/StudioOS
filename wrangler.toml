@@ -113,11 +113,14 @@ tag                = "v1-realtime"
 # SQLite-backed storage is the default and only supported mode going forward.
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 
-# ---------- R2 (object storage, optional) ----------
-# Uncomment after running `npx wrangler r2 bucket create studioos-files`
-# [[r2_buckets]]
-# binding     = "FILES"
-# bucket_name = "studioos-files"
+# ---------- R2 (object storage) ----------
+# Stores KYC documents (passport / ID images) under key prefix `kyc/{user_id}/`.
+# Bucket is private — access is gated by Worker routes that re-check auth on
+# every read. We deliberately do NOT use S3-compat presigned URLs (which would
+# require separate R2 access keys + introduce a leak vector).
+[[r2_buckets]]
+binding     = "FILES"
+bucket_name = "studioos-files"
 
 # ---------- Cron Triggers ----------
 # Drains the in-DB queue every minute; daily cleanup runs at 03:00 UTC

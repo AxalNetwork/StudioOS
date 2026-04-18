@@ -402,9 +402,44 @@ export default function AdminPage({ onImpersonate }) {
                     <KV label="Phone" value={kycDetail.kyc_data.phone || '—'} />
                     <KV label="ID Type" value={kycDetail.kyc_data.id_type} />
                     <KV label="ID Number" value={kycDetail.kyc_data.id_number} />
-                    <KV label="Document Uploaded" value={kycDetail.kyc_data.document_uploaded ? 'Yes' : 'No'} />
+                    <KV label="Document Uploaded" value={kycDetail.kyc_data.document_uploaded ? `Yes (${kycDetail.kyc_data.document_storage || 'unknown'})` : 'No'} />
                     <KV label="PEP Disclosed" value={kycDetail.kyc_data.pep_self_disclosed ? 'Yes' : 'No'} />
                   </div>
+                  {kycDetail.kyc_data.document_uploaded && (
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          // Bearer auth: must fetch via authenticated API call,
+                          // build a blob URL, and open that. A plain anchor link
+                          // can't carry the Authorization header.
+                          try {
+                            const token = localStorage.getItem('token');
+                            const res = await fetch(`/api/kyc/admin/${kycDetail.id}/document`, {
+                              headers: { Authorization: `Bearer ${token}` },
+                            });
+                            if (!res.ok) {
+                              const msg = await res.text().catch(() => '');
+                              alert(`Failed to load document (${res.status}): ${msg}`);
+                              return;
+                            }
+                            const blob = await res.blob();
+                            const url = URL.createObjectURL(blob);
+                            const w = window.open(url, '_blank', 'noopener,noreferrer');
+                            // Revoke after the new tab has had time to load.
+                            setTimeout(() => URL.revokeObjectURL(url), 60_000);
+                            if (!w) alert('Pop-up blocked. Allow pop-ups for axal.vc and try again.');
+                          } catch (e) {
+                            alert(`Failed to load document: ${e?.message || e}`);
+                          }
+                        }}
+                        className="inline-flex items-center gap-2 text-xs font-semibold text-axal-blue hover:text-axal-blue/80 underline"
+                      >
+                        View ID Document &rarr;
+                      </button>
+                      <p className="text-[10px] text-gray-500 mt-1">Opens in a new tab. Every access is audit-logged.</p>
+                    </div>
+                  )}
                   {kycDetail.kyc_data.provider_result && (
                     <div className="mt-3 bg-gray-50 rounded-lg p-3 text-xs">
                       <div className="font-semibold text-gray-700 mb-1">Automated Provider Result: <span className="font-mono">{kycDetail.kyc_data.provider_result.result}</span></div>
