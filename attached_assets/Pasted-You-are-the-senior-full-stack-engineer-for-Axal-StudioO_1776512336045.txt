@@ -1,0 +1,58 @@
+You are the senior full-stack engineer for Axal StudioOS. The Admin Console already exists with the Users table (Name, Email, Role, Status, Verified, Joined, Actions).
+
+Build a **full user profile modal** that opens when clicking any user row or the "View As" button. The modal must match the style and content shown in the attached screenshot and include everything requested.
+
+Exact requirements:
+
+1. **Trigger**
+   - Make every row in the Users table clickable.
+   - Clicking a row or the "View As" button opens a large modal with the selected user's full profile.
+
+2. **Modal Content (match screenshot + enhancements)**
+   - Header: User name + email + role badge (Partner/Founder/Admin) + status badge.
+   - Left column:
+     • Persona (AI extracted) — editable field
+     • Entity Type
+     • Legal Entity Name / EIN / Tax ID / Signatory / Title
+     • AI Summary (editable card)
+   - Onboarding Conversation section (chat-like history from activity_logs or dedicated kyc_conversation table)
+   - Tabs or sections below:
+     • **Profile** — full user data (joined date, last active, total earnings, network score, verified badges)
+     • **KYC & Verification** — current kyc_status, verification history, ID upload status, TOTP status
+     • **Full History** — paginated activity log (from activity_logs table) with filters (all actions, referrals, commissions, spin-outs, etc.)
+     • **Errors & Issues** — any failed jobs, rate-limit hits, or system errors related to this user
+   - Right sidebar or bottom actions:
+     • Resend Email Verification button (triggers email with new verification link + enables TOTP setup)
+     • Propose Closing Binder / Agreement dropdown + "Verify & Assign Agreement" button
+     • Admin Notes (textarea, saved to user record)
+     • Quick actions: View As (switch to that user's role), Enable/Disable account, Reject user
+
+3. **Backend Endpoints (add to admin.py router)**
+   - GET /api/admin/users/{user_id}/profile → return full user data + history + kyc + errors
+   - POST /api/admin/users/{user_id}/resend-verification → send new email verification link and enable TOTP flow
+   - POST /api/admin/users/{user_id}/update-notes → save admin notes
+   - POST /api/admin/users/{user_id}/assign-agreement → handle agreement assignment
+   - All protected by admin-only RBAC.
+
+4. **Frontend Implementation**
+   - Create a reusable modal component (modal.html or JS-driven).
+   - Use fetch() to load profile data dynamically.
+   - Make the conversation look like a real chat (bubbles with timestamps).
+   - Add loading spinners, success/error toasts.
+   - Resend verification button must show confirmation and success message.
+
+5. **Integration & Polish**
+   - Use existing Replit Auth email system for resend.
+   - After resend, automatically enable TOTP setup flow for the user.
+   - Keep modal responsive and match Axal dark/purple branding.
+   - Add close (X) button as in screenshot.
+
+Build this step-by-step:
+1. First add the backend endpoint GET /api/admin/users/{user_id}/profile and resend-verification.
+2. Then create the modal HTML/JS component.
+3. Then wire up the table rows to open the modal with dynamic data.
+4. Finally implement all tabs, actions (resend email, admin notes, agreement), and history feed.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
