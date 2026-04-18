@@ -14,6 +14,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
 import { Jobs } from '../models/jobs';
+import { enqueueJob } from '../services/queue';
 import { Listings, Matches, LiquidityEvents } from '../models/liquidity';
 import { logActivity } from './partnernet';
 
@@ -80,7 +81,7 @@ liquidity.post('/list', async (c) => {
     valuation_cents: body.asking_price_cents,
     shares_offered: body.shares,
   });
-  await Jobs.enqueue(c.env, 'liquidity_valuation', { listing_id: listing.id, subsidiary_id: body.subsidiary_id });
+  await enqueueJob(c.env, 'liquidity_valuation', { listing_id: listing.id, subsidiary_id: body.subsidiary_id });
   await logActivity(c.env, user.id, 'secondary_listing_created', {
     entityType: 'secondary_listing', entityId: listing.id,
     metadata: { subsidiary_id: body.subsidiary_id, shares: body.shares },
@@ -107,8 +108,8 @@ liquidity.post('/match', async (c) => {
   const listing = await Listings.getById(c.env, body.listing_id);
   if (!listing) return c.json({ error: 'listing not found' }, 404);
   await Matches.clearForListing(c.env, body.listing_id);  // clear prior 'proposed' matches
-  const job = await Jobs.enqueue(c.env, 'liquidity_matching', { listing_id: body.listing_id });
-  return c.json({ ok: true, enqueued_job: job });
+  const result = await enqueueJob(c.env, 'liquidity_matching', { listing_id: body.listing_id });
+  return c.json({ ok: true, enqueued_job: result.job, transport: result.transport });
 });
 
 // GET /api/liquidity/listings/:id/matches — see proposed buyers (admin/partner)

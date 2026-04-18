@@ -909,10 +909,10 @@ legalcap.post('/spinout/go-independent', async (c) => {
 
   // Event-driven: enqueue downstream work asynchronously so this endpoint stays fast.
   try {
-    const { Jobs } = await import('../models/jobs');
+    const { enqueueJob } = await import('../services/queue');
     const { Listings, LiquidityEvents } = await import('../models/liquidity');
-    await Jobs.enqueue(c.env, 'metrics_aggregation', { trigger: 'spinout_independent', subsidiary_id: sub.id });
-    await Jobs.enqueue(c.env, 'traction_review', { project_id: dealId });
+    await enqueueJob(c.env, 'metrics_aggregation', { trigger: 'spinout_independent', subsidiary_id: sub.id });
+    await enqueueJob(c.env, 'traction_review', { project_id: dealId });
 
     // Auto-create a 0-share placeholder listing so the AI can value the asset
     // for marketing on the secondary marketplace. Founders/LPs will then create
@@ -934,7 +934,7 @@ legalcap.post('/spinout/go-independent', async (c) => {
       notes: 'Auto-generated valuation placeholder (spin-out went independent).',
     });
     if (placeholder) {
-      await Jobs.enqueue(c.env, 'liquidity_valuation', { listing_id: placeholder.id, subsidiary_id: sub.id });
+      await enqueueJob(c.env, 'liquidity_valuation', { listing_id: placeholder.id, subsidiary_id: sub.id });
     }
   } catch (e) {
     console.error('post-independent enqueue failed', e);

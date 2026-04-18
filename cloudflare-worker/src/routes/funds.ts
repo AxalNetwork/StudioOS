@@ -13,6 +13,7 @@ import type { Env } from '../types';
 import { requireAdmin, requireAuth } from '../auth';
 import { Funds, LPs } from '../models/funds';
 import { Jobs } from '../models/jobs';
+import { enqueueJob } from '../services/queue';
 import { Distributions } from '../models/distributions';
 import { logActivity } from './partnernet';
 
@@ -170,7 +171,7 @@ funds.post('/', async (c) => {
   const f = await Funds.create(c.env, body);
   if (!f) return c.json({ error: 'create failed' }, 500);
   // Auto-generate LPA via job queue (non-blocking).
-  await Jobs.enqueue(c.env, 'lpa_generation', { fund_id: f.id });
+  await enqueueJob(c.env, 'lpa_generation', { fund_id: f.id });
   return c.json({ ok: true, fund: f, lpa_status: 'enqueued' }, 201);
 });
 

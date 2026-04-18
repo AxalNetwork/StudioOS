@@ -15,6 +15,22 @@ export interface Env {
   PERSONA_API_KEY?: string;
   SUMSUB_API_KEY?: string;
   AI?: any;
+  // Native Cloudflare Queues binding. Optional so unit-test envs and
+  // older deploys that haven't been re-deployed against the updated
+  // wrangler.toml don't crash on absence — the producer falls back to
+  // the legacy D1 `queue_jobs` table when this is undefined.
+  JOB_QUEUE?: Queue<JobMessage>;
+  // Feature flag — string "true" enables the native CF Queue path.
+  USE_CF_QUEUE?: string;
+}
+
+// Cloudflare Queues message envelope (matches the body shape the producer sends).
+// `idempotency_key` is set by the producer and used by the consumer to dedupe
+// at-least-once redeliveries via a KV-backed seen-set.
+export interface JobMessage {
+  job_type: string;
+  payload: any;
+  idempotency_key: string;
 }
 
 export interface User {

@@ -37,6 +37,8 @@ import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
 import { processQueueBatch } from './services/queueWorker';
 import { Jobs } from './models/jobs';
+import { queueConsumer } from './queue-consumer';
+import type { JobMessage } from './types';
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', securityHeadersMiddleware());
@@ -279,5 +281,12 @@ export default {
     // the work alive past the response.
     ctx.waitUntil(work);
     await work;
+  },
+  // Cloudflare Queues consumer for `studioos-job-queue`. Required because
+  // wrangler.toml declares a [[queues.consumers]] block; deploys are
+  // rejected without this export. See cloudflare-worker/src/queue-consumer.ts
+  // for the dispatch logic — it reuses the same handler as the D1 cron drain.
+  async queue(batch: MessageBatch<JobMessage>, env: Env, ctx: ExecutionContext) {
+    await queueConsumer(batch, env, ctx);
   },
 };

@@ -1,0 +1,93 @@
+**✅ Here are the exact configs you need for Cloudflare Durable Objects** (before you prompt Replit).
+
+### 1. `wrangler.toml` (add these sections)
+
+```toml
+# wrangler.toml
+name = "axal-studioos"
+main = "backend/main.py"
+compatibility_date = "2026-04-01"
+
+# === Durable Objects ===
+[[durable_objects]]
+name = "PIPELINE_ROOM"
+class_name = "PipelineRoom"
+
+[[durable_objects]]
+name = "ONBOARDING_CHAT"
+class_name = "OnboardingChat"
+
+# Migrations (required for Durable Objects)
+[[migrations]]
+tag = "v1"
+new_classes = ["PipelineRoom", "OnboardingChat"]
+```
+
+### 2. `.env.example` (no new secrets needed for basic Durable Objects, but add this comment)
+
+```env
+# Cloudflare Durable Objects (no secret keys needed for basic use)
+# Durable Objects are bound automatically via wrangler.toml
+```
+
+### 3. Expected file locations (Replit Agent will create these)
+- `durable-objects/pipeline-room.js` → for live Pipeline Board updates
+- `durable-objects/onboarding-chat.js` → for real-time chat in the onboarding modal
+
+---
+
+**Now here is the ready-to-copy prompt** for Replit Agent.
+
+**Paste this directly into the Agent tab:**
+
+```
+You are the senior real-time systems engineer for Axal StudioOS. Implement **Cloudflare Durable Objects** for real-time features:
+- Live Pipeline Board updates (stage changes, metrics, AI recommendations)
+- Real-time chat in the Admin Onboarding modal (conversation history)
+
+Use the exact configurations I provided:
+
+1. Update wrangler.toml with the two Durable Objects and migration (use the exact [[durable_objects]] and [[migrations]] sections I gave you).
+
+2. Create the following files in a new durable-objects/ folder:
+   - pipeline-room.js → Durable Object class that broadcasts Pipeline Board changes
+   - onboarding-chat.js → Durable Object class that handles real-time chat messages
+
+3. Backend integration:
+   - In backend/main.py, bind the Durable Objects using env.PIPELINE_ROOM and env.ONBOARDING_CHAT
+   - Add WebSocket endpoints:
+     - GET /api/pipeline/ws/{deal_id} → connects to PipelineRoom
+     - GET /api/onboarding/chat/ws/{user_id} → connects to OnboardingChat
+   - Emit events from existing routers (pipeline, admin, spinout, etc.) so changes instantly push to connected clients.
+
+4. Frontend integration:
+   - Update /pipeline.html to use WebSocket for live updates (stage changes, new metrics, AI badges)
+   - Update the Admin user profile modal (onboarding conversation section) to use real-time chat via WebSocket
+   - Add simple reconnect logic and heartbeat
+
+5. Security:
+   - Only authenticated users can connect (use existing RBAC + Replit Auth token)
+   - Rate-limit WebSocket connections per user
+
+6. Monitoring:
+   - Add queue-like monitoring for active Durable Object connections in /api/infra/queue
+
+Build this step-by-step:
+1. First update wrangler.toml with Durable Objects bindings and migration.
+2. Then create the two Durable Object classes (pipeline-room.js and onboarding-chat.js).
+3. Then add WebSocket routes in main.py and relevant routers.
+4. Then update the frontend Pipeline Board and onboarding modal to use the WebSockets.
+5. Finally test end-to-end (change a project stage → see live update on Pipeline Board; send chat message in onboarding modal).
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+Just copy the configs above first, then paste the prompt into Replit Agent.
+
+After it finishes, you’ll have true real-time updates on the Pipeline Board and live chat in the onboarding modal — exactly what a modern high-throughput VC studio needs.
+
+Would you like the next prompt for **R2 (file storage for legal docs / PDFs)** or for **syncing everything to GitHub**? Just say the word.

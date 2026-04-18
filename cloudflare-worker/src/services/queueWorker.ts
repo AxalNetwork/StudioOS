@@ -25,6 +25,10 @@ async function meter(env: Env, jobType: string, status: 'completed' | 'failed', 
   } catch {}
 }
 
+export async function handleJob(env: Env, job: QueueJob): Promise<void> {
+  return handle(env, job);
+}
+
 async function handle(env: Env, job: QueueJob): Promise<void> {
   const payload = job.payload ? JSON.parse(job.payload) : {};
   switch (job.job_type) {
