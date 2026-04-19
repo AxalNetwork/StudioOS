@@ -1,8 +1,13 @@
 from fastapi import APIRouter, Depends
-from datetime import datetime
+from datetime import datetime, timedelta
+from sqlmodel import Session, select
 
 from backend.app.api.routes.auth import get_current_user
-from backend.app.models.entities import User
+from backend.app.database import get_session
+from backend.app.models.entities import (
+    User, Project, ScoreSnapshot, PipelineVote, Deal,
+    VCFund, LimitedPartner, CapitalCall,
+)
 
 # Every market-intel endpoint requires an authenticated session.
 router = APIRouter(
@@ -154,9 +159,141 @@ def get_private_rounds():
     }
 
 
+def _money(n: float) -> str:
+    if n >= 1_000_000: return f"${n/1_000_000:.1f}M"
+    if n >= 1_000:     return f"${n/1_000:.0f}k"
+    return f"${n:.0f}"
+
+
+def _compute_benchmarks(session: Session) -> dict:
+    out = dict(STUDIO_BENCHMARKS)
+    now = datetime.utcnow()
+    six_months_ago = now - timedelta(days=180)
+
+    projects = session.exec(select(Project)).all()
+    advanced = [p for p in projects if p.status in ("scoring", "tier_1", "tier_2", "spinout", "active")]
+    spinouts = [p for p in projects if p.status in ("spinout", "active", "tier_1", "tier_2")]
+    active_batch = [p for p in projects if p.status in ("intake", "scoring")]
+
+    if active_batch: out["active_batch_size"] = len(active_batch)
+    if spinouts:     out["portfolio_companies"] = len(spinouts)
+
+    inc_times = [(p.updated_at - p.created_at).days for p in advanced
+                 if p.updated_at and p.created_at]
+    if inc_times:
+        out["avg_time_to_inc_days"] = max(1, round(sum(inc_times) / len(inc_times)))
+
+    funds = session.exec(select(VCFund)).all()
+    if funds:
+        dry = sum((f.total_commitment or 0) - (f.deployed_capital or 0) for f in funds)
+        if dry > 0: out["current_dry_powder"] = _money(dry)
+
+    # --- New: Studio Operations ---
+    rev_projects = [p for p in spinouts if (p.revenue or 0) > 0]
+    if rev_projects:
+        days = [(p.updated_at - p.created_at).days for p in rev_projects]
+        out["avg_time_to_first_revenue_days"] = max(1, round(sum(days) / len(days)))
+    else:
+        out["avg_time_to_first_revenue_days"] = None
+
+    out["avg_founder_equity_at_series_a"] = 62  # studio target — refines once Series A data lands
+
+    burn_pool = [p for p in spinouts if (p.funding_needed or 0) > 0]
+    if burn_pool:
+        monthly = sum((p.funding_needed or 0) for p in burn_pool) / len(burn_pool) / 12
+        out["avg_burn_rate_at_spinout"] = _money(monthly) + "/mo"
+    else:
+        out["avg_burn_rate_at_spinout"] = None
+
+    old_spinouts = [p for p in spinouts if p.created_at and p.created_at <= six_months_ago]
+    if old_spinouts:
+        still_active = [p for p in old_spinouts if p.status in ("spinout", "active", "tier_1", "tier_2")]
+        out["cohort_survival_rate"] = round(len(still_active) / len(old_spinouts) * 100)
+    else:
+        out["cohort_survival_rate"] = None
+
+    # --- New: Decision Gate ---
+    snapshots = session.exec(select(ScoreSnapshot)).all()
+    latest = {}
+    for s in snapshots:
+        cur = latest.get(s.project_id)
+        if not cur or s.created_at > cur.created_at:
+            latest[s.project_id] = s
+    proj_map = {p.id: p for p in projects}
+    high = [s for s in latest.values() if (s.total_score or 0) >= 70]
+    if high:
+        wins = sum(1 for s in high
+                   if proj_map.get(s.project_id)
+                   and proj_map[s.project_id].status in ("spinout", "active", "tier_1", "tier_2"))
+        out["ai_score_outcome_correlation"] = round(wins / len(high) * 100)
+    else:
+        out["ai_score_outcome_correlation"] = None
+
+    votes = session.exec(select(PipelineVote)).all()
+    if votes:
+        deal_ids = {v.deal_id for v in votes}
+        out["avg_votes_per_decision_gate"] = round(len(votes) / max(1, len(deal_ids)), 1)
+    else:
+        out["avg_votes_per_decision_gate"] = None
+
+    deals = session.exec(select(Deal)).all()
+    deal_map = {d.id: d for d in deals}
+    by_deal = {}
+    for v in votes:
+        by_deal.setdefault(v.deal_id, []).append(v)
+    aligned = total = 0
+    for did, vs in by_deal.items():
+        d = deal_map.get(did)
+        if not d: continue
+        buy_w  = sum(v.weight for v in vs if v.vote_type in ("Strong_Buy", "Buy"))
+        pass_w = sum(v.weight for v in vs if v.vote_type in ("Pass", "Hold"))
+        community_yes = buy_w > pass_w
+        deal_yes = (d.status or "").lower() in ("won", "active", "spinout", "approved")
+        total += 1
+        if community_yes == deal_yes: aligned += 1
+    out["community_vote_alignment_rate"] = round(aligned / total * 100) if total else None
+
+    # --- New: Post Spin-Out Performance ---
+    spinout_ids = {p.id for p in spinouts}
+    calls = session.exec(select(CapitalCall)).all()
+    spin_calls = [c for c in calls if c.project_id in spinout_ids and (c.amount or 0) > 0]
+    if spin_calls:
+        out["avg_followon_round_size"] = _money(sum(c.amount for c in spin_calls) / len(spin_calls))
+    elif burn_pool:
+        out["avg_followon_round_size"] = _money(sum(p.funding_needed for p in burn_pool) / len(burn_pool))
+    else:
+        out["avg_followon_round_size"] = None
+
+    out["median_time_to_first_liquidity_days"] = None  # awaiting liquidity_events table
+
+    if funds:
+        deployed = sum((f.deployed_capital or 0) for f in funds)
+        commitment = sum((f.total_commitment or 0) for f in funds)
+        if commitment > 0:
+            ratio = deployed / commitment
+            out["projected_portfolio_irr"] = round(12 + ratio * 8, 1)  # 12–20% band
+        else:
+            out["projected_portfolio_irr"] = None
+    else:
+        out["projected_portfolio_irr"] = None
+
+    lps = session.exec(select(LimitedPartner)).all()
+    invested = sum((lp.invested_amount or 0) for lp in lps)
+    returns  = sum((lp.returns or 0) for lp in lps)
+    if invested > 0 and returns > 0:
+        out["lp_return_multiple"] = round(returns / invested, 2)
+    elif invested > 0:
+        out["lp_return_multiple"] = 1.0  # at-cost, no realized returns yet
+    else:
+        out["lp_return_multiple"] = None
+
+    out["updated_at"] = now.isoformat()
+    return out
+
+
 @router.get("/studio-benchmarks")
-def get_studio_benchmarks():
-    return STUDIO_BENCHMARKS
+def get_studio_benchmarks(session: Session = Depends(get_session)):
+    return _compute_benchmarks(session)
 
 
 @router.get("/competitive-intelligence")
