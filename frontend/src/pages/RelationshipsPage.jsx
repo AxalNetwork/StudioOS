@@ -205,10 +205,10 @@ function CreateRelModal({ onClose, onCreated }) {
     catch (e) { setErr(e.message); setBusy(false); }
   };
   return (
-    <Modal onClose={onClose} title="New Partner Relationship">
+    <Modal onClose={onClose} title="New Partner Relationship" titleClassName="text-gray-900">
       <Field label="Partner User ID *"><input type="number" value={form.partner_id} onChange={e => setForm({...form, partner_id: e.target.value})} className={inputCls} placeholder="e.g. 42" /></Field>
       <Field label="Relationship Type">
-        <select value={form.relationship_type} onChange={e => setForm({...form, relationship_type: e.target.value})} className={inputCls}>
+        <select value={form.relationship_type} onChange={e => setForm({...form, relationship_type: e.target.value})} className={`${inputCls} appearance-none pr-10 bg-[linear-gradient(45deg,transparent_50%,#6b7280_50%),linear-gradient(135deg,#6b7280_50%,transparent_50%),linear-gradient(to_right,#fff,#fff)] bg-[position:calc(100%_-_18px)_50%,calc(100%_-_12px)_50%,0_0] bg-[size:6px_6px,6px_6px,100%_100%] bg-no-repeat`}>
           {REL_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
         </select>
       </Field>

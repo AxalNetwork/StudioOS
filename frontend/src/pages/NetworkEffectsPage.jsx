@@ -222,7 +222,7 @@ function CreateSyndicateModal({ onClose, onCreated }) {
   };
 
   return (
-    <Modal title="Create Syndicate" onClose={onClose}>
+    <Modal title="Create Syndicate" onClose={onClose} titleClassName="text-gray-900">
       <div className="space-y-3">
         <Field label="Name *"><input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} className={inputCls} /></Field>
         <Field label="Description"><textarea rows={2} value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} className={inputCls} /></Field>
@@ -231,7 +231,7 @@ function CreateSyndicateModal({ onClose, onCreated }) {
           <Field label="Min Commitment ($)"><input type="number" value={form.min_dollars} onChange={e => setForm(f => ({...f, min_dollars: e.target.value}))} className={inputCls} /></Field>
         </div>
         <Field label="Link to Deal (optional)">
-          <select value={form.deal_id} onChange={e => setForm(f => ({...f, deal_id: e.target.value}))} className={inputCls}>
+          <select value={form.deal_id} onChange={e => setForm(f => ({...f, deal_id: e.target.value}))} className={`${inputCls} appearance-none pr-10 bg-[linear-gradient(45deg,transparent_50%,#6b7280_50%),linear-gradient(135deg,#6b7280_50%,transparent_50%),linear-gradient(to_right,#fff,#fff)] bg-[position:calc(100%_-_18px)_50%,calc(100%_-_12px)_50%,0_0] bg-[size:6px_6px,6px_6px,100%_100%] bg-no-repeat`}>
             <option value="">— None —</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
