@@ -129,10 +129,11 @@ _PRIVATE_FIELDS = (
 
 def _viewer_is_company_member(session: Session, company: CompanyProfile, viewer: User) -> bool:
     """Predicate used to decide if member PII may be unmasked in a detail
-    response. Platform admins always pass."""
-    if _is_admin(viewer):
-        return True
-    return _get_link(session, company.id, viewer.id) is not None
+    response. Thin wrapper around the central access-policy rule
+    (`can_view_company_member_list`) — kept here for call-site clarity.
+    Platform admins always pass."""
+    from backend.app.services.access_policy import can_view_company_member_list
+    return can_view_company_member_list(viewer, company, session)
 
 
 def _member_count(session: Session, company_id: int) -> int:

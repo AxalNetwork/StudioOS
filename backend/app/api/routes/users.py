@@ -7,9 +7,9 @@ from backend.app.api.routes.auth import get_current_user
 from backend.app.services.pii import (
     serialize_user_safe,
     mask_email,
-    can_see_full_pii,
     is_privileged_viewer,
 )
+from backend.app.services.access_policy import can_view_personal_contact
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -67,7 +67,7 @@ def get_user(user_id: int, session: Session = Depends(get_session), user: User =
             # *that founder themselves* — checked against founder_id, not the
             # outer User.id, so a founder viewing their own profile via
             # /users/{user_id} still sees their own real email.
-            if not can_see_full_pii(user, subject_founder_id=founder.id):
+            if not can_view_personal_contact(user, subject_founder_id=founder.id):
                 f["email"] = mask_email(f.get("email"))
             result["founder"] = f
 
@@ -75,7 +75,7 @@ def get_user(user_id: int, session: Session = Depends(get_session), user: User =
         partner = session.get(Partner, target.partner_id)
         if partner:
             p = partner.model_dump()
-            if not can_see_full_pii(user, subject_partner_id=partner.id):
+            if not can_view_personal_contact(user, subject_partner_id=partner.id):
                 p["email"] = mask_email(p.get("email"))
             result["partner"] = p
 

@@ -7,6 +7,7 @@ from backend.app.models.entities import Document, Entity, Project, DocumentType,
 from backend.app.schemas.scoring import DocumentCreate
 from backend.app.api.routes.auth import get_current_user
 from backend.app.api.deps import require_role, ensure_founder_access, is_privileged
+from backend.app.services.access_policy import require_contract_view
 from datetime import datetime
 
 require_partner = require_role("partner")
@@ -908,12 +909,14 @@ def list_documents(project_id: int = None, session: Session = Depends(get_sessio
 
 
 @router.get("/documents/{doc_id}")
-def get_document(doc_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def get_document(
+    doc: Document = Depends(require_contract_view),
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    # Access control enforced by `require_contract_view` (Rule 1, see
+    # backend/app/services/access_policy.py).
     from backend.app.services.audit import log_audit, AuditAction
-    doc = session.get(Document, doc_id)
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
-    ensure_founder_access(user, _doc_owner_founder_id(session, doc))
     # Mirror the admin-side viewed event so founder/user reads of contract
     # content are also auditable. commit=True because GET has no own txn.
     log_audit(
@@ -930,12 +933,13 @@ def get_document(doc_id: int, session: Session = Depends(get_session), user: Use
 
 
 @router.post("/documents/{doc_id}/send")
-def send_document(doc_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def send_document(
+    doc: Document = Depends(require_contract_view),
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    # Access control enforced by `require_contract_view` (Rule 1).
     from backend.app.services.audit import log_audit, AuditAction
-    doc = session.get(Document, doc_id)
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
-    ensure_founder_access(user, _doc_owner_founder_id(session, doc))
     prev_status = str(doc.status)
     doc.status = DocumentStatus.SENT
     doc.updated_at = datetime.utcnow()
@@ -966,19 +970,16 @@ class SignDocumentRequest(BaseModel):
 
 @router.post("/documents/{doc_id}/sign")
 def sign_document(
-    doc_id: int,
     body: Optional[SignDocumentRequest] = None,
     request: Request = None,
+    doc: Document = Depends(require_contract_view),
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
+    # Access control enforced by `require_contract_view` (Rule 1) — loads
+    # doc and asserts founder ownership / privileged role before this body.
     from backend.app.services.audit import log_audit, AuditAction
     from backend.app.services.signatures import derive_signer_email
-    doc = session.get(Document, doc_id)
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
-    # Founder-ownership ACL (or platform privileged user).
-    ensure_founder_access(user, _doc_owner_founder_id(session, doc))
     # Reject re-signing or signing voided contracts — signatures must be
     # immutable once recorded.
     if doc.status == DocumentStatus.SIGNED:

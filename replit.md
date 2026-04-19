@@ -417,3 +417,27 @@ See `cloudflare-worker/SETUP.md` for complete deployment instructions.
      OR origin firewall allowing only CF IPs) — otherwise an attacker can
      bypass the perimeter by hitting the origin directly.
 - Same module + env approach should be used for staging (separate AUD).
+
+## Sensitive-data access policy (Security #7)
+Single source of truth: `backend/app/services/access_policy.py`. Any new
+route that exposes one of the four resource categories below MUST call the
+named predicate (or the FastAPI dependency) — no ad-hoc role checks.
+
+| # | Resource | Who may view (un-masked) | Predicate / Dependency |
+|---|----------|--------------------------|------------------------|
+| 1 | Contracts (`Document`) | admin · partner · owning founder | `can_view_contract` / `Depends(require_contract_view)` |
+| 2a | `signed_ip` (legal proof) | admin only | `can_view_signed_ip` (used by `redact_signature_for_viewer`) |
+| 2b | `signed_by` signer email | admin · the signer · doc owner | `can_view_signer_email` (used by `redact_signature_for_viewer`) |
+| 3 | Personal contact info (email / phone / `Partner.contact_info`) | admin · the subject themselves · co-members on the same company (email only) | `can_view_personal_contact` (alias of `pii.can_see_full_pii`) |
+| 4 | Company member roster (un-masked emails) | admin · members of that company | `can_view_company_member_list` / `Depends(require_company_member_view)` |
+
+Notes:
+- This codebase does not currently store physical postal addresses.
+  When/if `address` lands on `User`/`Founder`/`LimitedPartner`, gate it
+  through Rule 3 (admin or self only).
+- `_viewer_is_company_member` in `routes/company.py` is now a thin alias
+  for `can_view_company_member_list` so the rule lives in one place.
+- Redactors (`redact_signature_for_viewer`, `serialize_user_safe`,
+  `_company_summary_dto`/`_company_detail_dto`) are the implementation
+  arm of the same rules — never bypass them by spreading raw
+  `model_dump()` output into a response.

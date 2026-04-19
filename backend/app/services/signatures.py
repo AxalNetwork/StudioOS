@@ -23,8 +23,12 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from backend.app.models.entities import User, UserRole
-from backend.app.services.pii import can_see_full_pii, mask_email
+from backend.app.models.entities import User
+from backend.app.services.access_policy import (
+    can_view_signed_ip,
+    can_view_signer_email,
+)
+from backend.app.services.pii import mask_email
 
 
 # Fields that are admin-only legal proof. They must be stripped from every
@@ -57,28 +61,23 @@ def redact_signature_for_viewer(
     if not isinstance(data, dict):
         return data
 
-    privileged = can_see_full_pii(
-        viewer,
-        subject_user_id=owner_user_id,
-        subject_founder_id=owner_founder_id,
-    )
-
-    # Strip admin-only legal-proof evidence for everyone except admins.
-    # `can_see_full_pii(..., subject_user_id=None)` returns True only for
-    # admins, so we use a strict admin gate here.
-    is_admin = bool(viewer and viewer.role == UserRole.ADMIN)
-    if not is_admin:
+    # Rule 2a: strip admin-only legal-proof evidence (signed_ip) for
+    # every non-admin viewer. Delegated to access_policy so the rule
+    # lives in one place.
+    if not can_view_signed_ip(viewer):
         for k in _ADMIN_ONLY_SIGNATURE_FIELDS:
-            if k in data:
-                data.pop(k, None)
+            data.pop(k, None)
 
-    # Mask signer email for non-privileged viewers who aren't the signer.
+    # Rule 2b: mask signer email unless the viewer is admin / signer /
+    # document owner.
     signed_by = data.get("signed_by")
-    if signed_by:
-        viewer_email = getattr(viewer, "email", None)
-        is_self_signer = bool(viewer_email and viewer_email.lower() == str(signed_by).lower())
-        if not (privileged or is_self_signer):
-            data["signed_by"] = mask_email(signed_by)
+    if signed_by and not can_view_signer_email(
+        viewer,
+        signer_email=str(signed_by),
+        owner_user_id=owner_user_id,
+        owner_founder_id=owner_founder_id,
+    ):
+        data["signed_by"] = mask_email(signed_by)
 
     return data
 

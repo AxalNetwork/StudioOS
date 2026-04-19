@@ -4,7 +4,8 @@ from backend.app.database import get_session
 from backend.app.models.entities import Partner, User
 from backend.app.schemas.scoring import PartnerCreate, MatchPartnersRequest
 from backend.app.api.routes.auth import get_current_user
-from backend.app.services.pii import mask_email, can_see_full_pii
+from backend.app.services.pii import mask_email
+from backend.app.services.access_policy import can_view_personal_contact
 import uuid
 
 router = APIRouter(prefix="/partners", tags=["Partner Ecosystem"])
@@ -14,7 +15,7 @@ def _partner_dto(p: Partner, viewer: User) -> dict:
     """Serialise a partner with email masked unless the viewer is privileged
     (admin) or is the partner themselves."""
     data = p.model_dump()
-    if not can_see_full_pii(viewer, subject_partner_id=p.id):
+    if not can_view_personal_contact(viewer, subject_partner_id=p.id):
         data["email"] = mask_email(data.get("email"))
     return data
 

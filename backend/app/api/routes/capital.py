@@ -45,8 +45,9 @@ def _lp_dto(lp: LimitedPartner, fund: VCFund | None, viewer: User | None = None)
     Email is masked for non-privileged viewers (anyone other than admins or
     the LP themselves). Investor identity is sensitive and should not be
     broadcast across founder accounts."""
-    from backend.app.services.pii import mask_email, can_see_full_pii
-    privileged = can_see_full_pii(viewer, subject_user_id=lp.user_id)
+    from backend.app.services.pii import mask_email
+    from backend.app.services.access_policy import can_view_personal_contact
+    privileged = can_view_personal_contact(viewer, subject_user_id=lp.user_id)
     return {
         "id": lp.id,
         "uid": lp.uid,
