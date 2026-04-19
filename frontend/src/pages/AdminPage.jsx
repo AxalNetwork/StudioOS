@@ -495,7 +495,7 @@ export default function AdminPage({ onImpersonate }) {
   );
 }
 
-function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive }) {
+export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive }) {
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('profile');
   const [notes, setNotes] = useState('');
@@ -574,11 +574,15 @@ function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive }) {
           <div className={`mx-6 mt-3 px-3 py-2 rounded-lg text-xs ${toast.kind === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{toast.msg}</div>
         )}
 
-        <div className="px-6 pt-3 border-b border-gray-200 flex gap-1">
-          {['profile', 'kyc', 'activity', 'notes'].map(t => (
+        <div className="px-6 pt-3 border-b border-gray-200 flex gap-1 overflow-x-auto">
+          {['profile', 'registration', 'kyc', 'agreements', 'activity', 'notes'].map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px capitalize transition-colors ${tab === t ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-              {t === 'kyc' ? 'KYC & Verification' : t}
+              className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px capitalize whitespace-nowrap transition-colors ${tab === t ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+              {t === 'kyc' ? 'KYC & Verification' :
+               t === 'registration' ? `Registration${(data?.timeline?.length ?? 0) ? ` · ${data.timeline.length}` : ''}` :
+               t === 'agreements' ? `Agreements${(data?.agreements?.length ?? 0) ? ` · ${data.agreements.length}` : ''}` :
+               t === 'activity' ? `Activity${(data?.activity?.length ?? 0) ? ` · ${data.activity.length}` : ''}` :
+               t}
             </button>
           ))}
         </div>
@@ -615,6 +619,58 @@ function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive }) {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {data && tab === 'registration' && (
+            <div className="space-y-2">
+              {(data.timeline || []).length === 0 && <div className="text-sm text-gray-500">No registration events recorded.</div>}
+              {(data.timeline || []).map((ev, i) => (
+                <div key={`${ev.kind}-${ev.ts}-${i}`} className="flex gap-3 text-xs">
+                  <div className="flex flex-col items-center">
+                    <div className="w-2 h-2 rounded-full bg-violet-500 mt-1.5" />
+                    {i < (data.timeline.length - 1) && <div className="w-px flex-1 bg-gray-200 mt-1" />}
+                  </div>
+                  <div className="flex-1 pb-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-gray-900 capitalize">{ev.label}</span>
+                      <span className="text-gray-500 whitespace-nowrap">{ev.ts ? new Date(ev.ts).toLocaleString() : ''}</span>
+                    </div>
+                    {ev.detail && <div className="text-gray-600 mt-0.5">{ev.detail}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {data && tab === 'agreements' && (
+            <div className="space-y-2">
+              {(data.agreements || []).length === 0 && <div className="text-sm text-gray-500">No eSign agreements yet.</div>}
+              {(data.agreements || []).map(ag => (
+                <div key={`${ag.envelope_id}-${ag.recipient_id || 'na'}`} className="border border-gray-200 rounded-lg p-3 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-gray-900">{ag.document_title || ag.document_type || 'Agreement'}</div>
+                      <div className="text-gray-500 mt-0.5">
+                        {ag.role_in_envelope === 'creator' ? 'Sent by user' : 'Recipient'}
+                        {ag.recipient_email ? ` · ${ag.recipient_email}` : ''}
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide text-[10px] ${
+                      (ag.recipient_status || ag.envelope_status) === 'signed' || (ag.recipient_status || ag.envelope_status) === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                      (ag.recipient_status || ag.envelope_status) === 'pending' || (ag.recipient_status || ag.envelope_status) === 'sent' ? 'bg-amber-100 text-amber-700' :
+                      (ag.recipient_status || ag.envelope_status) === 'declined' || (ag.recipient_status || ag.envelope_status) === 'expired' ? 'bg-red-100 text-red-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {ag.recipient_status || ag.envelope_status || 'unknown'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-2 text-gray-600">
+                    <div>Created: {ag.created_at ? new Date(ag.created_at).toLocaleString() : '—'}</div>
+                    <div>Signed: {ag.recipient_signed_at || ag.signed_at ? new Date(ag.recipient_signed_at || ag.signed_at).toLocaleString() : '—'}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 

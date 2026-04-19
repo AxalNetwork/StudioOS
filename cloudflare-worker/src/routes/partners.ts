@@ -5,10 +5,22 @@ import { requireAuth } from '../auth';
 
 const partners = new Hono<{ Bindings: Env }>();
 
+// Listing returns each partner row. Admins additionally get linked-user
+// metadata (user_id, email, KYC, active, verified) so they can open the
+// full user-profile modal from a partner row. Non-admin authenticated
+// users (founder/partner) only get the public partner directory fields —
+// no other users' account/KYC info is leaked.
 partners.get('/', async (c) => {
-  await requireAuth(c);
+  const me = await requireAuth(c);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT * FROM partners ORDER BY created_at DESC`;
+  const rows = me.role === 'admin'
+    ? await sql`
+        SELECT p.*, u.id AS user_id, u.email AS user_email, u.is_active AS user_is_active,
+               u.email_verified AS user_email_verified, u.kyc_status AS user_kyc_status
+          FROM partners p
+          LEFT JOIN users u ON u.partner_id = p.id
+         ORDER BY p.created_at DESC`
+    : await sql`SELECT * FROM partners ORDER BY created_at DESC`;
   await sql.end();
   return c.json(rows);
 });

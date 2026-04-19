@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Users, Plus, Search, Copy } from 'lucide-react';
+import { Users, Plus, Search, Copy, ChevronRight } from 'lucide-react';
+import { UserDetailModal } from './AdminPage';
 
 export default function PartnersPage() {
   const [partners, setPartners] = useState([]);
@@ -9,6 +10,9 @@ export default function PartnersPage() {
   const [form, setForm] = useState({ name: '', email: '', company: '', specialization: '' });
   const [matchSector, setMatchSector] = useState('');
   const [matches, setMatches] = useState(null);
+  // openPartner: row from /partners (now augmented with user_id via LEFT JOIN).
+  // We open the shared UserDetailModal when a linked user account exists.
+  const [openPartner, setOpenPartner] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -108,11 +112,18 @@ export default function PartnersPage() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {partners.map(p => (
-                <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="px-5 py-3 text-gray-900">{p.name}</td>
+                <tr key={p.id} onClick={() => setOpenPartner(p)}
+                    className="hover:bg-violet-50/40 cursor-pointer group">
+                  <td className="px-5 py-3 text-gray-900">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium">{p.name}</span>
+                      <ChevronRight size={12} className="text-gray-300 group-hover:text-violet-600 transition-colors" />
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">{p.email || p.user_email || '—'}</div>
+                  </td>
                   <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.company || '—'}</td>
                   <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.specialization || '—'}</td>
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => copyCode(p.referral_code)} className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-700 font-mono">
                       {p.referral_code} <Copy size={10} />
                     </button>
@@ -124,6 +135,41 @@ export default function PartnersPage() {
           </table>
         )}
       </div>
+      {openPartner && openPartner.user_id && (
+        <UserDetailModal
+          userRow={{
+            id: openPartner.user_id,
+            name: openPartner.name,
+            email: openPartner.user_email || openPartner.email,
+            role: 'partner',
+            is_active: openPartner.user_is_active,
+            email_verified: openPartner.user_email_verified,
+          }}
+          onClose={() => setOpenPartner(null)}
+          onImpersonate={() => setOpenPartner(null)}
+          onToggleActive={() => setOpenPartner(null)}
+        />
+      )}
+      {openPartner && !openPartner.user_id && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setOpenPartner(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-900">{openPartner.name}</h3>
+            <p className="text-xs text-gray-500 mt-1">{openPartner.email || '—'}</p>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div><div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Company</div><div className="text-gray-900">{openPartner.company || '—'}</div></div>
+              <div><div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Specialization</div><div className="text-gray-900">{openPartner.specialization || '—'}</div></div>
+              <div><div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Referral code</div><div className="text-gray-900 font-mono text-xs">{openPartner.referral_code || '—'}</div></div>
+              <div><div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Referrals</div><div className="text-gray-900">{openPartner.referrals_count ?? 0}</div></div>
+            </div>
+            <div className="mt-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700">
+              No user account is linked to this partner record yet. Once they register and an admin links the accounts, the full registration timeline, KYC, agreements, and activity history will appear here.
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button onClick={() => setOpenPartner(null)} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
