@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api';
-import { Ticket, Plus, ChevronDown, X, RefreshCw, MessageSquare, Clock, ArrowLeft, ExternalLink } from 'lucide-react';
+import { Ticket, Plus, ChevronDown, X, RefreshCw, MessageSquare, Clock, ArrowLeft } from 'lucide-react';
 
 function ModernSelect({ value, onChange, children, ...props }) {
   return (
@@ -70,23 +70,12 @@ function TicketDetail({ ticketId, onBack }) {
             <div className="flex items-center gap-3 mt-2">
               <span className={`text-[10px] px-2 py-0.5 rounded-full ${priorityColors[ticket.priority]}`}>{ticket.priority}</span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[ticket.status]}`}>{ticket.status?.replace('_', ' ')}</span>
-              {ticket.github_issue_number && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                  GitHub #{ticket.github_issue_number}
-                </span>
-              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={load} className="p-2 text-gray-400 hover:text-violet-600 transition-colors" title="Refresh">
               <RefreshCw size={14} />
             </button>
-            {ticket.github_issue_url && (
-              <a href={ticket.github_issue_url} target="_blank" rel="noopener noreferrer"
-                className="p-2 text-gray-400 hover:text-violet-600 transition-colors" title="View on GitHub">
-                <ExternalLink size={14} />
-              </a>
-            )}
           </div>
         </div>
 
@@ -127,9 +116,6 @@ function TicketDetail({ ticketId, onBack }) {
         {(!ticket.comments || ticket.comments.length === 0) ? (
           <div className="text-center py-6">
             <p className="text-sm text-gray-500">No comments yet.</p>
-            {ticket.github_issue_url && (
-              <p className="text-xs text-gray-400 mt-1">Comments posted on the GitHub issue will appear here automatically.</p>
-            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -309,9 +295,6 @@ export default function TicketsPage() {
                   <td className="px-5 py-3">
                     <div className="text-gray-900 hover:text-violet-600 transition-colors">{t.title}</div>
                     {t.description && <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{t.description}</div>}
-                    {t.github_issue_number && (
-                      <div className="text-[10px] text-gray-400 mt-0.5">GitHub #{t.github_issue_number}</div>
-                    )}
                   </td>
                   {isAdmin && <td className="px-5 py-3 hidden md:table-cell text-gray-600">{t.submitted_by || '—'}</td>}
                   <td className="px-5 py-3">
