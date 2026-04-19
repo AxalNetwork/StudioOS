@@ -62,6 +62,7 @@ class DocumentStatus(str, Enum):
     GENERATED = "generated"
     SENT = "sent"
     SIGNED = "signed"
+    VOID = "void"
 
 
 class TicketStatus(str, Enum):

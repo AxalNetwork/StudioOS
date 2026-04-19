@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
-import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, Clock, XCircle, CheckCircle2 } from 'lucide-react';
+import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, Clock, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw } from 'lucide-react';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 const ROLE_BADGES = {
@@ -158,7 +158,13 @@ export default function AdminPage({ onImpersonate }) {
             <span className="ml-2 bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">{kycQueue.length} pending</span>
           )}
         </button>
+        <button onClick={() => setTab('contracts')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'contracts' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+          <FileText size={14} className="inline mr-1.5" /> Contracts
+        </button>
       </div>
+
+      {tab === 'contracts' && <ContractsPanel />}
 
       {tab === 'users' && (
         <>
@@ -1120,6 +1126,300 @@ function KV({ label, value }) {
     <div>
       <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{label}</div>
       <div className="text-sm text-gray-900 break-words">{value || '—'}</div>
+    </div>
+  );
+}
+
+// ===== Admin Contracts Management ======================================
+const STATUS_PILL = {
+  draft:     { label: 'DRAFT',     cls: 'bg-gray-100 text-gray-700' },
+  generated: { label: 'GENERATED', cls: 'bg-sky-100 text-sky-700' },
+  sent:      { label: 'PENDING',   cls: 'bg-amber-100 text-amber-700' },
+  signed:    { label: 'SIGNED',    cls: 'bg-emerald-100 text-emerald-700' },
+  void:      { label: 'VOID',      cls: 'bg-slate-200 text-slate-600' },
+};
+
+function StatusPill({ status }) {
+  const s = STATUS_PILL[status] || STATUS_PILL.draft;
+  return (
+    <span className={`text-[10px] font-bold tracking-wide px-2.5 py-1 rounded-full ${s.cls}`}>{s.label}</span>
+  );
+}
+
+function fmtDate(iso) {
+  if (!iso) return null;
+  try { return new Date(iso).toLocaleString(); } catch { return iso; }
+}
+
+export function ContractsPanel() {
+  const [stats, setStats] = useState(null);
+  const [items, setItems] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sub, setSub] = useState('all'); // all | pending | signed | templates
+  const [q, setQ] = useState('');
+  const [docType, setDocType] = useState('');
+  const [openContract, setOpenContract] = useState(null);
+
+  const statusFilter = sub === 'pending' ? 'sent' : sub === 'signed' ? 'signed' : '';
+
+  const reload = async () => {
+    setLoading(true);
+    try {
+      const [s, list, tpls] = await Promise.all([
+        api.adminContractStats().catch(() => null),
+        sub === 'templates' ? Promise.resolve({ items: [] }) : api.adminListContracts({ status: statusFilter, doc_type: docType, q, limit: 200 }),
+        sub === 'templates' ? api.adminContractTemplates().catch(() => []) : Promise.resolve(null),
+      ]);
+      setStats(s);
+      setItems(list?.items || []);
+      if (tpls) setTemplates(tpls);
+    } catch (e) {
+      console.error('Failed to load contracts:', e);
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [sub, statusFilter, docType]);
+
+  const onSearch = (e) => { e.preventDefault(); reload(); };
+
+  const docTypeOptions = Array.from(new Set([
+    ...(stats?.by_type || []).map(t => t.type),
+  ])).sort();
+
+  return (
+    <div>
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+        <KpiTile label="Total"               value={stats?.total ?? '—'} />
+        <KpiTile label="Pending Signature"   value={stats?.pending_signature ?? '—'} accent="amber" />
+        <KpiTile label="Signed"              value={stats?.by_status?.signed ?? '—'} accent="emerald" />
+        <KpiTile label="Avg Days to Sign"    value={stats?.avg_days_to_sign ?? '—'} />
+        <KpiTile label="Signed Last 30d"     value={stats?.signed_last_30d ?? '—'} />
+      </div>
+
+      {/* Sub-tabs */}
+      <div className="flex items-center gap-2 mb-4">
+        {[
+          ['all',       'All Contracts'],
+          ['pending',   'Sent / Pending'],
+          ['signed',    'Signed'],
+          ['templates', 'Templates'],
+        ].map(([k, label]) => (
+          <button key={k} onClick={() => setSub(k)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${sub === k ? 'bg-violet-600 border-violet-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-violet-300'}`}>
+            {label}
+          </button>
+        ))}
+        <button onClick={reload} className="ml-auto text-xs text-gray-500 hover:text-violet-600 flex items-center gap-1">
+          <RefreshCw size={12} /> Refresh
+        </button>
+      </div>
+
+      {/* Filters (hidden on Templates) */}
+      {sub !== 'templates' && (
+        <form onSubmit={onSearch} className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="relative flex-1 min-w-[240px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={q} onChange={e => setQ(e.target.value)}
+              placeholder="Search title, recipient, project, template…"
+              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-300" />
+          </div>
+          <select value={docType} onChange={e => setDocType(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
+            <option value="">All types</option>
+            {docTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <button type="submit" className="px-3 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium">Search</button>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="text-center text-gray-500 py-12 text-sm">Loading…</div>
+      ) : sub === 'templates' ? (
+        <TemplatesGrid templates={templates} />
+      ) : items.length === 0 ? (
+        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm">
+          No contracts found for this filter.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map(c => <ContractRow key={c.uid} c={c} onOpen={() => setOpenContract(c)} />)}
+        </div>
+      )}
+
+      {openContract && (
+        <ContractDetailModal
+          uid={openContract.uid}
+          onClose={() => setOpenContract(null)}
+          onChanged={() => { setOpenContract(null); reload(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function KpiTile({ label, value, accent }) {
+  const accentCls = accent === 'amber' ? 'text-amber-700'
+                  : accent === 'emerald' ? 'text-emerald-700'
+                  : 'text-gray-900';
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+      <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{label}</div>
+      <div className={`text-2xl font-bold mt-0.5 ${accentCls}`}>{value}</div>
+    </div>
+  );
+}
+
+function ContractRow({ c, onOpen }) {
+  return (
+    <button onClick={onOpen}
+      className="w-full text-left bg-white border border-gray-200 rounded-xl px-4 py-3 hover:border-violet-300 hover:shadow-sm transition-all">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-gray-900 truncate">{c.title}</div>
+          <div className="text-xs text-gray-600 mt-0.5">
+            Recipient · <span className="text-gray-800">{c.recipient_email || '—'}</span>
+            {c.project_name && <> · Project · <span className="text-gray-800">{c.project_name}</span></>}
+          </div>
+          <div className="flex items-center gap-4 text-[11px] text-gray-500 mt-1.5">
+            <span>Created: {fmtDate(c.created_at) || '—'}</span>
+            <span>Signed: {fmtDate(c.signed_at) || '—'}</span>
+            {c.days_to_sign != null && <span>Days to sign: <span className="text-gray-700 font-medium">{c.days_to_sign}</span></span>}
+          </div>
+        </div>
+        <StatusPill status={c.status} />
+      </div>
+    </button>
+  );
+}
+
+function TemplatesGrid({ templates }) {
+  if (!templates || templates.length === 0) {
+    return <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm">No templates available.</div>;
+  }
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      {templates.map(t => (
+        <div key={t.key} className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="font-semibold text-gray-900 truncate">{t.title}</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">{t.layer_label}</div>
+            </div>
+            <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-1 rounded-full whitespace-nowrap">{t.usage_count} uses</span>
+          </div>
+          <div className="text-[11px] text-gray-500 mt-3">
+            Last used: {fmtDate(t.last_used_at) || 'Never'}
+          </div>
+          <div className="text-[10px] text-gray-400 mt-1 font-mono truncate">{t.key}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ContractDetailModal({ uid, onClose, onChanged }) {
+  const [doc, setDoc] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await api.adminGetContract(uid);
+        if (!cancelled) setDoc(d);
+      } catch (e) { if (!cancelled) setErr(e.message); }
+    })();
+    return () => { cancelled = true; };
+  }, [uid]);
+
+  const doResend = async () => {
+    if (!confirm('Resend this contract to the recipient?')) return;
+    setBusy(true); setErr('');
+    try { await api.adminResendContract(uid); onChanged(); }
+    catch (e) { setErr(e.message); setBusy(false); }
+  };
+  const doVoid = async () => {
+    if (!confirm('Void this contract? It will be archived and can no longer be signed.')) return;
+    setBusy(true); setErr('');
+    try { await api.adminVoidContract(uid); onChanged(); }
+    catch (e) { setErr(e.message); setBusy(false); }
+  };
+  const doDownload = () => {
+    const url = api.adminDownloadContractUrl(uid);
+    const token = localStorage.getItem('token');
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.blob().then(b => ({ b, ct: r.headers.get('Content-Disposition') })))
+      .then(({ b, ct }) => {
+        const m = (ct || '').match(/filename="([^"]+)"/);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b);
+        a.download = m ? m[1] : `contract_${uid.slice(0, 8)}.txt`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+      })
+      .catch(e => setErr(e.message));
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[88vh] overflow-hidden flex flex-col">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <FileText size={16} className="text-violet-600" />
+              <h3 className="font-semibold text-gray-900 truncate">{doc?.title || 'Contract'}</h3>
+              {doc && <StatusPill status={doc.status} />}
+            </div>
+            <div className="text-xs text-gray-500">
+              {doc?.doc_type} {doc?.template_name ? `· ${doc.template_name}` : ''}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+        </div>
+
+        <div className="px-5 py-4 overflow-y-auto flex-1 space-y-4">
+          {err && <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-2 rounded">{err}</div>}
+          {!doc ? (
+            <div className="text-center text-gray-500 text-sm py-8">Loading…</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Recipient"   value={doc.recipient_email} />
+                <Field label="Project"     value={doc.project_name} />
+                <Field label="Signed by"   value={doc.signed_by} />
+                <Field label="Signed at"   value={fmtDate(doc.signed_at)} />
+                <Field label="Created"     value={fmtDate(doc.created_at)} />
+                <Field label="Days to sign" value={doc.days_to_sign != null ? String(doc.days_to_sign) : '—'} />
+              </div>
+              <div>
+                <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Content</div>
+                <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-[11px] text-gray-800 whitespace-pre-wrap max-h-72 overflow-y-auto">{doc.content || '(empty)'}</pre>
+              </div>
+            </>
+          )}
+        </div>
+
+        {doc && (
+          <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 flex flex-wrap gap-2 justify-end">
+            <button onClick={doDownload} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5">
+              <Download size={13} /> Download
+            </button>
+            {doc.status !== 'signed' && doc.status !== 'void' && (
+              <button onClick={doResend} disabled={busy} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5">
+                <Send size={13} /> Resend
+              </button>
+            )}
+            {doc.status !== 'signed' && doc.status !== 'void' && (
+              <button onClick={doVoid} disabled={busy} className="px-3 py-2 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 flex items-center gap-1.5">
+                <Ban size={13} /> Void
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

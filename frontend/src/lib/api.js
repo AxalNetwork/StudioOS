@@ -120,6 +120,16 @@ export const api = {
   activitySyncGithub: () => request('/activity/sync-github', { method: 'POST' }),
 
   adminListUsers: () => request('/admin/users'),
+  adminListContracts: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
+    return request(`/admin/contracts${q ? `?${q}` : ''}`);
+  },
+  adminContractStats: () => request('/admin/contracts/stats'),
+  adminContractTemplates: () => request('/admin/contracts/templates'),
+  adminGetContract: (uid) => request(`/admin/contracts/${uid}`),
+  adminResendContract: (uid) => request(`/admin/contracts/${uid}/resend`, { method: 'POST' }),
+  adminVoidContract: (uid) => request(`/admin/contracts/${uid}/void`, { method: 'POST' }),
+  adminDownloadContractUrl: (uid) => `/api/admin/contracts/${uid}/download`,
   adminImpersonate: (userId) => request(`/admin/impersonate/${userId}`, { method: 'POST' }),
   adminUpdateRole: (userId, role) => request(`/admin/users/${userId}/role?role=${role}`, { method: 'PATCH' }),
   adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),

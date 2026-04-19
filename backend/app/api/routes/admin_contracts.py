@@ -132,27 +132,31 @@ def contract_stats(
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     signed_recent = 0
 
+    def _val(x):
+        # Normalize enum-or-str to its string value for stable counting.
+        return getattr(x, "value", x) if x is not None else None
+
     for d in docs:
-        by_status[str(d.status)] += 1
-        by_type[str(d.doc_type)] += 1
+        by_status[_val(d.status)] += 1
+        by_type[_val(d.doc_type)] += 1
         days = _days_to_sign(d)
         if days is not None:
             sign_days.append(days)
         if d.signed_at and d.signed_at >= thirty_days_ago:
             signed_recent += 1
 
-    pending = by_status.get(DocumentStatus.SENT, 0) + by_status.get(DocumentStatus.GENERATED, 0)
+    pending = by_status.get("sent", 0) + by_status.get("generated", 0)
 
     return {
         "total": len(docs),
         "by_status": {
-            "draft": by_status.get(DocumentStatus.DRAFT, 0),
-            "generated": by_status.get(DocumentStatus.GENERATED, 0),
-            "sent": by_status.get(DocumentStatus.SENT, 0),
-            "signed": by_status.get(DocumentStatus.SIGNED, 0),
-            "void": by_status.get("void", 0),
+            "draft":     by_status.get("draft", 0),
+            "generated": by_status.get("generated", 0),
+            "sent":      by_status.get("sent", 0),
+            "signed":    by_status.get("signed", 0),
+            "void":      by_status.get("void", 0),
         },
-        "by_type": [{"type": t, "count": n} for t, n in by_type.most_common()],
+        "by_type": [{"type": t, "count": n} for t, n in by_type.most_common() if t],
         "avg_days_to_sign": round(sum(sign_days) / len(sign_days), 1) if sign_days else None,
         "signed_last_30d": signed_recent,
         "pending_signature": pending,
@@ -252,8 +256,7 @@ def void_contract(
     doc = _get_by_uid(session, uid)
     if doc.status == DocumentStatus.SIGNED:
         raise HTTPException(status_code=400, detail="Cannot void a signed contract")
-    # Use the string literal so we don't have to mutate the enum at runtime.
-    doc.status = "void"  # accepted by SQLModel since `status` is a str enum
+    doc.status = DocumentStatus.VOID
     doc.updated_at = datetime.utcnow()
     session.add(doc)
     session.add(ActivityLog(
