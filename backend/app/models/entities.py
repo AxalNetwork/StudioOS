@@ -444,3 +444,44 @@ class IntegrationLog(SQLModel, table=True):
     payload_json: Optional[str] = None
     response_summary: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+# ===========================================================================
+# Growth & Expansion Track — Task 1: Company Profile System
+# ===========================================================================
+# Free-form `stage` (text, not enum) so we can add new stages without
+# requiring a SQL migration on existing rows. Recommended values:
+# 'Seed', 'Series A', 'Series B', 'Series C', 'Growth', 'Profitable', 'Scale'
+# JSON-encoded text columns for `current_products`, `international_presence`,
+# and `expansion_goals` (matches the pattern used elsewhere in this file).
+
+class CompanyProfile(SQLModel, table=True):
+    __tablename__ = "company_profiles"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    company_name: str = Field(index=True)
+    stage: Optional[str] = Field(default=None, index=True)         # 'Seed' | 'Series A' | 'Profitable' | ...
+    revenue_range: Optional[str] = Field(default=None, index=True) # '$0-1M' | '$1-5M' | '$5-20M' | '$20M+'
+    employee_count: Optional[int] = None
+    current_products: Optional[str] = None        # JSON array or free text
+    international_presence: Optional[str] = None  # JSON array of country codes (e.g. ["US","DE","JP"])
+    expansion_goals: Optional[str] = None         # JSON {target_markets, products, partners}
+    logo_url: Optional[str] = None                # R2 key once uploads land in Step 6
+    website: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    description: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class UserCompanyLink(SQLModel, table=True):
+    __tablename__ = "user_company_links"
+    __table_args__ = (
+        UniqueConstraint("user_id", "company_id", name="uq_user_company"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    company_id: int = Field(foreign_key="company_profiles.id", index=True)
+    role_in_company: str = Field(default="Member", index=True)  # 'Founder' | 'Admin' | 'Advisor' | 'Member'
+    is_primary_admin: bool = Field(default=False, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
