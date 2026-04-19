@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Layers, Plus, Loader2, Sparkles, X, Zap, TrendingUp, CheckCircle2, RotateCcw, AlertTriangle, Activity, Target } from 'lucide-react';
+import { Layers, Plus, Loader2, Sparkles, X, Zap, TrendingUp, CheckCircle2, RotateCcw, AlertTriangle, Activity, Target, ThumbsUp, MessageSquare, Users as UsersIcon, EyeOff } from 'lucide-react';
 import { api } from '../lib/api';
 import SpinoutWizard from '../components/SpinoutWizard';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -68,10 +68,25 @@ export default function PipelinePage() {
   // change without the user pressing refresh. Skipped while a local move
   // is in flight to avoid clobbering the optimistic UI.
   const [liveTick, setLiveTick] = useState(0);
+  // Vote tallies pushed live via WebSocket — keyed by deal_id. Each entry
+  // mirrors the GET /pipeline/votes/{id} payload. The DealCard widget uses
+  // this as an override so it doesn't have to refetch on every vote event.
+  const [voteTallies, setVoteTallies] = useState({});
+
+  // Live updates: anyone authenticated can watch the board (voting works
+  // for everyone). The WS upgrade is gated only by having a session.
   useWebSocket('/api/pipeline/ws/overview', {
-    enabled: !!canEdit,
+    enabled: !!me,
     onMessage: (msg) => {
       if (!msg || !msg.type) return;
+      // Vote events carry a fresh tally; merge into local state without a
+      // network round-trip so every connected board reflects the change
+      // within ~50ms of the cast.
+      if (msg.type === 'vote_updated' && msg.deal_id) {
+        setVoteTallies(prev => ({ ...prev, [msg.deal_id]: msg.tally }));
+        setLiveTick(t => t + 1);
+        return;
+      }
       // All backend events that mutate the board state. Keep this list in
       // sync with notifyPipelineRoom call sites in routes/pipeline.ts so a
       // new event type is not silently swallowed (which would leave the
@@ -226,6 +241,7 @@ export default function PipelinePage() {
                         onDragEnd={onCardDragEnd}
                         isDragging={dragId === d.id}
                         isPending={!!pendingMoves[d.id]}
+                        liveTally={voteTallies[d.id]}
                       />
                     ))}
                   </div>
@@ -243,7 +259,7 @@ export default function PipelinePage() {
   );
 }
 
-function DealCard({ deal, onOpen, onSpinout, draggable, onDragStart, onDragEnd, isDragging, isPending }) {
+function DealCard({ deal, onOpen, onSpinout, draggable, onDragStart, onDragEnd, isDragging, isPending, liveTally }) {
   const tot = deal.task_counts.todo + deal.task_counts.in_progress + deal.task_counts.done;
   const pct = tot ? Math.round((deal.task_counts.done / tot) * 100) : 0;
   const traction = deal.latest_metrics?.traction_score;
@@ -288,11 +304,124 @@ function DealCard({ deal, onOpen, onSpinout, draggable, onDragStart, onDragEnd, 
           {gate.final_decision && <span className="ml-auto font-bold">→ {gate.final_decision}</span>}
         </div>
       )}
+      <DealVoteWidget dealId={deal.id} liveTally={liveTally} />
       {deal.pipeline_stage === 'spinout_ready' && onSpinout && (
         <button onClick={(e) => { e.stopPropagation(); onSpinout(); }} className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1.5 rounded flex items-center justify-center gap-1">
           🚀 Execute Spin-Out
         </button>
       )}
+    </div>
+  );
+}
+
+// Inline community-vote widget rendered on every DealCard. Self-fetches the
+// initial tally on mount, then accepts WebSocket-pushed `liveTally` overrides
+// from the parent so cross-user votes appear without a refetch.
+const VOTE_OPTIONS = [
+  { id: 'Strong_Buy', label: 'Strong Buy', short: 'SB', color: 'emerald' },
+  { id: 'Buy',        label: 'Buy',        short: 'B',  color: 'green'   },
+  { id: 'Hold',       label: 'Hold',       short: 'H',  color: 'amber'   },
+  { id: 'Pass',       label: 'Pass',       short: 'P',  color: 'rose'    },
+];
+
+function DealVoteWidget({ dealId, liveTally }) {
+  const [tally, setTally] = useState(null);
+  const [expanded, setExpanded] = useState(false);
+  const [comment, setComment] = useState('');
+  const [anonymous, setAnonymous] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    api.getVotes(dealId).then(t => { if (alive) setTally(t); }).catch(() => {});
+    return () => { alive = false; };
+  }, [dealId]);
+
+  // WS push from parent — always wins over our cached state.
+  useEffect(() => { if (liveTally) setTally(liveTally); }, [liveTally]);
+
+  const cast = async (vote_type) => {
+    setBusy(true); setErr('');
+    try {
+      const next = await api.castVote(dealId, { vote_type, comment: comment || null, anonymous });
+      setTally(next);
+      setComment('');
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  if (!tally) return null;
+  const my = tally.my_vote;
+  const stop = (e) => e.stopPropagation();
+
+  return (
+    <div className="mt-2 pt-2 border-t border-gray-100" onClick={stop}>
+      <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1.5">
+        <span className="flex items-center gap-1">
+          <UsersIcon size={10} /> {tally.total_voters} {tally.total_voters === 1 ? 'voter' : 'voters'}
+          {tally.total_weight > 0 && <span className="text-gray-400">· {tally.total_weight}w</span>}
+        </span>
+        <span className="font-semibold text-emerald-600">{tally.strong_buy_pct}% buy</span>
+      </div>
+      {tally.total_weight > 0 && (
+        <div className="flex h-1 rounded-full overflow-hidden bg-gray-100 mb-1.5">
+          {VOTE_OPTIONS.map(o => {
+            const w = tally.by_type[o.id]?.weight || 0;
+            const pct = (w / tally.total_weight) * 100;
+            if (pct === 0) return null;
+            const bg = { emerald: 'bg-emerald-500', green: 'bg-green-400', amber: 'bg-amber-400', rose: 'bg-rose-400' }[o.color];
+            return <div key={o.id} className={bg} style={{ width: `${pct}%` }} title={`${o.label}: ${w}w`} />;
+          })}
+        </div>
+      )}
+      {tally.threshold_reached && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded mb-1.5 flex items-center gap-1">
+          <CheckCircle2 size={10} /> Vote threshold reached
+        </div>
+      )}
+      <div className="grid grid-cols-4 gap-1">
+        {VOTE_OPTIONS.map(o => {
+          const isMine = my?.vote_type === o.id;
+          const ring = { emerald: 'ring-emerald-400', green: 'ring-green-400', amber: 'ring-amber-400', rose: 'ring-rose-400' }[o.color];
+          const bg = isMine
+            ? { emerald: 'bg-emerald-100 text-emerald-800', green: 'bg-green-100 text-green-800', amber: 'bg-amber-100 text-amber-800', rose: 'bg-rose-100 text-rose-800' }[o.color]
+            : 'bg-gray-50 text-gray-600 hover:bg-gray-100';
+          return (
+            <button
+              key={o.id}
+              onClick={(e) => { stop(e); cast(o.id); }}
+              disabled={busy}
+              title={o.label + (isMine ? ' (your vote)' : '')}
+              className={`text-[10px] font-semibold py-1 rounded transition-colors disabled:opacity-50 ${bg} ${isMine ? `ring-1 ${ring}` : ''}`}
+            >
+              {o.short}
+            </button>
+          );
+        })}
+      </div>
+      <button
+        onClick={(e) => { stop(e); setExpanded(v => !v); }}
+        className="mt-1 text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1"
+      >
+        <MessageSquare size={9} /> {expanded ? 'Hide' : 'Add comment / anonymous'}
+      </button>
+      {expanded && (
+        <div className="mt-1 space-y-1" onClick={stop}>
+          <input
+            type="text"
+            value={comment}
+            onChange={e => setComment(e.target.value)}
+            placeholder="Optional comment (sent with next vote)"
+            className="w-full text-[10px] bg-white border border-gray-300 rounded px-2 py-1 focus:border-violet-400 focus:outline-none"
+          />
+          <label className="flex items-center gap-1 text-[10px] text-gray-600 cursor-pointer">
+            <input type="checkbox" checked={anonymous} onChange={e => setAnonymous(e.target.checked)} />
+            <EyeOff size={9} /> Vote anonymously
+          </label>
+        </div>
+      )}
+      {err && <div className="mt-1 text-[10px] text-red-600">{err}</div>}
     </div>
   );
 }

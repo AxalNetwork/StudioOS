@@ -26,6 +26,7 @@ from backend.app.api.routes import (
     monitoring,
     partners,
     partnernet,
+    pipeline_votes,
     private_data,
     projects,
     scoring,
@@ -151,6 +152,7 @@ app.include_router(monitoring.router, prefix="/api")
 app.include_router(funds.router, prefix="/api")
 app.include_router(liquidity.router, prefix="/api")
 app.include_router(partnernet.router, prefix="/api")
+app.include_router(pipeline_votes.router, prefix="/api")
 app.include_router(integrations.router, prefix="/api")
 from backend.app.api.routes import email as email_routes  # noqa: E402
 app.include_router(email_routes.router, prefix="/api")

@@ -290,6 +290,13 @@ export const api = {
   capitalSend: (id) => request(`/legalcap/capital/call/${id}/send`, { method: 'PATCH', body: JSON.stringify({}) }),
   respondCapitalCall: (id, data) => request(`/legalcap/capital/call/${id}/respond`, { method: 'POST', body: JSON.stringify(data) }),
   lpPortal: () => request('/capital/lp-portal'),
+
+  // ───── Pipeline community voting ─────
+  getVotes: (dealId, includeComments = false) =>
+    request(`/pipeline/votes/${dealId}${includeComments ? '?include_comments=true' : ''}`),
+  castVote: (dealId, body) =>
+    request(`/pipeline/vote/${dealId}`, { method: 'POST', body: JSON.stringify(body) }),
+  voteLeaderboard: (limit = 10) => request(`/pipeline/votes/leaderboard?limit=${limit}`),
   capitalCalls: () => request('/legalcap/capital/calls').catch(() => []),
   diligenceReview: (data) => request('/legalcap/diligence/review', { method: 'POST', body: JSON.stringify(data) }),
   diligenceFor: (dealId) => request(`/legalcap/diligence/${dealId}`),

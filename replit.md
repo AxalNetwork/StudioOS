@@ -377,3 +377,13 @@ See `cloudflare-worker/SETUP.md` for complete deployment instructions.
 - **RBAC**: gated to admin / operator / service_provider / partner / founder roles via `_ensure_role`. Tenancy check via `_load_owned`.
 - **Frontend**: `/integrations` route (admin + partner) with marketplace cards, connection list, log viewer modal, and connect/update modal supporting API key, webhook secret, JSON config, and per-provider docs links. Sidebar entry added for admin and partner roles.
 - **Skipped intentionally** (per scope decision A): Python/JS SDKs and event-driven automation (no job queue exists in the FastAPI dev backend).
+
+## Pipeline Community Voting (Apr 19 2026)
+- **Model**: `PipelineVote` in `entities.py` — `(deal_id, user_id)` unique, role-weight stored at cast time, `vote_type ∈ {Strong_Buy, Buy, Hold, Pass}`, optional `comment`, `anonymous` flag.
+- **Routes** (`backend/app/api/routes/pipeline_votes.py`, mounted at `/api/pipeline`):
+  - `POST /vote/{deal_id}` (async) — upsert with `IntegrityError` retry; broadcasts a *public* tally (no `my_vote`) over WS; returns viewer-specific tally to caller.
+  - `GET /votes/leaderboard` — declared **before** `/votes/{deal_id}` so static path wins matching.
+  - `GET /votes/{deal_id}?include_comments=` — includes `my_vote` for the viewer + optional comment list (anonymized).
+  - `WS  /ws/overview?token=<jwt>` — JWT auth via query param (close 4401 on fail), shared `_ConnectionManager`.
+- **Weights**: admin=3, LP (matched by `User.email == LimitedPartner.email`)=3, partner=2, founder/other=1. Threshold = ≥5 voters AND ≥12 weight.
+- **Frontend**: `DealVoteWidget` inlined on every Pipeline `DealCard` — self-fetches initial tally, accepts WS-pushed `liveTally` overrides, 4-button row + weighted bar + "threshold reached" pill, optional comment / anonymous toggle. WS handler in `PipelinePage.jsx` extends `BOARD_EVENTS` handling to dispatch `vote_updated` into `voteTallies` state. API client: `api.getVotes`, `api.castVote`, `api.voteLeaderboard`.

@@ -1,4 +1,5 @@
 from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import UniqueConstraint
 from typing import Optional, List
 from datetime import datetime, date
 from enum import Enum
@@ -390,6 +391,28 @@ class Integration(SQLModel, table=True):
     status: str = Field(default="active", index=True)  # active | paused | error
     last_synced_at: Optional[datetime] = None
     last_error: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PipelineVote(SQLModel, table=True):
+    """Community vote on a pipeline deal.
+
+    One row per (deal_id, user_id). When a user re-votes we UPDATE in place
+    rather than insert. Weight is computed at write time from the user's
+    role + LP status so the GET tally endpoint is a single SUM query.
+    """
+    __tablename__ = "pipeline_votes"
+    __table_args__ = (
+        UniqueConstraint("deal_id", "user_id", name="uq_pipeline_vote_deal_user"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    deal_id: int = Field(foreign_key="deals.id", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    vote_type: str = Field(index=True)  # Strong_Buy | Buy | Hold | Pass
+    weight: int = Field(default=1)      # 3 = investor/admin, 2 = partner, 1 = founder
+    comment: Optional[str] = None
+    anonymous: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
