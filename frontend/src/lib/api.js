@@ -137,6 +137,49 @@ export const api = {
   adminGetProfile: (email) => request(`/profiling/admin/${encodeURIComponent(email)}`),
   adminVerifyProfile: (email, data) => request(`/profiling/admin/${encodeURIComponent(email)}/verify`, { method: 'POST', body: JSON.stringify(data) }),
 
+  // ----- eSignature -----
+  esignSend: (data) => request('/legal/esign/send', { method: 'POST', body: JSON.stringify(data) }),
+  esignList: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return request(`/legal/esign${q ? `?${q}` : ''}`);
+  },
+  esignDetail: (id) => request(`/legal/esign/${id}`),
+  esignDocumentUrl: (id) => `/api/legal/esign/${id}/document`,
+  // Public (token-gated, no auth header) — uses raw fetch since the sign page
+  // is reachable without a logged-in session.
+  esignFetchByToken: async (token) => {
+    const res = await fetch(`/api/legal/esign/sign/${encodeURIComponent(token)}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error || res.statusText || 'Failed to load signing envelope');
+    }
+    return await res.json();
+  },
+  esignSubmitSignature: async (token, payload) => {
+    const res = await fetch(`/api/legal/esign/sign/${encodeURIComponent(token)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error || res.statusText || 'Signing failed');
+    }
+    return await res.json();
+  },
+  esignReject: async (token, reason) => {
+    const res = await fetch(`/api/legal/esign/sign/${encodeURIComponent(token)}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error || res.statusText || 'Could not decline');
+    }
+    return await res.json();
+  },
+
   privateProfile: () => request('/private-data/profile'),
   privateSignals: () => request('/private-data/market/private-signals'),
   privatePortfolioMetrics: () => request('/private-data/portfolio/metrics'),

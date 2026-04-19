@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAdmin } from '../auth';
 import { notifyOnboardingChat } from '../services/realtime';
+import { createAndSendEnvelope } from './esign';
 
 const profiling = new Hono<{ Bindings: Env }>();
 
@@ -343,7 +344,44 @@ profiling.post('/admin/:email/verify', async (c) => {
     await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_reviewed_by_admin', ${`Your profile was ${newStatus} by an Axal admin${agreement_type ? ` — proposed Closing Binder: ${agreement_type}` : ''}`}, ${email}, ${targetUserId})`;
   }
   await sql.end();
-  return c.json({ updated: true, status: newStatus, agreement_type, admin_notes });
+
+  // When the admin verifies AND has assigned an agreement, fire the eSign
+  // pipeline: create an envelope, generate a magic link, email the recipient
+  // from deal@axal.vc. Idempotent — skip if a non-final envelope already
+  // exists for this (user, agreement_type) pair.
+  let esignResult: { envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean } | null = null;
+  if (newStatus === 'verified' && agreement_type) {
+    try {
+      const existing: any = await c.env.DB.prepare(
+        `SELECT id FROM esign_envelopes
+          WHERE document_type = ?
+            AND (user_id = ? OR EXISTS (SELECT 1 FROM esign_recipients WHERE envelope_id = esign_envelopes.id AND LOWER(recipient_email) = ?))
+            AND status IN ('sent','partially_signed')
+          LIMIT 1`
+      ).bind(agreement_type, targetUserId, email.toLowerCase()).first().catch(() => null);
+      if (!existing?.id) {
+        const targetRow: any = targetUserId
+          ? await c.env.DB.prepare(`SELECT id, name, email FROM users WHERE id = ?`).bind(targetUserId).first().catch(() => null)
+          : null;
+        const recipientName = targetRow?.name || rows[0]?.full_name || rows[0]?.name || '';
+        esignResult = await createAndSendEnvelope(c.env, {
+          adminUserId: adminUser.id,
+          adminName: adminUser.name || adminUser.email,
+          recipientUserId: targetUserId,
+          recipientEmail: email,
+          recipientName,
+          documentType: agreement_type,
+          appUrl: c.env.APP_URL || 'https://axal.vc',
+        });
+      } else {
+        esignResult = { envelope_id: existing.id, envelope_uuid: '', signing_url: '', email_sent: false };
+      }
+    } catch (e: any) {
+      console.error('[profiling/verify] eSign envelope creation failed', e?.message || e);
+    }
+  }
+
+  return c.json({ updated: true, status: newStatus, agreement_type, admin_notes, esign: esignResult });
 });
 
 export default profiling;

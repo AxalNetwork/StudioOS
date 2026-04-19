@@ -32,14 +32,15 @@ function stripHeaderInjection(s: string): string {
   return (s || '').replace(/[\r\n]+/g, ' ').trim();
 }
 
-function buildRawEmail(to: string, subject: string, html: string, text: string): string {
+function buildRawEmail(to: string, subject: string, html: string, text: string, from?: string): string {
   const boundary = `boundary_${crypto.randomUUID().replace(/-/g, '')}`;
   const safeTo = stripHeaderInjection(to);
   const safeSubject = stripHeaderInjection(subject);
+  const safeFrom = stripHeaderInjection(from || 'Axal VC <noreply@axal.vc>');
   const subjectEncoded = `=?UTF-8?B?${btoa(unescape(encodeURIComponent(safeSubject)))}?=`;
   const lines = [
     `To: ${safeTo}`,
-    `From: Axal VC <noreply@axal.vc>`,
+    `From: ${safeFrom}`,
     `Subject: ${subjectEncoded}`,
     `MIME-Version: 1.0`,
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
@@ -162,6 +163,95 @@ ${noteBlock}
 
 function escapeHtml(s: string): string {
   return (s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+}
+
+// ---------------------------------------------------------------------------
+// Agreement / Closing Binder email — sent from `deal@axal.vc` whenever an
+// admin assigns an agreement to a partner via the ProfileReviewModal.
+// Includes a one-click magic link to the eSignature page.
+// Note: requires the configured Gmail account to have `deal@axal.vc` set up
+// as a Send-As alias. Without that, Gmail rewrites the From header to the
+// authenticated user's primary address (the email still sends).
+// ---------------------------------------------------------------------------
+export async function sendAgreementAssignedEmail(
+  env: Env,
+  to: string,
+  recipientName: string,
+  agreementLabel: string,
+  signLink: string,
+  adminName: string,
+): Promise<boolean> {
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+    console.error('[EMAIL] Gmail credentials missing — agreement email not sent');
+    return false;
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const greet = recipientName ? `Hi ${recipientName.split(' ')[0]},` : 'Hi,';
+    const safeAgreement = escapeHtml(agreementLabel);
+    const safeAdmin = escapeHtml(adminName);
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;"><tr><td align="center">
+<table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
+<tr><td style="padding:32px 32px 20px;border-bottom:1px solid #f3f4f6;">
+  <table cellpadding="0" cellspacing="0"><tr>
+    <td style="vertical-align:middle;padding-right:10px;">
+      <img src="https://axal.vc/axal-mark.png" alt="Axal VC" width="36" height="36" style="display:block;border:0;border-radius:8px;" />
+    </td>
+    <td style="vertical-align:middle;">
+      <span style="font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.01em;">Axal Deals</span>
+      <div style="font-size:11px;color:#9ca3af;margin-top:2px;">deal@axal.vc</div>
+    </td>
+  </tr></table>
+</td></tr>
+<tr><td style="padding:28px 32px 0;">
+  <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">Your Closing Binder is ready</h1>
+  <p style="font-size:14px;color:#6b7280;margin:0 0 18px;line-height:1.6;">${greet}</p>
+  <p style="font-size:14px;color:#374151;margin:0 0 18px;line-height:1.65;">
+    ${safeAdmin} has reviewed and verified your partner profile. Your assigned agreement is ready for electronic signature:
+  </p>
+  <div style="background:#faf5ff;border:1px solid #e9d5ff;border-left:3px solid #7c3aed;border-radius:10px;padding:16px 18px;margin:0 0 24px;">
+    <div style="font-size:12px;color:#7c3aed;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">Closing Binder</div>
+    <div style="font-size:16px;color:#111827;font-weight:600;">${safeAgreement}</div>
+  </div>
+</td></tr>
+<tr><td style="padding:0 32px;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:0 0 24px;">
+    <a href="${signLink}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:16px 32px;border-radius:14px;">Review &amp; Sign Document</a>
+  </td></tr></table>
+</td></tr>
+<tr><td style="padding:0 32px 32px;">
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:16px 18px;">
+    <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">Or paste this link into your browser:</p>
+    <a href="${signLink}" style="color:#2563eb;word-break:break-all;font-size:12px;">${signLink}</a>
+  </div>
+  <p style="font-size:11px;color:#9ca3af;margin:20px 0 0;line-height:1.6;">
+    This link is unique to you and expires in 7 days. Every access is logged for compliance.
+    Reply to this email if anything looks incorrect — we'll re-issue.
+  </p>
+</td></tr>
+</table></td></tr></table></body></html>`;
+    const text = `${greet}\n\n${adminName} has verified your partner profile and assigned your Closing Binder:\n\n  ${agreementLabel}\n\nReview and sign here: ${signLink}\n\nThis link expires in 7 days. Every access is logged.\n\n— Axal Deals`;
+    const subject = `Your Closing Binder is ready: ${agreementLabel}`;
+    const rawEmail = buildRawEmail(to, subject, html, text, 'Axal Deals <deal@axal.vc>');
+    const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+    if (!res.ok) {
+      const err: any = await res.json().catch(() => ({}));
+      console.error('[EMAIL] Agreement email send failed:', err);
+      return false;
+    }
+    return true;
+  } catch (e: any) {
+    console.error(`[EMAIL] Agreement email failed for ${to}: ${e?.message || 'Unknown error'}`);
+    return false;
+  }
 }
 
 export async function sendReferralInviteEmail(

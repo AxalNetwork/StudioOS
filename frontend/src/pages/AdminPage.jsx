@@ -762,12 +762,22 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
   let extracted = {};
   try { extracted = JSON.parse(profile.extracted_data || '{}'); } catch {}
 
+  const [esignFlash, setEsignFlash] = useState(null);
   const submit = async (status) => {
     setSaving(true);
     setError('');
     try {
-      await api.adminVerifyProfile(profile.email, { agreement_type: agreement, admin_notes: notes, status });
-      onSaved();
+      const res = await api.adminVerifyProfile(profile.email, { agreement_type: agreement, admin_notes: notes, status });
+      if (res?.esign?.envelope_id) {
+        setEsignFlash({
+          envelopeId: res.esign.envelope_id,
+          emailSent: !!res.esign.email_sent,
+          signingUrl: res.esign.signing_url,
+        });
+        setTimeout(() => onSaved(), 2200);
+      } else {
+        onSaved();
+      }
     } catch (e) { setError(e.message); }
     setSaving(false);
   };
@@ -934,6 +944,23 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
                 className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none resize-none" />
             </div>
             {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
+            {esignFlash && (
+              <div className="text-xs bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5 space-y-1">
+                <div className="font-semibold text-emerald-800 flex items-center gap-1.5">
+                  <Check size={12} /> eSignature envelope #{esignFlash.envelopeId} created
+                </div>
+                <div className="text-emerald-700">
+                  {esignFlash.emailSent
+                    ? <>Email sent from <span className="font-mono">deal@axal.vc</span> to <span className="font-mono">{profile.email}</span>.</>
+                    : <>Envelope created — email delivery did not confirm. Share this link manually:</>}
+                </div>
+                {!esignFlash.emailSent && esignFlash.signingUrl && (
+                  <a href={esignFlash.signingUrl} target="_blank" rel="noreferrer" className="text-violet-700 underline break-all">
+                    {esignFlash.signingUrl}
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

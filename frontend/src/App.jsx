@@ -27,6 +27,7 @@ import LandingPage from './pages/LandingPage';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
+import ESignPage from './pages/ESignPage';
 import KYCPage from './pages/KYCPage';
 import ReferEarnPage from './pages/ReferEarnPage';
 import IntegrationsPage from './pages/IntegrationsPage';
@@ -544,6 +545,7 @@ export default function App() {
       <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/esign/:token" element={<ESignPage />} />
 
       <Route path="/dashboard" element={guard(['admin', 'founder', 'partner'], <Dashboard />)} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
