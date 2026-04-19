@@ -417,6 +417,22 @@ class PipelineVote(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class OnboardingMessage(SQLModel, table=True):
+    """Persisted transcript of the sign-up chatbot conversation.
+
+    The live chat lives in a Cloudflare Durable Object; the worker mirrors
+    each turn here so the FastAPI admin console can render it on the user
+    profile modal even when the DO is offline.
+    """
+    __tablename__ = "onboarding_messages"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    role: str = Field(index=True)              # "user" | "assistant" | "system"
+    content: str
+    extracted_persona: Optional[str] = None    # AI-extracted role guess at this turn
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
 class IntegrationLog(SQLModel, table=True):
     __tablename__ = "integration_logs"
     id: Optional[int] = Field(default=None, primary_key=True)

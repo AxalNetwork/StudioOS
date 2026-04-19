@@ -4,7 +4,9 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from backend.app.database import get_session
-from backend.app.models.entities import User, UserRole, ActivityLog
+from backend.app.models.entities import (
+    User, UserRole, ActivityLog, Document, Founder, Partner, OnboardingMessage,
+)
 from backend.app.api.routes.auth import get_current_user, JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRY_HOURS
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -133,6 +135,33 @@ class NotesIn(BaseModel):
     admin_notes: str = ""
 
 
+class OnboardingMessageIn(BaseModel):
+    role: str           # "user" | "assistant" | "system"
+    content: str
+    extracted_persona: str | None = None
+
+
+# Action prefixes that we surface as "Registration timeline" events. Anything
+# matching is shown chronologically on the user profile modal so admins can
+# trace a user's onboarding from sign-up through verification.
+_REGISTRATION_ACTIONS = (
+    "user_registered",
+    "user_signup",
+    "email_verified",
+    "kyc_submitted",
+    "kyc_approved",
+    "kyc_rejected",
+    "totp_enabled",
+    "agreement_assigned",
+    "agreement_signed",
+    "onboarding_completed",
+)
+
+
+def _registration_label(action: str) -> str:
+    return action.replace("_", " ").title() if action else "Event"
+
+
 @router.get("/users/{user_id}/profile")
 def user_profile(
     user_id: int,
@@ -202,6 +231,94 @@ def user_profile(
     if target.email_verified:
         kyc["status"] = "email_verified"
 
+    # Linked Founder / Partner enrichment so the Profile tab can show a real
+    # bio, LinkedIn, etc., instead of a wall of dashes.
+    founder_info: dict | None = None
+    if target.founder_id:
+        f = session.get(Founder, target.founder_id)
+        if f:
+            founder_info = {
+                "id": f.id,
+                "name": f.name,
+                "linkedin_url": getattr(f, "linkedin_url", None),
+                "domain_expertise": getattr(f, "domain_expertise", None),
+                "experience_years": getattr(f, "experience_years", None),
+                "bio": getattr(f, "bio", None),
+            }
+    partner_info: dict | None = None
+    if target.partner_id:
+        p = session.get(Partner, target.partner_id)
+        if p:
+            partner_info = {
+                "id": p.id,
+                "name": p.name,
+                "company": getattr(p, "company", None),
+                "specialization": getattr(p, "specialization", None),
+                "status": getattr(p, "status", None),
+            }
+
+    # Agreements signed by this user (Document.signed_by stores the email).
+    # We surface the modal expects: document_title, document_type, status,
+    # created_at, signed_at, role_in_envelope.
+    agreements: list[dict] = []
+    try:
+        docs = session.exec(
+            select(Document)
+            .where(Document.signed_by == target.email)
+            .order_by(_desc(Document.created_at))
+            .limit(50)
+        ).all()
+        for d in docs:
+            agreements.append({
+                "envelope_id": d.uid,
+                "recipient_id": None,
+                "document_title": d.title,
+                "document_type": str(d.doc_type) if d.doc_type else None,
+                "envelope_status": str(d.status) if d.status else None,
+                "recipient_status": "signed" if d.signed_at else (str(d.status) if d.status else None),
+                "recipient_email": target.email,
+                "role_in_envelope": "recipient",
+                "created_at": d.created_at.isoformat() if d.created_at else None,
+                "signed_at": d.signed_at.isoformat() if d.signed_at else None,
+                "recipient_signed_at": d.signed_at.isoformat() if d.signed_at else None,
+            })
+    except Exception:  # noqa: BLE001 — agreements are best-effort
+        pass
+
+    # Registration timeline — filter ActivityLog rows down to the events that
+    # describe a user's onboarding journey. Ordered chronologically (oldest
+    # first) because the modal renders top-to-bottom as a stepper.
+    timeline: list[dict] = []
+    for r in reversed(rows):  # rows is desc; reverse to ascending
+        action = (r.action or "").lower()
+        if any(action.startswith(prefix) for prefix in _REGISTRATION_ACTIONS):
+            timeline.append({
+                "kind": action,
+                "label": _registration_label(r.action),
+                "detail": getattr(r, "details", None),
+                "ts": r.created_at.isoformat() if r.created_at else None,
+            })
+
+    # Onboarding chat transcript persisted from the Cloudflare DO mirror.
+    onboarding: list[dict] = []
+    try:
+        msgs = session.exec(
+            select(OnboardingMessage)
+            .where(OnboardingMessage.user_id == target.id)
+            .order_by(OnboardingMessage.created_at)
+        ).all()
+        onboarding = [
+            {
+                "role": m.role,
+                "content": m.content,
+                "extracted_persona": m.extracted_persona,
+                "ts": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in msgs
+        ]
+    except Exception:  # noqa: BLE001 — table may not exist in pre-migration DBs
+        pass
+
     return {
         "ok": True,
         "user": {
@@ -222,10 +339,58 @@ def user_profile(
         "activity": activity,
         "tickets": tickets,
         "integrations": integrations,
+        "agreements": agreements,
+        "timeline": timeline,
+        "onboarding": onboarding,
+        "founder": founder_info,
+        "partner": partner_info,
         "stats": {
             "activity_count": len(activity),
             "ticket_count": len(tickets),
             "integration_count": len(integrations),
+            "agreement_count": len(agreements),
+            "onboarding_count": len(onboarding),
+        },
+    }
+
+
+@router.post("/users/{user_id}/onboarding-messages")
+def append_onboarding_message(
+    user_id: int,
+    body: OnboardingMessageIn,
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin),
+):
+    """Append a single chat turn to a user's persisted onboarding transcript.
+
+    Intended to be called by the Cloudflare Worker (using an admin token) so
+    the FastAPI admin console has a server-side copy of the conversation
+    once the Durable Object flushes a turn.
+    """
+    target = session.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if body.role not in ("user", "assistant", "system"):
+        raise HTTPException(status_code=400, detail="role must be user|assistant|system")
+    if not (body.content or "").strip():
+        raise HTTPException(status_code=400, detail="content is required")
+    msg = OnboardingMessage(
+        user_id=target.id,
+        role=body.role,
+        content=body.content,
+        extracted_persona=body.extracted_persona,
+    )
+    session.add(msg)
+    session.commit()
+    session.refresh(msg)
+    return {
+        "ok": True,
+        "message": {
+            "id": msg.id,
+            "role": msg.role,
+            "content": msg.content,
+            "extracted_persona": msg.extracted_persona,
+            "ts": msg.created_at.isoformat() if msg.created_at else None,
         },
     }
 

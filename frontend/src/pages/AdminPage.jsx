@@ -575,12 +575,13 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
         )}
 
         <div className="px-6 pt-3 border-b border-gray-200 flex gap-1 overflow-x-auto">
-          {['profile', 'registration', 'kyc', 'agreements', 'activity', 'notes'].map(t => (
+          {['profile', 'registration', 'onboarding', 'kyc', 'agreements', 'activity', 'notes'].map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px capitalize whitespace-nowrap transition-colors ${tab === t ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
               {t === 'kyc' ? 'KYC & Verification' :
                t === 'registration' ? `Registration${(data?.timeline?.length ?? 0) ? ` · ${data.timeline.length}` : ''}` :
                t === 'agreements' ? `Agreements${(data?.agreements?.length ?? 0) ? ` · ${data.agreements.length}` : ''}` :
+               t === 'onboarding' ? `Onboarding${(data?.onboarding?.length ?? 0) ? ` · ${data.onboarding.length}` : ''}` :
                t === 'activity' ? `Activity${(data?.activity?.length ?? 0) ? ` · ${data.activity.length}` : ''}` :
                t}
             </button>
@@ -601,11 +602,47 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
               <Field label="Partner ID" value={u.partner_id ?? '—'} />
               <Field label="Joined" value={u.created_at ? new Date(u.created_at).toLocaleString() : '—'} />
               <Field label="Last active" value={u.last_active_at ? new Date(u.last_active_at).toLocaleString() : '—'} />
-              <div className="col-span-2 grid grid-cols-3 gap-3 mt-2">
+              <div className="col-span-2 grid grid-cols-4 gap-3 mt-2">
                 <Stat label="Activity events" value={stats.activity_count ?? 0} />
                 <Stat label="Tickets" value={stats.ticket_count ?? 0} />
                 <Stat label="Integrations" value={stats.integration_count ?? 0} />
+                <Stat label="Agreements" value={stats.agreement_count ?? 0} />
               </div>
+              {(data.founder || data.partner) && (
+                <div className="col-span-2 mt-3 bg-violet-50 border border-violet-200 rounded-lg p-3">
+                  <div className="text-xs font-semibold text-violet-700 mb-2">
+                    {data.founder ? 'Founder profile' : 'Partner profile'}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-800">
+                    {data.founder && (
+                      <>
+                        {data.founder.domain_expertise && <Field label="Expertise" value={data.founder.domain_expertise} />}
+                        {data.founder.experience_years != null && <Field label="Experience" value={`${data.founder.experience_years} yrs`} />}
+                        {data.founder.linkedin_url && (
+                          <div className="col-span-2">
+                            <div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">LinkedIn</div>
+                            <a href={data.founder.linkedin_url} target="_blank" rel="noreferrer"
+                              className="text-violet-700 hover:underline break-all">{data.founder.linkedin_url}</a>
+                          </div>
+                        )}
+                        {data.founder.bio && (
+                          <div className="col-span-2">
+                            <div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Bio</div>
+                            <div className="text-gray-800 whitespace-pre-wrap">{data.founder.bio}</div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {data.partner && (
+                      <>
+                        {data.partner.company && <Field label="Company" value={data.partner.company} />}
+                        {data.partner.specialization && <Field label="Specialization" value={data.partner.specialization} />}
+                        {data.partner.status && <Field label="Status" value={data.partner.status} />}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
               {integrations.length > 0 && (
                 <div className="col-span-2 mt-3">
                   <div className="text-xs font-semibold text-gray-700 mb-2">Connected integrations</div>
@@ -671,6 +708,46 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {data && tab === 'onboarding' && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <MessageSquare size={14} className="text-gray-600" />
+                <h4 className="text-sm font-semibold text-gray-900">Onboarding Conversation</h4>
+                <span className="ml-auto text-[11px] text-gray-500">
+                  {(data.onboarding || []).length} message{(data.onboarding || []).length === 1 ? '' : 's'}
+                </span>
+              </div>
+              {(data.onboarding || []).length === 0 ? (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-xs text-gray-500">
+                  No transcript stored for this user yet. Conversations from the sign-up bot
+                  sync here once the user completes their first turn.
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-[60vh] overflow-y-auto space-y-2">
+                  {(data.onboarding || []).map((m, i) => (
+                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] text-xs px-3 py-2 rounded-lg whitespace-pre-wrap ${
+                        m.role === 'user'
+                          ? 'bg-violet-600 text-white'
+                          : m.role === 'system'
+                          ? 'bg-amber-50 border border-amber-200 text-amber-800'
+                          : 'bg-white border border-gray-200 text-gray-800'
+                      }`}>
+                        <div>{m.content}</div>
+                        {m.ts && (
+                          <div className={`mt-1 text-[10px] ${m.role === 'user' ? 'text-violet-100' : 'text-gray-400'}`}>
+                            {new Date(m.ts).toLocaleString()}
+                            {m.extracted_persona ? ` · persona: ${m.extracted_persona}` : ''}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
