@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, Users, Store, Layers, Plus, Loader2, Sparkles, X, Save, Search, Send, Brain, Star, Briefcase, ChevronDown } from 'lucide-react';
+import { TrendingUp, Users, Store, Layers, Plus, Loader2, Sparkles, X, Save, Search, Send, Brain, Star, Briefcase, ChevronDown, Building2 } from 'lucide-react';
 import { api } from '../lib/api';
+import CompanyProfilePanel from '../components/CompanyProfilePanel';
 
 export default function NetworkEffectsPage() {
   const [tab, setTab] = useState('compounding');
@@ -32,6 +33,7 @@ export default function NetworkEffectsPage() {
           { id: 'compounding', label: 'Compounding Referrals', icon: Layers },
           { id: 'syndicates', label: 'Syndicates', icon: Users },
           { id: 'marketplace', label: 'Marketplace', icon: Store },
+          { id: 'companies', label: 'Companies', icon: Building2 },
         ].map(t => {
           const Icon = t.icon;
           return (
@@ -48,6 +50,7 @@ export default function NetworkEffectsPage() {
       {tab === 'compounding' && <Compounding />}
       {tab === 'syndicates' && <Syndicates />}
       {tab === 'marketplace' && <Marketplace />}
+      {tab === 'companies' && <CompanyProfilePanel />}
     </div>
   );
 }

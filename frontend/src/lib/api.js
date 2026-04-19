@@ -389,4 +389,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ contacts, custom_message }),
     }),
+
+  // Company Profiles (Growth & Expansion Track — Task 1)
+  companyMe: () => request('/company/me'),
+  getCompany: (uid) => request(`/company/${uid}`),
+  listCompanies: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/companies${qs ? `?${qs}` : ''}`);
+  },
+  createCompany: (data) => request('/company/create', { method: 'POST', body: JSON.stringify(data) }),
+  updateCompany: (uid, data) => request(`/company/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  addCompanyMember: (uid, data) => request(`/company/${uid}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  removeCompanyMember: (uid, userId) => request(`/company/${uid}/members/${userId}`, { method: 'DELETE' }),
 };
