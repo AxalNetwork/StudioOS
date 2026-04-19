@@ -387,3 +387,33 @@ See `cloudflare-worker/SETUP.md` for complete deployment instructions.
   - `WS  /ws/overview?token=<jwt>` — JWT auth via query param (close 4401 on fail), shared `_ConnectionManager`.
 - **Weights**: admin=3, LP (matched by `User.email == LimitedPartner.email`)=3, partner=2, founder/other=1. Threshold = ≥5 voters AND ≥12 weight.
 - **Frontend**: `DealVoteWidget` inlined on every Pipeline `DealCard` — self-fetches initial tally, accepts WS-pushed `liveTally` overrides, 4-button row + weighted bar + "threshold reached" pill, optional comment / anonymous toggle. WS handler in `PipelinePage.jsx` extends `BOARD_EVENTS` handling to dispatch `vote_updated` into `voteTallies` state. API client: `api.getVotes`, `api.castVote`, `api.voteLeaderboard`.
+
+## Cloudflare Zero Trust perimeter (Apr 19 2026 — Security Item #6)
+- **Module**: `backend/app/services/cf_access.py` — verifies the
+  `Cf-Access-Jwt-Assertion` header that Cloudflare Access injects on every
+  request. RS256 verification against the team JWKS, with `aud`/`iss`/`exp`
+  required claims and an optional app-side email allowlist.
+- **Layered, never replacing app auth**: applied via `dependencies=` on the
+  router include, so it runs *before* `require_admin`. Backoffice routers
+  gated: `admin`, `admin_contracts`, `infra`, `monitoring`. The non-backoffice
+  `private_data` and `company` routers are NOT gated (they have user-scoped
+  routes that real founders need to hit).
+- **Opt-in**: when `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` are unset
+  (local dev) the dependency is a no-op and logs a single warning. When set,
+  any direct hit to the origin without a CF Access JWT returns
+  `403 "Cloudflare Access required for this route"`, even if the caller has
+  a valid app JWT.
+- **Setup checklist for prod / staging**:
+  1. In the Cloudflare dashboard → Zero Trust → Access → Applications, add a
+     Self-hosted application for `https://<your-domain>/api/admin/*`,
+     `/api/monitoring/*`, `/api/infra/*` (and `/api/admin/contracts/*`).
+  2. Attach an Access policy: Email allowlist or SSO group (Google
+     Workspace / Okta / Entra), require MFA, optional WARP / device posture.
+  3. Copy the Application AUD tag → set env `CF_ACCESS_AUD`.
+  4. Set `CF_ACCESS_TEAM_DOMAIN=<team>.cloudflareaccess.com`.
+  5. (Optional) `CF_ACCESS_ALLOWED_EMAILS=alice@axal.vc,bob@axal.vc` for an
+     extra app-side allowlist independent of the CF policy.
+  6. Lock down the origin so only Cloudflare can reach it (Cloudflare Tunnel
+     OR origin firewall allowing only CF IPs) — otherwise an attacker can
+     bypass the perimeter by hitting the origin directly.
+- Same module + env approach should be used for staging (separate AUD).

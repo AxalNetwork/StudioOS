@@ -154,13 +154,24 @@ app.include_router(market_intel.router, prefix="/api")
 app.include_router(advisory.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
-app.include_router(admin.router, prefix="/api")
+# --- Backoffice routers (Security Item #6: Cloudflare Zero Trust perimeter)
+# Every router below is admin/internal and gets an extra perimeter check via
+# `require_cf_access`. When CF_ACCESS_TEAM_DOMAIN / CF_ACCESS_AUD are unset
+# (e.g. local dev) the dependency is a no-op, so nothing breaks. In prod,
+# the Cloudflare Access policy in front of these routes adds SSO + MFA +
+# device-posture enforcement *before* the request even reaches our app
+# auth (`require_admin`).
+from backend.app.services.cf_access import require_cf_access
+from fastapi import Depends as _Depends  # noqa: E402
+_BACKOFFICE_DEPS = [_Depends(require_cf_access)]
+
+app.include_router(admin.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
 app.include_router(private_data.router, prefix="/api")
-app.include_router(monitoring.router, prefix="/api")
+app.include_router(monitoring.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
 from backend.app.api.routes import infra as _infra
-app.include_router(_infra.router, prefix="/api")
+app.include_router(_infra.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
 from backend.app.api.routes import admin_contracts as _admin_contracts
-app.include_router(_admin_contracts.router, prefix="/api")
+app.include_router(_admin_contracts.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
 from backend.app.api.routes import company as _company
 app.include_router(_company.router, prefix="/api")
 from backend.app.api.routes import files as _files
