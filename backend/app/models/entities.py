@@ -478,6 +478,64 @@ class CompanyProfile(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+# ===========================================================================
+# Growth & Expansion Track — Task 4: International Expansion Toolkit
+# ===========================================================================
+# Country-keyed reference data (ISO-3166 alpha-2 codes, e.g. "DE", "BR").
+# `market_insights` is a JSON-encoded text blob: { quick_facts, growth_rate,
+# key_regulations, opportunities } — kept free-text to avoid migrations.
+# `file_key` on jurisdiction_templates is a future R2 object key.
+
+class Country(SQLModel, table=True):
+    __tablename__ = "countries"
+    code: str = Field(primary_key=True, max_length=2)        # ISO-3166 alpha-2
+    name: str = Field(index=True)
+    region: Optional[str] = Field(default=None, index=True)  # e.g. "EMEA", "APAC", "LATAM"
+    currency: Optional[str] = Field(default=None, max_length=3)  # ISO-4217
+    market_insights: Optional[str] = None  # JSON: quick_facts, growth_rate, regulations, opportunities
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CountryComplianceItem(SQLModel, table=True):
+    __tablename__ = "country_compliance_checklists"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    country_code: str = Field(foreign_key="countries.code", index=True, max_length=2)
+    category: str = Field(index=True)   # 'legal' | 'tax' | 'employment' | 'data_protection' | ...
+    item_text: str
+    is_required: bool = Field(default=True)
+    sort_order: int = Field(default=0)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class LocalPartner(SQLModel, table=True):
+    __tablename__ = "local_partners"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    country_code: str = Field(foreign_key="countries.code", index=True, max_length=2)
+    partner_name: str = Field(index=True)
+    partner_type: str = Field(index=True)  # 'distributor' | 'reseller' | 'legal_firm' | 'tech_partner' | ...
+    expertise: Optional[str] = None
+    contact_info: Optional[str] = None     # JSON: { email, phone, website, linkedin }
+    notes: Optional[str] = None
+    status: str = Field(default="active", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class JurisdictionTemplate(SQLModel, table=True):
+    __tablename__ = "jurisdiction_templates"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    country_code: str = Field(foreign_key="countries.code", index=True, max_length=2)
+    template_type: str = Field(index=True)  # 'tax_setup' | 'company_formation' | 'employment_contract' | ...
+    title: str
+    description: Optional[str] = None
+    file_key: Optional[str] = None          # R2 object key (uploaded later)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class GrowthSprint(SQLModel, table=True):
     """Growth-track sibling to the spin-out flow.
 
