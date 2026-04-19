@@ -14,6 +14,7 @@
  * still lives in the `chat_history` JSON column on the founder profile.
  */
 import type { Env } from '../types';
+import { bumpActiveWS } from '../services/realtime';
 
 const HEARTBEAT_MS = 25_000;
 const RECENT_LIMIT = 50;
@@ -72,6 +73,7 @@ export class OnboardingChat implements DurableObject {
       const client = pair[0];
       const server = pair[1];
       this.state.acceptWebSocket(server);
+      await bumpActiveWS(this._env, +1);
 
       const userId = request.headers.get('x-auth-user-id') || 'unknown';
       const role = request.headers.get('x-auth-role') || 'unknown';
@@ -120,10 +122,12 @@ export class OnboardingChat implements DurableObject {
 
   async webSocketClose(ws: WebSocket, code: number) {
     try { ws.close(code, 'closed'); } catch {}
+    await bumpActiveWS(this._env, -1);
   }
 
   async webSocketError(ws: WebSocket) {
     try { ws.close(1011, 'error'); } catch {}
+    await bumpActiveWS(this._env, -1);
   }
 
   async alarm() {

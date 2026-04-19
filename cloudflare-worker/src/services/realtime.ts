@@ -49,14 +49,45 @@ export async function notifyOnboardingChat(
 }
 
 /** Used by /api/infra/queue to surface live connection counts. */
-export async function getRealtimeStats(env: Env): Promise<{ pipeline_rooms: number; onboarding_rooms: number; note: string }> {
+export async function getRealtimeStats(env: Env): Promise<{ pipeline_rooms: number; onboarding_rooms: number; active_ws: number; note: string }> {
   // CF doesn't expose a "list all DO instances" API. We can't enumerate
   // active rooms cheaply — return a stub plus the binding-presence flags.
   return {
     pipeline_rooms: env.PIPELINE_ROOM ? -1 : 0,
     onboarding_rooms: env.ONBOARDING_CHAT ? -1 : 0,
+    active_ws: await getActiveWS(env),
     note: env.PIPELINE_ROOM && env.ONBOARDING_CHAT
-      ? 'DOs bound. -1 means "not enumerable" — query a specific room via /api/realtime/room/:kind/:id/count for an exact count.'
-      : 'DOs not bound. Real-time fan-out is disabled.',
+      ? 'DOs bound. -1 means "not enumerable" — query a specific room via /api/realtime/room/:kind/:id/count for an exact count. active_ws is an aggregate counter maintained by DOes on connect/disconnect (approximate; KV-backed, not transactional).'
+      : 'DOes not bound. Real-time fan-out is disabled.',
   };
+}
+
+// ---------------------------------------------------------------------------
+// Aggregate "currently-open WebSocket" counter, maintained by DOes via
+// bumpActiveWS(env, +1) on connect and bumpActiveWS(env, -1) on close/error.
+// KV is non-atomic, so the value is approximate — we clamp at zero on
+// underflow to bound drift. The counter has no TTL (it's a live gauge), but
+// will naturally reset if the KV namespace is rotated or all keys expire
+// during inactivity.
+// ---------------------------------------------------------------------------
+const ACTIVE_WS_KEY = 'realtime:ws:active';
+
+export async function bumpActiveWS(env: Env, delta: number): Promise<void> {
+  if (!env.RATE_LIMITS) return;
+  try {
+    const cur = parseInt((await env.RATE_LIMITS.get(ACTIVE_WS_KEY)) || '0', 10) || 0;
+    const next = Math.max(0, cur + delta);
+    await env.RATE_LIMITS.put(ACTIVE_WS_KEY, String(next));
+  } catch {
+    // Counter drift is acceptable; never block a connect/close on KV errors.
+  }
+}
+
+export async function getActiveWS(env: Env): Promise<number> {
+  if (!env.RATE_LIMITS) return 0;
+  try {
+    return parseInt((await env.RATE_LIMITS.get(ACTIVE_WS_KEY)) || '0', 10) || 0;
+  } catch {
+    return 0;
+  }
 }

@@ -11,6 +11,7 @@
  * that you expect to survive eviction; persist via state.storage instead.
  */
 import type { Env } from '../types';
+import { bumpActiveWS } from '../services/realtime';
 
 const HEARTBEAT_MS = 25_000;
 const HEARTBEAT_ALARM_KEY = 'pipeline_room_alarm';
@@ -62,6 +63,7 @@ export class PipelineRoom implements DurableObject {
       // Hibernatable accept — the runtime will evict the JS instance
       // between events and re-deliver via webSocketMessage/Close.
       this.state.acceptWebSocket(server);
+      await bumpActiveWS(this._env, +1);
 
       // Tag so we can route per-user logic later if needed.
       const userId = request.headers.get('x-auth-user-id') || 'unknown';
@@ -119,15 +121,13 @@ export class PipelineRoom implements DurableObject {
   }
 
   async webSocketClose(ws: WebSocket, code: number, _reason: string, _wasClean: boolean) {
-    try {
-      ws.close(code, 'closed');
-    } catch {}
+    try { ws.close(code, 'closed'); } catch {}
+    await bumpActiveWS(this._env, -1);
   }
 
   async webSocketError(ws: WebSocket, _error: unknown) {
-    try {
-      ws.close(1011, 'error');
-    } catch {}
+    try { ws.close(1011, 'error'); } catch {}
+    await bumpActiveWS(this._env, -1);
   }
 
   async alarm() {
