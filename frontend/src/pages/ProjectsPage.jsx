@@ -58,7 +58,7 @@ export default function ProjectsPage() {
             <Input label="Solution" value={form.solution} onChange={v => setForm(f => ({ ...f, solution: v }))} />
           </div>
           <div className="flex gap-3 mt-4">
-            <button onClick={submit} className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm text-gray-900">Create</button>
+            <button onClick={submit} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm text-white font-medium transition-colors">Create</button>
             <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm text-gray-900">Cancel</button>
           </div>
         </div>

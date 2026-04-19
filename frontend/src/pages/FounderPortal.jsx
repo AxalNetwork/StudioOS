@@ -70,7 +70,7 @@ export default function FounderPortal() {
 
       <div className="flex gap-2 mb-8">
         {[1, 2, 3].map(s => (
-          <div key={s} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${step >= s ? 'bg-violet-600 text-gray-900' : 'bg-gray-50 text-gray-500'}`}>
+          <div key={s} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${step >= s ? 'bg-violet-600 text-white' : 'bg-gray-50 text-gray-500'}`}>
             {s === 1 && 'Startup Info'}
             {s === 2 && 'Scoring Inputs'}
             {s === 3 && 'Results'}
@@ -143,7 +143,7 @@ export default function FounderPortal() {
             <label className="block text-sm text-gray-600 mb-1">Use of Funds</label>
             <textarea className="w-full bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-gray-900 text-sm h-16" value={form.use_of_funds} onChange={e => handleChange('use_of_funds', e.target.value)} />
           </div>
-          <button onClick={() => setStep(2)} disabled={!form.name || !form.founder_name || !form.founder_email} className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-gray-900 rounded-lg text-sm font-medium">
+          <button onClick={() => setStep(2)} disabled={!form.name || !form.founder_name || !form.founder_email} className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors">
             Next: Scoring Inputs
           </button>
         </div>
@@ -208,7 +208,7 @@ export default function FounderPortal() {
             <button onClick={() => setStep(1)} className="px-6 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg text-sm font-medium">
               Back
             </button>
-            <button onClick={handleSubmit} disabled={loading} className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-gray-900 rounded-lg text-sm font-medium flex items-center gap-2">
+            <button onClick={handleSubmit} disabled={loading} className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
               <Rocket size={16} />
               {loading ? 'Submitting & Scoring...' : 'Submit & Auto-Score'}
             </button>

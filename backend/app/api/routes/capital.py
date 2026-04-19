@@ -207,6 +207,31 @@ def create_capital_call(
     return _call_dto(call)
 
 
+@router.get("/lp-portal")
+def lp_portal(
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """LP-facing list of capital calls visible to the current user.
+
+    Local dev returns an empty list when the caller is not linked to an LP
+    record (real production logic lives in the Cloudflare worker). This
+    replaces the previous broken `/legalcap/capital/lp-portal` URL the
+    frontend was calling, which produced an Internal Server Error.
+    """
+    lp = session.exec(
+        select(LimitedPartner).where(LimitedPartner.email == user.email)
+    ).first()
+    if not lp:
+        return []
+    calls = session.exec(
+        select(CapitalCall)
+        .where(CapitalCall.limited_partner_id == lp.id)
+        .order_by(CapitalCall.created_at.desc())
+    ).all()
+    return [_call_dto(c) for c in calls]
+
+
 @router.get("/calls")
 def list_capital_calls(
     status: str | None = None,

@@ -35,7 +35,7 @@ export default function AdvisoryPage() {
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-colors ${
-              tab === t.key ? 'bg-violet-600 text-gray-900' : 'bg-gray-50 text-gray-600 hover:text-gray-900'
+              tab === t.key ? 'bg-violet-600 text-white' : 'bg-gray-50 text-gray-600 hover:text-gray-900'
             }`}>
             <t.icon size={14} /> {t.label}
           </button>
@@ -100,7 +100,7 @@ function AdvisorTab({ projects }) {
               placeholder="Ask anything about strategy, GTM, fundraising..."
               className="flex-1 bg-gray-50 border border-gray-700 rounded-lg px-4 py-2 text-sm text-gray-900 placeholder-gray-500" />
             <button onClick={ask} disabled={loading || !question.trim()}
-              className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 rounded-lg text-sm text-gray-900 flex items-center gap-2">
+              className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg text-sm text-white font-medium flex items-center gap-2 transition-colors">
               <Send size={14} /> {loading ? 'Thinking...' : 'Ask'}
             </button>
           </div>
@@ -165,10 +165,12 @@ function FinancialTab({ projects }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <label className="text-xs text-gray-600">Project</label>
-            <select {...f('project_id')} className="w-full mt-1 bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200">
-              <option value="">Standalone</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <div className="mt-1">
+              <ModernSelect {...f('project_id')}>
+                <option value="">Standalone</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </ModernSelect>
+            </div>
           </div>
           {[
             ['monthly_burn', 'Monthly Burn ($)', 'number'],
@@ -187,7 +189,7 @@ function FinancialTab({ projects }) {
           ))}
         </div>
         <button onClick={generate} disabled={loading}
-          className="mt-4 w-full px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 rounded-lg text-sm text-gray-900">
+          className="mt-4 w-full px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg text-sm text-white font-medium transition-colors">
           {loading ? 'Generating...' : 'Generate Financial Plan'}
         </button>
       </div>
@@ -271,13 +273,14 @@ function DiligenceTab({ projects }) {
       <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
         <h3 className="text-sm font-semibold text-gray-900 mb-3">Automated Diligence Check</h3>
         <div className="flex gap-3">
-          <select value={projectId} onChange={e => setProjectId(e.target.value)}
-            className="flex-1 bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200">
-            <option value="">Select a project...</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <div className="flex-1">
+            <ModernSelect value={projectId} onChange={e => setProjectId(e.target.value)}>
+              <option value="">Select a project...</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </ModernSelect>
+          </div>
           <button onClick={runCheck} disabled={loading || !projectId}
-            className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 rounded-lg text-sm text-gray-900">
+            className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg text-sm text-white font-medium transition-colors whitespace-nowrap">
             {loading ? 'Running...' : 'Run Diligence'}
           </button>
         </div>

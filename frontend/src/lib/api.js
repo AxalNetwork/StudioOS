@@ -289,7 +289,7 @@ export const api = {
   createCapitalCall: (data) => request('/legalcap/capital/call', { method: 'POST', body: JSON.stringify(data) }),
   capitalSend: (id) => request(`/legalcap/capital/call/${id}/send`, { method: 'PATCH', body: JSON.stringify({}) }),
   respondCapitalCall: (id, data) => request(`/legalcap/capital/call/${id}/respond`, { method: 'POST', body: JSON.stringify(data) }),
-  lpPortal: () => request('/legalcap/capital/lp-portal'),
+  lpPortal: () => request('/capital/lp-portal'),
   capitalCalls: () => request('/legalcap/capital/calls').catch(() => []),
   diligenceReview: (data) => request('/legalcap/diligence/review', { method: 'POST', body: JSON.stringify(data) }),
   diligenceFor: (dealId) => request(`/legalcap/diligence/${dealId}`),
