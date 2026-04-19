@@ -41,12 +41,33 @@ const MACRO_DATA = {
 };
 
 const PRIVATE_ROUNDS = [
-  { company: 'AgenticFlow', amount: '$12M', valuation: '$60M', sector: 'Agentic B2B', stage: 'Series A' },
-  { company: 'NeuralEdge', amount: '$8M', valuation: '$40M', sector: 'AI Infrastructure', stage: 'Seed' },
-  { company: 'DataWeave', amount: '$15M', valuation: '$75M', sector: 'Data / Analytics', stage: 'Series A' },
-  { company: 'ChainVault', amount: '$5M', valuation: '$25M', sector: 'Fintech / DeFi', stage: 'Seed' },
-  { company: 'BioScript', amount: '$20M', valuation: '$100M', sector: 'Bio-Automation', stage: 'Series B' },
-  { company: 'ShieldAI', amount: '$10M', valuation: '$50M', sector: 'Cybersecurity', stage: 'Series A' },
+  { company: 'xAI',        sector: 'AI Infrastructure',     amount: '$6B',    valuation: '$45B', stage: 'Series C' },
+  { company: 'Anthropic',  sector: 'AI Infrastructure',     amount: '$3.5B',  valuation: '$61B', stage: 'Series E' },
+  { company: 'Anduril',    sector: 'Defense / Cybersecurity', amount: '$1.5B', valuation: '$14B', stage: 'Series E' },
+  { company: 'Scale AI',   sector: 'Data / Analytics',      amount: '$1B',    valuation: '$14B', stage: 'Series F' },
+  { company: 'Groq',       sector: 'AI Infrastructure',     amount: '$300M',  valuation: '$2.8B', stage: 'Series D' },
+  { company: 'Perplexity', sector: 'AI Search',             amount: '$250M',  valuation: '$3B',  stage: 'Series D' },
+];
+
+const HIGH_CONVICTION = [
+  { sector: 'Agentic B2B',          play_type: 'Replacement Play', multiple: 22.4, sentiment: 'Aggressive',
+    reasoning: 'High churn in legacy CRM; 40% migration to AI-first middleware.',
+    gap_opportunity: 'Unified API for autonomous agent billing.' },
+  { sector: 'AI Infrastructure',    play_type: 'Efficiency Play',  multiple: 28.7, sentiment: 'Aggressive',
+    reasoning: 'High 28.7x multiple + aggressive sentiment = launch at 1/10th cost via studio.',
+    gap_opportunity: 'Edge inference orchestration layer for real-time AI.' },
+  { sector: 'Data / Analytics',     play_type: 'Exit Play',        multiple: 19.8, sentiment: 'Aggressive',
+    reasoning: 'Sector multiples at 19.8x — favorable exit timing.',
+    gap_opportunity: 'Real-time data quality monitoring for AI pipelines.' },
+  { sector: 'Cybersecurity',        play_type: 'Efficiency Play',  multiple: 24.2, sentiment: 'Aggressive',
+    reasoning: 'High 24.2x multiple + aggressive sentiment = launch at 1/10th cost via studio.',
+    gap_opportunity: 'AI-powered threat detection for API-first architectures.' },
+  { sector: 'Autonomous Robotics',  play_type: 'Efficiency Play',  multiple: 26.3, sentiment: 'Aggressive',
+    reasoning: 'High 26.3x multiple + aggressive sentiment = launch at 1/10th cost via studio.',
+    gap_opportunity: 'Unified agentic control layer for heterogeneous robot fleets.' },
+  { sector: 'Climate Intelligence', play_type: 'Exit Play',        multiple: 17.9, sentiment: 'Aggressive',
+    reasoning: 'Post-IRA tailwinds + 17.9x multiples — favorable exit timing for MRV plays.',
+    gap_opportunity: 'Real-time MRV API for enterprise net-zero compliance.' },
 ];
 
 const STUDIO_BENCHMARKS = {
@@ -94,13 +115,12 @@ marketIntel.get('/private-rounds', (c) => c.json({ rounds: PRIVATE_ROUNDS, total
 marketIntel.get('/studio-benchmarks', (c) => c.json(STUDIO_BENCHMARKS));
 
 marketIntel.get('/competitive-intelligence', (c) => {
-  const highConviction = MARKET_PULSE.filter(s => s.sentiment === 'Aggressive' && s.multiple > 15).map(s => {
-    let playType = 'Exit Play', reasoning = `Sector multiples at ${s.multiple}x — favorable exit timing.`;
-    if (s.multiple > 20) { playType = 'Efficiency Play'; reasoning = `High ${s.multiple}x multiple + aggressive sentiment = launch at 1/10th cost via studio.`; }
-    if (s.technographic_signal.toLowerCase().includes('churn') || s.technographic_signal.toLowerCase().includes('migration')) { playType = 'Replacement Play'; reasoning = `Tech churn detected: ${s.technographic_signal}`; }
-    return { sector: s.sector, play_type: playType, reasoning, gap_opportunity: s.gap_opportunity, multiple: s.multiple, sentiment: s.sentiment };
+  return c.json({
+    high_conviction_plays: HIGH_CONVICTION,
+    studio_benchmarks: STUDIO_BENCHMARKS,
+    market_pulse: MARKET_PULSE,
+    updated_at: new Date().toISOString(),
   });
-  return c.json({ high_conviction_plays: highConviction, studio_benchmarks: STUDIO_BENCHMARKS, market_pulse: MARKET_PULSE, updated_at: new Date().toISOString() });
 });
 
 export { MARKET_PULSE, STUDIO_BENCHMARKS };

@@ -47,8 +47,15 @@ export default function MarketIntelPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Market Intelligence</h1>
-      <p className="text-sm text-gray-600 mb-6">Signal-to-Action pipeline for competitive advantage</p>
+      <div className="flex items-end justify-between mb-6 flex-wrap gap-2">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Market Intelligence</h1>
+          <p className="text-sm text-gray-600">Signal-to-Action pipeline for competitive advantage</p>
+        </div>
+        {pulseUpdatedAt && (
+          <div className="text-xs text-gray-500">Last updated {fmtTime(pulseUpdatedAt)}</div>
+        )}
+      </div>
 
       <div className="mb-6">
         {/* Desktop tabs */}
