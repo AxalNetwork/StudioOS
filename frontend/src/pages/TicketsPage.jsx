@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api';
 import { Ticket, Plus, ChevronDown, X, RefreshCw, MessageSquare, Clock, ArrowLeft } from 'lucide-react';
+// `RefreshCw` is still used by the in-detail "Refresh" button (TicketDetail).
 
 function ModernSelect({ value, onChange, children, ...props }) {
   return (
@@ -220,11 +221,6 @@ export default function TicketsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={syncFromGithub} disabled={syncing}
-            className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600 transition-colors disabled:opacity-50"
-            title="Sync statuses from GitHub">
-            <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} /> Sync
-          </button>
           <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm font-medium text-white transition-colors">
             <Plus size={14} /> New Ticket
           </button>
