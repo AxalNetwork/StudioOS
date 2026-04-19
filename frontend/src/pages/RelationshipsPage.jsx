@@ -90,7 +90,7 @@ export default function RelationshipsPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200">
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto [&>button]:whitespace-nowrap">
         {[
           {id: 'relationships', label: `Relationships (${rels.length})`, icon: Users},
           {id: 'activity', label: `Activity Feed (${logs.total})`, icon: Activity},
@@ -173,8 +173,8 @@ function ActivityTab({ logs }) {
 function LeaderboardTab({ leaderboard, meId }) {
   if (leaderboard.length === 0) return <Empty text="Leaderboard will populate as partners build their network." />;
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
+    <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+      <table className="w-full text-sm min-w-[640px]">
         <thead className="bg-gray-50 text-xs text-gray-700">
           <tr><th className="text-left px-4 py-2">#</th><th className="text-left px-4 py-2">Partner</th><th className="text-center px-4 py-2">Score</th><th className="text-center px-4 py-2">Rels</th><th className="text-center px-4 py-2">Reach</th><th className="text-right px-4 py-2">Earnings</th><th className="text-left px-4 py-2">Badges</th></tr>
         </thead>

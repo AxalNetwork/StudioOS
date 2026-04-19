@@ -171,7 +171,7 @@ export default function MonitoringPage() {
       )}
 
       {/* Tab nav */}
-      <div className="border-b border-gray-200 flex gap-1">
+      <div className="border-b border-gray-200 flex gap-1 overflow-x-auto [&>button]:whitespace-nowrap">
         {[
           { id: 'overview', label: 'Overview' },
           { id: 'infra', label: 'Infrastructure' },

@@ -234,7 +234,8 @@ export default function PartnerPortal() {
               <div className="px-4 py-3 border-b border-gray-200">
                 <h3 className="text-sm font-semibold text-gray-900">Live Portfolio Performance</h3>
               </div>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[640px]">
                 <thead>
                   <tr className="border-b border-gray-200">
                     <th className="text-left px-4 py-2 text-gray-600 font-medium text-xs">Company</th>
@@ -270,6 +271,7 @@ export default function PartnerPortal() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           ) : (
             <EmptyState message="No portfolio companies yet" />
