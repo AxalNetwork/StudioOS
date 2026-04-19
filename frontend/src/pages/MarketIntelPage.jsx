@@ -52,8 +52,8 @@ export default function MarketIntelPage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Market Intelligence</h1>
           <p className="text-sm text-gray-600">Signal-to-Action pipeline for competitive advantage</p>
         </div>
-        {pulseUpdatedAt && (
-          <div className="text-xs text-gray-500">Last updated {fmtTime(pulseUpdatedAt)}</div>
+        {(tab === 'studio' ? benchmarks?.updated_at : pulseUpdatedAt) && (
+          <div className="text-xs text-gray-500">Last updated {fmtTime(tab === 'studio' ? benchmarks?.updated_at : pulseUpdatedAt)}</div>
         )}
       </div>
 
@@ -315,6 +315,20 @@ export default function MarketIntelPage() {
               <BenchmarkCard label="Idea → Funded Rate" value={`${benchmarks.conversion_idea_to_funded}%`} target="> 20%" />
               <BenchmarkCard label="Active Batch Size" value={benchmarks.active_batch_size} target="5-10" />
               <BenchmarkCard label="Portfolio Companies" value={benchmarks.portfolio_companies} target="Growing" />
+              <BenchmarkCard label="Avg Time to First Revenue"
+                value={benchmarks.avg_time_to_first_revenue_days != null
+                  ? `${benchmarks.avg_time_to_first_revenue_days} days` : null}
+                target="< 120 days" />
+              <BenchmarkCard label="Founder Equity @ Series A"
+                value={benchmarks.avg_founder_equity_at_series_a != null
+                  ? `${benchmarks.avg_founder_equity_at_series_a}%` : null}
+                target="> 55%" />
+              <BenchmarkCard label="Burn Rate @ Spin-Out"
+                value={benchmarks.avg_burn_rate_at_spinout} target="< $80k/mo" />
+              <BenchmarkCard label="Cohort Survival (6mo)"
+                value={benchmarks.cohort_survival_rate != null
+                  ? `${benchmarks.cohort_survival_rate}%` : null}
+                target="> 75%" />
             </div>
           </div>
 
@@ -325,6 +339,16 @@ export default function MarketIntelPage() {
               <BenchmarkCard label="Avg Time to Spin-Out" value={`${benchmarks.avg_time_to_spinout_days} days`} target="< 90 days" />
               <BenchmarkCard label="Avg Founder Equity at Spin-Out" value={`${benchmarks.avg_founder_equity_at_spinout}%`} target="60-75%" />
               <BenchmarkCard label="Cost Per Spin-Out" value={benchmarks.cost_per_spinout} target="< $250k" />
+              <BenchmarkCard label="AI Score ↔ Outcome"
+                value={benchmarks.ai_score_outcome_correlation != null
+                  ? `${benchmarks.ai_score_outcome_correlation}%` : null}
+                target="> 70%" />
+              <BenchmarkCard label="Avg Votes / Gate"
+                value={benchmarks.avg_votes_per_decision_gate} target="> 5" />
+              <BenchmarkCard label="Community ↔ Decision Alignment"
+                value={benchmarks.community_vote_alignment_rate != null
+                  ? `${benchmarks.community_vote_alignment_rate}%` : null}
+                target="> 80%" />
             </div>
           </div>
 
@@ -334,6 +358,20 @@ export default function MarketIntelPage() {
               <BenchmarkCard label="Follow-On Funding Rate" value={`${benchmarks.followon_funding_rate}%`} target="> 70%" />
               <BenchmarkCard label="Avg Valuation at First Round" value={benchmarks.avg_valuation_first_round} target="> $8M" />
               <BenchmarkCard label="Deployment Velocity" value={`${benchmarks.deployment_velocity}%`} target="> 40% / quarter" />
+              <BenchmarkCard label="Avg Follow-On Round Size"
+                value={benchmarks.avg_followon_round_size} target="> $5M" />
+              <BenchmarkCard label="Time to First Liquidity (median)"
+                value={benchmarks.median_time_to_first_liquidity_days != null
+                  ? `${benchmarks.median_time_to_first_liquidity_days} days` : null}
+                target="< 4 yrs" />
+              <BenchmarkCard label="Projected Portfolio IRR"
+                value={benchmarks.projected_portfolio_irr != null
+                  ? `${benchmarks.projected_portfolio_irr}%` : null}
+                target="> 18%" />
+              <BenchmarkCard label="LP Return Multiple"
+                value={benchmarks.lp_return_multiple != null
+                  ? `${benchmarks.lp_return_multiple}x` : null}
+                target="> 3.0x" />
             </div>
           </div>
         </div>
@@ -343,10 +381,13 @@ export default function MarketIntelPage() {
 }
 
 function BenchmarkCard({ label, value, target }) {
+  const empty = value == null || value === '' || value === 'null' || (typeof value === 'string' && value.includes('null'));
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5">
       <div className="text-[10px] text-gray-600 uppercase tracking-wider mb-1">{label}</div>
-      <div className="text-2xl font-bold text-gray-900">{value}</div>
+      <div className={empty ? 'text-base font-medium text-gray-400 italic' : 'text-2xl font-bold text-gray-900'}>
+        {empty ? '— Calculating…' : value}
+      </div>
       <div className="text-[10px] text-gray-600 mt-1">Target: {target}</div>
     </div>
   );
