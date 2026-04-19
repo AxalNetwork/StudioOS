@@ -120,6 +120,9 @@ def _doc_dto(session: Session, doc: Document, *, include_content: bool = False) 
         "recipient_email": _recipient_email(session, doc),
         "signed_by": doc.signed_by,
         "signed_at": doc.signed_at.isoformat() if doc.signed_at else None,
+        # Legal-proof evidence — admin DTO only. The founder/legal route DTO
+        # never surfaces this field (see services/signatures.py).
+        "signed_ip": doc.signed_ip,
         "days_to_sign": _days_to_sign(doc),
         "created_at": doc.created_at.isoformat() if doc.created_at else None,
         "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,

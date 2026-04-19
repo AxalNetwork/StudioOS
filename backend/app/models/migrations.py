@@ -93,6 +93,8 @@ def ensure_document_file_columns() -> None:
             ("file_size", "INTEGER"),
             ("file_sha256", "VARCHAR"),
             ("file_content_type", "VARCHAR"),
+            # Signature legal-proof column — see Document.signed_ip.
+            ("signed_ip", "VARCHAR"),
         ):
             try:
                 session.exec(text(

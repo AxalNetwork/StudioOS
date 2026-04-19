@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlmodel import Session, select
 from backend.app.database import get_session
 from backend.app.models.entities import Document, Entity, Project, DocumentType, DocumentStatus, User
@@ -822,7 +824,10 @@ def generate_document(data: DocumentCreate, session: Session = Depends(get_sessi
             # remains as a fallback that the download endpoint will migrate
             # on next read.
             pass
-    return doc
+    # Route through the redactor for policy consistency: even though a freshly
+    # generated doc has no signature data yet, going through `_hydrate_doc_content`
+    # guarantees no future field on Document leaks unexpectedly.
+    return _hydrate_doc_content(doc, viewer=user, session=session)
 
 
 def _doc_owner_founder_id(session: Session, doc: Document):
@@ -832,10 +837,14 @@ def _doc_owner_founder_id(session: Session, doc: Document):
     return p.founder_id if p else None
 
 
-def _hydrate_doc_content(doc: Document) -> dict:
+def _hydrate_doc_content(doc: Document, viewer: Optional[User] = None, session: Optional[Session] = None) -> dict:
     """Return a dict copy of `doc` with `content` rehydrated from storage if
     the inline copy was cleared during the storage migration. Listing/detail
-    endpoints used to return raw `content`, so this preserves wire-compat."""
+    endpoints used to return raw `content`, so this preserves wire-compat.
+
+    When `viewer` is supplied, the result is also passed through the
+    signature redactor so admin-only proof fields (`signed_ip`) are stripped
+    and `signed_by` is masked for non-privileged callers."""
     data = doc.dict() if hasattr(doc, "dict") else doc.model_dump()
     if not data.get("content") and doc.file_key:
         try:
@@ -843,6 +852,22 @@ def _hydrate_doc_content(doc: Document) -> dict:
             data["content"] = get_storage().get(doc.file_key).decode("utf-8", errors="replace")
         except Exception:  # noqa: BLE001
             data["content"] = ""
+    if viewer is not None:
+        from backend.app.services.signatures import redact_signature_for_viewer
+        # Resolve owner founder so the redactor can recognise founder owners
+        # and not mask their own signature email. Requires `session` because
+        # ownership lives on the parent Project row.
+        owner_founder_id = None
+        if session is not None and doc.project_id:
+            try:
+                owner_founder_id = _doc_owner_founder_id(session, doc)
+            except Exception:  # noqa: BLE001
+                owner_founder_id = None
+        redact_signature_for_viewer(
+            data,
+            viewer=viewer,
+            owner_founder_id=owner_founder_id,
+        )
     return data
 
 
@@ -857,7 +882,7 @@ def list_documents(project_id: int = None, session: Session = Depends(get_sessio
     if project_id:
         stmt = stmt.where(Document.project_id == project_id)
     docs = session.exec(stmt).all()
-    return [_hydrate_doc_content(d) for d in docs]
+    return [_hydrate_doc_content(d, viewer=user, session=session) for d in docs]
 
 
 @router.get("/documents/{doc_id}")
@@ -879,7 +904,7 @@ def get_document(doc_id: int, session: Session = Depends(get_session), user: Use
         meta={"status": str(doc.status), "doc_type": doc.doc_type, "via": "legal.get_document"},
         commit=True,
     )
-    return _hydrate_doc_content(doc)
+    return _hydrate_doc_content(doc, viewer=user, session=session)
 
 
 @router.post("/documents/{doc_id}/send")
@@ -904,20 +929,60 @@ def send_document(doc_id: int, session: Session = Depends(get_session), user: Us
     )
     session.commit()
     session.refresh(doc)
-    return {"status": "sent", "document": doc}
+    return {"status": "sent", "document": _hydrate_doc_content(doc, viewer=user, session=session)}
+
+
+class SignDocumentRequest(BaseModel):
+    """Body for the sign endpoint.
+
+    `on_behalf_of` is *only* honoured for admins / partners. For everyone
+    else, the signer is unconditionally the authenticated user — preventing
+    an authenticated founder from signing a contract under someone else's
+    name."""
+    on_behalf_of: Optional[str] = None
 
 
 @router.post("/documents/{doc_id}/sign")
-def sign_document(doc_id: int, signed_by: str = "system", session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def sign_document(
+    doc_id: int,
+    body: Optional[SignDocumentRequest] = None,
+    request: Request = None,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
     from backend.app.services.audit import log_audit, AuditAction
+    from backend.app.services.signatures import derive_signer_email
     doc = session.get(Document, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    # Founder-ownership ACL (or platform privileged user).
     ensure_founder_access(user, _doc_owner_founder_id(session, doc))
+    # Reject re-signing or signing voided contracts — signatures must be
+    # immutable once recorded.
+    if doc.status == DocumentStatus.SIGNED:
+        raise HTTPException(status_code=409, detail="Document is already signed")
+    if doc.status == DocumentStatus.VOID:
+        raise HTTPException(status_code=409, detail="Cannot sign a voided document")
+
+    # Resolve the legal signer. Non-privileged callers always sign as
+    # themselves regardless of any `on_behalf_of` they try to set.
+    requested_obo = (body.on_behalf_of if body else None)
+    signer_email = derive_signer_email(
+        actor=user,
+        requested_on_behalf_of=requested_obo,
+        actor_is_privileged=is_privileged(user),
+    )
+
+    # Capture client IP as legal-proof evidence (admin-only-visible field).
+    client_ip = None
+    if request is not None and request.client is not None:
+        client_ip = request.client.host
+
     prev_status = str(doc.status)
     doc.status = DocumentStatus.SIGNED
-    doc.signed_by = signed_by
+    doc.signed_by = signer_email
     doc.signed_at = datetime.utcnow()
+    doc.signed_ip = client_ip
     doc.updated_at = datetime.utcnow()
     session.add(doc)
     log_audit(
@@ -926,12 +991,19 @@ def sign_document(doc_id: int, signed_by: str = "system", session: Session = Dep
         actor=user,
         target_uid=doc.uid,
         project_id=doc.project_id,
-        summary=f"{user.email} signed contract '{doc.title}' on behalf of {signed_by}",
-        meta={"prev_status": prev_status, "signed_by": signed_by, "doc_type": doc.doc_type},
+        summary=f"{user.email} signed contract '{doc.title}' as {signer_email}",
+        meta={
+            "prev_status": prev_status,
+            "signer_email": signer_email,
+            "actor_email": user.email,
+            "on_behalf_of": bool(requested_obo) and is_privileged(user),
+            "doc_type": doc.doc_type,
+            "ip": client_ip,
+        },
     )
     session.commit()
     session.refresh(doc)
-    return {"status": "signed", "document": doc}
+    return {"status": "signed", "document": _hydrate_doc_content(doc, viewer=user, session=session)}
 
 
 @router.post("/incorporate")

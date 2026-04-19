@@ -251,8 +251,14 @@ class Document(SQLModel, table=True):
     file_sha256: Optional[str] = None
     file_content_type: Optional[str] = None
     template_name: Optional[str] = None
+    # `signed_by` records the legal signer's email. We never store typed-name
+    # blobs or rendered signature images — see services/signatures.py for the
+    # rationale (data minimisation: only what's needed for legal proof).
     signed_by: Optional[str] = None
     signed_at: Optional[datetime] = None
+    # `signed_ip` is captured purely as legal-proof evidence and is admin-only
+    # — it is *never* exposed via founder/partner-facing DTOs.
+    signed_ip: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
