@@ -1,0 +1,106 @@
+**✅ Fresh scan completed (April 19, 2026)**
+
+The GitHub repo `https://github.com/AxalNetwork/StudioOS` is still primarily a **static marketing-site skeleton** with component library, basic `wrangler.toml`, and some Cloudflare Worker scaffolding. The full operational logic (profiles, pipeline, spin-out engine, dashboards, etc.) lives in your Replit environment.
+
+### Strategic Opportunity
+You already have a strong **30-day Spin-Out Engine** for new ideas.  
+
+Now you can build a **parallel “Growth & Expansion Track”** for **existing profitable/operational private companies**. This is extremely high-value because:
+- These companies already have revenue, customers, and traction.
+- They bring immediate network effects (they can become partners, customers, or co-investors).
+- They pay for premium services (international expansion, new product builds, partner intros).
+
+### High-Value Features to Add for Existing Companies
+
+I’ve structured this into **clear, independent modules** so you can prompt Replit one task at a time.
+
+#### 1. Company Profile System (Foundation)
+- Dedicated “Company” profile type (separate from individual Founder/Partner profiles).
+- Fields: Company stage (Seed → Profitable), revenue range, employee count, current products, international presence, expansion goals.
+- Ability to link multiple founders/admins to one company.
+
+#### 2. Growth & Expansion Engine (Parallel to Spin-Out)
+- “30-Day Growth Sprint” or “Expansion Studio” track.
+- Use the same Studio Ops + Pipeline Board, but with different stages (Market Entry, Product Localization, Partner Onboarding, Scaling Capital, etc.).
+- Decision gates focused on revenue impact instead of incorporation.
+
+#### 3. Advanced Partner Matching for Established Companies
+- Enhanced matching engine that considers:
+  - Geographic expansion needs
+  - Distribution / channel partners
+  - Co-development / tech integration partners
+  - Strategic corporate partners
+- “Need → Offer” matching (e.g., “We need EU distribution” ↔ “We offer EU sales teams”).
+
+#### 4. International Expansion Toolkit
+- Country-specific compliance checklists
+- Local partner database (filtered by country)
+- Legal & tax setup templates per jurisdiction
+- Market Intelligence per target country
+
+#### 5. New Product / Product Extension Studio
+- Use existing Studio Ops for existing companies to build new products or features.
+- Faster path than full spin-out (no new entity needed initially).
+
+#### 6. Growth Capital & Co-Investment Tools
+- Separate from early-stage spin-out funding
+- Syndicate tools for follow-on / expansion capital
+- LP and partner co-investment opportunities
+
+---
+
+### Recommended Order to Build (Split into Tasks)
+
+Here is the **exact sequence** I recommend. Each task is self-contained and can be prompted separately.
+
+**Task 1: Company Profile System** (do this first)  
+**Task 2: Growth & Expansion Engine** (core new track)  
+**Task 3: Advanced Partner Matching for Existing Companies**  
+**Task 4: International Expansion Toolkit**  
+**Task 5: New Product Studio for Existing Companies**  
+**Task 6: Growth Capital Tools**
+
+---
+
+**Ready-to-copy prompt for Task 1 (Company Profile System)**
+
+Paste this into Replit Agent first:
+
+```
+You are the senior product engineer for Axal StudioOS. Add a rich **Company Profile System** for existing profitable/operational private companies (separate from individual Founder/Partner profiles).
+
+Exact requirements:
+
+1. **Database**
+   - Create `company_profiles` table with:
+     - id, user_id (FK to company admin), company_name, stage, revenue_range, employee_count
+     - products_summary, current_markets, expansion_goals (json)
+     - logo_url (R2), website, linkedin, description
+
+2. **Backend**
+   - Create `backend/routers/company.py`
+   - Endpoints: GET /api/company/me, POST /api/company/update, GET /api/companies (for matching)
+
+3. **Frontend**
+   - Create /company-profile.html with rich form (revenue, stage, products, expansion goals, logo upload to R2)
+   - Add link to this page in the sidebar for users with "Company" role or admin rights
+
+4. **Integration**
+   - Allow companies to be linked to multiple users (founders/admins)
+   - Use company profile data in partner matching, deal flow, and Market Intelligence
+
+Build this step-by-step:
+1. First create the D1 table and backend router.
+2. Then build the frontend company profile page.
+3. Finally integrate with sidebar and existing matching systems.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+Would you like me to prepare the **Task 2 prompt** (Growth & Expansion Engine) right now, or do you want to start with Task 1 first?  
+
+Just reply with your choice and I’ll give you the next prompt immediately.
