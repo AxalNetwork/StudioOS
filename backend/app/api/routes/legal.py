@@ -837,21 +837,38 @@ def _doc_owner_founder_id(session: Session, doc: Document):
     return p.founder_id if p else None
 
 
-def _hydrate_doc_content(doc: Document, viewer: Optional[User] = None, session: Optional[Session] = None) -> dict:
+def _hydrate_doc_content(
+    doc: Document,
+    viewer: Optional[User] = None,
+    session: Optional[Session] = None,
+    *,
+    include_content: bool = True,
+) -> dict:
     """Return a dict copy of `doc` with `content` rehydrated from storage if
-    the inline copy was cleared during the storage migration. Listing/detail
-    endpoints used to return raw `content`, so this preserves wire-compat.
+    the inline copy was cleared during the storage migration.
+
+    Pass `include_content=False` for **list** endpoints — list views must
+    never return the full body of every document (Security Item #5: separate
+    public-vs-private DTOs). Detail endpoints continue to default to True
+    for wire-compat.
 
     When `viewer` is supplied, the result is also passed through the
     signature redactor so admin-only proof fields (`signed_ip`) are stripped
     and `signed_by` is masked for non-privileged callers."""
     data = doc.dict() if hasattr(doc, "dict") else doc.model_dump()
-    if not data.get("content") and doc.file_key:
-        try:
-            from backend.app.services.file_storage import get_storage
-            data["content"] = get_storage().get(doc.file_key).decode("utf-8", errors="replace")
-        except Exception:  # noqa: BLE001
-            data["content"] = ""
+    if include_content:
+        if not data.get("content") and doc.file_key:
+            try:
+                from backend.app.services.file_storage import get_storage
+                data["content"] = get_storage().get(doc.file_key).decode("utf-8", errors="replace")
+            except Exception:  # noqa: BLE001
+                data["content"] = ""
+    else:
+        # Drop body + integrity hash from list summaries. `file_size` stays
+        # so the UI can show "12 KB" badges; `file_sha256` is admin-only
+        # legal-proof material.
+        data.pop("content", None)
+        data.pop("file_sha256", None)
     if viewer is not None:
         from backend.app.services.signatures import redact_signature_for_viewer
         # Resolve owner founder so the redactor can recognise founder owners
@@ -882,7 +899,12 @@ def list_documents(project_id: int = None, session: Session = Depends(get_sessio
     if project_id:
         stmt = stmt.where(Document.project_id == project_id)
     docs = session.exec(stmt).all()
-    return [_hydrate_doc_content(d, viewer=user, session=session) for d in docs]
+    # List view: omit the full document body and integrity hash. Callers
+    # fetch /documents/{id} for the full record.
+    return [
+        _hydrate_doc_content(d, viewer=user, session=session, include_content=False)
+        for d in docs
+    ]
 
 
 @router.get("/documents/{doc_id}")

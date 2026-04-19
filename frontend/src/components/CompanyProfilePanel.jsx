@@ -182,10 +182,24 @@ function CompanyDirectory({ onOpen }) {
   const [data, setData] = useState({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
 
+  // Revenue is a private business field — backend gates the filter to admins
+  // (returns 403 for everyone else). Mirror that here so non-admins don't see
+  // a control that is guaranteed to error.
+  const isAdmin = (() => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}').role === 'admin'; }
+    catch { return false; }
+  })();
+
   async function reload() {
     setLoading(true);
-    try { setData(await api.listCompanies({ q, stage, revenue_range: revenue })); }
-    finally { setLoading(false); }
+    try {
+      // Only forward `revenue_range` when the caller is allowed to filter on it.
+      const filters = { q, stage };
+      if (isAdmin && revenue) filters.revenue_range = revenue;
+      setData(await api.listCompanies(filters));
+    } catch {
+      setData({ items: [], total: 0 });
+    } finally { setLoading(false); }
   }
   useEffect(() => { reload(); }, []);
   useEffect(() => { const t = setTimeout(reload, 300); return () => clearTimeout(t); }, [q, stage, revenue]);
@@ -202,10 +216,12 @@ function CompanyDirectory({ onOpen }) {
           <option value="">All stages</option>
           {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <select value={revenue} onChange={e => setRevenue(e.target.value)} className="text-sm bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-black">
-          <option value="">All revenue</option>
-          {REVENUE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+        {isAdmin && (
+          <select value={revenue} onChange={e => setRevenue(e.target.value)} className="text-sm bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-black">
+            <option value="">All revenue</option>
+            {REVENUE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
       </div>
       {loading ? (
         <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500"><Loader2 className="animate-spin mx-auto"/></div>

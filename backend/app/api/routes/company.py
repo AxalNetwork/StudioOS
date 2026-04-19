@@ -18,6 +18,7 @@ from backend.app.models.entities import (
     User, UserRole, CompanyProfile, UserCompanyLink,
 )
 from backend.app.api.routes.auth import get_current_user
+from backend.app.services.pii import mask_email
 
 router = APIRouter(tags=["Company Profiles"])
 
@@ -93,43 +94,95 @@ def _can_edit(session: Session, company: CompanyProfile, user: User) -> bool:
     return link.is_primary_admin or link.role_in_company in ("Owner", "Admin", "Founder")
 
 
-def _company_dto(session: Session, company: CompanyProfile, *, include_members: bool = False) -> dict:
-    out = {
-        "id": company.id,
-        "uid": company.uid,
-        "company_name": company.company_name,
-        "stage": company.stage,
-        "revenue_range": company.revenue_range,
-        "employee_count": company.employee_count,
-        "current_products": company.current_products,
-        "international_presence": company.international_presence,
-        "expansion_goals": company.expansion_goals,
-        "logo_url": company.logo_url,
-        "website": company.website,
-        "linkedin_url": company.linkedin_url,
-        "description": company.description,
-        "created_at": company.created_at.isoformat() if company.created_at else None,
-        "updated_at": company.updated_at.isoformat() if company.updated_at else None,
-    }
-    if include_members:
-        links = session.exec(
-            select(UserCompanyLink).where(UserCompanyLink.company_id == company.id)
-        ).all()
-        members = []
-        for lnk in links:
-            u = session.get(User, lnk.user_id)
-            if not u:
-                continue
-            members.append({
-                "user_id": u.id,
-                "name": u.name,
-                "email": u.email,
-                "role_in_company": lnk.role_in_company,
-                "is_primary_admin": lnk.is_primary_admin,
-                "joined_at": lnk.created_at.isoformat() if lnk.created_at else None,
-            })
-        out["members"] = members
-        out["member_count"] = len(members)
+# ---------------------------------------------------------------------------
+# Response shapes (Security Item #5: separate public-vs-private DTOs)
+#
+# Three layers of detail, picked based on the viewer's relationship to the
+# company:
+#
+#   _company_summary_dto(c, member_count)
+#       Public-list shape. Returned to ANY authenticated user from
+#       `/api/companies`. Strips business-sensitive fields like
+#       `revenue_range`, `employee_count`, `current_products`, and
+#       `expansion_goals` — those belong only on the owner-detail view
+#       (otherwise they're competitive intel exposed to every signed-in user).
+#
+#   _company_detail_dto(session, c, viewer)
+#       Full-detail shape. Returns every business field. Member emails are
+#       MASKED unless the viewer is a member of this company or a platform
+#       admin — so a stranger doing a UID lookup cannot scrape co-member
+#       contact info.
+#
+# A single `_company_dto(... include_members=...)` previously served all
+# routes; that mixed concerns and over-shared. This module replaces it.
+# ---------------------------------------------------------------------------
+_PUBLIC_FIELDS = (
+    "id", "uid", "company_name", "stage",
+    "logo_url", "website", "linkedin_url", "description",
+    "international_presence",
+)
+_PRIVATE_FIELDS = (
+    "revenue_range", "employee_count",
+    "current_products", "expansion_goals",
+)
+
+
+def _viewer_is_company_member(session: Session, company: CompanyProfile, viewer: User) -> bool:
+    """Predicate used to decide if member PII may be unmasked in a detail
+    response. Platform admins always pass."""
+    if _is_admin(viewer):
+        return True
+    return _get_link(session, company.id, viewer.id) is not None
+
+
+def _member_count(session: Session, company_id: int) -> int:
+    return len(session.exec(
+        select(UserCompanyLink).where(UserCompanyLink.company_id == company_id)
+    ).all())
+
+
+def _company_summary_dto(session: Session, company: CompanyProfile) -> dict:
+    """Safe shape for list endpoints. NO business-sensitive fields, NO
+    member emails. Aggregate counts only."""
+    out = {f: getattr(company, f) for f in _PUBLIC_FIELDS}
+    out["member_count"] = _member_count(session, company.id)
+    out["created_at"] = company.created_at.isoformat() if company.created_at else None
+    return out
+
+
+def _company_detail_dto(session: Session, company: CompanyProfile, viewer: User) -> dict:
+    """Owner / admin / member detail shape. Includes private business
+    fields and the member roster. Co-member emails are masked unless the
+    viewer is a member or platform admin."""
+    out = {f: getattr(company, f) for f in _PUBLIC_FIELDS}
+    for f in _PRIVATE_FIELDS:
+        out[f] = getattr(company, f)
+    out["created_at"] = company.created_at.isoformat() if company.created_at else None
+    out["updated_at"] = company.updated_at.isoformat() if company.updated_at else None
+
+    is_member = _viewer_is_company_member(session, company, viewer)
+    links = session.exec(
+        select(UserCompanyLink).where(UserCompanyLink.company_id == company.id)
+    ).all()
+    members = []
+    for lnk in links:
+        u = session.get(User, lnk.user_id)
+        if not u:
+            continue
+        # Members of the company (and admins) see real emails so the team
+        # can contact each other. Strangers see a masked form.
+        member_email = u.email if is_member else mask_email(u.email)
+        members.append({
+            "user_id": u.id,
+            "name": u.name,
+            "email": member_email,
+            "role_in_company": lnk.role_in_company,
+            "is_primary_admin": lnk.is_primary_admin,
+            "joined_at": lnk.created_at.isoformat() if lnk.created_at else None,
+        })
+    out["members"] = members
+    out["member_count"] = len(members)
+    out["viewer_is_member"] = is_member
     return out
 
 
@@ -154,7 +207,7 @@ def my_company(
     if not company:
         return None
     return {
-        **_company_dto(session, company, include_members=True),
+        **_company_detail_dto(session, company, viewer=user),
         "my_role": link.role_in_company,
         "is_primary_admin": link.is_primary_admin,
     }
@@ -197,7 +250,7 @@ def create_company(
     session.commit()
     session.refresh(company)
 
-    return _company_dto(session, company, include_members=True)
+    return _company_detail_dto(session, company, viewer=user)
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +286,7 @@ def update_company(
     )
     session.commit()
     session.refresh(company)
-    return _company_dto(session, company, include_members=True)
+    return _company_detail_dto(session, company, viewer=user)
 
 
 # ---------------------------------------------------------------------------
@@ -243,10 +296,19 @@ def update_company(
 def get_company(
     uid: str,
     session: Session = Depends(get_session),
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     company = _get_company_or_404(session, uid)
-    return _company_dto(session, company, include_members=True)
+    # DTO selection by viewer relationship:
+    #   - Members of this company OR platform admins  → full detail DTO
+    #     (private business fields + member roster with raw emails)
+    #   - Anyone else (authenticated stranger)        → summary DTO
+    #     (public marketing fields + member_count only — no private business
+    #     fields, no member emails). Strangers should not be able to use
+    #     /company/{uid} as an end-run around the body-less list at /companies.
+    if _viewer_is_company_member(session, company, user):
+        return _company_detail_dto(session, company, viewer=user)
+    return _company_summary_dto(session, company)
 
 
 # ---------------------------------------------------------------------------
@@ -260,12 +322,23 @@ def list_companies(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     session: Session = Depends(get_session),
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     stmt = select(CompanyProfile).order_by(CompanyProfile.created_at.desc())
     if stage:
         stmt = stmt.where(CompanyProfile.stage == stage)
+    # Side-channel guard: even though `_company_summary_dto` strips
+    # `revenue_range` from the response, *filtering* by it would let any
+    # authenticated user binary-search the value of any company's hidden
+    # bucket (issue: just probe `?company_name=...&revenue_range=...` and
+    # observe presence/absence in results). Restrict the filter itself to
+    # platform admins.
     if revenue_range:
+        if not _is_admin(user):
+            raise HTTPException(
+                status_code=403,
+                detail="Filtering by revenue_range is restricted to administrators",
+            )
         stmt = stmt.where(CompanyProfile.revenue_range == revenue_range)
     rows = session.exec(stmt).all()
 
@@ -278,7 +351,7 @@ def list_companies(
         ]
 
     total = len(rows)
-    items = [_company_dto(session, r) for r in rows[offset: offset + limit]]
+    items = [_company_summary_dto(session, r) for r in rows[offset: offset + limit]]
     return {"total": total, "limit": limit, "offset": offset, "items": items}
 
 
@@ -335,7 +408,7 @@ def add_member(
         },
     )
     session.commit()
-    return _company_dto(session, company, include_members=True)
+    return _company_detail_dto(session, company, viewer=user)
 
 
 @router.delete("/company/{uid}/members/{user_id}")

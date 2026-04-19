@@ -317,7 +317,18 @@ export default function LegalPage() {
                       }`}>{d.status}</span>
                     </td>
                     <td className="px-5 py-3">
-                      <button onClick={() => setViewDoc(viewDoc?.id === d.id ? null : d)} className="text-violet-600 hover:text-violet-700 text-xs flex items-center gap-1">
+                      <button onClick={async () => {
+                        // List view no longer ships full document body
+                        // (Security Item #5 — public list is body-less).
+                        // Fetch the detail record on demand for the modal.
+                        if (viewDoc?.id === d.id) { setViewDoc(null); return; }
+                        try {
+                          const full = await api.getDocument(d.id);
+                          setViewDoc(full);
+                        } catch {
+                          setViewDoc(d); // fall back to summary so modal still opens
+                        }
+                      }} className="text-violet-600 hover:text-violet-700 text-xs flex items-center gap-1">
                         <Eye size={12} /> View
                       </button>
                     </td>
