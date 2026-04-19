@@ -94,3 +94,17 @@ python-dotenv
 qrcode
 sqlmodel
 uvicorn
+alembic
+fastapi
+google-api-python-client
+google-auth
+google-auth-oauthlib
+httpx
+psycopg2-binary
+pydantic
+pyjwt
+pyotp
+python-dotenv
+qrcode
+sqlmodel
+uvicorn
