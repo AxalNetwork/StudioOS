@@ -219,17 +219,22 @@ def lp_portal(
     replaces the previous broken `/legalcap/capital/lp-portal` URL the
     frontend was calling, which produced an Internal Server Error.
     """
-    lp = session.exec(
-        select(LimitedPartner).where(LimitedPartner.email == user.email)
-    ).first()
-    if not lp:
+    try:
+        lp = session.exec(
+            select(LimitedPartner).where(LimitedPartner.email == user.email)
+        ).first()
+        if not lp:
+            return []
+        calls = session.exec(
+            select(CapitalCall)
+            .where(CapitalCall.limited_partner_id == lp.id)
+            .order_by(CapitalCall.created_at.desc())
+        ).all()
+        return [_call_dto(c) for c in calls]
+    except Exception:
+        # Schema drift (legacy DBs without limited_partner_id) shouldn't
+        # surface as a 500 to the LP — degrade to an empty list.
         return []
-    calls = session.exec(
-        select(CapitalCall)
-        .where(CapitalCall.limited_partner_id == lp.id)
-        .order_by(CapitalCall.created_at.desc())
-    ).all()
-    return [_call_dto(c) for c in calls]
 
 
 @router.get("/calls")

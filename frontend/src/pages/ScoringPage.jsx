@@ -141,7 +141,7 @@ export default function ScoringPage() {
             </Section>
 
             <div className="flex gap-3 mt-6">
-              <button onClick={runScore} disabled={loading} className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+              <button onClick={runScore} disabled={loading} style={{ color: '#ffffff' }} className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
                 <Play size={14} /> {loading ? 'Scoring...' : 'Run Full Score'}
               </button>
               {selectedProject && result && (

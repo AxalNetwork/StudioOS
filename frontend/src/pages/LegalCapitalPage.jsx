@@ -361,7 +361,7 @@ function LPPortalTab() {
   const [err, setErr] = useState('');
   const [responding, setResponding] = useState(null);
 
-  const reload = async () => { setLoading(true); try { setCalls(await api.lpPortal()); } catch (e) { setErr(e.message); } finally { setLoading(false); } };
+  const reload = async () => { setLoading(true); setErr(''); try { setCalls(await api.lpPortal()); } catch (e) { setErr(e.message); } finally { setLoading(false); } };
   useEffect(() => { reload(); }, []);
 
   if (loading) return <Loading />;
