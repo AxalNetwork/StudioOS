@@ -6,10 +6,10 @@ function ModernSelect({ value, onChange, children, ...props }) {
   return (
     <div className="relative">
       <select value={value} onChange={onChange} {...props}
-        className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400">
+        className="w-full bg-white text-gray-900 border border-gray-300 rounded-xl px-4 py-2.5 pr-10 text-sm appearance-none shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400 hover:shadow-md">
         {children}
       </select>
-      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
+      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
     </div>
   );
 }
@@ -188,8 +188,8 @@ function FinancialTab({ projects }) {
             </div>
           ))}
         </div>
-        <button onClick={generate} disabled={loading}
-          className="mt-4 w-full px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg text-sm text-white font-medium transition-colors">
+            <button onClick={generate} disabled={loading}
+              className="mt-4 w-full px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg text-sm text-white font-medium transition-colors">
           {loading ? 'Generating...' : 'Generate Financial Plan'}
         </button>
       </div>
