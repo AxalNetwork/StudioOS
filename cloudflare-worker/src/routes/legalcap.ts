@@ -373,7 +373,13 @@ legalcap.post('/legal/generate', async (c) => {
 
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'document', id: doc.id }); } catch {}
   await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'legal_doc', entityId: doc.id, metadata: { type, deal_id: dealId } });
-  return c.json({ ...doc, body, vars }, 201);
+  // Security #8 — storage cleanup: never return the rendered `body` (or
+  // the substituted `vars`, which contain PII like investor name and
+  // amount) in the JSON response. Caller can re-fetch via
+  // GET /legal/docs/:dealId, which is also redacted; the body itself
+  // lives only in the legal_documents.content JSON column and will be
+  // surfaced via a signed download URL once the worker mints them.
+  return c.json({ ...doc, content_url: null, redacted: true }, 201);
 });
 
 legalcap.get('/legal/docs/:dealId', async (c) => {
@@ -387,11 +393,19 @@ legalcap.get('/legal/docs/:dealId', async (c) => {
   await sql.end();
   const stripped = (rows as any[]).map(r => {
     const parsed = safeJson<any>(r.content, {});
+    // Security #8 — storage cleanup: `body` is NEVER returned inline,
+    // even for admins/partners. They previously got the full rendered
+    // contract text in JSON; now they get the model used + a flag and
+    // must use the (forthcoming) signed download URL endpoint to fetch
+    // the body. `fullAccess` still controls whether non-body metadata
+    // (model, access label) is surfaced.
     return {
       ...r,
-      body: fullAccess ? (parsed.body || '') : null,
+      body: null,
       model: parsed.model || null,
       content: undefined,
+      content_url: null,
+      redacted: true,
       access: fullAccess ? 'full' : 'metadata_only',
     };
   });

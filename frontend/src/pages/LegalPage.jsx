@@ -351,7 +351,30 @@ export default function LegalPage() {
                 'bg-amber-100 text-amber-700'
               }`}>{viewDoc.status}</span>
             </div>
-            <pre className="text-xs text-gray-700 whitespace-pre-wrap bg-gray-50 p-4 rounded-lg font-mono leading-relaxed">{viewDoc.content}</pre>
+            {/* Security #8: contract bodies are no longer rendered inline.
+                The backend returns a short-lived (~5 min) signed download
+                URL; clicking it streams the file as `attachment` with
+                `Cache-Control: no-store`, so the body never persists in
+                page memory. */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700">
+              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Document body</div>
+              {viewDoc.content_url ? (
+                <a
+                  href={viewDoc.content_url}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-medium transition-colors"
+                  rel="noopener noreferrer"
+                >
+                  Download contract
+                </a>
+              ) : (
+                <div className="text-xs text-gray-400">No file content available.</div>
+              )}
+              {viewDoc.file_size != null && (
+                <div className="mt-2 text-[11px] text-gray-500">
+                  {(viewDoc.file_size / 1024).toFixed(1)} KB · link expires in ~5 min
+                </div>
+              )}
+            </div>
             <button onClick={() => setViewDoc(null)} className="mt-4 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors">Close</button>
           </div>
         </div>

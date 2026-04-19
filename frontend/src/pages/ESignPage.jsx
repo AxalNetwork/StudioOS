@@ -65,8 +65,12 @@ export default function ESignPage() {
     if (!sigDataUrl) { setError('Please draw your signature in the box.'); return; }
     setError(''); setSubmitting(true);
     try {
+      // SECURITY: deliberately do NOT ship the drawn-signature image
+      // (`sigDataUrl`) to the backend. The server treats authenticated
+      // click-through + typed_name as the legal signature record (data
+      // minimisation — see services/signatures.py). Sending the base64
+      // image would be wasted bandwidth and unnecessary PII surface.
       const r = await api.esignSubmitSignature(token, {
-        signature_data_url: sigDataUrl,
         accepted: true,
         typed_name: typedName,
       });

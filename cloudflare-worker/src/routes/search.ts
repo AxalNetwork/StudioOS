@@ -69,6 +69,15 @@ search.get('/', async (c) => {
     const wide = await searchSemantic(c.env, q, { topK: limit * 3 });
     hits = wide.filter(h => allowed.includes(h.type)).slice(0, limit);
   }
+  // Security #8 defense-in-depth: even though `vectorize.embedAndUpsertById`
+  // now stores neutral metadata for documents, vectors indexed by older
+  // worker versions may still carry contract body fragments in
+  // `snippet`. Scrub at response time — for `document` hits we replace
+  // the snippet with the same neutral pattern unconditionally. Until a
+  // full backfill purges legacy vectors, this is the wire-level guard.
+  hits = hits.map(h => h.type === 'document'
+    ? { ...h, snippet: 'Legal document — open to view (download required)' }
+    : h);
   return c.json({ query: q, type: requestedType || 'all', allowed_types: allowed, hits });
 });
 

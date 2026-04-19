@@ -200,8 +200,20 @@ function LPADrawer({ fundId, onClose }) {
         {!doc ? <div className="text-xs text-gray-400 py-8 text-center">Loading…</div> : (
           <>
             <div className="text-xs text-gray-500 mb-3">v{doc.version} · {doc.status} · {doc.created_at && new Date(doc.created_at + 'Z').toLocaleString()}</div>
-            {doc.content
-              ? <pre className="whitespace-pre-wrap text-xs text-gray-800 bg-gray-50 p-4 rounded-lg border border-gray-200">{doc.content}</pre>
+            {/* Security #8: LPA body is not embedded in JSON. Backend
+                returns a short-lived signed URL (~5 min) — click to
+                download. Server-side ACL still gates the download by
+                LP membership of this fund. */}
+            {doc.content_url
+              ? (
+                <a
+                  href={doc.content_url}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-medium transition-colors"
+                  rel="noopener noreferrer"
+                >
+                  Download LPA
+                </a>
+              )
               : <div className="text-xs text-gray-400">Content redacted (you are not an LP of this fund).</div>}
           </>
         )}

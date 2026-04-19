@@ -138,7 +138,11 @@ funds.get('/:id', async (c) => {
 });
 
 funds.get('/:id/lpa', async (c) => {
-  // Anyone authenticated can preview the LPA. Admin/LPs of the fund see content.
+  // Security #8 — storage cleanup:
+  // The LPA body is NEVER inlined in the JSON response, regardless of
+  // viewer role. Admins/LPs of this fund get `file_key` so the body can
+  // be fetched via a separate download path; non-LPs get metadata only
+  // (no `file_key`) so they can't even attempt a download.
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'), 10);
   const f = await Funds.getById(c.env, id);
@@ -147,17 +151,33 @@ funds.get('/:id/lpa', async (c) => {
     `SELECT * FROM legal_documents WHERE id = ?`
   ).bind(f.lpa_doc_id).first();
   if (!doc) return c.json({ error: 'doc not found' }, 404);
-  // Admins always; LPs of this fund always; otherwise return metadata only.
+
+  // Strip the inline body for everyone. `file_sha256` is admin-only
+  // legal-proof material; admins keep it.
+  const { content: _content, file_sha256, ...rest } = doc;
+  let safeDoc: any = { ...rest };
+  if (user.role === 'admin') {
+    safeDoc.file_sha256 = file_sha256;
+  }
+
   if (user.role !== 'admin') {
     const isLP = await c.env.DB.prepare(
       `SELECT 1 AS yes FROM limited_partners WHERE fund_id = ? AND user_id = ? LIMIT 1`
     ).bind(id, user.id).first<{ yes: number }>();
     if (!isLP) {
-      const { content, ...meta } = doc;
+      // Non-LP, non-admin: drop `file_key` so they cannot attempt a
+      // download; return non-sensitive metadata only.
+      const { file_key, file_size, file_content_type, ...meta } = safeDoc;
       return c.json({ ok: true, doc: meta, redacted: true });
     }
   }
-  return c.json({ ok: true, doc });
+  // Admin or LP: return metadata + file_key. Frontend should issue a
+  // download via a short-lived signed URL endpoint (TODO: port the
+  // FastAPI `/api/files/contracts/{token}` minting flow into the worker
+  // so the LPADrawer's `Download LPA` button has a `content_url` to
+  // hit). Until then, this response is correct-by-default — no body
+  // leaks via JSON.
+  return c.json({ ok: true, doc: safeDoc });
 });
 
 funds.post('/', async (c) => {

@@ -5,6 +5,17 @@ import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
 
 const legal = new Hono<{ Bindings: Env }>();
 
+// Security #8 — storage cleanup:
+// Centralised serializer for document rows. The contract body
+// (`content`) is **never** returned in JSON, regardless of viewer role.
+// This keeps the worker on the same policy as the FastAPI backend.
+// When a signed-URL minting flow is added to the worker, this helper
+// will be the single place to attach `content_url`.
+function safeDoc<T extends Record<string, any>>(row: T): Omit<T, 'content' | 'project_founder_id'> & { content_url: null; redacted: true } {
+  const { content: _content, project_founder_id: _pfid, ...rest } = row as any;
+  return { ...rest, content_url: null, redacted: true };
+}
+
 const TEMPLATE_LAYERS: Record<string, { label: string; description: string }> = {
   gp: { label: 'Internal Management (GP Level)', description: 'Governance, partner economics, and decision-making framework' },
   fund: { label: 'Fund Formation (LP Level)', description: 'Capital raising, investor agreements, and fund structure' },
@@ -78,7 +89,7 @@ legal.post('/templates/:key/generate', async (c) => {
 
   const [doc] = await sql`INSERT INTO documents (project_id, title, doc_type, status, content, template_name) VALUES (${body.project_id || null}, ${template.title}, ${key}, 'generated', ${content}, ${key}) RETURNING *`;
   await sql.end();
-  return c.json(doc, 201);
+  return c.json(safeDoc(doc), 201);
 });
 
 legal.get('/documents', async (c) => {
@@ -107,7 +118,7 @@ legal.get('/documents', async (c) => {
     }
   }
   await sql.end();
-  return c.json(docs);
+  return c.json((docs as any[]).map(safeDoc));
 });
 
 legal.get('/documents/:id', async (c) => {
@@ -121,7 +132,7 @@ legal.get('/documents/:id', async (c) => {
   if (!canAccessFounderResource(user, (rows[0] as any).project_founder_id)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
-  return c.json(rows[0]);
+  return c.json(safeDoc(rows[0] as any));
 });
 
 legal.post('/documents', async (c) => {
@@ -143,7 +154,7 @@ legal.post('/documents', async (c) => {
   }
   const [doc] = await sql`INSERT INTO documents (project_id, title, doc_type, content, template_name) VALUES (${data.project_id || null}, ${data.title}, ${data.doc_type || 'other'}, ${data.content || null}, ${data.template_name || null}) RETURNING *`;
   await sql.end();
-  return c.json(doc, 201);
+  return c.json(safeDoc(doc), 201);
 });
 
 legal.put('/documents/:id/sign', async (c) => {
@@ -161,7 +172,7 @@ legal.put('/documents/:id/sign', async (c) => {
   await sql`UPDATE documents SET status = 'signed', signed_by = ${signed_by || 'Unknown'}, signed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   const [updated] = await sql`SELECT * FROM documents WHERE id = ${id}`;
   await sql.end();
-  return c.json(updated);
+  return c.json(safeDoc(updated));
 });
 
 legal.get('/entities', async (c) => {

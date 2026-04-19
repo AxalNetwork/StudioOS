@@ -1405,7 +1405,13 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
               </div>
               <div>
                 <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Content</div>
-                <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-[11px] text-gray-800 whitespace-pre-wrap max-h-72 overflow-y-auto">{doc.content || '(empty)'}</pre>
+                {/* Security #8: body is no longer inlined. Use the
+                    Download button in the footer (which streams via the
+                    short-lived signed URL) to view the file. */}
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-[11px] text-gray-500">
+                  Body lives in object storage. Use <span className="font-semibold text-gray-700">Download</span> below to retrieve it via a short-lived link.
+                  {doc.file_size != null && <span className="block mt-1 text-gray-400">{(doc.file_size / 1024).toFixed(1)} KB · sha256 admin-only</span>}
+                </div>
               </div>
             </>
           )}

@@ -9,6 +9,7 @@ from backend.app.api.routes.auth import get_current_user
 from backend.app.api.deps import require_role, ensure_founder_access, is_privileged
 from backend.app.services.access_policy import require_contract_view
 from datetime import datetime
+import time
 
 require_partner = require_role("partner")
 
@@ -838,38 +839,82 @@ def _doc_owner_founder_id(session: Session, doc: Document):
     return p.founder_id if p else None
 
 
+_DOWNLOAD_URL_TTL_SECONDS = 300  # 5 minutes — short enough to limit replay
+
+
 def _hydrate_doc_content(
     doc: Document,
     viewer: Optional[User] = None,
     session: Optional[Session] = None,
     *,
-    include_content: bool = True,
+    embed_content: bool = False,
 ) -> dict:
-    """Return a dict copy of `doc` with `content` rehydrated from storage if
-    the inline copy was cleared during the storage migration.
+    """Build the wire-shape for a Document.
 
-    Pass `include_content=False` for **list** endpoints — list views must
-    never return the full body of every document (Security Item #5: separate
-    public-vs-private DTOs). Detail endpoints continue to default to True
-    for wire-compat.
+    Security Item #8 — storage cleanup
+    -----------------------------------
+    The full contract body is **never** returned inline in HTTP responses.
+    Instead we emit:
+
+        * `file_key`             — opaque object-storage key (already there)
+        * `content_url`          — short-lived (5 min) HMAC-signed URL the
+                                   browser can hit to download the body via
+                                   `/api/files/contracts/{token}`
+        * `content_url_expires_at` (epoch seconds)
+
+    The download endpoint forces `Content-Disposition: attachment` and
+    `Cache-Control: no-store` so the body never persists in browser
+    cache or page memory beyond the active download.
+
+    `embed_content=True` is reserved for **in-process** callers (e.g.
+    PDF rendering) that need the raw text. Route handlers must keep the
+    default (False) so the body never crosses the wire as JSON.
+
+    `file_sha256` (legal-proof integrity hash) is also dropped — it's
+    admin-only material; admins can fetch the canonical file via the
+    download URL and recompute if needed.
 
     When `viewer` is supplied, the result is also passed through the
     signature redactor so admin-only proof fields (`signed_ip`) are stripped
-    and `signed_by` is masked for non-privileged callers."""
+    and `signed_by` is masked for non-privileged callers.
+    """
     data = doc.dict() if hasattr(doc, "dict") else doc.model_dump()
-    if include_content:
-        if not data.get("content") and doc.file_key:
-            try:
-                from backend.app.services.file_storage import get_storage
-                data["content"] = get_storage().get(doc.file_key).decode("utf-8", errors="replace")
-            except Exception:  # noqa: BLE001
-                data["content"] = ""
-    else:
-        # Drop body + integrity hash from list summaries. `file_size` stays
-        # so the UI can show "12 KB" badges; `file_sha256` is admin-only
-        # legal-proof material.
-        data.pop("content", None)
-        data.pop("file_sha256", None)
+
+    # Always strip the inline body and integrity hash from JSON responses.
+    # `file_size` stays so the UI can render "12 KB" badges.
+    data.pop("content", None)
+    data.pop("file_sha256", None)
+
+    # Mint a short-lived download URL when storage has the file.
+    if doc.file_key:
+        try:
+            from backend.app.services.file_storage import (
+                get_storage,
+                mint_signed_token,
+            )
+            actor = getattr(viewer, "email", None)
+            token = mint_signed_token(
+                doc.file_key,
+                ttl_seconds=_DOWNLOAD_URL_TTL_SECONDS,
+                actor=actor,
+            )
+            data["content_url"] = f"/api/files/contracts/{token}"
+            data["content_url_expires_at"] = int(time.time()) + _DOWNLOAD_URL_TTL_SECONDS
+            data["content_url_ttl_seconds"] = _DOWNLOAD_URL_TTL_SECONDS
+
+            # In-process callers (PDF render, etc.) opt-in to raw bytes.
+            if embed_content:
+                try:
+                    data["content"] = get_storage().get(doc.file_key).decode(
+                        "utf-8", errors="replace"
+                    )
+                except Exception:  # noqa: BLE001
+                    data["content"] = ""
+        except Exception:  # noqa: BLE001
+            # Storage/token issuance failure must not break the JSON
+            # response — frontend just won't render a download link.
+            data.setdefault("content_url", None)
+
     if viewer is not None:
         from backend.app.services.signatures import redact_signature_for_viewer
         # Resolve owner founder so the redactor can recognise founder owners
@@ -903,7 +948,7 @@ def list_documents(project_id: int = None, session: Session = Depends(get_sessio
     # List view: omit the full document body and integrity hash. Callers
     # fetch /documents/{id} for the full record.
     return [
-        _hydrate_doc_content(d, viewer=user, session=session, include_content=False)
+        _hydrate_doc_content(d, viewer=user, session=session)
         for d in docs
     ]
 

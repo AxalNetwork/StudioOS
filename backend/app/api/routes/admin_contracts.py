@@ -108,6 +108,16 @@ def _days_to_sign(doc: Document) -> Optional[int]:
 
 
 def _doc_dto(session: Session, doc: Document, *, include_content: bool = False) -> dict:
+    """Admin contract DTO.
+
+    Security #8: per-policy, the contract body is **never** inlined in
+    the JSON response — even for admins. The `include_content=True`
+    legacy flag is preserved for callsite compatibility but now emits a
+    short-lived signed `content_url` instead, mirroring `_hydrate_doc_content`
+    in `routes/legal.py`. Admins still have the explicit
+    `POST /admin/contracts/{uid}/download-url` endpoint for shareable
+    long-form download links.
+    """
     out = {
         "id": doc.id,
         "uid": doc.uid,
@@ -130,17 +140,21 @@ def _doc_dto(session: Session, doc: Document, *, include_content: bool = False) 
     out["file_key"] = doc.file_key
     out["file_size"] = doc.file_size
     out["file_content_type"] = doc.file_content_type
+    # `file_sha256` is admin-only legal-proof material — kept on this DTO
+    # because the entire endpoint already requires admin (see router
+    # include in main.py), and admins need it for integrity audits.
     out["file_sha256"] = doc.file_sha256
-    if include_content:
-        # Prefer the stored copy; fall back to inline `content` for legacy rows.
-        if doc.file_key:
-            try:
-                data = get_storage().get(doc.file_key)
-                out["content"] = data.decode("utf-8", errors="replace")
-            except Exception:  # noqa: BLE001
-                out["content"] = doc.content
-        else:
-            out["content"] = doc.content
+    if include_content and doc.file_key:
+        # Mint a short-lived signed download URL instead of inlining the body.
+        try:
+            from backend.app.services.file_storage import mint_signed_token
+            import time as _time
+            token = mint_signed_token(doc.file_key, ttl_seconds=300)
+            out["content_url"] = f"/api/files/contracts/{token}"
+            out["content_url_expires_at"] = int(_time.time()) + 300
+            out["content_url_ttl_seconds"] = 300
+        except Exception:  # noqa: BLE001
+            out["content_url"] = None
     return out
 
 

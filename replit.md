@@ -441,3 +441,66 @@ Notes:
   `_company_summary_dto`/`_company_detail_dto`) are the implementation
   arm of the same rules — never bypass them by spreading raw
   `model_dump()` output into a response.
+
+## Storage cleanup (Security #8)
+Contract bodies and signature payloads are never returned as raw
+text/base64 in JSON responses. The wire shape is **file pointer + short-
+lived signed URL only**.
+
+- **Backend** (`backend/app/api/routes/legal.py`):
+  - `_hydrate_doc_content(doc, ..., embed_content=False)` is the single
+    serialiser for all `Document` JSON responses. It strips `content`
+    and `file_sha256` (admin-only legal-proof material) and emits:
+    - `file_key` — opaque object-storage key.
+    - `content_url` — short-lived (5 min) HMAC-signed URL pointing at
+      `/api/files/contracts/{token}` (see `services/file_storage.py`
+      `mint_signed_token` / `verify_signed_token`).
+    - `content_url_expires_at`, `content_url_ttl_seconds`.
+  - `embed_content=True` is reserved for **in-process** callers (e.g.
+    PDF rendering). Route handlers must keep the default (False) so the
+    body never crosses the wire as JSON.
+  - The download endpoint (`/api/files/contracts/{token}`) forces
+    `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`,
+    and `Cache-Control: private, no-store` — the body never persists
+    in browser cache or page memory beyond the active download.
+- **Signatures**: drawn-signature images (base64 data URLs) are **not
+  shipped**. Frontend `ESignPage` was sending `signature_data_url` but
+  the backend has no schema field for it — silently discarded. We
+  removed the field from the request body to eliminate the leak surface.
+  Per `services/signatures.py`: data minimisation — the legal record is
+  authenticated click-through + `typed_name`, nothing more.
+- **Frontend** — three pages used to render contract bodies inline in
+  `<pre>` blocks (`LegalPage`, `AdminPage`, `FundsPage`). All three now
+  show a violet **Download** button that hits the short-lived URL on
+  click. Closing the modal clears `viewDoc` state, so even the URL is
+  garbage-collected within a render cycle.
+- **Cloudflare Worker parallel** — the worker runs its own copy of the
+  legal/contract API surface (`routes/legal.ts`, `routes/legalcap.ts`,
+  `routes/funds.ts`). All of them now strip `content` from JSON
+  responses via the `safeDoc()` helper in `legal.ts` (and equivalent
+  inline scrubbers in the other two). `legalcap.POST /legal/generate`
+  no longer returns `body`/`vars` — the rendered contract text and the
+  PII-bearing template variables (investor name, amount, valuation cap)
+  are never wire-returned. The worker doesn't yet have its own HMAC
+  signing primitive; until ported, the response shape is correct-by-
+  default (no body) and a TODO documents the follow-up so the
+  `Download LPA` button can target a worker-minted `content_url`.
+- **Semantic search** (`services/vectorize.ts` +
+  `routes/search.ts`) — the `snippet` field for document vectors used
+  to be the first 280 chars of `legal_documents.content`, surfaced
+  verbatim in `GET /api/search`. Two-layer fix:
+  1. `vectorize.embedAndUpsertById` writes a neutral
+     `${doc_type} • ${status} • deal #${id}` snippet at upsert time.
+  2. `search.GET /` adds a response-time scrub that replaces the
+     snippet with a static neutral string for **every** hit where
+     `type === 'document'` — protects against legacy vectors written
+     before fix #1 until a backfill is run.
+
+  The embedding `text` field (which IS body-derived) is still fed to
+  the vector model — that's an acceptable internal use; only the
+  metadata `snippet` round-trips to the wire.
+
+  **Operational follow-up** (run once after deploy): hit
+  `POST /api/search/backfill` (admin-only) to re-embed all
+  `legal_documents` under the new neutral-snippet policy and purge
+  any stale snippets at rest.

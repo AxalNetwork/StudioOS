@@ -180,12 +180,19 @@ export async function embedAndUpsertById(env: Env, type: EntityType, id: number)
     ).bind(id).first<any>();
     if (!row) { await deleteEntity(env, type, id); return false; }
     const text = [row.doc_type, row.status, row.content].filter(Boolean).join('\n');
+    // Security #8 — storage cleanup:
+    // The `text` field is fed into the embedding model and stored in
+    // Vectorize as a vector (not human-readable). The `snippet` field,
+    // however, is round-tripped via metadata and surfaced verbatim in
+    // /api/search responses — so it must NEVER carry contract body text
+    // or rendered template vars (which contain PII like investor name,
+    // amount, valuation cap). Use neutral type/status metadata only.
     return upsertEntity(env, {
       type, id,
       text,
       title: `${row.doc_type} (deal #${row.deal_id})`,
       url: `/legal?deal=${row.deal_id}`,
-      snippet: String(row.content || '').slice(0, 280),
+      snippet: `${row.doc_type} • ${row.status || 'draft'} • deal #${row.deal_id}`,
     });
   }
   return false;
