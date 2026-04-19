@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, Loader2, FileText, User as UserIcon, Briefcase, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
 const TYPE_FILTERS = [
-  { key: '', label: 'All' },
-  { key: 'project', label: 'Projects' },
-  { key: 'partner', label: 'Partners' },
-  { key: 'document', label: 'Documents' },
+  { key: '', label: 'All', path: null },
+  { key: 'project', label: 'Projects', path: '/projects' },
+  { key: 'partner', label: 'Partners', path: '/partners' },
+  { key: 'document', label: 'Documents', path: '/legal' },
 ];
 
 function iconForType(t) {
@@ -17,6 +17,7 @@ function iconForType(t) {
 }
 
 export default function SemanticSearch() {
+  const navigate = useNavigate();
   const [q, setQ] = useState('');
   const [type, setType] = useState('');
   const [hits, setHits] = useState([]);
@@ -77,7 +78,16 @@ export default function SemanticSearch() {
         {TYPE_FILTERS.map(f => (
           <button
             key={f.key || 'all'}
-            onClick={() => setType(f.key)}
+            onClick={() => {
+              if (q.trim()) {
+                setType(f.key);
+              } else if (f.path) {
+                navigate(f.path);
+              } else {
+                setType(f.key);
+              }
+            }}
+            title={!q.trim() && f.path ? `Go to ${f.label}` : `Filter by ${f.label}`}
             className={`text-[11px] px-2 py-0.5 rounded-full border ${type === f.key ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
           >
             {f.label}
