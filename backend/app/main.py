@@ -151,6 +151,8 @@ app.include_router(private_data.router, prefix="/api")
 app.include_router(monitoring.router, prefix="/api")
 from backend.app.api.routes import infra as _infra
 app.include_router(_infra.router, prefix="/api")
+from backend.app.api.routes import admin_contracts as _admin_contracts
+app.include_router(_admin_contracts.router, prefix="/api")
 app.include_router(funds.router, prefix="/api")
 app.include_router(liquidity.router, prefix="/api")
 app.include_router(partnernet.router, prefix="/api")
