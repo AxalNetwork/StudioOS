@@ -39,12 +39,19 @@ router = APIRouter(prefix="/capital", tags=["Capital & Investment"])
 # ---------------------------------------------------------------------------
 # Serialization helpers — preserve legacy keys for the frontend.
 # ---------------------------------------------------------------------------
-def _lp_dto(lp: LimitedPartner, fund: VCFund | None) -> dict:
+def _lp_dto(lp: LimitedPartner, fund: VCFund | None, viewer: User | None = None) -> dict:
+    """Serialise an LP investor.
+
+    Email is masked for non-privileged viewers (anyone other than admins or
+    the LP themselves). Investor identity is sensitive and should not be
+    broadcast across founder accounts."""
+    from backend.app.services.pii import mask_email, can_see_full_pii
+    privileged = can_see_full_pii(viewer, subject_user_id=lp.user_id)
     return {
         "id": lp.id,
         "uid": lp.uid,
         "name": lp.name,
-        "email": lp.email,
+        "email": lp.email if privileged else mask_email(lp.email),
         "fund_id": lp.fund_id,
         "fund_name": fund.name if fund else None,
         "commitment_amount": lp.commitment_amount,
@@ -95,7 +102,7 @@ def _get_or_create_fund(session: Session, name: str) -> VCFund:
 def list_investors(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     lps = session.exec(select(LimitedPartner).order_by(LimitedPartner.created_at.desc())).all()
     funds = {f.id: f for f in session.exec(select(VCFund)).all()}
-    return [_lp_dto(lp, funds.get(lp.fund_id)) for lp in lps]
+    return [_lp_dto(lp, funds.get(lp.fund_id), user) for lp in lps]
 
 
 @router.post("/investors")
@@ -136,7 +143,7 @@ def create_investor(
     session.add(fund)
     session.commit()
     session.refresh(lp)
-    return _lp_dto(lp, fund)
+    return _lp_dto(lp, fund, user)
 
 
 @router.get("/investors/{investor_id}")
@@ -152,7 +159,7 @@ def get_investor(
     calls = session.exec(
         select(CapitalCall).where(CapitalCall.limited_partner_id == investor_id)
     ).all()
-    return {**_lp_dto(lp, fund), "capital_calls": [_call_dto(c) for c in calls]}
+    return {**_lp_dto(lp, fund, user), "capital_calls": [_call_dto(c) for c in calls]}
 
 
 # ---------------------------------------------------------------------------

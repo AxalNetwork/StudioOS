@@ -4,14 +4,25 @@ from backend.app.database import get_session
 from backend.app.models.entities import Partner, User
 from backend.app.schemas.scoring import PartnerCreate, MatchPartnersRequest
 from backend.app.api.routes.auth import get_current_user
+from backend.app.services.pii import mask_email, can_see_full_pii
 import uuid
 
 router = APIRouter(prefix="/partners", tags=["Partner Ecosystem"])
 
 
+def _partner_dto(p: Partner, viewer: User) -> dict:
+    """Serialise a partner with email masked unless the viewer is privileged
+    (admin) or is the partner themselves."""
+    data = p.model_dump()
+    if not can_see_full_pii(viewer, subject_partner_id=p.id):
+        data["email"] = mask_email(data.get("email"))
+    return data
+
+
 @router.get("/")
 def list_partners(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
-    return session.exec(select(Partner).order_by(Partner.created_at.desc())).all()
+    rows = session.exec(select(Partner).order_by(Partner.created_at.desc())).all()
+    return [_partner_dto(p, user) for p in rows]
 
 
 @router.post("/")
@@ -26,7 +37,7 @@ def create_partner(data: PartnerCreate, session: Session = Depends(get_session),
     session.add(partner)
     session.commit()
     session.refresh(partner)
-    return partner
+    return _partner_dto(partner, user)
 
 
 @router.get("/{partner_id}")
@@ -34,7 +45,7 @@ def get_partner(partner_id: int, session: Session = Depends(get_session), user: 
     partner = session.get(Partner, partner_id)
     if not partner:
         raise HTTPException(status_code=404, detail="Partner not found")
-    return partner
+    return _partner_dto(partner, user)
 
 
 @router.get("/referral/{referral_code}")
@@ -43,7 +54,7 @@ def get_by_referral(referral_code: str, session: Session = Depends(get_session),
     partner = session.exec(stmt).first()
     if not partner:
         raise HTTPException(status_code=404, detail="Invalid referral code")
-    return partner
+    return _partner_dto(partner, user)
 
 
 @router.post("/referral/{referral_code}/use")
@@ -56,7 +67,7 @@ def use_referral(referral_code: str, session: Session = Depends(get_session), us
     session.add(partner)
     session.commit()
     session.refresh(partner)
-    return {"message": "Referral tracked", "partner": partner}
+    return {"message": "Referral tracked", "partner": _partner_dto(partner, user)}
 
 
 @router.get("/matchmaking/recommend")
@@ -65,7 +76,7 @@ def recommend_partners(sector: str = None, session: Session = Depends(get_sessio
     if sector:
         stmt = stmt.where(Partner.specialization.ilike(f"%{sector}%"))
     partners = session.exec(stmt).all()
-    return {"matches": partners, "count": len(partners)}
+    return {"matches": [_partner_dto(p, user) for p in partners], "count": len(partners)}
 
 
 @router.post("/matchPartners")
