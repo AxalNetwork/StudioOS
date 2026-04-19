@@ -222,7 +222,7 @@ function CreateSyndicateModal({ onClose, onCreated }) {
   };
 
   return (
-    <Modal title="Create Syndicate" onClose={onClose} titleClassName="text-gray-900">
+    <Modal title="Create Syndicate" onClose={onClose} titleClassName="text-black">
       <div className="space-y-3">
         <Field label="Name *"><input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} className={inputCls} /></Field>
         <Field label="Description"><textarea rows={2} value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} className={inputCls} /></Field>
