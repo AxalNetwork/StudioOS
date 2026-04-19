@@ -10,17 +10,24 @@ import { api } from '../lib/api';
 
 const TEMPLATE_STORAGE_KEY = 'axal:invite_templates_v1';
 
+// Public Axal channels referenced in default share copy. Editing the templates
+// in the UI overrides these — the constants are only used to build defaults.
+const AXAL_TELEGRAM_URL = 'https://t.me/axalvc';
+const AXAL_LINKEDIN_URL = 'https://www.linkedin.com/company/axalvc';
+
 const DEFAULT_TEMPLATES = {
   twitter:
-    "I've been using @AxalVC StudioOS to spin up startups in 30 days — AI-scored deals, automated incorporation, real partner network. Worth a look:",
+    "I've been using @AxalVC StudioOS to spin up startups in 30 days — AI-scored deals, automated incorporation, real partner network. Worth a look: #AxalVC #VentureStudio #Startups",
   linkedin:
-    "I'm part of the Axal StudioOS network — a venture studio that ships funded startups in 30 days. They're opening up partner spots. Use my link:",
+    "I'm part of the Axal StudioOS network (@axalvc — " + AXAL_LINKEDIN_URL + ") — a venture studio that ships funded startups in 30 days. They're opening up partner spots. Use my link: {{link}}\n\n#AxalVC #VentureStudio #Startups #Founders",
   whatsapp:
     "Hey — thought you'd find this interesting. Axal StudioOS turns ideas into funded companies in 30 days. My referral link:",
+  telegram:
+    "Join me on Axal StudioOS — a venture studio that ships funded startups in 30 days. Sign up with my referral link: {{link}}\n\nAlso join the Axal community on Telegram: " + AXAL_TELEGRAM_URL + " #AxalVC",
   email_subject:
     "Quick intro to Axal StudioOS",
   email_body:
-    "Hi,\n\nI wanted to share something I think you'd find useful — Axal StudioOS. It's a venture studio that uses AI scoring + automated incorporation to ship funded startups in 30 days, and they pay commissions when partners I refer hit milestones.\n\nIf you'd like to take a look, here's my referral link:\n{{link}}\n\nReferral code: {{code}}\n\nLet me know what you think.\n\nThanks,",
+    "Hi,\n\nI wanted to share something I think you'd find useful — Axal StudioOS. It's a venture studio that uses AI scoring + automated incorporation to ship funded startups in 30 days, and they pay commissions when partners I refer hit milestones.\n\nIf you'd like to take a look, here's my referral link:\n{{link}}\n\nReferral code: {{code}}\n\nJoin the Axal community on Telegram: " + AXAL_TELEGRAM_URL + "\nFollow Axal on LinkedIn: " + AXAL_LINKEDIN_URL + "\n\nLet me know what you think.\n\nThanks,",
 };
 
 function loadTemplates() {
@@ -93,14 +100,21 @@ export default function ReferEarnPage() {
   const shareLinks = useMemo(() => {
     const url = encodeURIComponent(link);
     const tw = encodeURIComponent(fillTemplate(templates.twitter, link, code));
-    const li = encodeURIComponent(fillTemplate(templates.linkedin, link, code));
+    // LinkedIn's share dialog ignores any `text`/`summary` param it used to
+    // accept — only `url` is honored. The template is still useful: many
+    // users copy/paste it into the LinkedIn composer or via a bookmarklet.
     const wa = encodeURIComponent(fillTemplate(templates.whatsapp, link, code) + ' ' + link);
+    // Telegram's share endpoint takes the URL plus an optional text body.
+    // We pre-fill with the user's referral link AND a nudge to join the
+    // public Axal channel, so the recipient gets both calls-to-action.
+    const tg = encodeURIComponent(fillTemplate(templates.telegram, link, code));
     const em_subject = encodeURIComponent(fillTemplate(templates.email_subject, link, code));
     const em_body = encodeURIComponent(fillTemplate(templates.email_body, link, code));
     return {
       twitter: `https://twitter.com/intent/tweet?text=${tw}&url=${url}`,
       linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${url}`,
       whatsapp: `https://wa.me/?text=${wa}`,
+      telegram: `https://t.me/share/url?url=${url}&text=${tg}`,
       email: `mailto:?subject=${em_subject}&body=${em_body}`,
     };
   }, [link, code, templates]);
@@ -247,9 +261,10 @@ export default function ReferEarnPage() {
                 <Edit3 size={11} /> {editingTemplates ? 'Close' : 'Edit messages'}
               </button>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
               <ShareButton href={shareLinks.twitter} icon={Twitter} label="X / Twitter" color="bg-black hover:bg-gray-800" />
               <ShareButton href={shareLinks.linkedin} icon={Linkedin} label="LinkedIn" color="bg-[#0A66C2] hover:bg-[#0856a8]" />
+              <ShareButton href={shareLinks.telegram} icon={Send} label="Telegram" color="bg-[#229ED9] hover:bg-[#1d8abf]" />
               <ShareButton href={shareLinks.whatsapp} icon={MessageCircle} label="WhatsApp" color="bg-[#25D366] hover:bg-[#20bd5a]" />
               <ShareButton href={shareLinks.email} icon={Mail} label="Email" color="bg-violet-600 hover:bg-violet-700" />
             </div>
@@ -495,6 +510,9 @@ function TemplateEditor({ templates, setTemplates, onSave, onReset }) {
         </Field>
         <Field label="WhatsApp">
           <textarea rows={2} className={inputCls} value={templates.whatsapp} onChange={e => set('whatsapp', e.target.value)} />
+        </Field>
+        <Field label="Telegram">
+          <textarea rows={3} className={inputCls} value={templates.telegram || ''} onChange={e => set('telegram', e.target.value)} />
         </Field>
         <Field label="Email subject">
           <input className={inputCls} value={templates.email_subject} onChange={e => set('email_subject', e.target.value)} />
