@@ -24,6 +24,60 @@ class ScoreRequest(BaseModel):
     ai_adjustment: float = Field(0, ge=-5, le=5)
 
 
+class _Slider10(BaseModel):
+    """Reusable 0..10 slider container — sub-factors share the same scale."""
+    pass
+
+
+class MarketScoreV2(BaseModel):
+    tam: float = Field(0, ge=0, le=10)
+    growth: float = Field(0, ge=0, le=10)
+    urgency: float = Field(0, ge=0, le=10)
+
+
+class TeamScoreV2(BaseModel):
+    expertise: float = Field(0, ge=0, le=10)
+    execution: float = Field(0, ge=0, le=10)
+    network: float = Field(0, ge=0, le=10)
+
+
+class ProductScoreV2(BaseModel):
+    differentiation: float = Field(0, ge=0, le=10)
+    feasibility: float = Field(0, ge=0, le=10)
+    scalability: float = Field(0, ge=0, le=10)
+
+
+class TractionScoreV2(BaseModel):
+    users: float = Field(0, ge=0, le=10)
+    revenue: float = Field(0, ge=0, le=10)
+    signals: float = Field(0, ge=0, le=10)
+
+
+class CapitalScoreV2(BaseModel):
+    burn_efficiency: float = Field(0, ge=0, le=10)
+    runway: float = Field(0, ge=0, le=10)
+
+
+class FitScoreV2(BaseModel):
+    alignment: float = Field(0, ge=0, le=10)
+    moat: float = Field(0, ge=0, le=10)
+
+
+class ScoreRunRequest(BaseModel):
+    """v2 — `/api/scoring/run`. All sub-factors are 0..10 sliders."""
+    project_id: Optional[int] = None
+    startup_name: Optional[str] = None
+    notes: Optional[str] = None  # optional analyst context for AI explanation
+    save_to_project: bool = False
+    market: MarketScoreV2 = Field(default_factory=MarketScoreV2)
+    team: TeamScoreV2 = Field(default_factory=TeamScoreV2)
+    product: ProductScoreV2 = Field(default_factory=ProductScoreV2)
+    traction: TractionScoreV2 = Field(default_factory=TractionScoreV2)
+    capital: CapitalScoreV2 = Field(default_factory=CapitalScoreV2)
+    fit: FitScoreV2 = Field(default_factory=FitScoreV2)
+    ai_adjustment: float = Field(0, ge=-10, le=10)
+
+
 class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = None

@@ -142,6 +142,129 @@ def tier_label(tier: str) -> str:
     return labels.get(tier, tier)
 
 
+# ---------------------------------------------------------------------------
+# v2 — "The Brain" 100-pt scoring (Market 25 / Team 20 / Product 20 /
+# Traction 15 / Capital 10 / Fit & Moat 10) + AI bonus layer (+/- 10).
+#
+# Each sub-input is 0..10 (slider scale). Weights map the slider score onto
+# the category's max points. Keeping the public surface deterministic so the
+# frontend can mirror the math for the live total.
+# ---------------------------------------------------------------------------
+SCORING_V2_WEIGHTS = {
+    "market": {
+        "max": 25,
+        "factors": {
+            "tam": {"max": 10, "label": "Market size (TAM)"},
+            "growth": {"max": 8,  "label": "Growth & timing"},
+            "urgency": {"max": 7, "label": "Pain / urgency"},
+        },
+    },
+    "team": {
+        "max": 20,
+        "factors": {
+            "expertise": {"max": 8, "label": "Domain expertise"},
+            "execution": {"max": 7, "label": "Execution speed"},
+            "network":   {"max": 5, "label": "Network leverage"},
+        },
+    },
+    "product": {
+        "max": 20,
+        "factors": {
+            "differentiation": {"max": 8, "label": "Differentiation / IP"},
+            "feasibility":     {"max": 7, "label": "Technical feasibility"},
+            "scalability":     {"max": 5, "label": "Scalability"},
+        },
+    },
+    "traction": {
+        "max": 15,
+        "factors": {
+            "users":    {"max": 6, "label": "User adoption"},
+            "revenue":  {"max": 6, "label": "Revenue / pipeline"},
+            "signals":  {"max": 3, "label": "Validation signals"},
+        },
+    },
+    "capital": {
+        "max": 10,
+        "factors": {
+            "burn_efficiency": {"max": 5, "label": "Burn efficiency"},
+            "runway":          {"max": 5, "label": "Runway / unit econ."},
+        },
+    },
+    "fit": {
+        "max": 10,
+        "factors": {
+            "alignment": {"max": 5, "label": "Strategic alignment"},
+            "moat":      {"max": 5, "label": "Defensibility / moat"},
+        },
+    },
+}
+
+
+def _weighted_factor(slider_value: float, factor_max: int) -> float:
+    """Convert a 0..10 slider into 0..factor_max points."""
+    v = max(0.0, min(10.0, float(slider_value or 0)))
+    return round((v / 10.0) * factor_max, 2)
+
+
+def _score_category(values: dict, category_key: str) -> dict:
+    spec = SCORING_V2_WEIGHTS[category_key]
+    breakdown = {}
+    total = 0.0
+    for factor_key, factor_spec in spec["factors"].items():
+        raw = values.get(factor_key, 0)
+        pts = _weighted_factor(raw, factor_spec["max"])
+        breakdown[factor_key] = {
+            "raw": round(float(raw or 0), 2),
+            "points": pts,
+            "max": factor_spec["max"],
+            "label": factor_spec["label"],
+        }
+        total += pts
+    total = round(min(total, spec["max"]), 2)
+    return {"total": total, "max": spec["max"], "factors": breakdown}
+
+
+def _recommendation(score: float) -> str:
+    if score >= 85:
+        return "Strong"
+    if score >= 70:
+        return "Promising"
+    if score >= 55:
+        return "Needs Work"
+    return "High Risk"
+
+
+def run_brain_score(payload: dict) -> dict:
+    """
+    Run the v2 100-pt scoring engine. `payload` must include nested category
+    dicts (market/team/product/traction/capital/fit), each holding 0..10
+    slider values for the factors defined in SCORING_V2_WEIGHTS, plus an
+    optional `ai_adjustment` in -10..+10.
+    """
+    categories = {}
+    raw_total = 0.0
+    for key, spec in SCORING_V2_WEIGHTS.items():
+        cat_values = payload.get(key, {}) or {}
+        cat = _score_category(cat_values, key)
+        categories[key] = cat
+        raw_total += cat["total"]
+
+    raw_total = round(raw_total, 2)
+    ai_adjustment = max(-10.0, min(10.0, float(payload.get("ai_adjustment", 0) or 0)))
+    final_total = round(max(0.0, min(100.0, raw_total + ai_adjustment)), 2)
+
+    return {
+        "total_score": final_total,
+        "raw_score": raw_total,
+        "ai_adjustment": ai_adjustment,
+        "max_possible": 100,
+        "recommendation": _recommendation(final_total),
+        "tier": classify_tier(final_total),
+        "tier_label": tier_label(classify_tier(final_total)),
+        "category_breakdown": categories,
+    }
+
+
 def run_full_score(data: dict) -> dict:
     market = score_market(
         tam=data.get("tam", 0),

@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from backend.app.database import get_session
 from backend.app.models.entities import Project, ScoreSnapshot, DealMemo, Founder, Deal, ActivityLog, User
-from backend.app.schemas.scoring import ScoreRequest, GenerateMemoRequest
-from backend.app.services.scoring import run_full_score, tier_label
+from backend.app.schemas.scoring import ScoreRequest, GenerateMemoRequest, ScoreRunRequest
+from backend.app.services.scoring import run_full_score, run_brain_score, tier_label
 from backend.app.services.ai_memo import generate_memo_with_ai
+from backend.app.services.scoring_ai import explain_score
 from backend.app.api.routes.auth import get_current_user
 from backend.app.api.deps import require_role, ensure_founder_access
 from datetime import datetime
@@ -66,6 +67,85 @@ def score_startup(req: ScoreRequest, session: Session = Depends(get_session), us
         session.commit()
         session.refresh(snapshot)
         result["snapshot_id"] = snapshot.id
+
+    return result
+
+
+@router.post("/run")
+def run_brain(req: ScoreRunRequest, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    """
+    v2 — "The Brain" 100-point scoring engine.
+
+    Returns: total_score, raw_score, ai_adjustment, recommendation,
+    category_breakdown (with per-factor points), and ai_explanation.
+
+    If `save_to_project=True` and `project_id` is provided, persists a
+    ScoreSnapshot and updates the project tier (with founder-access guard).
+    """
+    payload = {
+        "market":   req.market.model_dump(),
+        "team":     req.team.model_dump(),
+        "product":  req.product.model_dump(),
+        "traction": req.traction.model_dump(),
+        "capital":  req.capital.model_dump(),
+        "fit":      req.fit.model_dump(),
+        "ai_adjustment": req.ai_adjustment,
+    }
+    result = run_brain_score(payload)
+    explanation = explain_score(result, startup_name=req.startup_name, context=req.notes)
+    result["ai_explanation"] = explanation
+
+    if req.save_to_project and req.project_id:
+        project = session.get(Project, req.project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        ensure_founder_access(user, project.founder_id)
+
+        # Map v2 category breakdown into the existing ScoreSnapshot columns.
+        b = result["category_breakdown"]
+        snapshot = ScoreSnapshot(
+            project_id=project.id,
+            total_score=result["total_score"],
+            tier=result["tier"],
+            market_size=b["market"]["factors"]["tam"]["points"],
+            market_urgency=b["market"]["factors"]["urgency"]["points"],
+            market_trend=b["market"]["factors"]["growth"]["points"],
+            market_total=b["market"]["total"],
+            team_expertise=b["team"]["factors"]["expertise"]["points"],
+            team_execution=b["team"]["factors"]["execution"]["points"],
+            team_network=b["team"]["factors"]["network"]["points"],
+            team_total=b["team"]["total"],
+            product_mvp_time=b["product"]["factors"]["feasibility"]["points"],
+            product_complexity=b["product"]["factors"]["differentiation"]["points"],
+            product_dependency=b["product"]["factors"]["scalability"]["points"],
+            product_total=b["product"]["total"],
+            capital_cost_mvp=b["capital"]["factors"]["burn_efficiency"]["points"],
+            capital_time_revenue=b["capital"]["factors"]["runway"]["points"],
+            capital_burn_traction=0,
+            capital_total=b["capital"]["total"],
+            fit_alignment=b["fit"]["factors"]["alignment"]["points"],
+            fit_synergy=b["fit"]["factors"]["moat"]["points"],
+            fit_total=b["fit"]["total"],
+            distribution_channels=b["traction"]["factors"]["users"]["points"],
+            distribution_virality=b["traction"]["factors"]["revenue"]["points"],
+            distribution_total=b["traction"]["total"],
+            ai_adjustment=result["ai_adjustment"],
+        )
+        session.add(snapshot)
+        if result["total_score"] >= 85:
+            project.status = "tier_1"
+        elif result["total_score"] >= 70:
+            project.status = "tier_2"
+        else:
+            project.status = "rejected"
+        project.updated_at = datetime.utcnow()
+        session.add(project)
+        session.commit()
+        session.refresh(snapshot)
+        result["snapshot_id"] = snapshot.id
+        result["saved"] = True
+    else:
+        result["saved"] = False
 
     return result
 
