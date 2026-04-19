@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { getLiveQuotes, getMarketHeadlines } from '../services/market-data';
 
 const marketIntel = new Hono<{ Bindings: Env }>();
 
@@ -56,8 +57,39 @@ const STUDIO_BENCHMARKS = {
   avg_valuation_first_round: '$9.2M', cost_per_spinout: '$185k', deployment_velocity: 35,
 };
 
-marketIntel.get('/market-pulse', (c) => c.json({ signals: MARKET_PULSE, updated_at: new Date().toISOString(), total_sectors: MARKET_PULSE.length }));
-marketIntel.get('/macro', (c) => c.json(MACRO_DATA));
+marketIntel.get('/market-pulse', async (c) => {
+  const updated_at = new Date().toISOString();
+  let headlines: any[] = [];
+  let sources: string[] = [];
+  let cached = false;
+  try {
+    const h = await getMarketHeadlines(c.env);
+    headlines = h.headlines;
+    sources = h.sources;
+    cached = h.cached;
+  } catch { /* fall through to seed-only */ }
+  return c.json({
+    signals: MARKET_PULSE,
+    headlines,
+    headlines_sources: sources,
+    headlines_cached: cached,
+    updated_at,
+    total_sectors: MARKET_PULSE.length,
+  });
+});
+
+marketIntel.get('/macro', async (c) => {
+  let live_quotes: any[] = [];
+  let quotes_updated_at: string | null = null;
+  let cached = false;
+  try {
+    const q = await getLiveQuotes(c.env);
+    live_quotes = q.quotes;
+    quotes_updated_at = q.updated_at;
+    cached = q.cached;
+  } catch { /* fall through to seed-only */ }
+  return c.json({ ...MACRO_DATA, live_quotes, quotes_updated_at, quotes_cached: cached });
+});
 marketIntel.get('/private-rounds', (c) => c.json({ rounds: PRIVATE_ROUNDS, total: PRIVATE_ROUNDS.length, updated_at: new Date().toISOString() }));
 marketIntel.get('/studio-benchmarks', (c) => c.json(STUDIO_BENCHMARKS));
 

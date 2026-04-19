@@ -4,6 +4,8 @@ import { api } from '../lib/api';
 
 export default function MarketIntelPage() {
   const [pulse, setPulse] = useState([]);
+  const [headlines, setHeadlines] = useState([]);
+  const [pulseUpdatedAt, setPulseUpdatedAt] = useState(null);
   const [macro, setMacro] = useState(null);
   const [rounds, setRounds] = useState([]);
   const [benchmarks, setBenchmarks] = useState(null);
@@ -20,12 +22,20 @@ export default function MarketIntelPage() {
       api.competitiveIntelligence(),
     ]).then(([p, m, r, b, c]) => {
       setPulse(p.signals || []);
+      setHeadlines(p.headlines || []);
+      setPulseUpdatedAt(p.updated_at || null);
       setMacro(m);
       setRounds(r.rounds || []);
       setBenchmarks(b);
       setConviction(c.high_conviction_plays || []);
     }).catch(() => {});
   }, []);
+
+  const fmtTime = (iso) => {
+    if (!iso) return '';
+    try { return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+    catch { return ''; }
+  };
 
   const tabs = [
     { key: 'pulse', label: 'Market Pulse', icon: Zap },
@@ -90,34 +100,58 @@ export default function MarketIntelPage() {
       </div>
 
       {tab === 'pulse' && (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {pulse.map((s, i) => (
-            <div key={i} className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="space-y-6">
+          {headlines.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-900">{s.sector}</h3>
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  s.sentiment === 'Aggressive' ? 'bg-emerald-100 text-emerald-700' :
-                  s.sentiment === 'Cautious' ? 'bg-orange-100 text-orange-700' :
-                  'bg-yellow-100 text-yellow-700'
-                }`}>{s.sentiment}</span>
+                <h3 className="text-sm font-semibold text-gray-900">Live Headlines</h3>
+                <span className="text-[10px] text-gray-500">Updated {fmtTime(pulseUpdatedAt)}</span>
               </div>
-              <div className="text-2xl font-bold text-violet-600 mb-3">{s.multiple}x</div>
-              <div className="space-y-2 text-xs">
-                <div>
-                  <span className="text-gray-600">Tech Signal:</span>
-                  <p className="text-gray-700 mt-0.5">{s.technographic_signal}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600">Hiring:</span>
-                  <p className="text-gray-700 mt-0.5">{s.hiring_surge}</p>
-                </div>
-                <div className="pt-2 border-t border-gray-200">
-                  <span className="text-violet-600 font-medium">Spin-out Opportunity:</span>
-                  <p className="text-gray-800 mt-0.5">{s.gap_opportunity}</p>
-                </div>
-              </div>
+              <ul className="divide-y divide-gray-100">
+                {headlines.map((h, i) => (
+                  <li key={i} className="py-2 text-xs">
+                    <a href={h.link} target="_blank" rel="noopener noreferrer" className="text-gray-900 hover:text-violet-600 font-medium block">
+                      {h.title}
+                    </a>
+                    <div className="text-gray-500 mt-0.5">
+                      <span className="text-violet-600">{h.source}</span>
+                      {h.published && <> · {fmtTime(h.published)}</>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
-          ))}
+          )}
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {pulse.map((s, i) => (
+              <div key={i} className="bg-white border border-gray-200 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900">{s.sector}</h3>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    s.sentiment === 'Aggressive' ? 'bg-emerald-100 text-emerald-700' :
+                    s.sentiment === 'Cautious' ? 'bg-orange-100 text-orange-700' :
+                    'bg-yellow-100 text-yellow-700'
+                  }`}>{s.sentiment}</span>
+                </div>
+                <div className="text-2xl font-bold text-violet-600 mb-3">{s.multiple}x</div>
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <span className="text-gray-600">Tech Signal:</span>
+                    <p className="text-gray-700 mt-0.5">{s.technographic_signal}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Hiring:</span>
+                    <p className="text-gray-700 mt-0.5">{s.hiring_surge}</p>
+                  </div>
+                  <div className="pt-2 border-t border-gray-200">
+                    <span className="text-violet-600 font-medium">Spin-out Opportunity:</span>
+                    <p className="text-gray-800 mt-0.5">{s.gap_opportunity}</p>
+                  </div>
+                  <div className="pt-1 text-[10px] text-gray-400">Updated {fmtTime(pulseUpdatedAt)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -133,6 +167,37 @@ export default function MarketIntelPage() {
               <p className="text-sm text-gray-700">{macro.interest_rate_impact}</p>
             </div>
           </div>
+
+          {macro.live_quotes && macro.live_quotes.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6">
+              <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-900">Live Tech Quotes</h3>
+                <span className="text-[10px] text-gray-500">Updated {fmtTime(macro.quotes_updated_at)}</span>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left px-4 py-2 text-gray-600 font-medium">Symbol</th>
+                    <th className="text-left px-4 py-2 text-gray-600 font-medium">Name</th>
+                    <th className="text-right px-4 py-2 text-gray-600 font-medium">Price</th>
+                    <th className="text-right px-4 py-2 text-gray-600 font-medium">Change</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {macro.live_quotes.map((q) => (
+                    <tr key={q.symbol} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-2 text-gray-900 font-mono font-medium">{q.symbol}</td>
+                      <td className="px-4 py-2 text-gray-700">{q.name}</td>
+                      <td className="px-4 py-2 text-right text-gray-900">${q.price}</td>
+                      <td className={`px-4 py-2 text-right font-medium ${q.pct_change > 0 ? 'text-emerald-600' : q.pct_change < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                        {q.pct_change > 0 ? '+' : ''}{q.pct_change}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             <table className="w-full text-sm">
               <thead>

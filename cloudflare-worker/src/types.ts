@@ -58,6 +58,7 @@ export interface User {
   email_verified: boolean;
   verification_token: string | null;
   verification_token_expires: string | null;
+  kyc_status: string | null;
   created_at: string;
 }
 
