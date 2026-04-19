@@ -17,8 +17,63 @@ from backend.app.models.entities import (
     User, ActivityLog, Document, DocumentStatus, Project, Founder, Partner,
 )
 from backend.app.api.routes.admin import require_admin
+from backend.app.services.file_storage import (
+    get_storage,
+    store_contract_bytes,
+    mint_signed_token,
+    verify_signed_token,
+)
 
 router = APIRouter(prefix="/admin/contracts", tags=["Admin · Contracts"])
+
+
+def _resolve_bytes(session: Session, doc: Document) -> tuple[bytes, str]:
+    """Return (bytes, content_type) for a document.
+
+    Behaviour:
+      - If `file_key` is set and the object exists, stream from storage.
+      - Otherwise, if inline `content` exists, migrate-on-read into storage
+        (clearing the inline copy) and return the bytes.
+      - If `file_key` is set but the object is *missing* and there is no
+        inline fallback, raise 410 Gone so we never silently serve empty
+        content. (Storage data loss must be visible.)
+    """
+    storage = get_storage()
+    if doc.file_key:
+        try:
+            data = storage.get(doc.file_key)
+            return data, doc.file_content_type or "application/octet-stream"
+        except Exception as exc:  # noqa: BLE001
+            if not doc.content:
+                raise HTTPException(
+                    status_code=410,
+                    detail=f"Stored contract object is missing (file_key={doc.file_key}); cannot serve.",
+                ) from exc
+            # else: fall through to inline content as a recovery path
+    body = doc.content or ""
+    if not body:
+        raise HTTPException(status_code=410, detail="Contract has no content")
+    looks_html = "<html" in body.lower() or "<div" in body.lower() or "<p>" in body.lower()
+    content_type = "text/html" if looks_html else "text/plain"
+    try:
+        obj = store_contract_bytes(doc.uid, body.encode("utf-8"), content_type)
+        doc.file_key = obj.file_key
+        doc.file_size = obj.size
+        doc.file_sha256 = obj.sha256
+        doc.file_content_type = obj.content_type
+        doc.content = None  # purge from DB now that storage holds it
+        session.add(doc)
+        session.commit()
+    except Exception:  # noqa: BLE001
+        # Migration failed but we still have the bytes in hand — serve them.
+        pass
+    return body.encode("utf-8"), content_type
+
+
+def _safe_filename(doc: Document, content_type: str) -> str:
+    safe_title = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in (doc.title or "contract"))[:64]
+    ext = "html" if "html" in (content_type or "") else ("pdf" if "pdf" in (content_type or "") else "txt")
+    return f"{safe_title}_{doc.uid[:8]}.{ext}"
 
 
 # ---------------------------------------------------------------------------
@@ -68,8 +123,20 @@ def _doc_dto(session: Session, doc: Document, *, include_content: bool = False) 
         "created_at": doc.created_at.isoformat() if doc.created_at else None,
         "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
     }
+    out["file_key"] = doc.file_key
+    out["file_size"] = doc.file_size
+    out["file_content_type"] = doc.file_content_type
+    out["file_sha256"] = doc.file_sha256
     if include_content:
-        out["content"] = doc.content
+        # Prefer the stored copy; fall back to inline `content` for legacy rows.
+        if doc.file_key:
+            try:
+                data = get_storage().get(doc.file_key)
+                out["content"] = data.decode("utf-8", errors="replace")
+            except Exception:  # noqa: BLE001
+                out["content"] = doc.content
+        else:
+            out["content"] = doc.content
     return out
 
 
@@ -275,18 +342,66 @@ def void_contract(
 def download_contract(
     uid: str,
     session: Session = Depends(get_session),
-    _: User = Depends(require_admin),
+    admin: User = Depends(require_admin),
 ):
+    """Auth-gated proxy that streams the contract bytes from object storage.
+
+    Legacy rows whose body still sits inline in `documents.content` are
+    migrated into storage on first access. Every successful download is
+    audit-logged."""
     doc = _get_by_uid(session, uid)
-    body = doc.content or ""
-    # Detect HTML payloads coming from the template engine
-    looks_html = "<html" in body.lower() or "<div" in body.lower() or "<p>" in body.lower()
-    media_type = "text/html" if looks_html else "text/plain"
-    ext = "html" if looks_html else "txt"
-    safe_title = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in (doc.title or "contract"))[:64]
-    filename = f"{safe_title}_{doc.uid[:8]}.{ext}"
+    data, content_type = _resolve_bytes(session, doc)
+    session.add(ActivityLog(
+        project_id=doc.project_id,
+        user_id=admin.id,
+        action="contract_downloaded",
+        details=f"Admin {admin.email} downloaded contract '{doc.title}' (uid={doc.uid})",
+        actor=admin.email,
+    ))
+    session.commit()
     return Response(
-        content=body,
-        media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        content=data,
+        media_type=content_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{_safe_filename(doc, content_type)}"'},
     )
+
+
+@router.post("/{uid}/download-url")
+def issue_contract_download_url(
+    uid: str,
+    ttl_seconds: int = Query(300, ge=30, le=3600),
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin),
+):
+    """Issue a short-lived signed URL the admin can share or open in a new tab.
+
+    The URL is valid for `ttl_seconds` (default 5 min, max 1 hour) and grants
+    read access to *only* this one contract. Audit-logged on issuance."""
+    doc = _get_by_uid(session, uid)
+    # Make sure storage has a copy (migrate legacy inline content if needed)
+    if not doc.file_key:
+        _resolve_bytes(session, doc)
+        if not doc.file_key:
+            raise HTTPException(status_code=410, detail="Contract has no file content")
+    # Verify the object still exists in storage before handing out a link;
+    # otherwise the recipient would just hit a 404 a few minutes from now.
+    storage = get_storage()
+    if not (hasattr(storage, "exists") and storage.exists(doc.file_key)):
+        raise HTTPException(
+            status_code=410,
+            detail=f"Stored contract object is missing (file_key={doc.file_key}); cannot issue link.",
+        )
+    token = mint_signed_token(doc.file_key, ttl_seconds=ttl_seconds, actor=admin.email)
+    session.add(ActivityLog(
+        project_id=doc.project_id,
+        user_id=admin.id,
+        action="contract_share_link_issued",
+        details=f"Admin {admin.email} issued share link for '{doc.title}' (uid={doc.uid}, ttl={ttl_seconds}s)",
+        actor=admin.email,
+    ))
+    session.commit()
+    return {
+        "url": f"/api/files/contracts/{token}",
+        "expires_in": ttl_seconds,
+        "filename": _safe_filename(doc, doc.file_content_type or "application/octet-stream"),
+    }

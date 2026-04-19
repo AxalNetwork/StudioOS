@@ -130,6 +130,8 @@ export const api = {
   adminResendContract: (uid) => request(`/admin/contracts/${uid}/resend`, { method: 'POST' }),
   adminVoidContract: (uid) => request(`/admin/contracts/${uid}/void`, { method: 'POST' }),
   adminDownloadContractUrl: (uid) => `/api/admin/contracts/${uid}/download`,
+  adminIssueContractShareLink: (uid, ttl_seconds = 300) =>
+    request(`/admin/contracts/${uid}/download-url?ttl_seconds=${ttl_seconds}`, { method: 'POST' }),
   adminImpersonate: (userId) => request(`/admin/impersonate/${userId}`, { method: 'POST' }),
   adminUpdateRole: (userId, role) => request(`/admin/users/${userId}/role?role=${role}`, { method: 'PATCH' }),
   adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),

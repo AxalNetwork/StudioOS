@@ -780,12 +780,33 @@ def generate_document(data: DocumentCreate, session: Session = Depends(get_sessi
         title=data.title or (template["title"] if template else "Untitled"),
         doc_type=data.doc_type,
         status=DocumentStatus.GENERATED,
-        content=content,
+        content=content,  # kept temporarily so legacy readers still work
         template_name=data.template_name,
     )
     session.add(doc)
     session.commit()
     session.refresh(doc)
+
+    # Persist the rendered body to object storage and clear the inline copy
+    # so PII / contract bodies no longer sit in the primary database.
+    if content:
+        try:
+            from backend.app.services.file_storage import store_contract_bytes
+            content_type = "text/html" if ("<html" in content.lower() or "<div" in content.lower() or "<p>" in content.lower()) else "text/plain"
+            obj = store_contract_bytes(doc.uid, content.encode("utf-8"), content_type)
+            doc.file_key = obj.file_key
+            doc.file_size = obj.size
+            doc.file_sha256 = obj.sha256
+            doc.file_content_type = obj.content_type
+            doc.content = None  # canonical copy lives in storage now
+            session.add(doc)
+            session.commit()
+            session.refresh(doc)
+        except Exception:  # noqa: BLE001
+            # Storage failure must not break legal flows — the inline content
+            # remains as a fallback that the download endpoint will migrate
+            # on next read.
+            pass
     return doc
 
 
@@ -794,6 +815,20 @@ def _doc_owner_founder_id(session: Session, doc: Document):
         return None
     p = session.get(Project, doc.project_id)
     return p.founder_id if p else None
+
+
+def _hydrate_doc_content(doc: Document) -> dict:
+    """Return a dict copy of `doc` with `content` rehydrated from storage if
+    the inline copy was cleared during the storage migration. Listing/detail
+    endpoints used to return raw `content`, so this preserves wire-compat."""
+    data = doc.dict() if hasattr(doc, "dict") else doc.model_dump()
+    if not data.get("content") and doc.file_key:
+        try:
+            from backend.app.services.file_storage import get_storage
+            data["content"] = get_storage().get(doc.file_key).decode("utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            data["content"] = ""
+    return data
 
 
 @router.get("/documents")
@@ -806,7 +841,8 @@ def list_documents(project_id: int = None, session: Session = Depends(get_sessio
         stmt = stmt.join(Project, Project.id == Document.project_id).where(Project.founder_id == user.founder_id)
     if project_id:
         stmt = stmt.where(Document.project_id == project_id)
-    return session.exec(stmt).all()
+    docs = session.exec(stmt).all()
+    return [_hydrate_doc_content(d) for d in docs]
 
 
 @router.get("/documents/{doc_id}")
@@ -815,7 +851,7 @@ def get_document(doc_id: int, session: Session = Depends(get_session), user: Use
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     ensure_founder_access(user, _doc_owner_founder_id(session, doc))
-    return doc
+    return _hydrate_doc_content(doc)
 
 
 @router.post("/documents/{doc_id}/send")
@@ -871,16 +907,31 @@ def incorporate_project(project_id: int, jurisdiction: str = "Delaware", session
     session.add(project)
     session.commit()
 
+    from backend.app.services.file_storage import store_contract_bytes
     for doc_type in ["bylaws", "equity_split", "ip_license"]:
         template = TEMPLATES[doc_type]
+        body = template["content"].replace("{company_name}", entity.name)
         doc = Document(
             project_id=project.id,
             title=template["title"],
             doc_type=doc_type,
             status=DocumentStatus.GENERATED,
-            content=template["content"].replace("{company_name}", entity.name),
+            content=body,
         )
         session.add(doc)
+        session.commit()
+        session.refresh(doc)
+        try:
+            ct = "text/html" if ("<html" in body.lower() or "<div" in body.lower() or "<p>" in body.lower()) else "text/plain"
+            obj = store_contract_bytes(doc.uid, body.encode("utf-8"), ct)
+            doc.file_key = obj.file_key
+            doc.file_size = obj.size
+            doc.file_sha256 = obj.sha256
+            doc.file_content_type = obj.content_type
+            doc.content = None
+            session.add(doc)
+        except Exception:  # noqa: BLE001
+            pass
     session.commit()
 
     return {

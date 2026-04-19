@@ -48,9 +48,15 @@ async def lifespan(app: FastAPI):
     logger.info("StudioOS starting up — initializing database")
     init_db()
     try:
-        from backend.app.models.migrations import consolidate_capital_tables, ensure_growth_track_columns
+        from backend.app.models.migrations import (
+            consolidate_capital_tables,
+            ensure_growth_track_columns,
+            ensure_document_file_columns,
+        )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
+        ensure_document_file_columns()
+        logger.info("StudioOS migrations: document file columns ensured")
         consolidate_capital_tables()
         logger.info("StudioOS migrations: capital tables consolidated")
     except Exception as exc:  # noqa: BLE001
@@ -157,6 +163,8 @@ from backend.app.api.routes import admin_contracts as _admin_contracts
 app.include_router(_admin_contracts.router, prefix="/api")
 from backend.app.api.routes import company as _company
 app.include_router(_company.router, prefix="/api")
+from backend.app.api.routes import files as _files
+app.include_router(_files.router, prefix="/api")
 app.include_router(funds.router, prefix="/api")
 app.include_router(liquidity.router, prefix="/api")
 app.include_router(partnernet.router, prefix="/api")

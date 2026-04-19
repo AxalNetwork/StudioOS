@@ -241,7 +241,15 @@ class Document(SQLModel, table=True):
     title: str
     doc_type: DocumentType
     status: DocumentStatus = DocumentStatus.DRAFT
+    # Legacy: rendered HTML/text was stored inline in `content`. Newly-created
+    # documents persist to object storage instead and keep only a `file_key`
+    # pointer here. `content` is migrated-on-read by the download endpoint and
+    # then cleared so PII / contract bodies don't sit in the primary DB.
     content: Optional[str] = None
+    file_key: Optional[str] = Field(default=None, index=True)
+    file_size: Optional[int] = None
+    file_sha256: Optional[str] = None
+    file_content_type: Optional[str] = None
     template_name: Optional[str] = None
     signed_by: Optional[str] = None
     signed_at: Optional[datetime] = None

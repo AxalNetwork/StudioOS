@@ -82,6 +82,33 @@ def ensure_growth_track_columns() -> None:
         session.commit()
 
 
+def ensure_document_file_columns() -> None:
+    """Add file-storage columns to `documents`. Idempotent.
+
+    Older rows continue to have `content` populated; the download endpoint
+    migrates them into object storage on first access and clears `content`."""
+    with Session(engine) as session:
+        for col, ddl in (
+            ("file_key", "VARCHAR"),
+            ("file_size", "INTEGER"),
+            ("file_sha256", "VARCHAR"),
+            ("file_content_type", "VARCHAR"),
+        ):
+            try:
+                session.exec(text(
+                    f"ALTER TABLE documents ADD COLUMN IF NOT EXISTS {col} {ddl}"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_document_file_columns: %s ALTER failed: %s", col, exc)
+        try:
+            session.exec(text(
+                "CREATE INDEX IF NOT EXISTS ix_documents_file_key ON documents(file_key)"
+            ))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_document_file_columns: index failed: %s", exc)
+        session.commit()
+
+
 def consolidate_capital_tables() -> None:
     """Merge legacy `lp_investors` + `entities(type=vc_fund)` into the canonical
     `vc_funds` + `limited_partners` tables.

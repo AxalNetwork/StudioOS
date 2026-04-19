@@ -1362,6 +1362,15 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
       })
       .catch(e => setErr(e.message));
   };
+  const doShareLink = async () => {
+    setErr('');
+    try {
+      const { url, expires_in } = await api.adminIssueContractShareLink(uid, 600);
+      const fullUrl = window.location.origin + url;
+      try { await navigator.clipboard.writeText(fullUrl); } catch {}
+      alert(`Share link copied to clipboard.\nValid for ${Math.round(expires_in / 60)} minutes:\n\n${fullUrl}`);
+    } catch (e) { setErr(e.message); }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -1406,6 +1415,9 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
           <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 flex flex-wrap gap-2 justify-end">
             <button onClick={doDownload} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5">
               <Download size={13} /> Download
+            </button>
+            <button onClick={doShareLink} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5" title="Generates a 10-minute signed link">
+              <Send size={13} /> Share link
             </button>
             {doc.status !== 'signed' && doc.status !== 'void' && (
               <button onClick={doResend} disabled={busy} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5">
