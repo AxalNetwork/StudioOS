@@ -775,6 +775,7 @@ def generate_document(data: DocumentCreate, session: Session = Depends(get_sessi
                 company_name = project.name
         content = template["content"].replace("{company_name}", company_name)
 
+    from backend.app.services.audit import log_audit, AuditAction
     doc = Document(
         project_id=data.project_id,
         title=data.title or (template["title"] if template else "Untitled"),
@@ -784,11 +785,25 @@ def generate_document(data: DocumentCreate, session: Session = Depends(get_sessi
         template_name=data.template_name,
     )
     session.add(doc)
+    # Flush (not commit) so we can populate uid for the audit row while
+    # keeping the contract creation + audit insert in one atomic transaction.
+    session.flush()
+    log_audit(
+        session,
+        action=AuditAction.CONTRACT_CREATED,
+        actor=user,
+        target_uid=doc.uid,
+        project_id=doc.project_id,
+        summary=f"{user.email} generated contract '{doc.title}'",
+        meta={"doc_type": data.doc_type, "template": data.template_name, "size": len(content or "")},
+    )
     session.commit()
     session.refresh(doc)
 
     # Persist the rendered body to object storage and clear the inline copy
-    # so PII / contract bodies no longer sit in the primary database.
+    # so PII / contract bodies no longer sit in the primary database. This is
+    # a *follow-up* migration — the contract row + audit row are already
+    # durable above, so a storage failure here is non-fatal.
     if content:
         try:
             from backend.app.services.file_storage import store_contract_bytes
@@ -847,22 +862,46 @@ def list_documents(project_id: int = None, session: Session = Depends(get_sessio
 
 @router.get("/documents/{doc_id}")
 def get_document(doc_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    from backend.app.services.audit import log_audit, AuditAction
     doc = session.get(Document, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     ensure_founder_access(user, _doc_owner_founder_id(session, doc))
+    # Mirror the admin-side viewed event so founder/user reads of contract
+    # content are also auditable. commit=True because GET has no own txn.
+    log_audit(
+        session,
+        action=AuditAction.CONTRACT_VIEWED,
+        actor=user,
+        target_uid=doc.uid,
+        project_id=doc.project_id,
+        summary=f"{user.email} viewed contract '{doc.title}'",
+        meta={"status": str(doc.status), "doc_type": doc.doc_type, "via": "legal.get_document"},
+        commit=True,
+    )
     return _hydrate_doc_content(doc)
 
 
 @router.post("/documents/{doc_id}/send")
 def send_document(doc_id: int, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    from backend.app.services.audit import log_audit, AuditAction
     doc = session.get(Document, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     ensure_founder_access(user, _doc_owner_founder_id(session, doc))
+    prev_status = str(doc.status)
     doc.status = DocumentStatus.SENT
     doc.updated_at = datetime.utcnow()
     session.add(doc)
+    log_audit(
+        session,
+        action=AuditAction.CONTRACT_SENT,
+        actor=user,
+        target_uid=doc.uid,
+        project_id=doc.project_id,
+        summary=f"{user.email} sent contract '{doc.title}'",
+        meta={"prev_status": prev_status, "new_status": "sent", "doc_type": doc.doc_type},
+    )
     session.commit()
     session.refresh(doc)
     return {"status": "sent", "document": doc}
@@ -870,15 +909,26 @@ def send_document(doc_id: int, session: Session = Depends(get_session), user: Us
 
 @router.post("/documents/{doc_id}/sign")
 def sign_document(doc_id: int, signed_by: str = "system", session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    from backend.app.services.audit import log_audit, AuditAction
     doc = session.get(Document, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     ensure_founder_access(user, _doc_owner_founder_id(session, doc))
+    prev_status = str(doc.status)
     doc.status = DocumentStatus.SIGNED
     doc.signed_by = signed_by
     doc.signed_at = datetime.utcnow()
     doc.updated_at = datetime.utcnow()
     session.add(doc)
+    log_audit(
+        session,
+        action=AuditAction.CONTRACT_SIGNED,
+        actor=user,
+        target_uid=doc.uid,
+        project_id=doc.project_id,
+        summary=f"{user.email} signed contract '{doc.title}' on behalf of {signed_by}",
+        meta={"prev_status": prev_status, "signed_by": signed_by, "doc_type": doc.doc_type},
+    )
     session.commit()
     session.refresh(doc)
     return {"status": "signed", "document": doc}

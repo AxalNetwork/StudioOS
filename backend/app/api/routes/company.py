@@ -169,10 +169,14 @@ def create_company(
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
+    from backend.app.services.audit import log_audit, AuditAction
     company = CompanyProfile(**data.model_dump())
     session.add(company)
-    session.commit()
-    session.refresh(company)
+    # Flush so company.id / company.uid are populated without committing.
+    # Keeping the company row, primary-admin link, and audit insert in one
+    # transaction means we can never end up with a company that has no
+    # `company.created` audit trail.
+    session.flush()
 
     # Caller becomes primary admin
     link = UserCompanyLink(
@@ -182,7 +186,16 @@ def create_company(
         is_primary_admin=True,
     )
     session.add(link)
+    log_audit(
+        session,
+        action=AuditAction.COMPANY_CREATED,
+        actor=user,
+        target_uid=company.uid,
+        summary=f"{user.email} created company '{company.company_name}'",
+        meta={"stage": company.stage, "primary_admin_user_id": user.id},
+    )
     session.commit()
+    session.refresh(company)
 
     return _company_dto(session, company, include_members=True)
 
@@ -201,11 +214,23 @@ def update_company(
     if not _can_edit(session, company, user):
         raise HTTPException(status_code=403, detail="Not authorized to edit this company")
 
+    from backend.app.services.audit import log_audit, AuditAction
     payload = data.model_dump(exclude_unset=True)
+    # Capture the changed-fields list for the audit trail (values themselves
+    # may contain sensitive data, so we only record which keys changed).
+    changed_keys = sorted(payload.keys())
     for k, v in payload.items():
         setattr(company, k, v)
     company.updated_at = datetime.utcnow()
     session.add(company)
+    log_audit(
+        session,
+        action=AuditAction.COMPANY_UPDATED,
+        actor=user,
+        target_uid=company.uid,
+        summary=f"{user.email} updated company '{company.company_name}' ({len(changed_keys)} field(s))",
+        meta={"changed_fields": changed_keys},
+    )
     session.commit()
     session.refresh(company)
     return _company_dto(session, company, include_members=True)
@@ -288,6 +313,7 @@ def add_member(
         if not (my_link and my_link.is_primary_admin):
             raise HTTPException(status_code=403, detail="Only the primary admin can grant primary admin status")
 
+    from backend.app.services.audit import log_audit, AuditAction
     link = UserCompanyLink(
         company_id=company.id,
         user_id=target.id,
@@ -295,6 +321,19 @@ def add_member(
         is_primary_admin=data.is_primary_admin,
     )
     session.add(link)
+    log_audit(
+        session,
+        action=AuditAction.COMPANY_MEMBER_ADDED,
+        actor=user,
+        target_uid=company.uid,
+        summary=f"{user.email} added {target.email} to '{company.company_name}' as {data.role_in_company}",
+        meta={
+            "member_user_id": target.id,
+            "member_uid": target.uid,
+            "role_in_company": data.role_in_company,
+            "is_primary_admin": bool(data.is_primary_admin),
+        },
+    )
     session.commit()
     return _company_dto(session, company, include_members=True)
 
@@ -325,6 +364,23 @@ def remove_member(
         if primary_count <= 1:
             raise HTTPException(status_code=400, detail="Cannot remove the only primary admin — assign another first")
 
+    from backend.app.services.audit import log_audit, AuditAction
+    target_user = session.get(User, user_id)
+    target_email = target_user.email if target_user else f"user#{user_id}"
+    target_uid_str = target_user.uid if target_user else None
     session.delete(link)
+    log_audit(
+        session,
+        action=AuditAction.COMPANY_MEMBER_REMOVED,
+        actor=user,
+        target_uid=company.uid,
+        summary=f"{user.email} removed {target_email} from '{company.company_name}'",
+        meta={
+            "member_user_id": user_id,
+            "member_uid": target_uid_str,
+            "role_in_company": link.role_in_company,
+            "was_primary_admin": bool(link.is_primary_admin),
+        },
+    )
     session.commit()
     return {"ok": True}

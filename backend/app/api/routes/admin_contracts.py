@@ -23,6 +23,7 @@ from backend.app.services.file_storage import (
     mint_signed_token,
     verify_signed_token,
 )
+from backend.app.services.audit import log_audit, AuditAction
 
 router = APIRouter(prefix="/admin/contracts", tags=["Admin · Contracts"])
 
@@ -281,9 +282,21 @@ def _get_by_uid(session: Session, uid: str) -> Document:
 def get_contract(
     uid: str,
     session: Session = Depends(get_session),
-    _: User = Depends(require_admin),
+    admin: User = Depends(require_admin),
 ):
     doc = _get_by_uid(session, uid)
+    # Read-access to a contract body is sensitive — log it. Use commit=True
+    # because GET handlers don't have their own write transaction.
+    log_audit(
+        session,
+        action=AuditAction.CONTRACT_VIEWED,
+        actor=admin,
+        target_uid=doc.uid,
+        project_id=doc.project_id,
+        summary=f"Admin {admin.email} viewed contract '{doc.title}'",
+        meta={"status": str(doc.status), "doc_type": doc.doc_type},
+        commit=True,
+    )
     return _doc_dto(session, doc, include_content=True)
 
 
@@ -299,16 +312,19 @@ def resend_contract(
     doc = _get_by_uid(session, uid)
     if doc.status == DocumentStatus.SIGNED:
         raise HTTPException(status_code=400, detail="Cannot resend a signed contract")
+    prev_status = str(doc.status)
     doc.status = DocumentStatus.SENT
     doc.updated_at = datetime.utcnow()
     session.add(doc)
-    session.add(ActivityLog(
+    log_audit(
+        session,
+        action=AuditAction.CONTRACT_RESENT,
+        actor=admin,
+        target_uid=doc.uid,
         project_id=doc.project_id,
-        user_id=admin.id,
-        action="contract_resent",
-        details=f"Admin {admin.email} resent contract '{doc.title}' (uid={doc.uid})",
-        actor=admin.email,
-    ))
+        summary=f"Admin {admin.email} resent contract '{doc.title}'",
+        meta={"prev_status": prev_status, "new_status": "sent"},
+    )
     session.commit()
     session.refresh(doc)
     return {"ok": True, "contract": _doc_dto(session, doc)}
@@ -323,16 +339,19 @@ def void_contract(
     doc = _get_by_uid(session, uid)
     if doc.status == DocumentStatus.SIGNED:
         raise HTTPException(status_code=400, detail="Cannot void a signed contract")
+    prev_status = str(doc.status)
     doc.status = DocumentStatus.VOID
     doc.updated_at = datetime.utcnow()
     session.add(doc)
-    session.add(ActivityLog(
+    log_audit(
+        session,
+        action=AuditAction.CONTRACT_VOIDED,
+        actor=admin,
+        target_uid=doc.uid,
         project_id=doc.project_id,
-        user_id=admin.id,
-        action="contract_voided",
-        details=f"Admin {admin.email} voided contract '{doc.title}' (uid={doc.uid})",
-        actor=admin.email,
-    ))
+        summary=f"Admin {admin.email} voided contract '{doc.title}'",
+        meta={"prev_status": prev_status, "new_status": "void"},
+    )
     session.commit()
     session.refresh(doc)
     return {"ok": True, "contract": _doc_dto(session, doc)}
@@ -351,13 +370,15 @@ def download_contract(
     audit-logged."""
     doc = _get_by_uid(session, uid)
     data, content_type = _resolve_bytes(session, doc)
-    session.add(ActivityLog(
+    log_audit(
+        session,
+        action=AuditAction.CONTRACT_DOWNLOADED,
+        actor=admin,
+        target_uid=doc.uid,
         project_id=doc.project_id,
-        user_id=admin.id,
-        action="contract_downloaded",
-        details=f"Admin {admin.email} downloaded contract '{doc.title}' (uid={doc.uid})",
-        actor=admin.email,
-    ))
+        summary=f"Admin {admin.email} downloaded contract '{doc.title}'",
+        meta={"size": len(data), "content_type": content_type},
+    )
     session.commit()
     return Response(
         content=data,
@@ -392,13 +413,15 @@ def issue_contract_download_url(
             detail=f"Stored contract object is missing (file_key={doc.file_key}); cannot issue link.",
         )
     token = mint_signed_token(doc.file_key, ttl_seconds=ttl_seconds, actor=admin.email)
-    session.add(ActivityLog(
+    log_audit(
+        session,
+        action=AuditAction.CONTRACT_SHARE_LINK_ISSUED,
+        actor=admin,
+        target_uid=doc.uid,
         project_id=doc.project_id,
-        user_id=admin.id,
-        action="contract_share_link_issued",
-        details=f"Admin {admin.email} issued share link for '{doc.title}' (uid={doc.uid}, ttl={ttl_seconds}s)",
-        actor=admin.email,
-    ))
+        summary=f"Admin {admin.email} issued share link for '{doc.title}'",
+        meta={"ttl_seconds": ttl_seconds},
+    )
     session.commit()
     return {
         "url": f"/api/files/contracts/{token}",
