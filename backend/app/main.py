@@ -48,13 +48,15 @@ async def lifespan(app: FastAPI):
     logger.info("StudioOS starting up — initializing database")
     init_db()
     try:
-        from backend.app.models.migrations import consolidate_capital_tables
+        from backend.app.models.migrations import consolidate_capital_tables, ensure_growth_track_columns
+        ensure_growth_track_columns()
+        logger.info("StudioOS migrations: growth track columns ensured")
         consolidate_capital_tables()
         logger.info("StudioOS migrations: capital tables consolidated")
     except Exception as exc:  # noqa: BLE001
         # Migrations are best-effort: a failure here must not prevent the API
         # from booting (e.g. fresh DB, missing legacy tables).
-        logger.warning("StudioOS migrations: consolidate_capital_tables skipped: %s", exc)
+        logger.warning("StudioOS migrations: skipped: %s", exc)
     logger.info("StudioOS ready")
     yield
     logger.info("StudioOS shutting down")

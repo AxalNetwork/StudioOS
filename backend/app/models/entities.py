@@ -124,6 +124,8 @@ class Deal(SQLModel, table=True):
     status: DealStatus = DealStatus.APPLIED
     notes: Optional[str] = None
     amount: Optional[float] = None
+    # Growth & Expansion Track — Task 2: 'spin_out' (default) | 'growth_sprint'
+    track_type: str = Field(default="spin_out", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -190,6 +192,8 @@ class Project(SQLModel, table=True):
     cost_to_mvp: Optional[float] = None
     funding_needed: Optional[float] = None
     use_of_funds: Optional[str] = None
+    # Growth & Expansion Track — Task 2: 'spin_out' (default) | 'growth_sprint'
+    track_type: str = Field(default="spin_out", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -470,6 +474,29 @@ class CompanyProfile(SQLModel, table=True):
     website: Optional[str] = None
     linkedin_url: Optional[str] = None
     description: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class GrowthSprint(SQLModel, table=True):
+    """Growth-track sibling to the spin-out flow.
+
+    Recommended `current_stage` values (free-text to avoid enum lock-in):
+      'Market Entry' | 'Product Localization' | 'Partner Onboarding' |
+      'Scaling Capital' | 'International Launch' | 'Revenue Growth Review'
+    """
+    __tablename__ = "growth_sprints"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    deal_id: int = Field(foreign_key="deals.id", index=True)
+    company_id: Optional[int] = Field(default=None, foreign_key="company_profiles.id", index=True)
+    current_stage: Optional[str] = Field(default="Market Entry", index=True)
+    current_revenue: Optional[float] = Field(default=None, index=True)   # USD
+    target_revenue: Optional[float] = Field(default=None, index=True)    # USD
+    expansion_markets: Optional[str] = None  # JSON array of country codes
+    new_product_ideas: Optional[str] = None  # JSON
+    partner_needs: Optional[str] = None      # JSON
+    notes: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

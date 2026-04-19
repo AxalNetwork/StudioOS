@@ -59,6 +59,29 @@ def _ensure_capital_call_columns(session: Session) -> None:
     session.commit()
 
 
+def ensure_growth_track_columns() -> None:
+    """Add `track_type` to `projects` and `deals` for the Growth & Expansion
+    track. Idempotent — safe to run on every boot. Existing rows default to
+    'spin_out' so behavior is unchanged for the original Spin-Out flow."""
+    with Session(engine) as session:
+        for tbl in ("projects", "deals"):
+            try:
+                session.exec(text(
+                    f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS "
+                    f"track_type VARCHAR DEFAULT 'spin_out' NOT NULL"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_growth_track_columns: %s ALTER failed: %s", tbl, exc)
+            try:
+                session.exec(text(
+                    f"CREATE INDEX IF NOT EXISTS ix_{tbl}_track_type "
+                    f"ON {tbl}(track_type)"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_growth_track_columns: %s INDEX failed: %s", tbl, exc)
+        session.commit()
+
+
 def consolidate_capital_tables() -> None:
     """Merge legacy `lp_investors` + `entities(type=vc_fund)` into the canonical
     `vc_funds` + `limited_partners` tables.
