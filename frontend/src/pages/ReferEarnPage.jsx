@@ -15,19 +15,22 @@ const TEMPLATE_STORAGE_KEY = 'axal:invite_templates_v1';
 const AXAL_TELEGRAM_URL = 'https://t.me/axalvc';
 const AXAL_LINKEDIN_URL = 'https://www.linkedin.com/company/axalvc';
 
+// House style: always use the @axalvc handle and the #axalvc hashtag across
+// every channel. Keep these strings consistent — they double as brand cues
+// for recipients who copy/paste the message into other tools.
 const DEFAULT_TEMPLATES = {
   twitter:
-    "I've been using @AxalVC StudioOS to spin up startups in 30 days — AI-scored deals, automated incorporation, real partner network. Worth a look: #AxalVC #VentureStudio #Startups",
+    "I've been using @axalvc StudioOS to spin up startups in 30 days — AI-scored deals, automated incorporation, real partner network. Worth a look: #axalvc #VentureStudio #Startups",
   linkedin:
-    "I'm part of the Axal StudioOS network (@axalvc — " + AXAL_LINKEDIN_URL + ") — a venture studio that ships funded startups in 30 days. They're opening up partner spots. Use my link: {{link}}\n\n#AxalVC #VentureStudio #Startups #Founders",
+    "I'm part of the @axalvc StudioOS network (" + AXAL_LINKEDIN_URL + ") — a venture studio that ships funded startups in 30 days. They're opening up partner spots. Use my link: {{link}}\n\n#axalvc #VentureStudio #Startups #Founders",
   whatsapp:
-    "Hey — thought you'd find this interesting. Axal StudioOS turns ideas into funded companies in 30 days. My referral link:",
+    "Hey — thought you'd find this interesting. @axalvc StudioOS turns ideas into funded companies in 30 days. My referral link: {{link}}\n\n#axalvc",
   telegram:
-    "Join me on Axal StudioOS — a venture studio that ships funded startups in 30 days. Sign up with my referral link: {{link}}\n\nAlso join the Axal community on Telegram: " + AXAL_TELEGRAM_URL + " #AxalVC",
+    "Join me on @axalvc StudioOS — a venture studio that ships funded startups in 30 days. Sign up with my referral link: {{link}}\n\nAlso join the Axal community on Telegram: " + AXAL_TELEGRAM_URL + "\n\n#axalvc",
   email_subject:
-    "Quick intro to Axal StudioOS",
+    "Quick intro to Axal StudioOS (@axalvc)",
   email_body:
-    "Hi,\n\nI wanted to share something I think you'd find useful — Axal StudioOS. It's a venture studio that uses AI scoring + automated incorporation to ship funded startups in 30 days, and they pay commissions when partners I refer hit milestones.\n\nIf you'd like to take a look, here's my referral link:\n{{link}}\n\nReferral code: {{code}}\n\nJoin the Axal community on Telegram: " + AXAL_TELEGRAM_URL + "\nFollow Axal on LinkedIn: " + AXAL_LINKEDIN_URL + "\n\nLet me know what you think.\n\nThanks,",
+    "Hi,\n\nI wanted to share something I think you'd find useful — @axalvc StudioOS. It's a venture studio that uses AI scoring + automated incorporation to ship funded startups in 30 days, and they pay commissions when partners I refer hit milestones.\n\nIf you'd like to take a look, here's my referral link:\n{{link}}\n\nReferral code: {{code}}\n\nJoin the Axal community on Telegram: " + AXAL_TELEGRAM_URL + "\nFollow @axalvc on LinkedIn: " + AXAL_LINKEDIN_URL + "\n\n#axalvc\n\nLet me know what you think.\n\nThanks,",
 };
 
 function loadTemplates() {
