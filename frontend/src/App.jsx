@@ -47,6 +47,8 @@ import MonitoringPage from './pages/MonitoringPage';
 import LiquidityPage from './pages/LiquidityPage';
 import FundsPage from './pages/FundsPage';
 import Footer from './components/Footer';
+import InactivityWarningModal from './components/InactivityWarningModal';
+import useInactivityTimeout from './hooks/useInactivityTimeout';
 
 // Item shapes:
 //   { to, icon, label }                         -> nav link
@@ -257,6 +259,16 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   const activeRole = isImpersonating ? user?.role : (isAdmin ? viewMode : user?.role);
   const navItems = getNavItems(activeRole || 'founder');
 
+  // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
+  // Tracks mouse/keyboard/scroll/touch on `window`. Disabled when no user is
+  // present (covers the brief render between logout and redirect).
+  const { warningOpen, secondsLeft, stayLoggedIn, logoutNow } = useInactivityTimeout({
+    timeoutMs: 20 * 60 * 1000,
+    warningMs: 60 * 1000,
+    enabled: !!user,
+    onTimeout: onLogout,
+  });
+
   return (
     <ViewModeContext.Provider value={{ viewMode: activeRole, isAdmin, isImpersonating }}>
       <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
@@ -384,6 +396,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           </main>
         </div>
       </div>
+      <InactivityWarningModal
+        open={warningOpen}
+        secondsLeft={secondsLeft}
+        onStay={stayLoggedIn}
+        onLogout={logoutNow}
+      />
     </ViewModeContext.Provider>
   );
 }
@@ -512,6 +530,8 @@ export default function App() {
     localStorage.removeItem('realUser');
     localStorage.removeItem('realToken');
     localStorage.removeItem('viewMode');
+    // Sweep any per-tab sensitive state (drafts, in-flight wizards, etc.).
+    try { sessionStorage.clear(); } catch (e) { /* ignore */ }
     setUser(null);
     setRealUser(null);
     window.location.href = '/';
