@@ -9,6 +9,36 @@ import { verifyTurnstile } from '../services/turnstile';
 
 const auth = new Hono<{ Bindings: Env }>();
 
+/**
+ * Defensive wrapper for auth handlers. Catches any unhandled exception and
+ * returns a friendly, route-scoped error message instead of the global
+ * "Internal server error" 500. Critical for the auth funnel — silent 500s
+ * here cost real signups and lock users out of their accounts.
+ *
+ * Logs the actual cause to Cloudflare logs with the route label so we can
+ * triage post-hoc without leaking internals to the client.
+ */
+function safe(label: string, friendlyError: string, handler: (c: any) => Promise<any>) {
+  return async (c: any) => {
+    try {
+      return await handler(c);
+    } catch (e: any) {
+      console.error(`[AUTH:${label}] unhandled error:`, e?.message || e, e?.stack || '');
+      return c.json({ error: friendlyError }, 500);
+    }
+  };
+}
+
+async function readJson(c: any): Promise<{ ok: boolean; body: any; res: any }> {
+  try {
+    const body = await c.req.json();
+    return { ok: true, body: body || {}, res: null };
+  } catch (e: any) {
+    console.error('[AUTH] invalid JSON body:', e?.message || e);
+    return { ok: false, body: null, res: c.json({ error: 'Malformed request body' }, 400) };
+  }
+}
+
 async function checkRateLimit(env: Env, key: string, max: number, windowSec: number): Promise<boolean> {
   // Fail-open on any KV error (incl. daily-write-limit exceeded on the free
   // plan). Auth/registration must keep working; a small over-allowance during
@@ -58,24 +88,14 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
   }
 }
 
-auth.post('/register', async (c) => {
-  // Wrap the entire handler so any unexpected error surfaces a useful message
-  // instead of the global "Internal server error" — registration is the
-  // funnel; opaque 500s here cost real signups.
-  let body: any;
-  try {
-    body = await c.req.json();
-  } catch (e: any) {
-    console.error('[REGISTER] invalid JSON body:', e?.message || e);
-    return c.json({ error: 'Malformed request body' }, 400);
-  }
-  const { email, name, role, turnstileToken, ref_code } = body || {};
+auth.post('/register', safe('register', 'Registration failed. Please try again in a moment, or contact support if the problem persists.', async (c) => {
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const { email, name, role, turnstileToken, ref_code } = parsed.body;
   if (!email || !name) return c.json({ error: 'Email and name required' }, 400);
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   if (!emailRe.test(String(email).trim())) return c.json({ error: 'Please enter a valid email address' }, 400);
   if (role && !['founder', 'partner'].includes(role)) return c.json({ error: 'Invalid role' }, 400);
-
-  try {
 
   const clientIp = c.req.header('cf-connecting-ip') || undefined;
   const turnstileOk = await verifyTurnstile(c.env, turnstileToken, clientIp);
@@ -148,16 +168,7 @@ auth.post('/register', async (c) => {
     message: emailSent ? 'Verification email sent' : 'Account created but email delivery failed',
     email: user.email, name: user.name, requires_verification: true, email_sent: emailSent, verification_url: !emailSent && tokenStored ? verificationUrl : undefined
   });
-
-  } catch (e: any) {
-    // Surface the real failure cause in logs (with email for triage) while
-    // returning a user-friendly message that doesn't leak internals.
-    console.error(`[REGISTER] failed for ${email}:`, e?.message || e, e?.stack || '');
-    return c.json({
-      error: 'Registration failed. Please try again in a moment, or contact support if the problem persists.',
-    }, 500);
-  }
-});
+}));
 
 auth.post('/resend-verification', async (c) => {
   const { email } = await c.req.json().catch(() => ({} as any));
@@ -213,7 +224,7 @@ auth.post('/resend-verification', async (c) => {
   }
 });
 
-auth.get('/verify-email', async (c) => {
+auth.get('/verify-email', safe('verify-email', 'Could not verify your email link. Please try again or request a new verification email.', async (c) => {
   const token = c.req.query('token');
   if (!token) return c.json({ error: 'Token required' }, 400);
 
@@ -229,10 +240,12 @@ auth.get('/verify-email', async (c) => {
   }
 
   return c.json({ valid: true, email: user.email, name: user.name });
-});
+}));
 
-auth.post('/confirm-verify-email', async (c) => {
-  const { token } = await c.req.json();
+auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confirm your email. Please try the verification link again or request a new one.', async (c) => {
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const { token } = parsed.body;
   if (!token) return c.json({ error: 'Token required' }, 400);
 
   const tokenHash = await hashToken(token);
@@ -255,10 +268,12 @@ auth.post('/confirm-verify-email', async (c) => {
   await sql.end();
 
   return c.json({ verified: true, email: user.email, name: user.name, setup_token: setupToken });
-});
+}));
 
-auth.post('/setup-totp', async (c) => {
-  const { email, token } = await c.req.json();
+auth.post('/setup-totp', safe('setup-totp', 'Could not set up authenticator. Please try again or request a new verification email.', async (c) => {
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const { email, token } = parsed.body;
   if (!email || !token) return c.json({ error: 'Email and token required' }, 400);
 
   const sql = getSQL(c.env);
@@ -294,10 +309,12 @@ auth.post('/setup-totp', async (c) => {
     totp_secret: totpSecret, provisioning_uri: uri, qr_code: qrBase64,
     message: 'Scan the QR code with your authenticator app, then use the TOTP code to log in.',
   });
-});
+}));
 
-auth.post('/login', async (c) => {
-  const { email, totp_code } = await c.req.json();
+auth.post('/login', safe('login', 'Login failed. Please try again in a moment, or contact support if the problem persists.', async (c) => {
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const { email, totp_code } = parsed.body;
   if (!email || !totp_code) return c.json({ error: 'Email and TOTP code required' }, 400);
 
   const allowed = await checkRateLimit(c.env, `login:${email.toLowerCase()}`, 5, 300);
@@ -325,7 +342,7 @@ auth.post('/login', async (c) => {
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
     expires_in: 24 * 3600,
   });
-});
+}));
 
 auth.get('/me', async (c) => {
   const user = await requireAuth(c);
@@ -336,8 +353,11 @@ auth.get('/me', async (c) => {
   });
 });
 
-auth.post('/verify-totp', async (c) => {
-  const { email, totp_code } = await c.req.json();
+auth.post('/verify-totp', safe('verify-totp', 'Could not verify your code. Please try again.', async (c) => {
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const { email, totp_code } = parsed.body;
+  if (!email || !totp_code) return c.json({ error: 'Email and TOTP code required' }, 400);
   const allowed = await checkRateLimit(c.env, `login:${email.toLowerCase()}`, 5, 300);
   if (!allowed) return c.json({ error: 'Too many attempts.' }, 429);
 
@@ -350,6 +370,6 @@ auth.post('/verify-totp', async (c) => {
   const totp = new TOTP({ secret: Secret.fromBase32(users[0].password_hash) });
   const valid = totp.validate({ token: totp_code, window: 1 }) !== null;
   return c.json({ valid });
-});
+}));
 
 export default auth;
