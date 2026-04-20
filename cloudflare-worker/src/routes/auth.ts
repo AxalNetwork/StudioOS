@@ -59,11 +59,23 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
 }
 
 auth.post('/register', async (c) => {
-  const { email, name, role, turnstileToken, ref_code } = await c.req.json();
+  // Wrap the entire handler so any unexpected error surfaces a useful message
+  // instead of the global "Internal server error" — registration is the
+  // funnel; opaque 500s here cost real signups.
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch (e: any) {
+    console.error('[REGISTER] invalid JSON body:', e?.message || e);
+    return c.json({ error: 'Malformed request body' }, 400);
+  }
+  const { email, name, role, turnstileToken, ref_code } = body || {};
   if (!email || !name) return c.json({ error: 'Email and name required' }, 400);
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   if (!emailRe.test(String(email).trim())) return c.json({ error: 'Please enter a valid email address' }, 400);
   if (role && !['founder', 'partner'].includes(role)) return c.json({ error: 'Invalid role' }, 400);
+
+  try {
 
   const clientIp = c.req.header('cf-connecting-ip') || undefined;
   const turnstileOk = await verifyTurnstile(c.env, turnstileToken, clientIp);
@@ -136,6 +148,15 @@ auth.post('/register', async (c) => {
     message: emailSent ? 'Verification email sent' : 'Account created but email delivery failed',
     email: user.email, name: user.name, requires_verification: true, email_sent: emailSent, verification_url: !emailSent && tokenStored ? verificationUrl : undefined
   });
+
+  } catch (e: any) {
+    // Surface the real failure cause in logs (with email for triage) while
+    // returning a user-friendly message that doesn't leak internals.
+    console.error(`[REGISTER] failed for ${email}:`, e?.message || e, e?.stack || '');
+    return c.json({
+      error: 'Registration failed. Please try again in a moment, or contact support if the problem persists.',
+    }, 500);
+  }
 });
 
 auth.post('/resend-verification', async (c) => {
