@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, Github, CheckCircle, AlertCircle, Loader2, Lock, Hash } from 'lucide-react';
+import { Activity, GitBranch, CheckCircle, AlertCircle, Loader2, Lock, Hash } from 'lucide-react';
 import { api } from '../lib/api';
 
 const ACTION_LABELS = {
@@ -88,7 +88,7 @@ export default function ActivityPage() {
           disabled={syncing}
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
         >
-          {syncing ? <Loader2 size={14} className="animate-spin" /> : <Github size={14} />}
+          {syncing ? <Loader2 size={14} className="animate-spin" /> : <GitBranch size={14} />}
           {syncing ? 'Syncing...' : 'Sync to GitHub'}
         </button>
       </div>
