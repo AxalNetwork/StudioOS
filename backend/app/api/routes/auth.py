@@ -4,7 +4,7 @@ import jwt
 import io
 import base64
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi import APIRouter, Depends, HTTPException, Header, Query, Request
 from sqlmodel import Session, select
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -22,6 +22,15 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 JWT_SECRET = os.environ.get("JWT_SECRET")
 if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET environment variable must be set")
+# Phase A5 — fail fast in production environments if the secret is too
+# weak. We treat "production" + "staging" as enforcement environments;
+# dev/preview are allowed to use shorter secrets for local convenience.
+_STUDIOOS_ENV = os.environ.get("STUDIOOS_ENV", "dev").lower()
+if _STUDIOOS_ENV in ("production", "prod", "staging") and len(JWT_SECRET.encode("utf-8")) < 32:
+    raise RuntimeError(
+        f"JWT_SECRET must be at least 32 bytes in {_STUDIOOS_ENV}; "
+        f"got {len(JWT_SECRET.encode('utf-8'))} bytes"
+    )
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 24
 
@@ -83,6 +92,13 @@ class RegisterRequest(BaseModel):
     name: str
     role: str = Field("partner", pattern="^(founder|partner)$")
     ref_code: Optional[str] = None
+    # Phase C4 — honeypot. Real users never see/fill this field; bots that
+    # autofill every input will set it. Non-empty value = bot, drop request.
+    # Pydantic v2 disallows leading-underscore field names, so the
+    # attribute is `axl_hp` and we read the wire field `_axl_hp` via alias.
+    axl_hp: Optional[str] = Field(default=None, alias="_axl_hp")
+
+    model_config = {"populate_by_name": True}
 
 
 class LoginRequest(BaseModel):
@@ -175,8 +191,59 @@ def _resolve_referrer(session: Session, ref_code: Optional[str], email: str):
     return partner.id, code
 
 
+_register_ip_attempts: dict = {}  # ip -> [timestamp]
+_register_email_attempts: dict = {}  # email -> [timestamp]
+
+
+def _register_rate_limit(ip: str, email: str) -> None:
+    """Phase C4 — register endpoint abuse limit: 5/min/IP and 3/day/email.
+    Sliding window in-process. Mirrors the bucket pattern in
+    `backend/app/services/rate_limit.py`.
+    """
+    now = datetime.utcnow()
+    minute_cutoff = now - timedelta(minutes=1)
+    day_cutoff = now - timedelta(days=1)
+
+    ip_bucket = [t for t in _register_ip_attempts.get(ip, []) if t > minute_cutoff]
+    if len(ip_bucket) >= 5:
+        raise HTTPException(status_code=429, detail="Too many registrations from this IP. Please slow down.")
+    ip_bucket.append(now)
+    _register_ip_attempts[ip] = ip_bucket
+
+    email_key = (email or "").lower().strip()
+    if email_key:
+        em_bucket = [t for t in _register_email_attempts.get(email_key, []) if t > day_cutoff]
+        if len(em_bucket) >= 3:
+            raise HTTPException(status_code=429, detail="Too many registration attempts for this email today.")
+        em_bucket.append(now)
+        _register_email_attempts[email_key] = em_bucket
+
+
 @router.post("/register")
-def register(req: RegisterRequest, session: Session = Depends(get_session)):
+def register(req: RegisterRequest, request: Request, session: Session = Depends(get_session)):
+    # Phase C4 — honeypot drop. Treat as 200 success so bots can't infer.
+    if req.axl_hp:
+        try:
+            session.add(ActivityLog(
+                action="register_bot_dropped",
+                details=f"honeypot tripped (email={req.email})",
+                actor="honeypot",
+            ))
+            session.commit()
+        except Exception:
+            pass
+        return {
+            "message": "Verification email sent",
+            "email": req.email,
+            "name": req.name,
+            "requires_verification": True,
+            "email_sent": True,
+            "verification_url": None,
+        }
+    # Phase C4 — IP + email rate limits.
+    client_ip = (request.client.host if request.client else "unknown") or "unknown"
+    _register_rate_limit(client_ip, req.email)
+
     referrer_id, ref_code_norm = _resolve_referrer(session, req.ref_code, req.email)
 
     existing = session.exec(select(User).where(User.email == req.email)).first()

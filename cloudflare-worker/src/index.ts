@@ -185,8 +185,24 @@ app.onError((err: any, c) => {
 // Cloudflare cron + fetch entry point. Cron drains the job queue every minute
 // (configured in wrangler.toml). The queue consumer handles the same dispatch
 // for Cloudflare Queues batches.
+// Phase A5 — wrap `fetch` so the JWT_SECRET strength check runs at the very
+// top of every request handler, not lazily inside auth code paths. In
+// prod/staging a weak/missing secret aborts the request with a generic 503.
+import { assertJwtSecretStrength } from './auth';
+
 export default {
-  fetch: app.fetch.bind(app),
+  fetch: async (request: Request, env: Env, ctx: ExecutionContext) => {
+    try {
+      assertJwtSecretStrength(env);
+    } catch (err) {
+      console.error('[boot] JWT_SECRET assertion failed:', (err as Error).message);
+      return new Response(
+        JSON.stringify({ ok: false, error: { code: 503, type: 'config_error', message: 'Service misconfigured' } }),
+        { status: 503, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    return app.fetch(request, env, ctx);
+  },
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     const work = (async () => {
       const LEASE_KEY = 'cron:queue:lease';

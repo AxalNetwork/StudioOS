@@ -153,18 +153,22 @@ async def security_and_observability(request: Request, call_next):
     # (Vite runs on its own port 5000). When the React bundle is built and
     # served from FastAPI in prod, no eval is needed, so 'unsafe-eval' is
     # intentionally excluded.
+    # Phase C3 — tighter CSP. connect-src is restricted to known origins
+    # (worker, GitHub, OpenAI). report-uri points at our /api/csp-report
+    # collector (Phase C2) so violations land in error_logs.
     response.headers.setdefault(
         "Content-Security-Policy",
-        "default-src 'self'; "
+        "default-src 'self' https://axal.vc; "
         "script-src 'self'; "
         "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: blob: https:; "
+        "img-src 'self' data: https:; "
         "font-src 'self' data:; "
-        "connect-src 'self' https: wss:; "
+        "connect-src 'self' https://*.workers.dev https://api.github.com https://api.openai.com; "
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
         "form-action 'self'; "
-        "object-src 'none'",
+        "object-src 'none'; "
+        "report-uri /api/csp-report",
     )
     if request.url.scheme == "https":
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
@@ -186,6 +190,9 @@ app.include_router(market_intel.router, prefix="/api")
 app.include_router(advisory.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+
+from backend.app.api.routes import csp_report as _csp_report  # noqa: E402
+app.include_router(_csp_report.router, prefix="/api")
 # --- Backoffice routers (Security Item #6: Cloudflare Zero Trust perimeter)
 # Every router below is admin/internal and gets an extra perimeter check via
 # `require_cf_access`. When CF_ACCESS_TEAM_DOMAIN / CF_ACCESS_AUD are unset
@@ -223,35 +230,51 @@ app.include_router(email_routes.unsubscribe_router, prefix="/api")
 # ---------------------------------------------------------------------------
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "ok": False,
-            "error": {
-                "code": exc.status_code,
-                "type": "http_error",
-                "message": exc.detail if isinstance(exc.detail, str) else "HTTP error",
-                "path": request.url.path,
-            },
-        },
-    )
+    # Preserve structured detail dicts (e.g. ERR_DISTRIBUTION_NOT_IMPLEMENTED).
+    # If detail is a dict, surface it under `error.details` and try to lift
+    # `code`/`message` for client convenience.
+    error_obj: dict = {
+        "code": exc.status_code,
+        "type": "http_error",
+        "path": request.url.path,
+    }
+    if isinstance(exc.detail, str):
+        error_obj["message"] = exc.detail
+    elif isinstance(exc.detail, dict):
+        error_obj["message"] = exc.detail.get("message", "HTTP error")
+        if "code" in exc.detail:
+            error_obj["error_code"] = exc.detail["code"]
+        error_obj["details"] = exc.detail
+    else:
+        error_obj["message"] = "HTTP error"
+        error_obj["details"] = exc.detail
+    return JSONResponse(status_code=exc.status_code, content={"ok": False, "error": error_obj})
 
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    return JSONResponse(
-        status_code=422,
-        content={
-            "ok": False,
-            "error": {
-                "code": 422,
-                "type": "validation_error",
-                "message": "Request validation failed",
-                "details": exc.errors(),
-                "path": request.url.path,
-            },
+    # Phase A4: surface a stable structured error code when fund_id is
+    # missing on cross-fund payloads, so callers can branch on it.
+    structured_code: str | None = None
+    path = request.url.path
+    if "/funds/distributions/execute" in path:
+        for err in exc.errors():
+            if "fund_id" in tuple(err.get("loc", ())) and err.get("type") in ("missing", "value_error.missing"):
+                structured_code = "ERR_DISTRIBUTION_FUND_ID_REQUIRED"
+                break
+    body = {
+        "ok": False,
+        "error": {
+            "code": 422,
+            "type": "validation_error",
+            "message": "Request validation failed",
+            "details": exc.errors(),
+            "path": path,
         },
-    )
+    }
+    if structured_code:
+        body["error"]["error_code"] = structured_code
+    return JSONResponse(status_code=422, content=body)
 
 
 @app.exception_handler(Exception)

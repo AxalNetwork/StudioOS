@@ -49,3 +49,14 @@ API-first Venture Studio Operating System — "The 30-Day Spin-Out Engine" for v
 - **Content-Security-Policy** header added to the FastAPI security middleware (audit #9).
 - **GitHub auto-tickets** carry an `origin: <env>` label (audit #10), default `staging`; set `STUDIOOS_ENV=production` on the prod backend.
 - See `PRODUCTION.md` for the release-blocker list (notably `POST /api/search/backfill`, audit #7).
+
+## Phase A/C Safe-Slice (April 2026)
+- **A1**: `entities` table now carries `CHECK (entity_type <> 'vc_fund') NOT VALID` constraint; ORM/Core guards now also emit a `deprecated_*_writes_blocked` ActivityLog row each time they fire so the admin dashboard can count drift attempts.
+- **A2**: `tests/test_db_guards.py` proves all four legacy write paths (ORM insert, Core bulk insert × 2 deprecated targets) are sealed. Run with `uv run pytest tests/`.
+- **A3**: `capital_calls.limited_partner_id` is promoted to `NOT NULL` automatically on the first boot after backfill completes (`_try_apply_capital_call_not_null`).
+- **A4**: `POST /api/funds/distributions/execute` now requires a `fund_id` body field; missing field yields a 422 with `error.error_code = "ERR_DISTRIBUTION_FUND_ID_REQUIRED"`.
+- **A5**: Both backend and Cloudflare worker fail fast on boot if `JWT_SECRET` is shorter than 32 bytes when `STUDIOOS_ENV ∈ {production, prod, staging}`. Dev/preview unchanged.
+- **C2**: `POST /api/csp-report` collector persists violations as `ActivityLog` rows (action=`csp_violation`); per-IP throttled at 30/min.
+- **C3**: CSP tightened — `connect-src` restricted to self + workers.dev + GitHub + OpenAI; `report-uri` wired to the new collector.
+- **C4**: `/api/auth/register` enforces 5/min/IP and 3/day/email; the request body now accepts a `_axl_hp` honeypot field — non-empty values are silently dropped (logged as `register_bot_dropped`).
+- **G1**: Removed obsolete `netlify.toml` (frontend ships via Cloudflare Pages, not Netlify).

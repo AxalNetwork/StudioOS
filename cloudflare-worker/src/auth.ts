@@ -6,8 +6,30 @@ import { getSQL } from './db';
 const JWT_ALGORITHM = 'HS256';
 const JWT_EXPIRY_HOURS = 24;
 
+/**
+ * Phase A5 — call this exactly once at the start of every request handler
+ * so weak/missing JWT_SECRET fails the whole request, not just the auth
+ * paths. Cloudflare Workers do not have a startup hook, so the next-best
+ * place is the top of the `fetch` handler in `index.ts`.
+ *
+ * Dev/preview workers can use shorter secrets for local convenience.
+ */
+export function assertJwtSecretStrength(env: Env): void {
+  const envName = ((env as any).STUDIOOS_ENV || 'dev').toLowerCase();
+  if (envName !== 'production' && envName !== 'prod' && envName !== 'staging') return;
+  const secret = env.JWT_SECRET || '';
+  if (!secret) throw new Error(`JWT_SECRET must be set in ${envName}`);
+  const len = new TextEncoder().encode(secret).byteLength;
+  if (len < 32) {
+    throw new Error(`JWT_SECRET must be at least 32 bytes in ${envName}; got ${len} bytes`);
+  }
+}
+
 function getSecretKey(env: Env) {
-  return new TextEncoder().encode(env.JWT_SECRET);
+  // Defense in depth: also check here in case a caller bypassed the
+  // top-level guard. The `assert` helper is the canonical entry point.
+  assertJwtSecretStrength(env);
+  return new TextEncoder().encode(env.JWT_SECRET || '');
 }
 
 export async function createJWT(env: Env, userId: number, email: string, role: string, impersonatedBy?: number) {

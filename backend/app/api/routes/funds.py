@@ -1,10 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from backend.app.models.entities import User
 from backend.app.api.routes.auth import get_current_user
 
 router = APIRouter(prefix="/funds", tags=["Funds"])
 
 NOT_IMPL = "Funds module is implemented in the production Cloudflare worker only. Local dev returns empty data."
+
+
+# Phase A4 — cross-fund fan-out guard. Mirrors the explicit fund_id
+# requirement on /api/liquidity/execute-exit. Forces every distribution
+# call to name a single fund so we cannot accidentally fan out a
+# distribution across multiple funds.
+class ExecuteDistributionRequest(BaseModel):
+    fund_id: str = Field(..., min_length=1, description="Required. The fund initiating the distribution.")
+    distribution_id: str | None = None
+    idempotency_key: str | None = None
+    note: str | None = None
 
 
 @router.get("")
@@ -68,8 +80,19 @@ def sign_lpa(lp_id: str, _: User = Depends(get_current_user)):
 
 
 @router.post("/distributions/execute", status_code=501)
-def execute_distribution(_: User = Depends(get_current_user)):
-    raise HTTPException(status_code=501, detail=NOT_IMPL)
+def execute_distribution(req: ExecuteDistributionRequest, _: User = Depends(get_current_user)):
+    # Pydantic enforces the fund_id requirement; if it's missing FastAPI
+    # returns the standard 422 envelope with our `validation_error` type.
+    # The structured error code below is for the not-yet-implemented happy
+    # path so downstream consumers can distinguish it from generic 501s.
+    raise HTTPException(
+        status_code=501,
+        detail={
+            "code": "ERR_DISTRIBUTION_NOT_IMPLEMENTED",
+            "fund_id": req.fund_id,
+            "message": NOT_IMPL,
+        },
+    )
 
 
 @router.post("/distributions/{dist_id}/mark-paid", status_code=501)
