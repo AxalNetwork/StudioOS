@@ -82,11 +82,20 @@ function isCacheableGet(method: string, path: string): boolean {
 app.all('/api/*', async (c) => {
   const origin = c.env.FASTAPI_ORIGIN;
   if (!origin) {
+    // User-facing message stays generic; operators see the real cause in
+    // worker logs. Leaking "wrangler secret put ..." into the login UI was
+    // both confusing for end users and an information disclosure.
+    console.error(
+      '[proxy] FASTAPI_ORIGIN secret is not set. Configure it with ' +
+        '`wrangler secret put FASTAPI_ORIGIN` and redeploy.',
+    );
     return c.json(
       {
-        detail:
-          'Edge proxy not configured: FASTAPI_ORIGIN secret missing. ' +
-          'Set it via `wrangler secret put FASTAPI_ORIGIN`.',
+        error: {
+          code: 503,
+          type: 'service_unavailable',
+          message: 'Service is temporarily unavailable. Please try again shortly.',
+        },
       },
       503,
     );
@@ -131,7 +140,16 @@ app.all('/api/*', async (c) => {
     upstream = await fetch(targetUrl, init);
   } catch (err: any) {
     console.error('[proxy] origin fetch failed:', err?.message || err);
-    return c.json({ detail: 'Bad gateway: origin unreachable' }, 502);
+    return c.json(
+      {
+        error: {
+          code: 502,
+          type: 'bad_gateway',
+          message: 'Service is temporarily unavailable. Please try again shortly.',
+        },
+      },
+      502,
+    );
   }
 
   // Stream the response straight through, preserving status + headers.
