@@ -1,126 +1,42 @@
-## Header
+# Axal StudioOS
 
-Header folder consists of 8 variations of Page Header with Titles
+The 30-Day Spin-Out Engine — an API-first venture studio operating system that takes a startup from intake → AI scoring → legal formation → fundraising → portfolio monitoring.
 
-### bg_color: 
-this variable when defined on page will change the color of header (page title bckground)
-it can take values as follows 
-    bg-default
-    bg-dark
-    bg-gray
-    bg-white
-    bg-red
-	bg-orange
-	bg-yellow
-	bg-green
-	bg-leaf
-	bg-teal
-	bg-aqua
-	bg-meander
-	bg-blue
-	bg-cobalt
-	bg-sky
-	bg-purple
-	bg-violet
-	bg-pink
-	bg-rose
-	bg-hibiscus
-	bg-brown
+## Repo layout
 
-## Nav
+| Path                | What it is                                                            |
+| ------------------- | --------------------------------------------------------------------- |
+| `frontend/`         | React 19 + Vite 6 + Tailwind 4 SPA (the dashboard)                    |
+| `backend/`          | **FastAPI** (Python) — the canonical API. Source of truth.            |
+| `cloudflare-worker/`| Edge proxy/cache (Hono on CF Workers) + Durable Objects for WebSockets|
+| `attached_assets/`  | Design specs, screenshots, methodology docs                           |
+| `docs/`             | Built frontend bundle (Vite output, served via GitHub Pages)          |
 
-Nav folder consists of 11 variations of Navigation 
- by default the logo is set to white for classic 
- you can set black logo by following 
+## Local development on Replit
 
- 	{% include navigation.html default_logo="black" logo_class="custom-logo-class" %}
+Two workflows are configured:
 
-for nav-10 
-	{% include nav-10.html shop_header=true %}
+- **Backend API** — `uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload`
+- **Start application** — `cd frontend && npm run dev` (Vite on port 5000, proxies `/api` → 8000)
 
-This would include the shop-header.html partial. Similarly, you can add other combinations:
+Required secret: `JWT_SECRET` (the backend fails fast at import time if unset).
 
-	{% include nav-10.html btn_header=true %}
-	{% include nav-10.html drop_search=true %}
-    <div class="navbar-brand">
-      <a href="{{site.url}}">
-        <!-- White Logo -->
-        <img 
-          src="{{site.data.general_settings.light_logo_1x}}" 
-          srcset="{{site.data.general_settings.light_logo_1x}} 1x, {{site.data.general_settings.light_logo_2x}} 2x"
-          class="{% if include.logo_class %}{{ include.logo_class }}{% else %}logo-light{% endif %} 
-                 {% unless include.default_logo == 'black' %}{% else %}d-none{% endunless %}" 
-          alt="{{site.data.general_settings.title}}" />
-        
-        <!-- Black Logo -->
-        <img 
-          src="{{site.data.general_settings.black_logo_1x}}" 
-          srcset="{{site.data.general_settings.black_logo_1x}} 1x, {{site.data.general_settings.black_logo_2x}} 2x"
-          class="{% if include.logo_class %}{{ include.logo_class }}{% else %}logo-dark{% endif %} 
-                 {% if include.default_logo == 'black' %}{% else %}d-none{% endif %}" 
-          alt="{{site.data.general_settings.title}}" />
-      </a>
-    </div>
+Optional secrets: `GITHUB_ACCESS_TOKEN`, `GMAIL_*`, `STRIPE_*`, `SUMSUB_*` — see `PRODUCTION.md`.
 
-Best Practice
+## Architecture
 
-    Use meaningful names for the class, such as center-logo, logo-with-padding, or logo-hover-effect, based on the styling applied.
-    Combine multiple styles in your custom-logo-class if needed, but keep the class name descriptive.
+FastAPI is the canonical API. The Cloudflare Worker is a thin edge layer that:
 
+1. Proxies `/api/*` to the FastAPI origin (configured via `FASTAPI_ORIGIN` secret).
+2. Hosts WebSocket fan-out via Durable Objects (`PipelineRoom`, `OnboardingChat`).
+3. Drains background jobs via cron + Queues consumer.
 
-## Footer
+The legacy in-worker route handlers (`cloudflare-worker/src/routes/*.ts`) are kept for git history but are no longer mounted from `index.ts`. See `cloudflare-worker/src/routes/README.md`.
 
-Footer folder consists of 8 variations of Footer 
+## Deploy
 
-## Blogs
+See `PRODUCTION.md` for the production checklist, secrets, and post-deploy steps.
 
-The main blogs directory holds the design to blog pages and there are 8 variations of them
+## License
 
-### header_image : 
-this variable can be used to define a page title image. You can insert the path to your image in this variable.
-
-### post_format:  
-its a variable used in blog pages frontmatter to define which post type you wanna use
-
-post_format can take the following values -- general , gallery, carousel , video
-
-## Breadcrumbs
-Usage
------
-
-To render the breadcrumbs for the current page:
-
-    {% include breadcrumbs.html %}
-
-To render the breadcrumbs for another page:
-
-    {% include breadcrumbs.html page=another_page %}
-
-To render breadcrumbs with the home page and date omitted (see [Options](#options) below
-for more options):
-
-    {% include breadcrumbs.html omit_home=true omit_date=true %}
-
-Options
--------
-
-omit_home
-: Don't include the home page as the first breadcrumb.
-
-omit_collection
-: Don't include the page's collection ("posts" by default, for posts) in the breadcrumbs.
-
-omit_categories
-: Don't include the page's categories in the breadcrumbs.
-
-omit_date
-: Don't include the post's date (year, month and day) in the breadcrumbs.
-
-omit_year
-: Don't include the post's year in the breadcrumbs.
-
-omit_month
-: Don't include the post's month in the breadcrumbs.
-
-omit_date
-: Don't include the post's date in the breadcrumbs.
+Proprietary — Axal Management, LLC.

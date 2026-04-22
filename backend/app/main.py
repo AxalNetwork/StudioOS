@@ -35,6 +35,8 @@ from backend.app.api.routes import (
 )
 from backend.app.api.routes.auth import get_current_user
 from backend.app.database import init_db
+from backend.app.services.db_guards import install_db_guards
+from backend.app.services.rate_limit import RateLimitMiddleware
 
 logger = logging.getLogger("studioos")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -47,6 +49,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 async def lifespan(app: FastAPI):
     logger.info("StudioOS starting up — initializing database")
     init_db()
+    # Audit #1: seal legacy write paths to lp_investors and entities(type=vc_fund).
+    install_db_guards()
+    logger.info("StudioOS db guards: legacy write paths sealed")
     try:
         from backend.app.models.migrations import (
             consolidate_capital_tables,
@@ -125,6 +130,12 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 
 
 # ---------------------------------------------------------------------------
+# Per-bucket rate limits (audit #8) — mirrors the worker bucket layout.
+# ---------------------------------------------------------------------------
+app.add_middleware(RateLimitMiddleware)
+
+
+# ---------------------------------------------------------------------------
 # Security headers + lightweight observability
 # ---------------------------------------------------------------------------
 @app.middleware("http")
@@ -134,6 +145,27 @@ async def security_and_observability(request: Request, call_next):
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+    # Content Security Policy — Zero Trust posture. Tight default-src, no
+    # third-party scripts, no inline JS, frames denied. Vite/React inline
+    # styles are needed for component libraries, hence 'unsafe-inline' for
+    # style-src only. NOTE: Vite's dev HMR client requires 'unsafe-eval' in
+    # script-src — but the FastAPI process never serves the Vite HMR client
+    # (Vite runs on its own port 5000). When the React bundle is built and
+    # served from FastAPI in prod, no eval is needed, so 'unsafe-eval' is
+    # intentionally excluded.
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' https: wss:; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "object-src 'none'",
+    )
     if request.url.scheme == "https":
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response

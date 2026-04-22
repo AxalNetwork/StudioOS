@@ -30,13 +30,24 @@ def _priority_label(priority: str) -> str:
     return mapping.get(priority, "priority: medium")
 
 
+def _origin_label() -> str:
+    """Discriminator label so production tickets are filterable from staging /
+    dev probes. Defaults to 'staging' so a misconfigured environment never
+    silently flags real tickets as production. Set STUDIOOS_ENV=production in
+    the prod backend's environment to flip this on."""
+    env = (os.getenv("STUDIOOS_ENV") or "staging").strip().lower()
+    if env not in ("production", "staging", "dev", "preview"):
+        env = "staging"
+    return f"origin: {env}"
+
+
 async def create_github_issue(title: str, description: str = None, priority: str = "medium", submitted_by: str = None):
     config = _get_config()
     if not config:
         logger.warning("GitHub not configured — skipping issue creation")
         return None
 
-    labels = [_priority_label(priority), "support-ticket"]
+    labels = [_priority_label(priority), "support-ticket", _origin_label()]
 
     body_parts = []
     if description:

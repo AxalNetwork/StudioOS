@@ -26,9 +26,10 @@ API-first Venture Studio Operating System — "The 30-Day Spin-Out Engine" for v
 - Fund management and LP tracking
 
 ## Environment Variables / Secrets
-- `JWT_SECRET` — Required for auth token signing (set in Replit Secrets)
+- `JWT_SECRET` — **Required.** Backend fails fast at import time if unset (no dev fallback).
+- `STUDIOOS_ENV` — `production` / `staging` / `dev` / `preview`. Drives the GitHub support-ticket origin label. Defaults to `staging`.
 - `GOOGLE_REDIRECT_URI` — Google OAuth redirect URI
-- `GITHUB_REPO_OWNER` / `GITHUB_REPO_NAME` — GitHub integration config
+- `GITHUB_ACCESS_TOKEN`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME` — GitHub integration config
 - `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` — PostgreSQL credentials (available if needed)
 
 ## Dependencies
@@ -40,4 +41,11 @@ API-first Venture Studio Operating System — "The 30-Day Spin-Out Engine" for v
 - Social media icons (Facebook, Instagram, Twitter, Youtube, Linkedin) removed from lucide-react 1.x — replaced with inline SVGs
 - `AlertOctagon` removed from lucide-react 1.x — replaced with `AlertTriangle`
 - `Github` icon removed from lucide-react 1.x — replaced with `GitBranch`
-- The Cloudflare Worker backend (`cloudflare-worker/`) is for production Cloudflare deployment only; the Python FastAPI backend is used in Replit
+
+## Architecture decisions
+- **FastAPI is the canonical API and source of truth** (audit #4). The Cloudflare Worker (`cloudflare-worker/`) is now a thin edge proxy/cache that forwards `/api/*` to FastAPI; only WebSocket Durable Objects + the queue consumer remain at the edge. Legacy in-worker route handlers under `cloudflare-worker/src/routes/*.ts` are kept for git history but are not mounted (see `cloudflare-worker/src/routes/README.md`).
+- **Per-bucket rate limits** in `backend/app/services/rate_limit.py` mirror the worker buckets: spinout 5/hr, ai 10/min, user 60/min, global 1000/min.
+- **Legacy data drift sealed** (audit #1): `backend/app/services/db_guards.py` registers SQLAlchemy event listeners that raise on any insert/update to `lp_investors` or `entities(type='vc_fund')`. Reads still work for the consolidation migration.
+- **Content-Security-Policy** header added to the FastAPI security middleware (audit #9).
+- **GitHub auto-tickets** carry an `origin: <env>` label (audit #10), default `staging`; set `STUDIOOS_ENV=production` on the prod backend.
+- See `PRODUCTION.md` for the release-blocker list (notably `POST /api/search/backfill`, audit #7).

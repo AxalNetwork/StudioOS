@@ -144,12 +144,22 @@ function DistributionModal({ fund, onClose }) {
   const [proceedsM, setProceedsM] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  // Audit #5: enforce a single concrete fund_id at the UI layer. The backend
+  // already refuses cross-fund auto fan-out, but a missing fund_id at this
+  // call site would be a developer error worth catching loudly here, not a
+  // silent 4xx round-trip.
+  const fundId = fund?.id;
+  const fundIdMissing = fundId === undefined || fundId === null;
   const submit = async (e) => {
     e.preventDefault();
+    if (fundIdMissing) {
+      setErr('No fund selected. Pick a specific fund before distributing.');
+      return;
+    }
     setBusy(true); setErr('');
     try {
       await api.fundsExecuteDistribution({
-        fund_id: fund.id,
+        fund_id: fundId,
         proceeds_cents: Math.round(Number(proceedsM || 0) * 1_000_000 * 100),
       });
       onClose(true);
@@ -170,7 +180,7 @@ function DistributionModal({ fund, onClose }) {
         <Field label="Proceeds ($M)" type="number" step="0.01" value={proceedsM} onChange={setProceedsM} required />
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={() => onClose()} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg">Cancel</button>
-          <button type="submit" disabled={busy} className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-lg">
+          <button type="submit" disabled={busy || fundIdMissing} className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-lg">
             {busy ? 'Running…' : 'Distribute'}
           </button>
         </div>
