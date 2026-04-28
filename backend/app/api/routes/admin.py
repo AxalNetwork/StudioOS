@@ -33,6 +33,9 @@ def list_all_users(session: Session = Depends(get_session), admin: User = Depend
             # Surface kyc_status so the admin UI can show verification state
             # and offer "Grant Full Access" without going through the queue.
             "kyc_status": getattr(u, "kyc_status", None),
+            # 'limited' (or null) — admin-granted browse-only access without
+            # KYC; cannot sign legal agreements until KYC is complete.
+            "access_level": getattr(u, "access_level", None),
             "created_at": u.created_at.isoformat() if u.created_at else None,
         }
         for u in users
@@ -132,6 +135,51 @@ def toggle_user_active(user_id: int, session: Session = Depends(get_session), ad
 from pydantic import BaseModel
 from sqlmodel import desc as _desc
 from backend.app.models.entities import Ticket, Integration
+
+
+class AccessLevelIn(BaseModel):
+    # Only "limited" or null is accepted. Full access is granted via the
+    # KYC approve endpoint (single source of truth).
+    level: str | None = None
+
+
+@router.patch("/users/{user_id}/access-level")
+def set_user_access_level(
+    user_id: int,
+    payload: AccessLevelIn,
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin),
+):
+    target = session.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if str(target.role) == "admin":
+        raise HTTPException(status_code=400, detail="Admins already have full access")
+    new_level = "limited" if (payload.level == "limited") else None
+    if getattr(target, "access_level", None) == new_level:
+        raise HTTPException(status_code=409, detail="No change")
+
+    target.access_level = new_level
+    session.add(target)
+
+    action = "access_limited_granted" if new_level == "limited" else "access_limited_revoked"
+    detail = (
+        f"Admin {admin.name} granted limited access (browse-only, no signing) to "
+        f"{target.name} ({target.email})"
+        if new_level == "limited"
+        else f"Admin {admin.name} revoked limited access from {target.name} ({target.email})"
+    )
+    session.add(ActivityLog(action=action, details=detail, actor=admin.email, user_id=admin.id))
+    user_msg = (
+        "You were granted limited platform access by Axal compliance. You can browse "
+        "but cannot sign legal agreements until KYC is complete."
+        if new_level == "limited"
+        else "Your limited platform access was revoked by Axal compliance."
+    )
+    session.add(ActivityLog(action=action, details=user_msg, actor=target.email, user_id=target.id))
+    session.commit()
+
+    return {"access_level": new_level, "user_id": user_id}
 
 
 class NotesIn(BaseModel):

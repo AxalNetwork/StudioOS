@@ -10,7 +10,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin, requireAuth } from '../auth';
+import { requireAdmin, requireAuth, requireApprovedKyc } from '../auth';
 import { Funds, LPs } from '../models/funds';
 import { Jobs } from '../models/jobs';
 import { enqueueJob } from '../services/queue';
@@ -234,8 +234,9 @@ funds.post('/:id/lps', async (c) => {
 });
 
 funds.post('/lps/:lpId/sign-lpa', async (c) => {
-  // LP signs their LPA. The LP must be the current user (or admin acting).
-  const user = await requireAuth(c);
+  // LP signs their LPA. Binding signature → enforce KYC. Limited-access
+  // users (kyc !== 'approved') are blocked; admins still pass through.
+  const user = await requireApprovedKyc(c);
   const lpId = parseInt(c.req.param('lpId'), 10);
   const lp = await LPs.getById(c.env, lpId);
   if (!lp) return c.json({ error: 'LP not found' }, 404);

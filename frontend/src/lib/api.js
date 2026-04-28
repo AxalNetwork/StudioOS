@@ -136,6 +136,10 @@ export const api = {
   adminImpersonate: (userId) => request(`/admin/impersonate/${userId}`, { method: 'POST' }),
   adminUpdateRole: (userId, role) => request(`/admin/users/${userId}/role?role=${role}`, { method: 'PATCH' }),
   adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),
+  // Set per-user access level. `level` is 'limited' (browse-only, no signing
+  // until KYC) or null (revoke). Full access is granted via kycAdminApprove.
+  adminSetAccessLevel: (userId, level) =>
+    request(`/admin/users/${userId}/access-level`, { method: 'PATCH', body: JSON.stringify({ level }) }),
 
   profilingChat: (data) => request('/profiling/chat', { method: 'POST', body: JSON.stringify(data) }),
   profilingSave: (data) => request('/profiling/save', { method: 'POST', body: JSON.stringify(data) }),

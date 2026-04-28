@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
+import { requireAuth, requireRole, requireApprovedKyc, canAccessFounderResource } from '../auth';
 
 const legal = new Hono<{ Bindings: Env }>();
 
@@ -158,7 +158,9 @@ legal.post('/documents', async (c) => {
 });
 
 legal.put('/documents/:id/sign', async (c) => {
-  const user = await requireAuth(c);
+  // Binding signature → enforce KYC. Limited-access users (kyc !== 'approved')
+  // are blocked; admins still pass through.
+  const user = await requireApprovedKyc(c);
   const id = parseInt(c.req.param('id'));
   const { signed_by } = await c.req.json();
   const sql = getSQL(c.env);

@@ -124,6 +124,22 @@ def ensure_growth_track_columns() -> None:
         session.commit()
 
 
+def ensure_user_access_level_column() -> None:
+    """Idempotently add `users.access_level` for the limited-access feature.
+
+    `'limited'` lets a user past the KYC gate to browse the platform but
+    forbids signing legal agreements (enforced in routes/legal.py). Any
+    other value (including NULL) means the normal flow applies.
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text("ALTER TABLE users ADD COLUMN access_level VARCHAR"))
+            session.commit()
+        except Exception as exc:  # column already exists / other DBs
+            session.rollback()
+            logger.debug("ensure_user_access_level_column: ALTER skipped: %s", exc)
+
+
 def ensure_document_file_columns() -> None:
     """Add file-storage columns to `documents`. Idempotent.
 

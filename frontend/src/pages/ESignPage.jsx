@@ -19,6 +19,19 @@ export default function ESignPage() {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
+  // If the signer is logged in with limited access, surface the warning up
+  // front so they don't waste time drawing a signature only to be rejected
+  // by the server. The server is still authoritative — see the worker
+  // /api/legal/esign/sign/:token handler.
+  let signerAccessLevel = null;
+  let signerKycStatus = null;
+  try {
+    const stored = JSON.parse(localStorage.getItem('user') || '{}');
+    signerAccessLevel = stored?.access_level || null;
+    signerKycStatus = stored?.kyc_status || null;
+  } catch {}
+  const limitedSigner = signerAccessLevel === 'limited' && signerKycStatus !== 'approved';
+
   useEffect(() => {
     let alive = true;
     api.esignFetchByToken(token)
@@ -98,6 +111,21 @@ export default function ESignPage() {
   return (
     <PageShell>
       <div className="space-y-5">
+        {limitedSigner && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3 items-start">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 text-sm">
+              <div className="font-semibold text-amber-900">Limited access — signing is disabled</div>
+              <p className="mt-1 text-amber-800 leading-relaxed">
+                Your account currently has limited (browse-only) access. You cannot sign legal
+                agreements until you complete identity verification. Please go to{' '}
+                <a href="/kyc" className="underline font-medium">Identity Verification</a>{' '}
+                to finish KYC, then return to this link to sign. If you believe this is in error,
+                contact Axal compliance.
+              </p>
+            </div>
+          </div>
+        )}
         {/* Document panel */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-3">
@@ -130,7 +158,7 @@ export default function ESignPage() {
 
           <SignaturePad
             onSubmit={submit}
-            disabled={submitting || !accepted}
+            disabled={submitting || !accepted || limitedSigner}
             typedName={typedName}
             setTypedName={setTypedName}
             accepted={accepted}

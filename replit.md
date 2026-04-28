@@ -60,3 +60,14 @@ API-first Venture Studio Operating System — "The 30-Day Spin-Out Engine" for v
 - **C3**: CSP tightened — `connect-src` restricted to self + workers.dev + GitHub + OpenAI; `report-uri` wired to the new collector.
 - **C4**: `/api/auth/register` enforces 5/min/IP and 3/day/email; the request body now accepts a `_axl_hp` honeypot field — non-empty values are silently dropped (logged as `register_bot_dropped`).
 - **G1**: Removed obsolete `netlify.toml` (frontend ships via Cloudflare Pages, not Netlify).
+
+## Admin user-access controls (April 2026)
+- **Grant Full Access**: admin button on `/admin` reuses `kycAdminApprove` and additionally logs `kyc_bypass_granted` when no KYC submission exists. Sets `users.kyc_status='approved'`.
+- **Limited Access (no KYC, no signing)**: new `users.access_level` column. `'limited'` lets a non-admin user log in and browse the platform without completing KYC, but they cannot sign any binding agreement. Worker endpoint `PATCH /api/admin/users/:user_id/access-level` (FastAPI mirror at same path) sets/clears the level. Audited as `access_limited_granted` / `access_limited_revoked`.
+- **Sign-gate enforcement (server-authoritative)**: `requireApprovedKyc` (admin OR `kyc_status==='approved'`) is now used on every binding signing surface:
+  - Worker `PUT /api/legal/documents/:id/sign`
+  - Worker `PATCH /api/legalcap/legal/docs/:id/sign`
+  - Worker `POST /api/funds/lps/:lpId/sign-lpa`
+  - Worker `POST /api/legal/esign/sign/:token` (magic-link; resolves recipient by `envelope_user_id` then by lower(email) and returns 403 `kyc_required_for_signing` if limited+not-approved)
+  - FastAPI `POST /api/legal/documents/{doc_id}/sign` (inline guard)
+- Frontend: `App.jsx` KYC gate bypasses redirect when `access_level==='limited'`; `AdminPage.jsx` shows a sky-blue "Limited" pill and Grant/Revoke Limited buttons; `ESignPage.jsx` shows an amber "signing disabled" banner and disables the signature pad when the logged-in signer is limited.

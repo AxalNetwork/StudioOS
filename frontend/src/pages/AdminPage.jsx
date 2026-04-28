@@ -142,6 +142,26 @@ export default function AdminPage({ onImpersonate }) {
     try { await api.kycAdminApprove(user.id); loadAll(); }
     catch (e) { alert(e.message || 'Failed to grant access'); }
   };
+  const handleGrantLimitedAccess = async (user) => {
+    const ok = window.confirm(
+      `Grant ${user.name || user.email} limited access?\n\n` +
+      `They will be able to log in and browse the platform without completing KYC, ` +
+      `BUT they will NOT be able to sign any legal agreements (subscription docs, SPA, ` +
+      `side letters, etc.) until they complete full KYC verification.`
+    );
+    if (!ok) return;
+    try { await api.adminSetAccessLevel(user.id, 'limited'); loadAll(); }
+    catch (e) { alert(e.message || 'Failed to grant limited access'); }
+  };
+  const handleRevokeLimitedAccess = async (user) => {
+    const ok = window.confirm(
+      `Revoke limited access from ${user.name || user.email}?\n\n` +
+      `They will be redirected back to the KYC verification flow on next page load.`
+    );
+    if (!ok) return;
+    try { await api.adminSetAccessLevel(user.id, null); loadAll(); }
+    catch (e) { alert(e.message || 'Failed to revoke limited access'); }
+  };
   const handleRoleChange = async (user, newRole) => {
     if (newRole === user.role) return;
     const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner / Investor' };
@@ -260,6 +280,18 @@ export default function AdminPage({ onImpersonate }) {
                         <td className="px-4 py-3 text-center">
                           {(() => {
                             const k = u.kyc_status || 'not_started';
+                            // Limited-access takes visual precedence ONLY when the user is
+                            // not already approved — once they're approved, KYC trumps everything.
+                            const isLimited = u.access_level === 'limited' && k !== 'approved';
+                            if (isLimited) {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-sky-100 text-sky-700"
+                                  title="Browse-only access. Cannot sign legal agreements until KYC is complete.">
+                                  <ShieldCheck size={11} />
+                                  Limited
+                                </span>
+                              );
+                            }
                             return (
                               <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${KYC_BADGES[k] || KYC_BADGES.not_started}`}>
                                 <ShieldCheck size={11} />
@@ -278,6 +310,22 @@ export default function AdminPage({ onImpersonate }) {
                                 className="px-2.5 py-1.5 text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium transition-colors flex items-center gap-1"
                                 title="Mark KYC approved without requiring submission">
                                 <ShieldCheck size={12} /> Grant Access
+                              </button>
+                            )}
+                            {/* Limited access: browse-only without KYC, no signing.
+                                Only meaningful for non-admins not yet approved. */}
+                            {u.role !== 'admin' && u.kyc_status !== 'approved' && u.access_level !== 'limited' && (
+                              <button onClick={() => handleGrantLimitedAccess(u)}
+                                className="px-2.5 py-1.5 text-xs bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg font-medium transition-colors flex items-center gap-1"
+                                title="Allow login & browsing without KYC. Signing remains blocked.">
+                                <ShieldCheck size={12} /> Grant Limited
+                              </button>
+                            )}
+                            {u.role !== 'admin' && u.access_level === 'limited' && u.kyc_status !== 'approved' && (
+                              <button onClick={() => handleRevokeLimitedAccess(u)}
+                                className="px-2.5 py-1.5 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg font-medium transition-colors flex items-center gap-1"
+                                title="Remove limited access. User will be redirected to KYC.">
+                                Revoke Limited
                               </button>
                             )}
                             <button onClick={() => handleImpersonate(u.id)}

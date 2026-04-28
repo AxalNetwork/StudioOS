@@ -14,6 +14,10 @@ async function ensureProfileColumns(env: Env): Promise<void> {
   const stmts = [
     `ALTER TABLE users ADD COLUMN admin_notes TEXT`,
     `ALTER TABLE users ADD COLUMN last_active_at TIMESTAMP`,
+    // 'limited' lets a user past the KYC gate to browse the platform but
+    // does NOT permit signing legal/financial agreements (server-enforced
+    // in /api/legal/esign/sign/:token). Null/missing = normal flow.
+    `ALTER TABLE users ADD COLUMN access_level TEXT`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch {} // duplicate-column errors are expected
@@ -23,10 +27,15 @@ async function ensureProfileColumns(env: Env): Promise<void> {
 
 admin.get('/users', async (c) => {
   await requireAdmin(c);
+  // Make sure access_level (and other admin-only columns) exist on the row
+  // shape before we SELECT them — older databases predate these adds.
+  await ensureProfileColumns(c.env);
   const sql = getSQL(c.env);
-  // Include `kyc_status` so the admin user table can show who's been verified
-  // and surface the "Grant Full Access" action when the value is not "approved".
-  const rows = await sql`SELECT id, uid, email, name, role, is_active, email_verified, kyc_status, created_at FROM users ORDER BY created_at DESC`;
+  // Include `kyc_status` and `access_level` so the admin user table can
+  // show who's been verified, who has a manual full-access grant, and who
+  // has limited (browse-only, can't sign legal docs) access. The UI uses
+  // these to decide which "Grant" buttons to render.
+  const rows = await sql`SELECT id, uid, email, name, role, is_active, email_verified, kyc_status, access_level, created_at FROM users ORDER BY created_at DESC`;
   await sql.end();
   return c.json(rows);
 });
@@ -198,6 +207,54 @@ admin.get('/users/:user_id/profile', async (c) => {
       signed_agreement_count: agreements.filter((a: any) => a.recipient_status === 'signed').length,
     },
   });
+});
+
+// PATCH /api/admin/users/:user_id/access-level — admin grants or revokes
+// "limited" access. Limited users can browse the platform without completing
+// KYC but the worker rejects any signing attempts (esign /sign/:token).
+// Body: { level: 'limited' | null }
+admin.patch('/users/:user_id/access-level', async (c) => {
+  const adminUser = await requireAdmin(c);
+  await ensureProfileColumns(c.env);
+  const userId = parseInt(c.req.param('user_id'));
+  if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
+  const body: any = await c.req.json().catch(() => ({}));
+  const raw = body?.level;
+  // Only `'limited'` and `null` (revoke) are accepted. We deliberately do
+  // not expose a 'full' value here — full access is granted via the KYC
+  // approve endpoint, which keeps a single source of truth.
+  if (raw !== null && raw !== 'limited' && raw !== '') {
+    return c.json({ error: "level must be 'limited' or null" }, 400);
+  }
+  const newLevel: string | null = raw === 'limited' ? 'limited' : null;
+
+  const target: any = await c.env.DB.prepare(
+    `SELECT id, email, name, role, access_level, kyc_status FROM users WHERE id = ?`
+  ).bind(userId).first();
+  if (!target) return c.json({ error: 'User not found' }, 404);
+  if (target.role === 'admin') return c.json({ error: "Admins already have full access; access_level is a no-op for them" }, 400);
+  if (target.access_level === newLevel) return c.json({ error: 'No change' }, 409);
+
+  await c.env.DB.prepare(`UPDATE users SET access_level = ? WHERE id = ?`).bind(newLevel, userId).run();
+
+  const action = newLevel === 'limited' ? 'access_limited_granted' : 'access_limited_revoked';
+  const details = newLevel === 'limited'
+    ? `Admin ${adminUser.name} granted limited access (browse-only, no signing) to ${target.name} (${target.email})`
+    : `Admin ${adminUser.name} revoked limited access from ${target.name} (${target.email})`;
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
+    ).bind(action, details, adminUser.email, adminUser.id).run();
+    // Also log on the target so it appears in their own activity timeline.
+    const userMsg = newLevel === 'limited'
+      ? 'You were granted limited platform access by Axal compliance. You can browse but cannot sign legal agreements until KYC is complete.'
+      : 'Your limited platform access was revoked by Axal compliance.';
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
+    ).bind(action, userMsg, target.email, target.id).run();
+  } catch {}
+
+  return c.json({ access_level: newLevel, user_id: userId });
 });
 
 // POST /api/admin/users/:user_id/notes — admin updates internal notes.

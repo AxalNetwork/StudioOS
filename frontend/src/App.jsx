@@ -409,6 +409,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate }) {
   const location = useLocation();
   const [kycStatus, setKycStatus] = useState(user?.kyc_status || null);
+  const [accessLevel, setAccessLevel] = useState(user?.access_level || null);
 
   useEffect(() => {
     if (!user) return;
@@ -418,9 +419,14 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
         const me = await api.getMe();
         if (cancelled) return;
         setKycStatus(me.kyc_status || 'not_started');
+        setAccessLevel(me.access_level || null);
         const stored = JSON.parse(localStorage.getItem('user') || '{}');
-        if (stored.kyc_status !== me.kyc_status) {
-          localStorage.setItem('user', JSON.stringify({ ...stored, kyc_status: me.kyc_status }));
+        if (stored.kyc_status !== me.kyc_status || stored.access_level !== me.access_level) {
+          localStorage.setItem('user', JSON.stringify({
+            ...stored,
+            kyc_status: me.kyc_status,
+            access_level: me.access_level || null,
+          }));
         }
       } catch {}
     })();
@@ -433,11 +439,15 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
 
   // Onboarding gate: non-admin users must complete KYC before accessing other pages.
   // Admins (and impersonation sessions) bypass the gate. Activity log + KYC pages are always allowed.
+  // `access_level === 'limited'` is an admin-granted bypass that lets the user
+  // browse the platform without KYC; signing of legal agreements is still
+  // blocked server-side in the eSign route.
   const effectiveRole = (realUser || user)?.role;
   const ALLOWED_BEFORE_KYC = ['/kyc', '/activity', '/tickets'];
   if (
     effectiveRole !== 'admin' &&
     !isImpersonating &&
+    accessLevel !== 'limited' &&
     kycStatus &&
     kycStatus !== 'approved' &&
     !ALLOWED_BEFORE_KYC.includes(location.pathname)

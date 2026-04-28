@@ -1025,6 +1025,22 @@ def sign_document(
     # doc and asserts founder ownership / privileged role before this body.
     from backend.app.services.audit import log_audit, AuditAction
     from backend.app.services.signatures import derive_signer_email
+    # Limited-access gate: a user with access_level='limited' can browse
+    # but is explicitly NOT permitted to sign binding agreements until
+    # KYC is approved. Admins always pass through. Mirrors the worker
+    # gate on /api/legal/esign/sign/:token and /api/funds/lps/.../sign-lpa.
+    if (
+        getattr(user, "role", None) != "admin"
+        and getattr(user, "access_level", None) == "limited"
+        and getattr(user, "kyc_status", None) != "approved"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "Limited access — please complete KYC verification before signing legal agreements.",
+                "code": "kyc_required_for_signing",
+            },
+        )
     # Reject re-signing or signing voided contracts — signatures must be
     # immutable once recorded.
     if doc.status == DocumentStatus.SIGNED:

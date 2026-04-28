@@ -109,6 +109,10 @@ class User(SQLModel, table=True):
     verification_token_expires: Optional[datetime] = None
     admin_notes: Optional[str] = None
     last_active_at: Optional[datetime] = None
+    # 'limited' = admin granted browse-only access without KYC. The user
+    # can use the platform but cannot sign legal agreements (enforced in
+    # the esign sign endpoint). Null = normal flow.
+    access_level: Optional[str] = None
     referrer_partner_id: Optional[int] = Field(default=None, foreign_key="partners.id", index=True)
     referrer_code_used: Optional[str] = None
     referral_attributed_at: Optional[datetime] = None

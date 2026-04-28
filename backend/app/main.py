@@ -57,11 +57,14 @@ async def lifespan(app: FastAPI):
             consolidate_capital_tables,
             ensure_growth_track_columns,
             ensure_document_file_columns,
+            ensure_user_access_level_column,
         )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
         ensure_document_file_columns()
         logger.info("StudioOS migrations: document file columns ensured")
+        ensure_user_access_level_column()
+        logger.info("StudioOS migrations: user.access_level column ensured")
         consolidate_capital_tables()
         logger.info("StudioOS migrations: capital tables consolidated")
     except Exception as exc:  # noqa: BLE001

@@ -350,6 +350,10 @@ auth.get('/me', async (c) => {
     id: user.id, email: user.email, name: user.name, role: user.role,
     is_active: user.is_active, created_at: user.created_at,
     kyc_status: (user as any).kyc_status || 'not_started',
+    // 'limited' lets the user past the KYC gate to browse the app, but
+    // they still cannot sign legal agreements (server-enforced in esign).
+    // null means normal flow: full access requires kyc_status='approved'.
+    access_level: (user as any).access_level || null,
   });
 });
 

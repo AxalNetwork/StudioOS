@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth } from '../auth';
+import { requireAuth, requireApprovedKyc } from '../auth';
 import { logActivity } from './partnernet';
 
 const legalcap = new Hono<{ Bindings: Env }>();
@@ -413,7 +413,10 @@ legalcap.get('/legal/docs/:dealId', async (c) => {
 });
 
 legalcap.patch('/legal/docs/:id/sign', async (c) => {
-  const user = await requireAuth(c);
+  // Binding signature on a legal doc → enforce KYC. requireApprovedKyc lets
+  // admins through and requires kyc_status==='approved' for everyone else,
+  // which blocks limited-access users until they finish verification.
+  const user = await requireApprovedKyc(c);
   if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
   await ensureSchema(c.env);
   const id = parseInt(c.req.param('id'));

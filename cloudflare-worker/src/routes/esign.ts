@@ -495,7 +495,7 @@ esign.post('/sign/:token', async (c) => {
   }
 
   const rec: any = await c.env.DB.prepare(
-    `SELECT r.*, e.envelope_uuid, e.document_type, e.document_title, e.document_body, e.body_sha256
+    `SELECT r.*, e.envelope_uuid, e.document_type, e.document_title, e.document_body, e.body_sha256, e.user_id AS envelope_user_id
        FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
       WHERE r.signing_token = ?`
   ).bind(token).first();
@@ -508,6 +508,33 @@ esign.post('/sign/:token', async (c) => {
   }
   if (rec.status === 'rejected') {
     return c.json({ error: 'This signing request was previously declined.' }, 409);
+  }
+
+  // Limited-access gate: a user with access_level='limited' can browse the
+  // platform but is explicitly NOT permitted to enter into binding
+  // agreements until they complete KYC. Enforced server-side so a magic
+  // signing link in their inbox can't bypass the policy.
+  //
+  // Resolve the recipient user robustly: envelope_user_id may be NULL (the
+  // /send endpoint accepts an optional recipient_user_id). Fall back to
+  // looking up by lowercased recipient email so the gate also catches
+  // signers whose envelope wasn't linked at creation time.
+  let recipientUser: any = null;
+  if (rec.envelope_user_id) {
+    recipientUser = await c.env.DB.prepare(
+      `SELECT access_level, kyc_status FROM users WHERE id = ?`
+    ).bind(rec.envelope_user_id).first().catch(() => null);
+  }
+  if (!recipientUser && rec.recipient_email) {
+    recipientUser = await c.env.DB.prepare(
+      `SELECT access_level, kyc_status FROM users WHERE lower(email) = lower(?)`
+    ).bind(rec.recipient_email).first().catch(() => null);
+  }
+  if (recipientUser && recipientUser.access_level === 'limited' && recipientUser.kyc_status !== 'approved') {
+    return c.json({
+      error: 'Limited access — please complete KYC verification before signing legal agreements. Contact Axal compliance if you need help.',
+      code: 'kyc_required_for_signing',
+    }, 403);
   }
 
   const ip = clientIp(c.req.raw);
