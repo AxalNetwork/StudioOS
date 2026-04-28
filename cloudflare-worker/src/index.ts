@@ -56,6 +56,9 @@ import matches from './routes/matches';
 import { processQueueBatch } from './services/queueWorker';
 import { Jobs } from './models/jobs';
 import { queueConsumer } from './queue-consumer';
+import { rateLimitMiddleware } from './middleware/rateLimit';
+import { observabilityMiddleware } from './middleware/observability';
+import { securityHeadersMiddleware } from './middleware/securityHeaders';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -74,6 +77,15 @@ app.use(
     allowHeaders: ['Content-Type', 'Authorization'],
   }),
 );
+
+// Defense-in-depth headers on every response (HSTS, nosniff, etc.).
+app.use('*', securityHeadersMiddleware());
+
+// Rate-limit + observability run on every /api/* request. rateLimit resolves
+// the current user once and caches it on context so observability + downstream
+// handlers don't re-query the DB. Both are no-ops outside `/api/*`.
+app.use('/api/*', rateLimitMiddleware());
+app.use('/api/*', observabilityMiddleware());
 
 // Quick health probe used by uptime monitors.
 app.get('/api/health', (c) =>
@@ -121,7 +133,11 @@ app.route('/api/email', email);
 app.route('/api/pipeline', pipeline);
 app.route('/api/search', search);
 app.route('/api/kyc', kyc);
-app.route('/api/esign', esign);
+// Frontend (`frontend/src/lib/api.js`) calls `/api/legal/esign/...` — mount
+// the esign router under that path, NOT `/api/esign`. Mounting it inside
+// `/api/legal` would be cleaner but `legal.ts` is its own router, so we just
+// register esign at the path the UI already uses.
+app.route('/api/legal/esign', esign);
 app.route('/api/network', network);
 app.route('/api/networkfx', networkfx);
 app.route('/api/profiling', profiling);
@@ -130,7 +146,21 @@ app.route('/api/dashboard', dashboard);
 app.route('/api/matches', matches);
 
 app.notFound((c) => c.json({ detail: 'Not found' }, 404));
+
+// Map the auth helpers' plain `throw new Error('Unauthorized'/'Forbidden'/...)`
+// to the right HTTP status. Without this, RBAC failures surface as 500s and
+// the frontend can't distinguish "log in again" from "the server crashed".
+const AUTH_ERROR_STATUSES: Record<string, 401 | 403> = {
+  Unauthorized: 401,
+  'Admin required': 403,
+  Forbidden: 403,
+  'KYC required': 403,
+};
+
 app.onError((err: any, c) => {
+  const msg = (err?.message ?? '') as string;
+  const mapped = AUTH_ERROR_STATUSES[msg];
+  if (mapped) return c.json({ detail: msg }, mapped);
   console.error('[edge] unhandled error:', err);
   return c.json({ detail: 'Internal server error' }, 500);
 });

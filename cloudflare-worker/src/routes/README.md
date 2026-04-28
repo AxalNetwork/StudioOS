@@ -33,7 +33,7 @@ against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.
 /api/pipeline      → pipeline.ts
 /api/search        → search.ts
 /api/kyc           → kyc.ts
-/api/esign         → esign.ts
+/api/legal/esign   → esign.ts            (frontend calls /api/legal/esign/*)
 /api/network       → network.ts
 /api/networkfx     → networkfx.ts
 /api/profiling     → profiling.ts
@@ -46,6 +46,27 @@ against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.
 Prefixes mirror the FastAPI routers in `backend/app/api/routes/*.py` so the
 local FastAPI dev backend exposes the same `/api/...` paths the frontend
 calls in production.
+
+## Known gaps vs the FastAPI dev backend
+
+These FastAPI routers in `backend/app/api/routes/` have no worker
+counterpart. Calls hit the worker as 404. The frontend touches some of these,
+so re-implementing them on the worker (or accepting the broken UI affordance)
+is a follow-up:
+
+- `integrations.py` — `/api/integrations/*` (used by `IntegrationsPage`
+  webhook config). No worker file exists.
+- `admin_contracts.py` — `/api/admin/contracts/*` (used by the admin
+  contract-download UI in `lib/api.js`). No worker file exists.
+- `pipeline_votes.py` — `/api/pipeline/vote*`, `/api/pipeline/votes*` (used by
+  the deal-card voting widget). The worker `pipeline.ts` only handles
+  `/active`, `/projects/*`, `/ws/*` — voting endpoints are missing.
+- `company.py` — `/api/company/*`. No frontend usage spotted, but FastAPI
+  exposes it; flagged for parity.
+
+These have been broken on prod whether the worker proxied or not (the proxy
+target was never deployed). Re-implementing them is out of scope for the
+"restore login" patch.
 
 ## Why the worker owns the API (not FastAPI)
 

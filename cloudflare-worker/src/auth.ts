@@ -15,7 +15,10 @@ const JWT_EXPIRY_HOURS = 24;
  * Dev/preview workers can use shorter secrets for local convenience.
  */
 export function assertJwtSecretStrength(env: Env): void {
-  const envName = ((env as any).STUDIOOS_ENV || 'dev').toLowerCase();
+  // Accept either STUDIOOS_ENV (FastAPI convention) or ENVIRONMENT (the var
+  // wrangler.toml actually sets in production). Otherwise the strength check
+  // silently no-ops in prod, which defeats the whole guard.
+  const envName = ((env as any).STUDIOOS_ENV || (env as any).ENVIRONMENT || 'dev').toLowerCase();
   if (envName !== 'production' && envName !== 'prod' && envName !== 'staging') return;
   const secret = env.JWT_SECRET || '';
   if (!secret) throw new Error(`JWT_SECRET must be set in ${envName}`);
