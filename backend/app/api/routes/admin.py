@@ -30,6 +30,9 @@ def list_all_users(session: Session = Depends(get_session), admin: User = Depend
             "role": u.role,
             "is_active": u.is_active,
             "email_verified": u.email_verified,
+            # Surface kyc_status so the admin UI can show verification state
+            # and offer "Grant Full Access" without going through the queue.
+            "kyc_status": getattr(u, "kyc_status", None),
             "created_at": u.created_at.isoformat() if u.created_at else None,
         }
         for u in users

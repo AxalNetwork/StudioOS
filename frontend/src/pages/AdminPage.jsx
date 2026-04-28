@@ -15,6 +15,21 @@ const STATUS_BADGES = {
   rejected: 'bg-red-100 text-red-700',
 };
 
+// KYC pill colors for the admin user table. `not_started` and an empty/null
+// value are treated the same — no submission yet.
+const KYC_BADGES = {
+  approved: 'bg-emerald-100 text-emerald-700',
+  pending: 'bg-amber-100 text-amber-700',
+  rejected: 'bg-red-100 text-red-700',
+  not_started: 'bg-gray-100 text-gray-600',
+};
+const KYC_LABELS = {
+  approved: 'Approved',
+  pending: 'Pending',
+  rejected: 'Rejected',
+  not_started: 'Not started',
+};
+
 const AGREEMENT_OPTIONS = [
   { value: '', label: '— Select agreement —' },
   { group: 'Investors', options: [
@@ -116,6 +131,17 @@ export default function AdminPage({ onImpersonate }) {
   const handleToggleActive = async (userId) => {
     try { await api.adminToggleActive(userId); loadAll(); } catch (e) { alert(e.message); }
   };
+  const handleGrantFullAccess = async (user) => {
+    const ok = window.confirm(
+      `Grant ${user.name || user.email} full access without requiring KYC?\n\n` +
+      `This marks their KYC status as approved, lets them out of the verification gate, ` +
+      `and is logged in their activity history. Use this only when you've verified their ` +
+      `identity through another channel.`
+    );
+    if (!ok) return;
+    try { await api.kycAdminApprove(user.id); loadAll(); }
+    catch (e) { alert(e.message || 'Failed to grant access'); }
+  };
   const handleRoleChange = async (user, newRole) => {
     if (newRole === user.role) return;
     const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner / Investor' };
@@ -200,6 +226,7 @@ export default function AdminPage({ onImpersonate }) {
                       <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Role</th>
                       <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Status</th>
                       <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Verified</th>
+                      <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">KYC</th>
                       <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Joined</th>
                       <th className="text-right px-4 py-2.5 text-gray-600 font-medium text-xs">Actions</th>
                     </tr>
@@ -230,9 +257,29 @@ export default function AdminPage({ onImpersonate }) {
                         <td className="px-4 py-3 text-center">
                           {u.email_verified ? <UserCheck size={16} className="text-green-500 mx-auto" /> : <UserX size={16} className="text-gray-400 mx-auto" />}
                         </td>
+                        <td className="px-4 py-3 text-center">
+                          {(() => {
+                            const k = u.kyc_status || 'not_started';
+                            return (
+                              <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${KYC_BADGES[k] || KYC_BADGES.not_started}`}>
+                                <ShieldCheck size={11} />
+                                {KYC_LABELS[k] || k}
+                              </span>
+                            );
+                          })()}
+                        </td>
                         <td className="px-4 py-3 text-gray-500 text-xs">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
                         <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-1 justify-end">
+                          <div className="flex items-center gap-1 justify-end flex-wrap">
+                            {/* Admins always have access; only show "Grant Full Access" for
+                                non-admin users whose KYC isn't already approved. */}
+                            {u.role !== 'admin' && u.kyc_status !== 'approved' && (
+                              <button onClick={() => handleGrantFullAccess(u)}
+                                className="px-2.5 py-1.5 text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium transition-colors flex items-center gap-1"
+                                title="Mark KYC approved without requiring submission">
+                                <ShieldCheck size={12} /> Grant Access
+                              </button>
+                            )}
                             <button onClick={() => handleImpersonate(u.id)}
                               className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors flex items-center gap-1"
                               title="Login as this user">

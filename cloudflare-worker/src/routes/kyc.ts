@@ -317,13 +317,22 @@ kyc.patch('/admin/:userId/approve', async (c) => {
   await ensureColumns(c.env);
   const userId = parseInt(c.req.param('userId'));
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id, email, name, kyc_status FROM users WHERE id = ${userId}`;
+  // Pull kyc_submitted_at too so we can distinguish a normal queue review
+  // (user submitted KYC, admin reviewed it) from an admin bypass
+  // (admin grants full access without the user ever submitting). Both paths
+  // land on kyc_status='approved', but the audit trail must show which.
+  const rows = await sql`SELECT id, email, name, kyc_status, kyc_submitted_at FROM users WHERE id = ${userId}`;
   if (!rows.length) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
   const target: any = rows[0];
   if (target.kyc_status === 'approved') { await sql.end(); return c.json({ error: 'Already approved' }, 409); }
+  const isBypass = !target.kyc_submitted_at;
 
   await sql`UPDATE users SET kyc_status = 'approved', kyc_reviewed_at = CURRENT_TIMESTAMP, kyc_reviewed_by = ${adminUser.id}, kyc_rejection_reason = NULL WHERE id = ${userId}`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_approved_by_admin', ${`Admin ${adminUser.name} approved KYC for ${target.name} (${target.email})`}, ${adminUser.email}, ${adminUser.id})`;
+  const adminAction = isBypass ? 'kyc_bypass_granted' : 'kyc_approved_by_admin';
+  const adminDetails = isBypass
+    ? `Admin ${adminUser.name} granted full access (KYC bypass) to ${target.name} (${target.email}) — no submission on file`
+    : `Admin ${adminUser.name} approved KYC for ${target.name} (${target.email})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES (${adminAction}, ${adminDetails}, ${adminUser.email}, ${adminUser.id})`;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_approved', ${`Your KYC verification was approved by Axal compliance.`}, ${target.email}, ${target.id})`;
   await sql.end();
 

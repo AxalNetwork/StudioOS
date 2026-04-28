@@ -24,7 +24,9 @@ async function ensureProfileColumns(env: Env): Promise<void> {
 admin.get('/users', async (c) => {
   await requireAdmin(c);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id, uid, email, name, role, is_active, email_verified, created_at FROM users ORDER BY created_at DESC`;
+  // Include `kyc_status` so the admin user table can show who's been verified
+  // and surface the "Grant Full Access" action when the value is not "approved".
+  const rows = await sql`SELECT id, uid, email, name, role, is_active, email_verified, kyc_status, created_at FROM users ORDER BY created_at DESC`;
   await sql.end();
   return c.json(rows);
 });
