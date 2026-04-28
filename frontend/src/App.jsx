@@ -124,7 +124,11 @@ const NAV_BY_ROLE = {
     { section: 'Support' },
     { to: '/activity', icon: Activity, label: 'Activity Log' },
     { to: '/tickets', icon: Ticket, label: 'Support' },
-    { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
+    // KYC intentionally hidden from founders. Identity verification is only
+    // mandatory at the moment a founder signs binding incorporation/SAFE
+    // docs — the signing endpoints enforce that server-side and the eSign
+    // page surfaces a banner with a link to /kyc when needed. The /kyc
+    // route itself remains reachable by direct URL.
 
     { divider: true },
     { to: '/founder', icon: Rocket, label: 'Founder Portal', highlight: true },
@@ -438,14 +442,18 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   }
 
   // Onboarding gate: non-admin users must complete KYC before accessing other pages.
-  // Admins (and impersonation sessions) bypass the gate. Activity log + KYC pages are always allowed.
-  // `access_level === 'limited'` is an admin-granted bypass that lets the user
-  // browse the platform without KYC; signing of legal agreements is still
-  // blocked server-side in the eSign route.
+  // Bypassed for:
+  //   - admins (and impersonation sessions)
+  //   - founders — KYC for founders is only mandatory at the moment they
+  //     sign binding incorporation/SAFE docs; the signing endpoints enforce
+  //     that server-side, and the eSign page shows a banner pointing to /kyc.
+  //   - users with admin-granted `access_level === 'limited'`
+  // The /kyc, /activity, /tickets routes remain reachable for everyone.
   const effectiveRole = (realUser || user)?.role;
   const ALLOWED_BEFORE_KYC = ['/kyc', '/activity', '/tickets'];
   if (
     effectiveRole !== 'admin' &&
+    effectiveRole !== 'founder' &&
     !isImpersonating &&
     accessLevel !== 'limited' &&
     kycStatus &&
