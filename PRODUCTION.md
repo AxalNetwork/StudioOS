@@ -1,33 +1,32 @@
 # Axal StudioOS – Production Deployment Guide
 
-Single source of truth for deploying StudioOS to production. Covers FastAPI
-(canonical API), the Cloudflare Worker edge proxy, the GitHub Pages frontend,
+Single source of truth for deploying StudioOS to production. Covers the
+Cloudflare Worker (canonical production API), the GitHub Pages frontend,
 secrets, and the post-deploy checklist.
 
 ---
 
 ## 1. Architecture in 30 seconds
 
-| Component        | Tech                   | Hosted on                              | Source                              |
-| ---------------- | ---------------------- | -------------------------------------- | ----------------------------------- |
-| **Public API**   | **FastAPI (Python)**   | Replit Deployments / Fly / Render      | `backend/`                          |
-| Database         | Postgres (or SQLite)   | Replit DB / managed Postgres           | `backend/app/database.py`           |
-| Edge proxy       | TypeScript + Hono      | **Cloudflare Workers** (`/api/*` → FastAPI) | `cloudflare-worker/src/index.ts` |
-| WebSocket fan-out| Durable Objects        | Cloudflare Workers                     | `cloudflare-worker/src/durable-objects/` |
-| Cache / sessions | KV                     | Cloudflare KV (`TOKENS`, `RATE_LIMITS`)| n/a                                 |
-| Job queue        | Cloudflare Queues + cron | Cloudflare                           | `cloudflare-worker/src/services/queueWorker.ts` |
-| Frontend         | React + Vite           | **GitHub Pages** (`docs/`)             | `frontend/`                         |
+| Component        | Tech                       | Hosted on                              | Source                                          |
+| ---------------- | -------------------------- | -------------------------------------- | ----------------------------------------------- |
+| **Public API**   | **TypeScript + Hono**      | **Cloudflare Workers** (`axal.vc`)     | `cloudflare-worker/src/index.ts` + `routes/`    |
+| Database         | Cloudflare D1 (SQLite)     | Cloudflare (`studioos-db`)             | bound as `env.DB`                               |
+| WebSocket fan-out| Durable Objects            | Cloudflare Workers                     | `cloudflare-worker/src/durable-objects/`        |
+| Cache / sessions | KV                         | Cloudflare KV (`TOKENS`, `RATE_LIMITS`)| n/a                                             |
+| Job queue        | Cloudflare Queues + cron   | Cloudflare                             | `cloudflare-worker/src/services/queueWorker.ts` |
+| File storage     | R2                         | Cloudflare R2 (`studioos-files`)       | bound as `env.FILES`                            |
+| Vector search    | Vectorize                  | Cloudflare (`axal-search`)             | bound as `env.VECTORIZE`                        |
+| Dev backend      | FastAPI (Python)           | Local Replit only                      | `backend/`                                      |
+| Frontend         | React + Vite               | **GitHub Pages** (`docs/`)             | `frontend/`                                     |
 
-> **Architecture decision (audit #4):** FastAPI is the canonical API and the
-> source of truth. The Cloudflare Worker re-implemented FastAPI's surface area
-> in TypeScript, which led to two-source-of-truth drift on auth, scoring and
-> capital semantics. The worker is now a thin edge layer that proxies `/api/*`
-> to the FastAPI origin and only owns the WebSocket Durable Objects + the
-> queue consumer (which must run at the edge).
->
-> Legacy in-worker handlers under `cloudflare-worker/src/routes/*.ts` are kept
-> for git history but are **not mounted** by `index.ts`. See
-> `cloudflare-worker/src/routes/README.md`.
+> **Architecture reality (revised 2026-04-28):** Earlier "audit #4" notes proposed
+> making FastAPI the canonical backend with the worker as a thin proxy via
+> `FASTAPI_ORIGIN`. That migration was never completed: the 23 production user
+> accounts live in D1, which only the worker can reach, and FastAPI is not
+> publicly deployed. The Cloudflare Worker is therefore the production API and
+> the source of truth for `/api/*`. FastAPI in `backend/` is the local dev
+> backend used during Replit iteration; do not point production traffic at it.
 
 ---
 
@@ -37,64 +36,52 @@ secrets, and the post-deploy checklist.
       rows (audit #7). The runtime scrub keeps queries safe but old vectors
       stay stale until the backfill runs. Trigger it once after every schema
       change that touches a `*_embedding` column. Admin-only.
-- [ ] Confirm `STUDIOOS_ENV=production` is set on the FastAPI deploy so
-      auto-created GitHub support tickets carry the `origin: production` label
-      (audit #10).
-- [ ] Confirm `JWT_SECRET` is set on the FastAPI deploy. The backend imports
-      will fail-fast if it's unset — do not paper over with a dev fallback.
-- [ ] Confirm `FASTAPI_ORIGIN` is set on the Cloudflare Worker:
-      `wrangler secret put FASTAPI_ORIGIN`. The proxy returns 503 without it.
+- [ ] Confirm `JWT_SECRET` is set on the worker
+      (`wrangler secret put JWT_SECRET`). The worker fails fast at the top of
+      every request if it's missing or weak.
+- [ ] Confirm wrangler is authenticated against the right Cloudflare account
+      (`wrangler whoami`).
 
 ---
 
 ## 3. Deploy
 
-### FastAPI backend
-
-Deploy `backend/` to your hosting target (Replit Deployments, Fly, Render,
-etc.). Required env:
-
-```
-JWT_SECRET=<openssl rand -hex 48>
-DATABASE_URL=postgres://…   # optional; defaults to local SQLite
-STUDIOOS_ENV=production
-GITHUB_ACCESS_TOKEN=…       # optional, ticket→issue sync
-GITHUB_REPO_OWNER=…
-GITHUB_REPO_NAME=…
-```
-
-### Cloudflare edge proxy
+### Cloudflare Worker (production API)
 
 ```bash
-wrangler secret put JWT_SECRET           # used only by Durable Objects' WS auth
-wrangler secret put FASTAPI_ORIGIN       # e.g. https://api.axal.vc
-wrangler deploy
+wrangler secret put JWT_SECRET           # used for auth + Durable Object WS handshake
+wrangler deploy                          # deploys top-level config (has all bindings)
 ```
+
+> ⚠️ Do **not** run `wrangler deploy --env production`. The `[env.production]`
+> block in `wrangler.toml` does not redeclare bindings, so deploying that
+> environment strips the D1, KV, R2, Queue, AI, and Durable Object bindings
+> from the live worker. The top-level config is the one you want.
 
 ### Frontend
 
 GitHub Action rebuilds `docs/` on push to `main`.
 
+### FastAPI (dev only)
+
+`backend/` runs in the local Replit workflow `Backend API` for development.
+It's not part of the production deploy path.
+
 ---
 
 ## 4. Secrets checklist
 
-### FastAPI (required)
-- [ ] `JWT_SECRET` – 64+ random chars (`openssl rand -hex 48`); fails fast if unset.
-- [ ] `DATABASE_URL` – Postgres URL (optional; SQLite default for local dev).
-- [ ] `STUDIOOS_ENV` – `production` / `staging` / `dev` / `preview`.
+### Cloudflare Worker (required)
+- [ ] `JWT_SECRET` – 64+ random chars (`openssl rand -hex 48`); the worker
+      refuses requests if it's missing or weak.
 
-### FastAPI (optional)
-- [ ] `GITHUB_ACCESS_TOKEN`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME` – ticket → GitHub-issue sync (auto-tagged with `origin: <env>`).
+### Cloudflare Worker (optional, per feature)
+- [ ] `GITHUB_ACCESS_TOKEN` – ticket → GitHub-issue sync.
 - [ ] `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` – outbound email.
 - [ ] `STRIPE_ATLAS_API_KEY`, `STRIPE_WEBHOOK_SECRET` – spin-out incorporation.
 - [ ] `SUMSUB_APP_TOKEN`, `SUMSUB_SECRET_KEY`, `SUMSUB_WEBHOOK_SECRET` – KYC.
-- [ ] `OPENAI_API_KEY` – AI scoring fallback.
+- [ ] `OPENAI_API_KEY` – AI scoring fallback (Workers AI is the primary).
 - [ ] `TURNSTILE_SECRET_KEY` – bot protection on register / login.
-
-### Cloudflare Worker
-- [ ] `FASTAPI_ORIGIN` – the FastAPI public URL the proxy forwards to.
-- [ ] `JWT_SECRET` – needed by the Durable Object WebSocket auth handshake.
 
 ### GitHub Actions secrets
 - [ ] `CLOUDFLARE_API_TOKEN` – scoped: `Workers Scripts:Edit`, `Workers KV:Edit`, `Workers AI:Read`.
@@ -105,10 +92,11 @@ GitHub Action rebuilds `docs/` on push to `main`.
 
 ## 5. Post-deploy checklist
 
-- [ ] `curl https://api.axal.vc/api/health` returns `{ "status": "ok" }`.
-- [ ] `curl https://axal.vc/api/health` returns the **edge** health (proves the proxy is mounted).
+- [ ] `curl https://axal.vc/api/health` returns `{ "status": "ok", ... }` with
+      every binding flag (`db`, `kv_tokens`, `kv_rate_limits`,
+      `durable_pipeline`, `durable_onboarding`) reading `true`.
 - [ ] Sign in to `https://axal.vc/dashboard` — verify all sub-queries resolve (no 500s).
-- [ ] Submit a support ticket — verify it appears in `AxalNetwork/StudioOS` with `origin: production` label.
+- [ ] Submit a support ticket — verify it appears in `AxalNetwork/StudioOS`.
 - [ ] Trigger `POST /api/search/backfill` (admin-only) once.
 - [ ] Run a manual partner-scoring job; verify `partner_scores` rows.
 - [ ] Send a test email from the admin panel to verify Gmail OAuth.
@@ -118,7 +106,9 @@ GitHub Action rebuilds `docs/` on push to `main`.
 
 ## 6. Rate limits (audit #8)
 
-FastAPI now mirrors the worker's per-bucket layout. See
+The worker enforces per-bucket limits via KV (`RATE_LIMITS`). FastAPI mirrors
+the same layout for local-dev parity. See
+`cloudflare-worker/src/services/rateLimit.ts` and
 `backend/app/services/rate_limit.py`.
 
 | Bucket    | Limit          | Scope    | Applies to                                              |
@@ -130,8 +120,6 @@ FastAPI now mirrors the worker's per-bucket layout. See
 
 Exempt: `/api/health`, `/api/auth/login|register|verify|me`, `/api/monitoring/metrics|rate-limits`.
 
-In-process state today (single-replica). Swap to Redis when scaling out.
-
 ---
 
 ## 7. Rollback
@@ -141,7 +129,6 @@ In-process state today (single-replica). Swap to Redis when scaling out.
 npx wrangler deployments list
 npx wrangler rollback <DEPLOYMENT_ID>
 
-# FastAPI: redeploy the previous commit on your hosting target.
 # Frontend: revert the docs/ commit on main.
 git revert <SHA-of-frontend-rebuild>
 git push

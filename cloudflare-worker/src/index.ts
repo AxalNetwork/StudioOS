@@ -1,34 +1,66 @@
 /**
- * Cloudflare Worker — edge proxy + cache for StudioOS.
+ * Cloudflare Worker — StudioOS production API.
  *
- * ARCHITECTURE (audit #4):
- * FastAPI (`backend/`) is the canonical API and source of truth. This worker
- * is a thin edge layer that:
- *   1. Forwards `/api/*` to the FastAPI origin (FASTAPI_ORIGIN secret).
- *   2. Hosts WebSocket fan-out via Durable Objects (must run at the edge).
- *   3. Drains the background-job queue via cron + Cloudflare Queues consumer.
+ * ARCHITECTURE (live as of 2026-04-28):
+ * The worker IS the production API at axal.vc. It owns:
+ *   1. All `/api/*` route handlers (mounted from `./routes/*.ts`).
+ *   2. WebSocket fan-out via Durable Objects (`PipelineRoom`, `OnboardingChat`).
+ *   3. Cron + Queues consumer that drains the background-job queue.
  *
- * The legacy in-worker route handlers under `cloudflare-worker/src/routes/*.ts`
- * (auth, scoring, projects, legal, partners, capital, deals, tickets, users,
- * admin, activity, market-intel, advisory, …) re-implemented FastAPI's surface
- * area and were the source of two-source-of-truth drift. They are intentionally
- * NOT imported here. The files remain in git for history; do not re-mount them.
+ * The Python FastAPI in `backend/` is the local dev backend used during Replit
+ * iteration. It is NOT deployed to production — D1 (Cloudflare-only) is the
+ * canonical user store, so the worker has to handle requests itself.
+ *
+ * Earlier "audit #4" attempted to make FastAPI canonical and turn this worker
+ * into a proxy via FASTAPI_ORIGIN, but the FastAPI side was never publicly
+ * deployed and the 23 production user accounts already live in D1. We keep
+ * the legacy in-worker routes mounted here as the source of truth.
  */
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import type { Env } from './types';
+import type { Env, JobMessage } from './types';
 
 import realtime from './routes/realtime';
+import auth from './routes/auth';
+import scoring from './routes/scoring';
+import projects from './routes/projects';
+import legal from './routes/legal';
+import legalcap from './routes/legalcap';
+import partners from './routes/partners';
+import partnernet from './routes/partnernet';
+import capital from './routes/capital';
+import tickets from './routes/tickets';
+import deals from './routes/deals';
+import users from './routes/users';
+import marketIntel from './routes/market-intel';
+import advisory from './routes/advisory';
+import activity from './routes/activity';
+import admin from './routes/admin';
+import privateData from './routes/private-data';
+import monitoring from './routes/monitoring';
+import infra from './routes/infra';
+import funds from './routes/funds';
+import liquidity from './routes/liquidity';
+import email from './routes/email';
+import pipeline from './routes/pipeline';
+import search from './routes/search';
+import kyc from './routes/kyc';
+import esign from './routes/esign';
+import network from './routes/network';
+import networkfx from './routes/networkfx';
+import profiling from './routes/profiling';
+import studioops from './routes/studioops';
+import dashboard from './routes/dashboard';
+import matches from './routes/matches';
 import { processQueueBatch } from './services/queueWorker';
 import { Jobs } from './models/jobs';
 import { queueConsumer } from './queue-consumer';
-import type { JobMessage } from './types';
 
 const app = new Hono<{ Bindings: Env }>();
 
-// CORS — preserved from the legacy worker. Origins kept in sync with the
-// FastAPI middleware in `backend/app/main.py`.
+// CORS — origins kept in sync with the FastAPI middleware in
+// `backend/app/main.py` so the dev backend stays consistent with prod.
 app.use(
   '*',
   cors({
@@ -43,15 +75,14 @@ app.use(
   }),
 );
 
-// Surface a quick health probe at the edge so uptime checks never wait on
-// origin. Origin health is reachable at `/api/origin-health` if needed.
+// Quick health probe used by uptime monitors.
 app.get('/api/health', (c) =>
   c.json({
     status: 'ok',
-    app: 'StudioOS edge proxy',
+    app: 'StudioOS API',
     runtime: 'Cloudflare Workers',
-    origin_configured: !!c.env.FASTAPI_ORIGIN,
     bindings: {
+      db: !!c.env.DB,
       kv_tokens: !!c.env.TOKENS,
       kv_rate_limits: !!c.env.RATE_LIMITS,
       durable_pipeline: !!(c.env as any).PIPELINE_ROOM,
@@ -60,121 +91,43 @@ app.get('/api/health', (c) =>
   }),
 );
 
-// Real-time WebSocket fan-out (Durable Objects). Must stay at the edge —
-// FastAPI is request/response only.
+// Real-time WebSocket fan-out (Durable Objects). Must stay at the edge.
 app.route('/api', realtime);
 
-// Edge cache for hot read-only endpoints. Tweak the allowlist as needed; we
-// intentionally never cache write methods or auth-stamped responses.
-const CACHEABLE_GET_PREFIXES: string[] = [
-  // Public read-mostly surfaces. Add more after auditing for PII leakage.
-  '/api/legal/templates',
-  '/api/market-intel/public',
-];
-
-function isCacheableGet(method: string, path: string): boolean {
-  return method === 'GET' && CACHEABLE_GET_PREFIXES.some((p) => path.startsWith(p));
-}
-
-// Catch-all proxy: forward everything else under /api/* to FastAPI. The
-// origin enforces auth, RBAC, KYC, rate limits, and security headers — this
-// worker's job is just transport.
-app.all('/api/*', async (c) => {
-  const origin = c.env.FASTAPI_ORIGIN;
-  if (!origin) {
-    // User-facing message stays generic; operators see the real cause in
-    // worker logs. Leaking "wrangler secret put ..." into the login UI was
-    // both confusing for end users and an information disclosure.
-    console.error(
-      '[proxy] FASTAPI_ORIGIN secret is not set. Configure it with ' +
-        '`wrangler secret put FASTAPI_ORIGIN` and redeploy.',
-    );
-    return c.json(
-      {
-        error: {
-          code: 503,
-          type: 'service_unavailable',
-          message: 'Service is temporarily unavailable. Please try again shortly.',
-        },
-      },
-      503,
-    );
-  }
-
-  const inUrl = new URL(c.req.url);
-  const targetUrl = origin.replace(/\/+$/, '') + inUrl.pathname + inUrl.search;
-  const method = c.req.method;
-
-  // Forward the original headers untouched (Authorization, Cookie, etc.) so
-  // the origin can do its own auth + RBAC. Drop hop-by-hop headers.
-  const headers = new Headers(c.req.raw.headers);
-  headers.delete('host');
-  headers.delete('cf-connecting-ip');
-  headers.delete('cf-ipcountry');
-  headers.set('x-forwarded-host', inUrl.host);
-  headers.set('x-forwarded-proto', inUrl.protocol.replace(':', ''));
-
-  // Edge-cache opt-in for the allowlist. Bypassed entirely for any request
-  // carrying an Authorization header (per-user responses must not be shared).
-  const cacheable = isCacheableGet(method, inUrl.pathname) && !headers.has('authorization');
-  const cache = (caches as any).default as Cache | undefined;
-  const cacheKey = new Request(targetUrl, { method: 'GET' });
-  if (cacheable && cache) {
-    const hit = await cache.match(cacheKey);
-    if (hit) return hit;
-  }
-
-  const init: RequestInit = {
-    method,
-    headers,
-    redirect: 'manual',
-  };
-  if (method !== 'GET' && method !== 'HEAD') {
-    init.body = c.req.raw.body;
-    // Cloudflare requires duplex:'half' when forwarding a streaming body.
-    (init as any).duplex = 'half';
-  }
-
-  let upstream: Response;
-  try {
-    upstream = await fetch(targetUrl, init);
-  } catch (err: any) {
-    console.error('[proxy] origin fetch failed:', err?.message || err);
-    return c.json(
-      {
-        error: {
-          code: 502,
-          type: 'bad_gateway',
-          message: 'Service is temporarily unavailable. Please try again shortly.',
-        },
-      },
-      502,
-    );
-  }
-
-  // Stream the response straight through, preserving status + headers.
-  const respHeaders = new Headers(upstream.headers);
-  // Strip Cloudflare/HTTP/2 hop headers that don't survive re-emission.
-  respHeaders.delete('content-encoding');
-  respHeaders.delete('transfer-encoding');
-
-  const out = new Response(upstream.body, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers: respHeaders,
-  });
-
-  if (cacheable && cache && upstream.ok) {
-    const toCache = out.clone();
-    // 60s edge TTL; origin can override via Cache-Control.
-    if (!toCache.headers.has('cache-control')) {
-      toCache.headers.set('cache-control', 'public, max-age=60');
-    }
-    (c.executionCtx as any)?.waitUntil(cache.put(cacheKey, toCache));
-  }
-
-  return out;
-});
+// Mount all production API routes. Prefixes mirror the FastAPI routers in
+// `backend/app/api/routes/*.py` so the frontend `/api/...` calls hit the same
+// paths in dev and prod.
+app.route('/api/auth', auth);
+app.route('/api/scoring', scoring);
+app.route('/api/projects', projects);
+app.route('/api/legal', legal);
+app.route('/api/legalcap', legalcap);
+app.route('/api/partners', partners);
+app.route('/api/partnernet', partnernet);
+app.route('/api/capital', capital);
+app.route('/api/tickets', tickets);
+app.route('/api/deals', deals);
+app.route('/api/users', users);
+app.route('/api/market-intel', marketIntel);
+app.route('/api/advisory', advisory);
+app.route('/api/activity', activity);
+app.route('/api/admin', admin);
+app.route('/api/private-data', privateData);
+app.route('/api/monitoring', monitoring);
+app.route('/api/infra', infra);
+app.route('/api/funds', funds);
+app.route('/api/liquidity', liquidity);
+app.route('/api/email', email);
+app.route('/api/pipeline', pipeline);
+app.route('/api/search', search);
+app.route('/api/kyc', kyc);
+app.route('/api/esign', esign);
+app.route('/api/network', network);
+app.route('/api/networkfx', networkfx);
+app.route('/api/profiling', profiling);
+app.route('/api/studioops', studioops);
+app.route('/api/dashboard', dashboard);
+app.route('/api/matches', matches);
 
 app.notFound((c) => c.json({ detail: 'Not found' }, 404));
 app.onError((err: any, c) => {
@@ -182,12 +135,8 @@ app.onError((err: any, c) => {
   return c.json({ detail: 'Internal server error' }, 500);
 });
 
-// Cloudflare cron + fetch entry point. Cron drains the job queue every minute
-// (configured in wrangler.toml). The queue consumer handles the same dispatch
-// for Cloudflare Queues batches.
-// Phase A5 — wrap `fetch` so the JWT_SECRET strength check runs at the very
-// top of every request handler, not lazily inside auth code paths. In
-// prod/staging a weak/missing secret aborts the request with a generic 503.
+// JWT_SECRET strength check runs at the very top of every request handler.
+// In prod a weak/missing secret aborts the request with a generic 503.
 import { assertJwtSecretStrength } from './auth';
 
 export default {
