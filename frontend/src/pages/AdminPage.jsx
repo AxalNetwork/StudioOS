@@ -116,8 +116,15 @@ export default function AdminPage({ onImpersonate }) {
   const handleToggleActive = async (userId) => {
     try { await api.adminToggleActive(userId); loadAll(); } catch (e) { alert(e.message); }
   };
-  const handleRoleChange = async (userId, newRole) => {
-    try { await api.adminUpdateRole(userId, newRole); loadAll(); } catch (e) { alert(e.message); }
+  const handleRoleChange = async (user, newRole) => {
+    if (newRole === user.role) return;
+    const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner / Investor' };
+    const ok = window.confirm(
+      `Change ${user.name || user.email}'s role from ${labels[user.role] || user.role} ` +
+      `to ${labels[newRole] || newRole}?\n\nThis takes effect immediately and is logged in their activity history.`
+    );
+    if (!ok) return;
+    try { await api.adminUpdateRole(user.id, newRole); loadAll(); } catch (e) { alert(e.message); }
   };
 
   const filtered = filter === 'all' ? users : users.filter(u => u.role === filter);
@@ -204,14 +211,15 @@ export default function AdminPage({ onImpersonate }) {
                         <td className="px-4 py-3 text-gray-900 font-medium">{u.name}</td>
                         <td className="px-4 py-3 text-gray-600">{u.email}</td>
                         <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                          <div className="relative inline-block">
-                            <select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                              className={`appearance-none text-xs font-medium px-3 py-1 pr-6 rounded-full cursor-pointer border-0 ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>
+                          <div className="relative inline-block group" title="Click to change this user's role">
+                            <select value={u.role} onChange={(e) => handleRoleChange(u, e.target.value)}
+                              aria-label={`Change role for ${u.name || u.email}`}
+                              className={`appearance-none text-xs font-semibold px-3 py-1 pr-7 rounded-full cursor-pointer border border-transparent hover:border-current hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-1 transition-all ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>
                               <option value="admin">Admin</option>
                               <option value="founder">Founder</option>
-                              <option value="partner">Partner</option>
+                              <option value="partner">Partner / Investor</option>
                             </select>
-                            <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
+                            <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-70 group-hover:opacity-100" />
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center">
