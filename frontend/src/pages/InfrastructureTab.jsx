@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Cpu, Database, RefreshCw, Play, Trash2, AlertOctagon, Activity } from 'lucide-react';
+import { Cpu, Database, RefreshCw, Play, Trash2, AlertTriangle, Activity } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { api } from '../lib/api';
 
@@ -107,7 +107,7 @@ export default function InfrastructureTab() {
         <MiniCard label="Pending" value={byStatus.pending} icon={Database} accent="gray" />
         <MiniCard label="Processing" value={byStatus.processing} icon={Cpu} accent="blue" sub={`In flight: ${metrics?.in_flight ?? 0}`} />
         <MiniCard label="Completed" value={byStatus.completed} icon={Activity} accent="emerald" sub="all-time" />
-        <MiniCard label="Failed" value={byStatus.failed} icon={AlertOctagon} accent="red" sub={`DLQ 7d: ${queue?.dlq_7d ?? 0}`} />
+        <MiniCard label="Failed" value={byStatus.failed} icon={AlertTriangle} accent="red" sub={`DLQ 7d: ${queue?.dlq_7d ?? 0}`} />
         <MiniCard label="Active Projects" value={metrics?.projects_active ?? 0} accent="violet" sub={`AI calls 5m: ${metrics?.ai_calls_5m ?? 0}`} />
       </div>
 
@@ -192,7 +192,7 @@ export default function InfrastructureTab() {
       {(dlq?.items || []).length > 0 && (
         <div className="bg-white border border-red-200 rounded-xl p-5">
           <div className="text-sm font-semibold text-red-900 mb-3 flex items-center gap-2">
-            <AlertOctagon size={14} /> Dead-letter queue ({dlq.items.length})
+            <AlertTriangle size={14} /> Dead-letter queue ({dlq.items.length})
           </div>
           <div className="space-y-2 max-h-[280px] overflow-y-auto">
             {dlq.items.slice(0, 25).map(d => (

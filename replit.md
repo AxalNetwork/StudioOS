@@ -1,506 +1,62 @@
-# Axal VC — StudioOS v1.0
-
-## VC Fund / Investment Entity core (Apr 2026)
-- Tables: `vc_funds` (+ `lpa_doc_id`, `fund_size_cents`, `carried_interest`, `management_fee`),
-  `limited_partners` (+ `lpa_signed`, `lpa_signed_at`, `commitment_date`, `distribution_history`),
-  `legal_documents` (+ `fund_id`), new `fund_distributions` (cents).
-- Migration: `cloudflare-worker/sql/funds_v2.sql`. AI worker: `ai-workers/lpa.ts` (Llama 3.1 8B + deterministic fallback).
-- Job types: `lpa_generation`, `capital_call_notice`, `returns_distribution` (in `services/queueWorker.ts`).
-- Routes (`/api/funds`): admin CRUD, `POST /` auto-enqueues LPA, `POST /:id/regenerate-lpa`,
-  `GET /:id/lpa`, `GET /lp-portal` (LP-only), `GET /syndication`, `POST /:id/capital-call`
-  enqueues notices, `POST /lps/:lpId/sign-lpa`, `GET /distributions?fund_id=`,
-  `POST /distributions/execute` (admin), `POST /distributions/:id/mark-paid`.
-- Liquidity `/execute-exit` records the event and returns a `distribution_hint`; the operator
-  must call `POST /api/funds/distributions/execute` with an explicit `fund_id` (auto fan-out is
-  refused to prevent cross-fund LP ledger corruption).
-- Idempotency: unique index `(source_liquidity_event_id, fund_id, lp_id)` + `INSERT OR IGNORE`
-  so retried jobs cannot double-pay; `mark-paid` is atomic via conditional batch.
-- `capital_call_notice` job sends pro-rata notices AND bumps `vc_funds.deployed_capital`
-  (preserves legacy financial invariant when `/funds/:id/capital-call` is used).
-- Frontend: `pages/FundsPage.jsx` mounted at `/funds` (admin: fund ops + LPA viewer + capital call
-  + distribute + mark-paid; LP: portfolio + TVPI/DPI charts + sign LPA + view distributions).
+# Axal StudioOS
 
 ## Overview
-A full-stack Venture Studio Operating System (StudioOS) designed for a 30-day startup spin-out model. Built for Axal VC to automate the venture creation pipeline from intake to spinout.
+API-first Venture Studio Operating System — "The 30-Day Spin-Out Engine" for venture capital and startup incubation. Manages startup project lifecycle from intake and AI scoring through legal formation (spin-outs), fundraising, and portfolio monitoring.
 
-## Tech Stack
-- **Backend**: Cloudflare Workers (TypeScript/Hono) at `https://studioos.guillaumelauzier.workers.dev`
-- **Frontend**: React 19 + Vite + Tailwind CSS → built to `docs/` → served via GitHub Pages at `axal.vc`
-- **Database**: Cloudflare D1 (SQLite at the edge) — `studioos-db`
-- **Email**: Gmail API (OAuth2 refresh token → access token → Gmail REST API)
-- **Spam Protection**: Cloudflare Turnstile (optional, via `TURNSTILE_SECRET_KEY` + `VITE_TURNSTILE_SITE_KEY`)
-- **AI**: OpenAI API (optional, for memo generation + advisory)
-- **Architecture**: Monorepo — Replit as code editor only, GitHub Pages for frontend, Cloudflare Workers for API
+## Architecture
 
-## Project Structure
-```
-/backend/
-  app/
-    main.py           — FastAPI app entry point
-    database.py        — SQLModel + PostgreSQL connection
-    models/entities.py — All database models (User, Deal, Project, Score, etc.)
-    schemas/scoring.py — Pydantic request schemas
-    services/
-      scoring.py       — 100-point scoring algorithm
-      ai_memo.py       — AI-powered deal memo generation (OpenAI)
-    api/routes/
-      auth.py          — TOTP authentication (register, login, JWT) — JWT_SECRET from env, no fallback
-      scoring.py       — Scoring engine + POST /generateMemo (auth required)
-      projects.py      — Project CRUD + playbook + auto-scoring (auth required)
-      legal.py         — Legal & compliance engine (auth required)
-      partners.py      — Partner ecosystem + POST /matchPartners (auth required)
-      capital.py       — Capital & investment ops + POST /capitalCall (auth required)
-      tickets.py       — Support hub (auth required, user-scoped)
-      deals.py         — Deal flow pipeline (auth required)
-      users.py         — User management (auth required, admin-only create)
-      market_intel.py  — Market intelligence (public data, no auth)
-      advisory.py      — AI advisory + financial planner (auth required)
-      activity.py      — Activity/audit log endpoints (auth required, user-scoped for non-admins, GitHub sync)
-      admin.py         — Admin console (admin-only)
-      private_data.py  — Private data API (role-scoped, auth required)
-  seed.py              — Seed data script
+### Frontend (`frontend/`)
+- React 19 + Vite 6 + Tailwind CSS 4
+- Runs on port 5000
+- Proxies `/api` requests to backend on port 8000
+- Workflow: `Start application` → `cd frontend && npm run dev`
 
-/frontend/
-  src/
-    App.jsx            — Main app with routing, auth guard, sidebar
-    lib/api.js         — API client with JWT auth headers
-    pages/
-      LandingPage.jsx   — Public landing page (Axal Ventures)
-      RegisterPage.jsx  — Registration with TOTP QR setup
-      LoginPage.jsx     — TOTP-based login
-      Dashboard.jsx     — Studio overview dashboard
-      ScoringPage.jsx   — 100-point scoring UI
-      ProjectsPage.jsx  — Project pipeline
-      ProjectDetail.jsx — Project detail + playbook + 4-week tracker
-      LegalPage.jsx     — Legal docs & incorporation
-      PartnersPage.jsx  — Partner matchmaking + referrals
-      CapitalPage.jsx   — LP investors & capital calls
-      TicketsPage.jsx   — Support ticket management
-      DealsPage.jsx     — Deal flow pipeline with status progression
-      FounderPortal.jsx — Founder submission form with auto-scoring
-      PartnerPortal.jsx — Partner view: deals + capital call acceptance
-      AdminPage.jsx     — Admin console: user management, impersonation, role changes
-      MarketIntelPage.jsx — Market intelligence (pulse, macro, private, conviction, benchmarks)
-      AdvisoryPage.jsx  — AI advisory + financial planner + diligence checker
-      ActivityPage.jsx  — System activity/audit log
-      ApiBridgePage.jsx — API Bridge & Jekyll integration (bridge script, usage examples, config)
-```
+### Backend (`backend/`)
+- FastAPI (Python) with SQLModel/SQLAlchemy
+- SQLite database at `backend/app.db`
+- Runs on port 8000
+- Workflow: `Backend API` → `uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload`
 
-## StudioOS Modules (7 Engines)
-1. **Intelligence Engine** — BI, market data, sector signals, competitive intelligence, studio benchmarks
-2. **Scoring & Diligence Engine** — 100-pt scoring, automated diligence (legal/tech/financial checks)
-3. **AI Advisory Suite** — AI advisor (strategy/GTM/fundraising), financial planner, diligence automation
-4. **Deal & Match Engine** — Deal flow pipeline, partner matchmaking, referral system
-5. **Legal & Compliance Engine** — Full VC legal stack across 4 layers: GP governance (operating agreement, carried interest, IC charter, service agreements), Fund formation (LPA, PPM, subscription, management co.), Portfolio execution (SAFE, term sheet, SPA, bylaws, equity split, IP, voting rights), Compliance (Form ADV, AML/KYC, 83(b) election). 18 templates total with preview, generation, and document management.
-6. **Operations & Support Hub** — Ticket support, activity/audit log
-7. **Capital & Investment Engine** — Capital calls, LP investor portal, portfolio performance tracking
+## Key Features
+- AI Scoring Engine for startup evaluation
+- Spin-out Wizard for legal entity formation
+- Real-time pipeline with WebSocket support
+- KYC & legal document management
+- Partner network and referral system
+- Fund management and LP tracking
 
-## Database Tables
-- **users** — id, email, name, role (admin/founder/partner), password_hash, email_verified, verification_token, verification_token_expires
-- **projects** — Startup pipeline (status, playbook week, sector, financials)
-- **founders** — Founder profiles
-- **partners** — Partner ecosystem with referral codes
-- **deals** — Deal flow CRM (applied → scored → active → funded)
-- **score_snapshots** — Historical scoring records
-- **deal_memos** — Structured investment memos
-- **documents** — Legal documents
-- **entities** — Legal entities (holding company, subsidiary). `vc_fund` type is DEPRECATED; funds now live in `vc_funds`.
-- **vc_funds** — Canonical fund table (name, vintage_year, total_commitment, deployed_capital, lp_count, status). Mirrored on Cloudflare D1.
-- **limited_partners** — Canonical LP table, scoped to a fund via `fund_id` FK. Replaces the legacy flat `lp_investors`. Fields: fund_id, user_id (nullable), name, email, commitment_amount, invested_amount, returns, status.
-- **lp_investors** — DEPRECATED, retained read-only as historical archive. New writes always go to `limited_partners`. Startup migration `consolidate_capital_tables()` keeps the two in sync for legacy rows.
-- **capital_calls** — Capital call tracking. Canonical FK is `limited_partner_id`; legacy `lp_investor_id` retained nullable for old rows. Migration backfills `limited_partner_id` from the LP id mapping.
-- **tickets** — Support tickets
-- **activity_logs** — System activity/audit tracking
+## Environment Variables / Secrets
+- `JWT_SECRET` — **Required.** Backend fails fast at import time if unset (no dev fallback).
+- `STUDIOOS_ENV` — `production` / `staging` / `dev` / `preview`. Drives the GitHub support-ticket origin label. Defaults to `staging`.
+- `GOOGLE_REDIRECT_URI` — Google OAuth redirect URI
+- `GITHUB_ACCESS_TOKEN`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME` — GitHub integration config
+- `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` — PostgreSQL credentials (available if needed)
 
-## Authentication
-- TOTP-based (passwordless) authentication using otpauth
-- **Email verification required before TOTP setup** — prevents impersonation
-- Registration flow: Form (+ Turnstile) → Email verification via Gmail API → TOTP authenticator setup → Dashboard
-- Verification tokens are SHA-256 hashed in DB, expire in 24 hours
-- Resend-verification endpoint rate limited (max 3/hour per email)
-- Email sending via Gmail API OAuth2 (falls back to console warning if Gmail credentials not configured)
-- Cloudflare Turnstile bot protection on registration (optional — skipped if TURNSTILE_SECRET_KEY not configured)
-- JWT tokens (24h expiry) for session management (jose library)
-- Frontend auth guard redirects unauthenticated users to login
-- Public pages: Landing (/), Register (/register), Login (/login), Verify Email (/verify-email)
-- All dashboard routes are protected behind authentication
+## Dependencies
+- Node packages installed globally (not in `frontend/node_modules`) — run from workspace root
+- Python packages in `.pythonlibs/`
+- Frontend package.json is in `frontend/`
 
-## API Endpoints
-Auth:
-- POST /api/auth/register — Create pending user + send verification email
-- POST /api/auth/verify-email?token=... — Verify email token, returns setup_token
-- POST /api/auth/setup-totp — Set up TOTP (requires verified email + setup_token)
-- POST /api/auth/resend-verification — Resend verification email (rate limited)
-- POST /api/auth/login — Login with email + TOTP code → JWT
-- GET /api/auth/me — Get current user (requires JWT)
-- POST /api/auth/verify-totp — Verify a TOTP code
+## Notes
+- Social media icons (Facebook, Instagram, Twitter, Youtube, Linkedin) removed from lucide-react 1.x — replaced with inline SVGs
+- `AlertOctagon` removed from lucide-react 1.x — replaced with `AlertTriangle`
+- `Github` icon removed from lucide-react 1.x — replaced with `GitBranch`
 
-Support:
-- POST /api/tickets/ — Create ticket + auto-create GitHub issue on AxalNetwork/StudioOS
-- GET /api/tickets/ — List all tickets
-- PUT /api/tickets/{id} — Update ticket status/assignment
+## Architecture decisions
+- **FastAPI is the canonical API and source of truth** (audit #4). The Cloudflare Worker (`cloudflare-worker/`) is now a thin edge proxy/cache that forwards `/api/*` to FastAPI; only WebSocket Durable Objects + the queue consumer remain at the edge. Legacy in-worker route handlers under `cloudflare-worker/src/routes/*.ts` are kept for git history but are not mounted (see `cloudflare-worker/src/routes/README.md`).
+- **Per-bucket rate limits** in `backend/app/services/rate_limit.py` mirror the worker buckets: spinout 5/hr, ai 10/min, user 60/min, global 1000/min.
+- **Legacy data drift sealed** (audit #1): `backend/app/services/db_guards.py` registers SQLAlchemy event listeners that raise on any insert/update to `lp_investors` or `entities(type='vc_fund')`. Reads still work for the consolidation migration.
+- **Content-Security-Policy** header added to the FastAPI security middleware (audit #9).
+- **GitHub auto-tickets** carry an `origin: <env>` label (audit #10), default `staging`; set `STUDIOOS_ENV=production` on the prod backend.
+- See `PRODUCTION.md` for the release-blocker list (notably `POST /api/search/backfill`, audit #7).
 
-Core:
-- POST /api/scoring/score — Score a startup (100-pt algorithm)
-- POST /api/scoring/generateMemo — AI-generated deal memo
-- POST /api/projects/submit — Founder submission with auto-scoring
-- POST /api/partners/matchPartners — Ranked partner matchmaking
-- POST /api/capital/capitalCall — Capital call with partner participation
-
-Market Intelligence:
-- GET /api/market-intel/market-pulse — Sector signals + gap opportunities
-- GET /api/market-intel/macro — Public market data (P/E, growth, IPO windows)
-- GET /api/market-intel/private-rounds — Recent private funding rounds
-- GET /api/market-intel/studio-benchmarks — Studio performance metrics
-- GET /api/market-intel/competitive-intelligence — High-conviction plays
-
-AI Advisory:
-- POST /api/advisory/ask — AI strategy advisor (GTM, fundraising, product, team)
-- POST /api/advisory/financial-plan — Financial planner (burn, runway, projections)
-- POST /api/advisory/diligence — Automated diligence checker
-
-Activity:
-- GET /api/activity/ — Activity log with filtering
-- GET /api/activity/summary — Activity summary + action breakdown
-
-Admin:
-- GET /api/admin/users — List all users (admin only)
-- POST /api/admin/impersonate/{user_id} — Impersonate a user (admin only)
-- PATCH /api/admin/users/{user_id}/role — Change user role (admin only)
-- PATCH /api/admin/users/{user_id}/toggle-active — Toggle user active status (admin only)
-
-Private Data API (Jekyll Bridge):
-- GET /api/private-data/profile — User profile + linked founder/partner data (auth required)
-- GET /api/private-data/market/private-signals — Private market signals + conviction status (admin/partner)
-- GET /api/private-data/portfolio/metrics — Role-scoped portfolio metrics (founder: projects/burn, partner: deals+fund/TVPI+portfolio, admin: all)
-- GET /api/private-data/founder/{user_id} — Founder-specific data (admin or self only)
-
-Full CRUD on projects, partners, investors, tickets, deals, users, documents, entities.
-
-## Jekyll Integration (Clean Room Architecture)
-- Private data (PII, financials, auth) stays in Replit PostgreSQL
-- External Jekyll site fetches data via authenticated API calls
-- Set JEKYLL_ORIGIN env var to restrict CORS to Jekyll domain (e.g., https://your-studio.github.io)
-- Frontend bridge script available at /api-bridge page (admin only)
-- Bridge handles JWT auth, session management, impersonation, and role-based data loading
-
-## Automation Logic
-- Startup submitted via Founder Portal → auto-scored immediately
-- Score ≥ 85 → TIER_1 (Immediate Spinout), stage → BUILD
-- Score ≥ 70 → TIER_2 (Conditional), deal status → scored
-- Score < 70 → REJECTED
-- Diligence checker auto-validates scoring, legal docs, team, financials
-- Activity log auto-records all system actions
-
-## Scoring Algorithm (100 points)
-- A. Market (25 pts): TAM/SAM (0-10), Urgency (0-10), Trend (0-5)
-- B. Team (20 pts): Expertise (0-8), Execution (0-8), Network (0-4)
-- C. Product (15 pts): MVP Time (0-7), Complexity (0-5), Dependencies (0-3)
-- D. Capital (15 pts): Cost to MVP (0-7), Revenue Time (0-5), Burn Risk (0-3)
-- E. Strategic Fit (15 pts): Alignment (0-10), Synergy (0-5)
-- F. Distribution (10 pts): Channels (0-5), Virality (0-5)
-
-## User Portals & RBAC
-Role-based access control with 3 roles: admin, founder, partner (partner includes LP investor capabilities)
-
-1. **Admin Console** — User management, role changes, impersonation ("Login As"), portal switcher
-2. **StudioOS Dashboard** — Studio overview (all roles see this)
-3. **Founder Portal** — Multi-step submission with instant scoring results
-4. **Partner / Investor Portal** — Deal flow, LP investors, capital calls, portfolio performance
-
-**Portal Switcher** (Admin only): A violet bar at the top allows admins to switch between Admin/Founder/Partner views. Sidebar navigation updates dynamically based on the selected view mode.
-
-**Impersonation**: Admins can "Login As" any user to troubleshoot their experience. Original admin session is preserved and can be restored with "Exit Impersonation".
-
-## Development
-Backend runs on port 8000 (localhost), Frontend on port 5000 (0.0.0.0).
-Vite proxies /api/* to the backend.
-
-## Seed Data
-4 example projects, 3 partners, 2 LP investors, 2 tickets.
-
-## Real-time (Cloudflare Durable Objects)
-
-Two SQLite-backed Durable Object classes provide WebSocket fan-out:
-
-- **PipelineRoom** — one instance per `deal:<id>` plus a global `overview` room. The worker emits `project_created` / `stage_advanced` from `routes/pipeline.ts`. The frontend `PipelinePage` subscribes to `overview` so the board live-updates without polling.
-- **OnboardingChat** — one instance per `user:<id>`. The worker emits `chat_message` from `POST /api/profiling/chat` (both the user's question and the AI reply). The Admin `ProfileReviewModal` subscribes per profile so admins watch transcripts grow live.
-
-Both classes use Hibernatable WebSockets (`state.acceptWebSocket`) so idle sockets incur no duration billing. A 25s server-initiated heartbeat alarm prunes half-open connections; the frontend hook also pings every 20s.
-
-Auth flow: WS upgrade routes (`GET /api/{pipeline,onboarding}/ws/...`) accept a `?token=` query param (browsers can't send Authorization on the WS handshake). The token is verified by the same `decodeJWT` used by every other route, RBAC-checked (admin/partner for pipeline; admin or self for onboarding), and rate-limited at 30 upgrades / minute / user via the existing `RATE_LIMITS` KV.
-
-Code map:
-- `cloudflare-worker/src/durable-objects/{pipeline-room,onboarding-chat}.ts` — DO classes (re-exported from `index.ts` so the runtime can find them).
-- `cloudflare-worker/src/services/realtime.ts` — `notifyPipelineRoom`, `notifyOnboardingChat` fire-and-forget broadcast helpers.
-- `cloudflare-worker/src/routes/realtime.ts` — WS upgrade routes mounted at `/api`.
-- `frontend/src/hooks/useWebSocket.js` — auto-reconnecting WS hook with backoff + heartbeat.
-
-`/api/infra/queue` reports binding presence under `realtime`. Rollback: comment the `[[durable_objects.bindings]]` blocks in `wrangler.toml` and redeploy — frontend hook degrades to silent no-op since the routes return 503.
-
-## GitHub Pages (axal.vc)
-The `docs/` directory contains the production build of the React frontend, served by GitHub Pages at axal.vc:
-- Built via `./build-pages.sh` or `cd frontend && npx vite build`
-- Output: `docs/` with index.html, assets/, 404.html, .nojekyll, CNAME
-- SPA routing handled via 404.html redirect trick (GitHub Pages SPA pattern)
-- API calls from axal.vc point to the Replit backend (cross-origin, CORS configured)
-- CORS: backend explicitly allows `https://axal.vc` and `https://www.axal.vc`
-- GitHub Pages source: main branch, `/docs` folder
-- `api.js` auto-detects hostname: uses relative `/api` on Replit, full URL on axal.vc
-
-## Deployment
-Autoscale deployment: builds frontend, serves via FastAPI with static files.
-
-## Environment Variables
-- DATABASE_URL — PostgreSQL connection (auto-set by Replit)
-- OPENAI_API_KEY — Optional, for AI advisory + memo generation (falls back to templates)
-- JWT_SECRET — JWT signing key (defaults to dev key if not set)
-- GMAIL_CLIENT_ID — Gmail API OAuth2 client ID (from Google Cloud Console)
-- GMAIL_CLIENT_SECRET — Gmail API OAuth2 client secret
-- GMAIL_REFRESH_TOKEN — Gmail API OAuth2 refresh token (from OAuth Playground)
-- CF_API_TOKEN — Cloudflare API token for Wrangler deploy (Edit Workers permission)
-- GITHUB_ACCESS_TOKEN — GitHub OAuth token (via Replit GitHub connector)
-- GITHUB_REPO_OWNER — GitHub repo owner for ticket issues (AxalNetwork)
-- GITHUB_REPO_NAME — GitHub repo name for ticket issues (StudioOS)
-
-## Auth Packages
-- pyotp — TOTP generation/verification
-- PyJWT — JWT token creation/validation
-- qrcode — QR code generation for authenticator setup
-
-## Cloudflare Worker Migration (`cloudflare-worker/`)
-A complete port of the FastAPI backend to Cloudflare Workers (TypeScript/Hono).
-
-### Stack
-- **Runtime**: Cloudflare Workers (edge)
-- **Framework**: Hono (TypeScript)
-- **Database**: Cloudflare D1 (SQLite at the edge)
-- **Email**: Gmail API (OAuth2)
-- **Auth**: JWT (jose) + TOTP (otpauth)
-- **KV**: TOKENS (verification tokens), RATE_LIMITS (login/resend throttling)
-
-### D1 Setup (one-time)
-```bash
-cd cloudflare-worker
-npm run db:create           # creates the D1 database, prints the ID
-# → copy the ID into wrangler.toml [d1_databases] database_id
-npm run db:schema:remote    # applies schema.sql to the live D1 database
-npm run deploy              # deploy the worker
-```
-
-### Structure
-```
-cloudflare-worker/
-  wrangler.toml       — Cloudflare config (KV, D1, vars) — replace REPLACE_WITH_D1_DATABASE_ID
-  package.json        — Dependencies
-  tsconfig.json       — TypeScript config
-  sql/schema.sql      — SQLite/D1 schema
-  SETUP.md            — Step-by-step deployment guide
-  src/
-    index.ts          — Main entry (Hono app, CORS, error handling, routes)
-    types.ts          — TypeScript interfaces (Env uses D1Database)
-    db.ts             — D1 tagged-template helper (getSQL)
-    auth.ts           — JWT + TOTP auth helpers
-    services/
-      email.ts        — Gmail API email service (OAuth2)
-      turnstile.ts    — Cloudflare Turnstile verification
-      scoring.ts      — 100-point scoring engine
-    routes/
-      auth.ts         — Register, verify, TOTP setup, login
-      scoring.ts      — Score engine, deal memos, queue
-      projects.ts     — Project CRUD, submit + auto-score
-      legal.ts        — 18 legal templates, documents, entities
-      partners.ts     — Partner CRUD, matchmaking, referrals
-      capital.ts      — LP investors, capital calls, portfolio
-      deals.ts        — Deal flow pipeline
-      tickets.ts      — Support tickets + GitHub sync
-      users.ts        — User management
-      admin.ts        — Admin console (impersonation, roles)
-      activity.ts     — Activity/audit logs
-      market-intel.ts — Market intelligence (static data)
-      advisory.ts     — AI advisory, financial planner, diligence
-      private-data.ts — Role-scoped private data API
-```
-
-### Deploy
-See `cloudflare-worker/SETUP.md` for complete deployment instructions.
-
-### Monitoring & Observability
-- **D1 schema**: `cloudflare-worker/sql/monitoring.sql` adds `system_metrics`, `rate_limit_logs`, `error_logs`, `queue_jobs` and extends `activity_logs` with `latency_ms`, `status_code`, `endpoint`, `method`. Apply once via `npx wrangler d1 execute studioos-db --file=sql/monitoring.sql --remote`.
-- **Middleware**:
-  - `src/middleware/observability.ts` — measures request latency, persists to `system_metrics` + `activity_logs` (asynchronously via `ctx.waitUntil`), logs 5xx + thrown errors to `error_logs`.
-  - `src/middleware/rateLimit.ts` — KV (RATE_LIMITS) sliding-window counter. Buckets: `user` 60/min, `ai` 10/min (scoring/matches/advisory), `spinout` 5/hour (admin/partner only), `global` 1000/min. Returns 429 + `Retry-After` header.
-- **Routes** (`/api/monitoring/*`, all admin-only except throughput):
-  - `GET /metrics?minutes=60` — RPM, AI calls, spin-outs, top endpoints, health (green/yellow/red).
-  - `GET /rate-limits?minutes=60` — blocked requests + heatmap.
-  - `GET /errors?limit=50` — recent 5xx with stack snippets.
-  - `GET /anomalies` — Workers-AI summary (`@cf/meta/llama-3.1-8b-instruct`) over last hour.
-  - `GET /throughput` — admin/partner-visible limited stats.
-  - `POST /cleanup` — purges metrics/logs > 30 days.
-- **Frontend**: `frontend/src/pages/MonitoringPage.jsx`, admin-only nav at `/monitoring`. Uses recharts (already installed) and polls every 15s.
-- **Deploy**: `bash cloudflare-worker/deploy-workers.sh` applies the migration then deploys the worker. Requires `CLOUDFLARE_API_TOKEN` with D1 + Workers Scripts edit permissions.
-
-### Liquidity & Secondary Market
-- **D1 schema**: `cloudflare-worker/sql/liquidity.sql` adds `liquidity_events`, `secondary_listings`, `exit_matches` (all money columns are integer cents). Apply once via `npx wrangler d1 execute studioos-db --file=sql/liquidity.sql --remote` (add this line to `deploy-workers.sh`).
-- **AI worker**: `cloudflare-worker/ai-workers/valuation.ts` exposes `aiValueAsset` (Llama 3.1 8B → cents-clamped fair value) and `aiMatchBuyers` (deterministic feature-scoring + a single anonymized AI call for explanations — emails and exact capital amounts are NOT sent; only role + sector + capital band).
-- **Models**: `cloudflare-worker/src/models/liquidity.ts` (`Listings`, `Matches`, `LiquidityEvents`).
-- **Routes** (`/api/liquidity/*`):
-  - `POST /list` — create listing. Role-scoped: admin & partner allowed; founder must own the underlying project (joined via `projects.founder_id → founders.email = users.email`); other users need an active LP record. Auto-enqueues `liquidity_valuation`.
-  - `GET /marketplace` — open + matched listings, filtered to `shares > 0 AND asking_price_cents > 0` so auto-generated valuation placeholders don't surface.
-  - `POST /match` (admin/partner) — clears prior `proposed` matches and enqueues `liquidity_matching`.
-  - `GET /listings/:id/matches` (admin/partner) — ranked buyer matches with AI explanation.
-  - `POST /execute-exit` (admin) — atomic conditional UPDATE (`WHERE status IN ('open','matched') RETURNING id`) prevents double-execution; records a `liquidity_event`, distributes the price across the seller's LP rows (returns column is legacy dollars — converted with `/100`), and marks the chosen `exit_match` as `executed`.
-  - `GET /my-portfolio` — LP holdings + my listings + recent exit history.
-  - `GET /events` (admin/partner) — recent 100 liquidity events for observability.
-- **Queue handlers** (extend `services/queueWorker.ts`): `liquidity_valuation`, `liquidity_matching`. Both included in the per-drain AI cap (5 AI jobs/min).
-- **Event-driven hook**: `legalcap.ts /spinout/go-independent` now also creates a 0-share placeholder `secondary_listing` and enqueues `liquidity_valuation` so AI fair-value is precomputed for the marketplace.
-- **Frontend**: `frontend/src/pages/LiquidityPage.jsx` — Marketplace grid (with AI valuation badges), List-My-Shares wizard, AI Buyer Matches modal (admin can execute), My Portfolio (LP rows + listings + exit history), Exit Pipeline funnel (admin/partner). Mounted at `/liquidity` for all roles.
-
-## Recent Changes (Apr 18 2026)
-- **Backend modernization** (`backend/app/main.py`): replaced deprecated `@app.on_event("startup")` with an `asynccontextmanager` `lifespan`; added `TrustedHostMiddleware` (allows axal.vc, *.replit.dev/app, localhost); added a security-headers middleware (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, conditional HSTS); added global structured-JSON exception handlers for `StarletteHTTPException`, `RequestValidationError`, and unhandled `Exception` (response shape `{ok: false, error: {...}}`). Title bumped to "Axal StudioOS". Router list and `/api/dashboard/stats` left intact — no destructive directory move or event-bus rewrite.
-- **Refer & Earn enhancements** (`frontend/src/pages/ReferEarnPage.jsx`):
-    - **Quick Share**: X/Twitter, LinkedIn, WhatsApp, Email buttons with pre-filled, branded messages and `mailto:` deep links.
-    - **Import Contacts**: client-side CSV parser (handles quoted fields, CRLF, commas-in-quotes; ≤1 MB, ≤500 rows) generating per-row personalized invite links + one-click email buttons. Header row must include `email` (and optionally `name`).
-    - **Editable invite templates**: in-page editor with `{{link}}` / `{{code}}` placeholders, persisted to `localStorage` under `axal:invite_templates_v1`, with reset-to-defaults.
-
-## Integrations module (Apr 18 2026)
-- **Schema**: new `integrations` and `integration_logs` tables (SQLModel) auto-created on backend startup. Secrets (`api_key_encrypted`, `webhook_secret_encrypted`) are Fernet-encrypted at rest using a key derived from `JWT_SECRET` via PBKDF2-HMAC-SHA256 (200k iterations, fixed app-scoped salt). See `backend/app/services/crypto_box.py`.
-- **Router** (`backend/app/api/routes/integrations.py`, mounted at `/api/integrations`):
-  - `GET /available` — provider catalogue (HubSpot, Salesforce, Sumsub, Stripe Atlas, Cooley GO, PitchBook, Custom).
-  - `GET /` — list current user's integrations (admins see all). Secrets returned as masked previews only.
-  - `POST /connect` — create or update; upserts on (user_id, provider_name).
-  - `DELETE /{uid}` — disconnect; owner or admin only.
-  - `POST /{uid}/sync` — synchronous sync trigger (logs entry; no remote call in dev).
-  - `POST /{uid}/push` — outbound push (logs payload; queueing layer not yet present).
-  - `GET /{uid}/logs` — paginated logs.
-  - `POST /webhook/{provider}/{uid}` — public, HMAC-SHA256 validated against the stored webhook secret (`X-Axal-Signature` header, hex of raw body). No auth dep by design.
-- **RBAC**: gated to admin / operator / service_provider / partner / founder roles via `_ensure_role`. Tenancy check via `_load_owned`.
-- **Frontend**: `/integrations` route (admin + partner) with marketplace cards, connection list, log viewer modal, and connect/update modal supporting API key, webhook secret, JSON config, and per-provider docs links. Sidebar entry added for admin and partner roles.
-- **Skipped intentionally** (per scope decision A): Python/JS SDKs and event-driven automation (no job queue exists in the FastAPI dev backend).
-
-## Pipeline Community Voting (Apr 19 2026)
-- **Model**: `PipelineVote` in `entities.py` — `(deal_id, user_id)` unique, role-weight stored at cast time, `vote_type ∈ {Strong_Buy, Buy, Hold, Pass}`, optional `comment`, `anonymous` flag.
-- **Routes** (`backend/app/api/routes/pipeline_votes.py`, mounted at `/api/pipeline`):
-  - `POST /vote/{deal_id}` (async) — upsert with `IntegrityError` retry; broadcasts a *public* tally (no `my_vote`) over WS; returns viewer-specific tally to caller.
-  - `GET /votes/leaderboard` — declared **before** `/votes/{deal_id}` so static path wins matching.
-  - `GET /votes/{deal_id}?include_comments=` — includes `my_vote` for the viewer + optional comment list (anonymized).
-  - `WS  /ws/overview?token=<jwt>` — JWT auth via query param (close 4401 on fail), shared `_ConnectionManager`.
-- **Weights**: admin=3, LP (matched by `User.email == LimitedPartner.email`)=3, partner=2, founder/other=1. Threshold = ≥5 voters AND ≥12 weight.
-- **Frontend**: `DealVoteWidget` inlined on every Pipeline `DealCard` — self-fetches initial tally, accepts WS-pushed `liveTally` overrides, 4-button row + weighted bar + "threshold reached" pill, optional comment / anonymous toggle. WS handler in `PipelinePage.jsx` extends `BOARD_EVENTS` handling to dispatch `vote_updated` into `voteTallies` state. API client: `api.getVotes`, `api.castVote`, `api.voteLeaderboard`.
-
-## Cloudflare Zero Trust perimeter (Apr 19 2026 — Security Item #6)
-- **Module**: `backend/app/services/cf_access.py` — verifies the
-  `Cf-Access-Jwt-Assertion` header that Cloudflare Access injects on every
-  request. RS256 verification against the team JWKS, with `aud`/`iss`/`exp`
-  required claims and an optional app-side email allowlist.
-- **Layered, never replacing app auth**: applied via `dependencies=` on the
-  router include, so it runs *before* `require_admin`. Backoffice routers
-  gated: `admin`, `admin_contracts`, `infra`, `monitoring`. The non-backoffice
-  `private_data` and `company` routers are NOT gated (they have user-scoped
-  routes that real founders need to hit).
-- **Opt-in**: when `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` are unset
-  (local dev) the dependency is a no-op and logs a single warning. When set,
-  any direct hit to the origin without a CF Access JWT returns
-  `403 "Cloudflare Access required for this route"`, even if the caller has
-  a valid app JWT.
-- **Setup checklist for prod / staging**:
-  1. In the Cloudflare dashboard → Zero Trust → Access → Applications, add a
-     Self-hosted application for `https://<your-domain>/api/admin/*`,
-     `/api/monitoring/*`, `/api/infra/*` (and `/api/admin/contracts/*`).
-  2. Attach an Access policy: Email allowlist or SSO group (Google
-     Workspace / Okta / Entra), require MFA, optional WARP / device posture.
-  3. Copy the Application AUD tag → set env `CF_ACCESS_AUD`.
-  4. Set `CF_ACCESS_TEAM_DOMAIN=<team>.cloudflareaccess.com`.
-  5. (Optional) `CF_ACCESS_ALLOWED_EMAILS=alice@axal.vc,bob@axal.vc` for an
-     extra app-side allowlist independent of the CF policy.
-  6. Lock down the origin so only Cloudflare can reach it (Cloudflare Tunnel
-     OR origin firewall allowing only CF IPs) — otherwise an attacker can
-     bypass the perimeter by hitting the origin directly.
-- Same module + env approach should be used for staging (separate AUD).
-
-## Sensitive-data access policy (Security #7)
-Single source of truth: `backend/app/services/access_policy.py`. Any new
-route that exposes one of the four resource categories below MUST call the
-named predicate (or the FastAPI dependency) — no ad-hoc role checks.
-
-| # | Resource | Who may view (un-masked) | Predicate / Dependency |
-|---|----------|--------------------------|------------------------|
-| 1 | Contracts (`Document`) | admin · partner · owning founder | `can_view_contract` / `Depends(require_contract_view)` |
-| 2a | `signed_ip` (legal proof) | admin only | `can_view_signed_ip` (used by `redact_signature_for_viewer`) |
-| 2b | `signed_by` signer email | admin · the signer · doc owner | `can_view_signer_email` (used by `redact_signature_for_viewer`) |
-| 3 | Personal contact info (email / phone / `Partner.contact_info`) | admin · the subject themselves · co-members on the same company (email only) | `can_view_personal_contact` (alias of `pii.can_see_full_pii`) |
-| 4 | Company member roster (un-masked emails) | admin · members of that company | `can_view_company_member_list` / `Depends(require_company_member_view)` |
-
-Notes:
-- This codebase does not currently store physical postal addresses.
-  When/if `address` lands on `User`/`Founder`/`LimitedPartner`, gate it
-  through Rule 3 (admin or self only).
-- `_viewer_is_company_member` in `routes/company.py` is now a thin alias
-  for `can_view_company_member_list` so the rule lives in one place.
-- Redactors (`redact_signature_for_viewer`, `serialize_user_safe`,
-  `_company_summary_dto`/`_company_detail_dto`) are the implementation
-  arm of the same rules — never bypass them by spreading raw
-  `model_dump()` output into a response.
-
-## Storage cleanup (Security #8)
-Contract bodies and signature payloads are never returned as raw
-text/base64 in JSON responses. The wire shape is **file pointer + short-
-lived signed URL only**.
-
-- **Backend** (`backend/app/api/routes/legal.py`):
-  - `_hydrate_doc_content(doc, ..., embed_content=False)` is the single
-    serialiser for all `Document` JSON responses. It strips `content`
-    and `file_sha256` (admin-only legal-proof material) and emits:
-    - `file_key` — opaque object-storage key.
-    - `content_url` — short-lived (5 min) HMAC-signed URL pointing at
-      `/api/files/contracts/{token}` (see `services/file_storage.py`
-      `mint_signed_token` / `verify_signed_token`).
-    - `content_url_expires_at`, `content_url_ttl_seconds`.
-  - `embed_content=True` is reserved for **in-process** callers (e.g.
-    PDF rendering). Route handlers must keep the default (False) so the
-    body never crosses the wire as JSON.
-  - The download endpoint (`/api/files/contracts/{token}`) forces
-    `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`,
-    and `Cache-Control: private, no-store` — the body never persists
-    in browser cache or page memory beyond the active download.
-- **Signatures**: drawn-signature images (base64 data URLs) are **not
-  shipped**. Frontend `ESignPage` was sending `signature_data_url` but
-  the backend has no schema field for it — silently discarded. We
-  removed the field from the request body to eliminate the leak surface.
-  Per `services/signatures.py`: data minimisation — the legal record is
-  authenticated click-through + `typed_name`, nothing more.
-- **Frontend** — three pages used to render contract bodies inline in
-  `<pre>` blocks (`LegalPage`, `AdminPage`, `FundsPage`). All three now
-  show a violet **Download** button that hits the short-lived URL on
-  click. Closing the modal clears `viewDoc` state, so even the URL is
-  garbage-collected within a render cycle.
-- **Cloudflare Worker parallel** — the worker runs its own copy of the
-  legal/contract API surface (`routes/legal.ts`, `routes/legalcap.ts`,
-  `routes/funds.ts`). All of them now strip `content` from JSON
-  responses via the `safeDoc()` helper in `legal.ts` (and equivalent
-  inline scrubbers in the other two). `legalcap.POST /legal/generate`
-  no longer returns `body`/`vars` — the rendered contract text and the
-  PII-bearing template variables (investor name, amount, valuation cap)
-  are never wire-returned. The worker doesn't yet have its own HMAC
-  signing primitive; until ported, the response shape is correct-by-
-  default (no body) and a TODO documents the follow-up so the
-  `Download LPA` button can target a worker-minted `content_url`.
-- **Semantic search** (`services/vectorize.ts` +
-  `routes/search.ts`) — the `snippet` field for document vectors used
-  to be the first 280 chars of `legal_documents.content`, surfaced
-  verbatim in `GET /api/search`. Two-layer fix:
-  1. `vectorize.embedAndUpsertById` writes a neutral
-     `${doc_type} • ${status} • deal #${id}` snippet at upsert time.
-  2. `search.GET /` adds a response-time scrub that replaces the
-     snippet with a static neutral string for **every** hit where
-     `type === 'document'` — protects against legacy vectors written
-     before fix #1 until a backfill is run.
-
-  The embedding `text` field (which IS body-derived) is still fed to
-  the vector model — that's an acceptable internal use; only the
-  metadata `snippet` round-trips to the wire.
-
-  **Operational follow-up** (run once after deploy): hit
-  `POST /api/search/backfill` (admin-only) to re-embed all
-  `legal_documents` under the new neutral-snippet policy and purge
-  any stale snippets at rest.
+## Phase A/C Safe-Slice (April 2026)
+- **A1**: `entities` table now carries `CHECK (entity_type <> 'vc_fund') NOT VALID` constraint; ORM/Core guards now also emit a `deprecated_*_writes_blocked` ActivityLog row each time they fire so the admin dashboard can count drift attempts.
+- **A2**: `tests/test_db_guards.py` proves all four legacy write paths (ORM insert, Core bulk insert × 2 deprecated targets) are sealed. Run with `uv run pytest tests/`.
+- **A3**: `capital_calls.limited_partner_id` is promoted to `NOT NULL` automatically on the first boot after backfill completes (`_try_apply_capital_call_not_null`).
+- **A4**: `POST /api/funds/distributions/execute` now requires a `fund_id` body field; missing field yields a 422 with `error.error_code = "ERR_DISTRIBUTION_FUND_ID_REQUIRED"`.
+- **A5**: Both backend and Cloudflare worker fail fast on boot if `JWT_SECRET` is shorter than 32 bytes when `STUDIOOS_ENV ∈ {production, prod, staging}`. Dev/preview unchanged.
+- **C2**: `POST /api/csp-report` collector persists violations as `ActivityLog` rows (action=`csp_violation`); per-IP throttled at 30/min.
+- **C3**: CSP tightened — `connect-src` restricted to self + workers.dev + GitHub + OpenAI; `report-uri` wired to the new collector.
+- **C4**: `/api/auth/register` enforces 5/min/IP and 3/day/email; the request body now accepts a `_axl_hp` honeypot field — non-empty values are silently dropped (logged as `register_bot_dropped`).
+- **G1**: Removed obsolete `netlify.toml` (frontend ships via Cloudflare Pages, not Netlify).

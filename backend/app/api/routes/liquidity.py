@@ -4,7 +4,16 @@ from backend.app.api.routes.auth import get_current_user
 
 router = APIRouter(prefix="/liquidity", tags=["Liquidity"])
 
-NOT_IMPL = "Liquidity module is implemented in the production Cloudflare worker only. Local dev returns empty data."
+NOT_IMPL = "Liquidity module is being ported to FastAPI. Local dev returns empty data."
+
+# Audit #6 — placeholder pollution.
+# When porting the worker's liquidity logic to FastAPI, ALL of
+# `/marketplace`, `/events`, and `/my-portfolio` MUST filter out the synthetic
+# 0-share listings that `legalcap.ts /spinout/go-independent` creates as a
+# valuation seed (shares_offered = 0, listing_type = 'placeholder'). The old
+# worker code only filtered them out of `/marketplace`, leaking them into the
+# event feed and the LP portfolio view. The contract on FastAPI is:
+#     WHERE shares_offered > 0 AND listing_type != 'placeholder'
 
 
 @router.get("/marketplace")

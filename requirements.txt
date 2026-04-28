@@ -124,6 +124,8 @@ pyjwt
 pyotp
 pyseto
 python-dotenv
+python-multipart
 qrcode
+sqlalchemy
 sqlmodel
 uvicorn

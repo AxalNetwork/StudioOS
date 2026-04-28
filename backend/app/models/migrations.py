@@ -26,6 +26,48 @@ from backend.app.models.entities import (
 logger = logging.getLogger(__name__)
 
 
+def _ensure_entities_vc_fund_check(session: Session) -> None:
+    """Phase A1: add a CHECK constraint on `entities.type` forbidding
+    'vc_fund' going forward. Idempotent — constraint name is fixed.
+
+    Existing rows are NOT touched — the constraint validates new INSERT/UPDATE
+    only. Postgres `NOT VALID` is used so the migration succeeds even when
+    legacy `vc_fund` rows still exist (they'll be migrated by the consolidate
+    step). The runtime guard in `db_guards.py` is the belt; this is the
+    suspenders.
+    """
+    try:
+        session.exec(
+            text(
+                "ALTER TABLE entities "
+                "ADD CONSTRAINT chk_entities_no_vc_fund "
+                "CHECK (entity_type <> 'vc_fund') NOT VALID"
+            )
+        )
+        session.commit()
+    except Exception:  # noqa: BLE001 — constraint already exists
+        session.rollback()
+
+
+def _try_apply_capital_call_not_null(session: Session) -> None:
+    """Phase A3: enforce NOT NULL on capital_calls.limited_partner_id ONCE
+    every existing row has been backfilled. Safe to call on every boot —
+    if any row is still NULL we leave the column nullable."""
+    try:
+        result = session.exec(
+            text("SELECT COUNT(*) FROM capital_calls WHERE limited_partner_id IS NULL")
+        )
+        unbacked = result.scalar() if hasattr(result, "scalar") else next(iter(result), 0)
+        if unbacked and int(unbacked) > 0:
+            return  # backfill not complete; defer
+        session.exec(text("ALTER TABLE capital_calls ALTER COLUMN limited_partner_id SET NOT NULL"))
+        session.commit()
+        logger.info("Phase A3: capital_calls.limited_partner_id is now NOT NULL")
+    except Exception as exc:  # noqa: BLE001
+        session.rollback()
+        logger.warning("Phase A3: NOT NULL on limited_partner_id deferred: %s", exc)
+
+
 def _ensure_capital_call_columns(session: Session) -> None:
     """Add `limited_partner_id` to `capital_calls`, relax `lp_investor_id`
     NOT NULL, and add a UNIQUE (fund_id, email) constraint to limited_partners
@@ -130,6 +172,7 @@ def consolidate_capital_tables() -> None:
     """
     with Session(engine) as session:
         _ensure_capital_call_columns(session)
+        _ensure_entities_vc_fund_check(session)
 
         legacy_investors = session.exec(select(LPInvestor)).all()
         legacy_fund_entities = session.exec(
@@ -137,8 +180,10 @@ def consolidate_capital_tables() -> None:
         ).all()
 
         if not legacy_investors and not legacy_fund_entities:
-            # Nothing to migrate. Still recompute fund totals defensively.
+            # Nothing to migrate. Still recompute fund totals defensively
+            # and apply the Phase A3 NOT NULL promotion if eligible.
             _recompute_fund_totals(session)
+            _try_apply_capital_call_not_null(session)
             return
 
         fund_by_name: Dict[str, VCFund] = {
@@ -209,6 +254,10 @@ def consolidate_capital_tables() -> None:
 
         # Step 4: refresh fund aggregates
         _recompute_fund_totals(session)
+
+        # Step 6 (Phase A3): once every capital_calls row has a
+        # limited_partner_id, promote the column to NOT NULL.
+        _try_apply_capital_call_not_null(session)
 
 
 def _recompute_fund_totals(session: Session) -> None:

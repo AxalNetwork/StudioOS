@@ -3,6 +3,10 @@ export interface Env {
   TOKENS: KVNamespace;
   RATE_LIMITS: KVNamespace;
   JWT_SECRET: string;
+  STUDIOOS_ENV?: string;
+  // Audit #4: edge proxy → FastAPI origin (e.g. https://api.axal.vc).
+  // Required by `index.ts` proxy handler. The worker returns 503 if missing.
+  FASTAPI_ORIGIN?: string;
   TURNSTILE_SECRET_KEY?: string;
   APP_URL: string;
   GMAIL_CLIENT_ID?: string;
