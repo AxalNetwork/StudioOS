@@ -349,8 +349,16 @@ admin.post('/impersonate/:userId', async (c) => {
 admin.patch('/users/:userId/role', async (c) => {
   const adminUser = await requireAdmin(c);
   const userId = parseInt(c.req.param('userId'));
-  const { role } = await c.req.json();
-  if (!['admin', 'founder', 'partner'].includes(role)) return c.json({ error: `Invalid role: ${role}` }, 400);
+  // Frontend sends `?role=...` as a query parameter (matches the FastAPI
+  // signature `def update_user_role(user_id, role: str, ...)`). Older clients
+  // posted it in the JSON body; accept either so we don't break them.
+  let role = c.req.query('role');
+  if (!role) {
+    try { role = (await c.req.json()).role; } catch {}
+  }
+  if (!role || !['admin', 'founder', 'partner'].includes(role)) {
+    return c.json({ error: `Invalid role: ${role}` }, 400);
+  }
 
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM users WHERE id = ${userId}`;
