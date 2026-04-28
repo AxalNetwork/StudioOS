@@ -1,0 +1,130 @@
+{
+  "level": "error",
+  "message": "POST https://axal.vc/api/auth/login",
+  "$workers": {
+    "event": {
+      "request": {
+        "url": "https://axal.vc/api/auth/login",
+        "method": "POST",
+        "headers": {
+          "accept": "*/*",
+          "accept-encoding": "gzip, br",
+          "accept-language": "en-US,en;q=0.9",
+          "cf-connecting-ip": "194.148.103.10",
+          "cf-ipcountry": "CH",
+          "cf-ray": "9f36efb7bc23f5cf",
+          "cf-visitor": "{\"scheme\":\"https\"}",
+          "connection": "Keep-Alive",
+          "content-length": "59",
+          "content-type": "application/json",
+          "cookie": "REDACTED",
+          "host": "axal.vc",
+          "origin": "https://axal.vc",
+          "priority": "u=3, i",
+          "referer": "https://axal.vc/login",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15",
+          "x-forwarded-proto": "https",
+          "x-real-ip": "194.148.103.10"
+        },
+        "cf": {
+          "httpProtocol": "HTTP/3",
+          "clientAcceptEncoding": "gzip, deflate, br",
+          "requestPriority": "",
+          "edgeRequestKeepAliveStatus": 1,
+          "requestHeaderNames": {},
+          "clientTcpRtt": 0,
+          "clientQuicRtt": 34,
+          "colo": "AMS",
+          "asn": 12350,
+          "asOrganization": "VTX Services SA",
+          "country": "CH",
+          "isEUCountry": false,
+          "city": "Genève",
+          "continent": "EU",
+          "region": "Geneva",
+          "regionCode": "GE",
+          "timezone": "Europe/Zurich",
+          "longitude": "6.14569",
+          "latitude": "46.20222",
+          "postalCode": "1200",
+          "tlsVersion": "TLSv1.3",
+          "tlsCipher": "AEAD-AES128-GCM-SHA256",
+          "tlsClientRandom": "Al1MwiL+fTDOEi1hjjNHaipd4BVZjqy+yuZ/LlkzEGg=",
+          "tlsClientCiphersSha1": "Z8A4G4PLASUgwhO8o5vanSeqNoc=",
+          "tlsClientExtensionsSha1": "vvvWeIeuIc8fBnsQ6vHkql7pPA8=",
+          "tlsClientExtensionsSha1Le": "TfOz8UxPc6w813RqRPUCOMuLsRI=",
+          "tlsExportedAuthenticator": {
+            "clientHandshake": "93453f3fef71119defdc4125dc9a0c923111e4546f64b32169436c762d670409",
+            "serverHandshake": "5d239f092081880614755a9079322251552d3fb396681def7957542d205675fd",
+            "clientFinished": "f513050fddaa350fac798ca352ca4e7f5a107aac8f1464b63b63e4b53cce5120",
+            "serverFinished": "b1f12b6c927accf99d7e30311ded6812798b874b3aa1af24a0938662119ac7f4"
+          },
+          "tlsClientHelloLength": "247",
+          "tlsClientAuth": {
+            "certPresented": "0",
+            "certVerified": "NONE",
+            "certRevoked": "0",
+            "certIssuerDN": "",
+            "certSubjectDN": "",
+            "certIssuerDNRFC2253": "",
+            "certSubjectDNRFC2253": "",
+            "certIssuerDNLegacy": "",
+            "certSubjectDNLegacy": "",
+            "certSerial": "",
+            "certIssuerSerial": "",
+            "certSKI": "",
+            "certIssuerSKI": "",
+            "certFingerprintSHA1": "",
+            "certFingerprintSHA256": "",
+            "certNotBefore": "",
+            "certNotAfter": "",
+            "certRFC9440": "",
+            "certRFC9440TooLarge": false,
+            "certChainRFC9440": "",
+            "certChainRFC9440TooLarge": false
+          },
+          "verifiedBotCategory": "",
+          "edgeL4": {
+            "deliveryRate": 3673455
+          }
+        },
+        "path": "/api/auth/login"
+      },
+      "response": {
+        "status": 503
+      },
+      "rayId": "9f36efb7bc23f5cf"
+    },
+    "scriptName": "studioos",
+    "outcome": "ok",
+    "eventType": "fetch",
+    "executionModel": "stateless",
+    "scriptVersion": {
+      "id": "3b119c87-5340-4525-8f90-4250223090f1"
+    },
+    "truncated": false,
+    "requestId": "9f36efb7bc23f5cf",
+    "cpuTimeMs": 0,
+    "wallTimeMs": 0
+  },
+  "$metadata": {
+    "id": "01KQA9P3PRDTVBXGDSGSHK42QC",
+    "requestId": "9f36efb7bc23f5cf",
+    "trigger": "POST /api/auth/login",
+    "service": "studioos",
+    "level": "error",
+    "statusCode": 503,
+    "error": "POST https://axal.vc/api/auth/login",
+    "message": "POST https://axal.vc/api/auth/login",
+    "url": "https://axal.vc/api/auth/login",
+    "account": "c016d64a9a4f4a2900fb3385bd08144f",
+    "provider": "cloudflare",
+    "type": "cf-worker-event",
+    "fingerprint": "03cef6331ecf608694483d4bfb76e2ba",
+    "origin": "fetch",
+    "messageTemplate": "POST https://axal.vc/api/auth/login"
+  }
+}
