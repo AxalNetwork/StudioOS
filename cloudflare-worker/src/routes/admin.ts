@@ -359,11 +359,31 @@ admin.patch('/users/:userId/role', async (c) => {
   if (!role || !['admin', 'founder', 'partner'].includes(role)) {
     return c.json({ error: `Invalid role: ${role}` }, 400);
   }
+  // Security policy: admin promotion is NOT allowed via this endpoint.
+  // The only way to grant admin is via direct SQL against the D1 database.
+  // Keeps the blast radius of a compromised admin session bounded — they
+  // cannot mint new admins to entrench access.
+  if (role === 'admin') {
+    return c.json({
+      error: 'Admin role can only be granted via direct database SQL (security policy).',
+      code: 'admin_promotion_disabled',
+    }, 403);
+  }
 
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM users WHERE id = ${userId}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
   if (rows[0].id === adminUser.id) { await sql.end(); return c.json({ error: 'Cannot change your own role' }, 400); }
+  // Same policy on the other side: an existing admin cannot be demoted via
+  // this endpoint either. Use SQL. This prevents accidental lockout of the
+  // last admin and prevents one admin from quietly silencing another.
+  if (rows[0].role === 'admin') {
+    await sql.end();
+    return c.json({
+      error: 'Existing admin role can only be changed via direct database SQL (security policy).',
+      code: 'admin_demotion_disabled',
+    }, 403);
+  }
 
   const oldRole = rows[0].role;
   await sql`UPDATE users SET role = ${role} WHERE id = ${userId}`;

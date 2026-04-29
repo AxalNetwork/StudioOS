@@ -258,16 +258,29 @@ export default function AdminPage({ onImpersonate }) {
                         <td className="px-4 py-3 text-gray-900 font-medium">{u.name}</td>
                         <td className="px-4 py-3 text-gray-600">{u.email}</td>
                         <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                          <div className="relative inline-block group" title="Click to change this user's role">
-                            <select value={u.role} onChange={(e) => handleRoleChange(u, e.target.value)}
-                              aria-label={`Change role for ${u.name || u.email}`}
-                              className={`appearance-none text-xs font-semibold px-3 py-1 pr-7 rounded-full cursor-pointer border border-transparent hover:border-current hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-1 transition-all ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>
-                              <option value="admin">Admin</option>
-                              <option value="founder">Founder</option>
-                              <option value="partner">Partner / Investor</option>
-                            </select>
-                            <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-70 group-hover:opacity-100" />
-                          </div>
+                          {u.role === 'admin' ? (
+                            // Admin role is intentionally read-only in the UI. The PATCH
+                            // /users/:id/role endpoint also refuses to promote into or
+                            // demote out of `admin` — those changes must be made
+                            // directly against the Cloudflare D1 database via SQL.
+                            <span
+                              title="Admin role can only be changed via direct database SQL (security policy)"
+                              className={`inline-block text-xs font-semibold px-3 py-1 rounded-full ${ROLE_BADGES.admin || 'bg-violet-100 text-violet-700'}`}
+                            >
+                              Admin
+                            </span>
+                          ) : (
+                            <div className="relative inline-block group" title="Click to change this user's role">
+                              <select value={u.role} onChange={(e) => handleRoleChange(u, e.target.value)}
+                                aria-label={`Change role for ${u.name || u.email}`}
+                                className={`appearance-none text-xs font-semibold px-3 py-1 pr-7 rounded-full cursor-pointer border border-transparent hover:border-current hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-1 transition-all ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>
+                                {/* Admin promotion intentionally not offered — see span branch above. */}
+                                <option value="founder">Founder</option>
+                                <option value="partner">Partner / Investor</option>
+                              </select>
+                              <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-70 group-hover:opacity-100" />
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className={`text-xs px-2 py-0.5 rounded-full ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>

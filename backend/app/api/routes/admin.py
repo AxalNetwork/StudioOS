@@ -91,6 +91,26 @@ def update_user_role(user_id: int, role: str, session: Session = Depends(get_ses
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
 
+    # Security policy: admin promotion/demotion is NOT allowed via this
+    # endpoint. Mirrors the worker `/admin/users/:id/role` policy. The only
+    # way to grant or revoke admin is via direct SQL against the database.
+    if str(new_role) == "admin" or new_role == UserRole.ADMIN:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "Admin role can only be granted via direct database SQL (security policy).",
+                "code": "admin_promotion_disabled",
+            },
+        )
+    if str(target.role) == "admin" or target.role == UserRole.ADMIN:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "Existing admin role can only be changed via direct database SQL (security policy).",
+                "code": "admin_demotion_disabled",
+            },
+        )
+
     old_role = target.role
     target.role = new_role
     session.add(target)
