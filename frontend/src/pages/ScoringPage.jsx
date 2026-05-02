@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Target, ChevronDown, ChevronUp, Play, FileText } from 'lucide-react';
+import { Target, ChevronDown, ChevronUp, Play, FileText, ShieldCheck, AlertTriangle, Lock } from 'lucide-react';
 
 function ModernSelect({ value, onChange, children, ...props }) {
   return (
@@ -46,6 +46,11 @@ export default function ScoringPage() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
+  // Epic 5: Practice mode (sandbox) is the default for founders. Sandbox runs
+  // are unlimited, never visible to LPs, and never lock the project's official
+  // 7-day cooldown. Toggle Off = Official run.
+  const [practiceMode, setPracticeMode] = useState(true);
+  const [cooldownInfo, setCooldownInfo] = useState(null); // { locked_until, snapshot_id }
 
   useEffect(() => {
     api.scoringQueue().then(setQueue).catch(() => {});
@@ -53,13 +58,23 @@ export default function ScoringPage() {
 
   const runScore = async () => {
     setLoading(true);
+    setCooldownInfo(null);
     try {
       const data = { ...form };
       if (selectedProject) data.project_id = selectedProject;
+      // Server-side anti-cheat is the source of truth — we just signal intent.
+      data.is_sandbox = practiceMode;
       const res = await api.scoreStartup(data);
       setResult(res);
     } catch (e) {
-      alert(e.message);
+      // The 7-day cooldown surfaces as a 429 with `code: official_cooldown`.
+      // Surface a friendlier UI hint instead of just an alert.
+      const msg = e?.message || 'Failed to score';
+      if (/locked|cooldown|429/i.test(msg)) {
+        setCooldownInfo({ message: msg });
+      } else {
+        alert(msg);
+      }
     }
     setLoading(false);
   };
@@ -86,9 +101,39 @@ export default function ScoringPage() {
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Target size={16} className="text-violet-600" />
-              <h2 className="font-semibold text-gray-900 text-sm">Score Input</h2>
+            <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Target size={16} className="text-violet-600" />
+                <h2 className="font-semibold text-gray-900 text-sm">Score Input</h2>
+              </div>
+              {/* Practice / Official toggle (Epic 5). Practice runs are unlimited
+                  and never visible to LPs/partners. */}
+              <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden text-xs">
+                <button
+                  type="button"
+                  onClick={() => setPracticeMode(true)}
+                  className={`px-3 py-1.5 font-medium transition-colors ${practiceMode ? 'bg-violet-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                >
+                  Practice mode
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPracticeMode(false)}
+                  className={`px-3 py-1.5 font-medium transition-colors ${!practiceMode ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                >
+                  Submit official
+                </button>
+              </div>
+            </div>
+
+            {/* Mode helper banner — explains LP-visibility consequences. */}
+            <div className={`mb-4 rounded-lg px-3 py-2 text-xs flex items-start gap-2 ${practiceMode ? 'bg-violet-50 text-violet-800 border border-violet-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'}`}>
+              {practiceMode ? <Target size={14} className="mt-0.5 flex-shrink-0" /> : <ShieldCheck size={14} className="mt-0.5 flex-shrink-0" />}
+              <span>
+                {practiceMode
+                  ? 'Practice mode: unlimited runs to learn the rubric. Never visible to LPs or partners.'
+                  : 'Official run: signed + locked for 7 days. Visible to partners after admin sign-off if anomalies are detected.'}
+              </span>
             </div>
 
             <div className="mb-4">
@@ -101,6 +146,32 @@ export default function ScoringPage() {
                 {queue.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </ModernSelect>
             </div>
+
+            {cooldownInfo && (
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2 text-xs flex items-start gap-2">
+                <Lock size={14} className="mt-0.5 flex-shrink-0" />
+                <span>
+                  <strong>Official scoring is on cooldown for this project.</strong> Switch to Practice mode to keep iterating;
+                  the official 7-day window resets automatically. <span className="opacity-80">{cooldownInfo.message}</span>
+                </span>
+              </div>
+            )}
+
+            {result?.requires_admin_review && (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 text-red-900 px-3 py-2 text-xs flex items-start gap-2">
+                <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+                <span>
+                  <strong>Anomaly detected — pending admin review.</strong> This score is held back from LPs/partners until an admin signs off.
+                </span>
+              </div>
+            )}
+
+            {result?.integrity_hash && !result?.requires_admin_review && !result?.is_sandbox && (
+              <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-900 px-3 py-2 text-xs flex items-start gap-2">
+                <ShieldCheck size={14} className="mt-0.5 flex-shrink-0" />
+                <span>Signed &amp; verified · hash <code className="font-mono">{String(result.integrity_hash).slice(0, 12)}…</code></span>
+              </div>
+            )}
 
             <Section title="A. Market (25 pts)">
               <Field label="TAM (USD)" value={form.tam} onChange={v => setField('tam', v)} />

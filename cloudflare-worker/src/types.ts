@@ -3,6 +3,9 @@ export interface Env {
   TOKENS: KVNamespace;
   RATE_LIMITS: KVNamespace;
   JWT_SECRET: string;
+  // Optional dedicated HMAC key for Epic 5 score signing. Falls back to JWT_SECRET
+  // when unset so operators don't have a second secret to rotate by default.
+  SCORING_HMAC_SECRET?: string;
   STUDIOOS_ENV?: string;
   // Audit #4: edge proxy → FastAPI origin (e.g. https://api.axal.vc).
   // Required by `index.ts` proxy handler. The worker returns 503 if missing.

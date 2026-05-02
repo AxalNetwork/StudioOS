@@ -338,9 +338,20 @@ studioops.get('/strategic-review/:projectId', async (c) => {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
-  const snapshots = await sql`SELECT * FROM score_snapshots WHERE project_id = ${projectId} ORDER BY created_at DESC LIMIT 1`;
-  const snap: any = snapshots[0] || null;
   await sql.end();
+
+  // Epic 5: strategic-review must use the verified-snapshot helper so
+  // tampered/flagged rows can't drive an AI verdict. The owning founder is
+  // allowed to see their own row (sandbox or official) via the helper's
+  // visibility ctx.
+  const { getVerifiedLatestSnapshot } = await import('../services/scoreIntegrity');
+  const verified = await getVerifiedLatestSnapshot(c.env, projectId, {
+    role: user.role || 'founder',
+    founderId: user.id,
+    ownerFounderId: p.founder_id,
+    userId: user.id,
+  });
+  const snap = verified ? verified.row : null;
 
   const metrics = {
     name: p.name, sector: p.sector, stage: p.stage, status: p.status,
@@ -355,9 +366,12 @@ studioops.get('/strategic-review/:projectId', async (c) => {
   await logAction(c.env, null, 'ai_call', user.id, { kind: 'strategic_review', project_id: projectId });
 
   let rec = 'ITERATE';
-  if (snap?.total_score >= 85) rec = 'SPIN-OUT';
-  else if (snap?.total_score >= 70) rec = 'CONTINUE';
-  else if (snap?.total_score && snap.total_score < 50) rec = 'KILL';
+  const score = snap?.total_score != null ? Number(snap.total_score) : null;
+  if (score != null) {
+    if (score >= 85) rec = 'SPIN-OUT';
+    else if (score >= 70) rec = 'CONTINUE';
+    else if (score < 50) rec = 'KILL';
+  }
 
   return c.json({
     project: { id: p.id, name: p.name, sector: p.sector, stage: p.stage, status: p.status },

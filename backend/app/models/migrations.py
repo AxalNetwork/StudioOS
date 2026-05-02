@@ -140,6 +140,50 @@ def ensure_user_access_level_column() -> None:
             logger.debug("ensure_user_access_level_column: ALTER skipped: %s", exc)
 
 
+def ensure_score_anti_cheat_columns() -> None:
+    """Epic 5 — add anti-cheat columns to `score_snapshots`. Idempotent.
+
+    Mirrors `cloudflare-worker/sql/score_anti_cheat.sql` so the dev FastAPI
+    backend can persist signed snapshots in lockstep with the production
+    Worker. Each ALTER uses `ADD COLUMN IF NOT EXISTS` so re-running on
+    boot is a no-op once applied.
+    """
+    cols = (
+        ("is_sandbox", "BOOLEAN DEFAULT FALSE NOT NULL"),
+        ("integrity_hash", "VARCHAR"),
+        ("integrity_version", "VARCHAR DEFAULT 'v1' NOT NULL"),
+        ("inputs_json", "TEXT"),
+        ("anomaly_flags", "TEXT"),
+        ("admin_review_status", "VARCHAR DEFAULT 'auto_approved' NOT NULL"),
+        ("admin_review_notes", "TEXT"),
+        ("admin_reviewed_by", "INTEGER"),
+        ("admin_reviewed_at", "TIMESTAMP"),
+        ("locked_until", "TIMESTAMP"),
+    )
+    indexes = (
+        ("ix_score_snapshots_is_sandbox", "is_sandbox"),
+        ("ix_score_snapshots_integrity_hash", "integrity_hash"),
+        ("ix_score_snapshots_admin_review_status", "admin_review_status"),
+        ("ix_score_snapshots_locked_until", "locked_until"),
+    )
+    with Session(engine) as session:
+        for col, ddl in cols:
+            try:
+                session.exec(text(
+                    f"ALTER TABLE score_snapshots ADD COLUMN IF NOT EXISTS {col} {ddl}"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_score_anti_cheat_columns: %s ALTER failed: %s", col, exc)
+        for name, expr in indexes:
+            try:
+                session.exec(text(
+                    f"CREATE INDEX IF NOT EXISTS {name} ON score_snapshots({expr})"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_score_anti_cheat_columns: %s INDEX failed: %s", name, exc)
+        session.commit()
+
+
 def ensure_document_file_columns() -> None:
     """Add file-storage columns to `documents`. Idempotent.
 

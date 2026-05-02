@@ -58,6 +58,7 @@ async def lifespan(app: FastAPI):
             ensure_growth_track_columns,
             ensure_document_file_columns,
             ensure_user_access_level_column,
+            ensure_score_anti_cheat_columns,
         )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
@@ -65,6 +66,10 @@ async def lifespan(app: FastAPI):
         logger.info("StudioOS migrations: document file columns ensured")
         ensure_user_access_level_column()
         logger.info("StudioOS migrations: user.access_level column ensured")
+        # Epic 5 — anti-cheat columns on score_snapshots (HMAC, sandbox flag,
+        # admin review state, 7-day cooldown).
+        ensure_score_anti_cheat_columns()
+        logger.info("StudioOS migrations: score anti-cheat columns ensured")
         consolidate_capital_tables()
         logger.info("StudioOS migrations: capital tables consolidated")
     except Exception as exc:  # noqa: BLE001

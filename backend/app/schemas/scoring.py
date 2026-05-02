@@ -5,6 +5,10 @@ from typing import Optional
 class ScoreRequest(BaseModel):
     project_id: Optional[int] = None
     startup_name: Optional[str] = None
+    # Epic 5: founder Practice mode. Server coerces this to False for any
+    # request originating from a partner or admin actor (sandbox is a
+    # founder-only escape hatch).
+    is_sandbox: bool = False
     tam: float = Field(0, description="Total Addressable Market in USD")
     market_urgency: float = Field(0, ge=0, le=10)
     market_trend: float = Field(0, ge=0, le=5)

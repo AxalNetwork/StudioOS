@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
+import json
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session, select
 from backend.app.database import get_session
 from backend.app.models.entities import Project, Founder, ScoreSnapshot, Deal, ActivityLog, User
 from backend.app.schemas.scoring import ProjectCreate, ProjectUpdate, FounderSubmitRequest
 from backend.app.services.scoring import run_full_score
+from backend.app.services.score_integrity import assert_no_reserved_fields
 from backend.app.api.routes.auth import get_current_user
 from backend.app.api.deps import require_admin, is_privileged, ensure_founder_access
 from backend.app.models.entities import UserRole
-from datetime import datetime
+from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -90,7 +92,26 @@ def create_project(data: ProjectCreate, session: Session = Depends(get_session),
 
 
 @router.post("/submit")
-def founder_submit_startup(data: FounderSubmitRequest, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+async def founder_submit_startup(
+    request: Request,
+    data: FounderSubmitRequest,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    # Epic 5: reject server-derived fields (score, tier, integrity_hash, ...)
+    # BEFORE any DB writes. We check the raw body — Pydantic would silently
+    # drop the extras and a malicious founder could otherwise have a project
+    # row created as a side effect of a "rejected" request.
+    try:
+        raw = await request.json()
+        if isinstance(raw, dict):
+            assert_no_reserved_fields(raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail={"error": str(e), "code": "reserved_field"})
+    except Exception:
+        # body wasn't JSON-parseable — Pydantic will surface a 422 below.
+        pass
+
     stmt = select(Founder).where(Founder.email == data.founder_email)
     founder = session.exec(stmt).first()
     if not founder:
@@ -142,6 +163,23 @@ def founder_submit_startup(data: FounderSubmitRequest, session: Session = Depend
 
     result = run_full_score(score_data)
 
+    # Epic 5 anti-cheat parity with the Worker `/submit` and `/scoring/score`
+    # paths: sign + flag the intake snapshot before it can drive a tier
+    # promotion. Anomaly detection MUST run BEFORE the snapshot is added
+    # to the session so the latest-snapshot lookup doesn't self-compare.
+    from backend.app.services.score_integrity import (
+        sign_score, detect_anomalies, INTEGRITY_VERSION,
+    )
+    intake_flags = detect_anomalies(
+        session,
+        project_id=project.id,
+        new_total=result["total_score"],
+        new_inputs=score_data,
+        is_sandbox=False,
+    )
+    intake_review = "flagged" if intake_flags else "auto_approved"
+    locked_until = datetime.utcnow() + timedelta(days=7)
+
     snapshot = ScoreSnapshot(
         project_id=project.id,
         total_score=result["total_score"],
@@ -170,10 +208,30 @@ def founder_submit_startup(data: FounderSubmitRequest, session: Session = Depend
         distribution_total=result["breakdown"]["distribution"]["total"],
         ai_adjustment=0,
         scored_by="auto",
+        is_sandbox=False,
+        integrity_version=INTEGRITY_VERSION,
+        inputs_json=json.dumps(score_data),
+        anomaly_flags=json.dumps(intake_flags) if intake_flags else None,
+        admin_review_status=intake_review,
+        locked_until=locked_until,
     )
     session.add(snapshot)
+    # Flush so created_at is populated by the DB; the canonical message
+    # MUST hash the row's persisted timestamp or verify_score will reject
+    # the snapshot on the very next read (round-trip identity must hold).
+    session.flush()
+    session.refresh(snapshot)
+    digest, _ts_iso = sign_score(project.id, result["total_score"], snapshot.created_at)
+    snapshot.integrity_hash = digest
+    session.add(snapshot)
 
-    if result["total_score"] >= 85:
+    # Flagged intake holds the project at "scoring" until admin signs off in
+    # MonitoringPage — same LP guarantee as the Worker path. Auto-approved
+    # runs follow the existing tier promotion rules.
+    if intake_review == "flagged":
+        project.status = "scoring"
+        deal_status = "applied"
+    elif result["total_score"] >= 85:
         project.status = "tier_1"
         project.stage = "build"
         deal_status = "active"
@@ -193,10 +251,25 @@ def founder_submit_startup(data: FounderSubmitRequest, session: Session = Depend
     log = ActivityLog(
         project_id=project.id,
         action="auto_scored",
-        details=f"Score: {result['total_score']}, Tier: {result['tier']}, Status: {project.status}",
+        details=(
+            f"Score: {result['total_score']}, Tier: {result['tier']}, "
+            f"Status: {project.status}, Review: {intake_review}"
+        ),
         actor="system",
     )
     session.add(log)
+
+    if intake_flags:
+        session.add(ActivityLog(
+            project_id=project.id,
+            action="score_anomaly",
+            details=json.dumps({
+                "snapshot_id": None,  # filled post-flush below
+                "flags": intake_flags,
+                "status": intake_review,
+            }),
+            actor="system",
+        ))
 
     session.commit()
     session.refresh(project)

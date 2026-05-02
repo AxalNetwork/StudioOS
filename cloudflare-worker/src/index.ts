@@ -208,6 +208,14 @@ export default {
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
         }
+        // Epic 5: nightly score-integrity audit at 03:30 UTC. Re-verifies the
+        // HMAC on every approved official snapshot; mismatches get flagged
+        // for admin review and disappear from LP/partner views immediately.
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 30) {
+          // Full-pagination audit: queueWorker pages through every non-sandbox
+          // approved snapshot using id-cursor (no LIMIT cap on coverage).
+          try { await Jobs.enqueue(env, 'score_hash_audit', { page_size: 500 }); } catch {}
+        }
       } finally {
         try {
           const cur = await env.RATE_LIMITS.get(LEASE_KEY);

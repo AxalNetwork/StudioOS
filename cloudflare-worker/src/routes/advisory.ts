@@ -89,7 +89,17 @@ advisory.post('/diligence', async (c) => {
   if (projects.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = projects[0];
 
-  const scores = await sql`SELECT * FROM score_snapshots WHERE project_id = ${project_id} ORDER BY created_at DESC`;
+  // Epic 5: route every score read through the verified-snapshot helper.
+  // Sandbox/flagged/tampered rows must never feed a partner-facing diligence
+  // verdict; the helper also writes the score_read audit entry.
+  const { getVerifiedLatestSnapshot } = await import('../services/scoreIntegrity');
+  const verified = await getVerifiedLatestSnapshot(c.env, project_id, {
+    role: user.role || 'partner',
+    founderId: user.id,
+    ownerFounderId: project.founder_id,
+    userId: user.id,
+  });
+
   const docs = await sql`SELECT * FROM documents WHERE project_id = ${project_id}`;
   let founder: any = null;
   if (project.founder_id) {
@@ -100,10 +110,21 @@ advisory.post('/diligence', async (c) => {
   const checks: any[] = [];
   let overallStatus = 'pass';
 
-  if (scores.length > 0) {
-    checks.push({ category: 'Scoring', item: 'Startup Score', status: scores[0].total_score >= 70 ? 'pass' : 'fail', detail: `Score: ${scores[0].total_score}/100 (${scores[0].tier})` });
+  if (verified) {
+    const row = verified.row;
+    checks.push({
+      category: 'Scoring',
+      item: 'Startup Score',
+      status: Number(row.total_score) >= 70 ? 'pass' : 'fail',
+      detail: `Score: ${row.total_score}/100 (${row.tier || 'untiered'})`,
+    });
   } else {
-    checks.push({ category: 'Scoring', item: 'Startup Score', status: 'missing', detail: 'No score on file.' });
+    checks.push({
+      category: 'Scoring',
+      item: 'Startup Score',
+      status: 'missing',
+      detail: 'No verified, approved official score on file.',
+    });
     overallStatus = 'incomplete';
   }
 

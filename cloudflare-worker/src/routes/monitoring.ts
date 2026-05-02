@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireAdmin } from '../auth';
+import type { ScoreSnapshotRow, AnomalyFlag } from '../services/scoreIntegrity';
 
 const monitoring = new Hono<{ Bindings: Env }>();
 
@@ -245,6 +246,141 @@ monitoring.get('/throughput', async (c) => {
     requests: Number(total[0]?.c ?? 0),
     spinouts_completed: Number(spinouts[0]?.c ?? 0),
   });
+});
+
+// ---------- /score-flags (Epic 5 — admin sign-off queue) ----------
+// Lists snapshots that anomaly detection flagged + any rows whose stored
+// hash does not match what the integrity service recomputes. Admin reviews
+// each one in MonitoringPage and either approves (visible to LPs) or
+// rejects (hidden permanently + project status reverted).
+monitoring.get('/score-flags', async (c) => {
+  await requireAdmin(c);
+  const sql = getSQL(c.env);
+  const status = c.req.query('status') || 'flagged';
+  const limit = clampLimit(c.req.query('limit'), 100);
+
+  const rows = await sql`
+    SELECT s.id, s.project_id, p.name AS project_name, p.status AS project_status,
+           s.total_score, s.tier, s.is_sandbox,
+           s.integrity_hash, s.integrity_version,
+           s.anomaly_flags, s.admin_review_status, s.admin_review_notes,
+           s.admin_reviewed_by, s.admin_reviewed_at,
+           s.inputs_json, s.created_at, s.locked_until
+    FROM score_snapshots s
+    LEFT JOIN projects p ON p.id = s.project_id
+    WHERE s.admin_review_status = ${status}
+      AND s.is_sandbox = 0
+    ORDER BY s.created_at DESC
+    LIMIT ${limit}
+  `;
+
+  // Re-verify each hash on the way out so the queue surfaces silent tampering
+  // (row whose `admin_review_status` is still `auto_approved` but whose hash
+  // no longer matches — i.e. somebody hand-edited the DB after the fact).
+  const { verifyScoreHash } = await import('../services/scoreIntegrity');
+  type ScoreFlagRow = ScoreSnapshotRow & {
+    project_name: string | null;
+    project_status: string | null;
+    inputs_json: string | null;
+    anomaly_flags: string | null;
+    admin_review_notes: string | null;
+    admin_reviewed_by: number | null;
+    admin_reviewed_at: string | null;
+    locked_until: string | null;
+  };
+  type EnrichedFlag = Omit<ScoreFlagRow, 'anomaly_flags'> & {
+    integrity_valid: boolean;
+    integrity_reason: string | null;
+    anomaly_flags: AnomalyFlag[];
+  };
+  const enriched: EnrichedFlag[] = [];
+  for (const raw of rows) {
+    const r = raw as ScoreFlagRow;
+    const v: { valid: boolean; reason?: string } = r.integrity_hash
+      ? await verifyScoreHash(c.env, r)
+      : { valid: false, reason: 'missing_hash' };
+    let flags: AnomalyFlag[] = [];
+    try {
+      const parsed = r.anomaly_flags ? JSON.parse(r.anomaly_flags) : [];
+      if (Array.isArray(parsed)) flags = parsed as AnomalyFlag[];
+    } catch { /* malformed json — surface as no flags but keep the row visible */ }
+    enriched.push({ ...r, integrity_valid: v.valid, integrity_reason: v.valid ? null : (v.reason ?? null), anomaly_flags: flags });
+  }
+  await sql.end();
+  return c.json({ items: enriched, count: enriched.length, status });
+});
+
+// POST /score-flags/:id/review — admin approves or rejects a flagged snapshot.
+// Approving makes it visible to LPs/partners; rejecting blocks it forever
+// and restores the project's previous tier so an LP never sees ghost numbers.
+monitoring.post('/score-flags/:id/review', async (c) => {
+  const admin = await requireAdmin(c);
+  const id = parseInt(c.req.param('id'), 10);
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
+  let body: any = {};
+  try { body = await c.req.json(); } catch { /* allow empty body for default approve */ }
+  const decision: string = (body.decision || '').toLowerCase();
+  if (decision !== 'approve' && decision !== 'reject') {
+    return c.json({ error: "decision must be 'approve' or 'reject'" }, 400);
+  }
+  const notes: string | null = (body.notes && String(body.notes).slice(0, 2000)) || null;
+
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT * FROM score_snapshots WHERE id = ${id}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Snapshot not found' }, 404); }
+  const snap = rows[0];
+
+  const newStatus = decision === 'approve' ? 'approved' : 'rejected';
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  await sql`
+    UPDATE score_snapshots
+       SET admin_review_status = ${newStatus},
+           admin_review_notes  = ${notes},
+           admin_reviewed_by   = ${admin.id},
+           admin_reviewed_at   = ${now}
+     WHERE id = ${id}
+  `;
+
+  // Re-derive project status from the approved score (or revert on reject so
+  // a flagged TIER_1 doesn't linger after admin says no).
+  if (decision === 'approve') {
+    const newProjectStatus = Number(snap.total_score) >= 85 ? 'tier_1'
+                           : Number(snap.total_score) >= 70 ? 'tier_2'
+                           : 'rejected';
+    await sql`UPDATE projects SET status = ${newProjectStatus}, updated_at = CURRENT_TIMESTAMP WHERE id = ${snap.project_id}`;
+  } else {
+    // Roll the project back to 'scoring' so it shows in the queue, not as TIER_x.
+    await sql`UPDATE projects SET status = 'scoring', updated_at = CURRENT_TIMESTAMP WHERE id = ${snap.project_id}`;
+  }
+
+  await sql`
+    INSERT INTO activity_logs (project_id, user_id, action, details, actor)
+    VALUES (${snap.project_id}, ${admin.id}, ${'score_review_' + decision},
+            ${JSON.stringify({ snapshot_id: id, notes, prior_status: snap.admin_review_status })},
+            'admin')
+  `;
+  await sql.end();
+  return c.json({ ok: true, snapshot_id: id, admin_review_status: newStatus });
+});
+
+// POST /score-flags/:id/waiver — admin grants a one-off cooldown override
+// for a project, so a founder can re-run the official score before the 7-day
+// lock expires. Used when a genuine intake correction needs immediate rescore.
+monitoring.post('/score-flags/:id/waiver', async (c) => {
+  const admin = await requireAdmin(c);
+  const id = parseInt(c.req.param('id'), 10);
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT project_id FROM score_snapshots WHERE id = ${id}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Snapshot not found' }, 404); }
+  await sql`UPDATE score_snapshots SET locked_until = NULL WHERE id = ${id}`;
+  await sql`
+    INSERT INTO activity_logs (project_id, user_id, action, details, actor)
+    VALUES (${rows[0].project_id}, ${admin.id}, 'score_cooldown_waived',
+            ${JSON.stringify({ snapshot_id: id })}, 'admin')
+  `;
+  await sql.end();
+  return c.json({ ok: true });
 });
 
 // ---------- /cleanup (manual; safe to call by admin or cron) ----------

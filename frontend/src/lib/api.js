@@ -59,11 +59,17 @@ export const api = {
   deleteProject: (id) => request(`/projects/${id}`, { method: 'DELETE' }),
   advanceWeek: (id) => request(`/projects/${id}/advance-week`, { method: 'POST' }),
 
+  // Epic 5: scoreStartup honours `is_sandbox` (founder practice mode). The
+  // server rejects any client-supplied `score`/`tier`/`score_breakdown`.
   scoreStartup: (data) => request('/scoring/score', { method: 'POST', body: JSON.stringify(data) }),
-  getScores: (projectId) => request(`/scoring/scores/${projectId}`),
+  getScores: (projectId, opts = {}) => request(`/scoring/scores/${projectId}${opts.includeSandbox ? '?include_sandbox=1' : ''}`),
   generateDealMemo: (projectId) => request(`/scoring/score/${projectId}/deal-memo`, { method: 'POST' }),
   getDealMemos: (projectId) => request(`/scoring/deal-memos/${projectId}`),
   scoringQueue: () => request('/scoring/queue'),
+  // Admin sign-off queue for flagged / tampered snapshots.
+  getScoreFlags: (status = 'flagged') => request(`/monitoring/score-flags?status=${encodeURIComponent(status)}`),
+  reviewScoreFlag: (id, decision, notes) => request(`/monitoring/score-flags/${id}/review`, { method: 'POST', body: JSON.stringify({ decision, notes }) }),
+  waiveScoreCooldown: (id) => request(`/monitoring/score-flags/${id}/waiver`, { method: 'POST' }),
 
   listTemplates: () => request('/legal/templates'),
   getTemplateContent: (key) => request(`/legal/templates/${key}`),

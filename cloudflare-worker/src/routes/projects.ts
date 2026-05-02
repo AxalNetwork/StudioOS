@@ -38,7 +38,7 @@ projects.get('/:id', async (c) => {
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = rows[0];
   // IDOR guard: a founder can only read their own project; admins/partners read all.
-  if (!canAccessFounderResource(user as any, project.founder_id)) {
+  if (!canAccessFounderResource(user, project.founder_id)) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
@@ -83,6 +83,20 @@ projects.post('', createProjectHandler);
 projects.post('/submit', async (c) => {
   await requireAuth(c);
   const data = await c.req.json();
+
+  // Epic 5: reject any client-supplied score / tier / breakdown BEFORE any
+  // DB writes. The /submit path is wide-open intake; a malicious founder
+  // could otherwise send a pre-built TIER_1 payload AND have a project row
+  // created as a side effect even when the request is rejected.
+  const { assertNoReservedFields, signScore, detectAnomalies, INTEGRITY_VERSION } =
+    await import('../services/scoreIntegrity');
+  try {
+    assertNoReservedFields(data);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Reserved field rejected';
+    return c.json({ error: message, code: 'reserved_field' }, 400);
+  }
+
   const sql = getSQL(c.env);
 
   const existingFounders = await sql`SELECT id FROM founders WHERE email = ${data.founder_email}`;
@@ -99,26 +113,85 @@ projects.post('/submit', async (c) => {
   const result = runFullScore(data);
   const b = result.breakdown;
 
-  const [snapshot] = await sql`INSERT INTO score_snapshots (project_id, total_score, tier, market_size, market_urgency, market_trend, market_total, team_expertise, team_execution, team_network, team_total, product_mvp_time, product_complexity, product_dependency, product_total, capital_cost_mvp, capital_time_revenue, capital_burn_traction, capital_total, fit_alignment, fit_synergy, fit_total, distribution_channels, distribution_virality, distribution_total, ai_adjustment, scored_by) VALUES (${project.id}, ${result.total_score}, ${result.tier}, ${b.market.size}, ${b.market.urgency}, ${b.market.trend}, ${b.market.total}, ${b.team.expertise}, ${b.team.execution}, ${b.team.network}, ${b.team.total}, ${b.product.mvp_time}, ${b.product.complexity}, ${b.product.dependency}, ${b.product.total}, ${b.capital.cost_mvp}, ${b.capital.time_revenue}, ${b.capital.burn_traction}, ${b.capital.total}, ${b.fit.alignment}, ${b.fit.synergy}, ${b.fit.total}, ${b.distribution.channels}, ${b.distribution.virality}, ${b.distribution.total}, 0, 'auto') RETURNING *`;
+  // Snapshot the scoring inputs so the nightly audit + admin queue can
+  // reproduce the math, and so anomaly detection can compare to history.
+  // Keys MUST match `REQUIRED_OFFICIAL_INPUTS` in scoreIntegrity.ts so that
+  // input_jump anomaly detection compares like-for-like fields across the
+  // /submit and /scoring/score paths.
+  const inputsSnapshot: Record<string, unknown> = {};
+  for (const k of ['tam','sam','market_urgency','market_trend','team_expertise','team_execution','team_network','mvp_time_days','product_complexity','product_dependencies','cost_to_mvp','time_to_revenue_months','burn_risk','fit_alignment','fit_synergy','distribution_channels','distribution_virality']) {
+    if (data[k] !== undefined) inputsSnapshot[k] = data[k];
+  }
+  const qualText = [data.problem_statement, data.solution, data.why_now, data.use_of_funds, data.growth_signals]
+    .filter(v => typeof v === 'string' && v.trim()).map(v => (v as string).trim().toLowerCase()).join('\n---\n') || null;
+  const lockedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+
+  // Anomaly detection MUST run BEFORE the INSERT (same reason as
+  // /scoring/score: detectAnomalies' "previous snapshot" lookup would
+  // otherwise self-compare against the row we just wrote, swallowing
+  // duplicate-text and input-jump signals on intake).
+  const intakeFlags = await detectAnomalies(c.env, {
+    projectId: project.id, totalScore: result.total_score, isSandbox: false,
+    inputs: inputsSnapshot as Record<string, number>, qualitativeText: qualText || '',
+  });
+  const intakeReview: 'auto_approved' | 'flagged' =
+    intakeFlags.length > 0 ? 'flagged' : 'auto_approved';
+  const intakeFlagsJson = intakeFlags.length > 0 ? JSON.stringify(intakeFlags) : null;
+
+  const [snapshot] = await sql`
+    INSERT INTO score_snapshots (
+      project_id, total_score, tier,
+      market_size, market_urgency, market_trend, market_total,
+      team_expertise, team_execution, team_network, team_total,
+      product_mvp_time, product_complexity, product_dependency, product_total,
+      capital_cost_mvp, capital_time_revenue, capital_burn_traction, capital_total,
+      fit_alignment, fit_synergy, fit_total,
+      distribution_channels, distribution_virality, distribution_total,
+      ai_adjustment, scored_by,
+      is_sandbox, integrity_version, inputs_json, qualitative_text, locked_until,
+      anomaly_flags, admin_review_status
+    ) VALUES (
+      ${project.id}, ${result.total_score}, ${result.tier},
+      ${b.market.size}, ${b.market.urgency}, ${b.market.trend}, ${b.market.total},
+      ${b.team.expertise}, ${b.team.execution}, ${b.team.network}, ${b.team.total},
+      ${b.product.mvp_time}, ${b.product.complexity}, ${b.product.dependency}, ${b.product.total},
+      ${b.capital.cost_mvp}, ${b.capital.time_revenue}, ${b.capital.burn_traction}, ${b.capital.total},
+      ${b.fit.alignment}, ${b.fit.synergy}, ${b.fit.total},
+      ${b.distribution.channels}, ${b.distribution.virality}, ${b.distribution.total},
+      0, 'auto',
+      0, ${INTEGRITY_VERSION}, ${JSON.stringify(inputsSnapshot)}, ${qualText}, ${lockedUntil},
+      ${intakeFlagsJson}, ${intakeReview}
+    )
+    RETURNING *
+  `;
+  const intakeHash = await signScore(c.env, project.id, result.total_score, snapshot.created_at, INTEGRITY_VERSION);
+  await sql`UPDATE score_snapshots SET integrity_hash = ${intakeHash} WHERE id = ${snapshot.id}`;
 
   let newStatus = 'rejected', dealStatus = 'rejected', newStage = project.stage;
-  if (result.total_score >= 85) { newStatus = 'tier_1'; newStage = 'build'; dealStatus = 'active'; }
+  if (intakeReview === 'flagged') {
+    // Flagged intake holds the project in review until admin signs off, so
+    // an LP or partner viewing the pipeline never sees an unverified TIER_1.
+    newStatus = 'scoring';
+    dealStatus = 'applied';
+  } else if (result.total_score >= 85) { newStatus = 'tier_1'; newStage = 'build'; dealStatus = 'active'; }
   else if (result.total_score >= 70) { newStatus = 'tier_2'; dealStatus = 'scored'; }
 
   await sql`UPDATE projects SET status = ${newStatus}, stage = ${newStage}, updated_at = CURRENT_TIMESTAMP WHERE id = ${project.id}`;
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'project', id: project.id }); } catch {}
   await sql`INSERT INTO deals (project_id, status) VALUES (${project.id}, ${dealStatus})`;
-  await sql`INSERT INTO activity_logs (project_id, action, details, actor) VALUES (${project.id}, 'auto_scored', ${`Score: ${result.total_score}, Tier: ${result.tier}, Status: ${newStatus}`}, 'system')`;
+  await sql`INSERT INTO activity_logs (project_id, action, details, actor) VALUES (${project.id}, 'auto_scored', ${`Score: ${result.total_score}, Tier: ${result.tier}, Status: ${newStatus}, Review: ${intakeReview}`}, 'system')`;
   await sql.end();
-  if (newStatus === 'tier_1' || newStatus === 'tier_2') {
+  // Only auto-create StudioOps for clean, approved tier_1/tier_2. A flagged
+  // intake holds at 'scoring' until admin signs off — Epic 5 LP guarantee.
+  if (intakeReview === 'auto_approved' && (newStatus === 'tier_1' || newStatus === 'tier_2')) {
     const { autoCreateStudioOpsForProject } = await import('./studioops');
     await autoCreateStudioOpsForProject(c.env, project.id, newStatus, founderId || 1);
   }
 
   return c.json({
     project: { ...project, status: newStatus, stage: newStage },
-    score: result,
-    auto_decision: { status: newStatus, stage: newStage, tier: result.tier, tier_label: result.tier_label },
+    score: { ...result, integrity_hash: intakeHash, integrity_version: INTEGRITY_VERSION, requires_admin_review: intakeReview === 'flagged', anomaly_flags: intakeFlags },
+    auto_decision: { status: newStatus, stage: newStage, tier: result.tier, tier_label: result.tier_label, requires_admin_review: intakeReview === 'flagged' },
   });
 });
 

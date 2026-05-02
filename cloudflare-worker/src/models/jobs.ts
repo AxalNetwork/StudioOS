@@ -20,7 +20,10 @@ export type JobType =
   | 'capital_call_notice'
   | 'returns_distribution'
   | 'embed_entity'
-  | 'embed_delete';
+  | 'embed_delete'
+  // Epic 5: nightly re-verification of every non-sandbox score snapshot's
+  // HMAC. Mismatches surface in MonitoringPage and `error_logs`.
+  | 'score_hash_audit';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

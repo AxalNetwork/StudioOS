@@ -52,6 +52,22 @@ npx wrangler d1 execute studioos-db --file=sql/consolidate_capital_rebuild.sql -
 # Phase 3: data backfill (always run; fully idempotent via NOT EXISTS guards).
 npx wrangler d1 execute studioos-db --file=sql/consolidate_capital_backfill.sql --remote
 
+echo "==> Applying Epic 5 anti-cheat columns on score_snapshots (one-shot ALTERs)…"
+# ALTERs error with 'duplicate column' on re-run — the marker insert at the
+# bottom of the file is what makes the run as a whole idempotent.
+SCORE_AC_APPLIED=$(npx wrangler d1 execute studioos-db --remote \
+  --command="SELECT 1 FROM _migrations WHERE name='score_anti_cheat_v1' LIMIT 1;" \
+  --json 2>/dev/null | grep -c '"1": 1' || true)
+if [ "${SCORE_AC_APPLIED}" = "0" ]; then
+  npx wrangler d1 execute studioos-db --file=sql/score_anti_cheat.sql --remote
+else
+  echo "    score_anti_cheat columns already applied — skipping ALTERs."
+  # Re-assert indexes idempotently in case an older deploy applied the marker
+  # before this index block landed.
+  npx wrangler d1 execute studioos-db --remote \
+    --command="CREATE INDEX IF NOT EXISTS idx_scores_sandbox ON score_snapshots(project_id, is_sandbox, created_at); CREATE INDEX IF NOT EXISTS idx_scores_review ON score_snapshots(admin_review_status); CREATE INDEX IF NOT EXISTS idx_scores_locked_until ON score_snapshots(project_id, locked_until);" || true
+fi
+
 echo "==> Deploying worker to edge…"
 npx wrangler deploy
 

@@ -135,29 +135,42 @@ pipeline.get('/active', async (c) => {
   const sql = getSQL(c.env);
   const isAdmin = user.role === 'admin';
   const isFounder = user.role === 'founder';
-  // NOTE: projects table has no `score` column — score lives in score_snapshots.
-  // We pull the latest snapshot's total_score per project via a correlated subquery.
-  // Founder scoping joins through users.founder_id (founders has no user_id column).
-  const rows = isAdmin
-    ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage,
-                  (SELECT total_score FROM score_snapshots WHERE project_id = p.id ORDER BY id DESC LIMIT 1) AS score,
+  // Score column was removed from projects — it lives in score_snapshots and
+  // every LP/partner read goes through getVerifiedLatestSnapshot below so the
+  // hash is recomputed and the read is audited. Sandbox rows are never
+  // surfaced here.
+  const baseRows = isAdmin
+    ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
                   p.status as project_status, p.created_at
                 FROM projects p WHERE p.status NOT IN ('rejected', 'archived')
                 ORDER BY p.created_at DESC LIMIT 100`
     : isFounder
-      ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage,
-                    (SELECT total_score FROM score_snapshots WHERE project_id = p.id ORDER BY id DESC LIMIT 1) AS score,
+      ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
                     p.status as project_status, p.created_at
                   FROM projects p
                   WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
                   ORDER BY p.created_at DESC LIMIT 100`
-      : await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage,
-                    (SELECT total_score FROM score_snapshots WHERE project_id = p.id ORDER BY id DESC LIMIT 1) AS score,
+      : await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
                     p.status as project_status, p.created_at
                   FROM projects p WHERE p.status NOT IN ('rejected', 'archived')
                   ORDER BY p.created_at DESC LIMIT 100`;
 
-  const ids = (rows as any[]).map(r => r.id);
+  // Per-project verified read: HMAC re-checked, audit row written. A row
+  // with no LP-visible snapshot returns score=null (UI shows "—").
+  const { getVerifiedLatestSnapshot } = await import('../services/scoreIntegrity');
+  const rows = await Promise.all(
+    (baseRows as Array<Record<string, unknown> & { id: number; founder_id: number | null }>).map(async (p) => {
+      const verified = await getVerifiedLatestSnapshot(c.env, p.id, {
+        role: user.role,
+        founderId: user.founder_id ?? null,
+        ownerFounderId: p.founder_id ?? null,
+        userId: user.id ?? null,
+      });
+      return { ...p, score: verified?.row.total_score ?? null };
+    }),
+  );
+
+  const ids = rows.map(r => r.id);
   if (!ids.length) { await sql.end(); return c.json([]); }
   const placeholders = ids.map(() => '?').join(',');
 
@@ -253,7 +266,7 @@ pipeline.get('/projects/:id/detail', async (c) => {
   const [project] = await sql`SELECT * FROM projects WHERE id = ${dealId}`;
   if (!project) { await sql.end(); return c.json({ error: 'Not found' }, 404); }
   // IDOR guard: founders may only see their own pipeline.
-  if (!canAccessFounderResource(user as any, project.founder_id)) {
+  if (!canAccessFounderResource(user, project.founder_id)) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }

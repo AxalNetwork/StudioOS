@@ -232,18 +232,29 @@ capital.post('/capitalCall', async (c) => {
 });
 
 capital.get('/portfolio', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const sql = getSQL(c.env);
   const projects = await sql`SELECT * FROM projects WHERE status IN ('spinout', 'active', 'tier_1', 'tier_2')`;
-  const portfolio = [];
-  for (const p of projects) {
-    const scores = await sql`SELECT total_score, tier FROM score_snapshots WHERE project_id = ${p.id} ORDER BY created_at DESC LIMIT 1`;
-    portfolio.push({
-      id: p.id, name: p.name, sector: p.sector, status: p.status, playbook_week: p.playbook_week,
-      score: scores[0]?.total_score || null, tier: scores[0]?.tier || null,
-      revenue: p.revenue, users: p.users_count,
-    });
-  }
+  // LP-facing portfolio: every score goes through the verified-read helper so
+  // the HMAC is re-checked and the read is audited. Tampered or flagged rows
+  // surface as score=null until admin signs off.
+  const { getVerifiedLatestSnapshot } = await import('../services/scoreIntegrity');
+  const portfolio = await Promise.all(
+    projects.map(async (p: any) => {
+      const verified = await getVerifiedLatestSnapshot(c.env, p.id, {
+        role: user.role,
+        founderId: user.founder_id ?? null,
+        ownerFounderId: p.founder_id ?? null,
+        userId: user.id ?? null,
+      });
+      return {
+        id: p.id, name: p.name, sector: p.sector, status: p.status, playbook_week: p.playbook_week,
+        score: verified?.row.total_score ?? null,
+        tier: verified?.row.tier ?? null,
+        revenue: p.revenue, users: p.users_count,
+      };
+    }),
+  );
   const committed = await sql`SELECT COALESCE(SUM(commitment_amount), 0) as total FROM limited_partners`;
   const called = await sql`SELECT COALESCE(SUM(invested_amount), 0) as total FROM limited_partners`;
   await sql.end();

@@ -235,6 +235,29 @@ class ScoreSnapshot(SQLModel, table=True):
     ai_notes: Optional[str] = None
     scored_by: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    # --- Epic 5: anti-cheat columns (parity with Cloudflare D1 schema) ---
+    # `is_sandbox=True` means a founder Practice run: never visible to LPs/
+    # partners, never counted toward the 7-day official cooldown.
+    is_sandbox: bool = Field(default=False, index=True)
+    # HMAC-SHA256 signature over the canonical message
+    # `pid=N|score=NN.NN|ver=v1|ts=...`. Validated on every read.
+    integrity_hash: Optional[str] = Field(default=None, index=True)
+    integrity_version: str = Field(default="v1")
+    # Raw founder/partner inputs at scoring time. Used for anomaly diffing
+    # and to re-derive the canonical hash in the nightly audit job. Stored
+    # as a JSON string for SQLite/Postgres portability.
+    inputs_json: Optional[str] = None
+    # JSON list of {type, severity, detail} produced by detectAnomalies().
+    anomaly_flags: Optional[str] = None
+    # 'auto_approved' (no anomalies, no tampering), 'flagged' (held back from
+    # LPs pending admin review), 'approved', 'rejected'.
+    admin_review_status: str = Field(default="auto_approved", index=True)
+    admin_review_notes: Optional[str] = None
+    admin_reviewed_by: Optional[int] = None
+    admin_reviewed_at: Optional[datetime] = None
+    # Until this UTC timestamp, no new official run for this project is
+    # accepted (founder must use sandbox or wait). NULL = no lock.
+    locked_until: Optional[datetime] = Field(default=None, index=True)
 
 
 class Document(SQLModel, table=True):

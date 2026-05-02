@@ -121,10 +121,26 @@ CREATE TABLE IF NOT EXISTS score_snapshots (
     ai_adjustment REAL DEFAULT 0,
     ai_notes TEXT,
     scored_by TEXT,
+    -- Epic 5 — anti-cheat columns. Fresh DBs get them here; existing DBs get
+    -- them via sql/score_anti_cheat.sql (gated on _migrations marker).
+    is_sandbox INTEGER NOT NULL DEFAULT 0,
+    integrity_hash TEXT,
+    integrity_version TEXT NOT NULL DEFAULT 'v1',
+    inputs_json TEXT,
+    qualitative_text TEXT,
+    anomaly_flags TEXT,
+    admin_review_status TEXT NOT NULL DEFAULT 'auto_approved',
+    admin_review_notes TEXT,
+    admin_reviewed_by INTEGER REFERENCES users(id),
+    admin_reviewed_at TEXT,
+    locked_until TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_scores_project ON score_snapshots(project_id);
+CREATE INDEX IF NOT EXISTS idx_scores_project      ON score_snapshots(project_id);
+CREATE INDEX IF NOT EXISTS idx_scores_sandbox      ON score_snapshots(project_id, is_sandbox, created_at);
+CREATE INDEX IF NOT EXISTS idx_scores_review       ON score_snapshots(admin_review_status);
+CREATE INDEX IF NOT EXISTS idx_scores_locked_until ON score_snapshots(project_id, locked_until);
 
 CREATE TABLE IF NOT EXISTS documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

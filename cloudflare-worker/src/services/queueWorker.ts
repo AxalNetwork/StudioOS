@@ -284,6 +284,73 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       await deleteEntity(env, type, id);
       return;
     }
+    case 'score_hash_audit': {
+      // Nightly: re-verify every non-sandbox approved snapshot's HMAC. We page
+      // through the entire dataset (id-cursor) so coverage doesn't degrade as
+      // the table grows. Mismatches are logged to error_logs + system_metrics
+      // and the row is downgraded to 'flagged' so it disappears from LP/partner
+      // views immediately. `payload.page_size` (default 500) caps each batch.
+      const { verifyScoreHash } = await import('./scoreIntegrity');
+      const pageSize = Math.max(50, Math.min(2000, Number(payload.page_size) || 500));
+      let cursor = 0;
+      let checked = 0, mismatched = 0, missing = 0;
+      // Loop until a page returns fewer rows than pageSize.
+      // Hard cap iterations as a safety net against runaway loops.
+      for (let iter = 0; iter < 1000; iter++) {
+        const rows = await env.DB.prepare(
+          `SELECT id, project_id, total_score, integrity_hash, integrity_version,
+                  created_at, admin_review_status
+             FROM score_snapshots
+            WHERE is_sandbox = 0
+              AND admin_review_status IN ('auto_approved','approved')
+              AND id > ?
+            ORDER BY id ASC LIMIT ?`,
+        ).bind(cursor, pageSize).all<any>();
+        const batch = rows.results || [];
+        if (batch.length === 0) break;
+        for (const row of batch) {
+          checked++;
+          cursor = Math.max(cursor, Number(row.id));
+          if (!row.integrity_hash) {
+            missing++;
+            await env.DB.prepare(
+              `UPDATE score_snapshots SET admin_review_status='flagged',
+                  anomaly_flags = COALESCE(anomaly_flags, '[]')
+                WHERE id = ?`,
+            ).bind(row.id).run().catch(() => {});
+            continue;
+          }
+          const v = await verifyScoreHash(env, row);
+          if (!v.valid) {
+            mismatched++;
+            await env.DB.prepare(
+              `UPDATE score_snapshots
+                  SET admin_review_status='flagged',
+                      anomaly_flags = json_insert(COALESCE(anomaly_flags,'[]'), '$[#]',
+                        json_object('type','hash_mismatch','severity','high','detail',?))
+                WHERE id = ?`,
+            ).bind(v.reason || 'mismatch', row.id).run().catch(async () => {
+              // json_insert may not exist on older D1; fall back to plain status flip.
+              await env.DB.prepare(
+                `UPDATE score_snapshots SET admin_review_status='flagged' WHERE id = ?`,
+              ).bind(row.id).run().catch(() => {});
+            });
+            await env.DB.prepare(
+              `INSERT INTO error_logs (level, source, message, details)
+               VALUES ('ERROR','score_hash_audit', ?, ?)`,
+            ).bind(
+              `Hash mismatch on score_snapshots.id=${row.id}`,
+              JSON.stringify({ snapshot_id: row.id, project_id: row.project_id, reason: v.reason }),
+            ).run().catch(() => {});
+          }
+        }
+        if (batch.length < pageSize) break;
+      }
+      await env.DB.prepare(
+        `INSERT INTO system_metrics (metric_name, value, labels) VALUES ('score_hash_audit', ?, ?)`,
+      ).bind(checked, JSON.stringify({ checked, mismatched, missing })).run().catch(() => {});
+      return;
+    }
     default:
       throw new Error(`unknown job type ${job.job_type}`);
   }

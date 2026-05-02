@@ -174,6 +174,7 @@ export default function MonitoringPage() {
       <div className="border-b border-gray-200 flex gap-1 overflow-x-auto [&>button]:whitespace-nowrap">
         {[
           { id: 'overview', label: 'Overview' },
+          { id: 'integrity', label: 'Score Integrity' },
           { id: 'infra', label: 'Infrastructure' },
         ].map(t => (
           <button
@@ -190,7 +191,8 @@ export default function MonitoringPage() {
         ))}
       </div>
 
-      {tab === 'infra' ? <InfrastructureTab /> : (
+      {tab === 'infra' ? <InfrastructureTab /> :
+       tab === 'integrity' ? <ScoreIntegrityTab /> : (
       <>
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -327,6 +329,150 @@ export default function MonitoringPage() {
         )}
       </div>
       </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Score Integrity tab (Epic 5)
+// ---------------------------------------------------------------------------
+// Lists snapshots that anomaly detection flagged AND any rows whose stored
+// HMAC no longer matches what the integrity service recomputes (silent
+// tampering). Admin can approve (release to LPs/partners), reject (revert
+// project status), or grant a one-off cooldown waiver.
+function ScoreIntegrityTab() {
+  const [items, setItems] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('flagged');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const load = async () => {
+    setBusy(true); setErr('');
+    try {
+      const r = await api.getScoreFlags(statusFilter);
+      setItems(r.items || []);
+    } catch (e) {
+      setErr(e?.message || 'Failed to load flags');
+    } finally { setBusy(false); }
+  };
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [statusFilter]);
+
+  const review = async (id, decision) => {
+    const notes = decision === 'reject' ? prompt('Reason (visible in audit log):') : '';
+    if (decision === 'reject' && notes === null) return;
+    try {
+      await api.reviewScoreFlag(id, decision, notes || '');
+      await load();
+    } catch (e) { alert(e?.message || 'Review failed'); }
+  };
+
+  const waive = async (id) => {
+    if (!confirm('Grant a one-off cooldown waiver so the founder can re-run the official score immediately?')) return;
+    try { await api.waiveScoreCooldown(id); await load(); }
+    catch (e) { alert(e?.message || 'Waiver failed'); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <ShieldAlert size={18} className="text-amber-600" />
+          <h2 className="text-base font-semibold text-gray-900">Score Integrity Queue</h2>
+          <span className="text-xs text-gray-500">{items.length} item(s)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-900">
+            <option value="flagged">Flagged (pending review)</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="auto_approved">Auto-approved</option>
+          </select>
+          <button onClick={load} disabled={busy}
+                  className="px-3 py-1.5 text-sm bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg flex items-center gap-1.5">
+            <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Refresh
+          </button>
+        </div>
+      </div>
+
+      {err && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2">{err}</div>
+      )}
+
+      {items.length === 0 && !busy ? (
+        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-sm text-gray-500">
+          No snapshots in this state. Tampering &amp; anomaly detection is healthy.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {items.map(it => (
+            <div key={it.id} className="bg-white border border-gray-200 rounded-xl p-4">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    {it.project_name || `Project #${it.project_id}`} · snapshot #{it.id}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    Score <strong className="text-gray-800">{it.total_score}</strong> · {it.tier} ·
+                    {' '}created {new Date(it.created_at + (it.created_at?.endsWith('Z') ? '' : 'Z')).toLocaleString()}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {it.integrity_valid === false && (
+                    <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-medium">
+                      Hash mismatch ({it.integrity_reason || 'tampered'})
+                    </span>
+                  )}
+                  {it.integrity_valid === true && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">Hash valid</span>
+                  )}
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                    it.admin_review_status === 'flagged' ? 'bg-amber-100 text-amber-800' :
+                    it.admin_review_status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
+                    it.admin_review_status === 'rejected' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-700'
+                  }`}>{it.admin_review_status}</span>
+                </div>
+              </div>
+
+              {Array.isArray(it.anomaly_flags) && it.anomaly_flags.length > 0 && (
+                <ul className="mt-3 space-y-1 text-xs text-gray-700">
+                  {it.anomaly_flags.map((f, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <AlertTriangle size={12} className={`mt-0.5 ${f.severity === 'high' ? 'text-red-600' : f.severity === 'medium' ? 'text-amber-600' : 'text-gray-500'}`} />
+                      <span><strong>{f.type}</strong> ({f.severity || 'low'}): {f.detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {it.integrity_hash && (
+                <div className="mt-2 text-[11px] font-mono text-gray-500 break-all">
+                  hash: {it.integrity_hash}
+                </div>
+              )}
+
+              {it.admin_review_status === 'flagged' && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button onClick={() => review(it.id, 'approve')}
+                          className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium">
+                    Approve · release to LPs
+                  </button>
+                  <button onClick={() => review(it.id, 'reject')}
+                          className="px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium">
+                    Reject · revert tier
+                  </button>
+                  <button onClick={() => waive(it.id)}
+                          className="px-3 py-1.5 text-xs bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium">
+                    Waive 7-day cooldown
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

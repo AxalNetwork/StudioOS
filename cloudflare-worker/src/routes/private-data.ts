@@ -45,9 +45,24 @@ privateData.get('/portfolio/metrics', async (c) => {
   const sql = getSQL(c.env);
 
   if (user.role === 'founder') {
-    const projects = user.founder_id
-      ? await sql`SELECT p.*, (SELECT total_score FROM score_snapshots WHERE project_id = p.id ORDER BY created_at DESC LIMIT 1) as total_score, (SELECT tier FROM score_snapshots WHERE project_id = p.id ORDER BY created_at DESC LIMIT 1) as tier FROM projects p WHERE p.founder_id = ${user.founder_id}`
+    // Founders see only OFFICIAL, APPROVED, hash-verified snapshots — sandbox
+    // runs are practice and a flagged run reads as "no score yet" until admin
+    // signs off. Goes through getVerifiedLatestSnapshot so reads are audited.
+    const baseProjects = user.founder_id
+      ? await sql`SELECT * FROM projects WHERE founder_id = ${user.founder_id}`
       : [];
+    const { getVerifiedLatestSnapshot } = await import('../services/scoreIntegrity');
+    const projects = await Promise.all(
+      baseProjects.map(async (p: any) => {
+        const verified = await getVerifiedLatestSnapshot(c.env, p.id, {
+          role: user.role,
+          founderId: user.founder_id ?? null,
+          ownerFounderId: p.founder_id ?? null,
+          userId: user.id ?? null,
+        });
+        return { ...p, total_score: verified?.row.total_score ?? null, tier: verified?.row.tier ?? null };
+      }),
+    );
     await sql.end();
     return c.json({ role: 'founder', projects, total_projects: projects.length });
   }
