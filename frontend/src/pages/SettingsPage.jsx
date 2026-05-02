@@ -340,7 +340,7 @@ function EmailSection({ data, flash, reload }) {
   };
 
   return (
-    <Card title="Email address" description="The new address must confirm within 24 hours. Once confirmed, the old address can still revoke the change for another 48 hours.">
+    <Card title="Email address" description="The new address must confirm within 24 hours. The old address can revoke the change within 24 hours of the request.">
       <div className="space-y-3">
         <Field label="Current email">
           <input value={data.email} disabled className={`${inputCls} bg-gray-50 text-gray-500`} />

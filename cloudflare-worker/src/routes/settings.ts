@@ -347,9 +347,10 @@ settings.post('/email-change/request', async (c) => {
   const revokeHash = await hashToken(revokeRaw);
   const now = Date.now();
   const confirmExpires = new Date(now + 24 * 3600 * 1000).toISOString();
-  // Keep revoke window open for 24h after confirmation could land — i.e.
-  // 48h from request — so the ousted owner has a real chance to revoke.
-  const revokeExpires = new Date(now + 48 * 3600 * 1000).toISOString();
+  // Per-epic spec: revocation window is 24h from request. Old-email owner
+  // gets the same window as the new-email confirm; if confirmation lands
+  // late the change is final.
+  const revokeExpires = new Date(now + 24 * 3600 * 1000).toISOString();
 
   await sql`INSERT INTO email_change_requests
             (user_id, old_email, new_email, confirm_token_hash, revoke_token_hash, confirm_expires_at, revoke_expires_at)

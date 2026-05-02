@@ -19,7 +19,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlmodel import Session, text
 
@@ -220,7 +221,11 @@ def _is_email(value: str) -> bool:
 
 @router.get("")
 @router.get("/")
-def get_settings(user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+def get_settings(
+    request: Request,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
     _ensure_schema(session)
     extras = _user_extras(session, user.id)
     pending_row = session.exec(
@@ -275,27 +280,29 @@ def get_settings(user: User = Depends(get_current_user), session: Session = Depe
         ),
         "pending_email_change": pending,
         "totp_recovery_codes_remaining": len(recovery_codes) if isinstance(recovery_codes, list) else 0,
-        "current_jti": _current_jti_from_request(),
+        "current_jti": _current_jti_from_request(request),
     }
 
 
-def _current_jti_from_request() -> Optional[str]:
-    # Light helper — pulls the current request's jti from the JWT in the
-    # Authorization header so /settings can highlight which session is "this
-    # device". Done outside FastAPI's Depends to avoid threading another
-    # parameter through. Returns None silently on any failure.
+def _current_jti_from_request(request: Request) -> Optional[str]:
+    """Return the jti claim of the bearer token on this request, or None.
+
+    Decoded without verification — the token has already been validated
+    upstream by ``get_current_user``. Used so the Settings → Active sessions
+    list can highlight "this device".
+    """
     try:
-        from starlette.requests import Request as _Req  # noqa
-        from contextvars import ContextVar  # noqa
+        auth = request.headers.get("authorization") or ""
+        if not auth.lower().startswith("bearer "):
+            return None
+        token = auth.split(" ", 1)[1].strip()
+        if not token:
+            return None
+        payload = jwt.decode(token, options={"verify_signature": False})
+        jti = payload.get("jti")
+        return jti if isinstance(jti, str) and jti else None
     except Exception:
         return None
-    # Decode without verification — the token already passed get_current_user.
-    import jwt as _jwt
-    from fastapi import Request as _FRequest
-    # We don't have direct request access here without injection; the worker
-    # mirror gets jti from the header. For FastAPI we accept None and let the
-    # frontend cope (it falls back to "current device" heuristic).
-    return None
 
 
 # --- PATCH /api/settings ----------------------------------------------------
@@ -499,7 +506,7 @@ def email_change_request(
     revoke_hash = _hash_token(revoke_raw)
     now = datetime.utcnow()
     confirm_expires = (now + timedelta(hours=24)).isoformat()
-    revoke_expires = (now + timedelta(hours=48)).isoformat()
+    revoke_expires = (now + timedelta(hours=24)).isoformat()
     session.exec(
         text(
             """INSERT INTO email_change_requests
@@ -776,9 +783,12 @@ def cancel_account_deletion(
 
 @router.get("/sessions")
 def list_sessions(
-    user: User = Depends(get_current_user), session: Session = Depends(get_session)
+    request: Request,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
 ):
     _ensure_schema(session)
+    current_jti = _current_jti_from_request(request)
     rows = session.exec(
         text(
             """SELECT id, jti, user_agent, ip, created_at, last_seen_at, revoked_at
@@ -796,7 +806,7 @@ def list_sessions(
                 "created_at": str(r._mapping["created_at"]),  # type: ignore[attr-defined]
                 "last_seen_at": str(r._mapping["last_seen_at"]),  # type: ignore[attr-defined]
                 "revoked_at": str(r._mapping["revoked_at"]) if r._mapping["revoked_at"] else None,  # type: ignore[attr-defined]
-                "is_current": False,  # FastAPI mirror doesn't surface jti; UI marks last_seen_at
+                "is_current": bool(current_jti and r._mapping["jti"] == current_jti),  # type: ignore[attr-defined]
             }
             for r in rows
         ]
