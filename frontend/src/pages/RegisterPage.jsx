@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Shield, Smartphone, Copy, Check, Mail, RefreshCw, Send, Sparkles } from 'lucide-react';
+import { ArrowLeft, Shield, Smartphone, Copy, Check, Mail, RefreshCw, Send, Sparkles, ChevronDown, ChevronRight, HelpCircle } from 'lucide-react';
 import QRCode from 'qrcode';
 import { api } from '../lib/api';
 
@@ -20,6 +20,8 @@ export default function RegisterPage() {
   const [emailWarning, setEmailWarning] = useState(false);
   const [verificationUrl, setVerificationUrl] = useState('');
   const [refCode, setRefCode] = useState('');
+  // Which "I can't scan the QR" app card is expanded on step 4. null = all collapsed.
+  const [manualOpen, setManualOpen] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -394,23 +396,121 @@ export default function RegisterPage() {
               </div>
 
               <div className="bg-gray-50 rounded-lg p-3 mb-4 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
                     <div className="text-[10px] text-gray-600 uppercase mb-0.5 font-medium">Secret Key (manual entry)</div>
-                    <div className="text-xs text-gray-900 font-mono tracking-wider">{totpData.totp_secret}</div>
+                    <div className="text-xs text-gray-900 font-mono tracking-wider break-all">{totpData.totp_secret}</div>
                   </div>
-                  <button onClick={copySecret} className="text-gray-600 hover:text-gray-900 p-1">
-                    {copied ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
+                  <button
+                    onClick={copySecret}
+                    aria-label={copied ? 'Secret key copied to clipboard' : 'Copy secret key to clipboard'}
+                    className="shrink-0 inline-flex items-center gap-1.5 text-xs text-gray-700 hover:text-gray-900 bg-white border border-gray-300 hover:border-gray-400 rounded-md px-2.5 py-1.5 transition-colors"
+                  >
+                    {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                    <span className={copied ? 'text-emerald-600 font-medium' : ''}>{copied ? 'Copied!' : 'Copy'}</span>
                   </button>
+                </div>
+                {/* Screen reader announcement when copy succeeds */}
+                <div role="status" aria-live="polite" className="sr-only">
+                  {copied ? 'Secret key copied to clipboard.' : ''}
                 </div>
               </div>
 
-              <div className="flex items-start gap-2 bg-violet-50 border border-violet-300 rounded-lg p-3 mb-6">
+              <div className="flex items-start gap-2 bg-violet-50 border border-violet-300 rounded-lg p-3 mb-4">
                 <Smartphone size={16} className="text-violet-600 shrink-0 mt-0.5" />
                 <p className="text-xs text-violet-700">
                   Open your authenticator app, scan the QR code or enter the secret key manually, then enter the 6-digit code below to verify.
                 </p>
               </div>
+
+              {/* I can't scan the QR — manual-entry instructions per app */}
+              <details className="mb-6 group" onToggle={(e) => { if (!e.currentTarget.open) setManualOpen(null); }}>
+                <summary className="flex items-center gap-2 text-xs font-medium text-gray-700 hover:text-gray-900 cursor-pointer select-none px-1 py-2 rounded outline-none focus-visible:ring-2 focus-visible:ring-violet-500">
+                  <HelpCircle size={14} className="text-gray-500" />
+                  <span>I can't scan the QR — show manual setup instructions</span>
+                  <ChevronDown size={14} className="ml-auto transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="mt-2 space-y-2">
+                  <p className="text-[11px] text-gray-500 px-1">
+                    Pick your authenticator app below and follow the steps. The secret key is the same value shown above.
+                  </p>
+                  {[
+                    {
+                      key: 'google',
+                      name: 'Google Authenticator',
+                      steps: [
+                        'Open Google Authenticator on your phone.',
+                        'Tap the + button (bottom right) → "Enter a setup key".',
+                        'Account: type "Axal VC" (or your email). Key: paste the secret key above.',
+                        'Time-based should be selected (default). Tap "Add".',
+                        'A new 6-digit code will appear. Type it into the verification box below.',
+                      ],
+                    },
+                    {
+                      key: 'authy',
+                      name: 'Authy',
+                      steps: [
+                        'Open Authy and tap "Add Account" (or the + icon).',
+                        'Tap "Enter Code Manually".',
+                        'Paste the secret key above and tap the arrow.',
+                        'Account name: "Axal VC". Logo: search for "Axal" or skip. Tap "Save".',
+                        'Authy will show a 6-digit code — type it into the verification box below.',
+                      ],
+                    },
+                    {
+                      key: '1password',
+                      name: '1Password',
+                      steps: [
+                        'Open 1Password → find or create the login item for Axal VC.',
+                        'Edit the item and tap "Add more" → "One-Time Password".',
+                        'Tap "From QR Code or Setup Code" → "Enter setup code manually".',
+                        'Paste the secret key above. Save the item.',
+                        '1Password will start generating a 6-digit code — copy it into the verification box below.',
+                      ],
+                    },
+                    {
+                      key: 'bitwarden',
+                      name: 'Bitwarden',
+                      steps: [
+                        'Open Bitwarden → find or create the login item for Axal VC. Premium is required for built-in TOTP.',
+                        'Edit the item and find the "Authenticator key (TOTP)" field.',
+                        'Paste the secret key above into that field and save.',
+                        'Bitwarden will display a rotating 6-digit code under the item.',
+                        'Type the current code into the verification box below.',
+                      ],
+                    },
+                  ].map(app => {
+                    const open = manualOpen === app.key;
+                    return (
+                      <div key={app.key} className="border border-gray-200 rounded-lg bg-white">
+                        <button
+                          type="button"
+                          onClick={() => setManualOpen(open ? null : app.key)}
+                          aria-expanded={open}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs font-medium text-gray-800 hover:bg-gray-50 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Smartphone size={13} className="text-violet-600" />
+                            {app.name}
+                          </span>
+                          {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                        </button>
+                        {open && (
+                          <ol className="list-decimal list-outside pl-8 pr-3 pb-3 pt-1 space-y-1 text-[11px] text-gray-700 leading-relaxed">
+                            {app.steps.map((s, i) => <li key={i}>{s}</li>)}
+                          </ol>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <p className="text-[11px] text-gray-500 text-center pt-1">
+                    Already set up?{' '}
+                    <Link to="/login" className="text-violet-600 hover:underline font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded">
+                      Sign in
+                    </Link>
+                  </p>
+                </div>
+              </details>
 
               <div className="space-y-4">
                 <div>

@@ -1,6 +1,64 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
-import { Rocket, CheckCircle, XCircle, AlertTriangle, ArrowRight, ChevronDown } from 'lucide-react';
+import { Rocket, CheckCircle, XCircle, AlertTriangle, ArrowRight, ChevronDown, ShieldCheck } from 'lucide-react';
+
+// Founder KYC is stage-gated (Epic 0.5): we only nudge them to verify their
+// identity once one of their projects has hit BUILD or LAUNCH. Sign-time KYC
+// gates remain in place server-side regardless of this banner — this is just
+// the in-app prompt. Admins viewing the portal don't see it.
+const KYC_REQUIRED_STAGES = new Set(['BUILD', 'LAUNCH']);
+
+function FounderKycBanner() {
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const stored = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; } })();
+    // Skip for admins (including admin "View as Founder"), users already approved,
+    // and admin-granted limited-access accounts (sign gates handle them already).
+    if (!stored || stored.role !== 'founder') return;
+    if (stored.kyc_status === 'approved') return;
+    if (stored.access_level === 'limited') return;
+
+    (async () => {
+      try {
+        const projects = await api.listProjects();
+        if (cancelled) return;
+        const list = Array.isArray(projects) ? projects : (projects?.projects || []);
+        const triggers = list.some(p => {
+          const stage = (p.stage || '').toString().toUpperCase();
+          return KYC_REQUIRED_STAGES.has(stage);
+        });
+        if (triggers) setShow(true);
+      } catch {
+        // If projects can't be loaded we fail silent — don't nag founders
+        // because of a transient network error.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!show) return null;
+  return (
+    <div className="mb-6 bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-start gap-3">
+      <ShieldCheck size={18} className="text-amber-700 shrink-0 mt-0.5" />
+      <div className="flex-1">
+        <div className="text-sm font-semibold text-amber-900">Identity verification recommended</div>
+        <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+          One of your projects has reached the <span className="font-medium">build</span> stage. Complete identity verification now so you&apos;re not blocked when it&apos;s time to sign incorporation, SAFE, or equity-allocation documents.
+        </p>
+      </div>
+      <Link
+        to="/kyc"
+        className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg transition-colors"
+      >
+        Verify now
+        <ArrowRight size={12} />
+      </Link>
+    </div>
+  );
+}
 
 function ModernSelect({ value, onChange, children, ...props }) {
   return (
@@ -67,6 +125,8 @@ export default function FounderPortal() {
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Founder Portal</h1>
       <p className="text-gray-600 mb-6">Submit your startup for evaluation — get scored instantly</p>
+
+      <FounderKycBanner />
 
       <div className="flex gap-2 mb-8">
         {[1, 2, 3].map(s => (

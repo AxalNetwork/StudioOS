@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, ChevronDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, ChevronDown, Info, Lightbulb } from 'lucide-react';
 import { api } from '../lib/api';
 
 export default function MarketIntelPage() {
@@ -47,7 +47,7 @@ export default function MarketIntelPage() {
 
   return (
     <div>
-      <div className="flex items-end justify-between mb-6 flex-wrap gap-2">
+      <div className="flex items-end justify-between mb-4 flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Market Intelligence</h1>
           <p className="text-sm text-gray-600">Signal-to-Action pipeline for competitive advantage</p>
@@ -55,6 +55,24 @@ export default function MarketIntelPage() {
         {(tab === 'studio' ? benchmarks?.updated_at : pulseUpdatedAt) && (
           <div className="text-xs text-gray-500">Last updated {fmtTime(tab === 'studio' ? benchmarks?.updated_at : pulseUpdatedAt)}</div>
         )}
+      </div>
+
+      {/* Why this matters — top-of-page explainer panel (Epic 0.4). Plain-English
+          framing for partners/LPs new to the surface so each tab has context. */}
+      <div className="mb-6 bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl p-4">
+        <div className="flex items-start gap-3">
+          <Lightbulb size={18} className="text-violet-600 shrink-0 mt-0.5" />
+          <div className="text-xs text-gray-700 leading-relaxed">
+            <div className="font-semibold text-gray-900 mb-1">Why this matters</div>
+            <p>
+              Market Intelligence turns noisy public and private signals into a short list of where to deploy capital next.
+              <span className="font-medium text-gray-900"> Private rounds</span> show direct competitors&apos; funding signals.
+              <span className="font-medium text-gray-900"> Public comps</span> are exit benchmarks for your sector.
+              <span className="font-medium text-gray-900"> High-conviction plays</span> are the bets we&apos;d take with concentrated capital this quarter, and
+              <span className="font-medium text-gray-900"> Studio benchmarks</span> tell you whether our pipeline is healthier than the market.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="mb-6">
@@ -108,10 +126,14 @@ export default function MarketIntelPage() {
 
       {tab === 'pulse' && (
         <div className="space-y-6">
+          <TabExplainer text="Where the market is heading right now: hiring surges, technographic signals, and sentiment per sector. Aggressive sectors get higher multiples and more competition; cautious sectors are where contrarian bets pay off." />
           {headlines.length > 0 && (
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-900">Live Headlines</h3>
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                  Live Headlines
+                  <InfoTip text="Real-time public-source headlines. We track them so you don't have to refresh five tabs." />
+                </h3>
                 <span className="text-[10px] text-gray-500">Updated {fmtTime(pulseUpdatedAt)}</span>
               </div>
               <ul className="divide-y divide-gray-100">
@@ -133,7 +155,10 @@ export default function MarketIntelPage() {
             {pulse.map((s, i) => (
               <div key={i} className="bg-white border border-gray-200 rounded-xl p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-gray-900">{s.sector}</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                    {s.sector}
+                    <InfoTip text="Sector pulse: technographic signal + hiring surge + spin-out opportunity. The multiple is the public-comp valuation premium." />
+                  </h3>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                     s.sentiment === 'Aggressive' ? 'bg-emerald-100 text-emerald-700' :
                     s.sentiment === 'Cautious' ? 'bg-orange-100 text-orange-700' :
@@ -164,13 +189,20 @@ export default function MarketIntelPage() {
 
       {tab === 'macro' && macro && (
         <div>
+          <TabExplainer text="Public-market lens on the venture environment. P/E ratios, IPO windows, and YoY growth set the ceiling on what your portfolio can exit at — and tell you when LPs are open to risk." />
           <div className="grid md:grid-cols-2 gap-4 mb-6">
             <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-2">Exit Environment</h3>
+              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1.5">
+                Exit Environment
+                <InfoTip text="Are IPO and M&A windows open? When closed, distributions slow and LPs stop recycling capital." />
+              </h3>
               <p className="text-sm text-gray-700">{macro.exit_environment}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-2">Interest Rate Impact</h3>
+              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1.5">
+                Interest Rate Impact
+                <InfoTip text="Higher rates compress growth multiples. Watch this when pricing late-stage rounds." />
+              </h3>
               <p className="text-sm text-gray-700">{macro.interest_rate_impact}</p>
             </div>
           </div>
@@ -248,6 +280,8 @@ export default function MarketIntelPage() {
       )}
 
       {tab === 'private' && (
+        <div className="space-y-4">
+          <TabExplainer text="Private rounds = direct competitors' funding signals. Who just raised, at what stage, and at what valuation tells you whether the sector is heating up — and where your portfolio is mispriced." />
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -274,10 +308,12 @@ export default function MarketIntelPage() {
             </tbody>
           </table>
         </div>
+        </div>
       )}
 
       {tab === 'conviction' && (
         <div className="space-y-4">
+          <TabExplainer text="Where we'd put concentrated bets right now. Each play is paired with a recommended spin-out the studio could ship to capture the gap." />
           {conviction.map((play, i) => (
             <div key={i} className="bg-white border border-gray-200 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
@@ -304,6 +340,7 @@ export default function MarketIntelPage() {
 
       {tab === 'studio' && benchmarks && (
         <div className="space-y-6">
+          <TabExplainer text="How our studio is performing against the targets we set with LPs. Operations metrics measure speed; decision-gate metrics measure judgment; post-spin-out metrics measure outcomes." />
           <div>
             <div className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-3">Studio Operations</div>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -389,6 +426,31 @@ function BenchmarkCard({ label, value, target }) {
         {empty ? '— Calculating…' : value}
       </div>
       <div className="text-[10px] text-gray-600 mt-1">Target: {target}</div>
+    </div>
+  );
+}
+
+// Lightweight tooltip: small info icon with native title + accessible label.
+// Avoids a popover library; hover/focus reveals the explanation.
+function InfoTip({ text }) {
+  return (
+    <span
+      title={text}
+      aria-label={text}
+      tabIndex={0}
+      className="inline-flex items-center text-gray-400 hover:text-violet-600 focus:text-violet-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-full cursor-help"
+    >
+      <Info size={12} />
+    </span>
+  );
+}
+
+// Per-tab "Why this matters" mini-panel shown above tab content.
+function TabExplainer({ text }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-[11px] text-gray-600 flex items-start gap-2">
+      <Info size={13} className="text-violet-500 shrink-0 mt-0.5" />
+      <span>{text}</span>
     </div>
   );
 }
