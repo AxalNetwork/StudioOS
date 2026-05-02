@@ -62,7 +62,12 @@ billing.post('/mi-pro/checkout', async (c) => {
 
   const stripeKey = (c.env as Env & { STRIPE_SECRET_KEY?: string }).STRIPE_SECRET_KEY;
   const priceEnvKey = PLAN_TO_PRICE_ENV[plan];
-  const priceId = (c.env as Record<string, unknown>)[priceEnvKey] as string | undefined;
+  // Cast through `unknown` because the `Env` type doesn't carry an index
+  // signature for these dynamically-named price-id vars (STRIPE_PRICE_*).
+  // Going via `unknown` is the TS-recommended escape hatch when two types
+  // don't sufficiently overlap. (Epic 11 — needed to keep `tsc --noEmit`
+  // green so the new CI lint gate stays green on day 1.)
+  const priceId = (c.env as unknown as Record<string, unknown>)[priceEnvKey] as string | undefined;
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
 
   // Dev fallback — no Stripe configured. Return a URL to the dev-upgrade

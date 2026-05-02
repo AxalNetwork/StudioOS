@@ -147,28 +147,43 @@ app.add_middleware(RateLimitMiddleware)
 # ---------------------------------------------------------------------------
 # Security headers + lightweight observability
 # ---------------------------------------------------------------------------
+# Epic 11 — CSP is now nonce-based. Each request gets a fresh 128-bit nonce
+# generated below; route handlers that emit HTML can read it via
+# `request.state.csp_nonce` and stamp it onto any inline `<script>` tag
+# they need to ship. The header advertises the nonce so the browser knows
+# which inline scripts are allowed. `'strict-dynamic'` lets a nonce'd
+# loader script bring in additional scripts without each one needing its
+# own nonce — modern OWASP-recommended pattern.
+import secrets
+
+
 @app.middleware("http")
 async def security_and_observability(request: Request, call_next):
+    # 16 random bytes -> 22-char URL-safe base64 (no padding). Issued
+    # before the route runs so handlers can read it.
+    nonce = secrets.token_urlsafe(16)
+    request.state.csp_nonce = nonce
+
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
-    # Content Security Policy — Zero Trust posture. Tight default-src, no
-    # third-party scripts, no inline JS, frames denied. Vite/React inline
-    # styles are needed for component libraries, hence 'unsafe-inline' for
-    # style-src only. NOTE: Vite's dev HMR client requires 'unsafe-eval' in
-    # script-src — but the FastAPI process never serves the Vite HMR client
-    # (Vite runs on its own port 5000). When the React bundle is built and
-    # served from FastAPI in prod, no eval is needed, so 'unsafe-eval' is
-    # intentionally excluded.
+    # Content Security Policy — Zero Trust posture. Tight default-src,
+    # nonce-required for inline JS, frames denied. Vite/React inline styles
+    # are needed for component libraries, hence 'unsafe-inline' for
+    # style-src only. NOTE: Vite's dev HMR client requires 'unsafe-eval'
+    # in script-src — but the FastAPI process never serves the Vite HMR
+    # client (Vite runs on its own port 5000). When the React bundle is
+    # built and served from FastAPI in prod, no eval is needed, so
+    # 'unsafe-eval' is intentionally excluded.
     # Phase C3 — tighter CSP. connect-src is restricted to known origins
     # (worker, GitHub, OpenAI). report-uri points at our /api/csp-report
     # collector (Phase C2) so violations land in error_logs.
     response.headers.setdefault(
         "Content-Security-Policy",
         "default-src 'self' https://axal.vc; "
-        "script-src 'self'; "
+        f"script-src 'self' 'nonce-{nonce}' 'strict-dynamic'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: https:; "
         "font-src 'self' data:; "

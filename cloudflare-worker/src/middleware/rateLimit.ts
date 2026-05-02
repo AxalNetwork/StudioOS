@@ -8,7 +8,7 @@ type Bucket = {
   limit: number;
   windowSec: number;
   test: (path: string, method: string, role?: string) => boolean;
-  scope: 'user' | 'global';
+  scope: 'user' | 'global' | 'ip';
 };
 
 const BUCKETS: Bucket[] = [
@@ -40,6 +40,31 @@ const BUCKETS: Bucket[] = [
     test: (p) => p.startsWith('/api/'),
     scope: 'user',
   },
+  // Epic 11 — per-IP sliding window. Applies to EVERY /api/* request,
+  // authenticated or not, so a single source IP cannot DoS the API by
+  // cycling through many anonymous requests (which would otherwise only
+  // hit the global 1000/min cap and starve real users). 200/min/IP is
+  // generous enough that legitimate dashboard polling never trips it.
+  {
+    name: 'ip',
+    limit: 200,
+    windowSec: 60,
+    test: (p) => p.startsWith('/api/'),
+    scope: 'ip',
+  },
+  // Epic 11 — abuse cap on the unauthenticated registration endpoint.
+  // Without this an attacker can churn through email signups (each one
+  // costs us a Turnstile verify + a D1 INSERT + an outbound verification
+  // email). 10/min/IP lets a real user retry after a typo without
+  // letting a script create thousands of accounts. This bucket co-exists
+  // with the 200/min general IP bucket above; the stricter limit wins.
+  {
+    name: 'register',
+    limit: 10,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/auth/register',
+    scope: 'ip',
+  },
   // 1000 req/min global burst protection
   {
     name: 'global',
@@ -50,12 +75,18 @@ const BUCKETS: Bucket[] = [
   },
 ];
 
-// Skip rate limiting on health, auth and the monitoring read endpoints (admins
+// Skip rate limiting on health and the monitoring read endpoints (admins
 // hit these frequently from the dashboard).
+//
+// Epic 11 — `/api/auth/register` was REMOVED from this list. It's now
+// covered by the dedicated 10/min/IP `register` bucket above so an
+// unauthenticated client cannot flood the signup endpoint. Other auth
+// routes (login, verify, me) stay exempt because the 200/min/IP general
+// bucket already covers them and they have their own brute-force
+// protections (Turnstile on login + JWT verification cost on me).
 const RATE_LIMIT_EXEMPT = [
   '/api/health',
   '/api/auth/login',
-  '/api/auth/register',
   '/api/auth/verify',
   '/api/auth/me',
   '/api/monitoring/metrics',
@@ -122,15 +153,31 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
     const windowMinute = Math.floor(Date.now() / 1000 / 60);
     const windowHour = Math.floor(Date.now() / 1000 / 3600);
 
+    // Epic 11 — resolve the source IP once per request. Cloudflare always
+    // sets `cf-connecting-ip`; we fall back to the first hop of
+    // `x-forwarded-for` if the worker is reached via a non-CF proxy in
+    // testing. If neither is set we still rate-limit (using the literal
+    // string 'unknown' as the scope key) so a missing-IP path can't
+    // unilaterally bypass the IP bucket.
+    const clientIp =
+      c.req.header('cf-connecting-ip') ||
+      (c.req.header('x-forwarded-for') || '').split(',')[0].trim() ||
+      'unknown';
+
     for (const b of BUCKETS) {
       if (!b.test(path, method, role)) continue;
       // userId required for per-user buckets — skip if anonymous
       if (b.scope === 'user' && !userId) continue;
 
       const windowKey = b.windowSec >= 3600 ? windowHour : windowMinute;
-      const key = b.scope === 'global'
-        ? `rl:g:${b.name}:${windowKey}`
-        : `rl:u:${userId}:${b.name}:${windowKey}`;
+      let key: string;
+      if (b.scope === 'global') {
+        key = `rl:g:${b.name}:${windowKey}`;
+      } else if (b.scope === 'ip') {
+        key = `rl:i:${clientIp}:${b.name}:${windowKey}`;
+      } else {
+        key = `rl:u:${userId}:${b.name}:${windowKey}`;
+      }
 
       let count = 0;
       try {

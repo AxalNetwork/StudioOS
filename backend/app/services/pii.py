@@ -15,10 +15,16 @@ Design rules:
   * The PII subject themselves (the user whose data it is) always sees their
     own full PII.
   * Everyone else gets the masked form.
+
+Epic 11 — `scrub_text()` is the catch-all helper for free-text strings
+headed into a persistent log row (ActivityLog.details, error_logs.message,
+system_metrics.labels). Use it in the call site that produces the log row
+so the raw value never lands on disk in the first place.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from backend.app.models.entities import User, UserRole
@@ -60,6 +66,92 @@ def mask_name(name: Optional[str]) -> Optional[str]:
     if not parts:
         return name
     return " ".join(f"{p[0].upper()}." for p in parts)
+
+
+# ---------------------------------------------------------------------------
+# Free-text scrub (Epic 11)
+# ---------------------------------------------------------------------------
+# These regexes target the categories that show up most often in our log
+# tables (activity_logs.details, error_logs.message). Each pattern is
+# deliberately conservative — false positives are cheap (a dropped placeholder
+# in a debug log) but false negatives leak PII into a row that's eventually
+# surfaced to admins / exported to support tickets.
+
+# RFC-5322 lite — good enough to catch real-looking emails in free text.
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
+# IPv4 — four dotted octets. We don't bother validating each octet's range
+# because even a 999.999.999.999-shaped number is something we'd rather not
+# log verbatim. IPv6 is matched separately, more loosely, to catch the
+# common `2001:db8::1` / fully-expanded forms without the (very gnarly)
+# strict RFC-4291 grammar.
+_IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+# IPv6 — we accept some false positives (e.g. an "ab::cd" appearing in a
+# hex dump) so that the common `::` zero-compression form (2001:db8::1,
+# fe80::1, ::1) is caught alongside the fully-expanded form. Pattern:
+#   * one or more groups of 1–4 hex chars separated by colons, OR
+#   * the same with a `::` somewhere in the middle (compression).
+_IPV6_RE = re.compile(
+    r"(?<![A-Fa-f0-9:])"
+    r"(?:"
+    r"(?:[A-Fa-f0-9]{1,4}:){2,7}[A-Fa-f0-9]{1,4}"   # full / right-trimmed
+    r"|"
+    r"(?:[A-Fa-f0-9]{1,4}:){1,6}:[A-Fa-f0-9]{1,4}"  # one `::` compression
+    r"|"
+    r"::[A-Fa-f0-9]{1,4}"                            # leading `::`
+    r")"
+    r"(?![A-Fa-f0-9:])"
+)
+
+# JWT shape — three URL-safe-base64 segments separated by dots. The middle
+# claim segment is usually 100+ chars, so we anchor on >= 20 chars per
+# segment to avoid clobbering ordinary dotted identifiers like `foo.bar.baz`.
+_JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\b")
+
+# `Bearer <token>` / `bearer <token>` — strip the entire pair so the
+# downstream reader can't accidentally surface the residual token by
+# stripping the `Bearer` prefix in their own UI.
+_BEARER_RE = re.compile(r"\b[Bb]earer\s+[A-Za-z0-9._\-]+", re.IGNORECASE)
+
+# `password=<value>` / `password: <value>` / `pwd=<value>` — common log
+# accidents. We grab everything up to the next whitespace or quote.
+_PASSWORD_RE = re.compile(
+    r"(?i)\b(?:password|pwd|secret|api[_-]?key|token)\s*[:=]\s*[\"']?[^\s\"'&]+",
+)
+
+
+def scrub_text(value: Optional[str]) -> Optional[str]:
+    """Replace PII / credential patterns in a free-text string with stable
+    redaction tokens.
+
+    Returns the input unchanged when it's None / empty so callers can chain
+    `scrub_text(maybe_str) or default` without extra None-handling.
+
+    Replacement tokens are deliberately distinct so admin reviewers reading
+    a log row can tell *what* was redacted at a glance:
+
+        ``[REDACTED:EMAIL]``    — an email address
+        ``[REDACTED:IP]``       — an IPv4 or IPv6 address
+        ``[REDACTED:JWT]``      — a JSON Web Token
+        ``[REDACTED:BEARER]``   — a `Bearer <token>` header value
+        ``[REDACTED:CREDENTIAL]`` — a password / api key / secret pair
+
+    Order matters: scrub credentials and JWTs *before* emails so a
+    `Bearer eyJ...@signing.email` style token doesn't leave the email half
+    behind.
+    """
+    if not value:
+        return value
+    text = value
+    # Highest-specificity patterns first so they consume their input before
+    # the broader ones fire.
+    text = _PASSWORD_RE.sub("[REDACTED:CREDENTIAL]", text)
+    text = _BEARER_RE.sub("[REDACTED:BEARER]", text)
+    text = _JWT_RE.sub("[REDACTED:JWT]", text)
+    text = _EMAIL_RE.sub("[REDACTED:EMAIL]", text)
+    text = _IPV4_RE.sub("[REDACTED:IP]", text)
+    text = _IPV6_RE.sub("[REDACTED:IP]", text)
+    return text
 
 
 # ---------------------------------------------------------------------------

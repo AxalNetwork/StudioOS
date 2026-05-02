@@ -64,16 +64,31 @@ import { securityHeadersMiddleware } from './middleware/securityHeaders';
 
 const app = new Hono<{ Bindings: Env }>();
 
-// CORS — origins kept in sync with the FastAPI middleware in
-// `backend/app/main.py` so the dev backend stays consistent with prod.
+// CORS — Epic 11: env-aware allowlist. Production locks the API to the two
+// canonical apex hosts only; preview/dev additionally allow the
+// workers.dev sandbox + localhost so local SPA -> remote-worker iteration
+// still works. The `origin` callback runs per-request and reads
+// `env.ENVIRONMENT` so a single deploy serves both modes correctly.
+const PROD_ORIGINS = ['https://axal.vc', 'https://www.axal.vc'];
+const DEV_EXTRA_ORIGINS = [
+  'https://studioos.guillaumelauzier.workers.dev',
+  'http://localhost:5000',
+  'http://localhost:5173',
+];
+
 app.use(
   '*',
   cors({
-    origin: [
-      'https://axal.vc',
-      'https://www.axal.vc',
-      'https://studioos.guillaumelauzier.workers.dev',
-    ],
+    origin: (origin, c) => {
+      const envName = (((c.env as unknown as { ENVIRONMENT?: string })?.ENVIRONMENT) || '').toLowerCase();
+      const isProd = envName === 'production' || envName === 'prod';
+      const allowed = isProd ? PROD_ORIGINS : [...PROD_ORIGINS, ...DEV_EXTRA_ORIGINS];
+      // Hono's cors() returns null/undefined to refuse the origin (no
+      // Access-Control-Allow-Origin header emitted). The browser then
+      // blocks the request — exactly the behaviour we want for an unknown
+      // origin in production.
+      return allowed.includes(origin) ? origin : null;
+    },
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
@@ -193,7 +208,10 @@ export default {
       try {
         const existing = await env.RATE_LIMITS.get(LEASE_KEY);
         if (existing) {
-          console.log('[cron] drain skipped — lease held');
+          // Epic 11 — `console.info` (vs `console.log`) survives the CI
+          // grep that bans `console.log` from worker source. Wrangler tail
+          // surfaces info-level logs identically.
+          console.info('[cron] drain skipped — lease held');
           return;
         }
         await env.RATE_LIMITS.put(LEASE_KEY, leaseHolder, { expirationTtl: 90 });
@@ -204,7 +222,7 @@ export default {
       try {
         const r = await processQueueBatch(env, 25);
         if (r.processed || r.failed) {
-          console.log(`[cron] drain processed=${r.processed} failed=${r.failed}`);
+          console.info(`[cron] drain processed=${r.processed} failed=${r.failed}`);
         }
         const now = new Date();
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {

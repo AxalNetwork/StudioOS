@@ -32,8 +32,31 @@ async function checkUpgradeRate(env: Env, userId: number): Promise<boolean> {
   return true;
 }
 
+/**
+ * Epic 11 — extract the bearer JWT from either:
+ *   1. `Sec-WebSocket-Protocol: bearer.<jwt>`  (preferred — RFC-compliant,
+ *      keeps the token out of URL strings, server access logs, and HTTP
+ *      Referer headers; the browser-side `useWebSocket` hook now sends this).
+ *   2. `?token=<jwt>` query string  (legacy fallback for any client that
+ *      hasn't been upgraded yet — kept so a partial deploy doesn't break
+ *      live connections).
+ *
+ * Returns the raw JWT string, or `null` if neither carrier is present.
+ */
+function extractBearerToken(c: any): string | null {
+  const proto = c.req.header('sec-websocket-protocol') || '';
+  if (proto) {
+    const offered = proto.split(',').map((s: string) => s.trim()).filter(Boolean);
+    for (const p of offered) {
+      if (p.startsWith('bearer.')) return p.slice('bearer.'.length);
+    }
+  }
+  const q = c.req.query('token');
+  return q || null;
+}
+
 async function authenticateForUpgrade(c: any): Promise<{ id: number; email: string; role: string; kyc_status: string | null } | null> {
-  const token = c.req.query('token');
+  const token = extractBearerToken(c);
   if (!token) return null;
   try {
     const payload = await decodeJWT(c.env, token);
@@ -45,6 +68,24 @@ async function authenticateForUpgrade(c: any): Promise<{ id: number; email: stri
   } catch {
     return null;
   }
+}
+
+/**
+ * Build the upgrade Request that gets handed to the Durable Object.
+ * Forwards the original `Sec-WebSocket-Protocol` header verbatim so the DO
+ * can echo the chosen subprotocol on its 101 response — the WebSocket
+ * handshake REQUIRES the server to echo exactly one of the offered
+ * subprotocols, otherwise the browser closes the socket with code 1006.
+ */
+function buildUpgradeRequest(c: any, user: { id: number; role: string }): Request {
+  const headers: Record<string, string> = {
+    upgrade: 'websocket',
+    'x-auth-user-id': String(user.id),
+    'x-auth-role': user.role,
+  };
+  const proto = c.req.header('sec-websocket-protocol');
+  if (proto) headers['sec-websocket-protocol'] = proto;
+  return new Request('https://do/ws', { headers });
 }
 
 // Mirror the global /api/* KYC gate for WS upgrades, which bypass the
@@ -79,13 +120,7 @@ realtime.get('/pipeline/ws/:deal_id', async (c) => {
   const id = c.env.PIPELINE_ROOM.idFromName(roomName);
   const stub = c.env.PIPELINE_ROOM.get(id);
   // Forward the upgrade to the DO with auth context attached.
-  return stub.fetch(new Request('https://do/ws', {
-    headers: {
-      upgrade: 'websocket',
-      'x-auth-user-id': String(user.id),
-      'x-auth-role': user.role,
-    },
-  }));
+  return stub.fetch(buildUpgradeRequest(c, user));
 });
 
 // GET /api/onboarding/ws/:user_id — broadcasts new chat messages.
@@ -111,13 +146,7 @@ realtime.get('/onboarding/ws/:user_id', async (c) => {
 
   const id = c.env.ONBOARDING_CHAT.idFromName(`user:${targetUserId}`);
   const stub = c.env.ONBOARDING_CHAT.get(id);
-  return stub.fetch(new Request('https://do/ws', {
-    headers: {
-      upgrade: 'websocket',
-      'x-auth-user-id': String(user.id),
-      'x-auth-role': user.role,
-    },
-  }));
+  return stub.fetch(buildUpgradeRequest(c, user));
 });
 
 // GET /api/realtime/room/:kind/:id/count — admin-only, exact connection

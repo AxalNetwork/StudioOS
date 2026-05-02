@@ -7,7 +7,9 @@
     "deploy": "wrangler deploy --config ../wrangler.toml",
     "db:create": "wrangler d1 create studioos-db",
     "db:schema": "wrangler d1 execute studioos-db --config ../wrangler.toml --file=sql/schema.sql",
-    "db:schema:remote": "wrangler d1 execute studioos-db --config ../wrangler.toml --remote --file=sql/schema.sql"
+    "db:schema:remote": "wrangler d1 execute studioos-db --config ../wrangler.toml --remote --file=sql/schema.sql",
+    "lint:no-console": "node scripts/check-console.mjs",
+    "lint": "npm run lint:no-console && tsc --noEmit"
   },
   "dependencies": {
     "hono": "^4.4.0",

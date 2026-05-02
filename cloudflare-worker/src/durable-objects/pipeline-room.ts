@@ -78,7 +78,20 @@ export class PipelineRoom implements DurableObject {
       // when no broadcast is happening.
       await this.scheduleHeartbeat();
 
-      return new Response(null, { status: 101, webSocket: client });
+      // Epic 11 — RFC 6455: if the client offered a Sec-WebSocket-Protocol
+      // header, the server MUST echo exactly one of the offered values on
+      // the 101 response or the browser closes the socket with code 1006.
+      // The realtime route forwards the original header verbatim; we pick
+      // the first offered subprotocol (which will be `bearer.<jwt>` for
+      // current clients) and echo it back unchanged.
+      const respHeaders: Record<string, string> = {};
+      const offered = request.headers.get('sec-websocket-protocol');
+      if (offered) {
+        const first = offered.split(',').map(s => s.trim()).find(Boolean);
+        if (first) respHeaders['sec-websocket-protocol'] = first;
+      }
+
+      return new Response(null, { status: 101, webSocket: client, headers: respHeaders });
     }
 
     return new Response('Not found', { status: 404 });

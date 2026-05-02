@@ -8,8 +8,17 @@ interface TurnstileResponse {
 }
 
 export async function verifyTurnstile(env: Env, token: string, ip?: string): Promise<boolean> {
+  // Epic 11 — fail CLOSED in production when the secret is unset. The
+  // previous fail-open meant a misconfigured prod deploy silently disabled
+  // the entire bot-protection layer on /register. Dev/preview keep the
+  // fail-open path so local iteration doesn't require Turnstile.
   if (!env.TURNSTILE_SECRET_KEY) {
-    console.warn('[TURNSTILE] No TURNSTILE_SECRET_KEY configured — bot protection disabled. Set the secret to enable.');
+    const envName = ((env as unknown as { ENVIRONMENT?: string }).ENVIRONMENT || '').toLowerCase();
+    if (envName === 'production' || envName === 'prod') {
+      console.error('[TURNSTILE] No TURNSTILE_SECRET_KEY in production — failing closed.');
+      return false;
+    }
+    console.warn('[TURNSTILE] No TURNSTILE_SECRET_KEY configured — bot protection disabled (dev). Set the secret to enable.');
     return true;
   }
 

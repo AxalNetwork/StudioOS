@@ -84,7 +84,18 @@ export class OnboardingChat implements DurableObject {
       server.send(JSON.stringify({ type: 'hello', room: 'onboarding', recent, ts: Date.now() }));
 
       await this.scheduleHeartbeat();
-      return new Response(null, { status: 101, webSocket: client });
+
+      // Epic 11 — echo the chosen Sec-WebSocket-Protocol on the 101 so
+      // browsers using the new bearer.<jwt> subprotocol auth path don't
+      // get their handshake rejected. See PipelineRoom for the rationale.
+      const respHeaders: Record<string, string> = {};
+      const offered = request.headers.get('sec-websocket-protocol');
+      if (offered) {
+        const first = offered.split(',').map(s => s.trim()).find(Boolean);
+        if (first) respHeaders['sec-websocket-protocol'] = first;
+      }
+
+      return new Response(null, { status: 101, webSocket: client, headers: respHeaders });
     }
 
     return new Response('Not found', { status: 404 });

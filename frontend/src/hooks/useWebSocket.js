@@ -9,8 +9,13 @@ import { useEffect, useRef, useState } from 'react';
  *     onMessage: (event) => { ... },
  *   });
  *
- * - The auth token (localStorage 'token') is appended as ?token= because
- *   browsers cannot set Authorization headers on WS handshakes.
+ * - The auth token (localStorage 'token') is sent as a WebSocket
+ *   subprotocol `bearer.<jwt>` (Epic 11). This keeps the JWT out of the
+ *   URL — the URL ends up in browser history, server access logs, and the
+ *   HTTP Referer header on any same-origin navigation triggered while the
+ *   socket is open. We additionally include `?token=` for backward
+ *   compatibility with worker deploys that haven't picked up the
+ *   subprotocol-auth path yet; the server prefers the subprotocol.
  * - Reconnects with exponential backoff capped at 30s, resets on success.
  * - Sends a `{type:'ping'}` every 20s; the server's `{type:'pong'}` is
  *   silently ignored at the consumer level.
@@ -43,12 +48,20 @@ export function useWebSocket(path, { enabled = true, onMessage } = {}) {
       if (cancelled) return;
       const token = localStorage.getItem('token') || '';
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      // Epic 11 — keep `?token=` for backward compat (older worker deploys
+      // only know about the query-string carrier). New deploys read the
+      // subprotocol header below first.
       const sep = path.includes('?') ? '&' : '?';
       const url = `${proto}//${window.location.host}${path}${sep}token=${encodeURIComponent(token)}`;
       setStatus('connecting');
       let ws;
       try {
-        ws = new WebSocket(url);
+        // Subprotocol values cannot contain whitespace, comma, or any byte
+        // outside the WebSocket token grammar. JWTs are URL-safe base64
+        // (alphanumerics + `-_`) so `bearer.<jwt>` is always a valid token.
+        ws = token
+          ? new WebSocket(url, [`bearer.${token}`])
+          : new WebSocket(url);
       } catch {
         scheduleReconnect();
         return;

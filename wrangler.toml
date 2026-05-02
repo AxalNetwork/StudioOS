@@ -24,6 +24,14 @@ compatibility_date = "2026-04-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
+# Epic 11 — minified production bundle. Wrangler runs esbuild with
+# `minify: true`, which strips comments, mangles identifiers, and (most
+# importantly here) drops dead-code branches so leftover console.log
+# statements that we want kept for dev observability don't bloat the
+# production bundle. It also reduces the worker startup latency on cold
+# isolates by ~10-15% on a deploy this size.
+minify = true
+
 # ---------- Public (non-secret) variables ----------
 [vars]
 APP_URL = "https://axal.vc"

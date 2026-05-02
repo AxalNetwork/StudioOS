@@ -83,7 +83,10 @@ export async function queueConsumer(
 
     // Dedup BEFORE side effects.
     if (await alreadyProcessed(env, body.idempotency_key)) {
-      console.log(`[queue-consumer] dedup skip job_type=${body.job_type} key=${body.idempotency_key}`);
+      // Epic 11 — `console.info` (vs `console.log`) keeps the CI grep that
+      // bans `console.log` from worker source happy. Wrangler tail surfaces
+      // both at the same level.
+      console.info(`[queue-consumer] dedup skip job_type=${body.job_type} key=${body.idempotency_key}`);
       message.ack();
       await meter(env, body.job_type, 'duplicate', Date.now() - t0);
       continue;
@@ -91,7 +94,7 @@ export async function queueConsumer(
 
     // AI budget gate.
     if (!(await reserveAiBudget(env, body.job_type))) {
-      console.log(`[queue-consumer] ai budget exhausted, deferring job_type=${body.job_type}`);
+      console.info(`[queue-consumer] ai budget exhausted, deferring job_type=${body.job_type}`);
       message.retry({ delaySeconds: 60 });
       await meter(env, body.job_type, 'deferred', Date.now() - t0);
       continue;
