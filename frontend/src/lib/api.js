@@ -441,4 +441,20 @@ export const api = {
   updateCompany: (uid, data) => request(`/company/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
   addCompanyMember: (uid, data) => request(`/company/${uid}/members`, { method: 'POST', body: JSON.stringify(data) }),
   removeCompanyMember: (uid, userId) => request(`/company/${uid}/members/${userId}`, { method: 'DELETE' }),
+
+  // ---------- Personas (Epic 1) ----------
+  getPersonaTaxonomy: () => request('/personas/taxonomy'),
+  getMyPersonas: () => request('/personas/me'),
+  classifyPersona: (first_message) =>
+    request('/personas/classify', { method: 'POST', body: JSON.stringify({ first_message }) }),
+  answerPersona: (persona_id, key, value) =>
+    request('/personas/answer', { method: 'POST', body: JSON.stringify({ persona_id, key, value }) }),
+  finalizePersona: (persona_id, confidence, source = 'router', secondary_persona_id = null) =>
+    request('/personas/finalize', {
+      method: 'POST',
+      body: JSON.stringify({ persona_id, confidence, source, secondary_persona_id }),
+    }),
+  listPersonasAdmin: () => request('/personas/admin/list'),
+  retagPersonaAdmin: (user_id, persona_id) =>
+    request(`/personas/admin/${user_id}/retag`, { method: 'POST', body: JSON.stringify({ persona_id }) }),
 };

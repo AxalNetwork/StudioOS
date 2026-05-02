@@ -48,6 +48,8 @@ import MonitoringPage from './pages/MonitoringPage';
 import LiquidityPage from './pages/LiquidityPage';
 import FundsPage from './pages/FundsPage';
 import SettingsPage from './pages/SettingsPage';
+import OnboardingPersonaPage from './pages/OnboardingPersonaPage';
+import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
 import EmailChangeRevokePage from './pages/EmailChangeRevokePage';
 import Footer from './components/Footer';
@@ -200,8 +202,24 @@ const ROLE_DEFAULT_PATH = {
 const ViewModeContext = createContext(null);
 export const useViewMode = () => useContext(ViewModeContext);
 
-function getNavItems(role) {
-  return NAV_BY_ROLE[role] || NAV_BY_ROLE.founder;
+function getNavItems(role, primaryPersonaId) {
+  const base = NAV_BY_ROLE[role] || NAV_BY_ROLE.founder;
+  const persona = primaryPersonaId ? PERSONA_LOOKUP[primaryPersonaId] : null;
+  if (!persona || !Array.isArray(persona.nav_extras) || persona.nav_extras.length === 0) {
+    return base;
+  }
+  // Surface persona-specific deep-links above the divider, but skip ones the
+  // role's nav already exposes so we never produce duplicate sidebar rows.
+  const existingPaths = new Set(base.filter((i) => i.to).map((i) => i.to));
+  const extras = persona.nav_extras.filter((e) => !existingPaths.has(e.to));
+  if (extras.length === 0) return base;
+  const dividerIdx = base.findIndex((i) => i.divider);
+  const insertAt = dividerIdx === -1 ? base.length : dividerIdx;
+  const personaSection = [
+    { section: `For ${persona.label}` },
+    ...extras.map((e) => ({ to: e.to, icon: Sparkles, label: e.label })),
+  ];
+  return [...base.slice(0, insertAt), ...personaSection, ...base.slice(insertAt)];
 }
 
 function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, impersonatedUser }) {
@@ -266,11 +284,11 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
   );
 }
 
-function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate }) {
+function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isAdmin = (realUser || user)?.role === 'admin';
   const activeRole = isImpersonating ? user?.role : (isAdmin ? viewMode : user?.role);
-  const navItems = getNavItems(activeRole || 'founder');
+  const navItems = getNavItems(activeRole || 'founder', primaryPersonaId);
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
   // Tracks mouse/keyboard/scroll/touch on `window`. Disabled when no user is
@@ -423,6 +441,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   const location = useLocation();
   const [kycStatus, setKycStatus] = useState(user?.kyc_status || null);
   const [accessLevel, setAccessLevel] = useState(user?.access_level || null);
+  const [primaryPersonaId, setPrimaryPersonaId] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -441,6 +460,12 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
             access_level: me.access_level || null,
           }));
         }
+      } catch {}
+      try {
+        const r = await api.getMyPersonas();
+        if (cancelled) return;
+        const primary = r?.personas?.find((p) => p.is_primary) || r?.personas?.[0];
+        setPrimaryPersonaId(primary?.persona_id || null);
       } catch {}
     })();
     return () => { cancelled = true; };
@@ -482,6 +507,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
       onExitImpersonation={onExitImpersonation}
       realUser={realUser}
       onImpersonate={onImpersonate}
+      primaryPersonaId={primaryPersonaId}
     >
       {children}
     </ProtectedLayout>
@@ -597,6 +623,7 @@ export default function App() {
       <Route path="/settings/email/revoke" element={<EmailChangeRevokePage />} />
 
       <Route path="/dashboard" element={guard(['admin', 'founder', 'partner'], <Dashboard />)} />
+      <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner'], <OnboardingPersonaPage />)} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
       <Route path="/scoring" element={guard(['admin', 'partner'], <ScoringPage />)} />
       <Route path="/projects" element={guard(['admin', 'founder', 'partner'], <ProjectsPage />)} />
