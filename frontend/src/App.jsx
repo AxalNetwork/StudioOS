@@ -4,7 +4,8 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
-  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug
+  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug,
+  Settings as SettingsIcon
 } from 'lucide-react';
 import { api } from './lib/api';
 import Dashboard from './pages/Dashboard';
@@ -46,6 +47,9 @@ import RiskDisclosuresPage from './pages/RiskDisclosuresPage';
 import MonitoringPage from './pages/MonitoringPage';
 import LiquidityPage from './pages/LiquidityPage';
 import FundsPage from './pages/FundsPage';
+import SettingsPage from './pages/SettingsPage';
+import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
+import EmailChangeRevokePage from './pages/EmailChangeRevokePage';
 import Footer from './components/Footer';
 import InactivityWarningModal from './components/InactivityWarningModal';
 import useInactivityTimeout from './hooks/useInactivityTimeout';
@@ -95,6 +99,9 @@ const NAV_BY_ROLE = {
     { section: 'Portals' },
     { to: '/founder', icon: Rocket, label: 'Founder Portal' },
     { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
+
+    { divider: true },
+    { to: '/settings', icon: SettingsIcon, label: 'Settings' },
   ],
 
   founder: [
@@ -132,6 +139,7 @@ const NAV_BY_ROLE = {
 
     { divider: true },
     { to: '/founder', icon: Rocket, label: 'Founder Portal', highlight: true },
+    { to: '/settings', icon: SettingsIcon, label: 'Settings' },
   ],
 
   partner: [
@@ -167,6 +175,7 @@ const NAV_BY_ROLE = {
 
     { divider: true },
     { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal', highlight: true },
+    { to: '/settings', icon: SettingsIcon, label: 'Settings' },
   ],
 };
 
@@ -584,6 +593,8 @@ export default function App() {
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/esign/:token" element={<ESignPage />} />
+      <Route path="/settings/email/confirm" element={<EmailChangeConfirmPage />} />
+      <Route path="/settings/email/revoke" element={<EmailChangeRevokePage />} />
 
       <Route path="/dashboard" element={guard(['admin', 'founder', 'partner'], <Dashboard />)} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
@@ -616,6 +627,7 @@ export default function App() {
       <Route path="/relationships" element={guard(['admin', 'founder', 'partner'], <RelationshipsPage />)} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner'], <LegalCapitalPage />)} />
       <Route path="/partner-portal" element={guard(['admin', 'partner'], <PartnerPortal />)} />
+      <Route path="/settings" element={guard(['admin', 'founder', 'partner'], <SettingsPage />)} />
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />

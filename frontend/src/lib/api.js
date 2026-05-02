@@ -397,6 +397,24 @@ export const api = {
       body: JSON.stringify({ contacts, custom_message }),
     }),
 
+  // ---------- Settings (Epic 3) ----------
+  getSettings: () => request('/settings'),
+  updateSettings: (data) => request('/settings', { method: 'PATCH', body: JSON.stringify(data) }),
+  uploadHeadshot: (data_uri) => request('/settings/headshot', { method: 'POST', body: JSON.stringify({ data_uri }) }),
+  requestEmailChange: (new_email) => request('/settings/email-change/request', { method: 'POST', body: JSON.stringify({ new_email }) }),
+  confirmEmailChange: (token) => request('/settings/email-change/confirm', { method: 'POST', body: JSON.stringify({ token }) }),
+  revokeEmailChange: (token) => request('/settings/email-change/revoke', { method: 'POST', body: JSON.stringify({ token }) }),
+  repairTotp: (totp_code) => request('/settings/totp/repair', { method: 'POST', body: JSON.stringify({ totp_code }) }),
+  revokeAllSessions: () => request('/settings/sessions/revoke-all', { method: 'POST', body: JSON.stringify({}) }),
+  requestAccountDeletion: () => request('/settings/account/delete-request', { method: 'POST', body: JSON.stringify({}) }),
+  cancelAccountDeletion: () => request('/settings/account/delete-request/cancel', { method: 'POST', body: JSON.stringify({}) }),
+  // The export endpoint streams a JSON file; we want the raw blob, not parsed JSON.
+  exportMyData: async () => {
+    const res = await fetch(`${BASE}/settings/data-export`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error('Export failed');
+    return await res.blob();
+  },
+
   // Company Profiles (Growth & Expansion Track — Task 1)
   companyMe: () => request('/company/me'),
   getCompany: (uid) => request(`/company/${uid}`),

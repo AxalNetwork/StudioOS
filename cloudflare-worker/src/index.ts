@@ -53,6 +53,7 @@ import profiling from './routes/profiling';
 import studioops from './routes/studioops';
 import dashboard from './routes/dashboard';
 import matches from './routes/matches';
+import settings from './routes/settings';
 import { processQueueBatch } from './services/queueWorker';
 import { Jobs } from './models/jobs';
 import { queueConsumer } from './queue-consumer';
@@ -144,6 +145,7 @@ app.route('/api/profiling', profiling);
 app.route('/api/studioops', studioops);
 app.route('/api/dashboard', dashboard);
 app.route('/api/matches', matches);
+app.route('/api/settings', settings);
 
 app.notFound((c) => c.json({ detail: 'Not found' }, 404));
 

@@ -1,0 +1,725 @@
+"""Epic 3 — Settings page (FastAPI dev mirror).
+
+Mirrors `cloudflare-worker/src/routes/settings.ts` so the frontend works
+identically against either backend during local development. The worker is
+the production source of truth; this module only needs to be functional, not
+identical line-for-line.
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import io
+import json
+import os
+import secrets
+import time
+import uuid
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel
+from sqlmodel import Session, text
+
+from backend.app.api.routes.auth import get_current_user
+from backend.app.database import get_session
+from backend.app.models.entities import User
+from backend.app.services.email_service import send_verification_email
+
+router = APIRouter(prefix="/settings", tags=["Settings"])
+
+
+# --- one-shot schema migration ---------------------------------------------
+
+_USER_COLUMNS = [
+    ("bio", "TEXT"),
+    ("headshot_local_path", "TEXT"),
+    ("jurisdictions", "TEXT"),
+    ("socials", "TEXT"),
+    ("notification_prefs", "TEXT"),
+    ("privacy_prefs", "TEXT"),
+    ("role_prefs", "TEXT"),
+    ("jwt_min_iat", "BIGINT DEFAULT 0"),
+    ("deletion_requested_at", "TIMESTAMP"),
+]
+
+_migrated = False
+
+
+def _ensure_schema(session: Session) -> None:
+    """Idempotent ALTER / CREATE — Postgres in dev. Each statement is its own
+    transaction so a single failure (e.g. column already exists) doesn't
+    poison the rest, and we cache the success flag to keep request latency
+    low after first boot."""
+    global _migrated
+    if _migrated:
+        return
+    for col, kind in _USER_COLUMNS:
+        try:
+            session.exec(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {kind}"))
+            session.commit()
+        except Exception:
+            session.rollback()
+    try:
+        session.exec(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS email_change_requests (
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    old_email TEXT NOT NULL,
+                    new_email TEXT NOT NULL,
+                    confirm_token_hash TEXT NOT NULL UNIQUE,
+                    revoke_token_hash TEXT NOT NULL UNIQUE,
+                    requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    confirm_expires_at TIMESTAMP NOT NULL,
+                    revoke_expires_at TIMESTAMP NOT NULL,
+                    confirmed_at TIMESTAMP,
+                    revoked_at TIMESTAMP
+                )
+                """
+            )
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+    try:
+        session.exec(text("CREATE INDEX IF NOT EXISTS idx_ecr_user ON email_change_requests(user_id)"))
+        session.commit()
+    except Exception:
+        session.rollback()
+    _migrated = True
+
+
+# --- helpers ----------------------------------------------------------------
+
+
+def _safe_json(raw: Any, fallback: Any) -> Any:
+    if raw is None or raw == "":
+        return fallback
+    if isinstance(raw, (dict, list)):
+        return raw
+    try:
+        return json.loads(raw)
+    except Exception:
+        return fallback
+
+
+def _user_extras(session: Session, user_id: int) -> dict[str, Any]:
+    row = session.exec(
+        text(
+            """
+            SELECT bio, headshot_local_path, jurisdictions, socials,
+                   notification_prefs, privacy_prefs, role_prefs,
+                   jwt_min_iat, deletion_requested_at
+            FROM users WHERE id = :uid
+            """
+        ).bindparams(uid=user_id)
+    ).first()
+    if row is None:
+        return {}
+    return dict(row._mapping)  # type: ignore[attr-defined]
+
+
+def _hash_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _generate_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def _app_url() -> str:
+    domain = os.environ.get("REPLIT_DEV_DOMAIN")
+    if domain:
+        return f"https://{domain}"
+    return os.environ.get("APP_URL", "http://localhost:5000")
+
+
+_HEADSHOT_MIME = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+_HEADSHOT_DIR = Path(os.environ.get("HEADSHOT_DIR", "/tmp/axal_headshots"))
+
+
+def _is_email(value: str) -> bool:
+    import re
+
+    return bool(re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$", value or ""))
+
+
+# --- GET /api/settings ------------------------------------------------------
+
+
+@router.get("")
+@router.get("/")
+def get_settings(user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    _ensure_schema(session)
+    extras = _user_extras(session, user.id)
+    pending_row = session.exec(
+        text(
+            """
+            SELECT id, new_email, requested_at, confirm_expires_at
+            FROM email_change_requests
+            WHERE user_id = :uid AND confirmed_at IS NULL AND revoked_at IS NULL
+              AND confirm_expires_at > CURRENT_TIMESTAMP
+            ORDER BY requested_at DESC LIMIT 1
+            """
+        ).bindparams(uid=user.id)
+    ).first()
+    pending = None
+    if pending_row is not None:
+        m = pending_row._mapping  # type: ignore[attr-defined]
+        pending = {
+            "new_email": m["new_email"],
+            "requested_at": str(m["requested_at"]),
+            "expires_at": str(m["confirm_expires_at"]),
+        }
+
+    return {
+        "id": user.id,
+        "uid": user.uid,
+        "email": user.email,
+        "name": user.name,
+        "role": user.role,
+        "email_verified": user.email_verified,
+        "totp_configured": bool(user.password_hash),
+        "kyc_status": getattr(user, "kyc_status", None) or "not_started",
+        "access_level": getattr(user, "access_level", None),
+        "last_active_at": str(user.last_active_at) if user.last_active_at else None,
+        "created_at": str(user.created_at) if user.created_at else None,
+        "profile": {
+            "bio": extras.get("bio") or "",
+            "headshot_url": (
+                f"/api/settings/headshot/{user.uid}" if extras.get("headshot_local_path") else None
+            ),
+            "socials": _safe_json(extras.get("socials"), {}),
+        },
+        "jurisdictions": _safe_json(extras.get("jurisdictions"), []),
+        "notification_prefs": _safe_json(extras.get("notification_prefs"), {}),
+        "privacy_prefs": _safe_json(
+            extras.get("privacy_prefs"),
+            {"public_profile": {"name": True, "bio": True, "headshot": True, "socials": False}},
+        ),
+        "role_prefs": _safe_json(extras.get("role_prefs"), {}),
+        "deletion_requested_at": (
+            str(extras.get("deletion_requested_at")) if extras.get("deletion_requested_at") else None
+        ),
+        "pending_email_change": pending,
+    }
+
+
+# --- PATCH /api/settings ----------------------------------------------------
+
+
+class _SettingsPatch(BaseModel):
+    name: Optional[str] = None
+    bio: Optional[str] = None
+    socials: Optional[dict] = None
+    jurisdictions: Optional[list] = None
+    notification_prefs: Optional[dict] = None
+    privacy_prefs: Optional[dict] = None
+    role_prefs: Optional[dict] = None
+
+
+@router.patch("")
+@router.patch("/")
+def patch_settings(
+    payload: _SettingsPatch,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    updates: list[tuple[str, Any]] = []
+
+    if payload.name is not None:
+        n = payload.name.strip()
+        if not n:
+            raise HTTPException(status_code=400, detail="Name cannot be empty")
+        updates.append(("name", n[:120]))
+    if payload.bio is not None:
+        updates.append(("bio", payload.bio.strip()[:2000] if payload.bio else None))
+    if payload.socials is not None:
+        safe = {}
+        for k in ("linkedin", "twitter", "website", "github"):
+            v = payload.socials.get(k) if payload.socials else None
+            if isinstance(v, str) and v.strip():
+                safe[k] = v.strip()[:300]
+        updates.append(("socials", json.dumps(safe)))
+    if payload.jurisdictions is not None:
+        safe = []
+        for x in payload.jurisdictions or []:
+            s = str(x or "").strip().upper()
+            if 2 <= len(s) <= 3 and s.isalpha():
+                safe.append(s)
+        updates.append(("jurisdictions", json.dumps(safe[:30])))
+    if payload.notification_prefs is not None:
+        j = json.dumps(payload.notification_prefs)
+        if len(j) > 8000:
+            raise HTTPException(status_code=400, detail="notification_prefs too large")
+        updates.append(("notification_prefs", j))
+    if payload.privacy_prefs is not None:
+        j = json.dumps(payload.privacy_prefs)
+        if len(j) > 4000:
+            raise HTTPException(status_code=400, detail="privacy_prefs too large")
+        updates.append(("privacy_prefs", j))
+    if payload.role_prefs is not None:
+        j = json.dumps(payload.role_prefs)
+        if len(j) > 16000:
+            raise HTTPException(status_code=400, detail="role_prefs too large")
+        updates.append(("role_prefs", j))
+
+    if not updates:
+        return {"ok": True, "updated": 0}
+
+    for col, val in updates:
+        session.exec(
+            text(f"UPDATE users SET {col} = :v WHERE id = :uid").bindparams(v=val, uid=user.id)
+        )
+    session.commit()
+    return {"ok": True, "updated": len(updates)}
+
+
+# --- Headshot upload + stream -----------------------------------------------
+
+
+class _HeadshotPayload(BaseModel):
+    data_uri: str
+
+
+@router.post("/headshot")
+def upload_headshot(
+    payload: _HeadshotPayload,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    data_uri = payload.data_uri or ""
+    if not data_uri.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="data_uri must be a data:image/* URI")
+    if len(data_uri) > 4_500_000:
+        raise HTTPException(status_code=413, detail="Image too large (max ~3MB)")
+    try:
+        meta_part, b64 = data_uri.split(",", 1)
+        content_type = meta_part[5:].split(";")[0].strip()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Malformed data URI")
+    ext = _HEADSHOT_MIME.get(content_type)
+    if not ext:
+        raise HTTPException(status_code=400, detail=f"Unsupported image type: {content_type}")
+    try:
+        raw_bytes = base64.b64decode(b64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 payload")
+    if len(raw_bytes) > 3 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image exceeds 3MB limit")
+
+    _HEADSHOT_DIR.mkdir(parents=True, exist_ok=True)
+    fname = f"{user.id}_{uuid.uuid4().hex}.{ext}"
+    fpath = _HEADSHOT_DIR / fname
+    fpath.write_bytes(raw_bytes)
+
+    # Best-effort cleanup of previous file.
+    prev = session.exec(
+        text("SELECT headshot_local_path FROM users WHERE id = :uid").bindparams(uid=user.id)
+    ).first()
+    old_path = prev._mapping["headshot_local_path"] if prev else None  # type: ignore[attr-defined]
+    session.exec(
+        text("UPDATE users SET headshot_local_path = :p WHERE id = :uid").bindparams(
+            p=str(fpath), uid=user.id
+        )
+    )
+    session.commit()
+    if old_path and old_path != str(fpath):
+        try:
+            Path(old_path).unlink(missing_ok=True)
+        except Exception:
+            pass
+    return {"ok": True, "headshot_url": f"/api/settings/headshot/{user.uid}"}
+
+
+@router.get("/headshot/{user_uid}")
+def stream_headshot(user_uid: str, session: Session = Depends(get_session)):
+    _ensure_schema(session)
+    row = session.exec(
+        text(
+            "SELECT headshot_local_path, privacy_prefs FROM users WHERE uid = :u OR cast(id as text) = :u"
+        ).bindparams(u=user_uid)
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    m = row._mapping  # type: ignore[attr-defined]
+    if not m.get("headshot_local_path"):
+        raise HTTPException(status_code=404, detail="Not found")
+    privacy = _safe_json(m.get("privacy_prefs"), {"public_profile": {"headshot": True}})
+    if (privacy or {}).get("public_profile", {}).get("headshot") is False:
+        raise HTTPException(status_code=404, detail="Not found")
+    fpath = Path(m["headshot_local_path"])
+    if not fpath.exists():
+        raise HTTPException(status_code=404, detail="Not found")
+    suffix = fpath.suffix.lower().lstrip(".")
+    content_type = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(
+        suffix, "application/octet-stream"
+    )
+    return Response(
+        content=fpath.read_bytes(),
+        media_type=content_type,
+        headers={"cache-control": "public, max-age=300"},
+    )
+
+
+# --- Email change flow ------------------------------------------------------
+
+
+class _EmailChangeRequest(BaseModel):
+    new_email: str
+
+
+@router.post("/email-change/request")
+def email_change_request(
+    payload: _EmailChangeRequest,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    new_email = (payload.new_email or "").strip().lower()
+    if not _is_email(new_email):
+        raise HTTPException(status_code=400, detail="Valid new_email required")
+    if new_email == (user.email or "").lower():
+        raise HTTPException(status_code=400, detail="New email matches current email")
+    taken = session.exec(
+        text("SELECT 1 FROM users WHERE lower(email) = :e AND id != :uid").bindparams(
+            e=new_email, uid=user.id
+        )
+    ).first()
+    if taken is not None:
+        raise HTTPException(status_code=409, detail="That email is already in use")
+
+    # Cancel outstanding pending requests.
+    session.exec(
+        text(
+            """UPDATE email_change_requests
+               SET revoked_at = CURRENT_TIMESTAMP
+               WHERE user_id = :uid AND confirmed_at IS NULL AND revoked_at IS NULL"""
+        ).bindparams(uid=user.id)
+    )
+
+    confirm_raw = _generate_token()
+    revoke_raw = _generate_token()
+    confirm_hash = _hash_token(confirm_raw)
+    revoke_hash = _hash_token(revoke_raw)
+    now = datetime.utcnow()
+    confirm_expires = (now + timedelta(hours=24)).isoformat()
+    revoke_expires = (now + timedelta(hours=48)).isoformat()
+    session.exec(
+        text(
+            """INSERT INTO email_change_requests
+               (user_id, old_email, new_email, confirm_token_hash, revoke_token_hash,
+                confirm_expires_at, revoke_expires_at)
+               VALUES (:uid, :oe, :ne, :ch, :rh, :ce, :re)"""
+        ).bindparams(
+            uid=user.id, oe=user.email, ne=new_email, ch=confirm_hash, rh=revoke_hash,
+            ce=confirm_expires, re=revoke_expires,
+        )
+    )
+    session.commit()
+
+    confirm_url = f"{_app_url()}/settings/email/confirm?token={confirm_raw}"
+    revoke_url = f"{_app_url()}/settings/email/revoke?token={revoke_raw}"
+    sent_confirm = bool(send_verification_email(new_email, user.name or new_email, confirm_url))
+    sent_revoke = bool(send_verification_email(user.email, user.name or user.email, revoke_url))
+
+    out = {
+        "ok": True,
+        "new_email": new_email,
+        "confirm_expires_at": confirm_expires,
+        "revoke_expires_at": revoke_expires,
+        "email_sent": sent_confirm,
+    }
+    # Surface dev links when email isn't actually delivered (no Gmail creds).
+    if not sent_confirm:
+        out["confirm_url"] = confirm_url
+    if not sent_revoke:
+        out["revoke_url"] = revoke_url
+    return out
+
+
+class _TokenPayload(BaseModel):
+    token: str
+
+
+@router.post("/email-change/confirm")
+def email_change_confirm(payload: _TokenPayload, session: Session = Depends(get_session)):
+    _ensure_schema(session)
+    if not payload.token:
+        raise HTTPException(status_code=400, detail="Token required")
+    th = _hash_token(payload.token)
+    rec = session.exec(
+        text("SELECT * FROM email_change_requests WHERE confirm_token_hash = :h").bindparams(h=th)
+    ).first()
+    if rec is None:
+        raise HTTPException(status_code=400, detail="Invalid or expired link")
+    m = rec._mapping  # type: ignore[attr-defined]
+    if m["confirmed_at"]:
+        raise HTTPException(status_code=400, detail="Already confirmed")
+    if m["revoked_at"]:
+        raise HTTPException(status_code=400, detail="This change was revoked")
+    expires = m["confirm_expires_at"]
+    if isinstance(expires, str):
+        expires = datetime.fromisoformat(expires)
+    if expires < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Confirmation link expired")
+
+    taken = session.exec(
+        text("SELECT 1 FROM users WHERE lower(email) = :e AND id != :uid").bindparams(
+            e=str(m["new_email"]).lower(), uid=m["user_id"]
+        )
+    ).first()
+    if taken is not None:
+        raise HTTPException(status_code=409, detail="That email was claimed by another account")
+
+    session.exec(
+        text("UPDATE users SET email = :e WHERE id = :uid").bindparams(
+            e=m["new_email"], uid=m["user_id"]
+        )
+    )
+    session.exec(
+        text("UPDATE email_change_requests SET confirmed_at = CURRENT_TIMESTAMP WHERE id = :i").bindparams(
+            i=m["id"]
+        )
+    )
+    session.exec(
+        text(
+            """INSERT INTO activity_logs (action, details, actor, user_id)
+               VALUES ('email_changed', :d, :a, :uid)"""
+        ).bindparams(
+            d=f"Email changed from {m['old_email']} to {m['new_email']} (revocable until {m['revoke_expires_at']})",
+            a=m["new_email"], uid=m["user_id"],
+        )
+    )
+    session.commit()
+    return {"ok": True, "email": m["new_email"], "revoke_expires_at": str(m["revoke_expires_at"])}
+
+
+@router.post("/email-change/revoke")
+def email_change_revoke(payload: _TokenPayload, session: Session = Depends(get_session)):
+    _ensure_schema(session)
+    if not payload.token:
+        raise HTTPException(status_code=400, detail="Token required")
+    th = _hash_token(payload.token)
+    rec = session.exec(
+        text("SELECT * FROM email_change_requests WHERE revoke_token_hash = :h").bindparams(h=th)
+    ).first()
+    if rec is None:
+        raise HTTPException(status_code=400, detail="Invalid or expired link")
+    m = rec._mapping  # type: ignore[attr-defined]
+    if m["revoked_at"]:
+        raise HTTPException(status_code=400, detail="Already revoked")
+    expires = m["revoke_expires_at"]
+    if isinstance(expires, str):
+        expires = datetime.fromisoformat(expires)
+    if expires < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Revocation window expired")
+    if m["confirmed_at"]:
+        session.exec(
+            text("UPDATE users SET email = :e WHERE id = :uid").bindparams(
+                e=m["old_email"], uid=m["user_id"]
+            )
+        )
+    session.exec(
+        text("UPDATE email_change_requests SET revoked_at = CURRENT_TIMESTAMP WHERE id = :i").bindparams(
+            i=m["id"]
+        )
+    )
+    now_sec = int(time.time())
+    session.exec(
+        text("UPDATE users SET jwt_min_iat = :n WHERE id = :uid").bindparams(
+            n=now_sec, uid=m["user_id"]
+        )
+    )
+    session.exec(
+        text(
+            """INSERT INTO activity_logs (action, details, actor, user_id)
+               VALUES ('email_change_revoked', :d, :a, :uid)"""
+        ).bindparams(
+            d=f"Email change revoked: {m['new_email']} -> {m['old_email']}; all sessions invalidated",
+            a=m["old_email"], uid=m["user_id"],
+        )
+    )
+    session.commit()
+    return {"ok": True, "email": m["old_email"]}
+
+
+# --- TOTP repair ------------------------------------------------------------
+
+
+class _TotpRepair(BaseModel):
+    totp_code: str
+
+
+@router.post("/totp/repair")
+def totp_repair(
+    payload: _TotpRepair,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    import pyotp
+
+    if not user.password_hash:
+        raise HTTPException(status_code=400, detail="TOTP is not configured for this account")
+    if not pyotp.TOTP(user.password_hash).verify(payload.totp_code or "", valid_window=1):
+        raise HTTPException(status_code=401, detail="Invalid current TOTP code")
+
+    new_secret = pyotp.random_base32()
+    new_uri = pyotp.TOTP(new_secret).provisioning_uri(name=user.email, issuer_name="Axal VC StudioOS")
+    session.exec(
+        text("UPDATE users SET password_hash = :p WHERE id = :uid").bindparams(
+            p=new_secret, uid=user.id
+        )
+    )
+    now_sec = int(time.time())
+    session.exec(
+        text("UPDATE users SET jwt_min_iat = :n WHERE id = :uid").bindparams(n=now_sec, uid=user.id)
+    )
+    session.exec(
+        text(
+            """INSERT INTO activity_logs (action, details, actor, user_id)
+               VALUES ('totp_repaired',
+                       'User re-paired TOTP from /settings; all sessions invalidated',
+                       :a, :uid)"""
+        ).bindparams(a=user.email, uid=user.id)
+    )
+    session.commit()
+
+    qr_b64: Optional[str] = None
+    try:
+        import qrcode
+
+        qr = qrcode.QRCode(version=1, box_size=10, border=4)
+        qr.add_data(new_uri)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        qr_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "totp_secret": new_secret,
+        "provisioning_uri": new_uri,
+        "qr_code": qr_b64,
+        "message": "Scan the new QR with your authenticator. Your existing sessions have been signed out.",
+    }
+
+
+# --- Sessions: sign out everywhere ------------------------------------------
+
+
+@router.post("/sessions/revoke-all")
+def revoke_all_sessions(
+    user: User = Depends(get_current_user), session: Session = Depends(get_session)
+):
+    _ensure_schema(session)
+    now_sec = int(time.time()) + 1
+    session.exec(
+        text("UPDATE users SET jwt_min_iat = :n WHERE id = :uid").bindparams(n=now_sec, uid=user.id)
+    )
+    session.exec(
+        text(
+            """INSERT INTO activity_logs (action, details, actor, user_id)
+               VALUES ('sessions_revoked_all', 'User revoked all active sessions from /settings',
+                       :a, :uid)"""
+        ).bindparams(a=user.email, uid=user.id)
+    )
+    session.commit()
+    return {"ok": True, "revoked_at": now_sec}
+
+
+# --- Account: delete request + data export ----------------------------------
+
+
+@router.post("/account/delete-request")
+def request_account_deletion(
+    user: User = Depends(get_current_user), session: Session = Depends(get_session)
+):
+    _ensure_schema(session)
+    session.exec(
+        text(
+            "UPDATE users SET deletion_requested_at = COALESCE(deletion_requested_at, CURRENT_TIMESTAMP) WHERE id = :uid"
+        ).bindparams(uid=user.id)
+    )
+    session.exec(
+        text(
+            """INSERT INTO activity_logs (action, details, actor, user_id)
+               VALUES ('account_deletion_requested',
+                       'User requested account deletion via /settings (manual review required)',
+                       :a, :uid)"""
+        ).bindparams(a=user.email, uid=user.id)
+    )
+    session.commit()
+    return {"ok": True, "message": "Deletion request received. Our team will reach out within 7 days."}
+
+
+@router.post("/account/delete-request/cancel")
+def cancel_account_deletion(
+    user: User = Depends(get_current_user), session: Session = Depends(get_session)
+):
+    _ensure_schema(session)
+    session.exec(
+        text("UPDATE users SET deletion_requested_at = NULL WHERE id = :uid").bindparams(uid=user.id)
+    )
+    session.exec(
+        text(
+            """INSERT INTO activity_logs (action, details, actor, user_id)
+               VALUES ('account_deletion_cancelled', 'User cancelled their pending deletion request',
+                       :a, :uid)"""
+        ).bindparams(a=user.email, uid=user.id)
+    )
+    session.commit()
+    return {"ok": True}
+
+
+@router.get("/data-export")
+def data_export(user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    _ensure_schema(session)
+    extras = _user_extras(session, user.id)
+    activity = session.exec(
+        text(
+            """SELECT action, details, created_at
+               FROM activity_logs WHERE user_id = :uid
+               ORDER BY created_at DESC LIMIT 500"""
+        ).bindparams(uid=user.id)
+    ).all()
+    payload = {
+        "exported_at": datetime.utcnow().isoformat(),
+        "user": {
+            "id": user.id,
+            "uid": user.uid,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "bio": extras.get("bio"),
+            "jurisdictions": _safe_json(extras.get("jurisdictions"), []),
+            "socials": _safe_json(extras.get("socials"), {}),
+            "notification_prefs": _safe_json(extras.get("notification_prefs"), {}),
+            "privacy_prefs": _safe_json(extras.get("privacy_prefs"), {}),
+            "role_prefs": _safe_json(extras.get("role_prefs"), {}),
+            "created_at": str(user.created_at) if user.created_at else None,
+            "last_active_at": str(user.last_active_at) if user.last_active_at else None,
+        },
+        "recent_activity": [
+            {"action": r._mapping["action"], "details": r._mapping["details"], "created_at": str(r._mapping["created_at"])}  # type: ignore[attr-defined]
+            for r in activity
+        ],
+        "note": "Profile + last 500 activity entries. Full cross-system export: contact support.",
+    }
+    return Response(
+        content=json.dumps(payload, indent=2),
+        media_type="application/json",
+        headers={
+            "content-disposition": f'attachment; filename="axal-data-export-{user.uid or user.id}.json"',
+        },
+    )

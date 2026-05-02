@@ -66,6 +66,23 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
     const users = await sql`SELECT * FROM users WHERE id = ${payload.user_id}`;
     await sql.end();
     if (users.length === 0 || !users[0].is_active) return null;
+    // Epic 3 — sessions/revoke-all and email-change/revoke bump
+    // `users.jwt_min_iat`. Reject any token issued before that mark so
+    // "Sign out everywhere" is a real invalidation, not a frontend-only
+    // gesture. Tokens predating the column return undefined → we accept.
+    const minIat = (users[0] as any).jwt_min_iat;
+    let tokenIat = (payload as any).iat;
+    // jose emits `iat` in seconds (per RFC 7519), but legacy tokens issued
+    // before this column existed could in theory carry a ms-based value. If
+    // the number looks like ms (greater than 1e12 ≈ year 2001 in s, or year
+    // 33658 in s), normalize to seconds before comparison so revocation
+    // can never be bypassed by a unit mismatch.
+    if (typeof tokenIat === 'number' && tokenIat > 1e12) {
+      tokenIat = Math.floor(tokenIat / 1000);
+    }
+    if (typeof minIat === 'number' && minIat > 0 && typeof tokenIat === 'number' && tokenIat < minIat) {
+      return null;
+    }
     return users[0] as unknown as User;
   } catch {
     return null;

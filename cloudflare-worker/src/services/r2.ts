@@ -86,3 +86,59 @@ export async function deleteKycDocument(env: Env, fileKey: string): Promise<void
   if (!fileKey.startsWith('kyc/')) return;
   await env.FILES.delete(fileKey);
 }
+
+// ---------------------------------------------------------------------------
+// Headshots — public-readable profile images stored under headshots/{user_id}/.
+// We reuse the FILES R2 bucket with a separate key prefix so KYC and headshot
+// objects never collide and the privacy guards in routes/settings.ts remain
+// the single source of truth for who can view what.
+// ---------------------------------------------------------------------------
+
+const HEADSHOT_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
+
+export interface HeadshotMeta {
+  file_key: string;
+  content_type: string;
+  size: number;
+  uploaded_at: string;
+}
+
+export async function putHeadshotFromDataUri(
+  env: Env,
+  userId: number,
+  dataUri: string,
+): Promise<HeadshotMeta> {
+  if (!env.FILES) throw new Error('R2 binding FILES not configured');
+  const commaIdx = dataUri.indexOf(',');
+  if (commaIdx < 0 || !dataUri.startsWith('data:')) throw new Error('Invalid data URI');
+  const meta = dataUri.slice(5, commaIdx);
+  const contentType = meta.replace(';base64', '').trim();
+  const ext = HEADSHOT_MIME[contentType];
+  if (!ext) throw new Error(`Unsupported image type: ${contentType} (allowed: jpeg, png, webp)`);
+  const bytes = bytesFromBase64(dataUri.slice(commaIdx + 1));
+  // 3MB hard ceiling at the byte level — `routes/settings.ts` already
+  // ceilings the data-URI length but raw bytes are the truthful number.
+  if (bytes.byteLength > 3 * 1024 * 1024) throw new Error('Image exceeds 3MB limit');
+  const uuid = crypto.randomUUID();
+  const fileKey = `headshots/${userId}/${uuid}.${ext}`;
+  await env.FILES.put(fileKey, bytes, {
+    httpMetadata: { contentType },
+    customMetadata: { user_id: String(userId) },
+  });
+  return {
+    file_key: fileKey,
+    content_type: contentType,
+    size: bytes.byteLength,
+    uploaded_at: new Date().toISOString(),
+  };
+}
+
+export async function getHeadshot(env: Env, fileKey: string): Promise<R2ObjectBody | null> {
+  if (!env.FILES) return null;
+  if (!fileKey.startsWith('headshots/')) return null;
+  return await env.FILES.get(fileKey);
+}
