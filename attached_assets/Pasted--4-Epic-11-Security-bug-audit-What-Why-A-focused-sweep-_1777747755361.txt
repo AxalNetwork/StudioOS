@@ -1,0 +1,38 @@
+#4 - Epic 11 — Security & bug audit
+What & Why
+A focused sweep of the issues replit.md and the roadmap explicitly flag, plus a generic dependency/secret/CI hardening pass. Some items (JWT_SECRET assertion, Turnstile in prod, rate limits) are P0.
+
+Done looks like
+Worker has its own HMAC primitive matching FastAPI's signed-URL scheme.
+POST /api/search/backfill is verified run in prod; CI fails if any vector has a non-neutral snippet.
+Any write to lp_investors throws — INSTEAD OF trigger or worker assertion.
+CORS allowlist is exactly https://axal.vc and https://www.axal.vc; no wildcards.
+Turnstile is hard-required when ENVIRONMENT=production and TURNSTILE_SECRET_KEY is unset → registration refuses to start.
+Per-IP sliding-window rate limits (200/min general, 10/min for unauth registration POST) layered on top of per-user.
+Content-Security-Policy header with nonces for inline scripts is set.
+email_change_requests table with revocation token exists (Epic 3 dep).
+WebSocket auth uses Sec-WebSocket-Protocol: bearer.<jwt> subprotocol with query-string fallback only for unsupported browsers.
+Nightly job re-verifies all non-sandbox score_snapshots.integrity_hash and alerts on mismatch (Epic 5 dep).
+R2 buckets have public access disabled and a 90-day lifecycle rule moving signed PDFs to Standard-IA.
+App refuses to start when ENVIRONMENT=production and JWT_SECRET is unset/short.
+Generic checklist passes: npm audit --omit=dev, pip-audit, wrangler secret list reviewed, unique D1_DATABASE_ID per env, no PII in error_logs/activity_logs.detail/system_metrics, no console.log in worker prod build, npm run lint + tsc --noEmit are required CI gates.
+Out of scope
+Reworking auth flow itself.
+Penetration testing — this is the internal hardening pass.
+Steps
+Boot-time assertions + Turnstile + CORS — JWT_SECRET assertion, Turnstile prod requirement, CORS lockdown.
+Rate limiting + CSP + WebSocket subprotocol — Per-IP buckets, CSP with nonces, WS subprotocol auth.
+HMAC + integrity nightly + lp_investors trigger — Worker HMAC primitive, nightly hash re-verification, write-block on lp_investors.
+R2 bucket policy + CI hardening — R2 public-access off, lifecycle rule, lint/typecheck/audit as required CI gates.
+PII scrub + log audit — Remove PII from error/activity/metrics; strip console.log from worker prod build.
+Relevant files
+cloudflare-worker/src/index.ts
+cloudflare-worker/src/middleware
+cloudflare-worker/src/auth.ts
+cloudflare-worker/src/routes/search.ts
+cloudflare-worker/wrangler.toml
+backend/app/main.py
+backend/app/services/rate_limit.py
+backend/app/services/db_guards.py
+backend/app/services/pii.py
+.github/workflows
