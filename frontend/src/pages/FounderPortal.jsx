@@ -15,8 +15,15 @@ function FounderKycBanner() {
   useEffect(() => {
     let cancelled = false;
     const stored = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; } })();
-    // Skip for admins (including admin "View as Founder"), users already approved,
-    // and admin-granted limited-access accounts (sign gates handle them already).
+    // Skip when an admin is impersonating a founder. App.jsx overwrites
+    // localStorage `user` with the impersonated founder (and stashes the
+    // real admin under `realUser`), so role alone isn't enough — the
+    // presence of `realUser`/`realToken` is the impersonation flag.
+    const isImpersonating =
+      !!localStorage.getItem('realUser') || !!localStorage.getItem('realToken');
+    if (isImpersonating) return;
+    // Skip for non-founders, users already approved, and admin-granted
+    // limited-access accounts (sign gates handle them already).
     if (!stored || stored.role !== 'founder') return;
     if (stored.kyc_status === 'approved') return;
     if (stored.access_level === 'limited') return;
