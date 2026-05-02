@@ -333,7 +333,20 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   const delta = totp.validate({ token: totp_code, window: 1 });
   if (delta === null) { await sql.end(); return c.json({ error: 'Invalid TOTP code' }, 401); }
 
-  const jwtToken = await createJWT(c.env, user.id, user.email, user.role);
+  // Epic 3 — mint a session-bound JWT. The jti claim ties the token to a
+  // row in user_sessions so the user can list and revoke individual devices
+  // from /settings. Falls back gracefully if the table doesn't exist yet
+  // (auth.ts already handles missing-table on the verify side).
+  const jti = crypto.randomUUID();
+  const jwtToken = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);
+  const ua = (c.req.header('user-agent') || '').slice(0, 500);
+  const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
+  try {
+    await sql`INSERT INTO user_sessions (user_id, jti, user_agent, ip)
+              VALUES (${user.id}, ${jti}, ${ua || null}, ${ip || null})`;
+  } catch {
+    // Table not migrated yet; the JWT still works (auth.ts skips the check).
+  }
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_login', ${`User ${user.name} logged in`}, ${user.email}, ${user.id})`;
   await sql.end();
 

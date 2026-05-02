@@ -414,6 +414,15 @@ export const api = {
     if (!res.ok) throw new Error('Export failed');
     return await res.blob();
   },
+  listSessions: () => request('/settings/sessions'),
+  revokeSession: (id) => request(`/settings/sessions/${id}/revoke`, { method: 'POST', body: JSON.stringify({}) }),
+  regenerateRecoveryCodes: (totp_code) =>
+    request('/settings/totp/recovery-codes/regenerate', { method: 'POST', body: JSON.stringify({ totp_code }) }),
+  listFounderInvites: () => request('/settings/founder/invites'),
+  createFounderInvite: (data) =>
+    request('/settings/founder/invites', { method: 'POST', body: JSON.stringify(data) }),
+  revokeFounderInvite: (id) =>
+    request(`/settings/founder/invites/${id}`, { method: 'DELETE' }),
 
   // Company Profiles (Growth & Expansion Track — Task 1)
   companyMe: () => request('/company/me'),

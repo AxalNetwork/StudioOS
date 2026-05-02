@@ -6,6 +6,7 @@ import base64
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Header, Query, Request
 from sqlmodel import Session, select
+from sqlalchemy import text
 from pydantic import BaseModel, Field
 from typing import Optional
 from backend.app.database import get_session
@@ -124,7 +125,7 @@ class ConfirmVerifyRequest(BaseModel):
     token: str
 
 
-def create_jwt(user_id: int, email: str, role: str) -> str:
+def create_jwt(user_id: int, email: str, role: str, jti: Optional[str] = None) -> str:
     payload = {
         "user_id": user_id,
         "email": email,
@@ -132,6 +133,11 @@ def create_jwt(user_id: int, email: str, role: str) -> str:
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS),
         "iat": datetime.utcnow(),
     }
+    # Epic 3 — jti binds the token to a row in user_sessions so individual
+    # sessions can be revoked from /settings without bumping jwt_min_iat
+    # for every device. Optional for back-compat with existing tokens.
+    if jti:
+        payload["jti"] = jti
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
@@ -160,6 +166,57 @@ def get_current_user(authorization: Optional[str] = Header(None), session: Sessi
 
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
+
+    # Epic 3 — enforce sign-out-everywhere (`users.jwt_min_iat`) and
+    # per-session revocation (`user_sessions.revoked_at`). Mirrors the
+    # worker's behavior in `cloudflare-worker/src/auth.ts`.
+    try:
+        row = session.exec(
+            text("SELECT jwt_min_iat FROM users WHERE id = :uid").bindparams(uid=user.id)
+        ).first()
+        min_iat = (row._mapping["jwt_min_iat"] if row else 0) or 0  # type: ignore[attr-defined]
+    except Exception:
+        # Column not migrated yet (cold backend before /settings was hit).
+        min_iat = 0
+
+    token_iat = payload.get("iat")
+    if isinstance(token_iat, datetime):
+        token_iat = int(token_iat.timestamp())
+    elif isinstance(token_iat, (int, float)):
+        token_iat = int(token_iat)
+        # PyJWT historically used seconds; tolerate ms tokens too.
+        if token_iat > 1e12:
+            token_iat = token_iat // 1000
+    else:
+        token_iat = None
+    if min_iat and token_iat is not None and token_iat < int(min_iat):
+        raise HTTPException(status_code=401, detail="Session was signed out")
+
+    jti = payload.get("jti")
+    if isinstance(jti, str) and jti:
+        try:
+            sess = session.exec(
+                text("SELECT revoked_at FROM user_sessions WHERE jti = :j AND user_id = :uid").bindparams(
+                    j=jti, uid=user.id
+                )
+            ).first()
+            if sess is None or sess._mapping["revoked_at"] is not None:  # type: ignore[attr-defined]
+                raise HTTPException(status_code=401, detail="Session was revoked")
+            try:
+                session.exec(
+                    text("UPDATE user_sessions SET last_seen_at = CURRENT_TIMESTAMP WHERE jti = :j").bindparams(
+                        j=jti
+                    )
+                )
+                session.commit()
+            except Exception:
+                session.rollback()
+        except HTTPException:
+            raise
+        except Exception:
+            # Table not migrated yet; fall through (iat check already passed).
+            pass
+
     return user
 
 
@@ -465,7 +522,7 @@ def setup_totp(req: SetupTOTPRequest, session: Session = Depends(get_session)):
 
 
 @router.post("/login")
-def login(req: LoginRequest, session: Session = Depends(get_session)):
+def login(req: LoginRequest, request: Request, session: Session = Depends(get_session)):
     _check_rate_limit(req.email)
 
     user = session.exec(select(User).where(User.email == req.email)).first()
@@ -488,7 +545,19 @@ def login(req: LoginRequest, session: Session = Depends(get_session)):
         raise HTTPException(status_code=401, detail="Invalid TOTP code")
 
     _clear_attempts(req.email)
-    token = create_jwt(user.id, user.email, user.role)
+    # Epic 3 — mint a session-bound JWT (jti -> user_sessions row).
+    # Ensure the user_sessions table exists before INSERT — the table is
+    # otherwise only created on first /settings hit, so cold-start logins
+    # would silently lose their session row and the auth check would 401
+    # them on subsequent requests.
+    from backend.app.api.routes.settings import _ensure_schema as _ensure_settings_schema
+    try:
+        _ensure_settings_schema(session)
+    except Exception:
+        session.rollback()
+    import uuid as _uuid
+    jti = _uuid.uuid4().hex
+    token = create_jwt(user.id, user.email, user.role, jti=jti)
 
     log = ActivityLog(
         action="user_login",
@@ -496,6 +565,25 @@ def login(req: LoginRequest, session: Session = Depends(get_session)):
         actor=user.email,
     )
     session.add(log)
+    # Capture device fingerprint so the Settings → Active Sessions list is
+    # actually useful. UA is clamped to 500 chars; IP prefers
+    # X-Forwarded-For (first hop) when behind a proxy, else request.client.
+    ua = (request.headers.get("user-agent") or "")[:500] or None
+    fwd = request.headers.get("x-forwarded-for") or ""
+    ip = (fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else None))
+    if ip:
+        ip = ip[:64]
+    try:
+        session.exec(
+            text(
+                """INSERT INTO user_sessions (user_id, jti, user_agent, ip)
+                   VALUES (:uid, :j, :ua, :ip)"""
+            ).bindparams(uid=user.id, j=jti, ua=ua, ip=ip)
+        )
+    except Exception:
+        # Table not migrated yet (first /settings hit creates it). Token still works.
+        session.rollback()
+        session.add(log)
     session.commit()
 
     return {

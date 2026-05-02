@@ -56,7 +56,22 @@ const NOTIFICATION_EVENTS = [
   { key: 'product_announcements', label: 'Product announcements' },
 ];
 
-const NOTIFICATION_CHANNELS = ['email', 'inapp'];
+const NOTIFICATION_CHANNELS = [
+  { key: 'email', label: 'Email' },
+  { key: 'inapp', label: 'In-app' },
+  // SMS column reserved — wired in the table as disabled until Twilio is provisioned.
+  { key: 'sms', label: 'SMS', disabled: true, hint: 'Coming soon' },
+];
+
+// Partner-only events — surfaced as a sub-section so partners can wire deal-flow
+// and mandate-relevant alerts independently of the core event grid.
+const PARTNER_NOTIFICATION_EVENTS = [
+  { key: 'partner_high_score_deal', label: 'New deal scores above your threshold' },
+  { key: 'partner_pipeline_activity', label: 'Founder activity on watched deals' },
+  { key: 'partner_capital_call_due', label: 'Capital call due in 7 days' },
+  { key: 'partner_match_recommendation', label: 'AI match recommendation' },
+  { key: 'partner_kyc_block', label: 'A founder you backed is blocked on KYC' },
+];
 
 const SECTIONS = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -357,6 +372,28 @@ function AuthSection({ data, flash }) {
   const [busy, setBusy] = useState(false);
   const [revoking, setRevoking] = useState(false);
 
+  // Sessions list (per-device revocation, populated from /settings/sessions).
+  const [sessions, setSessions] = useState(null);
+  const [sessionsErr, setSessionsErr] = useState(null);
+  const [sessionBusyId, setSessionBusyId] = useState(null);
+
+  // Recovery codes
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [generatedCodes, setGeneratedCodes] = useState(null);
+  const remaining = data.totp_recovery_codes_remaining ?? 0;
+
+  const loadSessions = async () => {
+    try {
+      const res = await api.listSessions();
+      setSessions(res?.sessions || []);
+      setSessionsErr(null);
+    } catch (e) {
+      setSessionsErr(e.message || 'Failed to load sessions');
+    }
+  };
+  useEffect(() => { loadSessions(); }, []);
+
   const repair = async () => {
     if (!code.trim()) return;
     setBusy(true);
@@ -386,6 +423,55 @@ function AuthSection({ data, flash }) {
       flash(e.message || 'Failed to revoke sessions', 'error');
       setRevoking(false);
     }
+  };
+
+  const revokeOne = async (sess) => {
+    if (sess.is_current && !window.confirm('This is your current session — revoking will sign you out. Continue?')) return;
+    setSessionBusyId(sess.id);
+    try {
+      await api.revokeSession(sess.id);
+      flash('Session revoked.');
+      if (sess.is_current) {
+        window.setTimeout(() => {
+          try { localStorage.clear(); } catch {}
+          window.location.href = '/login';
+        }, 800);
+      } else {
+        await loadSessions();
+      }
+    } catch (e) {
+      flash(e.message || 'Failed to revoke session', 'error');
+    } finally {
+      setSessionBusyId(null);
+    }
+  };
+
+  const regenerateRecovery = async () => {
+    if (!recoveryCode.trim()) return;
+    if (remaining > 0 && !window.confirm('This invalidates any existing recovery codes. Continue?')) return;
+    setRecoveryBusy(true);
+    try {
+      const res = await api.regenerateRecoveryCodes(recoveryCode.trim());
+      setGeneratedCodes(res?.codes || []);
+      setRecoveryCode('');
+      flash('Recovery codes generated — save them now.');
+    } catch (e) {
+      flash(e.message || 'Failed to generate recovery codes', 'error');
+    } finally {
+      setRecoveryBusy(false);
+    }
+  };
+
+  const downloadCodes = () => {
+    if (!generatedCodes) return;
+    const txt = `Axal — TOTP recovery codes (${data.email})\nGenerated ${new Date().toISOString()}\n\n${generatedCodes.join('\n')}\n\nEach code can be used exactly once if you lose access to your authenticator app.\nDo not share these. Store somewhere safe (password manager, sealed envelope, etc.).\n`;
+    const blob = new Blob([txt], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `axal-recovery-codes-${(data.uid || data.id)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -427,7 +513,106 @@ function AuthSection({ data, flash }) {
         )}
       </Card>
 
-      <Card title="Active sessions" description="Sign out of every device that has access to this account.">
+      <Card title="Recovery codes"
+        description="One-time codes you can use to sign in if you lose access to your authenticator app.">
+        {generatedCodes ? (
+          <div className="space-y-3">
+            <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              These codes will not be shown again. Save them somewhere safe before you leave this page.
+            </div>
+            <div className="grid grid-cols-2 gap-2 font-mono text-sm">
+              {generatedCodes.map((c, i) => (
+                <div key={i} className="bg-gray-50 border border-gray-200 rounded px-3 py-2 select-all">{c}</div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={downloadCodes}
+                className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">
+                Download as .txt
+              </button>
+              <button onClick={() => setGeneratedCodes(null)}
+                className="px-4 py-2 border border-gray-300 hover:border-gray-400 text-gray-700 rounded-lg text-sm">
+                I've saved them
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="text-sm text-gray-700">
+              {remaining > 0
+                ? <>You have <span className="font-semibold">{remaining}</span> unused recovery code{remaining === 1 ? '' : 's'}.</>
+                : <span className="text-amber-700">You don't have any recovery codes yet — generate a set and store them somewhere safe.</span>}
+            </div>
+            {data.totp_configured ? (
+              <Field label="Enter your current 6-digit TOTP code to generate 8 new recovery codes">
+                <div className="flex gap-2">
+                  <input value={recoveryCode}
+                    onChange={e => setRecoveryCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="123456" inputMode="numeric" className={inputCls} />
+                  <button onClick={regenerateRecovery} disabled={recoveryBusy || recoveryCode.length !== 6}
+                    className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium whitespace-nowrap">
+                    {recoveryBusy ? 'Generating…' : (remaining > 0 ? 'Regenerate codes' : 'Generate codes')}
+                  </button>
+                </div>
+              </Field>
+            ) : (
+              <div className="text-sm text-gray-500">Configure TOTP first.</div>
+            )}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Active sessions" description="See every device with an active session and revoke individual ones — or sign everything out at once.">
+        {sessionsErr && <div className="text-sm text-red-600 mb-3">{sessionsErr}</div>}
+        {sessions === null ? (
+          <div className="text-sm text-gray-500">Loading sessions…</div>
+        ) : sessions.length === 0 ? (
+          <div className="text-sm text-gray-500 mb-3">No tracked sessions yet. New sign-ins will appear here.</div>
+        ) : (
+          <div className="overflow-x-auto mb-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider">
+                  <th className="text-left px-2 py-2 font-medium">Device</th>
+                  <th className="text-left px-2 py-2 font-medium">IP</th>
+                  <th className="text-left px-2 py-2 font-medium">First seen</th>
+                  <th className="text-left px-2 py-2 font-medium">Last seen</th>
+                  <th className="px-2 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map(s => {
+                  const isRevoked = !!s.revoked_at;
+                  return (
+                    <tr key={s.id} className={`border-b border-gray-100 ${isRevoked ? 'text-gray-400' : 'text-gray-800'}`}>
+                      <td className="px-2 py-2 max-w-xs truncate" title={s.user_agent || ''}>
+                        {s.user_agent || 'Unknown device'}
+                        {s.is_current && (
+                          <span className="ml-2 inline-block text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            This device
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 text-xs">{s.ip || '—'}</td>
+                      <td className="px-2 py-2 text-xs">{s.created_at ? new Date(s.created_at).toLocaleString() : '—'}</td>
+                      <td className="px-2 py-2 text-xs">{s.last_seen_at ? new Date(s.last_seen_at).toLocaleString() : '—'}</td>
+                      <td className="px-2 py-2 text-right">
+                        {isRevoked ? (
+                          <span className="text-xs text-gray-400">Revoked</span>
+                        ) : (
+                          <button onClick={() => revokeOne(s)} disabled={sessionBusyId === s.id}
+                            className="text-xs text-red-600 hover:text-red-800 disabled:text-gray-400">
+                            {sessionBusyId === s.id ? 'Revoking…' : 'Revoke'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
         <button onClick={revokeAll} disabled={revoking}
           className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium flex items-center gap-2">
           <LogOut size={14} /> {revoking ? 'Signing out…' : 'Sign out everywhere'}
@@ -447,38 +632,60 @@ function NotificationsSection({ data, patch }) {
     patch({ notification_prefs: next });
   };
 
-  return (
-    <Card title="Notifications" description="Choose where each kind of alert is delivered.">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200">
-              <th className="text-left px-2 py-2 text-xs text-gray-500 font-medium">Event</th>
-              {NOTIFICATION_CHANNELS.map(c => (
-                <th key={c} className="text-center px-2 py-2 text-xs text-gray-500 font-medium uppercase tracking-wider">{c}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {NOTIFICATION_EVENTS.map(ev => (
-              <tr key={ev.key} className="border-b border-gray-100">
-                <td className="px-2 py-2 text-gray-800">{ev.label}</td>
-                {NOTIFICATION_CHANNELS.map(c => {
-                  const checked = !!prefs[ev.key]?.[c];
-                  return (
-                    <td key={c} className="text-center px-2 py-2">
-                      <input type="checkbox" checked={checked}
-                        onChange={e => setEvent(ev.key, c, e.target.checked)}
-                        className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500" />
-                    </td>
-                  );
-                })}
-              </tr>
+  const renderTable = (events) => (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-gray-200">
+            <th className="text-left px-2 py-2 text-xs text-gray-500 font-medium">Event</th>
+            {NOTIFICATION_CHANNELS.map(c => (
+              <th key={c.key}
+                className="text-center px-2 py-2 text-xs text-gray-500 font-medium uppercase tracking-wider"
+                title={c.disabled ? c.hint : undefined}>
+                {c.label}
+                {c.disabled && (
+                  <div className="text-[10px] normal-case font-normal text-gray-400 tracking-normal">
+                    {c.hint}
+                  </div>
+                )}
+              </th>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+          </tr>
+        </thead>
+        <tbody>
+          {events.map(ev => (
+            <tr key={ev.key} className="border-b border-gray-100">
+              <td className="px-2 py-2 text-gray-800">{ev.label}</td>
+              {NOTIFICATION_CHANNELS.map(c => {
+                const checked = !!prefs[ev.key]?.[c.key];
+                return (
+                  <td key={c.key} className="text-center px-2 py-2">
+                    <input type="checkbox" checked={checked} disabled={!!c.disabled}
+                      onChange={e => setEvent(ev.key, c.key, e.target.checked)}
+                      title={c.disabled ? c.hint : undefined}
+                      className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 disabled:opacity-40 disabled:cursor-not-allowed" />
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  return (
+    <>
+      <Card title="Notifications" description="Choose where each kind of alert is delivered.">
+        {renderTable(NOTIFICATION_EVENTS)}
+      </Card>
+      {data.role === 'partner' && (
+        <Card title="Partner notification triggers"
+          description="Deal-flow and mandate alerts specific to your partner / LP role.">
+          {renderTable(PARTNER_NOTIFICATION_EVENTS)}
+        </Card>
+      )}
+    </>
   );
 }
 
@@ -598,45 +805,193 @@ function FounderPrefs({ data, patch }) {
   };
 
   return (
-    <Card title="Founder preferences" description="How you want to be matched with deals, capital, and partners.">
-      <div className="grid sm:grid-cols-2 gap-3">
-        <Field label="Preferred raise band">
-          <select value={draft.raise_band || ''} onChange={e => save({ raise_band: e.target.value })} className={inputCls}>
-            <option value="">—</option>
-            <option value="pre_seed">Pre-seed (under $1M)</option>
-            <option value="seed">Seed ($1M – $5M)</option>
-            <option value="series_a">Series A ($5M – $20M)</option>
-            <option value="growth">Growth ($20M+)</option>
+    <>
+      <Card title="Founder preferences" description="How you want to be matched with deals, capital, and partners.">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Preferred raise band">
+            <select value={draft.raise_band || ''} onChange={e => save({ raise_band: e.target.value })} className={inputCls}>
+              <option value="">—</option>
+              <option value="pre_seed">Pre-seed (under $1M)</option>
+              <option value="seed">Seed ($1M – $5M)</option>
+              <option value="series_a">Series A ($5M – $20M)</option>
+              <option value="growth">Growth ($20M+)</option>
+            </select>
+          </Field>
+          <Field label="Stage now">
+            <select value={draft.stage || ''} onChange={e => save({ stage: e.target.value })} className={inputCls}>
+              <option value="">—</option>
+              <option value="idea">Idea</option>
+              <option value="prototype">Prototype</option>
+              <option value="mvp">MVP</option>
+              <option value="revenue">Revenue</option>
+              <option value="scaling">Scaling</option>
+            </select>
+          </Field>
+          <Field label="Co-founder seats open">
+            <input type="number" min={0} max={10} value={draft.cofounder_seats ?? 0}
+              onChange={e => save({ cofounder_seats: Number(e.target.value) || 0 })} className={inputCls} />
+          </Field>
+          <Field label="Board posture">
+            <select value={draft.board_posture || ''} onChange={e => save({ board_posture: e.target.value })} className={inputCls}>
+              <option value="">—</option>
+              <option value="independent">Founder-led, independent</option>
+              <option value="balanced">Balanced founder + investor</option>
+              <option value="investor_led">Investor-led</option>
+            </select>
+          </Field>
+        </div>
+        <div className="mt-4">
+          <Field label="What you're looking for from Axal" hint="Free text. Used by partners reviewing your profile.">
+            <textarea value={draft.notes || ''} onChange={e => save({ notes: e.target.value })} rows={3} className={inputCls} />
+          </Field>
+        </div>
+      </Card>
+      <CofounderInvitesCard />
+    </>
+  );
+}
+
+function CofounderInvitesCard() {
+  const [invites, setInvites] = useState(null);
+  const [cap, setCap] = useState(10);
+  const [err, setErr] = useState(null);
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('co-founder');
+  const [busy, setBusy] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const [pendingLink, setPendingLink] = useState(null);
+
+  const load = async () => {
+    try {
+      const res = await api.listFounderInvites();
+      setInvites(res?.invites || []);
+      setCap(res?.cap_per_project ?? 10);
+    } catch (e) {
+      setErr(e.message || 'Failed to load invites');
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const send = async () => {
+    if (!email.trim()) return;
+    setBusy(true);
+    setPendingLink(null);
+    try {
+      const res = await api.createFounderInvite({
+        invitee_email: email.trim().toLowerCase(),
+        invitee_name: name.trim() || undefined,
+        role,
+      });
+      setEmail('');
+      setName('');
+      if (!res?.email_sent && res?.accept_url) setPendingLink(res.accept_url);
+      await load();
+    } catch (e) {
+      setErr(e.message || 'Failed to send invite');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async (id) => {
+    if (!window.confirm('Revoke this invite?')) return;
+    setBusyId(id);
+    try {
+      await api.revokeFounderInvite(id);
+      await load();
+    } catch (e) {
+      setErr(e.message || 'Failed to revoke invite');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const pendingCount = (invites || []).filter(i => !i.accepted_at && !i.revoked_at).length;
+
+  return (
+    <Card title="Co-founder invites"
+      description={`Invite a co-founder, advisor, or operating partner to join your project on Axal. Up to ${cap} active invites at a time, each valid for 14 days.`}>
+      {err && <div className="text-sm text-red-600 mb-3">{err}</div>}
+
+      <div className="grid sm:grid-cols-3 gap-2 mb-3">
+        <input type="email" placeholder="cofounder@example.com" value={email}
+          onChange={e => setEmail(e.target.value)} className={inputCls} />
+        <input type="text" placeholder="Name (optional)" value={name}
+          onChange={e => setName(e.target.value)} className={inputCls} />
+        <div className="flex gap-2">
+          <select value={role} onChange={e => setRole(e.target.value)} className={inputCls}>
+            <option value="co-founder">Co-founder</option>
+            <option value="advisor">Advisor</option>
+            <option value="operator">Operating partner</option>
           </select>
-        </Field>
-        <Field label="Stage now">
-          <select value={draft.stage || ''} onChange={e => save({ stage: e.target.value })} className={inputCls}>
-            <option value="">—</option>
-            <option value="idea">Idea</option>
-            <option value="prototype">Prototype</option>
-            <option value="mvp">MVP</option>
-            <option value="revenue">Revenue</option>
-            <option value="scaling">Scaling</option>
-          </select>
-        </Field>
-        <Field label="Co-founder seats open">
-          <input type="number" min={0} max={10} value={draft.cofounder_seats ?? 0}
-            onChange={e => save({ cofounder_seats: Number(e.target.value) || 0 })} className={inputCls} />
-        </Field>
-        <Field label="Board posture">
-          <select value={draft.board_posture || ''} onChange={e => save({ board_posture: e.target.value })} className={inputCls}>
-            <option value="">—</option>
-            <option value="independent">Founder-led, independent</option>
-            <option value="balanced">Balanced founder + investor</option>
-            <option value="investor_led">Investor-led</option>
-          </select>
-        </Field>
+          <button onClick={send} disabled={busy || !email.trim() || pendingCount >= cap}
+            className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium whitespace-nowrap">
+            {busy ? 'Sending…' : 'Send invite'}
+          </button>
+        </div>
       </div>
-      <div className="mt-4">
-        <Field label="What you're looking for from Axal" hint="Free text. Used by partners reviewing your profile.">
-          <textarea value={draft.notes || ''} onChange={e => save({ notes: e.target.value })} rows={3} className={inputCls} />
-        </Field>
-      </div>
+
+      {pendingCount >= cap && (
+        <div className="text-xs text-amber-700 mb-3">Cap reached. Revoke a pending invite to send a new one.</div>
+      )}
+      {pendingLink && (
+        <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 break-all">
+          Email delivery is unavailable in this environment — share this link manually:
+          <div className="font-mono mt-1">{pendingLink}</div>
+        </div>
+      )}
+
+      {invites === null ? (
+        <div className="text-sm text-gray-500">Loading invites…</div>
+      ) : invites.length === 0 ? (
+        <div className="text-sm text-gray-500">No invites yet.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider">
+                <th className="text-left px-2 py-2 font-medium">Invitee</th>
+                <th className="text-left px-2 py-2 font-medium">Role</th>
+                <th className="text-left px-2 py-2 font-medium">Status</th>
+                <th className="text-left px-2 py-2 font-medium">Expires</th>
+                <th className="px-2 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {invites.map(i => {
+                let status = 'Pending';
+                let cls = 'text-amber-700 bg-amber-50 border-amber-200';
+                if (i.accepted_at) { status = 'Accepted'; cls = 'text-emerald-700 bg-emerald-50 border-emerald-200'; }
+                else if (i.revoked_at) { status = 'Revoked'; cls = 'text-gray-500 bg-gray-50 border-gray-200'; }
+                return (
+                  <tr key={i.id} className="border-b border-gray-100">
+                    <td className="px-2 py-2">
+                      <div className="text-gray-800">{i.invitee_name || i.invitee_email}</div>
+                      {i.invitee_name && <div className="text-xs text-gray-500">{i.invitee_email}</div>}
+                    </td>
+                    <td className="px-2 py-2 text-gray-700">{i.role}</td>
+                    <td className="px-2 py-2">
+                      <span className={`inline-block text-xs px-2 py-0.5 rounded-full border ${cls}`}>{status}</span>
+                    </td>
+                    <td className="px-2 py-2 text-xs text-gray-600">
+                      {i.expires_at ? new Date(i.expires_at).toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-2 py-2 text-right">
+                      {!i.accepted_at && !i.revoked_at && (
+                        <button onClick={() => revoke(i.id)} disabled={busyId === i.id}
+                          className="text-xs text-red-600 hover:text-red-800 disabled:text-gray-400">
+                          {busyId === i.id ? 'Revoking…' : 'Revoke'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Card>
   );
 }
@@ -701,7 +1056,8 @@ function PartnerPrefs({ data, patch }) {
           <input type="number" min={0} value={draft.fund_size_cap ?? ''}
             onChange={e => save({ fund_size_cap: Number(e.target.value) || 0 })} className={inputCls} placeholder="50000000" />
         </Field>
-        <Field label="Risk tolerance">
+        <Field label="Risk tolerance"
+          hint="Bucket used by older deal scoring. The numeric slider below replaces it for new matching.">
           <select value={draft.risk_tolerance || ''} onChange={e => save({ risk_tolerance: e.target.value })} className={inputCls}>
             <option value="">—</option>
             <option value="low">Low</option>
@@ -709,6 +1065,24 @@ function PartnerPrefs({ data, patch }) {
             <option value="high">High</option>
             <option value="frontier">Frontier</option>
           </select>
+        </Field>
+      </div>
+
+      <div className="mt-4">
+        <Field label={`Risk score: ${draft.risk_score ?? 50} / 100`}
+          hint="0 = capital preservation, 100 = swing-for-the-fences. Used by AI matching to weight deals against your mandate.">
+          <input type="range" min={0} max={100} step={1}
+            value={draft.risk_score ?? 50}
+            onChange={e => setDraft({ ...draft, risk_score: Number(e.target.value) })}
+            onMouseUp={e => save({ risk_score: Number(e.target.value) })}
+            onTouchEnd={e => save({ risk_score: Number(e.target.value) })}
+            onKeyUp={e => save({ risk_score: Number(e.target.value) })}
+            className="w-full accent-violet-600" />
+          <div className="flex justify-between text-[11px] text-gray-500 mt-1">
+            <span>Capital preservation</span>
+            <span>Balanced</span>
+            <span>Frontier / venture</span>
+          </div>
         </Field>
       </div>
 

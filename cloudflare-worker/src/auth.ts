@@ -35,13 +35,24 @@ function getSecretKey(env: Env) {
   return new TextEncoder().encode(env.JWT_SECRET || '');
 }
 
-export async function createJWT(env: Env, userId: number, email: string, role: string, impersonatedBy?: number) {
+export async function createJWT(
+  env: Env,
+  userId: number,
+  email: string,
+  role: string,
+  impersonatedBy?: number,
+  jti?: string,
+) {
   const payload: Record<string, unknown> = {
     user_id: userId,
     email,
     role,
   };
   if (impersonatedBy) payload.impersonated_by = impersonatedBy;
+  // Epic 3 — jti binds the token to a row in user_sessions so individual
+  // sessions can be revoked from /settings without nuking every device.
+  // Optional for back-compat with existing in-flight tokens.
+  if (jti) payload.jti = jti;
 
   return new SignJWT(payload)
     .setProtectedHeader({ alg: JWT_ALGORITHM })
@@ -82,6 +93,27 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
     }
     if (typeof minIat === 'number' && minIat > 0 && typeof tokenIat === 'number' && tokenIat < minIat) {
       return null;
+    }
+    // Per-session revocation: if the token carries a jti, verify the
+    // matching `user_sessions` row exists and isn't revoked. Tokens without
+    // jti (older in-flight ones) skip this check and rely on iat alone.
+    const tokenJti = (payload as any).jti;
+    if (typeof tokenJti === 'string' && tokenJti.length > 0) {
+      try {
+        const sess = await c.env.DB.prepare(
+          'SELECT revoked_at FROM user_sessions WHERE jti = ? AND user_id = ?'
+        ).bind(tokenJti, payload.user_id).first<{ revoked_at: string | null }>();
+        if (!sess || sess.revoked_at) return null;
+        // Best-effort heartbeat. Don't fail the request if this errors.
+        try {
+          await c.env.DB.prepare(
+            "UPDATE user_sessions SET last_seen_at = datetime('now') WHERE jti = ?"
+          ).bind(tokenJti).run();
+        } catch {}
+      } catch {
+        // user_sessions table may not exist yet on a cold worker before
+        // ensureSchema runs in /settings. Don't lock people out.
+      }
     }
     return users[0] as unknown as User;
   } catch {

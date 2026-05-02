@@ -43,7 +43,11 @@ _USER_COLUMNS = [
     ("role_prefs", "TEXT"),
     ("jwt_min_iat", "BIGINT DEFAULT 0"),
     ("deletion_requested_at", "TIMESTAMP"),
+    ("totp_recovery_codes", "TEXT"),
 ]
+
+FOUNDER_INVITE_CAP_PER_PROJECT = 10
+FOUNDER_INVITE_EXPIRY_DAYS = 14
 
 _migrated = False
 
@@ -90,6 +94,69 @@ def _ensure_schema(session: Session) -> None:
         session.commit()
     except Exception:
         session.rollback()
+    # user_sessions
+    try:
+        session.exec(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS user_sessions (
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    jti TEXT NOT NULL UNIQUE,
+                    user_agent TEXT,
+                    ip TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    revoked_at TIMESTAMP
+                )
+                """
+            )
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+    for stmt in (
+        "CREATE INDEX IF NOT EXISTS idx_us_user ON user_sessions(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_us_jti ON user_sessions(jti)",
+    ):
+        try:
+            session.exec(text(stmt))
+            session.commit()
+        except Exception:
+            session.rollback()
+    # founder_invites
+    try:
+        session.exec(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS founder_invites (
+                    id BIGSERIAL PRIMARY KEY,
+                    project_id INTEGER,
+                    inviter_user_id INTEGER NOT NULL,
+                    invitee_email TEXT NOT NULL,
+                    invitee_name TEXT,
+                    role TEXT NOT NULL DEFAULT 'co-founder',
+                    token_hash TEXT NOT NULL UNIQUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP NOT NULL,
+                    accepted_at TIMESTAMP,
+                    revoked_at TIMESTAMP
+                )
+                """
+            )
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+    for stmt in (
+        "CREATE INDEX IF NOT EXISTS idx_fi_inviter ON founder_invites(inviter_user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_fi_project ON founder_invites(project_id)",
+    ):
+        try:
+            session.exec(text(stmt))
+            session.commit()
+        except Exception:
+            session.rollback()
     _migrated = True
 
 
@@ -113,7 +180,7 @@ def _user_extras(session: Session, user_id: int) -> dict[str, Any]:
             """
             SELECT bio, headshot_local_path, jurisdictions, socials,
                    notification_prefs, privacy_prefs, role_prefs,
-                   jwt_min_iat, deletion_requested_at
+                   jwt_min_iat, deletion_requested_at, totp_recovery_codes
             FROM users WHERE id = :uid
             """
         ).bindparams(uid=user_id)
@@ -176,6 +243,7 @@ def get_settings(user: User = Depends(get_current_user), session: Session = Depe
             "expires_at": str(m["confirm_expires_at"]),
         }
 
+    recovery_codes = _safe_json(extras.get("totp_recovery_codes"), [])
     return {
         "id": user.id,
         "uid": user.uid,
@@ -206,7 +274,28 @@ def get_settings(user: User = Depends(get_current_user), session: Session = Depe
             str(extras.get("deletion_requested_at")) if extras.get("deletion_requested_at") else None
         ),
         "pending_email_change": pending,
+        "totp_recovery_codes_remaining": len(recovery_codes) if isinstance(recovery_codes, list) else 0,
+        "current_jti": _current_jti_from_request(),
     }
+
+
+def _current_jti_from_request() -> Optional[str]:
+    # Light helper — pulls the current request's jti from the JWT in the
+    # Authorization header so /settings can highlight which session is "this
+    # device". Done outside FastAPI's Depends to avoid threading another
+    # parameter through. Returns None silently on any failure.
+    try:
+        from starlette.requests import Request as _Req  # noqa
+        from contextvars import ContextVar  # noqa
+    except Exception:
+        return None
+    # Decode without verification — the token already passed get_current_user.
+    import jwt as _jwt
+    from fastapi import Request as _FRequest
+    # We don't have direct request access here without injection; the worker
+    # mirror gets jti from the header. For FastAPI we accept None and let the
+    # frontend cope (it falls back to "current device" heuristic).
+    return None
 
 
 # --- PATCH /api/settings ----------------------------------------------------
@@ -677,6 +766,269 @@ def cancel_account_deletion(
                VALUES ('account_deletion_cancelled', 'User cancelled their pending deletion request',
                        :a, :uid)"""
         ).bindparams(a=user.email, uid=user.id)
+    )
+    session.commit()
+    return {"ok": True}
+
+
+# --- Sessions: list + per-session revoke ------------------------------------
+
+
+@router.get("/sessions")
+def list_sessions(
+    user: User = Depends(get_current_user), session: Session = Depends(get_session)
+):
+    _ensure_schema(session)
+    rows = session.exec(
+        text(
+            """SELECT id, jti, user_agent, ip, created_at, last_seen_at, revoked_at
+               FROM user_sessions WHERE user_id = :uid
+               ORDER BY last_seen_at DESC LIMIT 100"""
+        ).bindparams(uid=user.id)
+    ).all()
+    return {
+        "sessions": [
+            {
+                "id": r._mapping["id"],  # type: ignore[attr-defined]
+                "jti": r._mapping["jti"],  # type: ignore[attr-defined]
+                "user_agent": r._mapping["user_agent"],  # type: ignore[attr-defined]
+                "ip": r._mapping["ip"],  # type: ignore[attr-defined]
+                "created_at": str(r._mapping["created_at"]),  # type: ignore[attr-defined]
+                "last_seen_at": str(r._mapping["last_seen_at"]),  # type: ignore[attr-defined]
+                "revoked_at": str(r._mapping["revoked_at"]) if r._mapping["revoked_at"] else None,  # type: ignore[attr-defined]
+                "is_current": False,  # FastAPI mirror doesn't surface jti; UI marks last_seen_at
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.post("/sessions/{session_id}/revoke")
+def revoke_session(
+    session_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    owned = session.exec(
+        text("SELECT id FROM user_sessions WHERE id = :i AND user_id = :uid").bindparams(
+            i=session_id, uid=user.id
+        )
+    ).first()
+    if owned is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    session.exec(
+        text(
+            "UPDATE user_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = :i AND user_id = :uid"
+        ).bindparams(i=session_id, uid=user.id)
+    )
+    session.exec(
+        text(
+            """INSERT INTO activity_logs (action, details, actor, user_id)
+               VALUES ('session_revoked', :d, :a, :uid)"""
+        ).bindparams(d=f"User revoked session {session_id} from /settings", a=user.email, uid=user.id)
+    )
+    session.commit()
+    return {"ok": True}
+
+
+# --- TOTP recovery codes ----------------------------------------------------
+
+
+def _generate_recovery_code() -> str:
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    raw = "".join(secrets.choice(alphabet) for _ in range(12))
+    return f"{raw[0:4]}-{raw[4:8]}-{raw[8:12]}"
+
+
+class _RecoveryRegen(BaseModel):
+    totp_code: str
+
+
+@router.post("/totp/recovery-codes/regenerate")
+def regenerate_recovery_codes(
+    payload: _RecoveryRegen,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    import pyotp
+
+    if not user.password_hash:
+        raise HTTPException(status_code=400, detail="TOTP is not configured for this account")
+    if not pyotp.TOTP(user.password_hash).verify(payload.totp_code or "", valid_window=1):
+        raise HTTPException(status_code=401, detail="Invalid current TOTP code")
+    plain = [_generate_recovery_code() for _ in range(8)]
+    hashes = [_hash_token(c) for c in plain]
+    session.exec(
+        text("UPDATE users SET totp_recovery_codes = :j WHERE id = :uid").bindparams(
+            j=json.dumps(hashes), uid=user.id
+        )
+    )
+    session.exec(
+        text(
+            """INSERT INTO activity_logs (action, details, actor, user_id)
+               VALUES ('totp_recovery_codes_regenerated',
+                       'User regenerated TOTP recovery codes', :a, :uid)"""
+        ).bindparams(a=user.email, uid=user.id)
+    )
+    session.commit()
+    return {
+        "ok": True,
+        "codes": plain,
+        "message": (
+            "Save these codes somewhere safe — they will not be shown again. "
+            "Each code can be used once if you lose access to your authenticator."
+        ),
+    }
+
+
+# --- Founder co-founder invites ---------------------------------------------
+
+
+class _FounderInvite(BaseModel):
+    invitee_email: str
+    invitee_name: Optional[str] = None
+    role: Optional[str] = "co-founder"
+    project_id: Optional[int] = None
+
+
+@router.get("/founder/invites")
+def list_founder_invites(
+    user: User = Depends(get_current_user), session: Session = Depends(get_session)
+):
+    _ensure_schema(session)
+    if user.role != "founder":
+        raise HTTPException(status_code=403, detail="Founder role required")
+    rows = session.exec(
+        text(
+            """SELECT id, project_id, invitee_email, invitee_name, role,
+                      created_at, expires_at, accepted_at, revoked_at
+               FROM founder_invites WHERE inviter_user_id = :uid
+               ORDER BY created_at DESC LIMIT 100"""
+        ).bindparams(uid=user.id)
+    ).all()
+    return {
+        "invites": [
+            {
+                "id": r._mapping["id"],  # type: ignore[attr-defined]
+                "project_id": r._mapping["project_id"],  # type: ignore[attr-defined]
+                "invitee_email": r._mapping["invitee_email"],  # type: ignore[attr-defined]
+                "invitee_name": r._mapping["invitee_name"],  # type: ignore[attr-defined]
+                "role": r._mapping["role"],  # type: ignore[attr-defined]
+                "created_at": str(r._mapping["created_at"]),  # type: ignore[attr-defined]
+                "expires_at": str(r._mapping["expires_at"]),  # type: ignore[attr-defined]
+                "accepted_at": str(r._mapping["accepted_at"]) if r._mapping["accepted_at"] else None,  # type: ignore[attr-defined]
+                "revoked_at": str(r._mapping["revoked_at"]) if r._mapping["revoked_at"] else None,  # type: ignore[attr-defined]
+            }
+            for r in rows
+        ],
+        "cap_per_project": FOUNDER_INVITE_CAP_PER_PROJECT,
+    }
+
+
+@router.post("/founder/invites")
+def create_founder_invite(
+    payload: _FounderInvite,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    if user.role != "founder":
+        raise HTTPException(status_code=403, detail="Founder role required")
+    invitee_email = (payload.invitee_email or "").strip().lower()
+    if not _is_email(invitee_email):
+        raise HTTPException(status_code=400, detail="Valid invitee_email required")
+    invitee_name = (payload.invitee_name or "").strip()[:120] or None
+    role = (payload.role or "co-founder").strip()[:40] or "co-founder"
+    project_id = payload.project_id
+
+    if project_id is not None:
+        # Authorization: inviter must own the target project. Mirrors the
+        # worker's broken-access-control fix.
+        if not user.founder_id:
+            raise HTTPException(status_code=403, detail="Founder profile required to invite to a project")
+        owns = session.exec(
+            text("SELECT id FROM projects WHERE id = :p AND founder_id = :fid").bindparams(
+                p=project_id, fid=user.founder_id
+            )
+        ).first()
+        if owns is None:
+            raise HTTPException(status_code=403, detail="Project not found or not owned by you")
+        count_row = session.exec(
+            text(
+                "SELECT COUNT(*) AS n FROM founder_invites WHERE project_id = :p AND revoked_at IS NULL"
+            ).bindparams(p=project_id)
+        ).first()
+    else:
+        count_row = session.exec(
+            text(
+                """SELECT COUNT(*) AS n FROM founder_invites
+                   WHERE project_id IS NULL AND inviter_user_id = :uid AND revoked_at IS NULL"""
+            ).bindparams(uid=user.id)
+        ).first()
+    n = int(count_row._mapping["n"] or 0) if count_row is not None else 0  # type: ignore[attr-defined]
+    if n >= FOUNDER_INVITE_CAP_PER_PROJECT:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Invite cap reached ({FOUNDER_INVITE_CAP_PER_PROJECT} per project)",
+        )
+
+    token_raw = _generate_token()
+    token_hash = _hash_token(token_raw)
+    expires = (datetime.utcnow() + timedelta(days=FOUNDER_INVITE_EXPIRY_DAYS)).isoformat()
+    session.exec(
+        text(
+            """INSERT INTO founder_invites
+               (project_id, inviter_user_id, invitee_email, invitee_name, role, token_hash, expires_at)
+               VALUES (:p, :uid, :e, :n, :r, :h, :ex)"""
+        ).bindparams(
+            p=project_id, uid=user.id, e=invitee_email, n=invitee_name,
+            r=role, h=token_hash, ex=expires,
+        )
+    )
+    session.exec(
+        text(
+            """INSERT INTO activity_logs (action, details, actor, user_id)
+               VALUES ('cofounder_invited', :d, :a, :uid)"""
+        ).bindparams(d=f"Invited {invitee_email} as {role}", a=user.email, uid=user.id)
+    )
+    session.commit()
+
+    accept_url = f"{_app_url()}/invites/cofounder?token={token_raw}"
+    sent = bool(send_verification_email(invitee_email, invitee_name or invitee_email, accept_url))
+    out = {
+        "ok": True,
+        "invitee_email": invitee_email,
+        "expires_at": expires,
+        "email_sent": sent,
+    }
+    if not sent:
+        out["accept_url"] = accept_url
+    return out
+
+
+@router.delete("/founder/invites/{invite_id}")
+def revoke_founder_invite(
+    invite_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    if user.role != "founder":
+        raise HTTPException(status_code=403, detail="Founder role required")
+    owned = session.exec(
+        text(
+            """SELECT id FROM founder_invites
+               WHERE id = :i AND inviter_user_id = :uid AND revoked_at IS NULL"""
+        ).bindparams(i=invite_id, uid=user.id)
+    ).first()
+    if owned is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    session.exec(
+        text(
+            "UPDATE founder_invites SET revoked_at = CURRENT_TIMESTAMP WHERE id = :i"
+        ).bindparams(i=invite_id)
     )
     session.commit()
     return {"ok": True}

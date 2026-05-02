@@ -1,97 +1,47 @@
 # Axal StudioOS
 
 ## Overview
-API-first Venture Studio Operating System — "The 30-Day Spin-Out Engine" for venture capital and startup incubation. Manages startup project lifecycle from intake and AI scoring through legal formation (spin-outs), fundraising, and portfolio monitoring.
+Axal StudioOS is an API-first Venture Studio Operating System, designed as a "30-Day Spin-Out Engine" for venture capital firms and startup incubators. Its primary purpose is to manage the entire startup project lifecycle, encompassing intake, AI-driven scoring, legal formation (spin-outs), fundraising, and continuous portfolio monitoring. The platform aims to streamline the process of launching and managing new ventures, providing robust tools for legal, financial, and operational oversight.
 
-## Architecture
+## User Preferences
+The user prefers clear and concise communication. They value iterative development and expect the agent to ask for confirmation before implementing major architectural changes or significant code refactoring. The user also requests that the agent prioritizes security best practices and robust error handling in all implementations.
 
-### Frontend (`frontend/`)
-- React 19 + Vite 6 + Tailwind CSS 4
-- Runs on port 5000
-- Proxies `/api` requests to backend on port 8000
-- Workflow: `Start application` → `cd frontend && npm run dev`
+## System Architecture
 
-### Backend (`backend/`)
-- FastAPI (Python) with SQLModel/SQLAlchemy
-- SQLite database at `backend/app.db`
-- Runs on port 8000
-- Workflow: `Backend API` → `uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload`
+### Core Technologies
+- **Frontend**: React 19, Vite 6, Tailwind CSS 4. Runs on port 5000 and proxies `/api` requests.
+- **Backend**: FastAPI (Python) with SQLModel/SQLAlchemy. Uses SQLite for local development (`backend/app.db`) and PostgreSQL for production. Runs on port 8000.
+- **Production API**: Cloudflare Worker serves as the canonical production API, mounting various routers at `/api/<prefix>`. The FastAPI backend mirrors these paths for local development.
 
-## Key Features
-- AI Scoring Engine for startup evaluation
-- Spin-out Wizard for legal entity formation
-- Real-time pipeline with WebSocket support
-- KYC & legal document management
-- Partner network and referral system
-- Fund management and LP tracking
+### Key Features
+- **AI Scoring Engine**: Evaluates startup potential.
+- **Spin-out Wizard**: Guides legal entity formation.
+- **Real-time Pipeline**: Supports WebSocket for live updates.
+- **Legal & Compliance**: KYC and document management.
+- **Network & Referrals**: Partner and referral system.
+- **Fund Management**: Tools for fund and Limited Partner (LP) tracking.
+- **Admin Controls**: Granular user access levels (admin, limited access, KYC enforcement).
+- **Settings Management**: User profiles, jurisdictions, email changes, TOTP, notification preferences, privacy settings, and account deletion requests.
+- **Multi-factor Authentication (MFA)**: TOTP setup with recovery codes and session management.
 
-## Environment Variables / Secrets
-- `JWT_SECRET` — **Required.** Backend fails fast at import time if unset (no dev fallback).
-- `STUDIOOS_ENV` — `production` / `staging` / `dev` / `preview`. Drives the GitHub support-ticket origin label. Defaults to `staging`.
-- `GOOGLE_REDIRECT_URI` — Google OAuth redirect URI
-- `GITHUB_ACCESS_TOKEN`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME` — GitHub integration config
-- `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` — PostgreSQL credentials (available if needed)
+### Architectural Decisions
+- The Cloudflare Worker is the primary production API, with FastAPI serving as the local development backend.
+- Rate limiting is implemented per bucket (e.g., spinout 5/hr, AI 10/min) mirroring worker configurations.
+- Strict data integrity measures are in place to prevent legacy data drift, blocking inserts/updates to specific deprecated tables.
+- Content-Security-Policy (CSP) headers are rigorously enforced to mitigate security risks.
+- GitHub auto-tickets are tagged with an `origin` label based on the environment.
+- Admin user access is controlled by an `access_level` column, differentiating between full, limited, and KYC-dependent access.
+- Sign-gate enforcement is server-authoritative, requiring approved KYC for binding agreements.
+- Founders have KYC as optional by default, becoming mandatory only for signing critical legal documents.
+- Admin role changes are restricted to direct SQL modifications for blast-radius control.
+- Robust session management with `jti` (JWT ID) for individual session revocation and `jwt_min_iat` for global session invalidation.
 
-## Dependencies
-- Node packages installed globally (not in `frontend/node_modules`) — run from workspace root
-- Python packages in `.pythonlibs/`
-- Frontend package.json is in `frontend/`
-
-## Notes
-- Social media icons (Facebook, Instagram, Twitter, Youtube, Linkedin) removed from lucide-react 1.x — replaced with inline SVGs
-- `AlertOctagon` removed from lucide-react 1.x — replaced with `AlertTriangle`
-- `Github` icon removed from lucide-react 1.x — replaced with `GitBranch`
-
-## Architecture decisions
-- **The Cloudflare Worker is the production API** (revised 2026-04-28). The earlier "audit #4" plan to make FastAPI canonical was never completed — the 23 production users live in D1 and FastAPI was never deployed publicly. `cloudflare-worker/src/index.ts` mounts every router under `cloudflare-worker/src/routes/*.ts` (auth, scoring, projects, legal, capital, deals, …) at `/api/<prefix>`. FastAPI in `backend/` stays as the local Replit dev backend and mirrors the same `/api/...` paths so the frontend works against either. See `PRODUCTION.md` and `cloudflare-worker/src/routes/README.md` for the mount map and the deploy command (`npx wrangler deploy` — never `--env production`, that strips the bindings).
-- **Per-bucket rate limits** in `backend/app/services/rate_limit.py` mirror the worker buckets: spinout 5/hr, ai 10/min, user 60/min, global 1000/min.
-- **Legacy data drift sealed** (audit #1): `backend/app/services/db_guards.py` registers SQLAlchemy event listeners that raise on any insert/update to `lp_investors` or `entities(type='vc_fund')`. Reads still work for the consolidation migration.
-- **Content-Security-Policy** header added to the FastAPI security middleware (audit #9).
-- **GitHub auto-tickets** carry an `origin: <env>` label (audit #10), default `staging`; set `STUDIOOS_ENV=production` on the prod backend.
-- See `PRODUCTION.md` for the release-blocker list (notably `POST /api/search/backfill`, audit #7).
-
-## Phase A/C Safe-Slice (April 2026)
-- **A1**: `entities` table now carries `CHECK (entity_type <> 'vc_fund') NOT VALID` constraint; ORM/Core guards now also emit a `deprecated_*_writes_blocked` ActivityLog row each time they fire so the admin dashboard can count drift attempts.
-- **A2**: `tests/test_db_guards.py` proves all four legacy write paths (ORM insert, Core bulk insert × 2 deprecated targets) are sealed. Run with `uv run pytest tests/`.
-- **A3**: `capital_calls.limited_partner_id` is promoted to `NOT NULL` automatically on the first boot after backfill completes (`_try_apply_capital_call_not_null`).
-- **A4**: `POST /api/funds/distributions/execute` now requires a `fund_id` body field; missing field yields a 422 with `error.error_code = "ERR_DISTRIBUTION_FUND_ID_REQUIRED"`.
-- **A5**: Both backend and Cloudflare worker fail fast on boot if `JWT_SECRET` is shorter than 32 bytes when `STUDIOOS_ENV ∈ {production, prod, staging}`. Dev/preview unchanged.
-- **C2**: `POST /api/csp-report` collector persists violations as `ActivityLog` rows (action=`csp_violation`); per-IP throttled at 30/min.
-- **C3**: CSP tightened — `connect-src` restricted to self + workers.dev + GitHub + OpenAI; `report-uri` wired to the new collector.
-- **C4**: `/api/auth/register` enforces 5/min/IP and 3/day/email; the request body now accepts a `_axl_hp` honeypot field — non-empty values are silently dropped (logged as `register_bot_dropped`).
-- **G1**: Removed obsolete `netlify.toml` (frontend ships via Cloudflare Pages, not Netlify).
-
-## Admin user-access controls (April 2026)
-- **Grant Full Access**: admin button on `/admin` reuses `kycAdminApprove` and additionally logs `kyc_bypass_granted` when no KYC submission exists. Sets `users.kyc_status='approved'`.
-- **Limited Access (no KYC, no signing)**: new `users.access_level` column. `'limited'` lets a non-admin user log in and browse the platform without completing KYC, but they cannot sign any binding agreement. Worker endpoint `PATCH /api/admin/users/:user_id/access-level` (FastAPI mirror at same path) sets/clears the level. Audited as `access_limited_granted` / `access_limited_revoked`.
-- **Sign-gate enforcement (server-authoritative)**: `requireApprovedKyc` (admin OR `kyc_status==='approved'`) is now used on every binding signing surface:
-  - Worker `PUT /api/legal/documents/:id/sign`
-  - Worker `PATCH /api/legalcap/legal/docs/:id/sign`
-  - Worker `POST /api/funds/lps/:lpId/sign-lpa`
-  - Worker `POST /api/legal/esign/sign/:token` (magic-link; resolves recipient by `envelope_user_id` then by lower(email) and returns 403 `kyc_required_for_signing` if limited+not-approved)
-  - FastAPI `POST /api/legal/documents/{doc_id}/sign` (inline guard)
-- Frontend: `App.jsx` KYC gate bypasses redirect when `access_level==='limited'`; `AdminPage.jsx` shows a sky-blue "Limited" pill and Grant/Revoke Limited buttons; `ESignPage.jsx` shows an amber "signing disabled" banner and disables the signature pad when the logged-in signer is limited.
-- **Founders are KYC-optional by default**: founders are not auto-redirected to `/kyc` and the "Identity Verification" sidebar item is hidden for them. KYC only becomes mandatory for founders at the moment they sign incorporation/SAFE/IP_license/equity_allocation docs — those signing endpoints already enforce `requireApprovedKyc` server-side, and `ESignPage.jsx` shows an amber banner pointing to `/kyc`. The `/kyc` route remains reachable via direct URL for founders who want to start verification voluntarily.
-- **Worker `PATCH /api/admin/users/:id/role` query-string fix** (2026-04-28): the frontend sends `?role=...` as a query string with no JSON body. Worker now reads from query first and falls back to body parse, so admin role changes no longer return 500.
-- **Admin role is SQL-only** (2026-04-29): for blast-radius reasons, the role-change endpoint refuses both promotion to `admin` (`code: admin_promotion_disabled`, 403) and demotion away from `admin` (`code: admin_demotion_disabled`, 403). Enforced in worker `cloudflare-worker/src/routes/admin.ts` and FastAPI `backend/app/api/routes/admin.py`. Frontend (`AdminPage.jsx`) renders a non-editable "Admin" badge when the user is admin and removes the `admin` option from the dropdown for everyone else. The only path to mint or revoke admin is direct SQL against the D1 `users` table (`UPDATE users SET role='admin' WHERE …`).
-
-## Epic 0 — Onboarding & UX quick wins (2026-05-02)
-- **TOTP setup polish** on both setup surfaces — `RegisterPage.jsx` step 4 and `VerifyEmailPage.jsx` (post-email-verification flow): the secret-key copy button is now a labeled chip with `aria-label`, a visible "Copied!" state, and an `aria-live` SR announcement. A new collapsible `<details>` block titled "I can't scan the QR — show manual setup instructions" lists per-app (Google Authenticator, Authy, 1Password, Bitwarden) numbered manual-entry steps with one app expanded at a time. The block ends with an "Already set up? Sign in" link to `/login`.
-- **VerifyEmailPage QR fix**: the `<canvas>` had a ref but no draw effect, so the QR never appeared and users were forced to use manual entry. Added the same `QRCode.toCanvas` effect used on RegisterPage. Also fixed a latent bug where the `<Check>` icon was referenced but not imported.
-- **Market Intelligence explainers** (`MarketIntelPage.jsx`): top-of-page "Why this matters" panel framing private rounds, public comps, conviction plays, and studio benchmarks for partners/LPs new to the surface. Each tab now has a `TabExplainer` mini-panel and per-card `InfoTip` icons with hover/focus tooltips (no popover library — uses native `title` + `aria-label`).
-- **Founder KYC stage-gate** (`FounderPortal.jsx`): new `FounderKycBanner` only renders when the logged-in user is `role==='founder'`, `kyc_status !== 'approved'`, `access_level !== 'limited'`, AND `api.listProjects()` returns at least one project with `stage` in `('BUILD','LAUNCH')`. Admin "View as Founder" impersonation sessions are excluded by checking for `localStorage.realUser`/`realToken` (App.jsx overwrites the stored `user` with the impersonated founder, so role alone is not enough). Sign-time KYC gates remain server-authoritative on the worker / FastAPI; this banner is only the in-app nudge.
-
-## Epic 3 — Settings page (2026-05-02)
-- **Surfaces**: `/settings` available to admin, founder, and partner. Sidebar nav entry added at the bottom of every role's `NAV_BY_ROLE` array (after a divider). Two unauthenticated landing pages — `/settings/email/confirm` and `/settings/email/revoke` — host the email-change token round-trip.
-- **Sections**: Profile (headshot + name + bio + socials), Jurisdictions (toggleable ISO chips), Email (with pending-change banner), Authentication (TOTP re-pair + sign out everywhere), Notifications (event × channel matrix), Privacy (public-profile toggles + data export + deletion request), and a role-conditional Role Preferences section (Founder mandate vs Partner/LP investment mandate). Admin role sees no role-prefs section.
-- **Backend (worker — production)** in `cloudflare-worker/src/routes/settings.ts`:
-  - `ensureSchema` idempotent ALTER on first request: adds `users.bio`, `headshot_r2_key`, `jurisdictions`, `socials`, `notification_prefs`, `privacy_prefs`, `role_prefs`, `jwt_min_iat`, `deletion_requested_at`; creates `email_change_requests` table.
-  - `GET/PATCH /api/settings` with whitelisted column updates (column names hard-coded; values bound). Free-form JSON columns are size-bounded.
-  - `POST /api/settings/headshot` decodes a `data:image/{jpeg,png,webp}` URI (≤3 MB), uploads to R2 under `headshots/{user_id}/{uuid}.{ext}` via `services/r2.ts:putHeadshotFromDataUri`. `GET /api/settings/headshot/:uid` streams from R2, honoring `privacy_prefs.public_profile.headshot`.
-  - `POST /api/settings/email-change/request` writes hashed token pair (24h confirm, 48h revoke), emails confirm to NEW and revoke to OLD. `confirm` swaps `users.email`; `revoke` rolls it back AND bumps `jwt_min_iat` to invalidate every existing session.
-  - `POST /api/settings/totp/repair` verifies current code, mints fresh base32 secret + provisioning URI + base64 QR, stores the new secret in `users.password_hash` (the column where TOTP secrets live), bumps `jwt_min_iat`.
-  - `POST /api/settings/sessions/revoke-all` bumps `jwt_min_iat` to `now+1`. `cloudflare-worker/src/auth.ts` now rejects any token whose `iat < users.jwt_min_iat`, returning 401.
-  - `POST /api/settings/account/delete-request` writes a non-destructive activity-log entry and stamps `deletion_requested_at`; `…/cancel` clears it. `GET /api/settings/data-export` returns a downloadable JSON of profile + last 500 activity rows.
-- **Backend (FastAPI dev mirror)** in `backend/app/api/routes/settings.py`: same surface; uses `pyotp`+`qrcode`, raw `text()` ALTER pattern with module-level `_migrated` flag, headshots written to `/tmp/axal_headshots/{user_id}_{uuid}.{ext}` (override via `HEADSHOT_DIR`). Surfaces dev `confirm_url`/`revoke_url` in the response when SMTP isn't configured so the flow is testable locally.
-- **Frontend** lives in `frontend/src/pages/SettingsPage.jsx` (single-file, ~600 lines, sectioned with sticky left rail). Autosave on blur for text fields, on toggle for chips/checkboxes. Email-change submission shows the dev `confirm_url` in a toast when SMTP is off. `EmailChangeConfirmPage.jsx` and `EmailChangeRevokePage.jsx` are token-only landing pages — no auth required, since the token is the proof.
-- **api.js**: added `getSettings, updateSettings, uploadHeadshot, requestEmailChange, confirmEmailChange, revokeEmailChange, repairTotp, revokeAllSessions, requestAccountDeletion, cancelAccountDeletion, exportMyData` (the last returns a `Blob` directly since the response is a JSON file download).
+## External Dependencies
+- **JWT**: For authentication (`JWT_SECRET`).
+- **Google OAuth**: For user authentication (`GOOGLE_REDIRECT_URI`).
+- **GitHub**: For integration (e.g., auto-tickets) using `GITHUB_ACCESS_TOKEN`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME`.
+- **PostgreSQL**: Production database (configurable via `DATABASE_URL`, `PGHOST`, etc.).
+- **Cloudflare R2**: For headshot storage and streaming.
+- **Cloudflare D1**: Production database for the Cloudflare Worker.
+- **pyotp & qrcode**: Python libraries for TOTP generation and QR code creation (used in FastAPI mirror).
+- **SMTP Service**: For sending email notifications (e.g., email change confirmations).

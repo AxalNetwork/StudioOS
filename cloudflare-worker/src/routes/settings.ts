@@ -20,6 +20,7 @@ import { Hono } from 'hono';
 import { TOTP, Secret } from 'otpauth';
 import * as QRCode from 'qrcode';
 import type { Env } from '../types';
+import { decodeJwt } from 'jose';
 import { getSQL } from '../db';
 import { requireAuth, hashToken, generateToken } from '../auth';
 import { putHeadshotFromDataUri, getHeadshot } from '../services/r2';
@@ -39,6 +40,7 @@ const SETTINGS_USER_COLUMNS: Array<[string, string]> = [
   ['role_prefs', 'TEXT'],               // JSON role-conditional
   ['jwt_min_iat', 'INTEGER DEFAULT 0'], // bump on Sign-out-everywhere
   ['deletion_requested_at', 'TIMESTAMP'],
+  ['totp_recovery_codes', 'TEXT'],      // JSON array of SHA-256 hex hashes
 ];
 
 let migrated = false;
@@ -64,8 +66,44 @@ async function ensureSchema(env: Env) {
     )`).run();
     await db.prepare(`CREATE INDEX IF NOT EXISTS idx_ecr_user ON email_change_requests(user_id)`).run();
   } catch {}
+  // user_sessions — one row per JWT mint, per-device revocation.
+  try {
+    await db.prepare(`CREATE TABLE IF NOT EXISTS user_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      jti TEXT NOT NULL UNIQUE,
+      user_agent TEXT,
+      ip TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      revoked_at TIMESTAMP
+    )`).run();
+    await db.prepare(`CREATE INDEX IF NOT EXISTS idx_us_user ON user_sessions(user_id)`).run();
+    await db.prepare(`CREATE INDEX IF NOT EXISTS idx_us_jti ON user_sessions(jti)`).run();
+  } catch {}
+  // founder_invites — co-founder invites with 14d expiry, capped per project.
+  try {
+    await db.prepare(`CREATE TABLE IF NOT EXISTS founder_invites (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER,
+      inviter_user_id INTEGER NOT NULL,
+      invitee_email TEXT NOT NULL,
+      invitee_name TEXT,
+      role TEXT NOT NULL DEFAULT 'co-founder',
+      token_hash TEXT NOT NULL UNIQUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      expires_at TIMESTAMP NOT NULL,
+      accepted_at TIMESTAMP,
+      revoked_at TIMESTAMP
+    )`).run();
+    await db.prepare(`CREATE INDEX IF NOT EXISTS idx_fi_inviter ON founder_invites(inviter_user_id)`).run();
+    await db.prepare(`CREATE INDEX IF NOT EXISTS idx_fi_project ON founder_invites(project_id)`).run();
+  } catch {}
   migrated = true;
 }
+
+const FOUNDER_INVITE_CAP_PER_PROJECT = 10;
+const FOUNDER_INVITE_EXPIRY_DAYS = 14;
 
 // --- helpers ----------------------------------------------------------------
 
@@ -89,6 +127,16 @@ const APP_URL = (env: Env) => env.APP_URL || 'https://app.axal.vc';
 
 // --- GET /api/settings ------------------------------------------------------
 
+function currentJtiFromRequest(c: any): string | null {
+  const auth = c.req.header('authorization') || '';
+  if (!auth.startsWith('Bearer ')) return null;
+  try {
+    const payload = decodeJwt(auth.slice(7));
+    const jti = (payload as any).jti;
+    return typeof jti === 'string' ? jti : null;
+  } catch { return null; }
+}
+
 settings.get('/', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
@@ -98,6 +146,7 @@ settings.get('/', async (c) => {
            bio, headshot_r2_key, jurisdictions, socials,
            notification_prefs, privacy_prefs, role_prefs,
            deletion_requested_at, last_active_at, created_at,
+           totp_recovery_codes,
            CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END AS totp_configured
     FROM users WHERE id = ${user.id}
   `;
@@ -138,6 +187,11 @@ settings.get('/', async (c) => {
       requested_at: pendingChange[0].requested_at,
       expires_at: pendingChange[0].confirm_expires_at,
     } : null,
+    totp_recovery_codes_remaining: (() => {
+      const arr = safeJson<string[]>(u.totp_recovery_codes, []);
+      return Array.isArray(arr) ? arr.length : 0;
+    })(),
+    current_jti: currentJtiFromRequest(c),
   });
 });
 
@@ -493,6 +547,192 @@ settings.get('/data-export', async (c) => {
       'content-disposition': `attachment; filename="axal-data-export-${user.uid || user.id}.json"`,
     },
   });
+});
+
+// --- Sessions: list + per-session revoke ------------------------------------
+
+settings.get('/sessions', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  const rows = await sql`
+    SELECT id, jti, user_agent, ip, created_at, last_seen_at, revoked_at
+    FROM user_sessions
+    WHERE user_id = ${user.id}
+    ORDER BY last_seen_at DESC
+    LIMIT 100
+  `;
+  await sql.end();
+  const currentJti = currentJtiFromRequest(c);
+  return c.json({
+    sessions: rows.map((r: any) => ({
+      id: r.id,
+      jti: r.jti,
+      user_agent: r.user_agent,
+      ip: r.ip,
+      created_at: r.created_at,
+      last_seen_at: r.last_seen_at,
+      revoked_at: r.revoked_at,
+      is_current: !!currentJti && r.jti === currentJti,
+    })),
+  });
+});
+
+settings.post('/sessions/:id/revoke', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id') || '0', 10);
+  if (!id) return c.json({ error: 'session id required' }, 400);
+  const sql = getSQL(c.env);
+  const owned = await sql`SELECT id FROM user_sessions WHERE id = ${id} AND user_id = ${user.id}`;
+  if (!owned.length) { await sql.end(); return c.json({ error: 'Not found' }, 404); }
+  await sql`UPDATE user_sessions SET revoked_at = datetime('now') WHERE id = ${id} AND user_id = ${user.id}`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+            VALUES ('session_revoked', ${`User revoked session ${id} from /settings`}, ${user.email}, ${user.id})`;
+  await sql.end();
+  return c.json({ ok: true });
+});
+
+// --- TOTP recovery codes ----------------------------------------------------
+//
+// 8 one-time codes formatted XXXX-XXXX-XXXX, each ~62 bits of entropy. We
+// store SHA-256 hashes in users.totp_recovery_codes and return the plaintext
+// to the user exactly once. Login consumption (verifying a code instead of a
+// TOTP) is intentionally a follow-up — this surface only covers generation
+// and rotation, which is the architect's explicit ask for "recovery codes
+// management".
+
+function generateRecoveryCode(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // skip ambiguous I,O,0,1
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  const chars: string[] = [];
+  for (let i = 0; i < 12; i++) chars.push(alphabet[bytes[i] % alphabet.length]);
+  return `${chars.slice(0, 4).join('')}-${chars.slice(4, 8).join('')}-${chars.slice(8, 12).join('')}`;
+}
+
+settings.post('/totp/recovery-codes/regenerate', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const code = clampStr(body?.totp_code, 12);
+  if (!code) return c.json({ error: 'Current TOTP code required' }, 400);
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT password_hash FROM users WHERE id = ${user.id}`;
+  if (!rows.length || !rows[0].password_hash) {
+    await sql.end();
+    return c.json({ error: 'TOTP is not configured for this account' }, 400);
+  }
+  const totp = new TOTP({ secret: Secret.fromBase32(rows[0].password_hash) });
+  if (totp.validate({ token: code, window: 1 }) === null) {
+    await sql.end();
+    return c.json({ error: 'Invalid current TOTP code' }, 401);
+  }
+  const plain: string[] = [];
+  const hashes: string[] = [];
+  for (let i = 0; i < 8; i++) {
+    const c1 = generateRecoveryCode();
+    plain.push(c1);
+    hashes.push(await hashToken(c1));
+  }
+  await sql`UPDATE users SET totp_recovery_codes = ${JSON.stringify(hashes)} WHERE id = ${user.id}`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+            VALUES ('totp_recovery_codes_regenerated', 'User regenerated TOTP recovery codes', ${user.email}, ${user.id})`;
+  await sql.end();
+  return c.json({
+    ok: true,
+    codes: plain,
+    message: 'Save these codes somewhere safe — they will not be shown again. Each code can be used once if you lose access to your authenticator.',
+  });
+});
+
+// --- Founder co-founder invites ---------------------------------------------
+
+settings.get('/founder/invites', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  if (user.role !== 'founder') return c.json({ error: 'Founder role required' }, 403);
+  const sql = getSQL(c.env);
+  const rows = await sql`
+    SELECT id, project_id, invitee_email, invitee_name, role, created_at, expires_at, accepted_at, revoked_at
+    FROM founder_invites
+    WHERE inviter_user_id = ${user.id}
+    ORDER BY created_at DESC
+    LIMIT 100
+  `;
+  await sql.end();
+  return c.json({ invites: rows, cap_per_project: FOUNDER_INVITE_CAP_PER_PROJECT });
+});
+
+settings.post('/founder/invites', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  if (user.role !== 'founder') return c.json({ error: 'Founder role required' }, 403);
+  const body = await c.req.json().catch(() => ({} as any));
+  const inviteeEmail = clampStr(body?.invitee_email, 254);
+  if (!inviteeEmail || !isEmail(inviteeEmail)) return c.json({ error: 'Valid invitee_email required' }, 400);
+  const inviteeName = clampStr(body?.invitee_name, 120);
+  const role = clampStr(body?.role, 40) || 'co-founder';
+  const projectId = body?.project_id != null ? parseInt(String(body.project_id), 10) || null : null;
+
+  const sql = getSQL(c.env);
+  // Authorization: if a project_id is supplied, the inviting founder must
+  // own that project. Without this check, any founder could consume the
+  // invite cap on any other founder's project (broken access control).
+  if (projectId !== null) {
+    if (!user.founder_id) {
+      await sql.end();
+      return c.json({ error: 'Founder profile required to invite to a project' }, 403);
+    }
+    const owns = await sql`SELECT id FROM projects WHERE id = ${projectId} AND founder_id = ${user.founder_id}`;
+    if (!owns.length) {
+      await sql.end();
+      return c.json({ error: 'Project not found or not owned by you' }, 403);
+    }
+  }
+  // Cap pending+accepted invites per project (or per inviter when project null).
+  const countRows = projectId
+    ? await sql`SELECT COUNT(*) AS n FROM founder_invites WHERE project_id = ${projectId} AND revoked_at IS NULL`
+    : await sql`SELECT COUNT(*) AS n FROM founder_invites WHERE project_id IS NULL AND inviter_user_id = ${user.id} AND revoked_at IS NULL`;
+  const n = Number(countRows[0]?.n || 0);
+  if (n >= FOUNDER_INVITE_CAP_PER_PROJECT) {
+    await sql.end();
+    return c.json({ error: `Invite cap reached (${FOUNDER_INVITE_CAP_PER_PROJECT} per project)` }, 409);
+  }
+
+  const tokenRaw = generateToken();
+  const tokenHash = await hashToken(tokenRaw);
+  const expires = new Date(Date.now() + FOUNDER_INVITE_EXPIRY_DAYS * 86400 * 1000).toISOString();
+  await sql`INSERT INTO founder_invites
+            (project_id, inviter_user_id, invitee_email, invitee_name, role, token_hash, expires_at)
+            VALUES (${projectId}, ${user.id}, ${inviteeEmail}, ${inviteeName}, ${role}, ${tokenHash}, ${expires})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+            VALUES ('cofounder_invited', ${`Invited ${inviteeEmail} as ${role}`}, ${user.email}, ${user.id})`;
+  await sql.end();
+
+  const acceptUrl = `${APP_URL(c.env)}/invites/cofounder?token=${tokenRaw}`;
+  const sent = await sendVerificationEmail(c.env, inviteeEmail, inviteeName || inviteeEmail, acceptUrl).catch(() => false);
+  return c.json({
+    ok: true,
+    invitee_email: inviteeEmail,
+    expires_at: expires,
+    accept_url: !sent ? acceptUrl : undefined,
+    email_sent: sent,
+  });
+});
+
+settings.delete('/founder/invites/:id', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  if (user.role !== 'founder') return c.json({ error: 'Founder role required' }, 403);
+  const id = parseInt(c.req.param('id') || '0', 10);
+  if (!id) return c.json({ error: 'invite id required' }, 400);
+  const sql = getSQL(c.env);
+  const owned = await sql`SELECT id FROM founder_invites WHERE id = ${id} AND inviter_user_id = ${user.id} AND revoked_at IS NULL`;
+  if (!owned.length) { await sql.end(); return c.json({ error: 'Not found' }, 404); }
+  await sql`UPDATE founder_invites SET revoked_at = datetime('now') WHERE id = ${id}`;
+  await sql.end();
+  return c.json({ ok: true });
 });
 
 export default settings;
