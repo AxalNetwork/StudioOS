@@ -16,10 +16,10 @@
  * Schema additions live in ensureSchema(); the ALTER TABLE pattern matches
  * routes/kyc.ts so first-request migration is idempotent and side-effect free.
  */
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { TOTP, Secret } from 'otpauth';
 import * as QRCode from 'qrcode';
-import type { Env } from '../types';
+import type { Env, UserSessionRow } from '../types';
 import { decodeJwt } from 'jose';
 import { getSQL } from '../db';
 import { requireAuth, hashToken, generateToken } from '../auth';
@@ -127,13 +127,12 @@ const APP_URL = (env: Env) => env.APP_URL || 'https://app.axal.vc';
 
 // --- GET /api/settings ------------------------------------------------------
 
-function currentJtiFromRequest(c: any): string | null {
+function currentJtiFromRequest(c: Context<{ Bindings: Env }>): string | null {
   const auth = c.req.header('authorization') || '';
   if (!auth.startsWith('Bearer ')) return null;
   try {
-    const payload = decodeJwt(auth.slice(7));
-    const jti = (payload as any).jti;
-    return typeof jti === 'string' ? jti : null;
+    const payload = decodeJwt(auth.slice(7)) as { jti?: unknown };
+    return typeof payload.jti === 'string' ? payload.jti : null;
   } catch { return null; }
 }
 
@@ -562,11 +561,11 @@ settings.get('/sessions', async (c) => {
     WHERE user_id = ${user.id}
     ORDER BY last_seen_at DESC
     LIMIT 100
-  `;
+  ` as unknown as UserSessionRow[];
   await sql.end();
   const currentJti = currentJtiFromRequest(c);
   return c.json({
-    sessions: rows.map((r: any) => ({
+    sessions: rows.map((r) => ({
       id: r.id,
       jti: r.jti,
       user_agent: r.user_agent,

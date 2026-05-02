@@ -64,6 +64,7 @@ export interface User {
   verification_token_expires: string | null;
   kyc_status: string | null;
   created_at: string;
+  jwt_min_iat?: number | null;
 }
 
 export interface JWTPayload {
@@ -73,4 +74,15 @@ export interface JWTPayload {
   impersonated_by?: number;
   exp: number;
   iat: number;
+  jti?: string;
+}
+
+export interface UserSessionRow {
+  id: number;
+  jti: string;
+  user_agent: string | null;
+  ip: string | null;
+  created_at: string;
+  last_seen_at: string;
+  revoked_at: string | null;
 }

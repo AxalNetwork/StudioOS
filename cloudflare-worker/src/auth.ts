@@ -74,48 +74,38 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
   try {
     const payload = await decodeJWT(c.env, token);
     const sql = getSQL(c.env);
-    const users = await sql`SELECT * FROM users WHERE id = ${payload.user_id}`;
+    const users = await sql`SELECT * FROM users WHERE id = ${payload.user_id}` as unknown as User[];
     await sql.end();
     if (users.length === 0 || !users[0].is_active) return null;
-    // Epic 3 — sessions/revoke-all and email-change/revoke bump
-    // `users.jwt_min_iat`. Reject any token issued before that mark so
-    // "Sign out everywhere" is a real invalidation, not a frontend-only
-    // gesture. Tokens predating the column return undefined → we accept.
-    const minIat = (users[0] as any).jwt_min_iat;
-    let tokenIat = (payload as any).iat;
-    // jose emits `iat` in seconds (per RFC 7519), but legacy tokens issued
-    // before this column existed could in theory carry a ms-based value. If
-    // the number looks like ms (greater than 1e12 ≈ year 2001 in s, or year
-    // 33658 in s), normalize to seconds before comparison so revocation
-    // can never be bypassed by a unit mismatch.
+    const u = users[0];
+    // Epic 3 — global sign-out: reject tokens issued before users.jwt_min_iat.
+    // Normalize ms→s for any legacy ms-based iat values.
+    const minIat = u.jwt_min_iat ?? 0;
+    let tokenIat = payload.iat;
     if (typeof tokenIat === 'number' && tokenIat > 1e12) {
       tokenIat = Math.floor(tokenIat / 1000);
     }
-    if (typeof minIat === 'number' && minIat > 0 && typeof tokenIat === 'number' && tokenIat < minIat) {
+    if (minIat > 0 && typeof tokenIat === 'number' && tokenIat < minIat) {
       return null;
     }
-    // Per-session revocation: if the token carries a jti, verify the
-    // matching `user_sessions` row exists and isn't revoked. Tokens without
-    // jti (older in-flight ones) skip this check and rely on iat alone.
-    const tokenJti = (payload as any).jti;
-    if (typeof tokenJti === 'string' && tokenJti.length > 0) {
+    // Per-session revocation. Tokens without jti skip (back-compat).
+    const tokenJti = payload.jti;
+    if (tokenJti) {
       try {
         const sess = await c.env.DB.prepare(
           'SELECT revoked_at FROM user_sessions WHERE jti = ? AND user_id = ?'
         ).bind(tokenJti, payload.user_id).first<{ revoked_at: string | null }>();
         if (!sess || sess.revoked_at) return null;
-        // Best-effort heartbeat. Don't fail the request if this errors.
         try {
           await c.env.DB.prepare(
             "UPDATE user_sessions SET last_seen_at = datetime('now') WHERE jti = ?"
           ).bind(tokenJti).run();
         } catch {}
       } catch {
-        // user_sessions table may not exist yet on a cold worker before
-        // ensureSchema runs in /settings. Don't lock people out.
+        // user_sessions not migrated yet; rely on iat alone.
       }
     }
-    return users[0] as unknown as User;
+    return u;
   } catch {
     return null;
   }
