@@ -1,21 +1,25 @@
 -- Epic 3 — Settings page schema (Cloudflare D1 / SQLite).
 --
--- This file is the durable source of truth for Epic 3 schema. The worker
--- still runs an idempotent in-process ensureSchema() at first request so
--- a fresh deploy doesn't have to wait for an out-of-band migration, but
--- this file should be applied via:
+-- ONE-TIME APPLY ONLY. D1/SQLite does not support `ALTER TABLE ... ADD
+-- COLUMN IF NOT EXISTS`, so the ALTER statements below WILL FAIL on
+-- re-run with "duplicate column name". The CREATE TABLE / CREATE INDEX
+-- statements use IF NOT EXISTS and are independently safe.
+--
+-- For day-to-day operation the worker runs an idempotent in-process
+-- ensureSchema() (cloudflare-worker/src/routes/settings.ts) at first
+-- request that catches the duplicate-column error per-statement. THIS
+-- file is the durable source of truth for the schema; apply it once via:
 --
 --   npx wrangler d1 execute studioos-db --file=sql/epic3_settings.sql
 --   npx wrangler d1 execute studioos-db --remote --file=sql/epic3_settings.sql
 --
--- All statements are guarded so re-running is safe.
+-- After the first apply, schema changes should be made by adding NEW
+-- migration files (e.g. epic3_settings_002.sql) rather than re-running
+-- this one.
 
 -- ---------------------------------------------------------------------------
--- 1. users — additive columns
+-- 1. users — additive columns (one-time only — see note above)
 -- ---------------------------------------------------------------------------
--- D1/SQLite has no `ADD COLUMN IF NOT EXISTS`, so each ALTER is wrapped in
--- a stand-alone statement and the in-process migrator catches the duplicate
--- error on re-run. Listed here for documentation + first-time apply.
 
 ALTER TABLE users ADD COLUMN bio TEXT;
 ALTER TABLE users ADD COLUMN headshot_r2_key TEXT;
