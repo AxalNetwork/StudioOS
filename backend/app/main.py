@@ -71,6 +71,7 @@ async def lifespan(app: FastAPI):
             ensure_user_access_level_column,
             ensure_score_anti_cheat_columns,
             ensure_investor_role_split,
+            ensure_marketplace_columns,
         )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
@@ -88,6 +89,8 @@ async def lifespan(app: FastAPI):
         # consolidation so the promotion query sees a complete LP table.
         ensure_investor_role_split()
         logger.info("StudioOS migrations: investor role split applied")
+        ensure_marketplace_columns()
+        logger.info("StudioOS migrations: marketplace columns ensured")
     except Exception as exc:  # noqa: BLE001
         # Migrations are best-effort: a failure here must not prevent the API
         # from booting (e.g. fresh DB, missing legacy tables).
@@ -279,6 +282,8 @@ from backend.app.api.routes import financials as financials_routes  # noqa: E402
 app.include_router(financials_routes.router, prefix="/api")
 from backend.app.api.routes import progress as progress_routes  # noqa: E402
 app.include_router(progress_routes.router, prefix="/api")
+from backend.app.api.routes import marketplace as marketplace_routes  # noqa: E402
+app.include_router(marketplace_routes.router, prefix="/api")
 
 
 # ---------------------------------------------------------------------------

@@ -337,6 +337,53 @@ class Partner(SQLModel, table=True):
     referrals_count: int = 0
     status: str = "active"
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    # Task #36 — Service provider marketplace (additive; migration adds columns to legacy rows).
+    headline: Optional[str] = None              # e.g. "Fractional CFO for late-seed SaaS"
+    bio: Optional[str] = None
+    categories_json: str = "[]"                 # ["legal","accounting","design","recruiting","fractional_cfo","gtm"]
+    sectors_json: str = "[]"                    # ["b2b_saas","fintech",...]
+    pricing_tier: Optional[str] = None          # "$" | "$$" | "$$$"
+    hourly_rate_min: Optional[float] = None
+    hourly_rate_max: Optional[float] = None
+    capacity_status: str = Field(default="available", index=True)  # available | limited | unavailable
+    response_time_hours: Optional[int] = None   # typical first-response SLA
+    kyb_status: str = Field(default="unverified", index=True)      # unverified | pending | verified | rejected
+    kyb_verified_at: Optional[datetime] = None
+    website: Optional[str] = None
+    listed: bool = Field(default=False, index=True)  # opt-in to marketplace listing
+
+
+class PartnerReview(SQLModel, table=True):
+    __tablename__ = "partner_reviews"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    partner_id: int = Field(foreign_key="partners.id", index=True)
+    reviewer_user_id: int = Field(foreign_key="users.id", index=True)
+    project_id: Optional[int] = Field(default=None, foreign_key="projects.id", index=True)
+    rating: int = Field(ge=1, le=5)
+    comment: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class MarketplaceInquiry(SQLModel, table=True):
+    __tablename__ = "marketplace_inquiries"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    partner_id: int = Field(foreign_key="partners.id", index=True)
+    requester_user_id: int = Field(foreign_key="users.id", index=True)
+    project_id: Optional[int] = Field(default=None, foreign_key="projects.id", index=True)
+    subject: str
+    status: str = Field(default="open", index=True)  # open | closed
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class MarketplaceMessage(SQLModel, table=True):
+    __tablename__ = "marketplace_messages"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    inquiry_id: int = Field(foreign_key="marketplace_inquiries.id", index=True)
+    sender_user_id: int = Field(foreign_key="users.id", index=True)
+    body: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class VCFund(SQLModel, table=True):

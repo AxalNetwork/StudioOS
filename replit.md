@@ -136,3 +136,31 @@ Three founder sub-pages under `/build` that replace self-reported scoring inputs
 - `/build/metrics` — `MetricsPage.jsx`: stat cards (MRR / users / LTV-CAC / traction score), Recharts MRR + active-users charts, snapshot history table, "Import from Stripe" button (surfaces `stripe_not_connected` / `stripe_no_data` errors), traction signal breakdown card.
 
 **`api.js` additions:** `listInterviews`, `createInterview`, `updateInterview`, `deleteInterview`, `listOkrs`, `createOkr`, `updateOkr`, `moveOkr`, `deleteOkr`, `listMetricsSnapshots`, `createMetricsSnapshot`, `deleteMetricsSnapshot`, `importMetricsFromStripe`, `getProgressSignals`.
+
+## Task #36 — Service provider marketplace (this commit)
+
+A discoverable directory of vetted service providers. The Partner role from Phase 0.1 identifies providers; this module adds public-facing profiles, KYB-tied verification, reviews, and inquiry threads.
+
+**Out of scope (per task brief):** Stripe Connect invoicing (Task 5.2) and featured / paid placement (Task 5.4).
+
+**Schema (additive on `partners` + new tables):**
+- `partners` adds: `headline`, `bio`, `categories_json`, `sectors_json`, `pricing_tier` ($/$$/$$$), `hourly_rate_min/max`, `capacity_status` (available/limited/unavailable), `response_time_hours`, `kyb_status` (unverified/pending/verified/rejected), `kyb_verified_at`, `website`, `listed`. Idempotent `ALTER TABLE … ADD COLUMN IF NOT EXISTS` migration in `models/migrations.py::ensure_marketplace_columns()` (registered in `main.py` startup chain).
+- New tables: `partner_reviews(partner_id, reviewer_user_id, project_id?, rating 1..5, comment)`, `marketplace_inquiries(partner_id, requester_user_id, project_id?, subject, status open|closed)`, `marketplace_messages(inquiry_id, sender_user_id, body)`. All auto-created via SQLModel.
+
+**Backend (`backend/app/api/routes/marketplace.py`, mounted at `/api`):**
+- Providers: `GET /marketplace/providers` (filters: category, sector, capacity, pricing, verified_only, rate_max, q), `GET /marketplace/providers/{id}` (returns recent_reviews), `GET/PUT /marketplace/providers/me` (partner self-edit), `POST /marketplace/providers/{id}/kyb` (admin sets verification status).
+- Reviews: `POST /marketplace/providers/{id}/reviews` (founder-only; one per reviewer, second submission updates), `GET /marketplace/providers/{id}/reviews`.
+- Inquiries: `POST /marketplace/inquiries?partner_id=X`, `GET /marketplace/inquiries` (scoped: requester sees own; partner sees inbox; admin sees all), `GET /marketplace/inquiries/{id}` (full thread), `POST /marketplace/inquiries/{id}/messages`, `POST /marketplace/inquiries/{id}/close`.
+- Metadata: `GET /marketplace/categories` (canonical enums for UI filters).
+
+**Authorization:**
+- Listing requires `Partner.listed=True` (partners see own row regardless).
+- Inquiries enforce `_can_view_inquiry`: requester, the partner row's owner, or admin only.
+- Reviews are founder-only; project-scoped reviews verify `user.founder_id == project.founder_id`.
+- KYB write is admin-only.
+
+**Categories enum:** legal, accounting, design, recruiting, fractional_cfo, gtm, engineering, marketing.
+
+**Frontend (`/marketplace`, top-nav under Network):**
+- `MarketplacePage.jsx` — three tabs: **Browse** (filter bar + provider cards with verified badge, rating, response time, capacity chip, pricing tier; detail modal with full bio, sectors, reviews, "Send inquiry" CTA), **My inquiries** (Inbox-style two-pane thread view with chat bubbles, ⌘/Ctrl+Enter to send, close action), **My listing** (partner-only — toggle `listed`, edit headline/bio/categories/sectors/pricing/rate range/capacity/response SLA/website).
+- Visible to admin/founder/partner/investor; partners cannot inquire to themselves; founders are the only role that can leave reviews.

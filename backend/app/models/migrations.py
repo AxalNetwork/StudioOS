@@ -516,3 +516,45 @@ def _recompute_fund_totals(session: Session) -> None:
         fund.updated_at = datetime.utcnow()
         session.add(fund)
     session.commit()
+
+
+def ensure_marketplace_columns() -> None:
+    """Task #36 — Service provider marketplace.
+
+    Idempotently adds the marketplace fields to the legacy `partners` table
+    (headline / bio / categories / pricing / KYB / capacity / listed) and
+    creates supporting tables for reviews, inquiries, and threaded messages.
+    Safe to run on every boot.
+    """
+    cols = (
+        ("headline", "VARCHAR"),
+        ("bio", "TEXT"),
+        ("categories_json", "TEXT DEFAULT '[]' NOT NULL"),
+        ("sectors_json", "TEXT DEFAULT '[]' NOT NULL"),
+        ("pricing_tier", "VARCHAR"),
+        ("hourly_rate_min", "DOUBLE PRECISION"),
+        ("hourly_rate_max", "DOUBLE PRECISION"),
+        ("capacity_status", "VARCHAR DEFAULT 'available' NOT NULL"),
+        ("response_time_hours", "INTEGER"),
+        ("kyb_status", "VARCHAR DEFAULT 'unverified' NOT NULL"),
+        ("kyb_verified_at", "TIMESTAMP"),
+        ("website", "VARCHAR"),
+        ("listed", "BOOLEAN DEFAULT FALSE NOT NULL"),
+    )
+    indexes = (
+        ("ix_partners_capacity_status", "capacity_status"),
+        ("ix_partners_kyb_status", "kyb_status"),
+        ("ix_partners_listed", "listed"),
+    )
+    with Session(engine) as session:
+        for col, ddl in cols:
+            try:
+                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_marketplace_columns: %s ALTER failed: %s", col, exc)
+        for name, expr in indexes:
+            try:
+                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON partners({expr})"))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_marketplace_columns: %s INDEX failed: %s", name, exc)
+        session.commit()

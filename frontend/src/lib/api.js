@@ -170,6 +170,21 @@ export const api = {
   importMetricsFromStripe: (projectId) => request(`/progress/metrics/${projectId}/import-stripe`, { method: 'POST' }),
   getProgressSignals: (projectId) => request(`/progress/signals/${projectId}`),
 
+  // Task #36 — Service Provider Marketplace
+  listProviders: (params = {}) => request(`/marketplace/providers${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`),
+  getProvider: (id) => request(`/marketplace/providers/${id}`),
+  getMyProvider: () => request('/marketplace/providers/me'),
+  updateMyProvider: (data) => request('/marketplace/providers/me', { method: 'PUT', body: JSON.stringify(data) }),
+  setProviderKyb: (id, status) => request(`/marketplace/providers/${id}/kyb`, { method: 'POST', body: JSON.stringify({ status }) }),
+  listProviderReviews: (id) => request(`/marketplace/providers/${id}/reviews`),
+  createProviderReview: (id, data) => request(`/marketplace/providers/${id}/reviews`, { method: 'POST', body: JSON.stringify(data) }),
+  marketplaceCategories: () => request('/marketplace/categories'),
+  createInquiry: (partnerId, data) => request(`/marketplace/inquiries?partner_id=${partnerId}`, { method: 'POST', body: JSON.stringify(data) }),
+  listInquiries: () => request('/marketplace/inquiries'),
+  getInquiry: (id) => request(`/marketplace/inquiries/${id}`),
+  postInquiryMessage: (id, body) => request(`/marketplace/inquiries/${id}/messages`, { method: 'POST', body: JSON.stringify({ body }) }),
+  closeInquiry: (id) => request(`/marketplace/inquiries/${id}/close`, { method: 'POST' }),
+
   askAdvisory: (data) => request('/advisory/ask', { method: 'POST', body: JSON.stringify(data) }),
   financialPlan: (data) => request('/advisory/financial-plan', { method: 'POST', body: JSON.stringify(data) }),
   runDiligence: (data) => request('/advisory/diligence', { method: 'POST', body: JSON.stringify(data) }),
