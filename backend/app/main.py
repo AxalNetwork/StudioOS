@@ -88,6 +88,7 @@ async def lifespan(app: FastAPI):
             ensure_section_83b_tracker_table,
             ensure_compliance_events_table,
             ensure_compliance_reminder_runs_table,
+            ensure_wellbeing_tables,
         )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
@@ -150,6 +151,9 @@ async def lifespan(app: FastAPI):
         ensure_compliance_events_table()
         ensure_compliance_reminder_runs_table()
         logger.info("StudioOS migrations: compliance_events table ensured")
+        # Task #40 — founder wellbeing pulse + resource directory.
+        ensure_wellbeing_tables()
+        logger.info("StudioOS migrations: wellbeing tables ensured")
     except Exception as exc:  # noqa: BLE001
         # Migrations are best-effort: a failure here must not prevent the API
         # from booting (e.g. fresh DB, missing legacy tables).
@@ -373,6 +377,8 @@ from backend.app.api.routes import calendar as _calendar
 app.include_router(_calendar.router, prefix="/api")
 from backend.app.api.routes import compliance as _compliance
 app.include_router(_compliance.router, prefix="/api")
+from backend.app.api.routes import wellbeing as _wellbeing
+app.include_router(_wellbeing.router, prefix="/api")
 from backend.app.api.routes import cofounder as _cofounder
 app.include_router(_cofounder.router, prefix="/api")
 from backend.app.api.routes import portfolio_health as _portfolio_health

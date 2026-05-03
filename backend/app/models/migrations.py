@@ -1382,6 +1382,63 @@ def ensure_compliance_events_table() -> None:
             session.rollback()
 
 
+def ensure_wellbeing_tables() -> None:
+    """Task #40 — Founder wellbeing pulse + resource directory.
+
+    All answer columns hold Fernet ciphertext (see
+    ``services.crypto_box``). Per-row data is founder-private; admins
+    only ever see anonymized aggregates over decrypted values.
+    Idempotent.
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS wellbeing_checkins (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR(64) UNIQUE NOT NULL,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    week_anchor DATE NOT NULL,
+                    stress_enc TEXT NOT NULL,
+                    sleep_enc TEXT NOT NULL,
+                    support_enc TEXT NOT NULL,
+                    decisions_enc TEXT NOT NULL,
+                    energy_enc TEXT NOT NULL,
+                    notes_enc TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    CONSTRAINT uq_wellbeing_user_week UNIQUE (user_id, week_anchor)
+                )
+            """))
+            session.exec(text(
+                "CREATE INDEX IF NOT EXISTS ix_wellbeing_user "
+                "ON wellbeing_checkins (user_id)"
+            ))
+            session.exec(text(
+                "CREATE INDEX IF NOT EXISTS ix_wellbeing_created "
+                "ON wellbeing_checkins (created_at)"
+            ))
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS wellbeing_resources (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR(64) UNIQUE NOT NULL,
+                    category VARCHAR(64) NOT NULL,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    url TEXT,
+                    region VARCHAR(32),
+                    is_24_7 BOOLEAN DEFAULT FALSE NOT NULL,
+                    is_free BOOLEAN DEFAULT FALSE NOT NULL,
+                    sort_order INTEGER DEFAULT 100 NOT NULL,
+                    created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_wellbeing_tables: %s", exc)
+            session.rollback()
+
+
 def ensure_compliance_reminder_runs_table() -> None:
     """Task #32 — daily lease for the compliance reminder loop.
 

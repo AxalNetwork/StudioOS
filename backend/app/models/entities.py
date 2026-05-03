@@ -1098,6 +1098,62 @@ class ComplianceEvent(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class WellbeingCheckin(SQLModel, table=True):
+    """Task #40 — optional weekly founder pulse.
+
+    Privacy-first: every answer column holds Fernet ciphertext via
+    ``services.crypto_box``. Plaintext never touches the DB. Per-row
+    rows are visible ONLY to the authoring founder — admins see
+    anonymized aggregates (avg + counts), and investors see nothing.
+
+    Five questions on a 1-5 scale (encrypted as strings):
+      - stress    (1=low, 5=overwhelmed)
+      - sleep     (1=poor, 5=great)
+      - support   (1=isolated, 5=strong)
+      - decisions (1=stuck, 5=clear)
+      - energy    (1=drained, 5=high)
+
+    ``notes_enc`` is optional encrypted free-text. ``week_anchor`` is
+    the Monday of the ISO week (UTC) — combined with user_id this
+    provides a uniqueness boundary so we can show "you already checked
+    in this week".
+    """
+    __tablename__ = "wellbeing_checkins"
+    __table_args__ = (
+        UniqueConstraint("user_id", "week_anchor", name="uq_wellbeing_user_week"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    week_anchor: date = Field(index=True)  # Monday of ISO week (UTC)
+    stress_enc: str           # Fernet ciphertext of "1".."5"
+    sleep_enc: str
+    support_enc: str
+    decisions_enc: str
+    energy_enc: str
+    notes_enc: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class WellbeingResource(SQLModel, table=True):
+    """Task #40 — curated resource directory (therapists, founder
+    support groups, hotlines). No PII; safe for all roles to read."""
+    __tablename__ = "wellbeing_resources"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    category: str = Field(index=True)  # therapy | peer_group | hotline | reading | coaching
+    name: str
+    description: Optional[str] = None
+    url: Optional[str] = None
+    region: Optional[str] = Field(default=None, index=True)  # global | us | uk | eu | sg | ...
+    is_24_7: bool = Field(default=False)
+    is_free: bool = Field(default=False)
+    sort_order: int = Field(default=100)
+    created_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class UserCompanyLink(SQLModel, table=True):
     __tablename__ = "user_company_links"
     __table_args__ = (

@@ -17,6 +17,7 @@ import IncorporatePage from './pages/IncorporatePage';
 import CofounderAgreementPage from './pages/CofounderAgreementPage';
 import Section83bPage from './pages/Section83bPage';
 import CompliancePage from './pages/CompliancePage';
+import WellbeingPage from './pages/WellbeingPage';
 import PartnersPage from './pages/PartnersPage';
 import CapitalPage from './pages/CapitalPage';
 import TicketsPage from './pages/TicketsPage';
@@ -130,6 +131,7 @@ const NAV_BY_ROLE = {
     { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker' },
     { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
     { to: '/trust', icon: Lock, label: 'Trust Center' },
+    { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
 
     { section: 'Advanced' },
     { to: '/monitoring', icon: Activity, label: 'Monitoring' },
@@ -175,6 +177,9 @@ const NAV_BY_ROLE = {
     { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker' },
     { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
     { to: '/trust', icon: Lock, label: 'Trust Center' },
+
+    { section: 'Wellbeing' },
+    { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
 
     { section: 'Network & Growth' },
     { to: '/services', icon: Package, label: 'Service Catalogue' },
@@ -836,6 +841,7 @@ export default function App() {
       <Route path="/incorporate/cofounder-agreement" element={guard(['admin', 'founder', 'partner'], <CofounderAgreementPage />)} />
       <Route path="/incorporate/83b" element={guard(['admin', 'founder', 'partner'], <Section83bPage />)} />
       <Route path="/compliance" element={guard(['admin', 'founder', 'partner'], <CompliancePage />)} />
+      <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
       <Route path="/partners" element={guard(['admin', 'partner', 'investor'], <PartnersPage />)} />
       <Route path="/capital" element={guard(['admin', 'investor'], <CapitalPage />)} />
       <Route path="/tickets" element={guard(['admin', 'founder', 'partner', 'investor'], <TicketsPage />)} />

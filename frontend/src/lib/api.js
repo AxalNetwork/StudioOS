@@ -122,6 +122,24 @@ export const api = {
   complianceDelete: (id) =>
     request(`/compliance/events/${id}`, { method: 'DELETE' }),
 
+  // Task #40 — Founder wellbeing
+  wellbeingMyCheckins: () => request('/wellbeing/checkins'),
+  wellbeingSubmit: (data) =>
+    request('/wellbeing/checkins', { method: 'POST', body: JSON.stringify(data) }),
+  wellbeingAggregate: (days = 30) =>
+    request(`/wellbeing/aggregate?days=${days}`),
+  wellbeingResources: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.category) q.set('category', params.category);
+    if (params.region) q.set('region', params.region);
+    const qs = q.toString();
+    return request(`/wellbeing/resources${qs ? `?${qs}` : ''}`);
+  },
+  wellbeingResourceCreate: (data) =>
+    request('/wellbeing/resources', { method: 'POST', body: JSON.stringify(data) }),
+  wellbeingResourceDelete: (id) =>
+    request(`/wellbeing/resources/${id}`, { method: 'DELETE' }),
+
   legal83bUploadReceipt: (id, file) => {
     const fd = new FormData();
     fd.append('file', file);
