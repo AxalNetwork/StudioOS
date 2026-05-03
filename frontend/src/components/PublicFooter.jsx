@@ -53,6 +53,15 @@ const socials = [
     href: 'https://t.me/axalvc',
     icon: <Send size={18} />,
   },
+  {
+    label: 'TikTok',
+    href: 'https://www.tiktok.com/@axalvc',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M16.6 5.82c.9.66 1.94 1.04 3.04 1.1v3.08c-1.1-.03-2.18-.31-3.1-.82v5.24c0 4.2-3.56 7.58-7.82 7.58A7.74 7.74 0 0 1 1 14.24c0-4.22 3.44-7.64 7.68-7.64.25 0 .5.02.74.04v3.18a4.7 4.7 0 0 0-.74-.07c-2.48 0-4.48 1.98-4.48 4.46 0 2.47 2 4.45 4.48 4.45 2.58 0 4.62-2.06 4.62-4.64V1h3.3c.02 1.1.4 2.15 1.1 3.04Z"/>
+      </svg>
+    ),
+  },
 ];
 
 export default function PublicFooter() {
