@@ -103,13 +103,15 @@ async def score_startup(
                 ).first()
                 if last_official and last_official.locked_until and last_official.locked_until > datetime.utcnow():
                     locked_iso = last_official.locked_until.isoformat() + "Z"
+                    # Structured detail so the frontend can render a live
+                    # countdown from `locked_until` instead of parsing prose.
                     raise HTTPException(
                         status_code=429,
                         detail={
                             "code": "official_cooldown",
+                            "message": f"Official scoring locked until {locked_iso} (use Practice mode in the meantime).",
                             "locked_until": locked_iso,
                             "previous_snapshot_id": last_official.id,
-                            "message": f"Official scoring locked until {locked_iso} (use Practice mode in the meantime).",
                         },
                     )
 

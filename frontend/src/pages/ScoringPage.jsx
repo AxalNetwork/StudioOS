@@ -50,7 +50,7 @@ export default function ScoringPage() {
   // are unlimited, never visible to LPs, and never lock the project's official
   // 7-day cooldown. Toggle Off = Official run.
   const [practiceMode, setPracticeMode] = useState(true);
-  const [cooldownInfo, setCooldownInfo] = useState(null); // { locked_until, snapshot_id }
+  const [cooldownInfo, setCooldownInfo] = useState(null); // { message, lockedUntilMs }
 
   useEffect(() => {
     api.scoringQueue().then(setQueue).catch(() => {});
@@ -69,7 +69,7 @@ export default function ScoringPage() {
     } catch (e) {
       // The 7-day cooldown surfaces as a 429 with `code: official_cooldown`
       // and a structured `locked_until` ISO timestamp. Render a live
-      // countdown instead of just echoing the raw message.
+      // countdown (CooldownBanner) instead of just echoing the raw message.
       const msg = e?.message || 'Failed to score';
       const data = e?.data || {};
       const isCooldown = data?.code === 'official_cooldown'

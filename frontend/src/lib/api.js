@@ -19,7 +19,8 @@ async function request(path, options = {}) {
         throw new Error('Session expired');
       }
       const err = await res.json().catch(() => ({}));
-      // Detail can be a structured dict (FastAPI) or a string. Surface the
+      // Detail can be a structured dict (FastAPI) or a string. The Cloudflare
+      // worker returns `error` as either a string or an object. Surface the
       // structured payload to callers via `error.data` so UI can render
       // things like a live cooldown countdown without regex-parsing the msg.
       const detailObj = (err && typeof err.detail === 'object') ? err.detail : null;
