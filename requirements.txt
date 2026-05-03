@@ -168,3 +168,6 @@ sqlalchemy
 sqlmodel
 uvicorn
 stripe
+pywebpush==2.3.0
+py-vapid==1.9.4
+http-ece==1.2.1

@@ -31,6 +31,7 @@ The user prefers clear and concise communication. They value iterative developme
 - **Mentor Matching + Office Hours**: Features a `mentor` user role, mentor profiles, booking system, and two-sided review process, with optional Cal.com integration.
 - **Unified Calendar Layer**: Aggregates mentor sessions, IC meetings, and founder check-ins, offering Google Calendar sync and ICS export.
 - **Co-founder Matching**: Facilitates connections based on mutual interest with auto-NDA generation and signing.
+- **Mobile PWA**: Installable web app with manifest + service worker, offline cache for the app shell, Academy lessons, and the user's own project data, plus an install banner (Android/iOS) and a per-device "Enable push" toggle wired through the notification center via VAPID web push.
 - **Watchlist + Decision Journal**: A capital-side due diligence instrument for tracking projects, recording investment decisions, and rolling up an "anti-portfolio" to identify missed opportunities.
 - **Portfolio Health Score + Predictive Failure**: Provides daily health snapshots for portfolio companies, calculating a score and badge based on runway, growth, churn, and sentiment, with intervention alerts.
 - **Trust Layer Hardening**: Includes KYB (Know Your Business) via Sumsub (or mock), investor accreditation verification, and per-role NDA acceptance with legal proof.
@@ -65,3 +66,4 @@ The user prefers clear and concise communication. They value iterative developme
 - **Whisper (or equivalent)**: For audio transcription.
 - **Llama (or equivalent OpenAI-compatible API)**: For text summarization.
 - **PitchBook**: For founder background data integration.
+- **pywebpush + VAPID**: For browser push notification delivery (FCM / Mozilla / Apple push services). VAPID keys read from `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_CLAIM_EMAIL` env vars; an ephemeral keypair is minted in dev when they are unset.

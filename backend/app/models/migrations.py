@@ -1287,6 +1287,35 @@ def ensure_watchlist_decision_tables() -> None:
             session.rollback()
 
 
+def ensure_push_subscriptions_table() -> None:
+    """Task #57 — Web Push (VAPID) subscriptions. Idempotent.
+
+    One row per (user, browser endpoint). The browser's PushManager
+    returns a stable URL endpoint (FCM / Mozilla / Apple) that we use as
+    the natural unique key. Stored as JSON to keep schema stable across
+    spec revisions (keys, expirationTime, etc.).
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS push_subscriptions (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    endpoint TEXT NOT NULL,
+                    subscription_json TEXT NOT NULL,
+                    user_agent TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    CONSTRAINT uq_push_user_endpoint UNIQUE (user_id, endpoint)
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_push_user ON push_subscriptions(user_id)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_push_subscriptions_table: %s", exc)
+            session.rollback()
+
+
 def ensure_portfolio_health_tables() -> None:
     """Task #44 — Portfolio health score + predictive failure. Idempotent."""
     with Session(engine) as session:

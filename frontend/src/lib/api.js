@@ -839,4 +839,13 @@ export const api = {
   getNotificationPrefs: () => request('/notifications/prefs'),
   putNotificationPrefs: (prefs) =>
     request('/notifications/prefs', { method: 'PUT', body: JSON.stringify({ prefs }) }),
+
+  // ---------- Web Push (Task #57) ----------
+  pushVapidKey: () => request('/notifications/push/vapid-key'),
+  pushSubscribe: (sub) =>
+    request('/notifications/push/subscribe', { method: 'POST', body: JSON.stringify(sub) }),
+  pushUnsubscribe: (data) =>
+    request('/notifications/push/unsubscribe', { method: 'POST', body: JSON.stringify(data) }),
+  pushSubscriptions: () => request('/notifications/push/subscriptions'),
+  pushTest: () => request('/notifications/push/test', { method: 'POST' }),
 };

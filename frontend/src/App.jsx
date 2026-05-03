@@ -81,6 +81,7 @@ import EmailChangeRevokePage from './pages/EmailChangeRevokePage';
 import InactivityWarningModal from './components/InactivityWarningModal';
 import NotificationBell from './components/NotificationBell';
 import CommandPalette from './components/CommandPalette';
+import InstallPrompt from './components/InstallPrompt';
 import useInactivityTimeout from './hooks/useInactivityTimeout';
 
 // Item shapes:
@@ -550,6 +551,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         onLogout={logoutNow}
       />
       <CommandPalette />
+      <InstallPrompt />
     </ViewModeContext.Provider>
   );
 }

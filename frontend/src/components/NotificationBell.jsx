@@ -1,7 +1,14 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Bell, CheckCheck, Settings as SettingsIcon } from 'lucide-react';
+import { Bell, CheckCheck, Settings as SettingsIcon, BellRing, BellOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import {
+  isPushSupported,
+  getPushState,
+  enablePush,
+  disablePush,
+  sendPushTest,
+} from '../lib/pwa';
 
 // Phase 0.2 — Notification bell (top-bar surface).
 // Polls /unread-count every 30s and lazy-loads the dropdown list on open.
@@ -30,6 +37,34 @@ export default function NotificationBell({ userId }) {
   const navigate = useNavigate();
   const popRef = useRef(null);
   const wsRef = useRef(null);
+  const [pushState, setPushState] = useState({ supported: false, subscribed: false, permission: 'default' });
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMsg, setPushMsg] = useState('');
+
+  const refreshPush = useCallback(async () => {
+    try { setPushState(await getPushState()); } catch {}
+  }, []);
+
+  const togglePush = useCallback(async () => {
+    setPushBusy(true);
+    setPushMsg('');
+    try {
+      if (pushState.subscribed) {
+        await disablePush();
+        setPushMsg('Push disabled on this device.');
+      } else {
+        await enablePush();
+        setPushMsg('Push enabled — sending a test…');
+        try { await sendPushTest(); } catch {}
+      }
+      await refreshPush();
+    } catch (err) {
+      setPushMsg(err?.message || 'Could not change push setting');
+    } finally {
+      setPushBusy(false);
+      setTimeout(() => setPushMsg(''), 4000);
+    }
+  }, [pushState.subscribed, refreshPush]);
 
   const refreshCount = useCallback(async () => {
     try {
@@ -107,7 +142,10 @@ export default function NotificationBell({ userId }) {
   const toggle = async () => {
     const next = !open;
     setOpen(next);
-    if (next) await loadList();
+    if (next) {
+      await loadList();
+      if (isPushSupported()) await refreshPush();
+    }
   };
 
   const onItemClick = async (n) => {
@@ -157,6 +195,26 @@ export default function NotificationBell({ userId }) {
               </button>
             </div>
           </div>
+          {pushState.supported && (
+            <div className="px-4 py-2 border-b border-gray-100 bg-gray-50/60 flex items-center gap-2">
+              <button
+                onClick={togglePush}
+                disabled={pushBusy}
+                className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md ${
+                  pushState.subscribed
+                    ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                    : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                } ${pushBusy ? 'opacity-50 cursor-wait' : ''}`}
+                title={pushState.subscribed ? 'Disable push on this device' : 'Enable push on this device'}
+              >
+                {pushState.subscribed ? <BellRing size={12} /> : <BellOff size={12} />}
+                {pushBusy ? 'Working…' : (pushState.subscribed ? 'Push enabled' : 'Enable push')}
+              </button>
+              <span className="text-[11px] text-gray-500 truncate">
+                {pushMsg || (pushState.subscribed ? 'Notifications on this device.' : 'Get pushes when away.')}
+              </span>
+            </div>
+          )}
           <div className="overflow-y-auto flex-1">
             {loading && <div className="px-4 py-6 text-sm text-gray-500 text-center">Loading…</div>}
             {!loading && items.length === 0 && (

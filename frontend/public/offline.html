@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Offline · Axal StudioOS</title>
+  <link rel="icon" href="/axal-mark.png" />
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Space Grotesk', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: linear-gradient(135deg, #0b0b14, #1a0b2e);
+      color: #e8e6f0;
+      padding: 24px;
+    }
+    .card {
+      max-width: 440px;
+      text-align: center;
+    }
+    img {
+      width: 96px;
+      height: auto;
+      opacity: 0.9;
+      margin-bottom: 24px;
+    }
+    h1 { font-weight: 600; margin: 0 0 8px; font-size: 22px; }
+    p  { color: #a89fc4; line-height: 1.5; margin: 0 0 24px; font-size: 14px; }
+    button {
+      background: #7c3aed;
+      color: white;
+      border: 0;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    button:hover { background: #6d28d9; }
+    .hint { font-size: 12px; color: #6b6587; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="/axal-mark.png" alt="Axal" />
+    <h1>You're offline</h1>
+    <p>StudioOS needs the network to load this page. Cached pages — Academy lessons and your own project data — are still available from the dashboard.</p>
+    <button onclick="location.reload()">Try again</button>
+    <div class="hint">Last seen online: <span id="ts"></span></div>
+  </div>
+  <script>
+    document.getElementById('ts').textContent = new Date().toLocaleString();
+  </script>
+</body>
+</html>

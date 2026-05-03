@@ -172,6 +172,31 @@ def notify(
                     "read_at": None,
                 }
                 _broadcast_ws(user_id, ws_payload)
+                # Task #57 — also fan out to web push subscriptions.
+                # Best-effort AND non-blocking: pywebpush is synchronous and
+                # network-bound (5s timeout × N devices). Running it inline
+                # would stall the request that triggered notify(), so we
+                # punt to a daemon thread. Exceptions inside the thread are
+                # logged by web_push.send_to_user itself.
+                try:
+                    import threading
+                    from backend.app.services.web_push import send_to_user as _push
+                    _payload = {
+                        "title": title,
+                        "body": body,
+                        "link": link,
+                        "type": type,
+                        "uid": row.uid,
+                    }
+                    _uid = user_id
+                    threading.Thread(
+                        target=_push,
+                        args=(_uid, _payload),
+                        daemon=True,
+                        name=f"webpush-u{_uid}",
+                    ).start()
+                except Exception as _exc:  # noqa: BLE001
+                    logger.warning("notify: web_push fan-out dispatch failed: %s", _exc)
 
             if "email" in resolved and user.email:
                 _send_email(user.email, f"[Axal] {title}", body or title)

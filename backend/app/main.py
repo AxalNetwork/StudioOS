@@ -84,6 +84,7 @@ async def lifespan(app: FastAPI):
             ensure_cofounder_tables,
             ensure_portfolio_health_tables,
             ensure_watchlist_decision_tables,
+            ensure_push_subscriptions_table,
         )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
@@ -136,6 +137,9 @@ async def lifespan(app: FastAPI):
         # Task #49 — watchlist + decision journal tables.
         ensure_watchlist_decision_tables()
         logger.info("StudioOS migrations: watchlist + decision journal tables ensured")
+        # Task #57 — web push subscriptions table.
+        ensure_push_subscriptions_table()
+        logger.info("StudioOS migrations: push subscriptions table ensured")
     except Exception as exc:  # noqa: BLE001
         # Migrations are best-effort: a failure here must not prevent the API
         # from booting (e.g. fresh DB, missing legacy tables).
@@ -370,6 +374,9 @@ from backend.app.api.routes import settings as settings_routes  # noqa: E402
 app.include_router(settings_routes.router, prefix="/api")
 from backend.app.api.routes import notifications as notifications_routes  # noqa: E402
 app.include_router(notifications_routes.router, prefix="/api")
+# Task #57 — web push subscription management.
+from backend.app.api.routes import push as _push_routes  # noqa: E402
+app.include_router(_push_routes.router, prefix="/api")
 from backend.app.api.routes import financials as financials_routes  # noqa: E402
 app.include_router(financials_routes.router, prefix="/api")
 from backend.app.api.routes import progress as progress_routes  # noqa: E402
