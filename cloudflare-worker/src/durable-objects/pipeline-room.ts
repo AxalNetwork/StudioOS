@@ -98,23 +98,31 @@ export class PipelineRoom implements DurableObject {
   }
 
   private broadcast(event: unknown) {
-    // Server-side authorization for personal notifications: when the event
-    // is a `{type:"notification", user_id, ...}` frame published by
-    // services/notify.ts, ONLY the recipient's sockets receive it. Other
-    // events (vote_updated, stage_change, etc.) are aggregate/public and
-    // fan out to every connected viewer of the room.
+    // Server-side authorization for two distinct event classes:
+    //   1. Personal `{type:"notification", user_id, ...}` frames published
+    //      by services/notify.ts go ONLY to the recipient's sockets.
+    //   2. Aggregate board events (vote_updated, stage_change,
+    //      project_created, gate_review_created, etc.) carry cross-deal
+    //      metadata and go ONLY to privileged roles (admin/partner/
+    //      investor). The `overview` channel is open to founders for the
+    //      bell, but they must not see board-wide pipeline activity.
     let targetUserId: string | null = null;
+    let isNotification = false;
     if (event && typeof event === 'object') {
       const e = event as Record<string, unknown>;
       if (e.type === 'notification' && e.user_id !== undefined && e.user_id !== null) {
         targetUserId = String(e.user_id);
+        isNotification = true;
       }
     }
     const payload = JSON.stringify(event);
+    const PRIVILEGED = new Set(['admin', 'partner', 'investor']);
     for (const ws of this.state.getWebSockets()) {
-      if (targetUserId !== null) {
-        const att = (ws.deserializeAttachment?.() as { userId?: string } | null) || null;
+      const att = (ws.deserializeAttachment?.() as { userId?: string; role?: string } | null) || null;
+      if (isNotification) {
         if (!att || String(att.userId) !== targetUserId) continue;
+      } else {
+        if (!att || !PRIVILEGED.has(String(att.role || ''))) continue;
       }
       try {
         ws.send(payload);
