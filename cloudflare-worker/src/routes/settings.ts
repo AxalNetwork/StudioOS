@@ -136,7 +136,14 @@ function currentJtiFromRequest(c: Context<{ Bindings: Env }>): string | null {
   } catch { return null; }
 }
 
-settings.get('/', async (c) => {
+// Register both `''` and `'/'` so the worker matches `/api/settings` and
+// `/api/settings/` identically — the FastAPI dev backend does the same via
+// `@router.get("")` + `@router.get("/")`. Without the empty-path variant,
+// `GET /api/settings` (no slash, what the frontend actually calls) falls
+// through to the global `app.notFound` handler and returns
+// `{"detail":"Not found"}`, which the UI surfaces as
+// "Could not load your settings: Not found".
+const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
@@ -192,11 +199,13 @@ settings.get('/', async (c) => {
     })(),
     current_jti: currentJtiFromRequest(c),
   });
-});
+};
+settings.get('', getRootSettings);
+settings.get('/', getRootSettings);
 
 // --- PATCH /api/settings ----------------------------------------------------
 
-settings.patch('/', async (c) => {
+const patchRootSettings = async (c: Context<{ Bindings: Env }>) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
@@ -256,7 +265,9 @@ settings.patch('/', async (c) => {
     await c.env.DB.prepare(`UPDATE users SET ${u.col} = ? WHERE id = ?`).bind(u.val, user.id).run();
   }
   return c.json({ ok: true, updated: updates.length });
-});
+};
+settings.patch('', patchRootSettings);
+settings.patch('/', patchRootSettings);
 
 // --- POST /api/settings/headshot --------------------------------------------
 
