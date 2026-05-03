@@ -238,7 +238,9 @@ export async function embedAndUpsertById(env: Env, type: EntityType, id: number)
       type, id,
       text,
       title: `${row.doc_type} (deal #${row.deal_id})`,
-      url: `/legal?deal=${row.deal_id}`,
+      // /legal-capital is reachable by admin/founder/partner/investor;
+      // /legal is admin/founder only and would 403 the others.
+      url: `/legal-capital?document=${id}`,
       snippet: `${row.doc_type} • ${row.status || 'draft'} • deal #${row.deal_id}`,
     });
   }

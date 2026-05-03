@@ -50,6 +50,7 @@ import LiquidityPage from './pages/LiquidityPage';
 import FundsPage from './pages/FundsPage';
 import SettingsPage from './pages/SettingsPage';
 import OnboardingPersonaPage from './pages/OnboardingPersonaPage';
+import AcademyLessonPage from './pages/AcademyLessonPage';
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
 import EmailChangeRevokePage from './pages/EmailChangeRevokePage';
@@ -708,6 +709,8 @@ export default function App() {
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/risk-disclosures" element={<RiskDisclosuresPage />} />
+      <Route path="/academy/:slug" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
+      <Route path="/academy" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
     </Routes>
   );
 }

@@ -27,11 +27,21 @@ from backend.app.models.entities import User
 router = APIRouter(prefix="/search", tags=["Search"])
 
 ALL_TYPES = ["project", "deal", "founder", "partner", "document", "academy_lesson"]
-PRIVILEGED = {"admin", "partner", "investor"}
+
+# Per-role allow-list scoped to entity types whose deep-link target is
+# actually reachable for that role (see route guards in frontend/App.jsx).
+# This prevents the palette from returning results that resolve to a
+# 403 / role-redirect — a UX trap and mild info-leak.
+ROLE_ALLOWED = {
+    "admin":    ALL_TYPES,
+    "founder":  ["project", "founder", "document", "academy_lesson"],
+    "partner":  ["project", "deal", "document", "academy_lesson"],
+    "investor": ["project", "deal", "document", "academy_lesson"],
+}
 
 
 def _allowed_types(role: str) -> List[str]:
-    return ALL_TYPES if role in PRIVILEGED else ["project", "academy_lesson"]
+    return ROLE_ALLOWED.get(role, ["project", "academy_lesson"])
 
 
 def _scrub(hit: Dict) -> Dict:
@@ -136,18 +146,23 @@ def _query_type(
         } for r in rows]
 
     if entity_type == "document":
+        # Backend dev schema: `documents` keyed by project_id with `doc_type`
+        # (the worker's prod D1 uses `legal_documents` keyed by deal_id —
+        # see services/vectorize.ts for the prod variant).
         rows = session.exec(text(
-            "SELECT id, deal_id, type AS doc_type, status FROM documents "
-            "WHERE type LIKE :like OR status LIKE :like "
+            "SELECT id, project_id, title, doc_type, status FROM documents "
+            "WHERE title LIKE :like OR doc_type LIKE :like OR status LIKE :like "
             "ORDER BY id DESC LIMIT :limit"
         ), params={"like": like, "limit": limit}).mappings().all()
         return [{
             "id": f"document:{r['id']}",
             "type": "document",
             "entity_id": r["id"],
-            "title": f"{r['doc_type']} (deal #{r['deal_id']})",
-            "url": f"/legal?deal={r['deal_id']}",
-            "snippet": f"{r['doc_type']} • {r['status'] or 'draft'} • deal #{r['deal_id']}",
+            "title": f"{r['title']} ({r['doc_type']})",
+            # /legal-capital is the all-roles legal surface; /legal is
+            # admin/founder only, which would 403 partner/investor hits.
+            "url": f"/legal-capital?document={r['id']}",
+            "snippet": f"{r['doc_type']} • {r['status'] or 'draft'}",
             "score": 0.0,
         } for r in rows]
 

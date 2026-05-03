@@ -56,9 +56,20 @@ async function ensureAcademySchema(env: Env): Promise<void> {
  * `warning`, not a 403 — keeps the UI simple and avoids leaking the
  * existence of restricted indices.
  */
+/**
+ * Role-scoped allow-list — must mirror the frontend route guards in
+ * App.jsx so every returned hit deep-links to a reachable page rather
+ * than a 403 / role-redirect.
+ */
+const ROLE_ALLOWED: Record<string, EntityType[]> = {
+  admin:    VALID_TYPES,
+  founder:  ['project', 'founder', 'document', 'academy_lesson'],
+  partner:  ['project', 'deal', 'document', 'academy_lesson'],
+  investor: ['project', 'deal', 'document', 'academy_lesson'],
+};
+
 function allowedTypes(role: string): EntityType[] {
-  if (role === 'admin' || role === 'partner' || role === 'investor') return VALID_TYPES;
-  return ['project', 'academy_lesson'];
+  return ROLE_ALLOWED[role] || ['project', 'academy_lesson'];
 }
 
 function scrubSnippet(h: SearchHit): SearchHit {
