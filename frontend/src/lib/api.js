@@ -128,6 +128,32 @@ export const api = {
   studioBenchmarks: () => request('/market-intel/studio-benchmarks'),
   competitiveIntelligence: () => request('/market-intel/competitive-intelligence'),
 
+  // Task #26 — Financial Model Builder
+  getFinancialModel: (projectId) => request(`/financials/${projectId}`),
+  saveFinancialModel: (projectId, assumptions) => request(`/financials/${projectId}`, { method: 'PUT', body: JSON.stringify({ assumptions }) }),
+  recomputeFinancialModel: (projectId) => request(`/financials/${projectId}/recompute`, { method: 'POST' }),
+  downloadFinancialModelXlsx: (projectId) => {
+    const token = localStorage.getItem('token');
+    fetch(`/api/financials/${projectId}/export.xlsx`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Export failed');
+        return res.blob().then((blob) => ({ blob, filename: (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || 'financials.xlsx' }));
+      })
+      .then(({ blob, filename }) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      })
+      .catch((e) => alert(e.message));
+  },
+
   askAdvisory: (data) => request('/advisory/ask', { method: 'POST', body: JSON.stringify(data) }),
   financialPlan: (data) => request('/advisory/financial-plan', { method: 'POST', body: JSON.stringify(data) }),
   runDiligence: (data) => request('/advisory/diligence', { method: 'POST', body: JSON.stringify(data) }),

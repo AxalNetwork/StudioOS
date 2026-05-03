@@ -151,3 +151,4 @@ qrcode
 sqlalchemy
 sqlmodel
 uvicorn
+openpyxl

@@ -75,3 +75,33 @@ Concrete changes shipped in this iteration. Treat this section as the source of 
 - `api.js` adds: `getSettings, updateSettings, uploadHeadshot, requestEmailChange, confirmEmailChange, revokeEmailChange, repairTotp, listSessions, revokeSession, revokeAllSessions, regenerateRecoveryCodes, listFounderInvites, createFounderInvite, revokeFounderInvite, requestAccountDeletion, cancelAccountDeletion, exportMyData`.
 
 **Known pre-existing bug (out of scope for this commit):** `frontend/src/pages/VerifyEmailPage.jsx` calls `api.verifyEmail` which doesn't exist — blocks the registration UI flow. Recommend a separate follow-up.
+## Task #26 — Financial Model Builder (this commit)
+
+**Backend (`backend/app/api/routes/financials.py`, mounted at `/api`):**
+- `GET /api/financials/{project_id}` — fetch saved model, or default-scaffold projection if none.
+- `PUT /api/financials/{project_id}` — upsert assumptions; recomputes projection, sensitivity, and capital category.
+- `POST /api/financials/{project_id}/recompute` — re-run from stored assumptions (admin/founder/partner/investor read).
+- `GET /api/financials/{project_id}/export.xlsx` — 4-sheet workbook (Assumptions, Projection, Summary, Sensitivity) via `openpyxl`.
+
+**Drivers (Pydantic `Assumptions`):** starting_cash, price_per_unit, units_month_0, monthly_growth_pct, cac, monthly_churn_pct, salaries_monthly, opex_monthly, gross_margin_pct, horizon_months (3..60).
+
+**Computation:** month-by-month projection of units/revenue/gross_profit/marketing/fixed/net/cash. Reports `runway_months` (caps when cash hits zero, else extrapolates from avg burn), `avg_monthly_burn`, `breakeven_month` (first month with net ≥ 0), `ending_cash`, `total_revenue_horizon`, `ltv`, `ltv_cac_ratio`. Sensitivity grid: ±20%/±10%/0 on top-3 drivers (price, units_month_0, cac), each cell holding runway/breakeven/ending cash.
+
+**Capital scoring hook:** Saving the model derives 0–10 sliders for the v2 scoring engine's capital category (`SCORING_V2_WEIGHTS["capital"]`):
+- `runway` slider = clip(runway_months / 2.4, 0..10) — 24mo+ caps at 10/10.
+- `burn_efficiency` slider = clip(ltv_cac_ratio × 3, 0..10) — 3.3:1 caps at 10/10.
+The recompute is persisted on the model row (`capital_recompute_json`) and surfaced in the UI; the next official scoring run consumes it.
+
+**Schema:** new `financial_models` table (SQLModel `FinancialModel` in `backend/app/models/entities.py`) — `project_id` UNIQUE, `assumptions_json`, `computed_json`, `sensitivity_json`, `capital_recompute_json`, `updated_by`, timestamps. Auto-created via `SQLModel.metadata.create_all` on startup.
+
+**Authorization (mirrors scoring/legal pattern via `backend/app/api/deps.py`):**
+- `_ensure_can_view`: admin/partner/investor (privileged) read all; founder reads only their own project (founder_id match) — blocks IDOR.
+- `_ensure_can_edit`: admin always; founder only if `user.founder_id == project.founder_id`; partner/investor blocked.
+
+**Frontend (`frontend/src/pages/FinancialsPage.jsx`, route `/build/financials`):**
+- Founder nav entry under Intelligence section.
+- Project selector (URL-synced via `?project_id=`), drivers form, save/reset/export buttons.
+- Stat cards (runway, burn, breakeven, capital score), Recharts line charts (cash trajectory + revenue/net) with breakeven reference line, sensitivity grid heat-map, capital factor breakdown with progress bars.
+- `api.js`: `getFinancialModel`, `saveFinancialModel`, `recomputeFinancialModel`, `downloadFinancialModelXlsx` (token-aware blob download).
+
+**Dependency added:** `openpyxl` (Python).

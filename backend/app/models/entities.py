@@ -662,3 +662,16 @@ class UserCompanyLink(SQLModel, table=True):
     role_in_company: str = Field(default="Member", index=True)  # 'Founder' | 'Admin' | 'Advisor' | 'Member'
     is_primary_admin: bool = Field(default=False, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class FinancialModel(SQLModel, table=True):
+    __tablename__ = "financial_models"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="projects.id", index=True, unique=True)
+    assumptions_json: str = Field(default="{}")
+    computed_json: str = Field(default="{}")
+    sensitivity_json: str = Field(default="{}")
+    capital_recompute_json: Optional[str] = None
+    updated_by: Optional[int] = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
