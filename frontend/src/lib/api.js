@@ -748,6 +748,37 @@ export const api = {
   attachMyCalcomKey: (data) =>
     request('/calendar/me/calcom', { method: 'POST', body: JSON.stringify(data) }),
 
+  // ---------- Co-founder matching (Task #38) ----------
+  cofounderMe: () => request('/cofounder/me'),
+  cofounderUpsertMe: (data) =>
+    request('/cofounder/me', { method: 'PUT', body: JSON.stringify(data) }),
+  cofounderUnlistMe: () => request('/cofounder/me', { method: 'DELETE' }),
+  cofounderVocab: () => request('/cofounder/vocab'),
+  cofounderBrowse: (opts = {}) => {
+    const qs = new URLSearchParams();
+    for (const k of ['q', 'skill', 'sector', 'commitment']) {
+      if (opts[k]) qs.set(k, opts[k]);
+    }
+    if (opts.remote_only) qs.set('remote_only', 'true');
+    if (opts.limit) qs.set('limit', String(opts.limit));
+    const s = qs.toString();
+    return request(`/cofounder/browse${s ? `?${s}` : ''}`);
+  },
+  cofounderExpressInterest: (data) =>
+    request('/cofounder/interest', { method: 'POST', body: JSON.stringify(data) }),
+  cofounderWithdrawInterest: (userUid) =>
+    request(`/cofounder/interest/${userUid}`, { method: 'DELETE' }),
+  cofounderListConnections: () => request('/cofounder/connections'),
+  cofounderGetConnection: (uid) => request(`/cofounder/connections/${uid}`),
+  cofounderGetMyNda: (uid) => request(`/cofounder/connections/${uid}/nda`),
+  cofounderSignNda: (uid, data) =>
+    request(`/cofounder/connections/${uid}/nda/sign`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  cofounderCloseConnection: (uid, reason) =>
+    request(`/cofounder/connections/${uid}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`,
+            { method: 'DELETE' }),
+
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {
     const qs = new URLSearchParams();

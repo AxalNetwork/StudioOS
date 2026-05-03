@@ -1325,3 +1325,91 @@ class CalendarSyncRecord(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("user_id", "source_kind", "source_id", name="uq_cal_sync_user_source"),
     )
+
+
+# ===========================================================================
+# Task #38 — Co-founder matching with mutual-interest reveal + auto-NDA.
+# ===========================================================================
+class CofounderProfile(SQLModel, table=True):
+    """One row per founder-user opting into the co-founder marketplace.
+
+    `user_id` is UNIQUE — a user may have at most one cofounder profile.
+    Identity is *never* surfaced via the browse endpoint; only the
+    pseudo-anonymous handle (derived from `uid[:8]`) plus the structured
+    fields below. Once two users have mutual interest AND both have
+    countersigned the per-pair NDA, full identity is revealed via the
+    connections endpoint.
+    """
+    __tablename__ = "cofounder_profiles"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    user_id: int = Field(foreign_key="users.id", unique=True, index=True)
+    # Skills as JSON array of free-form strings. Suggested vocab in the UI
+    # (engineering, product, design, sales, gtm, ops, finance, ai_ml,
+    # data, hardware) but we don't enforce — operators may add new
+    # categories without a migration.
+    # Stored as JSON-encoded strings to mirror the Mentor pattern (avoids
+    # taking on a postgres ARRAY/JSON dialect dependency for one feature).
+    # Helpers in services/cofounder.py round-trip these via json.loads/dumps.
+    skills_json: str = Field(default="[]")
+    sectors_json: str = Field(default="[]")
+    commitment: str = Field(default="full_time")  # full_time | part_time | exploring
+    location_city: Optional[str] = None
+    location_country: Optional[str] = None
+    remote_ok: bool = Field(default=True)
+    equity_expectation_min: Optional[float] = None  # percent, e.g. 20.0
+    equity_expectation_max: Optional[float] = None  # percent, e.g. 50.0
+    bio: Optional[str] = Field(default=None, max_length=2000)
+    looking_for: Optional[str] = Field(default=None, max_length=400)
+    listed: bool = Field(default=True, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CofounderInterest(SQLModel, table=True):
+    """Directed "I'm interested in you" signal. Mutuality is computed by
+    checking whether the inverse row exists and is not withdrawn."""
+    __tablename__ = "cofounder_interests"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    from_user_id: int = Field(foreign_key="users.id", index=True)
+    to_user_id: int = Field(foreign_key="users.id", index=True)
+    message: Optional[str] = Field(default=None, max_length=500)
+    status: str = Field(default="sent", index=True)  # sent | withdrawn
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("from_user_id", "to_user_id", name="uq_cofounder_interest_pair"),
+    )
+
+
+class CofounderConnection(SQLModel, table=True):
+    """Created the moment mutual interest is detected.
+
+    `user_a_id`/`user_b_id` are stored sorted ascending so a single
+    UNIQUE constraint catches the unordered pair. Two NDA Documents
+    (one per side, since each is the legal "Recipient" w.r.t. the other)
+    are minted at creation; the connection enters status `active` only
+    after both sides have signed."""
+    __tablename__ = "cofounder_connections"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    user_a_id: int = Field(foreign_key="users.id", index=True)  # always < user_b_id
+    user_b_id: int = Field(foreign_key="users.id", index=True)
+    nda_doc_a_id: Optional[int] = Field(default=None, foreign_key="documents.id")
+    nda_doc_b_id: Optional[int] = Field(default=None, foreign_key="documents.id")
+    nda_signed_at_a: Optional[datetime] = None
+    nda_signed_at_b: Optional[datetime] = None
+    nda_signed_ip_a: Optional[str] = None
+    nda_signed_ip_b: Optional[str] = None
+    nda_signed_name_a: Optional[str] = None
+    nda_signed_name_b: Optional[str] = None
+    status: str = Field(default="pending_nda", index=True)  # pending_nda | active | closed
+    closed_at: Optional[datetime] = None
+    closed_reason: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_a_id", "user_b_id", name="uq_cofounder_conn_pair"),
+    )

@@ -1213,3 +1213,92 @@ def ensure_calendar_tables() -> None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("ensure_calendar_tables: calendar_sync_records: %s", exc)
             session.rollback()
+
+
+def ensure_cofounder_tables() -> None:
+    """Task #38 — Co-founder matching. Idempotent.
+
+    Creates ``cofounder_profiles``, ``cofounder_interests`` and
+    ``cofounder_connections``. Each block is wrapped in its own
+    try/except/rollback so a failure on one table doesn't poison the
+    rest of the migration sweep.
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS cofounder_profiles (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                    skills_json TEXT DEFAULT '[]' NOT NULL,
+                    sectors_json TEXT DEFAULT '[]' NOT NULL,
+                    commitment VARCHAR DEFAULT 'full_time' NOT NULL,
+                    location_city VARCHAR,
+                    location_country VARCHAR,
+                    remote_ok BOOLEAN DEFAULT TRUE NOT NULL,
+                    equity_expectation_min DOUBLE PRECISION,
+                    equity_expectation_max DOUBLE PRECISION,
+                    bio TEXT,
+                    looking_for VARCHAR,
+                    listed BOOLEAN DEFAULT TRUE NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cofounder_profiles_listed ON cofounder_profiles(listed)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_cofounder_tables: cofounder_profiles: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS cofounder_interests (
+                    id SERIAL PRIMARY KEY,
+                    from_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    to_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    message VARCHAR,
+                    status VARCHAR DEFAULT 'sent' NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    CONSTRAINT uq_cofounder_interest_pair UNIQUE (from_user_id, to_user_id)
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cofounder_interest_from ON cofounder_interests(from_user_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cofounder_interest_to ON cofounder_interests(to_user_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cofounder_interest_status ON cofounder_interests(status)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_cofounder_tables: cofounder_interests: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS cofounder_connections (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    user_a_id INTEGER NOT NULL REFERENCES users(id),
+                    user_b_id INTEGER NOT NULL REFERENCES users(id),
+                    nda_doc_a_id INTEGER REFERENCES documents(id),
+                    nda_doc_b_id INTEGER REFERENCES documents(id),
+                    nda_signed_at_a TIMESTAMP,
+                    nda_signed_at_b TIMESTAMP,
+                    nda_signed_ip_a VARCHAR,
+                    nda_signed_ip_b VARCHAR,
+                    nda_signed_name_a VARCHAR,
+                    nda_signed_name_b VARCHAR,
+                    status VARCHAR DEFAULT 'pending_nda' NOT NULL,
+                    closed_at TIMESTAMP,
+                    closed_reason VARCHAR,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    CONSTRAINT uq_cofounder_conn_pair UNIQUE (user_a_id, user_b_id)
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cofounder_conn_a ON cofounder_connections(user_a_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cofounder_conn_b ON cofounder_connections(user_b_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cofounder_conn_status ON cofounder_connections(status)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_cofounder_tables: cofounder_connections: %s", exc)
+            session.rollback()

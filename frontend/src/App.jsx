@@ -35,6 +35,7 @@ import TrustCenterPage from './pages/TrustCenterPage';
 import MentorsPage from './pages/MentorsPage';
 import OfficeHoursPage from './pages/OfficeHoursPage';
 import CalendarPage from './pages/CalendarPage';
+import CofounderPage from './pages/CofounderPage';
 import ReferEarnPage from './pages/ReferEarnPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import PayoutsPage from './pages/PayoutsPage';
@@ -180,6 +181,7 @@ const NAV_BY_ROLE = {
 
     { divider: true },
     { to: '/calendar', icon: Calendar, label: 'Calendar' },
+    { to: '/cofounder', icon: Users, label: 'Find a Co-founder' },
     { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
     { to: '/founder', icon: Rocket, label: 'Founder Portal', highlight: true },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
@@ -816,6 +818,7 @@ export default function App() {
       <Route path="/mentors" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <MentorsPage />)} />
       <Route path="/office-hours" element={guard(['admin', 'mentor'], <OfficeHoursPage />)} />
       <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <CalendarPage />)} />
+      <Route path="/cofounder" element={guard(['admin', 'founder'], <CofounderPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor'], <TrustCenterPage />)} />
