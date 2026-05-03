@@ -115,9 +115,12 @@ def get_prefs(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    # Canonical store is `users.notification_prefs` (owned by settings.py
+    # which also adds the column via _ensure_schema). The Cloudflare worker
+    # mirrors the same column on D1 so prod + dev stay in lockstep.
     try:
         row = session.exec(
-            text("SELECT notification_prefs FROM users_extra WHERE user_id = :uid").bindparams(uid=user.id)
+            text("SELECT notification_prefs FROM users WHERE id = :uid").bindparams(uid=user.id)
         ).first()
         raw = row[0] if row else None
         return {"prefs": json.loads(raw) if raw else {}}
@@ -138,27 +141,12 @@ def put_prefs(
     j = json.dumps(data.prefs or {})
     if len(j) > 16_000:
         raise HTTPException(status_code=400, detail="notification_prefs too large")
-    # Upsert into users_extra; the settings router owns the table create.
     try:
-        session.exec(text(
-            "INSERT INTO users_extra (user_id, notification_prefs) VALUES (:uid, :p) "
-            "ON CONFLICT(user_id) DO UPDATE SET notification_prefs = :p"
-        ).bindparams(uid=user.id, p=j))
+        session.exec(
+            text("UPDATE users SET notification_prefs = :p WHERE id = :uid").bindparams(uid=user.id, p=j)
+        )
         session.commit()
-    except Exception:
-        # PG path: the SQLite ON CONFLICT syntax is also valid in PG with the
-        # constraint name; fall back to a manual select+update.
+    except Exception as exc:
         session.rollback()
-        existing = session.exec(
-            text("SELECT user_id FROM users_extra WHERE user_id = :uid").bindparams(uid=user.id)
-        ).first()
-        if existing:
-            session.exec(text(
-                "UPDATE users_extra SET notification_prefs = :p WHERE user_id = :uid"
-            ).bindparams(uid=user.id, p=j))
-        else:
-            session.exec(text(
-                "INSERT INTO users_extra (user_id, notification_prefs) VALUES (:uid, :p)"
-            ).bindparams(uid=user.id, p=j))
-        session.commit()
+        raise HTTPException(status_code=500, detail=f"Failed to save prefs: {exc}")
     return {"ok": True}

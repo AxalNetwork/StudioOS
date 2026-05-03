@@ -65,25 +65,38 @@ VOTE_THRESHOLD_WEIGHT = 12
 # the REST POST handler to broadcast vote updates in real time.
 # ---------------------------------------------------------------------------
 class _ConnectionManager:
+    """Tracks WS connections + the authenticated user_id of each socket.
+
+    `broadcast()` fans `vote_updated` (public/aggregate) to every client,
+    but routes `notification` messages strictly to the addressed user's
+    sockets — server-side authorization, not client-side filtering. This
+    prevents one user's private notification payload from reaching
+    another user's browser over the wire.
+    """
     def __init__(self) -> None:
-        self._connections: set[WebSocket] = set()
+        self._owners: dict[WebSocket, int] = {}
         self._lock = asyncio.Lock()
 
-    async def connect(self, ws: WebSocket) -> None:
+    async def connect(self, ws: WebSocket, user_id: int) -> None:
         await ws.accept()
         async with self._lock:
-            self._connections.add(ws)
+            self._owners[ws] = user_id
 
     async def disconnect(self, ws: WebSocket) -> None:
         async with self._lock:
-            self._connections.discard(ws)
+            self._owners.pop(ws, None)
 
     async def broadcast(self, message: dict) -> None:
+        target_user_id = None
+        if isinstance(message, dict) and message.get("type") == "notification":
+            target_user_id = message.get("user_id")
         # Snapshot to avoid mutating the set while iterating.
         async with self._lock:
-            sockets = list(self._connections)
+            pairs = list(self._owners.items())
         dead: list[WebSocket] = []
-        for ws in sockets:
+        for ws, owner_id in pairs:
+            if target_user_id is not None and owner_id != target_user_id:
+                continue
             try:
                 await ws.send_json(message)
             except Exception:
@@ -91,7 +104,7 @@ class _ConnectionManager:
         if dead:
             async with self._lock:
                 for ws in dead:
-                    self._connections.discard(ws)
+                    self._owners.pop(ws, None)
 
 
 manager = _ConnectionManager()
@@ -394,7 +407,7 @@ async def ws_overview(websocket: WebSocket, token: str = Query(...)):
             await websocket.close(code=4401)
             return
 
-    await manager.connect(websocket)
+    await manager.connect(websocket, user.id)
     try:
         while True:
             msg = await websocket.receive_json()

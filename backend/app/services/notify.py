@@ -31,11 +31,12 @@ DEFAULT_CHANNELS = ("in_app",)
 
 
 def _user_prefs(session: Session, user_id: int) -> dict:
-    """Read notification_prefs JSON from users_extra; tolerant of absence."""
+    """Read notification_prefs JSON from users (canonical store, owned by
+    settings.py and mirrored on the worker)."""
     try:
         from sqlalchemy import text
         row = session.exec(
-            text("SELECT notification_prefs FROM users_extra WHERE user_id = :uid").bindparams(uid=user_id)
+            text("SELECT notification_prefs FROM users WHERE id = :uid").bindparams(uid=user_id)
         ).first()
         raw = row[0] if row else None
         return json.loads(raw) if raw else {}

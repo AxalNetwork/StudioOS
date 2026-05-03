@@ -66,7 +66,11 @@ export default function NotificationBell({ userId }) {
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     let url;
     try {
-      url = `${proto}//${window.location.host}/api/pipeline/ws/overview`;
+      // Both auth carriers: ?token= for FastAPI dev (Starlette WS doesn't
+      // read subprotocols easily), and `bearer.<jwt>` subprotocol for the
+      // Cloudflare worker / RFC-compliant path. Servers honor whichever
+      // they support — the other is ignored.
+      url = `${proto}//${window.location.host}/api/pipeline/ws/overview?token=${encodeURIComponent(token)}`;
     } catch {
       return;
     }
