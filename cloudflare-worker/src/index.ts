@@ -236,6 +236,11 @@ export default {
           // approved snapshot using id-cursor (no LIMIT cap on coverage).
           try { await Jobs.enqueue(env, 'score_hash_audit', { page_size: 500 }); } catch {}
         }
+        // Daily admin digest for flagged-but-unreviewed scores (>24h old).
+        // Runs at 14:00 UTC so US/EU admins see it in the morning.
+        if (now.getUTCHours() === 14 && now.getUTCMinutes() === 0) {
+          try { await Jobs.enqueue(env, 'flagged_score_digest', {}); } catch {}
+        }
       } finally {
         try {
           const cur = await env.RATE_LIMITS.get(LEASE_KEY);

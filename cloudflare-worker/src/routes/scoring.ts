@@ -210,6 +210,20 @@ scoring.post('/score', async (c) => {
         VALUES (${projectId}, ${user.id}, 'score_anomaly', ${JSON.stringify({ snapshot_id: snapshot.id, flags, status: reviewStatus })}, ${user.role || 'system'})
       `;
     } catch {/* best-effort */ }
+    // Page admins (in-app + email) the moment a row transitions to flagged.
+    if (reviewStatus === 'flagged') {
+      try {
+        const { notifyAdminsOfFlaggedScore } = await import('../services/notifications');
+        await notifyAdminsOfFlaggedScore(c.env, {
+          snapshotId: snapshot.id,
+          projectId,
+          projectName: project.name ?? null,
+          totalScore: result.total_score,
+          flags,
+          source: 'submit',
+        });
+      } catch (e) { console.error('[scoring] admin notify failed', e); }
+    }
   }
 
   // Status only flips for auto-approved official runs. Flagged runs hold

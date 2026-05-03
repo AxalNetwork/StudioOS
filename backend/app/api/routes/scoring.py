@@ -193,6 +193,28 @@ async def score_startup(
         result["requires_admin_review"] = (review_status == "flagged")
         result["anomaly_flags"] = flags
 
+        # Epic 5 — admin alert when a snapshot transitions to flagged. Best-effort:
+        # an in-app activity_log row goes in the same transaction so admins
+        # always see it on MonitoringPage; email is fire-and-forget below.
+        if review_status == "flagged" and not is_sandbox:
+            try:
+                session.add(ActivityLog(
+                    project_id=project.id,
+                    user_id=user.id,
+                    action="admin_flagged_score_alert",
+                    details=json.dumps({
+                        "snapshot_id": snapshot.id,
+                        "project_name": project.name,
+                        "total_score": result["total_score"],
+                        "flags": flags,
+                        "source": "submit",
+                    }),
+                    actor=user.role.value if hasattr(user.role, "value") else str(user.role or "system"),
+                ))
+                session.commit()
+            except Exception:
+                session.rollback()
+
     return result
 
 

@@ -292,6 +292,170 @@ export async function sendReferralInviteEmail(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Epic 5 — Admin alerts when a score is flagged for review (anomaly, hash
+// mismatch, or missing signature). Two flavours: real-time per-event, and
+// daily digest of unreviewed items older than 24h. Best-effort delivery —
+// notifications.ts always also writes an in-app row first.
+// ---------------------------------------------------------------------------
+interface FlaggedScoreEmailPayload {
+  projectName: string;
+  snapshotId: number;
+  totalScore: number | null;
+  flagSummary: string[];
+  reviewUrl: string;
+  source: 'submit' | 'hash_audit';
+}
+
+export async function sendFlaggedScoreEmail(
+  env: Env,
+  to: string,
+  recipientName: string,
+  payload: FlaggedScoreEmailPayload,
+): Promise<boolean> {
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) return false;
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const greet = recipientName ? `Hi ${recipientName.split(' ')[0]},` : 'Hi,';
+    const safeProject = escapeHtml(payload.projectName);
+    const safeFlags = payload.flagSummary.length
+      ? payload.flagSummary.map(f => `<li>${escapeHtml(f)}</li>`).join('')
+      : '<li>integrity issue</li>';
+    const sourceLabel = payload.source === 'hash_audit' ? 'Nightly HMAC audit' : 'Live anomaly detection';
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;"><tr><td align="center">
+<table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
+<tr><td style="padding:24px 28px;border-bottom:1px solid #f3f4f6;background:#fef2f2;">
+  <div style="font-size:11px;color:#b91c1c;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">Score integrity alert</div>
+  <div style="font-size:18px;color:#111827;font-weight:700;margin-top:4px;">A score is awaiting your review</div>
+</td></tr>
+<tr><td style="padding:24px 28px;">
+  <p style="margin:0 0 14px;font-size:14px;color:#374151;line-height:1.6;">${greet}</p>
+  <p style="margin:0 0 14px;font-size:14px;color:#374151;line-height:1.6;">
+    A score for <strong>${safeProject}</strong> was flagged by ${escapeHtml(sourceLabel)} and is hidden from LPs/partners until you sign off.
+  </p>
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin:12px 0 18px;font-size:13px;color:#374151;">
+    <div><strong>Snapshot:</strong> #${payload.snapshotId}</div>
+    <div><strong>Score:</strong> ${payload.totalScore ?? 'unknown'}</div>
+    <div style="margin-top:6px;"><strong>Flags:</strong></div>
+    <ul style="margin:4px 0 0 18px;padding:0;">${safeFlags}</ul>
+  </div>
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:8px 0 4px;">
+    <a href="${payload.reviewUrl}" style="display:inline-block;background:#dc2626;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 22px;border-radius:12px;">Open review queue</a>
+  </td></tr></table>
+  <p style="margin:18px 0 0;font-size:11px;color:#9ca3af;line-height:1.6;">
+    You're receiving this because you have admin access to Axal StudioOS. Adjust your notification preferences in Settings.
+  </p>
+</td></tr>
+</table></td></tr></table></body></html>`;
+    const text = `${greet}\n\nA score for ${payload.projectName} was flagged by ${sourceLabel}.\n` +
+      `Snapshot #${payload.snapshotId} (score ${payload.totalScore ?? 'unknown'})\n` +
+      `Flags: ${payload.flagSummary.join(', ') || 'integrity issue'}\n\n` +
+      `Review here: ${payload.reviewUrl}\n`;
+    const subject = `[Axal] Score flagged for review — ${payload.projectName}`;
+    const rawEmail = buildRawEmail(to, subject, html, text, 'Axal Alerts <noreply@axal.vc>');
+    const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+    if (!res.ok) {
+      const err: any = await res.json().catch(() => ({}));
+      console.error('[EMAIL] flagged-score alert failed:', err);
+      return false;
+    }
+    return true;
+  } catch (e: any) {
+    console.error(`[EMAIL] flagged-score alert failed for ${to}: ${e?.message || 'Unknown'}`);
+    return false;
+  }
+}
+
+interface DigestItem {
+  snapshot_id: number;
+  project_id: number;
+  project_name: string;
+  total_score: number | null;
+  created_at: string;
+  flag_summary: string[];
+}
+
+export async function sendFlaggedScoreDigestEmail(
+  env: Env,
+  to: string,
+  recipientName: string,
+  items: DigestItem[],
+  queueUrl: string,
+): Promise<boolean> {
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) return false;
+  if (items.length === 0) return false;
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const greet = recipientName ? `Hi ${recipientName.split(' ')[0]},` : 'Hi,';
+    const rows = items.slice(0, 30).map(it => `
+      <tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#111827;">
+          <div style="font-weight:600;">${escapeHtml(it.project_name)}</div>
+          <div style="font-size:11px;color:#9ca3af;">snapshot #${it.snapshot_id} · ${escapeHtml(it.created_at)}</div>
+        </td>
+        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#374151;">${it.total_score ?? '?'}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;color:#6b7280;">${escapeHtml(it.flag_summary.join(', ') || 'integrity issue')}</td>
+      </tr>`).join('');
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
+<tr><td style="padding:24px 28px;border-bottom:1px solid #f3f4f6;background:#fffbeb;">
+  <div style="font-size:11px;color:#92400e;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">Daily digest</div>
+  <div style="font-size:18px;color:#111827;font-weight:700;margin-top:4px;">${items.length} flagged score${items.length === 1 ? '' : 's'} still awaiting review</div>
+</td></tr>
+<tr><td style="padding:20px 28px;">
+  <p style="margin:0 0 14px;font-size:14px;color:#374151;line-height:1.6;">${greet}</p>
+  <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.6;">
+    The items below have been sitting in the review queue for more than 24 hours.
+    None are visible to LPs or partners until you approve or reject them.
+  </p>
+  <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;border-collapse:separate;">
+    <thead><tr style="background:#f9fafb;">
+      <th align="left" style="padding:10px 12px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.04em;">Project</th>
+      <th align="left" style="padding:10px 12px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.04em;">Score</th>
+      <th align="left" style="padding:10px 12px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.04em;">Flags</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:18px 0 4px;">
+    <a href="${queueUrl}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 22px;border-radius:12px;">Open review queue</a>
+  </td></tr></table>
+</td></tr>
+</table></td></tr></table></body></html>`;
+    const text = `${greet}\n\n${items.length} flagged scores still awaiting review (>24h):\n\n` +
+      items.slice(0, 30).map(it =>
+        `• ${it.project_name} — snapshot #${it.snapshot_id}, score ${it.total_score ?? '?'} (${it.flag_summary.join(', ') || 'integrity issue'})`
+      ).join('\n') + `\n\nReview queue: ${queueUrl}\n`;
+    const subject = `[Axal] ${items.length} flagged score${items.length === 1 ? '' : 's'} awaiting review`;
+    const rawEmail = buildRawEmail(to, subject, html, text, 'Axal Alerts <noreply@axal.vc>');
+    const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+    if (!res.ok) {
+      const err: any = await res.json().catch(() => ({}));
+      console.error('[EMAIL] flagged-score digest failed:', err);
+      return false;
+    }
+    return true;
+  } catch (e: any) {
+    console.error(`[EMAIL] flagged-score digest failed for ${to}: ${e?.message || 'Unknown'}`);
+    return false;
+  }
+}
+
 export async function sendVerificationEmail(env: Env, to: string, name: string, verificationUrl: string): Promise<boolean> {
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
     console.error('[EMAIL] Gmail credentials missing');

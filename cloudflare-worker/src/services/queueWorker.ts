@@ -291,6 +291,8 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       // and the row is downgraded to 'flagged' so it disappears from LP/partner
       // views immediately. `payload.page_size` (default 500) caps each batch.
       const { verifyScoreHash } = await import('./scoreIntegrity');
+      const { notifyAdminsOfFlaggedScore } = await import('./notifications');
+      const flagged: Array<{ snapshotId: number; projectId: number; totalScore: number | null; reason: string }> = [];
       const pageSize = Math.max(50, Math.min(2000, Number(payload.page_size) || 500));
       let cursor = 0;
       let checked = 0, mismatched = 0, missing = 0;
@@ -318,6 +320,7 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
                   anomaly_flags = COALESCE(anomaly_flags, '[]')
                 WHERE id = ?`,
             ).bind(row.id).run().catch(() => {});
+            flagged.push({ snapshotId: Number(row.id), projectId: Number(row.project_id), totalScore: row.total_score ?? null, reason: 'missing_hash' });
             continue;
           }
           const v = await verifyScoreHash(env, row);
@@ -342,6 +345,7 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
               `Hash mismatch on score_snapshots.id=${row.id}`,
               JSON.stringify({ snapshot_id: row.id, project_id: row.project_id, reason: v.reason }),
             ).run().catch(() => {});
+            flagged.push({ snapshotId: Number(row.id), projectId: Number(row.project_id), totalScore: row.total_score ?? null, reason: v.reason || 'hash_mismatch' });
           }
         }
         if (batch.length < pageSize) break;
@@ -349,6 +353,31 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       await env.DB.prepare(
         `INSERT INTO system_metrics (metric_name, value, labels) VALUES ('score_hash_audit', ?, ?)`,
       ).bind(checked, JSON.stringify({ checked, mismatched, missing })).run().catch(() => {});
+      // Page admins for each newly-downgraded row. notifyAdminsOfFlaggedScore
+      // is idempotent per snapshot, so re-runs of this audit don't double-page.
+      for (const f of flagged) {
+        try {
+          let projectName: string | null = null;
+          try {
+            const p: any = await env.DB.prepare(`SELECT name FROM projects WHERE id = ?`).bind(f.projectId).first();
+            projectName = p?.name ?? null;
+          } catch {}
+          await notifyAdminsOfFlaggedScore(env, {
+            snapshotId: f.snapshotId,
+            projectId: f.projectId,
+            projectName,
+            totalScore: f.totalScore,
+            flags: [{ type: 'hash_mismatch', severity: 'high', detail: f.reason }],
+            source: 'hash_audit',
+          });
+        } catch (e) { console.error('[score_hash_audit] notify failed', e); }
+      }
+      return;
+    }
+    case 'flagged_score_digest': {
+      // Daily digest of flagged-but-unreviewed snapshots older than 24h.
+      const { digestUnreviewedFlaggedScores } = await import('./notifications');
+      await digestUnreviewedFlaggedScores(env);
       return;
     }
     default:

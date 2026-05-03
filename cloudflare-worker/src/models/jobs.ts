@@ -23,7 +23,8 @@ export type JobType =
   | 'embed_delete'
   // Epic 5: nightly re-verification of every non-sandbox score snapshot's
   // HMAC. Mismatches surface in MonitoringPage and `error_logs`.
-  | 'score_hash_audit';
+  | 'score_hash_audit'
+  | 'flagged_score_digest';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
