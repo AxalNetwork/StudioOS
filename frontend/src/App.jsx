@@ -491,6 +491,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   const [primaryPersonaId, setPrimaryPersonaId] = useState(null);
   const [onboardingFlow, setOnboardingFlow] = useState(null);
   const [onboardingComplete, setOnboardingComplete] = useState(true);
+  const [onboardingLoaded, setOnboardingLoaded] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -524,9 +525,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
         if (cancelled) return;
         setOnboardingFlow(p?.flow || null);
         setOnboardingComplete(!!p?.completed_at);
+        setOnboardingLoaded(true);
       } catch {
         // Endpoint missing or transient error — don't block login.
-        if (!cancelled) setOnboardingComplete(true);
+        if (!cancelled) {
+          setOnboardingComplete(true);
+          setOnboardingLoaded(true);
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -540,14 +545,20 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   // Roles that have a dedicated wizard land back on it until completion.
   // Admins are exempt; persona-only flows (/onboarding/persona) and the
   // wizard pages themselves are always reachable so the user can finish.
+  // Two redirect cases:
+  //   • brand-new user (no progress row → flow=null, completed=false)
+  //   • returning user with a saved-but-incomplete row for their role
+  // Cross-role rows (e.g. role-changed mid-flow) are ignored — those
+  // users keep their default landing path until they re-enter onboarding.
   const wizardForRole = { founder: '/onboarding/founder', investor: '/onboarding/investor', partner: '/onboarding/partner' };
   const myWizard = wizardForRole[user.role];
   const onWizardPath = location.pathname.startsWith('/onboarding/');
+  const needsWizard = !onboardingComplete && (onboardingFlow === null || onboardingFlow === user.role);
   if (
     myWizard &&
     !isImpersonating &&
-    !onboardingComplete &&
-    onboardingFlow === user.role &&
+    onboardingLoaded &&
+    needsWizard &&
     !onWizardPath
   ) {
     return <Navigate to={myWizard} replace />;
