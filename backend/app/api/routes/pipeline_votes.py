@@ -73,30 +73,45 @@ class _ConnectionManager:
     prevents one user's private notification payload from reaching
     another user's browser over the wire.
     """
+    PRIVILEGED_ROLES = {"admin", "partner", "investor"}
+
     def __init__(self) -> None:
-        self._owners: dict[WebSocket, int] = {}
+        # value: (user_id, role) so broadcast() can authorize per-event.
+        self._owners: dict[WebSocket, tuple[int, str]] = {}
         self._lock = asyncio.Lock()
 
-    async def connect(self, ws: WebSocket, user_id: int) -> None:
+    async def connect(self, ws: WebSocket, user_id: int, role: str = "") -> None:
         await ws.accept()
         async with self._lock:
-            self._owners[ws] = user_id
+            self._owners[ws] = (user_id, str(role or "").lower())
 
     async def disconnect(self, ws: WebSocket) -> None:
         async with self._lock:
             self._owners.pop(ws, None)
 
     async def broadcast(self, message: dict) -> None:
+        # Two delivery rules — must mirror PipelineRoom.broadcast() in the
+        # Cloudflare Worker so dev and prod behave identically:
+        #   1. `type:"notification"` -> ONLY the recipient's sockets.
+        #   2. anything else (vote_updated, stage_change, etc.) -> ONLY
+        #      sockets whose role is admin/partner/investor. The bell
+        #      lets founders subscribe to /ws/overview for personal
+        #      notifications, but they MUST NOT see board-wide activity.
         target_user_id = None
+        is_notification = False
         if isinstance(message, dict) and message.get("type") == "notification":
             target_user_id = message.get("user_id")
-        # Snapshot to avoid mutating the set while iterating.
+            is_notification = True
         async with self._lock:
             pairs = list(self._owners.items())
         dead: list[WebSocket] = []
-        for ws, owner_id in pairs:
-            if target_user_id is not None and owner_id != target_user_id:
-                continue
+        for ws, (owner_id, role) in pairs:
+            if is_notification:
+                if owner_id != target_user_id:
+                    continue
+            else:
+                if role not in self.PRIVILEGED_ROLES:
+                    continue
             try:
                 await ws.send_json(message)
             except Exception:
@@ -431,7 +446,7 @@ async def ws_overview(websocket: WebSocket, token: str = Query(...)):
             await websocket.close(code=4401)
             return
 
-    await manager.connect(websocket, user.id)
+    await manager.connect(websocket, user.id, getattr(user, "role", "") or "")
     try:
         while True:
             msg = await websocket.receive_json()
