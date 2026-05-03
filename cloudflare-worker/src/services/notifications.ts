@@ -126,7 +126,7 @@ export async function notifyAdminsOfFlaggedScore(env: Env, alert: FlaggedAlert):
   const summary = summarizeFlags(alert.flags);
   const title = `Score flagged for review: ${alert.projectName || `project #${alert.projectId}`}`;
   const body = `Snapshot #${alert.snapshotId} (score ${alert.totalScore ?? '?'}) — ${summary.join(', ') || 'integrity issue'}`;
-  const link = `/admin/monitoring?tab=score-integrity&snapshot=${alert.snapshotId}`;
+  const link = `/monitoring?tab=integrity&snapshot=${alert.snapshotId}`;
   const metaJson = JSON.stringify({
     snapshot_id: alert.snapshotId,
     project_id: alert.projectId,
@@ -209,7 +209,7 @@ export async function digestUnreviewedFlaggedScores(env: Env): Promise<{ admins:
   });
 
   const appUrl = env.APP_URL || 'https://axal.vc';
-  const queueUrl = `${appUrl.replace(/\/$/, '')}/admin/monitoring?tab=score-integrity`;
+  const queueUrl = `${appUrl.replace(/\/$/, '')}/monitoring?tab=integrity`;
   const dedupeKey = `digest:${new Date().toISOString().slice(0, 10)}`; // YYYY-MM-DD UTC
 
   const title = `${summarised.length} flagged score${summarised.length === 1 ? '' : 's'} awaiting review`;

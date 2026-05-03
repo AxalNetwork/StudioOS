@@ -83,7 +83,27 @@ export default function MonitoringPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState('');
   const [window, setWindow] = useState(60);
-  const [tab, setTab] = useState('overview');
+  // Deep-link support: admin notification emails (Epic 5) link to
+  // /monitoring?tab=integrity&snapshot=<id> so the review queue opens
+  // straight to the flagged row. NOTE: local `window` state above shadows
+  // the global, so we go through `globalThis` to read the URL.
+  const qp = (() => {
+    try {
+      const loc = (typeof globalThis !== 'undefined' && globalThis.location) || null;
+      if (!loc) return new URLSearchParams();
+      return new URLSearchParams(loc.search || '');
+    } catch { return new URLSearchParams(); }
+  })();
+  const initialTab = (() => {
+    const t = qp.get('tab');
+    return (t === 'integrity' || t === 'infra' || t === 'overview') ? t : 'overview';
+  })();
+  const [tab, setTab] = useState(initialTab);
+  const focusSnapshotId = (() => {
+    const s = qp.get('snapshot');
+    const n = s ? Number(s) : null;
+    return Number.isFinite(n) && n > 0 ? n : null;
+  })();
 
   const loadAll = async (minutes = window) => {
     setRefreshing(true);
@@ -192,7 +212,7 @@ export default function MonitoringPage() {
       </div>
 
       {tab === 'infra' ? <InfrastructureTab /> :
-       tab === 'integrity' ? <ScoreIntegrityTab /> : (
+       tab === 'integrity' ? <ScoreIntegrityTab focusSnapshotId={focusSnapshotId} /> : (
       <>
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -341,11 +361,24 @@ export default function MonitoringPage() {
 // HMAC no longer matches what the integrity service recomputes (silent
 // tampering). Admin can approve (release to LPs/partners), reject (revert
 // project status), or grant a one-off cooldown waiver.
-function ScoreIntegrityTab() {
+function ScoreIntegrityTab({ focusSnapshotId = null }) {
   const [items, setItems] = useState([]);
   const [statusFilter, setStatusFilter] = useState('flagged');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  // Deep-link focus: scroll the targeted snapshot into view + highlight it
+  // briefly once the queue has loaded. Only fires once per mount.
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (focused || !focusSnapshotId || items.length === 0) return;
+    const el = document.getElementById(`score-flag-${focusSnapshotId}`);
+    if (el) {
+      try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
+      el.classList.add('ring-2', 'ring-violet-400');
+      setTimeout(() => el.classList.remove('ring-2', 'ring-violet-400'), 4000);
+      setFocused(true);
+    }
+  }, [items, focusSnapshotId, focused]);
 
   const load = async () => {
     setBusy(true); setErr('');
@@ -408,7 +441,7 @@ function ScoreIntegrityTab() {
       ) : (
         <div className="space-y-3">
           {items.map(it => (
-            <div key={it.id} className="bg-white border border-gray-200 rounded-xl p-4">
+            <div key={it.id} id={`score-flag-${it.id}`} className="bg-white border border-gray-200 rounded-xl p-4 transition-shadow">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
                   <div className="text-sm font-semibold text-gray-900">
