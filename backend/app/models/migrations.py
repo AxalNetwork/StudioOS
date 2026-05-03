@@ -1215,6 +1215,39 @@ def ensure_calendar_tables() -> None:
             session.rollback()
 
 
+def ensure_portfolio_health_tables() -> None:
+    """Task #44 — Portfolio health score + predictive failure. Idempotent."""
+    with Session(engine) as session:
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS portfolio_health_snapshots (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    snapshot_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                    score DOUBLE PRECISION DEFAULT 0 NOT NULL,
+                    badge VARCHAR DEFAULT 'yellow' NOT NULL,
+                    intervention BOOLEAN DEFAULT FALSE NOT NULL,
+                    runway_months DOUBLE PRECISION,
+                    growth_velocity DOUBLE PRECISION,
+                    churn_delta DOUBLE PRECISION,
+                    sentiment_delta DOUBLE PRECISION,
+                    components_json TEXT DEFAULT '{}' NOT NULL,
+                    reasons_json TEXT DEFAULT '[]' NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    CONSTRAINT uq_portfolio_health_day UNIQUE (project_id, snapshot_date)
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_portfolio_health_project ON portfolio_health_snapshots(project_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_portfolio_health_date ON portfolio_health_snapshots(snapshot_date)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_portfolio_health_badge ON portfolio_health_snapshots(badge)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_portfolio_health_intervention ON portfolio_health_snapshots(intervention)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_portfolio_health_tables: %s", exc)
+            session.rollback()
+
+
 def ensure_cofounder_tables() -> None:
     """Task #38 — Co-founder matching. Idempotent.
 

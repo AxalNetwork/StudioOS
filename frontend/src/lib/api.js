@@ -779,6 +779,21 @@ export const api = {
     request(`/cofounder/connections/${uid}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`,
             { method: 'DELETE' }),
 
+  // ---------- Portfolio Health (Task #44) ----------
+  portfolioHealthList: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.badge) qs.set('badge', opts.badge);
+    if (opts.interventionOnly) qs.set('intervention_only', 'true');
+    const s = qs.toString();
+    return request(`/portfolio/health${s ? `?${s}` : ''}`);
+  },
+  portfolioHealthGet: (projectUid, days) =>
+    request(`/portfolio/health/${projectUid}${days ? `?history_days=${days}` : ''}`),
+  portfolioHealthRecomputeAll: () =>
+    request('/portfolio/health/recompute', { method: 'POST' }),
+  portfolioHealthRecomputeOne: (projectUid) =>
+    request(`/portfolio/health/recompute/${projectUid}`, { method: 'POST' }),
+
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {
     const qs = new URLSearchParams();

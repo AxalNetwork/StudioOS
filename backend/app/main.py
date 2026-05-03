@@ -82,6 +82,7 @@ async def lifespan(app: FastAPI):
             ensure_mentor_tables,
             ensure_calendar_tables,
             ensure_cofounder_tables,
+            ensure_portfolio_health_tables,
         )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
@@ -128,6 +129,9 @@ async def lifespan(app: FastAPI):
         # Task #38 — co-founder matching tables.
         ensure_cofounder_tables()
         logger.info("StudioOS migrations: cofounder tables ensured")
+        # Task #44 — portfolio health snapshots.
+        ensure_portfolio_health_tables()
+        logger.info("StudioOS migrations: portfolio health tables ensured")
     except Exception as exc:  # noqa: BLE001
         # Migrations are best-effort: a failure here must not prevent the API
         # from booting (e.g. fresh DB, missing legacy tables).
@@ -141,6 +145,14 @@ async def lifespan(app: FastAPI):
         digest_task = asyncio.create_task(_wdl(digest_stop))
     except Exception as exc:  # noqa: BLE001
         logger.warning("StudioOS: failed to start insights digest loop: %s", exc)
+    # Task #44 — portfolio health daily sweep loop.
+    health_stop = asyncio.Event()
+    health_task = None
+    try:
+        from backend.app.services.portfolio_health import daily_health_loop as _dhl
+        health_task = asyncio.create_task(_dhl(health_stop))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("StudioOS: failed to start portfolio health loop: %s", exc)
     logger.info("StudioOS ready")
     yield
     logger.info("StudioOS shutting down")
@@ -150,6 +162,12 @@ async def lifespan(app: FastAPI):
             await asyncio.wait_for(digest_task, timeout=5)
         except Exception:  # noqa: BLE001
             digest_task.cancel()
+    if health_task:
+        health_stop.set()
+        try:
+            await asyncio.wait_for(health_task, timeout=5)
+        except Exception:  # noqa: BLE001
+            health_task.cancel()
 
 
 app = FastAPI(
@@ -323,6 +341,8 @@ from backend.app.api.routes import calendar as _calendar
 app.include_router(_calendar.router, prefix="/api")
 from backend.app.api.routes import cofounder as _cofounder
 app.include_router(_cofounder.router, prefix="/api")
+from backend.app.api.routes import portfolio_health as _portfolio_health
+app.include_router(_portfolio_health.router, prefix="/api")
 app.include_router(funds.router, prefix="/api")
 app.include_router(liquidity.router, prefix="/api")
 app.include_router(partnernet.router, prefix="/api")

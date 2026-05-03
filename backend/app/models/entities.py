@@ -1413,3 +1413,39 @@ class CofounderConnection(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("user_a_id", "user_b_id", name="uq_cofounder_conn_pair"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Task #44 — Portfolio health score + predictive failure
+# ---------------------------------------------------------------------------
+class PortfolioHealthSnapshot(SQLModel, table=True):
+    """One row per (project, day). Written by the daily background sweep
+    in `services/portfolio_health.py`. The latest row per project drives
+    the dashboard badge + intervention flag; the history is what powers
+    the per-company sparkline + delta arrows.
+
+    `components_json` is a JSON object of the four sub-scores
+    (runway / growth_velocity / churn_delta / sentiment_delta) plus the
+    raw signals that fed each one — so the UI can show "why" without
+    re-running the formula client-side. The numeric `score` is on the
+    0-100 scale; `badge` is the bucketed green/yellow/red.
+    """
+    __tablename__ = "portfolio_health_snapshots"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    snapshot_date: date = Field(default_factory=date.today, index=True)
+    score: float = 0.0                        # 0..100
+    badge: str = Field(default="yellow", index=True)  # green | yellow | red
+    intervention: bool = Field(default=False, index=True)
+    runway_months: Optional[float] = None     # signal: from FinancialModel.computed_json
+    growth_velocity: Optional[float] = None   # signal: MRR slope %/mo over last 2 snapshots
+    churn_delta: Optional[float] = None       # signal: this_pct - prev_pct  (lower=better)
+    sentiment_delta: Optional[float] = None   # signal: founder check-in cadence/notes proxy
+    components_json: str = "{}"               # {runway:{score,signal,...}, ...}
+    reasons_json: str = "[]"                  # ["Runway under 6 months", ...]
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "snapshot_date", name="uq_portfolio_health_day"),
+    )
