@@ -194,3 +194,31 @@ A two-sided needs marketplace that complements the provider directory: founders 
 **`api.js` additions:** `listNeeds`, `getNeed`, `createNeed`, `updateNeed`, `deleteNeed`, `upsertRfp`, `submitQuote`, `listQuotesForNeed`, `myQuotes`, `acceptQuote`, `rejectQuote`, `withdrawQuote`, `listEngagements`.
 
 **Categories** are reused from `marketplace.VALID_CATEGORIES` for symmetry with the provider directory.
+
+## Task #52 — Demand heatmap + insight feed (this commit)
+
+Aggregates `founder_needs` rows (joined with `projects` for stage/sector and `entities` for jurisdiction) into category × stage heatmap, monthly trend, auto-generated insight feed, plus an opt-in weekly newsletter delivering the same. Custom report builder is intentionally out of scope per the task brief.
+
+**Schema (new tables, auto-created via SQLModel):**
+- `insight_subscriptions(user_id UNIQUE, frequency='weekly', active, subscribed_at, last_sent_at)` — opt-in registry.
+- `insight_digests(week_start UNIQUE, body_md, sent_count, created_at)` — archive/de-dup of generated weekly digests so the cron is idempotent.
+
+**Backend (`backend/app/api/routes/insights.py`, mounted at `/api`):**
+- `GET /insights/heatmap?window_days=` — returns category × stage matrix plus sector/geography sidebars and totals. Stages bucketed via `STAGE_BUCKETS` (`idea, prototype, mvp, seed, series_a, growth, other`); anything else falls into `other` to keep the grid readable.
+- `GET /insights/trends?months=` — monthly time series (oldest → newest), `total` + `by_category` per bucket.
+- `GET /insights/feed?window_days=` — auto-generated insight bullets: top category, stage × top-category callout (e.g. "62% of seed-stage founders requested hiring help"), QoQ momentum, median budget, top sector, geographic concentration.
+- `GET /insights/newsletter` / `POST /insights/newsletter/{subscribe,unsubscribe}` — opt-in toggle.
+- `GET /insights/newsletter/preview` — renders the markdown body the cron would email so partners can eyeball before subscribing.
+- `POST /insights/newsletter/run-now` — admin-only manual trigger.
+- `_join_rows` helper does a single in-memory join FounderNeed → Project → Entity (sector from `Project.sector`, geography from `Entity.jurisdiction`) — keeps the SQL portable.
+- `weekly_digest_loop(stop_event)` — async scheduler started in `lifespan` (and cancelled on shutdown). Wakes hourly, anchors each issue to Monday 00:00 UTC, idempotent via the `insight_digests.week_start` unique key. Synchronous SQLModel work runs on a worker thread (`asyncio.to_thread`).
+- Email send goes through the existing `services.notify._send_email` (Gmail OAuth via `email_service.send_transactional_email`); failures are logged, never raised, so one bad address can't block the whole list.
+
+**Authorization:**
+- Heatmap/trends/feed/newsletter endpoints gate on `user.role in (PARTNER, INVESTOR, ADMIN)` — founders already see their own needs in `/needs`. ACL uses the DB role, not the JWT claim, so a forged claim can't escalate.
+- `/newsletter/run-now` is admin-only.
+
+**Frontend (`/partner/insights` — top-nav "Demand Insights", `TrendingUp` icon):**
+- `PartnerInsightsPage.jsx` — window-size selector (30/90/180/365d), insight feed cards (tone-coloured), CSS-grid heatmap with value-scaled background (more legible than a recharts hack), monthly recharts `LineChart`, sector/geography `BarChart`s, newsletter subscribe toggle and digest-preview modal.
+
+**`api.js` additions:** `insightsHeatmap`, `insightsTrends`, `insightsFeed`, `insightsNewsletterStatus`, `insightsNewsletterSubscribe`, `insightsNewsletterUnsubscribe`, `insightsNewsletterPreview`.

@@ -62,6 +62,7 @@ import RoadmapPage from './pages/RoadmapPage';
 import MetricsPage from './pages/MetricsPage';
 import MarketplacePage from './pages/MarketplacePage';
 import NeedsBoardPage from './pages/NeedsBoardPage';
+import PartnerInsightsPage from './pages/PartnerInsightsPage';
 import PitchDeckPrintPage from './pages/PitchDeckPrintPage';
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
@@ -114,6 +115,7 @@ const NAV_BY_ROLE = {
     { to: '/integrations', icon: Plug, label: 'Integrations' },
     { to: '/marketplace', icon: Briefcase, label: 'Marketplace' },
     { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
+    { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
 
     { section: 'Portals' },
     { to: '/founder', icon: Rocket, label: 'Founder Portal' },
@@ -755,6 +757,7 @@ export default function App() {
       <Route path="/needs" element={guard(['admin', 'founder', 'partner', 'investor'], <NeedsBoardPage user={user} />)} />
       <Route path="/founder/post-need" element={guard(['admin', 'founder'], <NeedsBoardPage user={user} />)} />
       <Route path="/partner/needs" element={guard(['admin', 'partner'], <NeedsBoardPage user={user} />)} />
+      <Route path="/partner/insights" element={guard(['admin', 'partner', 'investor'], <PartnerInsightsPage />)} />
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -95,9 +96,24 @@ async def lifespan(app: FastAPI):
         # Migrations are best-effort: a failure here must not prevent the API
         # from booting (e.g. fresh DB, missing legacy tables).
         logger.warning("StudioOS migrations: skipped: %s", exc)
+    # Task #52 — start the in-process weekly insights digest loop. Wakes
+    # hourly, fires once per ISO week (de-duped via insight_digests.week_start).
+    digest_stop = asyncio.Event()
+    digest_task = None
+    try:
+        from backend.app.api.routes.insights import weekly_digest_loop as _wdl
+        digest_task = asyncio.create_task(_wdl(digest_stop))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("StudioOS: failed to start insights digest loop: %s", exc)
     logger.info("StudioOS ready")
     yield
     logger.info("StudioOS shutting down")
+    if digest_task:
+        digest_stop.set()
+        try:
+            await asyncio.wait_for(digest_task, timeout=5)
+        except Exception:  # noqa: BLE001
+            digest_task.cancel()
 
 
 app = FastAPI(
@@ -288,6 +304,8 @@ from backend.app.api.routes import needs as needs_routes  # noqa: E402
 app.include_router(needs_routes.router, prefix="/api")
 app.include_router(needs_routes.quote_router, prefix="/api")
 app.include_router(needs_routes.engagement_router, prefix="/api")
+from backend.app.api.routes import insights as insights_routes  # noqa: E402
+app.include_router(insights_routes.router, prefix="/api")
 
 
 # ---------------------------------------------------------------------------

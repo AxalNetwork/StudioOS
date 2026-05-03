@@ -200,6 +200,15 @@ export const api = {
   withdrawQuote: (id) => request(`/quotes/${id}/withdraw`, { method: 'POST' }),
   listEngagements: () => request('/engagements'),
 
+  // Task #52 — Demand heatmap + insight feed
+  insightsHeatmap: (windowDays = 180) => request(`/insights/heatmap?window_days=${windowDays}`),
+  insightsTrends: (months = 6) => request(`/insights/trends?months=${months}`),
+  insightsFeed: (windowDays = 90) => request(`/insights/feed?window_days=${windowDays}`),
+  insightsNewsletterStatus: () => request('/insights/newsletter'),
+  insightsNewsletterSubscribe: () => request('/insights/newsletter/subscribe', { method: 'POST' }),
+  insightsNewsletterUnsubscribe: () => request('/insights/newsletter/unsubscribe', { method: 'POST' }),
+  insightsNewsletterPreview: () => request('/insights/newsletter/preview'),
+
   askAdvisory: (data) => request('/advisory/ask', { method: 'POST', body: JSON.stringify(data) }),
   financialPlan: (data) => request('/advisory/financial-plan', { method: 'POST', body: JSON.stringify(data) }),
   runDiligence: (data) => request('/advisory/diligence', { method: 'POST', body: JSON.stringify(data) }),

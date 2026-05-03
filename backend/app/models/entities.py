@@ -442,6 +442,28 @@ class Quote(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class InsightSubscription(SQLModel, table=True):
+    """Task #52 — opt-in for the weekly demand-insights newsletter."""
+    __tablename__ = "insight_subscriptions"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", unique=True, index=True)
+    frequency: str = Field(default="weekly")  # weekly only for now
+    active: bool = Field(default=True)
+    subscribed_at: datetime = Field(default_factory=datetime.utcnow)
+    last_sent_at: Optional[datetime] = None
+
+
+class InsightDigest(SQLModel, table=True):
+    """Archive of generated digests so we don't recompute on demand and
+    can show subscribers their last issue."""
+    __tablename__ = "insight_digests"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    week_start: datetime = Field(unique=True, index=True)
+    body_md: str
+    sent_count: int = 0
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class Engagement(SQLModel, table=True):
     """Created when a founder accepts a quote — represents the active
     engagement between a founder/project and a partner. Stripe Connect
