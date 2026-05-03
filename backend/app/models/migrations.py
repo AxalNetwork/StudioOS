@@ -639,6 +639,35 @@ def ensure_partner_directory_columns() -> None:
         session.commit()
 
 
+def ensure_cap_table_scenarios_table() -> None:
+    """Task #27 — Cap-table simulator scenarios. Idempotent."""
+    ddl = """
+    CREATE TABLE IF NOT EXISTS cap_table_scenarios (
+        id SERIAL PRIMARY KEY,
+        uid VARCHAR NOT NULL UNIQUE,
+        owner_user_id INTEGER NOT NULL REFERENCES users(id),
+        project_id INTEGER REFERENCES projects(id),
+        name VARCHAR NOT NULL,
+        inputs_json TEXT NOT NULL,
+        result_json TEXT,
+        computed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text(ddl))
+            session.exec(text(
+                "CREATE INDEX IF NOT EXISTS ix_cap_table_scenarios_owner "
+                "ON cap_table_scenarios(owner_user_id)"
+            ))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_cap_table_scenarios_table failed: %s", exc)
+            session.rollback()
+
+
 def ensure_founder_risk_profiles_table() -> None:
     """Task #41 — Founder risk profile.
 

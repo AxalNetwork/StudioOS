@@ -610,6 +610,19 @@ export const api = {
   retagPersonaAdmin: (user_id, persona_id) =>
     request(`/personas/admin/${user_id}/retag`, { method: 'POST', body: JSON.stringify({ persona_id }) }),
 
+  // ---------- Cap-table simulator (Task #27) ----------
+  simulateCapTable: (inputs) =>
+    request('/captable/simulate', { method: 'POST', body: JSON.stringify({ inputs }) }),
+  listCapTableScenarios: () => request('/captable/scenarios'),
+  getCapTableScenario: (uid) => request(`/captable/scenarios/${uid}`),
+  createCapTableScenario: (data) =>
+    request('/captable/scenarios', { method: 'POST', body: JSON.stringify(data) }),
+  updateCapTableScenario: (uid, data) =>
+    request(`/captable/scenarios/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteCapTableScenario: (uid) =>
+    request(`/captable/scenarios/${uid}`, { method: 'DELETE' }),
+  exportCapTableCsvUrl: (uid) => `/api/captable/scenarios/${uid}/export.csv`,
+
   // ---------- Founder risk (Task #41, admin/partner/investor only) ----------
   getFounderRiskByDeal: (dealId) => request(`/founder-risk/by-deal/${dealId}`),
   getFounderRiskByFounder: (founderId) => request(`/founder-risk/by-founder/${founderId}`),

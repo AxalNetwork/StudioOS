@@ -402,6 +402,26 @@ def _partner_assign_slug(_mapper, _connection, target: "Partner") -> None:
 # integration) and compute a deterministic risk score surfaced on the deal
 # record. One row per founder; refreshed via /founder-risk/{founder_id}/pull.
 # ---------------------------------------------------------------------------
+class CapTableScenario(SQLModel, table=True):
+    """Task #27 — Cap-table simulator scenario.
+
+    A single saved what-if: founders + option pool + SAFE notes + priced
+    rounds + (optional) exit value, plus the cached computed result so the
+    list view doesn't have to re-simulate every read.
+    """
+    __tablename__ = "cap_table_scenarios"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    owner_user_id: int = Field(foreign_key="users.id", index=True)
+    project_id: Optional[int] = Field(default=None, foreign_key="projects.id", index=True)
+    name: str
+    inputs_json: str            # canonical inputs (founders/safes/rounds/exit)
+    result_json: Optional[str] = None   # cached engine output
+    computed_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class FounderRiskProfile(SQLModel, table=True):
     __tablename__ = "founder_risk_profiles"
     id: Optional[int] = Field(default=None, primary_key=True)

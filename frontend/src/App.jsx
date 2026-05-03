@@ -5,7 +5,7 @@ import {
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
   ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package,
-  Settings as SettingsIcon
+  Settings as SettingsIcon, PieChart as PieIcon
 } from 'lucide-react';
 import { api } from './lib/api';
 import Dashboard from './pages/Dashboard';
@@ -60,6 +60,7 @@ import FinancialsPage from './pages/FinancialsPage';
 import DiscoveryPage from './pages/DiscoveryPage';
 import RoadmapPage from './pages/RoadmapPage';
 import MetricsPage from './pages/MetricsPage';
+import CapTablePage from './pages/CapTablePage';
 import MarketplacePage from './pages/MarketplacePage';
 import NeedsBoardPage from './pages/NeedsBoardPage';
 import ServiceCatalogPage from './pages/ServiceCatalogPage';
@@ -146,6 +147,7 @@ const NAV_BY_ROLE = {
     { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
     { to: '/build/roadmap', icon: Layers, label: 'Roadmap' },
     { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
+    { to: '/build/captable', icon: PieIcon, label: 'Cap Table' },
 
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
@@ -761,6 +763,7 @@ export default function App() {
       <Route path="/build/discovery" element={guard(['admin', 'founder', 'partner', 'investor'], <DiscoveryPage />)} />
       <Route path="/build/roadmap" element={guard(['admin', 'founder', 'partner', 'investor'], <RoadmapPage />)} />
       <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], <MetricsPage />)} />
+      <Route path="/build/captable" element={guard(['admin', 'founder', 'partner', 'investor'], <CapTablePage />)} />
       <Route path="/marketplace" element={guard(['admin', 'founder', 'partner', 'investor'], <MarketplacePage user={user} />)} />
       <Route path="/needs" element={guard(['admin', 'founder', 'partner', 'investor'], <NeedsBoardPage user={user} />)} />
       <Route path="/services" element={guard(['admin', 'founder', 'partner', 'investor'], <ServiceCatalogPage user={user} />)} />
