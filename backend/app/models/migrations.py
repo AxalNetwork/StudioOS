@@ -385,11 +385,22 @@ def ensure_investor_role_split() -> None:
             logger.warning("ensure_investor_role_split: investors table create failed: %s", exc)
 
         # Step 2 — users.investor_id FK (depends on investors existing).
+        # PG supports ADD COLUMN IF NOT EXISTS; SQLite does not — probe via
+        # PRAGMA and fall back to a plain ADD COLUMN there (architect fix).
         try:
-            session.exec(text(
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS investor_id INTEGER REFERENCES investors(id)"
-            ))
-            session.commit()
+            if is_pg:
+                session.exec(text(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS investor_id INTEGER REFERENCES investors(id)"
+                ))
+                session.commit()
+            else:
+                cols = session.exec(text("PRAGMA table_info(users)")).all()
+                names = {(r[1] if isinstance(r, tuple) else r.name) for r in cols}
+                if "investor_id" not in names:
+                    # SQLite can't add a REFERENCES constraint via ALTER, but
+                    # the column itself is what the ORM needs.
+                    session.exec(text("ALTER TABLE users ADD COLUMN investor_id INTEGER"))
+                    session.commit()
         except Exception as exc:
             session.rollback()
             logger.warning("ensure_investor_role_split: users.investor_id add failed: %s", exc)
