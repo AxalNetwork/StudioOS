@@ -85,6 +85,7 @@ async def lifespan(app: FastAPI):
             ensure_portfolio_health_tables,
             ensure_watchlist_decision_tables,
             ensure_push_subscriptions_table,
+            ensure_section_83b_tracker_table,
         )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
@@ -131,6 +132,9 @@ async def lifespan(app: FastAPI):
         # Task #38 — co-founder matching tables.
         ensure_cofounder_tables()
         logger.info("StudioOS migrations: cofounder tables ensured")
+        # Task #31 — 83(b) tracker idempotency unique index.
+        ensure_section_83b_tracker_table()
+        logger.info("StudioOS migrations: section_83b_trackers unique index ensured")
         # Task #44 — portfolio health snapshots.
         ensure_portfolio_health_tables()
         logger.info("StudioOS migrations: portfolio health tables ensured")

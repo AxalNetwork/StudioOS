@@ -1038,6 +1038,36 @@ class Notification(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
 
+class Section83bTracker(SQLModel, table=True):
+    """Task #31 — 83(b) election tracker.
+
+    Founders have a hard 30-day deadline from grant date to mail their
+    83(b) election to the IRS. Missing it converts the grant to ordinary
+    income at vest, which is a common avoidable disaster. We track the
+    deadline, the certified-mail receipt, and surface a countdown +
+    notification ping.
+
+    `receipt_doc_id` points at a `Document` row whose body holds the
+    uploaded certified-mail receipt (PII — same access rules as legal
+    docs). Tracker rows themselves carry no PII beyond taxpayer_name.
+    """
+    __tablename__ = "section_83b_trackers"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    taxpayer_name: str
+    grant_date: date
+    deadline_date: date = Field(index=True)  # grant_date + 30 days
+    mailed_at: Optional[datetime] = None
+    receipt_doc_id: Optional[int] = Field(default=None, foreign_key="documents.id")
+    election_doc_id: Optional[int] = Field(default=None, foreign_key="documents.id")
+    status: str = Field(default="pending", index=True)  # pending | mailed | confirmed | missed
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class UserCompanyLink(SQLModel, table=True):
     __tablename__ = "user_company_links"
     __table_args__ = (

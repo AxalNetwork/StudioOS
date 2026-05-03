@@ -69,7 +69,7 @@ export const api = {
   health: () => request('/health'),
   stats: () => request('/dashboard/stats'),
 
-  listProjects: (status) => request(`/projects${status ? `?status=${status}` : ''}`),
+  listProjects: (status) => request(`/projects/${status ? `?status=${status}` : ''}`),
   getProject: (id) => request(`/projects/${id}`),
   createProject: (data) => request('/projects', { method: 'POST', body: JSON.stringify(data) }),
   updateProject: (id, data) => request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -98,6 +98,20 @@ export const api = {
   legalJurisdictions: () => request('/legal/jurisdictions'),
   legalIncorporateWizard: (data) =>
     request('/legal/incorporate/wizard', { method: 'POST', body: JSON.stringify(data) }),
+  // Task #31 — Co-founder agreement + 83(b) tracker
+  legalCofounderAgreement: (data) =>
+    request('/legal/cofounder-agreement', { method: 'POST', body: JSON.stringify(data) }),
+  legal83bList: (projectId) =>
+    request(`/legal/83b/trackers${projectId ? `?project_id=${projectId}` : ''}`),
+  legal83bCreate: (data) =>
+    request('/legal/83b/trackers', { method: 'POST', body: JSON.stringify(data) }),
+  legal83bUpdate: (id, data) =>
+    request(`/legal/83b/trackers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  legal83bUploadReceipt: (id, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request(`/legal/83b/trackers/${id}/receipt`, { method: 'POST', body: fd });
+  },
   spinoutProject: (projectId) => request(`/legal/spinout/${projectId}`, { method: 'POST' }),
   listEntities: () => request('/legal/entities'),
 

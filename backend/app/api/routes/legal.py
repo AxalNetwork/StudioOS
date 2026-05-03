@@ -1,15 +1,19 @@
+import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlmodel import Session, select
+from sqlalchemy.exc import IntegrityError
 from backend.app.database import get_session
-from backend.app.models.entities import Document, Entity, Project, DocumentType, DocumentStatus, User
+from backend.app.models.entities import Document, Entity, Project, DocumentType, DocumentStatus, User, Section83bTracker
 from backend.app.schemas.scoring import DocumentCreate
 from backend.app.api.routes.auth import get_current_user
 from backend.app.api.deps import require_role, ensure_founder_access, is_privileged
 from backend.app.services.access_policy import require_contract_view
-from datetime import datetime
+from datetime import datetime, date
 import time
+
+logger = logging.getLogger(__name__)
 
 # Phase 0.1 split — both service-provider partners (e.g. lawyers) and
 # investors may view contracts depending on context; route-level access
@@ -680,6 +684,105 @@ SECTION 6 — RECORD RETENTION
 
 Approved: ____________________
 Date: ____________________""",
+    },
+    "cofounder_agreement": {
+        "title": "Co-Founder Agreement",
+        "layer": "gp",
+        "content": """CO-FOUNDER AGREEMENT
+
+This Co-Founder Agreement (the "Agreement") is entered into as of {effective_date} by
+and between the founders of {company_name} (the "Company"):
+
+{founders_block}
+
+1. EQUITY SPLIT
+   The founders agree to the following initial equity allocation, subject to the
+   vesting schedule below:
+
+{equity_block}
+
+2. VESTING SCHEDULE
+   2.1 Vesting Period: {vesting_years} years from each founder's start date.
+   2.2 Cliff: {cliff_months} months — no equity vests before the cliff date; on the
+       cliff date, {cliff_pct}% of the founder's grant vests in a single tranche.
+   2.3 Monthly Vesting: The remainder vests in equal monthly installments over the
+       remaining vesting period.
+   2.4 Acceleration: {acceleration_clause}
+
+3. INTELLECTUAL PROPERTY ASSIGNMENT
+   3.1 Each founder hereby assigns to the Company all right, title, and interest in
+       any work product, inventions, code, designs, trademarks, copyrights, trade
+       secrets, and other intellectual property (collectively, "IP") created by the
+       founder (a) prior to the date of this Agreement that is related to the
+       Company's business, or (b) during the founder's involvement with the Company.
+   3.2 Each founder represents that no third party (employer, university, prior
+       company, government grant) holds claims to such IP, and will execute the
+       Company's standard Proprietary Information & Inventions Assignment (PIIA)
+       upon request.
+   3.3 Pre-existing IP exclusions: {ip_exclusions}
+
+4. DECISION RIGHTS & GOVERNANCE
+   4.1 Day-to-day operating decisions are made by {decision_day_to_day}.
+   4.2 The following matters require unanimous founder consent:
+{unanimous_block}
+   4.3 All other strategic matters require a {decision_threshold} vote of the
+       founders.
+   4.4 Deadlock resolution: {deadlock_clause}
+
+5. ROLES & RESPONSIBILITIES
+{roles_block}
+
+6. COMMITMENT
+   6.1 Each founder agrees to devote {commitment_level} working time and best
+       efforts to the Company.
+   6.2 Outside activities (board seats, advisory roles, side projects) must be
+       disclosed in writing to the other founders and approved by majority vote.
+
+7. DEPARTURE, BUYOUT & EXIT
+   7.1 Voluntary Departure: A departing founder forfeits all unvested equity. The
+       Company has a right of first refusal on the founder's vested shares,
+       exercisable within 90 days of departure at fair market value.
+   7.2 Termination for Cause: A founder terminated for cause (fraud, breach of
+       fiduciary duty, conviction of a felony, material breach of this Agreement)
+       forfeits both vested and unvested equity, subject to a payment of par
+       value for vested shares.
+   7.3 Termination without Cause / Good Reason: The departing founder retains
+       vested equity. Acceleration per Section 2.4 may apply.
+   7.4 Buyout Right: Upon a Change of Control, all unvested equity accelerates per
+       Section 2.4. Pre-Change-of-Control buyouts require {decision_threshold}
+       founder consent.
+   7.5 Right of First Refusal: Founders may not transfer shares to third parties
+       without first offering them to the Company and the other founders on the
+       same terms.
+
+8. CONFIDENTIALITY & NON-COMPETE
+   8.1 Each founder agrees to keep all Company information confidential during and
+       for {confidentiality_years} years after their involvement.
+   8.2 During involvement and for 12 months thereafter, no founder shall directly
+       compete with the Company or solicit Company employees, customers, or
+       investors.
+
+9. SECTION 83(b) ELECTION
+   Each founder is strongly advised to file a Section 83(b) election with the IRS
+   within 30 days of receiving restricted stock. Failure to file results in
+   significantly higher tax liability and is a common, avoidable disaster. The
+   Company will provide a template; the filing is the founder's personal
+   responsibility.
+
+10. DISPUTE RESOLUTION
+    10.1 Governing Law: {governing_law}.
+    10.2 Disputes shall first be resolved by good-faith negotiation, then by
+         mediation, then by binding arbitration in {arbitration_venue}.
+
+11. ENTIRE AGREEMENT
+    This Agreement constitutes the entire agreement among the founders with respect
+    to the subject matter and supersedes all prior discussions. It may be amended
+    only in writing signed by all founders.
+
+SIGNATURES
+
+{signature_block}
+""",
     },
     "section_83b": {
         "title": "Section 83(b) Election",
@@ -1899,3 +2002,504 @@ def spinout_project(project_id: int, session: Session = Depends(get_session), us
     session.refresh(project)
 
     return {"message": f"Project '{project.name}' has been spun out successfully.", "project": project}
+
+
+# ---------------------------------------------------------------------------
+# Task #31 — Co-founder agreement wizard + 83(b) tracker
+# ---------------------------------------------------------------------------
+
+class CoFounderInput(BaseModel):
+    name: str
+    email: Optional[str] = None
+    role: Optional[str] = None
+    equity_pct: float = 0.0
+    start_date: Optional[str] = None
+
+
+class CoFounderAgreementRequest(BaseModel):
+    project_id: int
+    company_name: str
+    effective_date: Optional[str] = None
+    founders: list[CoFounderInput]
+    vesting_years: int = 4
+    cliff_months: int = 12
+    cliff_pct: int = 25
+    acceleration: str = "single_trigger"  # none | single_trigger | double_trigger
+    ip_exclusions: Optional[str] = None
+    decision_day_to_day: str = "the CEO"
+    decision_threshold: str = "majority"  # majority | supermajority | unanimous
+    unanimous_matters: list[str] = []
+    deadlock_clause: Optional[str] = None
+    commitment_level: str = "full-time"  # full-time | part-time
+    confidentiality_years: int = 3
+    governing_law: str = "Delaware, USA"
+    arbitration_venue: str = "Wilmington, Delaware"
+    roles: Optional[str] = None  # free-form roles description
+
+
+def _check_project_write_access(user: User, project: Project) -> None:
+    """Same write-path guard used by /incorporate/wizard. Investors are NOT
+    privileged here — only admin / partner / the project's own founder."""
+    role = (user.role.value if hasattr(user.role, "value") else str(user.role)).lower()
+    if role in ("admin", "partner"):
+        return
+    if (
+        project.founder_id is not None
+        and getattr(user, "founder_id", None) == project.founder_id
+    ):
+        return
+    raise HTTPException(status_code=403, detail="Forbidden: you do not own this project")
+
+
+@router.post("/cofounder-agreement")
+def cofounder_agreement(
+    body: CoFounderAgreementRequest,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Task #31 — Generate a filled Co-Founder Agreement and persist it as
+    a Document on the project. The wizard captures vesting cliffs, IP
+    assignment, decision rights, and exit/buyout terms; we feed those
+    into the existing legal template generator and return the new Document.
+    """
+    if not body.company_name.strip():
+        raise HTTPException(status_code=400, detail="company_name is required")
+    if not body.founders or len(body.founders) < 2:
+        raise HTTPException(status_code=400, detail="At least two founders are required")
+    total_equity = sum(f.equity_pct or 0 for f in body.founders)
+    if total_equity > 100.001:
+        raise HTTPException(status_code=400, detail=f"Equity totals {total_equity:.2f}% — must be ≤ 100")
+
+    project = session.get(Project, body.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    _check_project_write_access(user, project)
+
+    # Render structured blocks the template expects.
+    eff = body.effective_date or datetime.utcnow().date().isoformat()
+    founders_lines = []
+    equity_lines = []
+    roles_lines = []
+    sig_lines = []
+    for i, f in enumerate(body.founders, 1):
+        founders_lines.append(
+            f"  ({chr(64+i)}) {f.name}"
+            + (f" <{f.email}>" if f.email else "")
+            + (f", {f.role}" if f.role else "")
+        )
+        equity_lines.append(
+            f"   {chr(64+i)}. {f.name}: {f.equity_pct:.2f}%"
+            + (f" (start: {f.start_date})" if f.start_date else "")
+        )
+        roles_lines.append(f"   {chr(64+i)}. {f.name} — {f.role or 'TBD'}")
+        sig_lines.append(f"  ____________________     {f.name}\n  Date: ____________________\n")
+
+    accel_text = {
+        "none": "No acceleration on Change of Control.",
+        "single_trigger": "Single-trigger — 100% of unvested equity accelerates on Change of Control.",
+        "double_trigger": "Double-trigger — unvested equity accelerates only if the founder is terminated without cause within 12 months of a Change of Control.",
+    }.get(body.acceleration, body.acceleration)
+
+    unanimous = body.unanimous_matters or [
+        "Sale or merger of the Company",
+        "Issuance of new equity above 10% dilution",
+        "Removal of a founder",
+        "Material change to this Agreement",
+    ]
+    unanimous_block = "\n".join(f"       - {m}" for m in unanimous)
+
+    fill = {
+        "company_name": body.company_name.strip(),
+        "effective_date": eff,
+        "founders_block": "\n".join(founders_lines),
+        "equity_block": "\n".join(equity_lines),
+        "vesting_years": str(body.vesting_years),
+        "cliff_months": str(body.cliff_months),
+        "cliff_pct": str(body.cliff_pct),
+        "acceleration_clause": accel_text,
+        "ip_exclusions": body.ip_exclusions or "None.",
+        "decision_day_to_day": body.decision_day_to_day,
+        "decision_threshold": body.decision_threshold,
+        "unanimous_block": unanimous_block,
+        "deadlock_clause": body.deadlock_clause or "Mediation followed by binding arbitration.",
+        "roles_block": body.roles or "\n".join(roles_lines),
+        "commitment_level": body.commitment_level,
+        "confidentiality_years": str(body.confidentiality_years),
+        "governing_law": body.governing_law,
+        "arbitration_venue": body.arbitration_venue,
+        "signature_block": "\n".join(sig_lines),
+    }
+    template = TEMPLATES["cofounder_agreement"]
+    rendered = template["content"]
+    for k, v in fill.items():
+        rendered = rendered.replace("{" + k + "}", str(v))
+
+    doc = Document(
+        project_id=project.id,
+        title=f"Co-Founder Agreement — {body.company_name.strip()}",
+        doc_type=DocumentType.OTHER,
+        template_name="cofounder_agreement",
+        status=DocumentStatus.GENERATED,
+        content=rendered,
+    )
+    session.add(doc)
+    session.commit()
+    session.refresh(doc)
+
+    # Persist to object storage (consistent with /incorporate/wizard).
+    try:
+        from backend.app.services.file_storage import store_contract_bytes
+        obj = store_contract_bytes(doc.uid, rendered.encode("utf-8"), "text/plain")
+        doc.file_key = obj.file_key
+        doc.file_size = obj.size
+        doc.file_sha256 = obj.sha256
+        doc.file_content_type = obj.content_type
+        doc.content = None
+        session.add(doc)
+        session.commit()
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "document": {
+            "id": doc.id,
+            "uid": doc.uid,
+            "title": doc.title,
+            "template_name": doc.template_name,
+        },
+        "summary": {
+            "founders": len(body.founders),
+            "total_equity_pct": round(total_equity, 2),
+            "vesting_years": body.vesting_years,
+            "cliff_months": body.cliff_months,
+            "acceleration": body.acceleration,
+        },
+    }
+
+
+# ----------------------- 83(b) tracker --------------------------------------
+
+class Section83bCreate(BaseModel):
+    project_id: int
+    taxpayer_name: str
+    grant_date: str  # ISO date
+
+
+class Section83bUpdate(BaseModel):
+    mailed_at: Optional[str] = None  # ISO datetime
+    receipt_doc_id: Optional[int] = None
+    status: Optional[str] = None     # pending | mailed | confirmed | missed
+    notes: Optional[str] = None
+
+
+def _tracker_dto(t: Section83bTracker) -> dict:
+    today = date.today()
+    days_left = (t.deadline_date - today).days
+    overdue = days_left < 0 and t.status not in ("mailed", "confirmed")
+    return {
+        "id": t.id,
+        "uid": t.uid,
+        "project_id": t.project_id,
+        "user_id": t.user_id,
+        "taxpayer_name": t.taxpayer_name,
+        "grant_date": t.grant_date.isoformat(),
+        "deadline_date": t.deadline_date.isoformat(),
+        "days_left": days_left,
+        "overdue": overdue,
+        "mailed_at": t.mailed_at.isoformat() if t.mailed_at else None,
+        "receipt_doc_id": t.receipt_doc_id,
+        "election_doc_id": t.election_doc_id,
+        "status": t.status,
+        "notes": t.notes,
+        "created_at": t.created_at.isoformat(),
+        "updated_at": t.updated_at.isoformat(),
+        "checklist": [
+            {"key": "draft", "label": "Generate the 83(b) election", "done": t.election_doc_id is not None},
+            {"key": "sign", "label": "Print, sign, and date the election", "done": t.status in ("mailed", "confirmed")},
+            {"key": "mail", "label": "Mail to the IRS service center via USPS Certified Mail", "done": t.mailed_at is not None},
+            {"key": "receipt", "label": "Upload your certified-mail receipt (PS Form 3800)", "done": t.receipt_doc_id is not None},
+            {"key": "copy_company", "label": "Send a signed copy to the Company", "done": t.status == "confirmed"},
+            {"key": "personal_records", "label": "Keep a copy in your personal tax records", "done": t.status == "confirmed"},
+        ],
+        "irs_mailing_steps": [
+            "Fill in your name, SSN, taxpayer address, and the property details.",
+            "Sign and date the election in two places.",
+            "Make 3 copies (IRS, Company, personal records).",
+            "Mail the original to the IRS Service Center for your state of residence via USPS Certified Mail with Return Receipt Requested.",
+            "Save the green PS Form 3800 receipt — that is your filing-date proof.",
+            "Upload the receipt here and mark the tracker 'confirmed' once you receive the green card back.",
+        ],
+    }
+
+
+@router.get("/83b/trackers")
+def list_83b_trackers(
+    project_id: Optional[int] = None,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """List 83(b) trackers visible to the caller. Founders see their own;
+    admin/partner see all (optionally filtered by project)."""
+    role = (user.role.value if hasattr(user.role, "value") else str(user.role)).lower()
+    q = select(Section83bTracker).order_by(Section83bTracker.deadline_date.asc())
+    if project_id:
+        q = q.where(Section83bTracker.project_id == project_id)
+    if role not in ("admin", "partner"):
+        q = q.where(Section83bTracker.user_id == user.id)
+    rows = session.exec(q).all()
+    return {"trackers": [_tracker_dto(r) for r in rows]}
+
+
+@router.post("/83b/trackers")
+def create_83b_tracker(
+    body: Section83bCreate,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Create a new 83(b) tracker. Auto-generates a pre-filled Section 83(b)
+    election Document, computes the 30-day deadline, and fires an in-app +
+    email reminder so the founder has the deadline on their calendar."""
+    project = session.get(Project, body.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    _check_project_write_access(user, project)
+    try:
+        grant = date.fromisoformat(body.grant_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="grant_date must be ISO format (YYYY-MM-DD)")
+
+    from datetime import timedelta
+    deadline = grant + timedelta(days=30)
+
+    # Idempotency: same project + user + grant_date → reuse. The DB has a
+    # unique index on (project_id, user_id, grant_date) (see
+    # ensure_section_83b_tracker_table) so concurrent POSTs cannot race past
+    # this app-level check.
+    existing = session.exec(
+        select(Section83bTracker).where(
+            Section83bTracker.project_id == project.id,
+            Section83bTracker.user_id == user.id,
+            Section83bTracker.grant_date == grant,
+        )
+    ).first()
+    if existing:
+        return {"ok": True, "reused": True, "tracker": _tracker_dto(existing)}
+
+    # Generate the pre-filled election document.
+    company = project.name
+    if project.entity_id:
+        ent = session.get(Entity, project.entity_id)
+        if ent:
+            company = ent.name
+    rendered = TEMPLATES["section_83b"]["content"].replace("{company_name}", company)
+    rendered = rendered.replace("Taxpayer: ____________________", f"Taxpayer: {body.taxpayer_name}")
+    rendered = rendered.replace("Tax Year: ____________________", f"Tax Year: {grant.year}")
+    rendered = rendered.replace("2. DATE OF TRANSFER: ____________________", f"2. DATE OF TRANSFER: {grant.isoformat()}")
+
+    doc = Document(
+        project_id=project.id,
+        title=f"83(b) Election — {body.taxpayer_name} ({grant.isoformat()})",
+        doc_type=DocumentType.SECTION_83B,
+        template_name="section_83b",
+        status=DocumentStatus.GENERATED,
+        content=rendered,
+    )
+    session.add(doc)
+    session.commit()
+    session.refresh(doc)
+    try:
+        from backend.app.services.file_storage import store_contract_bytes
+        obj = store_contract_bytes(doc.uid, rendered.encode("utf-8"), "text/plain")
+        doc.file_key = obj.file_key
+        doc.file_size = obj.size
+        doc.file_sha256 = obj.sha256
+        doc.file_content_type = obj.content_type
+        doc.content = None
+        session.add(doc)
+        session.commit()
+    except Exception:
+        pass
+
+    tracker = Section83bTracker(
+        project_id=project.id,
+        user_id=user.id,
+        taxpayer_name=body.taxpayer_name,
+        grant_date=grant,
+        deadline_date=deadline,
+        election_doc_id=doc.id,
+        status="pending",
+    )
+    session.add(tracker)
+    try:
+        session.commit()
+        session.refresh(tracker)
+    except IntegrityError:
+        # Lost the race against the unique index — return the now-existing
+        # row instead of a 500.
+        session.rollback()
+        existing = session.exec(
+            select(Section83bTracker).where(
+                Section83bTracker.project_id == project.id,
+                Section83bTracker.user_id == user.id,
+                Section83bTracker.grant_date == grant,
+            )
+        ).first()
+        if existing:
+            return {"ok": True, "reused": True, "tracker": _tracker_dto(existing)}
+        raise
+
+    # Calendar/notification ping (Task 0.2 notify subsystem).
+    try:
+        from backend.app.services.notify import notify
+        notify(
+            user_id=user.id,
+            type="section_83b_tracker_created",
+            title="83(b) deadline: {0}".format(deadline.isoformat()),
+            body=(
+                f"You have 30 days from {grant.isoformat()} to mail your 83(b) election to the IRS. "
+                f"Use USPS Certified Mail with Return Receipt Requested and upload the PS Form 3800 receipt."
+            ),
+            link="/incorporate/83b",
+            payload={
+                "tracker_id": tracker.id,
+                "project_id": project.id,
+                "grant_date": grant.isoformat(),
+                "deadline_date": deadline.isoformat(),
+            },
+            channels=("in_app", "email"),
+        )
+    except Exception:
+        pass
+
+    return {"ok": True, "reused": False, "tracker": _tracker_dto(tracker), "election_document_id": doc.id}
+
+
+@router.patch("/83b/trackers/{tracker_id}")
+def update_83b_tracker(
+    tracker_id: int,
+    body: Section83bUpdate,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    t = session.get(Section83bTracker, tracker_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Tracker not found")
+    role = (user.role.value if hasattr(user.role, "value") else str(user.role)).lower()
+    if role not in ("admin", "partner") and t.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Forbidden: not your tracker")
+
+    if body.mailed_at is not None:
+        try:
+            t.mailed_at = datetime.fromisoformat(body.mailed_at.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="mailed_at must be ISO datetime")
+        if t.status == "pending":
+            t.status = "mailed"
+    if body.receipt_doc_id is not None:
+        # Verify the doc exists + belongs to the same project.
+        d = session.get(Document, body.receipt_doc_id)
+        if not d or d.project_id != t.project_id:
+            raise HTTPException(status_code=400, detail="receipt_doc_id is not a document on this project")
+        t.receipt_doc_id = body.receipt_doc_id
+    if body.status is not None:
+        if body.status not in ("pending", "mailed", "confirmed", "missed"):
+            raise HTTPException(status_code=400, detail="Invalid status")
+        t.status = body.status
+    if body.notes is not None:
+        t.notes = body.notes
+    t.updated_at = datetime.utcnow()
+    session.add(t)
+    session.commit()
+    session.refresh(t)
+    return {"ok": True, "tracker": _tracker_dto(t)}
+
+
+@router.post("/83b/trackers/{tracker_id}/receipt")
+async def upload_83b_receipt(
+    tracker_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Upload a certified-mail receipt (PS Form 3800 scan) for a 83(b)
+    tracker. Stored as a Document on the same project; receipt_doc_id is
+    linked back on the tracker."""
+    from fastapi import UploadFile
+    from starlette.datastructures import UploadFile as _UF
+
+    t = session.get(Section83bTracker, tracker_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Tracker not found")
+    role = (user.role.value if hasattr(user.role, "value") else str(user.role)).lower()
+    if role not in ("admin", "partner") and t.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Forbidden: not your tracker")
+
+    form = await request.form()
+    upload = form.get("file")
+    if not isinstance(upload, _UF):
+        raise HTTPException(status_code=400, detail="file is required (multipart/form-data)")
+    data = await upload.read()
+    if len(data) == 0:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
+
+    # Server-side MIME allowlist + magic-byte sniff. Receipts are scans of
+    # PS Form 3800 (the green certified-mail slip) so PDF / JPEG / PNG cover
+    # 100% of legitimate uploads. We don't trust the client-supplied
+    # Content-Type header (architect review for Task #31).
+    declared = (upload.content_type or "").lower().split(";")[0].strip()
+    allowed_types = {"application/pdf", "image/jpeg", "image/jpg", "image/png"}
+    head = data[:8]
+    sniffed = None
+    if head.startswith(b"%PDF-"):
+        sniffed = "application/pdf"
+    elif head.startswith(b"\xff\xd8\xff"):
+        sniffed = "image/jpeg"
+    elif head.startswith(b"\x89PNG\r\n\x1a\n"):
+        sniffed = "image/png"
+    if sniffed is None:
+        raise HTTPException(status_code=400, detail="Receipt must be a PDF, JPEG, or PNG file")
+    if declared and declared not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"Unsupported content type: {declared}")
+    content_type = sniffed
+
+    # Storage first — only persist the Document + link the tracker if bytes
+    # actually landed. If storage fails we surface a 5xx and leave both the
+    # tracker state and document table untouched.
+    try:
+        from backend.app.services.file_storage import store_contract_bytes
+        import uuid as _uuid
+        placeholder_uid = str(_uuid.uuid4())
+        obj = store_contract_bytes(placeholder_uid, data, content_type)
+    except Exception as exc:
+        logger.exception("83b receipt storage failed for tracker %s", tracker_id)
+        raise HTTPException(status_code=502, detail="Receipt storage failed; please retry.") from exc
+
+    doc = Document(
+        uid=placeholder_uid,
+        project_id=t.project_id,
+        title=f"83(b) Certified-Mail Receipt — {t.taxpayer_name}",
+        doc_type=DocumentType.OTHER,
+        template_name="83b_certified_receipt",
+        status=DocumentStatus.GENERATED,
+        file_key=obj.file_key,
+        file_size=obj.size,
+        file_sha256=obj.sha256,
+        file_content_type=obj.content_type,
+    )
+    session.add(doc)
+    session.commit()
+    session.refresh(doc)
+
+    t.receipt_doc_id = doc.id
+    if t.status == "pending":
+        t.status = "mailed"
+    if t.mailed_at is None:
+        t.mailed_at = datetime.utcnow()
+    t.updated_at = datetime.utcnow()
+    session.add(t)
+    session.commit()
+    session.refresh(t)
+    return {"ok": True, "tracker": _tracker_dto(t), "receipt_document_id": doc.id}

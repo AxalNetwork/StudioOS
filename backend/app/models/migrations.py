@@ -1316,6 +1316,25 @@ def ensure_push_subscriptions_table() -> None:
             session.rollback()
 
 
+def ensure_section_83b_tracker_table() -> None:
+    """Task #31 — 83(b) trackers. Idempotent.
+
+    Enforces a unique constraint on ``(project_id, user_id, grant_date)``
+    so concurrent POSTs to ``/api/legal/83b/trackers`` cannot create
+    duplicate trackers (architect review for Task #31).
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_section_83b_project_user_grant "
+                "ON section_83b_trackers(project_id, user_id, grant_date)"
+            ))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_section_83b_tracker_table: %s", exc)
+            session.rollback()
+
+
 def ensure_portfolio_health_tables() -> None:
     """Task #44 — Portfolio health score + predictive failure. Idempotent."""
     with Session(engine) as session:

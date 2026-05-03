@@ -1,0 +1,105 @@
+CO-FOUNDER AGREEMENT
+
+This Co-Founder Agreement (the "Agreement") is entered into as of 2026-05-03 by
+and between the founders of UI-Watch-Target (the "Company"):
+
+  (A) Alice Test 0hKs, CEO
+  (B) Bob Test i0sc, CTO
+
+1. EQUITY SPLIT
+   The founders agree to the following initial equity allocation, subject to the
+   vesting schedule below:
+
+   A. Alice Test 0hKs: 50.00%
+   B. Bob Test i0sc: 50.00%
+
+2. VESTING SCHEDULE
+   2.1 Vesting Period: 4 years from each founder's start date.
+   2.2 Cliff: 12 months — no equity vests before the cliff date; on the
+       cliff date, 25% of the founder's grant vests in a single tranche.
+   2.3 Monthly Vesting: The remainder vests in equal monthly installments over the
+       remaining vesting period.
+   2.4 Acceleration: Single-trigger — 100% of unvested equity accelerates on Change of Control.
+
+3. INTELLECTUAL PROPERTY ASSIGNMENT
+   3.1 Each founder hereby assigns to the Company all right, title, and interest in
+       any work product, inventions, code, designs, trademarks, copyrights, trade
+       secrets, and other intellectual property (collectively, "IP") created by the
+       founder (a) prior to the date of this Agreement that is related to the
+       Company's business, or (b) during the founder's involvement with the Company.
+   3.2 Each founder represents that no third party (employer, university, prior
+       company, government grant) holds claims to such IP, and will execute the
+       Company's standard Proprietary Information & Inventions Assignment (PIIA)
+       upon request.
+   3.3 Pre-existing IP exclusions: None.
+
+4. DECISION RIGHTS & GOVERNANCE
+   4.1 Day-to-day operating decisions are made by the CEO.
+   4.2 The following matters require unanimous founder consent:
+       - Sale or merger of the Company
+       - Issuance of new equity above 10% dilution
+       - Removal of a founder
+       - Material change to this Agreement
+   4.3 All other strategic matters require a majority vote of the
+       founders.
+   4.4 Deadlock resolution: Mediation followed by binding arbitration.
+
+5. ROLES & RESPONSIBILITIES
+   A. Alice Test 0hKs — CEO
+   B. Bob Test i0sc — CTO
+
+6. COMMITMENT
+   6.1 Each founder agrees to devote full-time working time and best
+       efforts to the Company.
+   6.2 Outside activities (board seats, advisory roles, side projects) must be
+       disclosed in writing to the other founders and approved by majority vote.
+
+7. DEPARTURE, BUYOUT & EXIT
+   7.1 Voluntary Departure: A departing founder forfeits all unvested equity. The
+       Company has a right of first refusal on the founder's vested shares,
+       exercisable within 90 days of departure at fair market value.
+   7.2 Termination for Cause: A founder terminated for cause (fraud, breach of
+       fiduciary duty, conviction of a felony, material breach of this Agreement)
+       forfeits both vested and unvested equity, subject to a payment of par
+       value for vested shares.
+   7.3 Termination without Cause / Good Reason: The departing founder retains
+       vested equity. Acceleration per Section 2.4 may apply.
+   7.4 Buyout Right: Upon a Change of Control, all unvested equity accelerates per
+       Section 2.4. Pre-Change-of-Control buyouts require majority
+       founder consent.
+   7.5 Right of First Refusal: Founders may not transfer shares to third parties
+       without first offering them to the Company and the other founders on the
+       same terms.
+
+8. CONFIDENTIALITY & NON-COMPETE
+   8.1 Each founder agrees to keep all Company information confidential during and
+       for 3 years after their involvement.
+   8.2 During involvement and for 12 months thereafter, no founder shall directly
+       compete with the Company or solicit Company employees, customers, or
+       investors.
+
+9. SECTION 83(b) ELECTION
+   Each founder is strongly advised to file a Section 83(b) election with the IRS
+   within 30 days of receiving restricted stock. Failure to file results in
+   significantly higher tax liability and is a common, avoidable disaster. The
+   Company will provide a template; the filing is the founder's personal
+   responsibility.
+
+10. DISPUTE RESOLUTION
+    10.1 Governing Law: Delaware, USA.
+    10.2 Disputes shall first be resolved by good-faith negotiation, then by
+         mediation, then by binding arbitration in Wilmington, Delaware.
+
+11. ENTIRE AGREEMENT
+    This Agreement constitutes the entire agreement among the founders with respect
+    to the subject matter and supersedes all prior discussions. It may be amended
+    only in writing signed by all founders.
+
+SIGNATURES
+
+  ____________________     Alice Test 0hKs
+  Date: ____________________
+
+  ____________________     Bob Test i0sc
+  Date: ____________________
+
