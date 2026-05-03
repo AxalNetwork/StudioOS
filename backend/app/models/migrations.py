@@ -560,6 +560,85 @@ def ensure_marketplace_columns() -> None:
         session.commit()
 
 
+def ensure_partner_directory_columns() -> None:
+    """Task #53 — Public partner directory + ranking.
+
+    Idempotently:
+      * adds `slug`, `featured`, `featured_until`, `featured_tier` to `partners`
+      * backfills `slug` for existing rows from `name` + uid suffix so the
+        column can serve as a stable public identifier in /partners/{slug}
+      * creates supporting indexes
+    """
+    import re as _re
+
+    cols = (
+        ("slug", "VARCHAR"),
+        ("featured", "BOOLEAN DEFAULT FALSE NOT NULL"),
+        ("featured_until", "TIMESTAMP"),
+        ("featured_tier", "VARCHAR"),
+    )
+    indexes = (
+        ("ix_partners_slug", "slug"),
+        ("ix_partners_featured", "featured"),
+    )
+
+    def _slugify(s: str) -> str:
+        s = (s or "").lower().strip()
+        s = _re.sub(r"[^a-z0-9]+", "-", s)
+        s = _re.sub(r"-+", "-", s).strip("-")
+        return s or "partner"
+
+    with Session(engine) as session:
+        for col, ddl in cols:
+            try:
+                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_partner_directory_columns: partners.%s ALTER failed: %s", col, exc)
+        session.commit()
+
+        # Backfill slugs for rows missing one.
+        try:
+            rows = session.exec(text(
+                "SELECT id, name, uid FROM partners WHERE slug IS NULL OR slug = ''"
+            )).all()
+            taken = set()
+            existing = session.exec(text("SELECT slug FROM partners WHERE slug IS NOT NULL")).all()
+            for r in existing:
+                taken.add(r._mapping["slug"])  # type: ignore[attr-defined]
+            for r in rows:
+                m = r._mapping  # type: ignore[attr-defined]
+                base = _slugify(m["name"])
+                suffix = (m["uid"] or "")[:6]
+                slug = f"{base}-{suffix}" if suffix else base
+                # If collision (paranoid — uid suffix is already unique), append id.
+                while slug in taken:
+                    slug = f"{slug}-{m['id']}"
+                taken.add(slug)
+                session.exec(text(
+                    "UPDATE partners SET slug = :slug WHERE id = :id"
+                ).bindparams(slug=slug, id=m["id"]))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_partner_directory_columns: slug backfill failed: %s", exc)
+            session.rollback()
+
+        # Add UNIQUE constraint on slug after backfill (savepoint — already-exists is fine).
+        try:
+            with session.begin_nested():
+                session.exec(text(
+                    "ALTER TABLE partners ADD CONSTRAINT uq_partners_slug UNIQUE (slug)"
+                ))
+        except Exception:  # noqa: BLE001
+            pass
+
+        for name, expr in indexes:
+            try:
+                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON partners({expr})"))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_partner_directory_columns: %s INDEX failed: %s", name, exc)
+        session.commit()
+
+
 def ensure_service_catalogue_columns() -> None:
     """Task #51 — Service catalogue + engagement lifecycle.
 

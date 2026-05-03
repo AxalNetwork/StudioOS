@@ -64,6 +64,8 @@ import MarketplacePage from './pages/MarketplacePage';
 import NeedsBoardPage from './pages/NeedsBoardPage';
 import ServiceCatalogPage from './pages/ServiceCatalogPage';
 import PartnerInsightsPage from './pages/PartnerInsightsPage';
+import PublicDirectoryPage from './pages/PublicDirectoryPage';
+import PublicPartnerProfilePage from './pages/PublicPartnerProfilePage';
 import PitchDeckPrintPage from './pages/PitchDeckPrintPage';
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
@@ -798,6 +800,13 @@ export default function App() {
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
       <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], <PartnerPortal />)} />
       <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor'], <SettingsPage />)} />
+
+      {/* Task #53 — Public partner directory + profiles (no auth). The
+          static /partners route below takes precedence over /partners/:slug
+          per React Router v6 path ranking, so authenticated users still
+          land on the internal CRM at /partners. */}
+      <Route path="/directory" element={<PublicDirectoryPage />} />
+      <Route path="/partners/:slug" element={<PublicPartnerProfilePage />} />
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />

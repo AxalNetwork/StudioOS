@@ -74,6 +74,7 @@ async def lifespan(app: FastAPI):
             ensure_investor_role_split,
             ensure_marketplace_columns,
             ensure_service_catalogue_columns,
+            ensure_partner_directory_columns,
         )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
@@ -92,6 +93,10 @@ async def lifespan(app: FastAPI):
         ensure_investor_role_split()
         logger.info("StudioOS migrations: investor role split applied")
         ensure_marketplace_columns()
+        # Task #53 — public directory slug + featured slot columns.
+        # Must run before service-catalogue migrations so `partners.slug`
+        # exists when downstream queries join on it.
+        ensure_partner_directory_columns()
         logger.info("StudioOS migrations: marketplace columns ensured")
         ensure_service_catalogue_columns()
         logger.info("StudioOS migrations: service catalogue + engagement lifecycle ensured")

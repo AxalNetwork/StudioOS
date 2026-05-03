@@ -7,6 +7,7 @@ const LINKS = [
   { label: 'Platform', href: '/#platform' },
   { label: 'Lanes', href: '/#lanes' },
   { label: 'Spin-Out Lab', href: '/spinout-lab' },
+  { label: 'Directory', href: '/directory' },
 ];
 
 export default function PublicNav() {

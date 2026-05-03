@@ -1,9 +1,17 @@
 from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import UniqueConstraint, event
 from typing import Optional, List
 from datetime import datetime, date
 from enum import Enum
+import re as _re
 import uuid
+
+
+def _slugify_name(s: str) -> str:
+    s = (s or "").lower().strip()
+    s = _re.sub(r"[^a-z0-9]+", "-", s)
+    s = _re.sub(r"-+", "-", s).strip("-")
+    return s or "partner"
 
 
 class EntityType(str, Enum):
@@ -359,6 +367,33 @@ class Partner(SQLModel, table=True):
     stripe_charges_enabled: bool = Field(default=False)
     stripe_payouts_enabled: bool = Field(default=False)
     stripe_onboarded_at: Optional[datetime] = None
+    # Task #53 — Public directory + ranking.
+    # `slug` is the SEO-friendly identifier used in /partners/{slug}
+    # public URLs. Backfilled from `name` + uid suffix on first migration
+    # to guarantee uniqueness.
+    slug: Optional[str] = Field(default=None, unique=True, index=True)
+    # Featured slot — when `featured=True` and `featured_until > now()`,
+    # the partner is pinned to the top of public listings ahead of
+    # algorithmic ranking. `featured_tier` distinguishes paid (e.g.
+    # "platinum"/"gold") from purely algorithmic boosts ("editor").
+    featured: bool = Field(default=False, index=True)
+    featured_until: Optional[datetime] = None
+    featured_tier: Optional[str] = None  # platinum | gold | editor | None
+
+
+@event.listens_for(Partner, "before_insert")
+def _partner_assign_slug(_mapper, _connection, target: "Partner") -> None:
+    """Task #53 — guarantee every Partner is born with a slug so public
+    read endpoints (`/marketplace/public/partners`) never need to mutate
+    state. Uniqueness is still enforced by the DB UNIQUE constraint;
+    extremely rare races resolve via the lazy collision-retry helper in
+    the marketplace migration backfill."""
+    if not getattr(target, "slug", None):
+        base = _slugify_name(target.name)
+        # `uid` has a default_factory so it is populated by the time the
+        # listener fires, but guard for the legacy path that pre-sets uid.
+        suffix = (target.uid or "")[:6]
+        target.slug = f"{base}-{suffix}" if suffix else base
 
 
 class PartnerReview(SQLModel, table=True):

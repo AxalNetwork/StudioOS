@@ -173,6 +173,16 @@ export const api = {
   // Task #36 — Service Provider Marketplace
   listProviders: (params = {}) => request(`/marketplace/providers${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`),
   getProvider: (id) => request(`/marketplace/providers/${id}`),
+
+  // Task #53 — Public partner directory (no auth required).
+  publicListPartners: (params = {}) => {
+    const q = Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== '');
+    return request(`/marketplace/public/partners${q.length ? `?${new URLSearchParams(q)}` : ''}`);
+  },
+  publicGetPartner: (slug) => request(`/marketplace/public/partners/${encodeURIComponent(slug)}`),
+  setPartnerFeatured: (partnerId, body) => request(`/marketplace/providers/${partnerId}/featured`, {
+    method: 'POST', body: JSON.stringify(body),
+  }),
   getMyProvider: () => request('/marketplace/providers/me'),
   updateMyProvider: (data) => request('/marketplace/providers/me', { method: 'PUT', body: JSON.stringify(data) }),
   setProviderKyb: (id, status) => request(`/marketplace/providers/${id}/kyb`, { method: 'POST', body: JSON.stringify({ status }) }),

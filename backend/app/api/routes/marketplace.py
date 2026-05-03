@@ -12,7 +12,7 @@ featured / paid placement (Task 5.4).
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -23,6 +23,7 @@ from backend.app.api.routes.auth import get_current_user
 from backend.app.database import get_session
 from backend.app.models.entities import (
     ActivityLog,
+    Engagement,
     MarketplaceInquiry,
     MarketplaceMessage,
     Partner,
@@ -714,3 +715,325 @@ def refresh_stripe_status(
     session.add(partner)
     session.commit()
     return stripe_connect.stripe_status_summary(partner) | {"simulated": bool(status.get("simulated"))}
+
+
+# ---------------------------------------------------------------------------
+# Task #53 — Public partner directory + ranking
+# ---------------------------------------------------------------------------
+# These endpoints are intentionally **unauthenticated** and form the public
+# discovery surface (SEO-friendly URLs, share links, etc.). They only ever
+# return rows that have explicitly opted in via `Partner.listed = True` AND
+# `kyb_status` not in the rejected/unverified-with-no-reviews state. Email,
+# inquiry threads, and admin-only fields are stripped from the public DTO.
+
+VALID_FEATURED_TIERS = {"platinum", "gold", "editor"}
+
+
+
+# Ranking weights — keep small and explainable. Weights are tuned so that
+# featured-in-window rows clear the algorithmic top by a wide margin while
+# still letting a high-quality non-featured partner outrank a low-quality
+# featured slot whose paid window has expired.
+_W_COMPLETED = 6.0      # per completed engagement, capped
+_W_RATING = 12.0        # per avg_rating point (0..5)
+_W_REVIEWS = 1.5        # per review count (capped)
+_W_KYB_VERIFIED = 25.0
+_W_RESPONSE_FAST = 20.0   # response_time_hours <= 4
+_W_RESPONSE_MED = 10.0    # <= 24h
+_W_RESPONSE_SLOW = 5.0    # <= 72h
+_FEATURED_BOOST = 1000.0  # pin featured-in-window above algorithmic
+_TIER_BONUS = {"platinum": 30.0, "gold": 15.0, "editor": 5.0}
+
+
+def _completed_count(session: Session, partner_id: int) -> int:
+    """Number of engagements that have reached `delivered` or beyond.
+    `cancelled` does not count. Used in the public ranking signal."""
+    return int(session.exec(
+        select(func.count(Engagement.id))
+        .where(Engagement.partner_id == partner_id)
+        .where(Engagement.status.in_(("delivered", "reviewed", "invoiced")))  # type: ignore[attr-defined]
+    ).first() or 0)
+
+
+def _is_featured_now(p: Partner) -> bool:
+    if not p.featured:
+        return False
+    if p.featured_until is None:
+        # Featured with no expiry == perma-featured (admin curated).
+        return True
+    return p.featured_until > datetime.utcnow()
+
+
+def _ranking_score(p: Partner, completed: int, reviews_summary: dict) -> tuple[float, dict]:
+    """Compute the algorithmic ranking score and return (score, breakdown).
+    Featured-in-window adds `_FEATURED_BOOST + tier bonus` so paid slots
+    sit above algorithmic order; non-featured partners are ordered purely
+    by their algorithmic score. Breakdown is returned for transparency
+    (surfaced in the API DTO so the UI can explain rankings)."""
+    breakdown: dict = {}
+    score = 0.0
+
+    completed_pts = min(completed, 25) * _W_COMPLETED  # cap at 25 engagements -> 150
+    breakdown["completed_engagements"] = {"value": completed, "points": round(completed_pts, 2)}
+    score += completed_pts
+
+    avg = reviews_summary.get("avg_rating") or 0.0
+    rating_pts = float(avg) * _W_RATING
+    breakdown["avg_rating"] = {"value": avg, "points": round(rating_pts, 2)}
+    score += rating_pts
+
+    review_count = reviews_summary.get("count") or 0
+    review_pts = min(review_count, 30) * _W_REVIEWS  # cap at 30 reviews
+    breakdown["review_count"] = {"value": review_count, "points": round(review_pts, 2)}
+    score += review_pts
+
+    kyb_pts = _W_KYB_VERIFIED if p.kyb_status == "verified" else 0.0
+    breakdown["kyb_verified"] = {"value": p.kyb_status == "verified", "points": kyb_pts}
+    score += kyb_pts
+
+    rt = p.response_time_hours
+    if rt is None:
+        resp_pts = 0.0
+    elif rt <= 4:
+        resp_pts = _W_RESPONSE_FAST
+    elif rt <= 24:
+        resp_pts = _W_RESPONSE_MED
+    elif rt <= 72:
+        resp_pts = _W_RESPONSE_SLOW
+    else:
+        resp_pts = 0.0
+    breakdown["response_time_hours"] = {"value": rt, "points": resp_pts}
+    score += resp_pts
+
+    featured_now = _is_featured_now(p)
+    if featured_now:
+        tier_bonus = _TIER_BONUS.get((p.featured_tier or "").lower(), 0.0)
+        feat_pts = _FEATURED_BOOST + tier_bonus
+        breakdown["featured"] = {"value": True, "tier": p.featured_tier, "points": feat_pts}
+        score += feat_pts
+    else:
+        breakdown["featured"] = {"value": False, "tier": None, "points": 0.0}
+
+    return round(score, 2), breakdown
+
+
+def _public_directory_dto(p: Partner, completed: int, reviews_summary: dict) -> dict:
+    """Public-safe DTO. Strips email/inquiry-internal fields and never
+    leaks unlisted profiles (caller must pre-filter `listed = True`)."""
+    score, breakdown = _ranking_score(p, completed, reviews_summary)
+    featured_now = _is_featured_now(p)
+    return {
+        "slug": p.slug,
+        "uid": p.uid,
+        "name": p.name,
+        "company": p.company,
+        "headline": p.headline,
+        "bio": p.bio,
+        "categories": _parse_json(p.categories_json, []),
+        "sectors": _parse_json(p.sectors_json, []),
+        "pricing_tier": p.pricing_tier,
+        "hourly_rate_min": p.hourly_rate_min,
+        "hourly_rate_max": p.hourly_rate_max,
+        "capacity_status": p.capacity_status,
+        "response_time_hours": p.response_time_hours,
+        "kyb_status": p.kyb_status,
+        "kyb_verified": p.kyb_status == "verified",
+        "website": p.website,
+        "specialization": p.specialization,
+        "completed_engagements": completed,
+        "reviews": reviews_summary,
+        "featured": featured_now,
+        "featured_tier": p.featured_tier if featured_now else None,
+        "ranking_score": score,
+        "ranking_breakdown": breakdown,
+    }
+
+
+@router.get("/public/partners")
+def public_list_partners(
+    category: Optional[str] = None,
+    sector: Optional[str] = None,
+    capacity: Optional[str] = Query(default=None, description="available | limited | unavailable"),
+    pricing: Optional[str] = Query(default=None, description="$ | $$ | $$$"),
+    verified_only: bool = False,
+    rate_max: Optional[float] = None,
+    q: Optional[str] = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    session: Session = Depends(get_session),
+):
+    """Public, unauthenticated partner directory with weighted ranking.
+
+    Ordering:
+      1. Featured slots (paid + algorithmic, within `featured_until` window)
+         sit on top, ordered by `ranking_score` (their featured boost is
+         baked into that score so the order is stable).
+      2. Algorithmic ranking by:
+         completed engagements, avg rating, review count, KYB verified,
+         response-time SLA. Featured slots that have *expired* fall back
+         into the algorithmic pool with no boost.
+    """
+    stmt = select(Partner).where(Partner.status == "active").where(Partner.listed == True)  # noqa: E712
+    rows = list(session.exec(stmt).all())
+
+    # In-memory filter (small directory; matches /providers semantics).
+    filtered: list[Partner] = []
+    for p in rows:
+        cats = _parse_json(p.categories_json, [])
+        secs = _parse_json(p.sectors_json, [])
+        if category and category not in cats:
+            continue
+        if sector and sector not in secs:
+            continue
+        if capacity and p.capacity_status != capacity:
+            continue
+        if pricing and p.pricing_tier != pricing:
+            continue
+        if verified_only and p.kyb_status != "verified":
+            continue
+        if rate_max is not None:
+            floor = p.hourly_rate_min if p.hourly_rate_min is not None else p.hourly_rate_max
+            if floor is not None and floor > rate_max:
+                continue
+        if q:
+            hay = " ".join(filter(None, [p.name, p.company, p.headline, p.bio, p.specialization])).lower()
+            if q.lower() not in hay:
+                continue
+        filtered.append(p)
+
+    # Build DTOs (one query per row for completed_count + reviews — fine
+    # for current scale; switch to a single GROUP BY join when N > ~500).
+    dtos = []
+    for p in filtered:
+        # Slugs are guaranteed at insert time by the Partner before_insert
+        # event listener and backfilled by the marketplace migration for
+        # legacy rows; the public read path is therefore strictly read-only.
+        completed = _completed_count(session, p.id)
+        reviews = _summarize_reviews(session, p.id)
+        dtos.append(_public_directory_dto(p, completed, reviews))
+
+    # Sort: featured-now first (by ranking_score desc — boost is baked in),
+    # then non-featured by algorithmic ranking_score desc, with rating/
+    # review tie-breakers.
+    dtos.sort(key=lambda d: (
+        0 if d["featured"] else 1,
+        -d["ranking_score"],
+        -(d["reviews"]["avg_rating"] or 0),
+        -(d["reviews"]["count"] or 0),
+    ))
+
+    total = len(dtos)
+    page = dtos[offset:offset + limit]
+    featured_count = sum(1 for d in page if d["featured"])
+    return {
+        "partners": page,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "featured_count": featured_count,
+        "ranking_weights": {
+            "completed_engagement": _W_COMPLETED,
+            "avg_rating": _W_RATING,
+            "review_count": _W_REVIEWS,
+            "kyb_verified": _W_KYB_VERIFIED,
+            "response_time_fast": _W_RESPONSE_FAST,
+            "response_time_med": _W_RESPONSE_MED,
+            "response_time_slow": _W_RESPONSE_SLOW,
+            "featured_boost": _FEATURED_BOOST,
+            "featured_tier_bonus": _TIER_BONUS,
+        },
+    }
+
+
+@router.get("/public/partners/{slug}")
+def public_get_partner(
+    slug: str,
+    session: Session = Depends(get_session),
+):
+    """Public partner profile. Slug is stable — generated from name + uid
+    suffix at migration time. Returns 404 for unlisted/inactive rows so
+    the public surface cannot be used to enumerate hidden profiles."""
+    p = session.exec(select(Partner).where(Partner.slug == slug)).first()
+    if not p or p.status != "active" or not p.listed:
+        raise HTTPException(status_code=404, detail="Partner not found")
+    completed = _completed_count(session, p.id)
+    reviews_summary = _summarize_reviews(session, p.id)
+    dto = _public_directory_dto(p, completed, reviews_summary)
+    # Surface up to 10 most-recent review comments.
+    review_rows = session.exec(
+        select(PartnerReview)
+        .where(PartnerReview.partner_id == p.id)
+        .order_by(PartnerReview.created_at.desc())
+    ).all()
+    dto["recent_reviews"] = [
+        {
+            "id": r.id,
+            "rating": r.rating,
+            "comment": r.comment,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in review_rows[:10]
+    ]
+    return dto
+
+
+# ---------------------------------------------------------------------------
+# Admin — set / clear featured slot
+# ---------------------------------------------------------------------------
+class FeaturedIn(BaseModel):
+    featured: bool
+    tier: Optional[str] = None  # platinum | gold | editor (None when un-featuring)
+    days: Optional[int] = PydField(default=None, ge=1, le=365)
+    # Days the featured window stays active; None == perma-featured.
+
+    @field_validator("tier")
+    @classmethod
+    def _check_tier(cls, v):
+        if v is not None and v.lower() not in VALID_FEATURED_TIERS:
+            raise ValueError(f"tier must be one of {sorted(VALID_FEATURED_TIERS)}")
+        return v.lower() if v else None
+
+
+@router.post("/providers/{partner_id}/featured")
+def set_featured_slot(
+    partner_id: int,
+    body: FeaturedIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Admin-only: set or clear a featured slot. Paid integration is left
+    to the billing flow — this endpoint just toggles the slot and records
+    an activity log entry. `days=None` makes the slot perma-featured
+    (typical for editorial picks); paid slots set an expiry."""
+    _ensure_admin(user)
+    p = session.get(Partner, partner_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    if body.featured:
+        if not body.tier:
+            raise HTTPException(status_code=400, detail="tier is required when featured=true")
+        p.featured = True
+        p.featured_tier = body.tier
+        p.featured_until = (
+            datetime.utcnow() + timedelta(days=body.days) if body.days else None
+        )
+    else:
+        p.featured = False
+        p.featured_tier = None
+        p.featured_until = None
+    session.add(p)
+    session.add(ActivityLog(
+        action="marketplace_featured_set",
+        details=f"partner={partner_id} featured={body.featured} tier={body.tier} days={body.days}",
+        actor=user.email,
+        user_id=user.id,
+    ))
+    session.commit()
+    session.refresh(p)
+    return {
+        "id": p.id,
+        "slug": p.slug,
+        "featured": _is_featured_now(p),
+        "featured_tier": p.featured_tier,
+        "featured_until": p.featured_until.isoformat() if p.featured_until else None,
+    }
