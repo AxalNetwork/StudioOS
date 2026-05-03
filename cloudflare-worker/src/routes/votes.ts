@@ -9,13 +9,13 @@
  *
  *   POST /api/pipeline/votes/:deal_id   { vote_type, weight?, comment?, anonymous? }
  *
- * Idempotency: a tiny `pipeline_vote_threshold_log` D1 row guards against
- * re-paging admins on every subsequent vote after the threshold crosses.
+ * Storage is D1 (SQLite). Idempotency: a `pipeline_vote_threshold_log`
+ * PK row guards against re-paging admins on every subsequent vote after
+ * the threshold first crosses.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { getSQL } from '../db';
 
 const votes = new Hono<{ Bindings: Env }>();
 
@@ -24,28 +24,28 @@ const VOTE_THRESHOLD_WEIGHT = 6;
 const VOTE_TYPES = new Set(['strong_buy', 'buy', 'pass', 'strong_pass']);
 
 let votesMigrated = false;
-async function ensureSchema(sql: any): Promise<void> {
+async function ensureSchema(env: Env): Promise<void> {
   if (votesMigrated) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS pipeline_votes (
-      id SERIAL PRIMARY KEY,
-      deal_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      vote_type TEXT NOT NULL,
-      weight INTEGER NOT NULL DEFAULT 1,
-      comment TEXT,
-      anonymous BOOLEAN DEFAULT FALSE,
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW(),
-      UNIQUE(deal_id, user_id)
-    )
-  `;
-  await sql`
-    CREATE TABLE IF NOT EXISTS pipeline_vote_threshold_log (
-      deal_id INTEGER PRIMARY KEY,
-      fired_at TIMESTAMP DEFAULT NOW()
-    )
-  `;
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS pipeline_votes (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       deal_id INTEGER NOT NULL,
+       user_id INTEGER NOT NULL,
+       vote_type TEXT NOT NULL,
+       weight INTEGER NOT NULL DEFAULT 1,
+       comment TEXT,
+       anonymous INTEGER DEFAULT 0,
+       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+       UNIQUE(deal_id, user_id)
+     )`,
+  ).run();
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS pipeline_vote_threshold_log (
+       deal_id INTEGER PRIMARY KEY,
+       fired_at TEXT DEFAULT CURRENT_TIMESTAMP
+     )`,
+  ).run();
   votesMigrated = true;
 }
 
@@ -59,57 +59,67 @@ votes.post('/:deal_id', async (c) => {
   const voteType: string = body?.vote_type;
   const weight: number = Math.max(1, Math.min(parseInt(body?.weight ?? 1, 10) || 1, 5));
   const comment: string | null = typeof body?.comment === 'string' ? body.comment.slice(0, 2000) : null;
-  const anonymous: boolean = !!body?.anonymous;
+  const anonymous: number = body?.anonymous ? 1 : 0;
   if (!VOTE_TYPES.has(voteType)) return c.json({ error: 'Invalid vote_type' }, 422);
 
-  const sql = getSQL(c.env);
   try {
-    await ensureSchema(sql);
+    await ensureSchema(c.env);
 
-    const existing = await sql`SELECT id FROM pipeline_votes WHERE deal_id = ${dealId} AND user_id = ${user.id}`;
-    if (existing.length > 0) {
-      await sql`
-        UPDATE pipeline_votes
-           SET vote_type = ${voteType}, weight = ${weight},
-               comment = ${comment}, anonymous = ${anonymous}, updated_at = NOW()
-         WHERE deal_id = ${dealId} AND user_id = ${user.id}
-      `;
+    const existing: any = await c.env.DB.prepare(
+      `SELECT id FROM pipeline_votes WHERE deal_id = ? AND user_id = ?`,
+    ).bind(dealId, user.id).first();
+    if (existing) {
+      await c.env.DB.prepare(
+        `UPDATE pipeline_votes
+            SET vote_type = ?, weight = ?, comment = ?, anonymous = ?,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE deal_id = ? AND user_id = ?`,
+      ).bind(voteType, weight, comment, anonymous, dealId, user.id).run();
     } else {
-      await sql`
-        INSERT INTO pipeline_votes (deal_id, user_id, vote_type, weight, comment, anonymous)
-        VALUES (${dealId}, ${user.id}, ${voteType}, ${weight}, ${comment}, ${anonymous})
-      `;
+      await c.env.DB.prepare(
+        `INSERT INTO pipeline_votes (deal_id, user_id, vote_type, weight, comment, anonymous)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).bind(dealId, user.id, voteType, weight, comment, anonymous).run();
     }
 
-    const tally = await sql`
-      SELECT
-        COUNT(*)::int                                       AS total_voters,
-        COALESCE(SUM(weight), 0)::int                       AS total_weight,
-        COUNT(*) FILTER (WHERE vote_type = 'strong_buy')::int AS strong_buy
-      FROM pipeline_votes WHERE deal_id = ${dealId}
-    `;
-    const t = tally[0] || { total_voters: 0, total_weight: 0, strong_buy: 0 };
+    const tally: any = await c.env.DB.prepare(
+      `SELECT
+         COUNT(*) AS total_voters,
+         COALESCE(SUM(weight), 0) AS total_weight,
+         SUM(CASE WHEN vote_type = 'strong_buy' THEN 1 ELSE 0 END) AS strong_buy
+       FROM pipeline_votes WHERE deal_id = ?`,
+    ).bind(dealId).first();
+    const totalVoters = Number(tally?.total_voters || 0);
+    const totalWeight = Number(tally?.total_weight || 0);
+    const strongBuy = Number(tally?.strong_buy || 0);
     const thresholdReached =
-      t.total_voters >= VOTE_THRESHOLD_VOTERS && t.total_weight >= VOTE_THRESHOLD_WEIGHT;
+      totalVoters >= VOTE_THRESHOLD_VOTERS && totalWeight >= VOTE_THRESHOLD_WEIGHT;
 
     if (thresholdReached) {
       try {
-        const fired = await sql`
-          INSERT INTO pipeline_vote_threshold_log (deal_id) VALUES (${dealId})
-          ON CONFLICT (deal_id) DO NOTHING
-          RETURNING deal_id
-        `;
-        if (fired.length > 0) {
-          const admins = await sql`SELECT id FROM users WHERE role = 'admin' AND is_active = true`;
+        // INSERT OR IGNORE acts as a "first-crossing" guard in SQLite —
+        // concurrent voters race; only one row inserts, the others no-op
+        // (reflected by .meta.changes === 0) so admins are paged once.
+        const fired: any = await c.env.DB.prepare(
+          `INSERT OR IGNORE INTO pipeline_vote_threshold_log (deal_id) VALUES (?)`,
+        ).bind(dealId).run();
+        const wasFirstCrossing = Number(fired?.meta?.changes || 0) > 0;
+        if (wasFirstCrossing) {
+          const admins: any = await c.env.DB.prepare(
+            `SELECT id FROM users WHERE role = 'admin' AND is_active = 1`,
+          ).all();
           const { notify } = await import('../services/notify');
-          for (const admin of admins) {
+          for (const admin of (admins?.results || [])) {
             await notify(c.env, {
               userId: admin.id,
               type: 'vote_threshold_reached',
               title: 'Vote threshold reached',
-              body: `Deal #${dealId} hit ${t.total_voters} voters · weight ${t.total_weight}`,
+              body: `Deal #${dealId} hit ${totalVoters} voters · weight ${totalWeight}`,
               link: '/pipeline',
-              payload: { deal_id: dealId, tally: t },
+              payload: {
+                deal_id: dealId,
+                tally: { total_voters: totalVoters, total_weight: totalWeight, strong_buy: strongBuy },
+              },
               channels: ['in_app', 'email', 'slack'],
             });
           }
@@ -117,14 +127,18 @@ votes.post('/:deal_id', async (c) => {
       } catch (e) { console.warn('[votes] notify vote_threshold_reached failed', e); }
     }
 
-    await sql.end();
     return c.json({
       ok: true,
       deal_id: dealId,
-      tally: { ...t, threshold_reached: thresholdReached, threshold: { voters: VOTE_THRESHOLD_VOTERS, weight: VOTE_THRESHOLD_WEIGHT } },
+      tally: {
+        total_voters: totalVoters,
+        total_weight: totalWeight,
+        strong_buy: strongBuy,
+        threshold_reached: thresholdReached,
+        threshold: { voters: VOTE_THRESHOLD_VOTERS, weight: VOTE_THRESHOLD_WEIGHT },
+      },
     });
   } catch (e: any) {
-    try { await sql.end(); } catch {}
     return c.json({ error: e?.message || 'Failed to cast vote' }, 500);
   }
 });

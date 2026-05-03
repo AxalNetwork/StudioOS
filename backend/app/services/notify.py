@@ -45,16 +45,16 @@ def _user_prefs(session: Session, user_id: int) -> dict:
 
 
 def _resolve_channels(prefs: dict, ntype: str, requested: Iterable[str]) -> list[str]:
-    """Honor user opt-outs. in_app is always on (it's the inbox).
+    """Honor per-event, per-channel opt-outs from /settings/notifications.
 
-    `requested` is the set the caller wants to attempt; the per-event matrix
-    in /settings/notifications can suppress email/slack per type.
+    All three channels (in_app/email/slack) are user-toggleable via the
+    matrix and default-on. If the user opts out of in_app for an event,
+    we skip the inbox row + bell push entirely for that event but still
+    deliver any other channels the user kept on.
     """
-    out = ["in_app"]
     ev = (prefs.get(ntype) or {}) if isinstance(prefs, dict) else {}
+    out: list[str] = []
     for ch in requested:
-        if ch == "in_app":
-            continue
         if ev.get(ch, True):  # default-on if user hasn't toggled
             out.append(ch)
     return out
@@ -115,35 +115,40 @@ def notify(
         with Session(engine) as session:
             prefs = _user_prefs(session, user_id)
             resolved = _resolve_channels(prefs, type, channels)
-
-            row = Notification(
-                user_id=user_id,
-                type=type,
-                title=title,
-                body=body,
-                link=link,
-                payload=json.dumps(payload) if payload is not None else None,
-                channel=",".join(resolved),
-            )
-            session.add(row)
-            session.commit()
-            session.refresh(row)
+            if not resolved:
+                # User opted out of every requested channel for this event.
+                return None
 
             user = session.get(User, user_id)
             if not user:
-                return row.id
+                return None
 
-            ws_payload = {
-                "id": row.id,
-                "uid": row.uid,
-                "type": row.type,
-                "title": row.title,
-                "body": row.body,
-                "link": row.link,
-                "created_at": row.created_at.isoformat(),
-                "read_at": None,
-            }
-            _broadcast_ws(user_id, ws_payload)
+            row_id: Optional[int] = None
+            if "in_app" in resolved:
+                row = Notification(
+                    user_id=user_id,
+                    type=type,
+                    title=title,
+                    body=body,
+                    link=link,
+                    payload=json.dumps(payload) if payload is not None else None,
+                    channel=",".join(resolved),
+                )
+                session.add(row)
+                session.commit()
+                session.refresh(row)
+                row_id = row.id
+                ws_payload = {
+                    "id": row.id,
+                    "uid": row.uid,
+                    "type": row.type,
+                    "title": row.title,
+                    "body": row.body,
+                    "link": row.link,
+                    "created_at": row.created_at.isoformat(),
+                    "read_at": None,
+                }
+                _broadcast_ws(user_id, ws_payload)
 
             if "email" in resolved and user.email:
                 _send_email(user.email, f"[Axal] {title}", body or title)
@@ -153,7 +158,7 @@ def notify(
                 if hook:
                     _post_slack(hook, f"*{title}*\n{body or ''}\n{link or ''}")
 
-            return row.id
+            return row_id
     except Exception as exc:
         logger.exception("notify failed for user=%s type=%s: %s", user_id, type, exc)
         return None

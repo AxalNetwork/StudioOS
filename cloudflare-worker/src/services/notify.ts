@@ -66,10 +66,13 @@ async function loadPrefs(env: Env, userId: number): Promise<Record<string, any>>
 }
 
 function resolveChannels(prefs: Record<string, any>, type: string, requested: NotifyChannel[]): NotifyChannel[] {
+  // Honor per-event, per-channel opt-outs from /settings/notifications.
+  // All three channels (in_app/email/slack) are user-toggleable and
+  // default-on; an explicit `false` in prefs[type][ch] suppresses that
+  // channel for that event type.
   const ev = (prefs && typeof prefs === 'object' ? (prefs[type] || {}) : {}) as Record<string, any>;
-  const out: NotifyChannel[] = ['in_app'];
+  const out: NotifyChannel[] = [];
   for (const ch of requested) {
-    if (ch === 'in_app') continue;
     const enabled = ev[ch];
     if (enabled === undefined || enabled === true) out.push(ch);
   }
@@ -108,41 +111,45 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
     const channels: NotifyChannel[] = (args.channels && args.channels.length > 0) ? args.channels : ['in_app'];
     const prefs = await loadPrefs(env, args.userId);
     const resolved = resolveChannels(prefs, args.type, channels);
+    if (resolved.length === 0) return null;
 
-    const insert: any = await env.DB.prepare(
-      `INSERT INTO notifications_inbox (user_id, type, title, body, link, payload, channel)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(
-      args.userId,
-      args.type,
-      args.title,
-      args.body ?? null,
-      args.link ?? null,
-      args.payload ? JSON.stringify(args.payload) : null,
-      resolved.join(','),
-    ).run();
-    const rowId = Number(insert?.meta?.last_row_id || 0) || null;
+    let rowId: number | null = null;
+    if (resolved.includes('in_app')) {
+      const insert: any = await env.DB.prepare(
+        `INSERT INTO notifications_inbox (user_id, type, title, body, link, payload, channel)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        args.userId,
+        args.type,
+        args.title,
+        args.body ?? null,
+        args.link ?? null,
+        args.payload ? JSON.stringify(args.payload) : null,
+        resolved.join(','),
+      ).run();
+      rowId = Number(insert?.meta?.last_row_id || 0) || null;
 
-    // Real-time push: route through the existing PipelineRoom DO 'overview'
-    // channel, which the bell already subscribes to. The DO's broadcast()
-    // filters `type:"notification"` frames to the recipient socket only —
-    // server-side authorization, NOT client-side filtering.
-    try {
-      const { notifyPipelineRoom } = await import('./realtime');
-      await notifyPipelineRoom(env, 'overview', {
-        type: 'notification',
-        user_id: args.userId,
-        notification: {
-          id: rowId,
-          type: args.type,
-          title: args.title,
-          body: args.body ?? null,
-          link: args.link ?? null,
-          read_at: null,
-          created_at: new Date().toISOString(),
-        },
-      });
-    } catch (e) { console.warn('[notify] realtime push failed', e); }
+      // Real-time push: route through the existing PipelineRoom DO 'overview'
+      // channel, which the bell already subscribes to. The DO's broadcast()
+      // filters `type:"notification"` frames to the recipient socket only —
+      // server-side authorization, NOT client-side filtering.
+      try {
+        const { notifyPipelineRoom } = await import('./realtime');
+        await notifyPipelineRoom(env, 'overview', {
+          type: 'notification',
+          user_id: args.userId,
+          notification: {
+            id: rowId,
+            type: args.type,
+            title: args.title,
+            body: args.body ?? null,
+            link: args.link ?? null,
+            read_at: null,
+            created_at: new Date().toISOString(),
+          },
+        });
+      } catch (e) { console.warn('[notify] realtime push failed', e); }
+    }
 
     if (resolved.includes('email')) {
       try {
