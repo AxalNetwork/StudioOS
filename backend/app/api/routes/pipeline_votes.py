@@ -282,20 +282,43 @@ async def cast_vote(
     public = _build_public_tally(deal_id, session)
     await manager.broadcast({"type": "vote_updated", "deal_id": deal_id, "tally": public})
 
-    # Phase 0.2 — notify admins when the vote threshold is first reached.
+    # Phase 0.2 — notify admins ONLY on the first crossing of the threshold.
+    # We persist a tiny `pipeline_vote_threshold_log` row keyed by deal_id so
+    # subsequent votes on a deal that's already crossed don't re-page admins.
     if public.get("threshold_reached"):
         try:
+            from sqlalchemy import text as _text
             from backend.app.services.notify import notify
-            admins = session.exec(select(User).where(User.role == UserRole.ADMIN)).all()
-            for admin in admins:
-                notify(
-                    user_id=admin.id,
-                    type="vote_threshold_reached",
-                    title="Vote threshold reached",
-                    body=f"Deal #{deal_id} hit {public['total_voters']} voters · weight {public['total_weight']}",
-                    link="/pipeline",
-                    payload={"deal_id": deal_id, "tally": public},
-                )
+            session.exec(_text(
+                "CREATE TABLE IF NOT EXISTS pipeline_vote_threshold_log ("
+                "deal_id INTEGER PRIMARY KEY, fired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            ))
+            session.commit()
+            already = session.exec(_text(
+                "SELECT 1 FROM pipeline_vote_threshold_log WHERE deal_id = :d"
+            ).bindparams(d=deal_id)).first()
+            if not already:
+                # Insert first so that any concurrent racer that wins the
+                # second insert hits a PK conflict and skips the fan-out.
+                try:
+                    session.exec(_text(
+                        "INSERT INTO pipeline_vote_threshold_log (deal_id) VALUES (:d)"
+                    ).bindparams(d=deal_id))
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                    already = True
+                if not already:
+                    admins = session.exec(select(User).where(User.role == UserRole.ADMIN)).all()
+                    for admin in admins:
+                        notify(
+                            user_id=admin.id,
+                            type="vote_threshold_reached",
+                            title="Vote threshold reached",
+                            body=f"Deal #{deal_id} hit {public['total_voters']} voters · weight {public['total_weight']}",
+                            link="/pipeline",
+                            payload={"deal_id": deal_id, "tally": public},
+                        )
         except Exception:
             pass
 

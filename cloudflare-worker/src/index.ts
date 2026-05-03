@@ -57,6 +57,7 @@ import matches from './routes/matches';
 import settings from './routes/settings';
 import personas from './routes/personas';
 import notificationsRoutes from './routes/notifications';
+import votesRoutes from './routes/votes';
 import { processQueueBatch } from './services/queueWorker';
 import { Jobs } from './models/jobs';
 import { queueConsumer } from './queue-consumer';
@@ -167,6 +168,7 @@ app.route('/api/settings', settings);
 app.route('/api/integrations', integrations);
 app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
+app.route('/api/pipeline/votes', votesRoutes);
 
 app.notFound((c) => c.json({ detail: 'Not found' }, 404));
 

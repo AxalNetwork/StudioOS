@@ -123,6 +123,27 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
     ).run();
     const rowId = Number(insert?.meta?.last_row_id || 0) || null;
 
+    // Real-time push: route through the existing PipelineRoom DO 'overview'
+    // channel, which the bell already subscribes to. The DO's broadcast()
+    // filters `type:"notification"` frames to the recipient socket only —
+    // server-side authorization, NOT client-side filtering.
+    try {
+      const { notifyPipelineRoom } = await import('./realtime');
+      await notifyPipelineRoom(env, 'overview', {
+        type: 'notification',
+        user_id: args.userId,
+        notification: {
+          id: rowId,
+          type: args.type,
+          title: args.title,
+          body: args.body ?? null,
+          link: args.link ?? null,
+          read_at: null,
+          created_at: new Date().toISOString(),
+        },
+      });
+    } catch (e) { console.warn('[notify] realtime push failed', e); }
+
     if (resolved.includes('email')) {
       try {
         const u: any = await env.DB.prepare(`SELECT email FROM users WHERE id = ?`).bind(args.userId).first();

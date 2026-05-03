@@ -98,8 +98,24 @@ export class PipelineRoom implements DurableObject {
   }
 
   private broadcast(event: unknown) {
+    // Server-side authorization for personal notifications: when the event
+    // is a `{type:"notification", user_id, ...}` frame published by
+    // services/notify.ts, ONLY the recipient's sockets receive it. Other
+    // events (vote_updated, stage_change, etc.) are aggregate/public and
+    // fan out to every connected viewer of the room.
+    let targetUserId: string | null = null;
+    if (event && typeof event === 'object') {
+      const e = event as Record<string, unknown>;
+      if (e.type === 'notification' && e.user_id !== undefined && e.user_id !== null) {
+        targetUserId = String(e.user_id);
+      }
+    }
     const payload = JSON.stringify(event);
     for (const ws of this.state.getWebSockets()) {
+      if (targetUserId !== null) {
+        const att = (ws.deserializeAttachment?.() as { userId?: string } | null) || null;
+        if (!att || String(att.userId) !== targetUserId) continue;
+      }
       try {
         ws.send(payload);
       } catch {
