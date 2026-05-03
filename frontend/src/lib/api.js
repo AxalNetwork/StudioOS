@@ -19,14 +19,23 @@ async function request(path, options = {}) {
         throw new Error('Session expired');
       }
       const err = await res.json().catch(() => ({}));
+      // Detail can be a structured dict (FastAPI) or a string. Surface the
+      // structured payload to callers via `error.data` so UI can render
+      // things like a live cooldown countdown without regex-parsing the msg.
+      const detailObj = (err && typeof err.detail === 'object') ? err.detail : null;
+      const errorObj = (err && typeof err.error === 'object') ? err.error : null;
       const msg =
-        (err && err.error && typeof err.error === 'object' && err.error.message) ||
+        (errorObj && errorObj.message) ||
         (typeof err.error === 'string' && err.error) ||
-        err.detail ||
+        (detailObj && detailObj.message) ||
+        (typeof err.detail === 'string' && err.detail) ||
         err.message ||
         res.statusText ||
         'Request failed';
-      throw new Error(msg);
+      const e = new Error(msg);
+      e.status = res.status;
+      e.data = detailObj || errorObj || err || null;
+      throw e;
     }
     const data = await res.json().catch(() => {
       throw new Error('Invalid response format from server');

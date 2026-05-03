@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Target, ChevronDown, ChevronUp, Play, FileText, ShieldCheck, AlertTriangle, Lock } from 'lucide-react';
+import { Target, ChevronDown, ChevronUp, Play, FileText, ShieldCheck, AlertTriangle, Lock, HelpCircle } from 'lucide-react';
 
 function ModernSelect({ value, onChange, children, ...props }) {
   return (
@@ -67,11 +67,16 @@ export default function ScoringPage() {
       const res = await api.scoreStartup(data);
       setResult(res);
     } catch (e) {
-      // The 7-day cooldown surfaces as a 429 with `code: official_cooldown`.
-      // Surface a friendlier UI hint instead of just an alert.
+      // The 7-day cooldown surfaces as a 429 with `code: official_cooldown`
+      // and a structured `locked_until` ISO timestamp. Render a live
+      // countdown instead of just echoing the raw message.
       const msg = e?.message || 'Failed to score';
-      if (/locked|cooldown|429/i.test(msg)) {
-        setCooldownInfo({ message: msg });
+      const data = e?.data || {};
+      const isCooldown = data?.code === 'official_cooldown'
+        || e?.status === 429
+        || /locked|cooldown/i.test(msg);
+      if (isCooldown) {
+        setCooldownInfo({ message: msg, locked_until: data?.locked_until || null });
       } else {
         alert(msg);
       }
@@ -148,13 +153,7 @@ export default function ScoringPage() {
             </div>
 
             {cooldownInfo && (
-              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2 text-xs flex items-start gap-2">
-                <Lock size={14} className="mt-0.5 flex-shrink-0" />
-                <span>
-                  <strong>Official scoring is on cooldown for this project.</strong> Switch to Practice mode to keep iterating;
-                  the official 7-day window resets automatically. <span className="opacity-80">{cooldownInfo.message}</span>
-                </span>
-              </div>
+              <CooldownBanner info={cooldownInfo} />
             )}
 
             {result?.requires_admin_review && (
@@ -287,6 +286,58 @@ function Section({ title, children }) {
         {title}
       </button>
       {open && <div className="grid grid-cols-2 md:grid-cols-3 gap-3 pl-5">{children}</div>}
+    </div>
+  );
+}
+
+function formatRemaining(ms) {
+  if (ms <= 0) return 'unlocking now';
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m ${sec}s`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
+function CooldownBanner({ info }) {
+  const lockedUntil = info?.locked_until ? new Date(info.locked_until) : null;
+  const valid = lockedUntil && !Number.isNaN(lockedUntil.getTime());
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!valid) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [valid]);
+  const remainingMs = valid ? lockedUntil.getTime() - now : 0;
+  return (
+    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2 text-xs flex items-start gap-2">
+      <Lock size={14} className="mt-0.5 flex-shrink-0" />
+      <div className="flex-1">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <strong>Official scoring is on cooldown for this project.</strong>
+          {valid && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 border border-amber-300 px-1.5 py-0.5 font-mono">
+              Unlocks in {formatRemaining(remainingMs)}
+            </span>
+          )}
+          <span
+            title="Each official run locks the project's scoring for 7 days so LP-facing numbers stay stable. Practice mode is unlimited and never visible to LPs. To unlock early (e.g. after a major intake change), ask an admin to run scoring with ?force=1."
+            className="inline-flex items-center cursor-help opacity-70 hover:opacity-100"
+          >
+            <HelpCircle size={12} />
+          </span>
+        </div>
+        <div className="opacity-80 mt-0.5">
+          Switch to Practice mode to keep iterating; the 7-day window resets automatically.
+          {valid && (
+            <> Unlocks at <span className="font-mono">{lockedUntil.toLocaleString()}</span>.</>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

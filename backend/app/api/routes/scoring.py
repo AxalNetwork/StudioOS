@@ -102,9 +102,15 @@ async def score_startup(
                     .order_by(ScoreSnapshot.created_at.desc())
                 ).first()
                 if last_official and last_official.locked_until and last_official.locked_until > datetime.utcnow():
+                    locked_iso = last_official.locked_until.isoformat() + "Z"
                     raise HTTPException(
                         status_code=429,
-                        detail=f"Official scoring locked until {last_official.locked_until.isoformat()}Z (use Practice mode in the meantime).",
+                        detail={
+                            "code": "official_cooldown",
+                            "locked_until": locked_iso,
+                            "previous_snapshot_id": last_official.id,
+                            "message": f"Official scoring locked until {locked_iso} (use Practice mode in the meantime).",
+                        },
                     )
 
         # Anomaly detection runs before insert so we know whether to flag.
