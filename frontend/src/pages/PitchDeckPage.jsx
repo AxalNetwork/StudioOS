@@ -1,29 +1,32 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import {
-  Sparkles, Loader2, Plus, Trash2, Copy, Share2, Printer,
-  History, RotateCcw, ChevronLeft, ChevronRight, Save,
+  Sparkles, Loader2, Plus, Trash2, Copy, Share2, Download,
+  History, RotateCcw, ChevronLeft, ChevronRight, Image as ImageIcon,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 
 // Task #25 — Pitch deck builder.
-// Single-page editor: project picker → generate 10 slides → per-slide
-// editor with autosave (each save = a new version) → version history +
-// restore → "share with investor" signed URL → print-to-PDF view.
+// Project picker → generate 10 slides (project + scoring data) → per-slide
+// editor with title/subtitle, markdown body, bullets, image URL. Autosave
+// creates a new version each save (full version history with restore).
+// Share button mints a ONE-TIME signed URL. Export uses @react-pdf/renderer.
 export default function PitchDeckPage() {
-  const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState(null);
   const [versions, setVersions] = useState([]);
-  const [deck, setDeck] = useState(null); // { id, version, title, slides, ... }
+  const [deck, setDeck] = useState(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [savingState, setSavingState] = useState('idle'); // idle|saving|saved
+  const [savingState, setSavingState] = useState('idle');
   const [shareUrl, setShareUrl] = useState('');
+  const [shareExpiresAt, setShareExpiresAt] = useState('');
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
   const saveTimer = useRef(null);
 
-  // Initial project list.
   useEffect(() => {
     api.listProjects().then((r) => {
       const list = Array.isArray(r) ? r : (r?.projects || []);
@@ -33,11 +36,9 @@ export default function PitchDeckPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load latest deck when project changes.
   useEffect(() => {
     if (!projectId) return;
-    setShareUrl('');
-    setError('');
+    setShareUrl(''); setShareExpiresAt(''); setError('');
     (async () => {
       try {
         const r = await api.deckListVersions(projectId);
@@ -46,11 +47,8 @@ export default function PitchDeckPage() {
         const current = list.find((v) => v.is_current) || list[0];
         if (current) {
           const full = await api.deckGet(current.id);
-          setDeck(full);
-          setActiveIdx(0);
-        } else {
-          setDeck(null);
-        }
+          setDeck(full); setActiveIdx(0);
+        } else { setDeck(null); }
       } catch (e) { setError(e?.message || 'Failed to load decks'); }
     })();
   }, [projectId]);
@@ -60,17 +58,14 @@ export default function PitchDeckPage() {
     setBusy(true); setError('');
     try {
       const fresh = await api.deckGenerate(projectId);
-      setDeck(fresh);
-      setActiveIdx(0);
+      setDeck(fresh); setActiveIdx(0);
       const r = await api.deckListVersions(projectId);
       setVersions(r?.versions || []);
     } catch (e) { setError(e?.message || 'Generate failed'); }
     finally { setBusy(false); }
   };
 
-  // Debounced autosave: every save creates a new version on the server
-  // (per task spec — explicit version history with restore). We mark
-  // "Saved · v{N}" in the UI so the founder sees their version number.
+  // Each save = a new version (per task spec — explicit history + restore).
   const queueSave = (next) => {
     setDeck(next);
     setSavingState('saving');
@@ -78,15 +73,12 @@ export default function PitchDeckPage() {
     saveTimer.current = setTimeout(async () => {
       try {
         const updated = await api.deckUpdate(next.id, { title: next.title, slides: next.slides });
-        setDeck(updated);
-        setSavingState('saved');
+        setDeck(updated); setSavingState('saved');
         const r = await api.deckListVersions(projectId);
         setVersions(r?.versions || []);
-        setShareUrl(''); // version bumped → existing share URL is stale
-      } catch (e) {
-        setError(e?.message || 'Autosave failed');
-        setSavingState('idle');
-      }
+        // Existing share URL is bound to the prior version → invalidate.
+        setShareUrl(''); setShareExpiresAt('');
+      } catch (e) { setError(e?.message || 'Autosave failed'); setSavingState('idle'); }
     }, 1200);
   };
 
@@ -102,9 +94,8 @@ export default function PitchDeckPage() {
   };
 
   const addSlide = () => {
-    if (!deck) return;
-    if (deck.slides.length >= 20) return;
-    const slides = [...deck.slides, { title: 'New slide', subtitle: null, bullets: [] }];
+    if (!deck || deck.slides.length >= 20) return;
+    const slides = [...deck.slides, { title: 'New slide', subtitle: null, body: '', bullets: [], image_url: null }];
     queueSave({ ...deck, slides });
     setActiveIdx(slides.length - 1);
   };
@@ -121,11 +112,10 @@ export default function PitchDeckPage() {
     setBusy(true);
     try {
       const restored = await api.deckRestore(vid);
-      setDeck(restored);
-      setActiveIdx(0);
+      setDeck(restored); setActiveIdx(0);
       const r = await api.deckListVersions(projectId);
       setVersions(r?.versions || []);
-      setShareUrl('');
+      setShareUrl(''); setShareExpiresAt('');
     } finally { setBusy(false); }
   };
 
@@ -135,14 +125,21 @@ export default function PitchDeckPage() {
     try {
       const r = await api.deckShare(deck.id, { ttl_hours: 72 });
       setShareUrl(`${window.location.origin}${r.share_path}`);
+      setShareExpiresAt(r.expires_at || '');
     } catch (e) { setError(e?.message || 'Share failed'); }
     finally { setBusy(false); }
   };
 
-  const exportPdf = () => {
+  const exportPdf = async () => {
     if (!deck) return;
-    // Open the dedicated print view; user invokes browser "Save as PDF".
-    window.open(`/deck/${deck.id}/print`, '_blank');
+    setExporting(true); setError('');
+    try {
+      await downloadDeckPdf(deck);
+    } catch (e) {
+      console.error(e);
+      setError(e?.message || 'PDF export failed');
+    }
+    finally { setExporting(false); }
   };
 
   const slide = deck?.slides?.[activeIdx];
@@ -156,7 +153,7 @@ export default function PitchDeckPage() {
             <Sparkles className="text-violet-600" size={22} /> Pitch Deck Builder
           </h1>
           <p className="text-sm text-gray-600 mt-1">
-            Generate a 10-slide deck, edit it, and share a tokenized link with investors.
+            Generate a 10-slide deck from your project + scoring data, edit each slide, and share a one-time tokenized link with investors.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -185,7 +182,6 @@ export default function PitchDeckPage() {
 
       {deck && (
         <div className="grid grid-cols-12 gap-4">
-          {/* Slide list */}
           <aside className="col-span-12 lg:col-span-3 space-y-2">
             <div className="text-xs uppercase tracking-wider text-gray-500 font-medium px-1">Slides</div>
             {deck.slides.map((s, i) => (
@@ -207,7 +203,6 @@ export default function PitchDeckPage() {
             </button>
           </aside>
 
-          {/* Editor + preview */}
           <main className="col-span-12 lg:col-span-6">
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3 text-xs">
@@ -231,18 +226,37 @@ export default function PitchDeckPage() {
                     placeholder="Subtitle (optional)"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
                   />
-                  <textarea
-                    value={bulletsText} onChange={(e) => updateBullets(activeIdx, e.target.value)}
-                    rows={8} placeholder="One bullet per line (max 6)"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono"
-                  />
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-gray-500 font-medium">Body (markdown)</label>
+                    <textarea
+                      value={slide.body || ''} onChange={(e) => updateSlide(activeIdx, { body: e.target.value })}
+                      rows={5} placeholder="**Bold**, *italic*, [links](https://…). Renders as rich text on the deck."
+                      className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-gray-500 font-medium">Bullets (one per line, max 6)</label>
+                    <textarea
+                      value={bulletsText} onChange={(e) => updateBullets(activeIdx, e.target.value)}
+                      rows={5}
+                      className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-gray-500 font-medium flex items-center gap-1">
+                      <ImageIcon size={11} /> Image URL (optional, https://)
+                    </label>
+                    <input
+                      type="url" value={slide.image_url || ''} onChange={(e) => updateSlide(activeIdx, { image_url: e.target.value || null })}
+                      placeholder="https://…/image.png"
+                      className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
                   <div className="flex items-center justify-between">
                     <button
                       onClick={() => removeSlide(activeIdx)} disabled={deck.slides.length <= 1}
                       className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 disabled:opacity-40"
-                    >
-                      <Trash2 size={12} /> Remove slide
-                    </button>
+                    ><Trash2 size={12} /> Remove slide</button>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => setActiveIdx((i) => Math.max(0, i - 1))} disabled={activeIdx === 0}
@@ -259,48 +273,55 @@ export default function PitchDeckPage() {
               )}
             </div>
 
-            {/* Live preview card */}
+            {/* Live preview */}
             {slide && (
-              <div className="mt-4 bg-gradient-to-br from-violet-600 to-violet-800 rounded-xl p-8 text-white shadow-md aspect-video flex flex-col">
+              <div className="mt-4 bg-gradient-to-br from-violet-600 to-violet-800 rounded-xl p-8 text-white shadow-md aspect-video flex flex-col overflow-hidden">
                 <div className="text-xs uppercase tracking-widest text-violet-200">{slide.subtitle || ''}</div>
                 <h2 className="text-2xl font-semibold mt-2">{slide.title}</h2>
-                <ul className="mt-4 space-y-2 text-sm">
-                  {(slide.bullets || []).map((b, i) => (
-                    <li key={i} className="flex gap-2">
-                      <span className="text-violet-200">•</span>
-                      <span>{b}</span>
-                    </li>
-                  ))}
-                </ul>
+                {slide.body && (
+                  <div className="prose prose-invert prose-sm max-w-none mt-3 text-violet-50">
+                    <ReactMarkdown>{slide.body}</ReactMarkdown>
+                  </div>
+                )}
+                {(slide.bullets || []).length > 0 && (
+                  <ul className="mt-3 space-y-1.5 text-sm">
+                    {slide.bullets.map((b, i) => (
+                      <li key={i} className="flex gap-2"><span className="text-violet-200">•</span><span>{b}</span></li>
+                    ))}
+                  </ul>
+                )}
+                {slide.image_url && (
+                  <img src={slide.image_url} alt="" className="mt-auto max-h-32 object-contain rounded self-end" />
+                )}
               </div>
             )}
           </main>
 
-          {/* Side panel: actions + versions */}
           <aside className="col-span-12 lg:col-span-3 space-y-4">
             <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
               <div className="text-xs uppercase tracking-wider text-gray-500 font-medium">Actions</div>
               <button
                 onClick={shareDeck} disabled={busy}
                 className="w-full inline-flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 py-2 rounded-lg disabled:opacity-50"
-              >
-                <Share2 size={14} /> Share with investor
-              </button>
+              ><Share2 size={14} /> Share with investor</button>
               <button
-                onClick={exportPdf}
-                className="w-full inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-violet-300 text-sm text-gray-700 font-medium px-3 py-2 rounded-lg"
+                onClick={exportPdf} disabled={exporting}
+                className="w-full inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-violet-300 text-sm text-gray-700 font-medium px-3 py-2 rounded-lg disabled:opacity-50"
               >
-                <Printer size={14} /> Export to PDF
+                {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                Export to PDF
               </button>
               {shareUrl && (
                 <div className="border border-emerald-200 bg-emerald-50 rounded-md p-2 text-xs">
-                  <div className="font-medium text-emerald-800 mb-1">Share URL (expires in 72h)</div>
+                  <div className="font-medium text-emerald-800 mb-1">One-time share URL</div>
                   <div className="flex items-center gap-1">
                     <code className="flex-1 break-all text-[11px] text-emerald-900">{shareUrl}</code>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(shareUrl)}
-                      className="text-emerald-700 hover:text-emerald-900"
-                    ><Copy size={12} /></button>
+                    <button onClick={() => navigator.clipboard.writeText(shareUrl)} className="text-emerald-700 hover:text-emerald-900">
+                      <Copy size={12} />
+                    </button>
+                  </div>
+                  <div className="mt-1 text-[10px] text-emerald-700">
+                    Single-use, expires {shareExpiresAt ? new Date(shareExpiresAt).toLocaleString() : '72h after issue'}.
                   </div>
                 </div>
               )}

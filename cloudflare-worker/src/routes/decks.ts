@@ -1,12 +1,9 @@
 /**
- * Task #25 — Pitch deck builder (Worker).
+ * Task #25 — Pitch deck builder (Worker mirror).
  *
- * Mirrors backend/app/api/routes/decks.py. Decks are versioned: every PUT
- * inserts a new row marked is_current=1 and demotes the previous version,
- * so older versions remain restorable.
- *
- * Public share URLs use HMAC-signed tokens scoped to `deck:<id>:v<version>`
- * so a leaked token can only read the specific version it was issued for.
+ * 10-slide deck pulling project + scoring data, per-slide rich-text
+ * (markdown body) + image fields, version history, restore, and
+ * ONE-TIME signed share URLs (HMAC + DB-tracked single-use).
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -30,6 +27,17 @@ async function ensureSchema(env: Env): Promise<void> {
      )`,
     `CREATE INDEX IF NOT EXISTS idx_decks_project ON pitch_decks(project_id, version)`,
     `CREATE INDEX IF NOT EXISTS idx_decks_current ON pitch_decks(project_id, is_current)`,
+    // One-time share tokens: stores SHA-256(token), atomic-claim on read.
+    `CREATE TABLE IF NOT EXISTS pitch_deck_share_tokens (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       deck_id INTEGER NOT NULL,
+       token_hash TEXT NOT NULL UNIQUE,
+       expires_at TEXT NOT NULL,
+       used_at TEXT,
+       created_by INTEGER,
+       created_at TEXT DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_deck_share_hash ON pitch_deck_share_tokens(token_hash)`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('decks schema:', e?.message); }
@@ -48,7 +56,16 @@ function fmtMoney(n: any): string | null {
   return `$${Math.round(v).toLocaleString()}`;
 }
 
-function heuristicSlides(p: any): any[] {
+async function latestScore(env: Env, projectId: number): Promise<any | null> {
+  try {
+    return await env.DB.prepare(
+      `SELECT * FROM score_snapshots WHERE project_id = ? AND is_sandbox = 0
+       ORDER BY created_at DESC LIMIT 1`
+    ).bind(projectId).first<any>();
+  } catch { return null; }
+}
+
+function heuristicSlides(p: any, snap: any | null): any[] {
   const name = p.name || 'Untitled';
   const sector = p.sector || 'your sector';
   const problem = (p.problem_statement || '').trim() || `Founders in ${sector} lack a fast way to ship and scale.`;
@@ -60,51 +77,54 @@ function heuristicSlides(p: any): any[] {
   const revenue = fmtMoney(p.revenue);
   const funding = fmtMoney(p.funding_needed);
   const useOf = (p.use_of_funds || 'Product, GTM, key hires.').trim();
-
+  const scoreLine = snap ? `Internal score: ${Math.round(Number(snap.total_score) * 10) / 10}/100 (${snap.tier}).` : '';
+  const marketLine = snap ? `Market scoring: ${Math.round(Number(snap.market_total) * 10) / 10} (urgency + trend signal).` : '';
   const arr = (xs: (string | null | undefined)[]) => xs.filter((x): x is string => !!x);
+
   return [
-    { title: 'Problem', subtitle: name, bullets: arr([problem, whyNow]) },
-    { title: 'Solution', subtitle: name, bullets: arr([solution]) },
-    { title: 'Market', subtitle: sector, bullets: arr([
+    { title: 'Problem', subtitle: name, body: problem, bullets: arr([whyNow]), image_url: null },
+    { title: 'Solution', subtitle: name, body: solution, bullets: [], image_url: null },
+    { title: 'Market', subtitle: sector, body: '', bullets: arr([
       tam ? `TAM: ${tam}` : 'TAM: large and growing',
       sam ? `SAM: ${sam}` : 'SAM: clearly addressable',
-      whyNow,
-    ]) },
-    { title: 'Traction', subtitle: "What's working", bullets: arr([
+      whyNow, marketLine,
+    ]), image_url: null },
+    { title: 'Traction', subtitle: "What's working", body: '', bullets: arr([
       users > 0 ? `${users.toLocaleString()} users` : 'Early design partners engaged',
       revenue ? `${revenue} revenue` : 'Pre-revenue, pilots in motion',
       p.growth_signals || 'Strong week-over-week engagement signals.',
-    ]) },
-    { title: 'Business model', subtitle: 'How we make money', bullets: [
+      scoreLine,
+    ]), image_url: null },
+    { title: 'Business model', subtitle: 'How we make money', body: '', bullets: [
       'Subscription / usage tier (to be locked in this quarter).',
       'Gross margin trending toward 70%+ at scale.',
-    ] },
-    { title: 'Go-to-market', subtitle: 'Channels & motion', bullets: [
+    ], image_url: null },
+    { title: 'Go-to-market', subtitle: 'Channels & motion', body: '', bullets: [
       'Founder-led sales into design partners → outbound + community.',
       'Distribution: integrations, referrals, content.',
-    ] },
-    { title: 'Competition', subtitle: 'Landscape', bullets: [
+    ], image_url: null },
+    { title: 'Competition', subtitle: 'Landscape', body: '', bullets: [
       'Incumbents are slow and unbundled.',
       'Our wedge: speed-to-value + integrated workflow.',
-    ] },
-    { title: 'Team', subtitle: 'Why us', bullets: [
+    ], image_url: null },
+    { title: 'Team', subtitle: 'Why us', body: '', bullets: [
       'Founders with domain + execution track record.',
       'Hiring plan: 2-3 senior ICs in the next 6 months.',
-    ] },
-    { title: 'Ask', subtitle: 'Round', bullets: arr([
+    ], image_url: null },
+    { title: 'Ask', subtitle: 'Round', body: '', bullets: arr([
       funding ? `Raising ${funding}` : 'Raising a focused pre-seed/seed round',
       '18-24 months of runway to hit the next milestone.',
       useOf,
-    ]) },
-    { title: 'Financials', subtitle: 'Plan', bullets: arr([
+    ]), image_url: null },
+    { title: 'Financials', subtitle: 'Plan', body: '', bullets: arr([
       'Year 1: get to repeatable revenue motion.',
       'Year 2: scale GTM, expand product surface.',
       funding ? `Burn target reflecting ${funding} raise.` : 'Disciplined burn, default-alive plan.',
-    ]) },
+    ]), image_url: null },
   ];
 }
 
-async function aiSlides(env: Env, p: any): Promise<any[] | null> {
+async function aiSlides(env: Env, p: any, snap: any | null): Promise<any[] | null> {
   const key = (env as any).OPENAI_API_KEY;
   if (!key) return null;
   try {
@@ -115,11 +135,19 @@ async function aiSlides(env: Env, p: any): Promise<any[] | null> {
       tam: p.tam, sam: p.sam, users: p.users_count, revenue: p.revenue,
       growth_signals: p.growth_signals, cost_to_mvp: p.cost_to_mvp,
       funding_needed: p.funding_needed, use_of_funds: p.use_of_funds,
+      scoring: snap ? {
+        total_score: snap.total_score, tier: snap.tier,
+        market_total: snap.market_total, team_total: snap.team_total,
+        product_total: snap.product_total, capital_total: snap.capital_total,
+        fit_total: snap.fit_total, distribution_total: snap.distribution_total,
+        ai_notes: snap.ai_notes,
+      } : null,
     };
     const prompt = `Draft a 10-slide pitch deck for the following startup. Return ONLY valid JSON of the shape:
-{"slides":[{"title":"...","subtitle":"...","bullets":["...","..."]}, ...]}
+{"slides":[{"title":"...","subtitle":"...","body":"...","bullets":["...","..."]}, ...]}
 Use exactly these slide titles in order: ${JSON.stringify(SLIDE_TITLES)}.
-Each slide should have 2-4 punchy bullets (no more than 18 words each).
+\`body\` is a 1-2 sentence narrative paragraph (markdown allowed). \`bullets\` is 2-4 punchy bullets (≤18 words each).
+Use the scoring numbers in the Traction and Market slides where helpful.
 Startup data: ${JSON.stringify(ctx)}`;
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -130,7 +158,7 @@ Startup data: ${JSON.stringify(ctx)}`;
           { role: 'system', content: 'You are a senior VC associate drafting concise pitch decks. Always return valid JSON.' },
           { role: 'user', content: prompt },
         ],
-        temperature: 0.5, max_tokens: 1400,
+        temperature: 0.5, max_tokens: 1800,
         response_format: { type: 'json_object' },
       }),
     });
@@ -138,8 +166,48 @@ Startup data: ${JSON.stringify(ctx)}`;
     const j: any = await r.json();
     const parsed = JSON.parse(j?.choices?.[0]?.message?.content || '{}');
     const slides = Array.isArray(parsed?.slides) ? parsed.slides : null;
-    return slides && slides.length >= 5 ? slides.slice(0, 10) : null;
+    return slides && slides.length >= 1 ? slides : null;
   } catch { return null; }
+}
+
+// Spec: deck "auto-creates 10 slides". Pad with fallback content from the
+// heuristic when the AI returns fewer; trim when more. Aligned by canonical
+// slide title where possible.
+function enforceTen(slides: any[], fallback: any[]): any[] {
+  const byTitle = new Map<string, any>();
+  for (const s of slides || []) {
+    if (!s || typeof s !== 'object') continue;
+    const t = String(s.title || '').trim().toLowerCase();
+    if (t && !byTitle.has(t)) byTitle.set(t, s);
+  }
+  const out: any[] = [];
+  for (let i = 0; i < SLIDE_TITLES.length; i++) {
+    const canonical = SLIDE_TITLES[i];
+    let s = byTitle.get(canonical.toLowerCase());
+    if (!s && i < slides.length && slides[i] && typeof slides[i] === 'object') s = slides[i];
+    if (!s) s = fallback[i];
+    s = { ...s };
+    if (!s.title) s.title = canonical;
+    out.push(s);
+  }
+  return out;
+}
+
+function sanitizeSlides(input: any[]): any[] {
+  return (input || []).slice(0, 20).map((s: any) => {
+    const title = String((s?.title || '') as string).trim().slice(0, 120) || 'Slide';
+    const sub = s?.subtitle ? String(s.subtitle).trim().slice(0, 200) : null;
+    const body = s?.body ? String(s.body).trim().slice(0, 4000) : '';
+    const bullets = Array.isArray(s?.bullets)
+      ? s.bullets.map((b: any) => String(b).trim().slice(0, 400)).filter((b: string) => !!b).slice(0, 6)
+      : [];
+    let image_url: string | null = null;
+    if (s?.image_url && typeof s.image_url === 'string') {
+      const u = s.image_url.trim();
+      if (/^https?:\/\//i.test(u)) image_url = u.slice(0, 1000);
+    }
+    return { title, subtitle: sub, body, bullets, image_url };
+  });
 }
 
 async function projectOwned(env: Env, user: any, projectId: number): Promise<any> {
@@ -162,17 +230,6 @@ function rowToDeck(row: any, withSlides = true): any {
   return out;
 }
 
-function sanitizeSlides(input: any[]): any[] {
-  return (input || []).slice(0, 20).map((s: any) => {
-    const title = String((s?.title || '') as string).trim().slice(0, 120) || 'Slide';
-    const sub = s?.subtitle ? String(s.subtitle).trim().slice(0, 200) : null;
-    const bullets = Array.isArray(s?.bullets)
-      ? s.bullets.map((b: any) => String(b).trim().slice(0, 400)).filter((b: string) => !!b).slice(0, 6)
-      : [];
-    return { title, subtitle: sub, bullets };
-  });
-}
-
 async function nextVersion(env: Env, projectId: number): Promise<number> {
   const row = await env.DB.prepare(
     'SELECT COALESCE(MAX(version), 0) AS v FROM pitch_decks WHERE project_id = ?'
@@ -189,7 +246,6 @@ async function insertVersion(env: Env, projectId: number, slides: any[], title: 
     `INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by)
      VALUES (?, ?, ?, ?, 1, ?)`
   ).bind(projectId, v, JSON.stringify(slides), title, userId).run();
-  // D1 returns last_row_id in meta.
   return Number((res as any)?.meta?.last_row_id || 0);
 }
 
@@ -200,14 +256,19 @@ decks.post('/generate', async (c) => {
   if (!pid) return c.json({ error: 'project_id required' }, 400);
   let p: any;
   try {
-    p = await projectOwned(c.env, user, pid);
+    await projectOwned(c.env, user, pid);
     p = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
   } catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
     return c.json({ error: 'forbidden' }, 403);
   }
   await ensureSchema(c.env);
-  const slides = sanitizeSlides((await aiSlides(c.env, p)) || heuristicSlides(p));
+  const snap = await latestScore(c.env, pid);
+  const fallback = heuristicSlides(p, snap);
+  const raw = (await aiSlides(c.env, p, snap)) || fallback;
+  const aligned = enforceTen(raw, fallback);
+  const slides = sanitizeSlides(aligned);
+  while (slides.length < 10) slides.push(fallback[slides.length]);
   const title = `${p.name} — Pitch deck`;
   const id = await insertVersion(c.env, pid, slides, title, Number(user.id) || null);
   const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
@@ -217,15 +278,13 @@ decks.post('/generate', async (c) => {
 decks.get('/by-project/:pid', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c.env, user, pid); }
-  catch (e: any) { return c.json({ error: 'forbidden' }, 403); }
+  try { await projectOwned(c.env, user, pid); } catch { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
   const rows = await c.env.DB.prepare(
     `SELECT id, project_id, version, title, is_current, created_at FROM pitch_decks
      WHERE project_id = ? ORDER BY version DESC`
   ).bind(pid).all<any>();
-  const list = ((rows.results ?? []) as any[]).map((r) => rowToDeck(r, false));
-  return c.json({ versions: list });
+  return c.json({ versions: ((rows.results ?? []) as any[]).map((r) => rowToDeck(r, false)) });
 });
 
 async function getDeckRow(env: Env, id: number): Promise<any> {
@@ -235,7 +294,6 @@ async function getDeckRow(env: Env, id: number): Promise<any> {
 }
 
 decks.get('/share/:token', async (c) => {
-  // Public — verify HMAC token, then return the bound deck.
   const token = c.req.param('token');
   let payload: any;
   try { payload = await verifySignedToken(c.env, token); }
@@ -243,6 +301,15 @@ decks.get('/share/:token', async (c) => {
   const m = /^deck:(\d+):v(\d+)$/.exec(String(payload?.k || ''));
   if (!m) return c.json({ error: 'bad token scope' }, 400);
   await ensureSchema(c.env);
+  // Atomic single-use claim. D1 returns meta.changes for the affected
+  // row count, so we know whether THIS request consumed the token.
+  const h = await sha256Hex(token);
+  const claim = await c.env.DB.prepare(
+    `UPDATE pitch_deck_share_tokens SET used_at = datetime('now')
+     WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')`
+  ).bind(h).run();
+  const changes = Number((claim as any)?.meta?.changes || 0);
+  if (changes !== 1) return c.json({ error: 'share link is no longer valid' }, 403);
   const id = parseInt(m[1]);
   const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
   if (!row) return c.json({ error: 'deck not found' }, 404);
@@ -273,8 +340,7 @@ decks.put('/:id', async (c) => {
   if (!slides.length) return c.json({ error: 'slides required' }, 400);
   const title = String(body?.title || row.title || 'Pitch deck').slice(0, 200);
   const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null);
-  const newRow = await getDeckRow(c.env, newId);
-  return c.json(rowToDeck(newRow));
+  return c.json(rowToDeck(await getDeckRow(c.env, newId)));
 });
 
 decks.post('/:id/restore', async (c) => {
@@ -286,7 +352,7 @@ decks.post('/:id/restore', async (c) => {
   try { await projectOwned(c.env, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   let slides: any[] = [];
-  try { slides = JSON.parse(row.slides || '[]'); } catch {}
+  try { slides = sanitizeSlides(JSON.parse(row.slides || '[]')); } catch {}
   const newId = await insertVersion(c.env, Number(row.project_id), slides, row.title, Number(user.id) || null);
   return c.json(rowToDeck(await getDeckRow(c.env, newId)));
 });
@@ -301,12 +367,20 @@ decks.post('/:id/share', async (c) => {
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
   const ttlHours = Math.min(24 * 30, Math.max(1, Number(body?.ttl_hours) || 72));
-  const token = await mintSignedToken(c.env, `deck:${id}:v${row.version}`, ttlHours * 3600, user.email || null);
-  return c.json({ token, expires_in_seconds: ttlHours * 3600, share_path: `/deck/share/${token}` });
+  const ttlSeconds = ttlHours * 3600;
+  const token = await mintSignedToken(c.env, `deck:${id}:v${row.version}`, ttlSeconds, user.email || null);
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  await c.env.DB.prepare(
+    `INSERT INTO pitch_deck_share_tokens (deck_id, token_hash, expires_at, created_by)
+     VALUES (?, ?, ?, ?)`
+  ).bind(id, await sha256Hex(token), expiresAt, Number(user.id) || null).run();
+  return c.json({
+    token, expires_in_seconds: ttlSeconds, expires_at: expiresAt,
+    share_path: `/deck/share/${token}`, one_time: true,
+  });
 });
 
-// --- HMAC token helpers (mirror of backend file_storage helpers) ---------
-// Kept local to this module to avoid widening the worker auth surface.
+// --- HMAC token + sha helpers (mirror of backend) -----------------------
 
 function b64url(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
@@ -355,6 +429,13 @@ async function verifySignedToken(env: Env, token: string): Promise<any> {
   if (Number(payload?.exp || 0) < Math.floor(Date.now() / 1000)) throw new Error('Token expired');
   if (!payload?.k) throw new Error('Token missing key');
   return payload;
+}
+async function sha256Hex(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  const bytes = new Uint8Array(buf);
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) out += bytes[i].toString(16).padStart(2, '0');
+  return out;
 }
 
 export default decks;

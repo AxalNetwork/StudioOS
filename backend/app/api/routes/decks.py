@@ -1,9 +1,8 @@
 """Task #25 — Pitch deck builder (FastAPI dev mirror).
 
-10-slide auto-generated decks with per-slide editing, version history,
-restore, signed share URLs, and a print-ready HTML view that the user
-exports to PDF via the browser's print dialog (the simplest path that
-avoids shipping a heavy server-side PDF dependency).
+10-slide auto-generated decks pulling project + scoring data, with
+per-slide rich-text (markdown) + image edits, version history, restore,
+and one-time signed share URLs for investors.
 
 Endpoints (under /api/decks)
     POST /generate                          AI/heuristic 10-slide draft
@@ -11,25 +10,28 @@ Endpoints (under /api/decks)
     GET  /{deck_id}                         Full slide payload
     PUT  /{deck_id}                         Update slides (creates new version)
     POST /{deck_id}/restore                 Restore an earlier version
-    POST /{deck_id}/share                   Mint signed share URL
-    GET  /share/{token}                     Public read by signed token
+    POST /{deck_id}/share                   Mint one-time signed share URL
+    GET  /share/{token}                     Public read (consumes token)
+
+Slide shape: { title, subtitle?, body? (markdown), bullets?, image_url? }
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import text
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from backend.app.api.routes.auth import get_current_user
 from backend.app.database import get_session
-from backend.app.models.entities import Project, User
+from backend.app.models.entities import Project, ScoreSnapshot, User
 from backend.app.services.file_storage import mint_signed_token, verify_signed_token
 
 router = APIRouter(prefix="/decks", tags=["Pitch Decks"])
@@ -56,6 +58,22 @@ def _ensure_schema(session: Session) -> None:
         """,
         "CREATE INDEX IF NOT EXISTS idx_decks_project ON pitch_decks(project_id, version)",
         "CREATE INDEX IF NOT EXISTS idx_decks_current ON pitch_decks(project_id, is_current)",
+        # One-time share tokens. We store the SHA-256 of the token (not the
+        # token itself) so a DB leak doesn't grant access. `used_at` marks
+        # consumption; an atomic UPDATE … WHERE used_at IS NULL prevents
+        # double-spend even under concurrent reads.
+        """
+        CREATE TABLE IF NOT EXISTS pitch_deck_share_tokens (
+            id BIGSERIAL PRIMARY KEY,
+            deck_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            expires_at TIMESTAMP NOT NULL,
+            used_at TIMESTAMP,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_deck_share_hash ON pitch_deck_share_tokens(token_hash)",
     ]
     for s in stmts:
         try:
@@ -80,21 +98,37 @@ def _project_owned(session: Session, project_id: int, user: User) -> Project:
     raise HTTPException(status_code=403, detail="not your project")
 
 
-SLIDE_TEMPLATES = [
-    ("Problem", "What painful, urgent problem are you solving?"),
-    ("Solution", "Your product in one screen + one paragraph."),
-    ("Market", "TAM / SAM / SOM and why now."),
-    ("Traction", "Users, revenue, MoM growth, pilots, LOIs."),
-    ("Business model", "How you make money + unit economics."),
-    ("Go-to-market", "Channels, CAC/LTV, sales motion."),
-    ("Competition", "Landscape + your unfair advantage."),
-    ("Team", "Founders + key hires + relevant wins."),
-    ("Ask", "Round size, runway, milestones to next round."),
-    ("Financials", "12-24mo plan: revenue, burn, headcount."),
+# Slide titles are LOCKED — every generated deck has exactly these 10
+# slides in this order. The editor lets the founder rename them later;
+# the generator must guarantee the structure so investors get a deck.
+SLIDE_TITLES = [
+    "Problem", "Solution", "Market", "Traction", "Business model",
+    "Go-to-market", "Competition", "Team", "Ask", "Financials",
 ]
 
 
-def _heuristic_slides(p: Project) -> List[Dict[str, Any]]:
+def _latest_score(session: Session, project_id: int) -> Optional[ScoreSnapshot]:
+    return session.exec(
+        select(ScoreSnapshot)
+        .where(ScoreSnapshot.project_id == project_id)
+        .where(ScoreSnapshot.is_sandbox == False)  # noqa: E712
+        .order_by(ScoreSnapshot.created_at.desc())
+    ).first()
+
+
+def _score_context(snap: Optional[ScoreSnapshot]) -> Dict[str, Any]:
+    if not snap:
+        return {}
+    return {
+        "total_score": snap.total_score, "tier": snap.tier,
+        "market_total": snap.market_total, "team_total": snap.team_total,
+        "product_total": snap.product_total, "capital_total": snap.capital_total,
+        "fit_total": snap.fit_total, "distribution_total": snap.distribution_total,
+        "ai_notes": snap.ai_notes,
+    }
+
+
+def _heuristic_slides(p: Project, snap: Optional[ScoreSnapshot]) -> List[Dict[str, Any]]:
     name = p.name or "Untitled"
     sector = p.sector or "your sector"
     problem = (p.problem_statement or "").strip() or f"Founders in {sector} lack a fast way to ship and scale."
@@ -107,52 +141,63 @@ def _heuristic_slides(p: Project) -> List[Dict[str, Any]]:
     funding = p.funding_needed or 0
     use_of = (p.use_of_funds or "Product, GTM, key hires.").strip()
 
+    # Lean on scoring data when available — gives investors a credible
+    # quantitative anchor on the Traction and Market slides.
+    score_line = ""
+    market_line = ""
+    if snap:
+        score_line = f"Internal score: {round(snap.total_score, 1)}/100 ({snap.tier})."
+        market_line = f"Market scoring: {round(snap.market_total, 1)} (urgency + trend signal)."
+
     def b(*items: str) -> List[str]:
         return [x for x in items if x]
 
     return [
-        {"title": "Problem", "subtitle": name, "bullets": b(problem, why_now)},
-        {"title": "Solution", "subtitle": name, "bullets": b(solution)},
-        {"title": "Market", "subtitle": sector, "bullets": b(
+        {"title": "Problem", "subtitle": name,
+         "body": problem, "bullets": b(why_now), "image_url": None},
+        {"title": "Solution", "subtitle": name,
+         "body": solution, "bullets": [], "image_url": None},
+        {"title": "Market", "subtitle": sector, "body": "", "bullets": b(
             f"TAM: ${tam:,.0f}" if tam else "TAM: large and growing",
             f"SAM: ${sam:,.0f}" if sam else "SAM: clearly addressable",
-            why_now,
-        )},
-        {"title": "Traction", "subtitle": "What's working", "bullets": b(
+            why_now, market_line,
+        ), "image_url": None},
+        {"title": "Traction", "subtitle": "What's working", "body": "", "bullets": b(
             f"{users:,} users" if users else "Early design partners engaged",
             f"${revenue:,.0f} revenue" if revenue else "Pre-revenue, pilots in motion",
             (p.growth_signals or "Strong week-over-week engagement signals."),
-        )},
-        {"title": "Business model", "subtitle": "How we make money", "bullets": b(
+            score_line,
+        ), "image_url": None},
+        {"title": "Business model", "subtitle": "How we make money", "body": "", "bullets": [
             "Subscription / usage tier (to be locked in this quarter).",
             "Gross margin trending toward 70%+ at scale.",
-        )},
-        {"title": "Go-to-market", "subtitle": "Channels & motion", "bullets": b(
+        ], "image_url": None},
+        {"title": "Go-to-market", "subtitle": "Channels & motion", "body": "", "bullets": [
             "Founder-led sales into design partners → outbound + community.",
             "Distribution: integrations, referrals, content.",
-        )},
-        {"title": "Competition", "subtitle": "Landscape", "bullets": b(
+        ], "image_url": None},
+        {"title": "Competition", "subtitle": "Landscape", "body": "", "bullets": [
             "Incumbents are slow and unbundled.",
             "Our wedge: speed-to-value + integrated workflow.",
-        )},
-        {"title": "Team", "subtitle": "Why us", "bullets": b(
+        ], "image_url": None},
+        {"title": "Team", "subtitle": "Why us", "body": "", "bullets": [
             "Founders with domain + execution track record.",
             "Hiring plan: 2-3 senior ICs in the next 6 months.",
-        )},
-        {"title": "Ask", "subtitle": "Round", "bullets": b(
+        ], "image_url": None},
+        {"title": "Ask", "subtitle": "Round", "body": "", "bullets": b(
             (f"Raising ${funding:,.0f}" if funding else "Raising a focused pre-seed/seed round"),
             "18-24 months of runway to hit the next milestone.",
             use_of,
-        )},
-        {"title": "Financials", "subtitle": "Plan", "bullets": b(
+        ), "image_url": None},
+        {"title": "Financials", "subtitle": "Plan", "body": "", "bullets": b(
             "Year 1: get to repeatable revenue motion.",
             "Year 2: scale GTM, expand product surface.",
             (f"Burn target reflecting ${funding:,.0f} raise." if funding else "Disciplined burn, default-alive plan."),
-        )},
+        ), "image_url": None},
     ]
 
 
-def _ai_slides(p: Project) -> Optional[List[Dict[str, Any]]]:
+def _ai_slides(p: Project, snap: Optional[ScoreSnapshot]) -> Optional[List[Dict[str, Any]]]:
     key = os.environ.get("OPENAI_API_KEY")
     if not key:
         return None
@@ -167,12 +212,15 @@ def _ai_slides(p: Project) -> Optional[List[Dict[str, Any]]]:
             "revenue": p.revenue, "growth_signals": p.growth_signals,
             "cost_to_mvp": p.cost_to_mvp, "funding_needed": p.funding_needed,
             "use_of_funds": p.use_of_funds,
+            "scoring": _score_context(snap),
         }
         prompt = (
             "Draft a 10-slide pitch deck for the following startup. Return ONLY valid JSON of the shape:\n"
-            '{"slides":[{"title":"...","subtitle":"...","bullets":["...","..."]}, ...]}\n'
-            f"Use exactly these slide titles in order: {[t for t,_ in SLIDE_TEMPLATES]}.\n"
-            "Each slide should have 2-4 punchy bullets (no more than 18 words each).\n"
+            '{"slides":[{"title":"...","subtitle":"...","body":"...","bullets":["...","..."]}, ...]}\n'
+            f"Use exactly these slide titles in order: {SLIDE_TITLES}.\n"
+            "`body` is a 1-2 sentence narrative paragraph (markdown allowed). "
+            "`bullets` is 2-4 punchy bullets (≤18 words each).\n"
+            "Use the scoring numbers in the Traction and Market slides where helpful.\n"
             f"Startup data: {json.dumps(ctx, default=str)}"
         )
         r = client.chat.completions.create(
@@ -181,16 +229,65 @@ def _ai_slides(p: Project) -> Optional[List[Dict[str, Any]]]:
                 {"role": "system", "content": "You are a senior VC associate drafting concise pitch decks. Always return valid JSON."},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.5, max_tokens=1400,
+            temperature=0.5, max_tokens=1800,
             response_format={"type": "json_object"},
         )
         parsed = json.loads(r.choices[0].message.content)
         slides = parsed.get("slides")
-        if isinstance(slides, list) and len(slides) >= 5:
-            return slides[:10]
+        if isinstance(slides, list) and len(slides) >= 1:
+            return slides
     except Exception:
         return None
     return None
+
+
+def _enforce_ten(slides: List[Dict[str, Any]], fallback: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Spec: deck "auto-creates 10 slides". Pad with fallback content from
+    the heuristic when the AI returns fewer; trim when it returns more.
+    Slides are aligned to the canonical SLIDE_TITLES order."""
+    by_title: Dict[str, Dict[str, Any]] = {}
+    for s in slides or []:
+        if not isinstance(s, dict):
+            continue
+        t = str(s.get("title") or "").strip()
+        if t:
+            by_title.setdefault(t.lower(), s)
+    out: List[Dict[str, Any]] = []
+    for i, canonical_title in enumerate(SLIDE_TITLES):
+        s = by_title.get(canonical_title.lower())
+        if not s and i < len(slides):
+            s = slides[i] if isinstance(slides[i], dict) else None
+        if not s:
+            s = fallback[i]
+        # Ensure title matches the canonical slot.
+        s = dict(s)
+        s.setdefault("title", canonical_title)
+        out.append(s)
+    return out
+
+
+def _sanitize_slides(slides: List[Any]) -> List[Dict[str, Any]]:
+    safe = []
+    for s in slides[:20]:
+        if not isinstance(s, dict):
+            continue
+        title = str(s.get("title") or "").strip()[:120] or "Slide"
+        subtitle = s.get("subtitle")
+        subtitle = str(subtitle).strip()[:200] if subtitle else None
+        body = s.get("body")
+        body = str(body).strip()[:4000] if body else ""
+        bullets_raw = s.get("bullets") or []
+        bullets = [str(b).strip()[:400] for b in bullets_raw if str(b).strip()][:6]
+        # image_url restricted to http(s) — protects the print/PDF render
+        # path from javascript:/data: URL injection.
+        image_url = s.get("image_url")
+        if image_url and isinstance(image_url, str) and re.match(r"^https?://", image_url.strip(), re.I):
+            image_url = image_url.strip()[:1000]
+        else:
+            image_url = None
+        safe.append({"title": title, "subtitle": subtitle, "body": body,
+                     "bullets": bullets, "image_url": image_url})
+    return safe
 
 
 def _row_to_deck(row, *, with_slides: bool = True) -> Dict[str, Any]:
@@ -248,7 +345,9 @@ class GeneratePayload(BaseModel):
 class SlideModel(BaseModel):
     title: str = Field(..., min_length=1, max_length=120)
     subtitle: Optional[str] = Field(default=None, max_length=200)
+    body: Optional[str] = Field(default="", max_length=4000)
     bullets: List[str] = Field(default_factory=list)
+    image_url: Optional[str] = Field(default=None, max_length=1000)
 
 
 class DeckUpdate(BaseModel):
@@ -276,16 +375,14 @@ def _deck_row(session: Session, deck_id: int):
 def generate(payload: GeneratePayload, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
     p = _project_owned(session, payload.project_id, user)
     _ensure_schema(session)
-    slides = _ai_slides(p) or _heuristic_slides(p)
-    # Sanitize bullets to plain strings.
-    safe_slides = []
-    for s in slides:
-        title = str((s.get("title") if isinstance(s, dict) else "") or "").strip()[:120] or "Slide"
-        subtitle = (s.get("subtitle") if isinstance(s, dict) else None)
-        subtitle = str(subtitle).strip()[:200] if subtitle else None
-        bullets_raw = (s.get("bullets") if isinstance(s, dict) else []) or []
-        bullets = [str(b).strip()[:400] for b in bullets_raw if str(b).strip()][:6]
-        safe_slides.append({"title": title, "subtitle": subtitle, "bullets": bullets})
+    snap = _latest_score(session, p.id)
+    fallback = _heuristic_slides(p, snap)
+    raw = _ai_slides(p, snap) or fallback
+    aligned = _enforce_ten(raw, fallback)
+    safe_slides = _sanitize_slides(aligned)
+    # _enforce_ten guarantees 10; sanity guard anyway.
+    while len(safe_slides) < 10:
+        safe_slides.append(fallback[len(safe_slides)])
     title = f"{p.name} — Pitch deck"
     deck_id = _insert_version(session, p.id, safe_slides, title, user)
     row = _deck_row(session, deck_id)
@@ -318,7 +415,9 @@ def update_deck(deck_id: int, payload: DeckUpdate, user: User = Depends(get_curr
     _ensure_schema(session)
     row = _deck_row(session, deck_id)
     _project_owned(session, row["project_id"], user)
-    slides = [s.model_dump() for s in payload.slides][:20]
+    slides = _sanitize_slides([s.model_dump() for s in payload.slides])
+    if not slides:
+        raise HTTPException(status_code=422, detail="at least one slide required")
     title = payload.title or row["title"] or "Pitch deck"
     new_id = _insert_version(session, int(row["project_id"]), slides, title, user)
     new_row = _deck_row(session, new_id)
@@ -331,18 +430,26 @@ def restore(deck_id: int, user: User = Depends(get_current_user), session: Sessi
     row = _deck_row(session, deck_id)
     _project_owned(session, row["project_id"], user)
     try:
-        slides = json.loads(row["slides"] or "[]")
+        slides = _sanitize_slides(json.loads(row["slides"] or "[]"))
     except Exception:
         slides = []
     new_id = _insert_version(session, int(row["project_id"]), slides, row["title"], user)
     return _row_to_deck(_deck_row(session, new_id))
 
 
-# Signed share URLs reuse the existing HMAC helper. The token's `k` field
-# is namespaced as `deck:{id}:v{version}` so a leaked token is bound to a
-# single immutable version and can't be re-pointed.
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 @router.post("/{deck_id}/share")
 def share(deck_id: int, payload: SharePayload, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    """Mints a ONE-TIME share URL.
+
+    The HMAC token gives transport-layer authenticity (tamper-resistant);
+    the DB row enforces single use — the share_read endpoint atomically
+    UPDATE … WHERE used_at IS NULL, so even concurrent reads can't
+    consume the same token twice.
+    """
     _ensure_schema(session)
     row = _deck_row(session, deck_id)
     _project_owned(session, row["project_id"], user)
@@ -350,10 +457,23 @@ def share(deck_id: int, payload: SharePayload, user: User = Depends(get_current_
     key = f"deck:{deck_id}:v{row['version']}"
     actor = getattr(user, "email", None)
     token = mint_signed_token(key, ttl_seconds=ttl, actor=actor)
+    expires_at = datetime.utcnow() + timedelta(seconds=ttl)
+    session.exec(text(
+        "INSERT INTO pitch_deck_share_tokens (deck_id, token_hash, expires_at, created_by) "
+        "VALUES (:did, :h, :exp, :uid)"
+    ), params={
+        "did": deck_id,
+        "h": _token_hash(token),
+        "exp": expires_at,
+        "uid": getattr(user, "id", None),
+    })
+    session.commit()
     return {
         "token": token,
         "expires_in_seconds": ttl,
+        "expires_at": expires_at.isoformat(),
         "share_path": f"/deck/share/{token}",
+        "one_time": True,
     }
 
 
@@ -362,8 +482,10 @@ _SHARE_KEY_RE = re.compile(r"^deck:(\d+):v(\d+)$")
 
 @router.get("/share/{token}")
 def share_read(token: str, session: Session = Depends(get_session)):
-    """Public read for an investor-share token. The token binds a specific
-    deck id (no version-bumping behind the investor's back)."""
+    """Public read for an investor-share token. Single-use:
+    1. HMAC verify the token (authenticity + expiry).
+    2. Atomically claim the matching DB row (used_at WHERE NULL).
+    3. Only then return the deck."""
     try:
         payload = verify_signed_token(token)
     except ValueError as exc:
@@ -373,6 +495,17 @@ def share_read(token: str, session: Session = Depends(get_session)):
         raise HTTPException(status_code=400, detail="bad token scope")
     deck_id = int(m.group(1))
     _ensure_schema(session)
+    h = _token_hash(token)
+    # Atomic claim. Postgres returns the row count via rowcount on the
+    # underlying CursorResult; sqlmodel's exec wraps it.
+    res = session.exec(text(
+        "UPDATE pitch_deck_share_tokens SET used_at = CURRENT_TIMESTAMP "
+        "WHERE token_hash = :h AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP"
+    ), params={"h": h})
+    session.commit()
+    if getattr(res, "rowcount", 0) != 1:
+        # Either: token never minted, already consumed, or expired.
+        raise HTTPException(status_code=403, detail="share link is no longer valid")
     row = session.exec(text(
         "SELECT * FROM pitch_decks WHERE id = :id"
     ), params={"id": deck_id}).mappings().first()
