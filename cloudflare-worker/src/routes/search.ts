@@ -62,8 +62,11 @@ async function ensureAcademySchema(env: Env): Promise<void> {
  * than a 403 / role-redirect.
  */
 const ROLE_ALLOWED: Record<string, EntityType[]> = {
+  // 'founder' (entity) is admin-only — founder-role users must not be
+  // able to enumerate other founders via search, and no founder-role
+  // -accessible founder profile page exists yet.
   admin:    VALID_TYPES,
-  founder:  ['project', 'founder', 'document', 'academy_lesson'],
+  founder:  ['project', 'document', 'academy_lesson'],
   partner:  ['project', 'deal', 'document', 'academy_lesson'],
   investor: ['project', 'deal', 'document', 'academy_lesson'],
 };

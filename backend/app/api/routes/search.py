@@ -33,8 +33,11 @@ ALL_TYPES = ["project", "deal", "founder", "partner", "document", "academy_lesso
 # This prevents the palette from returning results that resolve to a
 # 403 / role-redirect — a UX trap and mild info-leak.
 ROLE_ALLOWED = {
+    # 'founder' (entity) is admin-only — founder-role users must not be
+    # able to enumerate other founders' identities/emails via search,
+    # and there is no founder-role-accessible founder profile page yet.
     "admin":    ALL_TYPES,
-    "founder":  ["project", "founder", "document", "academy_lesson"],
+    "founder":  ["project", "document", "academy_lesson"],
     "partner":  ["project", "deal", "document", "academy_lesson"],
     "investor": ["project", "deal", "document", "academy_lesson"],
 }
