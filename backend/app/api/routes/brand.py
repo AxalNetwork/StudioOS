@@ -256,10 +256,20 @@ class WaitlistPayload(BaseModel):
 # render with dangerouslySetInnerHTML on the public landing page, so we
 # strip <script>/<foreignObject> blocks and on*= event handlers before
 # accepting the payload. Anything that doesn't start with <svg is dropped.
-_SVG_SCRIPT_RE = re.compile(r"<\s*(script|foreignObject|iframe|object|embed|link|meta)\b[^>]*>.*?<\s*/\s*\1\s*>", re.IGNORECASE | re.DOTALL)
-_SVG_VOID_TAGS = re.compile(r"<\s*(script|foreignObject|iframe|object|embed|link|meta)\b[^>]*/?>", re.IGNORECASE)
+_SVG_DANGER_TAG_BLOCK = re.compile(
+    r"<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*>.*?<\s*/\s*\1\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+_SVG_DANGER_TAG_VOID = re.compile(
+    r"<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*/?>",
+    re.IGNORECASE,
+)
 _SVG_EVENT_ATTR = re.compile(r"\s+on[a-z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", re.IGNORECASE)
-_SVG_JS_HREF = re.compile(r"\s+(href|xlink:href)\s*=\s*(\"\s*javascript:[^\"]*\"|'\s*javascript:[^']*')", re.IGNORECASE)
+# Strict href stripper — kills href/xlink:href regardless of scheme, quoted
+# OR unquoted. The fallback logo we ship has no href, so dropping all of
+# them is safe and forecloses javascript:/data: bypasses the regex sanitizer
+# would otherwise miss.
+_SVG_ANY_HREF = re.compile(r"\s+(href|xlink:href)\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", re.IGNORECASE)
 
 
 def _sanitize_svg(svg: Optional[str]) -> Optional[str]:
@@ -268,10 +278,16 @@ def _sanitize_svg(svg: Optional[str]) -> Optional[str]:
     s = str(svg).strip()
     if not s.lower().startswith("<svg"):
         return None
-    s = _SVG_SCRIPT_RE.sub("", s)
-    s = _SVG_VOID_TAGS.sub("", s)
+    s = _SVG_DANGER_TAG_BLOCK.sub("", s)
+    s = _SVG_DANGER_TAG_VOID.sub("", s)
     s = _SVG_EVENT_ATTR.sub("", s)
-    s = _SVG_JS_HREF.sub("", s)
+    s = _SVG_ANY_HREF.sub("", s)
+    # Belt-and-suspenders: if anything dangerous still slipped through
+    # (e.g. obfuscated entities), drop the SVG entirely so the renderer
+    # falls back to the generated initial badge.
+    lower = s.lower()
+    if "javascript:" in lower or "<script" in lower or "onload" in lower or "onerror" in lower:
+        return None
     return s[:8000]
 
 

@@ -76,10 +76,18 @@ function sanitizeSvg(svg: string | null | undefined): string | null {
   if (!svg) return null;
   let s = String(svg).trim();
   if (!s.toLowerCase().startsWith('<svg')) return null;
-  s = s.replace(/<\s*(script|foreignObject|iframe|object|embed|link|meta)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '');
-  s = s.replace(/<\s*(script|foreignObject|iframe|object|embed|link|meta)\b[^>]*\/?>/gi, '');
+  s = s.replace(/<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '');
+  s = s.replace(/<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*\/?>/gi, '');
   s = s.replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-  s = s.replace(/\s+(href|xlink:href)\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*')/gi, '');
+  // Strip ALL href/xlink:href (quoted or unquoted, any scheme) — the
+  // generated/uploaded logo SVGs have no need for hrefs and stripping
+  // them blanket-blocks javascript:/data:text/html bypasses.
+  s = s.replace(/\s+(href|xlink:href)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  // Belt-and-suspenders: drop the whole SVG if obfuscated payloads remain.
+  const lower = s.toLowerCase();
+  if (lower.includes('javascript:') || lower.includes('<script') || lower.includes('onload') || lower.includes('onerror')) {
+    return null;
+  }
   return s.slice(0, 8000);
 }
 
