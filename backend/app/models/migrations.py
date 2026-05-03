@@ -558,3 +558,116 @@ def ensure_marketplace_columns() -> None:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_marketplace_columns: %s INDEX failed: %s", name, exc)
         session.commit()
+
+
+def ensure_service_catalogue_columns() -> None:
+    """Task #51 — Service catalogue + engagement lifecycle.
+
+    Idempotently:
+      * adds Stripe Connect onboarding columns to `partners`
+      * adds lifecycle / Stripe / SLA columns to `engagements`
+      * relaxes `engagements.quote_id` and `engagements.need_id` NOT NULL
+        (offering-sourced engagements have neither)
+      * remaps legacy `engagements.status = 'active'` → `'accepted'`
+      * creates `service_offerings` and `engagement_reviews` tables via
+        SQLModel.metadata (no-op when tables already exist)
+
+    Safe on every boot.
+    """
+    from backend.app.models.entities import (  # local import — avoid cycle at module load
+        ServiceOffering,
+        EngagementReview,
+    )
+
+    partner_cols = (
+        ("stripe_account_id", "VARCHAR"),
+        ("stripe_charges_enabled", "BOOLEAN DEFAULT FALSE NOT NULL"),
+        ("stripe_payouts_enabled", "BOOLEAN DEFAULT FALSE NOT NULL"),
+        ("stripe_onboarded_at", "TIMESTAMP"),
+    )
+    engagement_cols = (
+        ("service_offering_id", "INTEGER"),
+        ("currency", "VARCHAR DEFAULT 'usd' NOT NULL"),
+        ("sla_days", "INTEGER"),
+        ("accepted_at", "TIMESTAMP"),
+        ("started_at", "TIMESTAMP"),
+        ("delivered_at", "TIMESTAMP"),
+        ("reviewed_at", "TIMESTAMP"),
+        ("invoiced_at", "TIMESTAMP"),
+        ("cancelled_at", "TIMESTAMP"),
+        ("delivery_notes", "TEXT"),
+        ("cancel_reason", "TEXT"),
+        ("stripe_invoice_id", "VARCHAR"),
+        ("stripe_invoice_url", "VARCHAR"),
+        ("stripe_payment_status", "VARCHAR"),
+        ("amount_cents", "INTEGER"),
+        ("invoice_simulated", "BOOLEAN DEFAULT FALSE NOT NULL"),
+    )
+    indexes = (
+        ("ix_partners_stripe_account_id", "partners", "stripe_account_id"),
+        ("ix_engagements_service_offering_id", "engagements", "service_offering_id"),
+    )
+    with Session(engine) as session:
+        # 1) Create new tables if they don't exist (covers fresh DB and
+        #    incremental adds — SQLModel skips existing tables).
+        try:
+            ServiceOffering.metadata.create_all(
+                engine, tables=[ServiceOffering.__table__, EngagementReview.__table__]
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_service_catalogue_columns: create_all failed: %s", exc)
+
+        # 2) Partner Stripe columns
+        for col, ddl in partner_cols:
+            try:
+                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_service_catalogue_columns: partners.%s ALTER failed: %s", col, exc)
+
+        # 3) Engagement lifecycle / Stripe columns
+        for col, ddl in engagement_cols:
+            try:
+                session.exec(text(f"ALTER TABLE engagements ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_service_catalogue_columns: engagements.%s ALTER failed: %s", col, exc)
+
+        # 4) Relax NOT NULL on quote_id / need_id (offering-sourced rows
+        #    have neither). Safe to run repeatedly — DROP NOT NULL is a
+        #    no-op once the column is already nullable.
+        for col in ("quote_id", "need_id"):
+            try:
+                session.exec(text(f"ALTER TABLE engagements ALTER COLUMN {col} DROP NOT NULL"))
+            except Exception:  # noqa: BLE001
+                pass
+
+        # 5) Optional FK from engagements.service_offering_id → service_offerings.id.
+        #    Commit prior DDL first so a failed FK ADD (e.g. constraint
+        #    already exists on Postgres) doesn't roll back the column
+        #    additions above. The FK ALTER runs in its own savepoint.
+        session.commit()
+        try:
+            with session.begin_nested():
+                session.exec(text(
+                    "ALTER TABLE engagements "
+                    "ADD CONSTRAINT fk_engagements_service_offering "
+                    "FOREIGN KEY (service_offering_id) REFERENCES service_offerings(id)"
+                ))
+        except Exception:  # noqa: BLE001 — already exists; savepoint rolled back
+            pass
+
+        # 6) Remap legacy status='active' → 'accepted'.
+        try:
+            session.exec(text(
+                "UPDATE engagements SET status = 'accepted' WHERE status = 'active'"
+            ))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_service_catalogue_columns: status remap failed: %s", exc)
+
+        # 7) Indexes
+        for name, tbl, expr in indexes:
+            try:
+                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON {tbl}({expr})"))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_service_catalogue_columns: %s INDEX failed: %s", name, exc)
+
+        session.commit()

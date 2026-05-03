@@ -658,3 +658,59 @@ def list_categories(_: User = Depends(get_current_user)):
         "pricing_tiers": sorted(VALID_PRICING),
         "kyb_statuses": sorted(VALID_KYB),
     }
+
+
+# ---------------------------------------------------------------------------
+# Task #51 — Stripe Connect onboarding for the calling partner
+# ---------------------------------------------------------------------------
+from backend.app.services import stripe_connect  # noqa: E402  (kept local to scope)
+
+
+@router.get("/providers/me/stripe")
+def get_my_stripe_status(
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    partner = _partner_for_user(session, user)
+    if not partner:
+        raise HTTPException(status_code=403, detail="Only partner accounts have a Stripe profile")
+    return stripe_connect.stripe_status_summary(partner)
+
+
+@router.post("/providers/me/stripe/onboard")
+def start_stripe_onboarding(
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    partner = _partner_for_user(session, user)
+    if not partner:
+        raise HTTPException(status_code=403, detail="Only partner accounts may onboard to Stripe")
+    link = stripe_connect.create_account_link(partner)
+    if link.get("account_id") and partner.stripe_account_id != link["account_id"]:
+        partner.stripe_account_id = link["account_id"]
+        session.add(partner)
+        session.commit()
+    return {
+        "url": link["url"],
+        "account_id": link["account_id"],
+        "simulated": bool(link.get("simulated")),
+    }
+
+
+@router.post("/providers/me/stripe/refresh")
+def refresh_stripe_status(
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    partner = _partner_for_user(session, user)
+    if not partner:
+        raise HTTPException(status_code=403, detail="Only partner accounts may refresh Stripe status")
+    status = stripe_connect.refresh_account_status(partner)
+    partner.stripe_account_id = status.get("stripe_account_id") or partner.stripe_account_id
+    partner.stripe_charges_enabled = bool(status.get("charges_enabled"))
+    partner.stripe_payouts_enabled = bool(status.get("payouts_enabled"))
+    if partner.stripe_charges_enabled and not partner.stripe_onboarded_at:
+        partner.stripe_onboarded_at = datetime.utcnow()
+    session.add(partner)
+    session.commit()
+    return stripe_connect.stripe_status_summary(partner) | {"simulated": bool(status.get("simulated"))}

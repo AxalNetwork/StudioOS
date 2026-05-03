@@ -73,6 +73,7 @@ async def lifespan(app: FastAPI):
             ensure_score_anti_cheat_columns,
             ensure_investor_role_split,
             ensure_marketplace_columns,
+            ensure_service_catalogue_columns,
         )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
@@ -92,6 +93,8 @@ async def lifespan(app: FastAPI):
         logger.info("StudioOS migrations: investor role split applied")
         ensure_marketplace_columns()
         logger.info("StudioOS migrations: marketplace columns ensured")
+        ensure_service_catalogue_columns()
+        logger.info("StudioOS migrations: service catalogue + engagement lifecycle ensured")
     except Exception as exc:  # noqa: BLE001
         # Migrations are best-effort: a failure here must not prevent the API
         # from booting (e.g. fresh DB, missing legacy tables).
@@ -304,6 +307,8 @@ from backend.app.api.routes import needs as needs_routes  # noqa: E402
 app.include_router(needs_routes.router, prefix="/api")
 app.include_router(needs_routes.quote_router, prefix="/api")
 app.include_router(needs_routes.engagement_router, prefix="/api")
+from backend.app.api.routes import services as services_routes  # noqa: E402
+app.include_router(services_routes.router, prefix="/api")
 from backend.app.api.routes import insights as insights_routes  # noqa: E402
 app.include_router(insights_routes.router, prefix="/api")
 
@@ -345,13 +350,17 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             if "fund_id" in tuple(err.get("loc", ())) and err.get("type") in ("missing", "value_error.missing"):
                 structured_code = "ERR_DISTRIBUTION_FUND_ID_REQUIRED"
                 break
+    # exc.errors() can contain non-JSON-serializable values (bytes from
+    # JSONDecodeError ctx, Exception instances, etc.). Run through
+    # jsonable_encoder so the response handler doesn't 500.
+    from fastapi.encoders import jsonable_encoder
     body = {
         "ok": False,
         "error": {
             "code": 422,
             "type": "validation_error",
             "message": "Request validation failed",
-            "details": exc.errors(),
+            "details": jsonable_encoder(exc.errors(), custom_encoder={bytes: lambda b: b.decode("utf-8", "replace")}),
             "path": path,
         },
     }

@@ -25,15 +25,29 @@ from backend.app.database import get_session
 from backend.app.models.entities import (
     ActivityLog,
     Engagement,
+    EngagementReview,
+    Founder,
     FounderNeed,
     Partner,
     Project,
     Quote,
     RFP,
+    ServiceOffering,
     User,
     UserRole,
 )
 from backend.app.api.routes.marketplace import VALID_CATEGORIES
+from backend.app.services import stripe_connect
+
+VALID_ENGAGEMENT_STATUSES = {
+    "accepted",
+    "in_progress",
+    "delivered",
+    "reviewed",
+    "invoiced",
+    "cancelled",
+}
+TERMINAL_ENGAGEMENT_STATUSES = {"reviewed", "invoiced", "cancelled"}
 
 router = APIRouter(prefix="/needs", tags=["Needs Board & RFPs"])
 
@@ -521,6 +535,7 @@ def accept_quote(
     n.updated_at = datetime.utcnow()
     session.add(n)
 
+    now = datetime.utcnow()
     eng = Engagement(
         quote_id=q.id,
         need_id=n.id,
@@ -530,6 +545,8 @@ def accept_quote(
         price=q.price,
         deliverables=q.deliverables,
         timeline_weeks=q.timeline_weeks,
+        status="accepted",
+        accepted_at=now,
     )
     session.add(eng)
     session.add(ActivityLog(
@@ -598,9 +615,98 @@ def withdraw_quote(
 
 
 # ---------------------------------------------------------------------------
-# Engagements — read-only views (Stripe Connect invoicing in Task 5.2)
+# Engagements — Task #51 lifecycle: accepted → in_progress → delivered
+#     → reviewed → invoiced (or cancelled at any non-terminal step)
 # ---------------------------------------------------------------------------
-engagement_router = APIRouter(prefix="/engagements", tags=["Needs Board & RFPs"])
+engagement_router = APIRouter(prefix="/engagements", tags=["Engagements"])
+
+
+def _engagement_is_party(eng: Engagement, user: User) -> tuple[bool, bool, bool]:
+    """Returns (is_admin, is_founder_party, is_partner_party)."""
+    is_admin = _is_admin(user)
+    is_founder = user.role == UserRole.FOUNDER and user.founder_id == eng.founder_id
+    is_partner = user.role == UserRole.PARTNER and user.partner_id == eng.partner_id
+    return is_admin, is_founder, is_partner
+
+
+def _ensure_party(eng: Engagement, user: User) -> tuple[bool, bool, bool]:
+    is_admin, is_founder, is_partner = _engagement_is_party(eng, user)
+    if not (is_admin or is_founder or is_partner):
+        raise HTTPException(status_code=403, detail="You are not a party to this engagement")
+    return is_admin, is_founder, is_partner
+
+
+def _engagement_dto(session: Session, e: Engagement) -> dict:
+    partner = session.get(Partner, e.partner_id)
+    proj = session.get(Project, e.project_id)
+    offering = session.get(ServiceOffering, e.service_offering_id) if e.service_offering_id else None
+    reviews = session.exec(
+        select(EngagementReview).where(EngagementReview.engagement_id == e.id)
+    ).all()
+    return {
+        "id": e.id,
+        "uid": e.uid,
+        "quote_id": e.quote_id,
+        "need_id": e.need_id,
+        "service_offering_id": e.service_offering_id,
+        "service_offering_title": offering.title if offering else None,
+        "project_id": e.project_id,
+        "project_name": proj.name if proj else None,
+        "partner_id": e.partner_id,
+        "partner_name": partner.name if partner else None,
+        "founder_id": e.founder_id,
+        "price": e.price,
+        "currency": e.currency or "usd",
+        "deliverables": e.deliverables,
+        "timeline_weeks": e.timeline_weeks,
+        "sla_days": e.sla_days,
+        "status": e.status,
+        "delivery_notes": e.delivery_notes,
+        "cancel_reason": e.cancel_reason,
+        "accepted_at": e.accepted_at.isoformat() if e.accepted_at else None,
+        "started_at": e.started_at.isoformat() if e.started_at else None,
+        "delivered_at": e.delivered_at.isoformat() if e.delivered_at else None,
+        "reviewed_at": e.reviewed_at.isoformat() if e.reviewed_at else None,
+        "invoiced_at": e.invoiced_at.isoformat() if e.invoiced_at else None,
+        "cancelled_at": e.cancelled_at.isoformat() if e.cancelled_at else None,
+        "stripe_invoice_id": e.stripe_invoice_id,
+        "stripe_invoice_url": e.stripe_invoice_url,
+        "stripe_payment_status": e.stripe_payment_status,
+        "amount_cents": e.amount_cents,
+        "invoice_simulated": bool(e.invoice_simulated),
+        "reviews": [
+            {
+                "id": r.id,
+                "reviewer_role": r.reviewer_role,
+                "reviewer_user_id": r.reviewer_user_id,
+                "rating": r.rating,
+                "comment": r.comment,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in reviews
+        ],
+        "created_at": e.created_at.isoformat() if e.created_at else None,
+        "updated_at": e.updated_at.isoformat() if e.updated_at else None,
+    }
+
+
+def _load_engagement_locked(session: Session, eng_id: int) -> Engagement:
+    eng = session.exec(
+        select(Engagement).where(Engagement.id == eng_id).with_for_update()
+    ).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    return eng
+
+
+def _ensure_status(eng: Engagement, allowed: set[str]) -> None:
+    # Treat legacy `active` as `accepted` for transition checks.
+    cur = "accepted" if eng.status == "active" else eng.status
+    if cur not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Engagement is '{eng.status}'; this action requires one of {sorted(allowed)}",
+        )
 
 
 @engagement_router.get("")
@@ -617,23 +723,274 @@ def list_engagements(
         rows = session.exec(stmt.where(Engagement.partner_id == user.partner_id)).all()
     else:
         rows = []
-    out = []
-    for e in rows:
-        partner = session.get(Partner, e.partner_id)
-        proj = session.get(Project, e.project_id)
-        out.append({
-            "id": e.id,
-            "uid": e.uid,
-            "quote_id": e.quote_id,
-            "need_id": e.need_id,
-            "project_id": e.project_id,
-            "project_name": proj.name if proj else None,
-            "partner_id": e.partner_id,
-            "partner_name": partner.name if partner else None,
-            "price": e.price,
-            "deliverables": e.deliverables,
-            "timeline_weeks": e.timeline_weeks,
-            "status": e.status,
-            "created_at": e.created_at.isoformat() if e.created_at else None,
-        })
-    return {"engagements": out}
+    return {"engagements": [_engagement_dto(session, e) for e in rows]}
+
+
+@engagement_router.get("/{eng_id}")
+def get_engagement(
+    eng_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    eng = session.get(Engagement, eng_id)
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    _ensure_party(eng, user)
+    return _engagement_dto(session, eng)
+
+
+@engagement_router.post("/{eng_id}/start")
+def start_engagement(
+    eng_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Partner kicks off work. accepted → in_progress."""
+    eng = _load_engagement_locked(session, eng_id)
+    is_admin, _, is_partner = _ensure_party(eng, user)
+    if not (is_admin or is_partner):
+        raise HTTPException(status_code=403, detail="Only the assigned partner may start work")
+    _ensure_status(eng, {"accepted"})
+    now = datetime.utcnow()
+    eng.status = "in_progress"
+    eng.started_at = now
+    eng.updated_at = now
+    session.add(eng)
+    session.add(ActivityLog(
+        action="engagement_started", project_id=eng.project_id, actor=user.email,
+        user_id=user.id, details=f"engagement={eng.id}",
+    ))
+    session.commit()
+    session.refresh(eng)
+    return _engagement_dto(session, eng)
+
+
+class DeliverIn(BaseModel):
+    delivery_notes: Optional[str] = None
+
+
+@engagement_router.post("/{eng_id}/deliver")
+def deliver_engagement(
+    eng_id: int,
+    body: DeliverIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Partner marks deliverables submitted. in_progress → delivered. Unlocks reviews."""
+    eng = _load_engagement_locked(session, eng_id)
+    is_admin, _, is_partner = _ensure_party(eng, user)
+    if not (is_admin or is_partner):
+        raise HTTPException(status_code=403, detail="Only the assigned partner may mark delivered")
+    _ensure_status(eng, {"in_progress"})
+    now = datetime.utcnow()
+    eng.status = "delivered"
+    eng.delivered_at = now
+    eng.delivery_notes = (body.delivery_notes or "").strip() or None
+    eng.updated_at = now
+    session.add(eng)
+    session.add(ActivityLog(
+        action="engagement_delivered", project_id=eng.project_id, actor=user.email,
+        user_id=user.id, details=f"engagement={eng.id}",
+    ))
+    session.commit()
+    session.refresh(eng)
+    return _engagement_dto(session, eng)
+
+
+class CancelIn(BaseModel):
+    reason: Optional[str] = None
+
+
+@engagement_router.post("/{eng_id}/cancel")
+def cancel_engagement(
+    eng_id: int,
+    body: CancelIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Either party (or admin) may cancel before invoicing."""
+    eng = _load_engagement_locked(session, eng_id)
+    _ensure_party(eng, user)
+    if eng.status in TERMINAL_ENGAGEMENT_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Engagement already {eng.status}")
+    now = datetime.utcnow()
+    eng.status = "cancelled"
+    eng.cancelled_at = now
+    eng.cancel_reason = (body.reason or "").strip() or None
+    eng.updated_at = now
+    session.add(eng)
+    session.add(ActivityLog(
+        action="engagement_cancelled", project_id=eng.project_id, actor=user.email,
+        user_id=user.id, details=f"engagement={eng.id} reason={eng.cancel_reason or '-'}",
+    ))
+    session.commit()
+    session.refresh(eng)
+    return _engagement_dto(session, eng)
+
+
+class ReviewIn(BaseModel):
+    rating: int = PydField(ge=1, le=5)
+    comment: Optional[str] = None
+
+
+@engagement_router.get("/{eng_id}/reviews")
+def list_engagement_reviews(
+    eng_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    eng = session.get(Engagement, eng_id)
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    _ensure_party(eng, user)
+    rows = session.exec(
+        select(EngagementReview).where(EngagementReview.engagement_id == eng_id)
+    ).all()
+    return {
+        "reviews": [
+            {
+                "id": r.id,
+                "reviewer_role": r.reviewer_role,
+                "reviewer_user_id": r.reviewer_user_id,
+                "rating": r.rating,
+                "comment": r.comment,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
+@engagement_router.post("/{eng_id}/reviews")
+def create_engagement_review(
+    eng_id: int,
+    body: ReviewIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Two-sided review. Only allowed once per side and only after the
+    engagement is `delivered` (or further along). When both sides have
+    rated, the engagement transitions to `reviewed`.
+    """
+    eng = _load_engagement_locked(session, eng_id)
+    is_admin, is_founder, is_partner = _ensure_party(eng, user)
+    if not (is_founder or is_partner):
+        raise HTTPException(status_code=403, detail="Only the founder or partner of this engagement may review")
+    if eng.status not in {"delivered", "reviewed", "invoiced"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Reviews unlock only after the engagement is marked delivered",
+        )
+    reviewer_role = "founder" if is_founder else "partner"
+
+    # One review per side. Re-submission is rejected to keep ratings honest.
+    existing = session.exec(
+        select(EngagementReview)
+        .where(EngagementReview.engagement_id == eng_id)
+        .where(EngagementReview.reviewer_role == reviewer_role)
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"You have already submitted a {reviewer_role} review for this engagement")
+
+    review = EngagementReview(
+        engagement_id=eng_id,
+        reviewer_user_id=user.id,
+        reviewer_role=reviewer_role,
+        rating=body.rating,
+        comment=(body.comment or "").strip() or None,
+    )
+    session.add(review)
+
+    # Mirror founder→partner review onto the legacy PartnerReview table so
+    # marketplace aggregate ratings include engagement-bound feedback.
+    if reviewer_role == "founder":
+        from backend.app.models.entities import PartnerReview  # local — avoid cycle
+        session.add(PartnerReview(
+            partner_id=eng.partner_id,
+            reviewer_user_id=user.id,
+            project_id=eng.project_id,
+            rating=body.rating,
+            comment=review.comment,
+        ))
+
+    # Promote to `reviewed` once both sides have rated.
+    other_role = "partner" if reviewer_role == "founder" else "founder"
+    other = session.exec(
+        select(EngagementReview)
+        .where(EngagementReview.engagement_id == eng_id)
+        .where(EngagementReview.reviewer_role == other_role)
+    ).first()
+    now = datetime.utcnow()
+    if other and eng.status == "delivered":
+        eng.status = "reviewed"
+        eng.reviewed_at = now
+    eng.updated_at = now
+    session.add(eng)
+    session.add(ActivityLog(
+        action="engagement_reviewed", project_id=eng.project_id, actor=user.email,
+        user_id=user.id, details=f"engagement={eng.id} role={reviewer_role} rating={body.rating}",
+    ))
+    session.commit()
+    session.refresh(eng)
+    return _engagement_dto(session, eng)
+
+
+@engagement_router.post("/{eng_id}/invoice")
+def invoice_engagement(
+    eng_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Partner issues the Stripe Connect invoice. delivered|reviewed → invoiced.
+
+    Idempotent — re-calling on an already-invoiced engagement returns the
+    persisted invoice URL without hitting Stripe again.
+    """
+    eng = _load_engagement_locked(session, eng_id)
+    is_admin, _, is_partner = _ensure_party(eng, user)
+    if not (is_admin or is_partner):
+        raise HTTPException(status_code=403, detail="Only the assigned partner may invoice")
+    if eng.status == "invoiced" and eng.stripe_invoice_id:
+        return _engagement_dto(session, eng)
+    _ensure_status(eng, {"delivered", "reviewed"})
+
+    partner = session.get(Partner, eng.partner_id)
+    if not partner:
+        raise HTTPException(status_code=404, detail="Partner not found")
+
+    # Resolve founder user (for billing email).
+    founder_user = None
+    founder = session.get(Founder, eng.founder_id)
+    if founder:
+        founder_user = session.exec(
+            select(User).where(User.founder_id == founder.id)
+        ).first()
+
+    try:
+        result = stripe_connect.create_invoice(eng, partner, founder_user)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    now = datetime.utcnow()
+    eng.stripe_invoice_id = result["invoice_id"]
+    eng.stripe_invoice_url = result["invoice_url"]
+    eng.stripe_payment_status = result["status"]
+    eng.amount_cents = result["amount_cents"]
+    eng.currency = result.get("currency") or eng.currency
+    eng.invoice_simulated = bool(result.get("simulated"))
+    if eng.status != "reviewed":
+        # delivered → invoiced (skip "reviewed" if neither side rated)
+        eng.status = "invoiced"
+    else:
+        eng.status = "invoiced"
+    eng.invoiced_at = now
+    eng.updated_at = now
+    session.add(eng)
+    session.add(ActivityLog(
+        action="engagement_invoiced", project_id=eng.project_id, actor=user.email,
+        user_id=user.id,
+        details=f"engagement={eng.id} invoice={eng.stripe_invoice_id} simulated={eng.invoice_simulated}",
+    ))
+    session.commit()
+    session.refresh(eng)
+    return _engagement_dto(session, eng)

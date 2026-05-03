@@ -199,6 +199,27 @@ export const api = {
   rejectQuote: (id) => request(`/quotes/${id}/reject`, { method: 'POST' }),
   withdrawQuote: (id) => request(`/quotes/${id}/withdraw`, { method: 'POST' }),
   listEngagements: () => request('/engagements'),
+  getEngagement: (id) => request(`/engagements/${id}`),
+  startEngagement: (id) => request(`/engagements/${id}/start`, { method: 'POST' }),
+  deliverEngagement: (id, data) => request(`/engagements/${id}/deliver`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  cancelEngagement: (id, data) => request(`/engagements/${id}/cancel`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  invoiceEngagement: (id) => request(`/engagements/${id}/invoice`, { method: 'POST' }),
+  listEngagementReviews: (id) => request(`/engagements/${id}/reviews`),
+  createEngagementReview: (id, data) => request(`/engagements/${id}/reviews`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Task #51 — Service catalogue
+  listServiceOfferings: (params = {}) => request(`/services/offerings${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`),
+  getServiceOffering: (id) => request(`/services/offerings/${id}`),
+  createServiceOffering: (data) => request('/services/offerings', { method: 'POST', body: JSON.stringify(data) }),
+  updateServiceOffering: (id, data) => request(`/services/offerings/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteServiceOffering: (id) => request(`/services/offerings/${id}`, { method: 'DELETE' }),
+  listPartnerOfferings: (partnerId) => request(`/services/partners/${partnerId}/offerings`),
+  engageServiceOffering: (id, data) => request(`/services/offerings/${id}/engage`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Task #51 — Stripe Connect onboarding (partner-only)
+  getMyStripeStatus: () => request('/marketplace/providers/me/stripe'),
+  startStripeOnboarding: () => request('/marketplace/providers/me/stripe/onboard', { method: 'POST' }),
+  refreshStripeStatus: () => request('/marketplace/providers/me/stripe/refresh', { method: 'POST' }),
 
   // Task #52 — Demand heatmap + insight feed
   insightsHeatmap: (windowDays = 180) => request(`/insights/heatmap?window_days=${windowDays}`),

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Plus, Send, Check, X, AlertCircle, Search, Filter, Briefcase, Clock, DollarSign,
   ShieldCheck, FileText, Trash2, Edit3, ChevronRight, Inbox, Handshake,
+  Play, Package, Star, Receipt, XCircle, ExternalLink,
 } from 'lucide-react';
 import { api } from '../lib/api';
 
@@ -532,29 +533,280 @@ function MyQuotesTab() {
 // ---------------------------------------------------------------------------
 // Engagements
 // ---------------------------------------------------------------------------
+const ENG_TONE = {
+  accepted: 'bg-violet-50 text-violet-700 border-violet-200',
+  active: 'bg-violet-50 text-violet-700 border-violet-200',
+  in_progress: 'bg-blue-50 text-blue-700 border-blue-200',
+  delivered: 'bg-amber-50 text-amber-700 border-amber-200',
+  reviewed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  invoiced: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+  cancelled: 'bg-gray-100 text-gray-600 border-gray-200',
+};
+const ENG_LABEL = {
+  accepted: 'Accepted', active: 'Accepted', in_progress: 'In progress',
+  delivered: 'Delivered', reviewed: 'Reviewed', invoiced: 'Invoiced', cancelled: 'Cancelled',
+};
+
 function EngagementsTab({ user }) {
   const [rows, setRows] = useState([]);
   const [error, setError] = useState(null);
-  useEffect(() => { api.listEngagements().then((r) => setRows(r.engagements || [])).catch((e) => setError(e.message)); }, []);
+  const [selected, setSelected] = useState(null);
+  const isFounder = user?.role === 'founder';
+  const isPartner = user?.role === 'partner';
+
+  async function load() {
+    try { const r = await api.listEngagements(); setRows(r.engagements || []); }
+    catch (e) { setError(e.message); }
+  }
+  useEffect(() => { load(); }, []);
+
   return (
     <div className="space-y-3">
       {error && <ErrorBox message={error} />}
-      {rows.length === 0 && <Empty icon={Handshake} text="No engagements yet. Accepting a quote creates one." />}
+      {rows.length === 0 && <Empty icon={Handshake} text="No engagements yet. Accept a quote or book a service offering." />}
       {rows.map((e) => (
-        <div key={e.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold text-gray-900">{e.partner_name} ↔ {e.project_name}</div>
-            <div className="text-xs text-gray-500 mt-0.5">Started {new Date(e.created_at).toLocaleDateString()}</div>
-            <p className="text-sm text-gray-700 mt-2 whitespace-pre-line line-clamp-3">{e.deliverables}</p>
+        <button key={e.id} onClick={() => setSelected(e.id)} className="w-full text-left bg-white border border-gray-200 hover:border-violet-300 rounded-xl p-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-gray-900 truncate">{e.partner_name} ↔ {e.project_name}</div>
+            <div className="text-xs text-gray-500 mt-0.5">
+              Created {new Date(e.created_at).toLocaleDateString()}
+              {e.service_offering_title && <> · from offering “{e.service_offering_title}”</>}
+            </div>
+            <p className="text-sm text-gray-700 mt-2 whitespace-pre-line line-clamp-2">{e.deliverables}</p>
           </div>
-          <div className="text-right flex flex-col items-end gap-1">
-            <span className="text-xs px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">{e.status}</span>
+          <div className="text-right flex flex-col items-end gap-1 shrink-0">
+            <span className={`text-xs px-2 py-0.5 rounded-full border ${ENG_TONE[e.status] || ENG_TONE.cancelled}`}>{ENG_LABEL[e.status] || e.status}</span>
             <div className="text-sm font-semibold text-gray-900">${e.price.toLocaleString()}</div>
-            {e.timeline_weeks !== null && e.timeline_weeks !== undefined && <div className="text-xs text-gray-500">{e.timeline_weeks}w</div>}
+            {e.stripe_invoice_url && <a href={e.stripe_invoice_url} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()} className="text-[11px] text-violet-700 hover:underline flex items-center gap-1"><Receipt size={11} /> Invoice {e.invoice_simulated ? '(sim)' : ''}</a>}
           </div>
-        </div>
+        </button>
       ))}
-      <div className="text-[11px] text-gray-400 italic">Invoicing &amp; escrow arrive in a future task (Stripe Connect, Task 5.2).</div>
+      {selected && (
+        <EngagementDetailModal
+          engagementId={selected}
+          user={user}
+          isFounder={isFounder}
+          isPartner={isPartner}
+          onClose={() => { setSelected(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function EngagementDetailModal({ engagementId, user, isFounder, isPartner, onClose }) {
+  const [eng, setEng] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    setError(null);
+    try { setEng(await api.getEngagement(engagementId)); } catch (e) { setError(e.message); }
+  }
+  useEffect(() => { load(); /* eslint-disable-line */ }, [engagementId]);
+
+  async function action(fn) {
+    setBusy(true); setError(null);
+    try { await fn(); await load(); } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  }
+
+  if (!eng) return <Modal title="Engagement" onClose={onClose}><div className="text-sm text-gray-500">{error || 'Loading…'}</div></Modal>;
+
+  const status = eng.status === 'active' ? 'accepted' : eng.status;
+  const myReview = (eng.reviews || []).find((r) =>
+    (isFounder && r.reviewer_role === 'founder') ||
+    (isPartner && r.reviewer_role === 'partner')
+  );
+  const otherReview = (eng.reviews || []).find((r) =>
+    (isFounder && r.reviewer_role === 'partner') ||
+    (isPartner && r.reviewer_role === 'founder')
+  );
+
+  return (
+    <Modal title={`Engagement #${eng.id} — ${eng.partner_name} ↔ ${eng.project_name}`} onClose={onClose} wide>
+      <div className="space-y-4 text-sm">
+        {error && <ErrorBox message={error} />}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`text-xs px-2 py-0.5 rounded-full border ${ENG_TONE[eng.status] || ENG_TONE.cancelled}`}>{ENG_LABEL[eng.status] || eng.status}</span>
+          <span className="text-sm font-semibold text-gray-900">${eng.price.toLocaleString()} {eng.currency?.toUpperCase()}</span>
+          {eng.sla_days != null && <span className="text-xs text-gray-500">SLA {eng.sla_days}d</span>}
+          {eng.service_offering_title && <span className="text-xs text-gray-500">· From “{eng.service_offering_title}”</span>}
+        </div>
+
+        <Timeline eng={eng} />
+
+        <Field label="Deliverables"><p className="whitespace-pre-line text-gray-800">{eng.deliverables}</p></Field>
+        {eng.delivery_notes && <Field label="Delivery notes (from partner)"><p className="whitespace-pre-line text-gray-800">{eng.delivery_notes}</p></Field>}
+        {eng.cancel_reason && <Field label="Cancel reason"><p className="text-gray-800">{eng.cancel_reason}</p></Field>}
+
+        {/* State machine actions */}
+        <div className="border-t pt-3 flex flex-wrap gap-2">
+          {isPartner && status === 'accepted' && (
+            <button disabled={busy} onClick={() => action(() => api.startEngagement(eng.id))}
+              className="bg-violet-600 hover:bg-violet-700 text-white rounded-md px-3 py-1.5 text-sm flex items-center gap-1 disabled:bg-gray-300">
+              <Play size={14} /> Start work
+            </button>
+          )}
+          {isPartner && status === 'in_progress' && <DeliverButton busy={busy} onSubmit={(notes) => action(() => api.deliverEngagement(eng.id, { delivery_notes: notes }))} />}
+          {isPartner && (status === 'delivered' || status === 'reviewed') && !eng.stripe_invoice_id && (
+            <button disabled={busy} onClick={() => action(() => api.invoiceEngagement(eng.id))}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-md px-3 py-1.5 text-sm flex items-center gap-1 disabled:bg-gray-300">
+              <Receipt size={14} /> Issue Stripe invoice
+            </button>
+          )}
+          {!['invoiced', 'reviewed', 'cancelled'].includes(status) && (
+            <CancelButton busy={busy} onSubmit={(reason) => action(() => api.cancelEngagement(eng.id, { reason }))} />
+          )}
+          {eng.stripe_invoice_url && (
+            <a href={eng.stripe_invoice_url} target="_blank" rel="noreferrer"
+              className="border border-violet-300 text-violet-700 hover:bg-violet-50 rounded-md px-3 py-1.5 text-sm flex items-center gap-1">
+              <ExternalLink size={14} /> View invoice {eng.invoice_simulated && <span className="text-[10px] text-amber-700">(simulated)</span>}
+            </a>
+          )}
+        </div>
+
+        {/* Two-sided review — unlocked only after delivered */}
+        {(isFounder || isPartner) && ['delivered', 'reviewed', 'invoiced'].includes(status) && (
+          <div className="border-t pt-3 space-y-3">
+            <div className="text-xs uppercase tracking-wide text-gray-500">Reviews</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <ReviewSlot label={isFounder ? 'Your review' : 'Founder review'} review={isFounder ? myReview : otherReview} />
+              <ReviewSlot label={isPartner ? 'Your review' : 'Partner review'} review={isPartner ? myReview : otherReview} />
+            </div>
+            {!myReview && (
+              <ReviewForm
+                role={isFounder ? 'founder' : 'partner'}
+                busy={busy}
+                onSubmit={(payload) => action(() => api.createEngagementReview(eng.id, payload))}
+              />
+            )}
+          </div>
+        )}
+        {!['delivered', 'reviewed', 'invoiced', 'cancelled'].includes(status) && (
+          <div className="text-[11px] text-gray-500 italic border-t pt-3">
+            Two-sided ratings unlock once the partner marks the engagement as delivered.
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function Timeline({ eng }) {
+  const steps = [
+    { key: 'accepted_at', label: 'Accepted' },
+    { key: 'started_at', label: 'In progress' },
+    { key: 'delivered_at', label: 'Delivered' },
+    { key: 'reviewed_at', label: 'Reviewed' },
+    { key: 'invoiced_at', label: 'Invoiced' },
+  ];
+  return (
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500">
+      {steps.map((s) => {
+        const done = !!eng[s.key];
+        return (
+          <span key={s.key} className={`flex items-center gap-1 ${done ? 'text-gray-800' : 'text-gray-400'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${done ? 'bg-violet-500' : 'bg-gray-300'}`} />
+            {s.label}{done && `: ${new Date(eng[s.key]).toLocaleDateString()}`}
+          </span>
+        );
+      })}
+      {eng.cancelled_at && (
+        <span className="flex items-center gap-1 text-rose-600">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Cancelled: {new Date(eng.cancelled_at).toLocaleDateString()}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ReviewSlot({ label, review }) {
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+      <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">{label}</div>
+      {review ? (
+        <>
+          <div className="flex items-center gap-1 text-amber-500">
+            {[1, 2, 3, 4, 5].map((n) => <Star key={n} size={14} fill={n <= review.rating ? 'currentColor' : 'none'} />)}
+            <span className="text-xs text-gray-600 ml-1">{review.rating}/5</span>
+          </div>
+          {review.comment && <p className="text-sm text-gray-700 mt-1">{review.comment}</p>}
+        </>
+      ) : <div className="text-xs text-gray-400 italic">Not yet submitted</div>}
+    </div>
+  );
+}
+
+function ReviewForm({ role, busy, onSubmit }) {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+  return (
+    <div className="bg-white border border-violet-200 rounded-lg p-3 space-y-2">
+      <div className="text-xs text-gray-700 font-medium">Submit your {role} review</div>
+      <div className="flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button key={n} onClick={() => setRating(n)} className="text-amber-500">
+            <Star size={20} fill={n <= rating ? 'currentColor' : 'none'} />
+          </button>
+        ))}
+        <span className="text-xs text-gray-600 ml-2">{rating}/5</span>
+      </div>
+      <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional comment"
+        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full" />
+      <button disabled={busy} onClick={() => onSubmit({ rating, comment })}
+        className="bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-md px-3 py-1.5 text-sm">
+        Submit review
+      </button>
+    </div>
+  );
+}
+
+function DeliverButton({ busy, onSubmit }) {
+  const [open, setOpen] = useState(false);
+  const [notes, setNotes] = useState('');
+  if (!open) {
+    return (
+      <button disabled={busy} onClick={() => setOpen(true)}
+        className="bg-amber-600 hover:bg-amber-700 text-white rounded-md px-3 py-1.5 text-sm flex items-center gap-1 disabled:bg-gray-300">
+        <Package size={14} /> Mark delivered
+      </button>
+    );
+  }
+  return (
+    <div className="w-full bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+      <div className="text-xs text-gray-700">Add delivery notes (optional)</div>
+      <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="border border-amber-200 rounded-md px-3 py-1.5 text-sm w-full" />
+      <div className="flex gap-2">
+        <button disabled={busy} onClick={() => { onSubmit(notes); setOpen(false); }}
+          className="bg-amber-600 hover:bg-amber-700 text-white rounded-md px-3 py-1.5 text-sm">Confirm delivered</button>
+        <button onClick={() => setOpen(false)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function CancelButton({ busy, onSubmit }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  if (!open) {
+    return (
+      <button disabled={busy} onClick={() => setOpen(true)}
+        className="border border-rose-300 text-rose-700 hover:bg-rose-50 rounded-md px-3 py-1.5 text-sm flex items-center gap-1 disabled:opacity-50">
+        <XCircle size={14} /> Cancel engagement
+      </button>
+    );
+  }
+  return (
+    <div className="w-full bg-rose-50 border border-rose-200 rounded-lg p-3 space-y-2">
+      <div className="text-xs text-gray-700">Reason for cancellation (optional)</div>
+      <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} className="border border-rose-200 rounded-md px-3 py-1.5 text-sm w-full" />
+      <div className="flex gap-2">
+        <button disabled={busy} onClick={() => { onSubmit(reason); setOpen(false); }}
+          className="bg-rose-600 hover:bg-rose-700 text-white rounded-md px-3 py-1.5 text-sm">Confirm cancel</button>
+        <button onClick={() => setOpen(false)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm">Keep open</button>
+      </div>
     </div>
   );
 }

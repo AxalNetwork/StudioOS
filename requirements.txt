@@ -167,3 +167,4 @@ python-multipart
 sqlalchemy
 sqlmodel
 uvicorn
+stripe

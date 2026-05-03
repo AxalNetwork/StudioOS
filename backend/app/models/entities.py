@@ -351,6 +351,14 @@ class Partner(SQLModel, table=True):
     kyb_verified_at: Optional[datetime] = None
     website: Optional[str] = None
     listed: bool = Field(default=False, index=True)  # opt-in to marketplace listing
+    # Task #51 — Stripe Connect onboarding state. Populated when the
+    # partner clicks "Connect Stripe" and Stripe redirects back. Without a
+    # connected account, founders may still book offerings but invoicing
+    # surfaces a clear "partner not yet onboarded" error.
+    stripe_account_id: Optional[str] = Field(default=None, index=True)
+    stripe_charges_enabled: bool = Field(default=False)
+    stripe_payouts_enabled: bool = Field(default=False)
+    stripe_onboarded_at: Optional[datetime] = None
 
 
 class PartnerReview(SQLModel, table=True):
@@ -465,26 +473,92 @@ class InsightDigest(SQLModel, table=True):
 
 
 class Engagement(SQLModel, table=True):
-    """Created when a founder accepts a quote — represents the active
-    engagement between a founder/project and a partner. Stripe Connect
-    invoicing layers on top in Task 5.2 (out of scope here).
+    """Task #51 — Engagement lifecycle.
+
+    Materialised when (a) a founder accepts a quote on a need, or
+    (b) a founder books a partner's `ServiceOffering` directly.
+
+    State machine (server-enforced):
+        accepted → in_progress → delivered → reviewed → invoiced
+                                   ↘ cancelled (terminal, allowed from any non-terminal)
+    Legacy `active` rows (created before the lifecycle was added) are
+    treated as `accepted`.
     """
     __tablename__ = "engagements"
     id: Optional[int] = Field(default=None, primary_key=True)
     uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
-    quote_id: int = Field(foreign_key="quotes.id", unique=True, index=True)
-    # One engagement per need — prevents the race where two concurrent
-    # `accept_quote` calls both win.
-    need_id: int = Field(foreign_key="founder_needs.id", unique=True, index=True)
+    # quote_id / need_id are nullable for offering-sourced engagements that
+    # bypass the needs board. The DB unique constraints stay (NULLs are
+    # distinct in Postgres) so quote-sourced rows still get one-per-quote.
+    quote_id: Optional[int] = Field(default=None, foreign_key="quotes.id", unique=True, index=True)
+    need_id: Optional[int] = Field(default=None, foreign_key="founder_needs.id", unique=True, index=True)
+    service_offering_id: Optional[int] = Field(default=None, foreign_key="service_offerings.id", index=True)
     project_id: int = Field(foreign_key="projects.id", index=True)
     founder_id: int = Field(foreign_key="founders.id", index=True)
     partner_id: int = Field(foreign_key="partners.id", index=True)
     price: float
+    currency: str = Field(default="usd")
     deliverables: str
     timeline_weeks: Optional[int] = None
-    status: str = Field(default="active", index=True)  # active | completed | cancelled
+    sla_days: Optional[int] = None
+    status: str = Field(default="accepted", index=True)
+    # Lifecycle timestamps — populated as the state machine advances.
+    accepted_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    started_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    invoiced_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
+    delivery_notes: Optional[str] = None
+    cancel_reason: Optional[str] = None
+    # Stripe Connect invoicing — populated on POST /engagements/{id}/invoice.
+    stripe_invoice_id: Optional[str] = None
+    stripe_invoice_url: Optional[str] = None
+    stripe_payment_status: Optional[str] = None  # draft | open | paid | void | uncollectible
+    amount_cents: Optional[int] = None
+    invoice_simulated: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ServiceOffering(SQLModel, table=True):
+    """Task #51 — Productised partner offering.
+
+    Partners list service packages (title, price, deliverables, SLA) that
+    founders can engage directly without going through the needs/RFP loop.
+    """
+    __tablename__ = "service_offerings"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    partner_id: int = Field(foreign_key="partners.id", index=True)
+    title: str
+    description: str
+    deliverables: str  # markdown / newline-separated bullets
+    category: str = Field(index=True)  # mirrors marketplace VALID_CATEGORIES
+    price: float
+    currency: str = Field(default="usd")
+    sla_days: Optional[int] = None  # promised turnaround in calendar days
+    listed: bool = Field(default=True, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class EngagementReview(SQLModel, table=True):
+    """Task #51 — Two-sided rating, gated to post-`delivered` engagements.
+
+    One row per (engagement, reviewer_role). Both founder and partner may
+    rate each other; once both sides have rated (or one side rates and the
+    other is past the auto-close window), the engagement transitions to
+    `reviewed`.
+    """
+    __tablename__ = "engagement_reviews"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    engagement_id: int = Field(foreign_key="engagements.id", index=True)
+    reviewer_user_id: int = Field(foreign_key="users.id", index=True)
+    reviewer_role: str = Field(index=True)  # founder | partner
+    rating: int = Field(ge=1, le=5)
+    comment: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class VCFund(SQLModel, table=True):

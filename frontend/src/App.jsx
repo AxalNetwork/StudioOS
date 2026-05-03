@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
-  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare,
+  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package,
   Settings as SettingsIcon
 } from 'lucide-react';
 import { api } from './lib/api';
@@ -62,6 +62,7 @@ import RoadmapPage from './pages/RoadmapPage';
 import MetricsPage from './pages/MetricsPage';
 import MarketplacePage from './pages/MarketplacePage';
 import NeedsBoardPage from './pages/NeedsBoardPage';
+import ServiceCatalogPage from './pages/ServiceCatalogPage';
 import PartnerInsightsPage from './pages/PartnerInsightsPage';
 import PitchDeckPrintPage from './pages/PitchDeckPrintPage';
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
@@ -114,6 +115,7 @@ const NAV_BY_ROLE = {
     { to: '/tickets', icon: Ticket, label: 'Support' },
     { to: '/integrations', icon: Plug, label: 'Integrations' },
     { to: '/marketplace', icon: Briefcase, label: 'Marketplace' },
+    { to: '/services', icon: Package, label: 'Service Catalogue' },
     { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
     { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
 
@@ -147,6 +149,8 @@ const NAV_BY_ROLE = {
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
 
     { section: 'Network & Growth' },
+    { to: '/services', icon: Package, label: 'Service Catalogue' },
+    { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
     { to: '/refer', icon: Share2, label: 'Refer & Earn' },
     { to: '/relationships', icon: Handshake, label: 'Relationships' },
     { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
@@ -182,6 +186,8 @@ const NAV_BY_ROLE = {
     { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
 
     { section: 'Network' },
+    { to: '/services', icon: Package, label: 'My Service Catalogue' },
+    { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
     { to: '/partners', icon: Users, label: 'Partners' },
     { to: '/refer', icon: Share2, label: 'Refer & Earn' },
     { to: '/relationships', icon: Handshake, label: 'Relationships' },
@@ -755,6 +761,7 @@ export default function App() {
       <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], <MetricsPage />)} />
       <Route path="/marketplace" element={guard(['admin', 'founder', 'partner', 'investor'], <MarketplacePage user={user} />)} />
       <Route path="/needs" element={guard(['admin', 'founder', 'partner', 'investor'], <NeedsBoardPage user={user} />)} />
+      <Route path="/services" element={guard(['admin', 'founder', 'partner', 'investor'], <ServiceCatalogPage user={user} />)} />
       <Route path="/founder/post-need" element={guard(['admin', 'founder'], <NeedsBoardPage user={user} />)} />
       <Route path="/partner/needs" element={guard(['admin', 'partner'], <NeedsBoardPage user={user} />)} />
       <Route path="/partner/insights" element={guard(['admin', 'partner', 'investor'], <PartnerInsightsPage />)} />
