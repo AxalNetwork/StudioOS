@@ -367,7 +367,11 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
             projectId: f.projectId,
             projectName,
             totalScore: f.totalScore,
-            flags: [{ type: 'hash_mismatch', severity: 'high', detail: f.reason }],
+            flags: [{
+              type: f.reason === 'missing_hash' ? 'missing_hash' : 'hash_mismatch',
+              severity: 'high',
+              detail: f.reason,
+            }],
             source: 'hash_audit',
           });
         } catch (e) { console.error('[score_hash_audit] notify failed', e); }
