@@ -284,6 +284,10 @@ from backend.app.api.routes import progress as progress_routes  # noqa: E402
 app.include_router(progress_routes.router, prefix="/api")
 from backend.app.api.routes import marketplace as marketplace_routes  # noqa: E402
 app.include_router(marketplace_routes.router, prefix="/api")
+from backend.app.api.routes import needs as needs_routes  # noqa: E402
+app.include_router(needs_routes.router, prefix="/api")
+app.include_router(needs_routes.quote_router, prefix="/api")
+app.include_router(needs_routes.engagement_router, prefix="/api")
 
 
 # ---------------------------------------------------------------------------

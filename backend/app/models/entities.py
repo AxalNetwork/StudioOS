@@ -386,6 +386,85 @@ class MarketplaceMessage(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+# ---------------------------------------------------------------------------
+# Task #50 — Needs board + RFP system
+# ---------------------------------------------------------------------------
+class FounderNeed(SQLModel, table=True):
+    """Lightweight 'I need help with X' post by a founder.
+
+    May escalate to a formal RFP (one-to-one) for detailed scope review.
+    Quotes hang off the need (and optionally reference the RFP).
+    """
+    __tablename__ = "founder_needs"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    founder_id: int = Field(foreign_key="founders.id", index=True)
+    category: str = Field(index=True)  # legal | accounting | design | recruiting | fractional_cfo | gtm | engineering | marketing
+    title: str
+    description: str
+    budget_min: Optional[float] = None
+    budget_max: Optional[float] = None
+    timeline: Optional[str] = None  # free-form e.g. "2 weeks", "Q3"
+    status: str = Field(default="open", index=True)  # open | in_review | closed | filled
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class RFP(SQLModel, table=True):
+    __tablename__ = "rfps"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    need_id: int = Field(foreign_key="founder_needs.id", unique=True, index=True)
+    scope_md: str
+    deliverables_md: Optional[str] = None
+    deadline_at: Optional[datetime] = None
+    status: str = Field(default="open", index=True)  # open | closed
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Quote(SQLModel, table=True):
+    """Partner submission against a need / RFP."""
+    __tablename__ = "quotes"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    need_id: int = Field(foreign_key="founder_needs.id", index=True)
+    rfp_id: Optional[int] = Field(default=None, foreign_key="rfps.id", index=True)
+    partner_id: int = Field(foreign_key="partners.id", index=True)
+    submitted_by_user_id: int = Field(foreign_key="users.id", index=True)
+    price: float
+    timeline_weeks: Optional[int] = None
+    deliverables: str
+    notes: Optional[str] = None
+    # pending | accepted | rejected | withdrawn
+    status: str = Field(default="pending", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Engagement(SQLModel, table=True):
+    """Created when a founder accepts a quote — represents the active
+    engagement between a founder/project and a partner. Stripe Connect
+    invoicing layers on top in Task 5.2 (out of scope here).
+    """
+    __tablename__ = "engagements"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    quote_id: int = Field(foreign_key="quotes.id", unique=True, index=True)
+    # One engagement per need — prevents the race where two concurrent
+    # `accept_quote` calls both win.
+    need_id: int = Field(foreign_key="founder_needs.id", unique=True, index=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    founder_id: int = Field(foreign_key="founders.id", index=True)
+    partner_id: int = Field(foreign_key="partners.id", index=True)
+    price: float
+    deliverables: str
+    timeline_weeks: Optional[int] = None
+    status: str = Field(default="active", index=True)  # active | completed | cancelled
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class VCFund(SQLModel, table=True):
     """Canonical fund container. Replaces `entities` rows of type 'vc_fund'."""
     __tablename__ = "vc_funds"

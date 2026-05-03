@@ -185,6 +185,21 @@ export const api = {
   postInquiryMessage: (id, body) => request(`/marketplace/inquiries/${id}/messages`, { method: 'POST', body: JSON.stringify({ body }) }),
   closeInquiry: (id) => request(`/marketplace/inquiries/${id}/close`, { method: 'POST' }),
 
+  // Task #50 — Needs board + RFPs + Quotes
+  listNeeds: (params = {}) => request(`/needs${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`),
+  getNeed: (id) => request(`/needs/${id}`),
+  createNeed: (data) => request('/needs', { method: 'POST', body: JSON.stringify(data) }),
+  updateNeed: (id, data) => request(`/needs/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteNeed: (id) => request(`/needs/${id}`, { method: 'DELETE' }),
+  upsertRfp: (needId, data) => request(`/needs/${needId}/rfp`, { method: 'POST', body: JSON.stringify(data) }),
+  submitQuote: (needId, data) => request(`/needs/${needId}/quotes`, { method: 'POST', body: JSON.stringify(data) }),
+  listQuotesForNeed: (needId) => request(`/needs/${needId}/quotes`),
+  myQuotes: () => request('/quotes/me'),
+  acceptQuote: (id) => request(`/quotes/${id}/accept`, { method: 'POST' }),
+  rejectQuote: (id) => request(`/quotes/${id}/reject`, { method: 'POST' }),
+  withdrawQuote: (id) => request(`/quotes/${id}/withdraw`, { method: 'POST' }),
+  listEngagements: () => request('/engagements'),
+
   askAdvisory: (data) => request('/advisory/ask', { method: 'POST', body: JSON.stringify(data) }),
   financialPlan: (data) => request('/advisory/financial-plan', { method: 'POST', body: JSON.stringify(data) }),
   runDiligence: (data) => request('/advisory/diligence', { method: 'POST', body: JSON.stringify(data) }),

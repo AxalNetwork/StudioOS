@@ -164,3 +164,33 @@ A discoverable directory of vetted service providers. The Partner role from Phas
 **Frontend (`/marketplace`, top-nav under Network):**
 - `MarketplacePage.jsx` — three tabs: **Browse** (filter bar + provider cards with verified badge, rating, response time, capacity chip, pricing tier; detail modal with full bio, sectors, reviews, "Send inquiry" CTA), **My inquiries** (Inbox-style two-pane thread view with chat bubbles, ⌘/Ctrl+Enter to send, close action), **My listing** (partner-only — toggle `listed`, edit headline/bio/categories/sectors/pricing/rate range/capacity/response SLA/website).
 - Visible to admin/founder/partner/investor; partners cannot inquire to themselves; founders are the only role that can leave reviews.
+
+## Task #50 — Needs board + RFP system (this commit)
+
+A two-sided needs marketplace that complements the provider directory: founders post needs (and optional formal RFPs), partners submit quotes, accepted quote materialises an `Engagement`. Stripe Connect invoicing (Task 5.2) and escrow are out of scope — `Engagement` is the handoff target.
+
+**Schema (new tables, all auto-created via SQLModel):**
+- `founder_needs(project_id, founder_id, category, title, description, budget_min/max, timeline, status open|in_review|closed|filled)`.
+- `rfps(need_id UNIQUE, scope_md, deliverables_md, deadline_at, status)` — 1:1 escalation of a need.
+- `quotes(need_id, rfp_id?, partner_id, submitted_by_user_id, price, timeline_weeks, deliverables, notes, status pending|accepted|rejected|withdrawn)`.
+- `engagements(quote_id UNIQUE, need_id UNIQUE, project_id, founder_id, partner_id, price, deliverables, timeline_weeks, status)` — `need_id` is uniquely constrained at the DB level (`engagements_need_id_unique`) to make the accept-race impossible.
+
+**Backend (`backend/app/api/routes/needs.py`, three routers mounted at `/api`):**
+- Needs: `POST/GET /needs`, `GET/PATCH/DELETE /needs/{id}`, `POST /needs/{id}/rfp` (upsert), `POST/GET /needs/{id}/quotes`.
+- Quotes: `GET /quotes/me`, `POST /quotes/{id}/{accept,reject,withdraw}`.
+- Engagements: `GET /engagements` (read-only; scoped per role).
+
+**Authorization & state machine:**
+- Needs are created only by founders with explicit `user.founder_id` against a project they own; partners need explicit `user.partner_id` to quote.
+- `_can_view_need`: founders → own only; partners/investors → only `open|in_review` (filled/closed are hidden); admin → all. `list_quotes_for_need` reuses this gate, with the exception that a partner who already submitted a quote may always read the per-need quote list.
+- One active quote per partner per need — re-submission updates the pending row instead of stacking duplicates; accepted quotes cannot be overwritten.
+- `accept_quote` takes a `SELECT … FOR UPDATE` row lock on the parent need, re-checks status, marks the chosen quote `accepted`, transitions other pending quotes to `rejected`, sets the need to `filled`, and inserts the `Engagement` row. The need_id unique constraint on `engagements` is the final DB-level safeguard.
+- `delete_need` blocks if any quote is `accepted` (preserves engagement integrity); cascades pending quotes + RFP otherwise.
+
+**Frontend (`/needs`, `/founder/post-need`, `/partner/needs` — top-nav "Needs Board"):**
+- `NeedsBoardPage.jsx` — four tabs: **Browse** (open needs, filter by category/keyword), **My needs** (founders — post / edit / RFP escalation / accept-reject quotes), **My quotes** (partners — submitted quote list with withdraw), **Engagements** (accepted-quote handoffs, scoped by role).
+- Modals for need form, RFP scope/deliverables/deadline, and quote submission. Founders see all quotes on their needs; partners see only their own (plus accepted on a filled need).
+
+**`api.js` additions:** `listNeeds`, `getNeed`, `createNeed`, `updateNeed`, `deleteNeed`, `upsertRfp`, `submitQuote`, `listQuotesForNeed`, `myQuotes`, `acceptQuote`, `rejectQuote`, `withdrawQuote`, `listEngagements`.
+
+**Categories** are reused from `marketplace.VALID_CATEGORIES` for symmetry with the provider directory.
