@@ -94,6 +94,10 @@ export const api = {
   listDocuments: (projectId) => request(`/legal/documents${projectId ? `?project_id=${projectId}` : ''}`),
   getDocument: (id) => request(`/legal/documents/${id}`),
   incorporateProject: (projectId) => request(`/legal/incorporate?project_id=${projectId}`, { method: 'POST' }),
+  // Task #30 — Jurisdiction wizard
+  legalJurisdictions: () => request('/legal/jurisdictions'),
+  legalIncorporateWizard: (data) =>
+    request('/legal/incorporate/wizard', { method: 'POST', body: JSON.stringify(data) }),
   spinoutProject: (projectId) => request(`/legal/spinout/${projectId}`, { method: 'POST' }),
   listEntities: () => request('/legal/entities'),
 

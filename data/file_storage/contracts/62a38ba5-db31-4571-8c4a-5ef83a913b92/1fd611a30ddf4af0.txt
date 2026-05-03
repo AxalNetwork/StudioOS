@@ -1,0 +1,22 @@
+COMPANIES HOUSE IN01 FILING KIT — Test Wizard Limited LIMITED
+
+Filing fee: £50 standard (24h) or £78 same-day.
+
+REQUIRED INFORMATION
+1. Proposed company name: Test Wizard Limited Limited
+2. Registered office address (must be in UK): _______________
+3. Director(s) — full name, DOB, nationality, occupation, residential
+   address (kept private), service address (public).
+4. Shareholder(s) — initial subscriber details.
+5. People with significant control (PSC) — anyone holding >25% shares
+   or voting rights.
+6. SIC code(s) — choose up to 4 from the official list.
+7. Statement of capital — number, nominal value, currency.
+
+SUBMISSION
+- Online via Companies House WebFiling (recommended).
+- Paper IN01 by post to Cardiff or Edinburgh registry.
+
+POST-INCORPORATION
+- Register for Corporation Tax with HMRC within 3 months.
+- Set up PAYE if employing staff; consider VAT registration.

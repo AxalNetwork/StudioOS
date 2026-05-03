@@ -1094,6 +1094,732 @@ def sign_document(
     return {"status": "signed", "document": _hydrate_doc_content(doc, viewer=user, session=session)}
 
 
+# --------------------------------------------------------------------------
+# Task #30 — Jurisdiction Wizard + Incorporation Flow
+# --------------------------------------------------------------------------
+# Static catalogue of supported jurisdictions. Each entry drives both the
+# `/jurisdictions` API (UI explainer) and the `/incorporate/wizard` doc
+# generator (which template keys to fill). Costs are typical 2025 ranges
+# in USD; precise quotes belong in the partner-facing surface, not here.
+JURISDICTIONS = {
+    "us_de_ccorp": {
+        "id": "us_de_ccorp",
+        "label": "Delaware C-Corp",
+        "country": "United States",
+        "country_code": "US",
+        "entity_type": "C Corporation",
+        "summary": "The default for VC-backed startups. Mature case law, frictionless preferred-stock rounds, and accepted by every US institutional investor.",
+        "est_cost_usd": [500, 1500],
+        "time_to_form_days": [1, 7],
+        "fundraising_friendly": True,
+        "atlas_supported": True,
+        "best_for": ["VC-backed software", "Stock options for global team", "Future US listing"],
+        "pros": [
+            "Stripe Atlas / Clerky one-click incorporation",
+            "Universally accepted by US VCs (preferred stock, SAFEs, convertibles)",
+            "Predictable Delaware Chancery Court for disputes",
+        ],
+        "cons": [
+            "21% federal corporate tax + Delaware franchise tax (min ~$450/yr)",
+            "Annual filings + registered agent (~$100/yr)",
+            "Double taxation on dividends",
+        ],
+        "tax_summary": "21% federal corporate income tax. State tax depends on where you operate. Delaware franchise tax: $400–$1,750 typical for early-stage.",
+        "templates": ["certificate_of_incorporation_de", "bylaws", "stock_purchase_agreement", "section_83b"],
+    },
+    "us_de_llc": {
+        "id": "us_de_llc",
+        "label": "Delaware LLC",
+        "country": "United States",
+        "country_code": "US",
+        "entity_type": "Limited Liability Company",
+        "summary": "Pass-through taxation, simple operating agreement. Great for bootstrapped/cash-flow businesses; harder to take VC.",
+        "est_cost_usd": [300, 800],
+        "time_to_form_days": [1, 5],
+        "fundraising_friendly": False,
+        "atlas_supported": False,
+        "best_for": ["Cash-flow / agency businesses", "Holding companies", "Solo founders not raising VC"],
+        "pros": [
+            "Pass-through taxation — no entity-level tax",
+            "Flexible operating agreement (any economics you want)",
+            "Lower compliance burden than C-Corp",
+        ],
+        "cons": [
+            "Most institutional VCs cannot invest in LLCs",
+            "Self-employment tax on member distributions",
+            "Converting to C-Corp later is taxable + costly",
+        ],
+        "tax_summary": "Pass-through to members' personal returns. No entity-level federal tax. DE franchise tax flat $300/yr.",
+        "templates": ["operating_agreement", "ein_application_kit", "member_consent"],
+    },
+    "uk_ltd": {
+        "id": "uk_ltd",
+        "label": "UK Private Limited (Ltd)",
+        "country": "United Kingdom",
+        "country_code": "GB",
+        "entity_type": "Private Limited Company",
+        "summary": "Fast (often same-day), cheap, and credible for European VCs. SEIS/EIS tax incentives are a major pull for UK angel investors.",
+        "est_cost_usd": [50, 250],
+        "time_to_form_days": [1, 3],
+        "fundraising_friendly": True,
+        "atlas_supported": False,
+        "best_for": ["UK / EU customer base", "SEIS/EIS-eligible angel rounds", "Founders based in UK"],
+        "pros": [
+            "Companies House filing fee ~£50; same-day incorporation possible",
+            "SEIS (50%) + EIS (30%) income-tax relief unlocks UK angel capital",
+            "25% corporation tax (lower for small profits)",
+        ],
+        "cons": [
+            "US institutional VCs may insist on a US flip later",
+            "Public director/PSC register (limited privacy)",
+            "Confirmation statement + accounts every year",
+        ],
+        "tax_summary": "Corporation tax 25% (19% small-profits rate up to £50k). VAT registration required above £90k turnover.",
+        "templates": ["uk_memorandum_of_association", "uk_articles_of_association", "uk_form_in01_kit"],
+    },
+    "sg_pte": {
+        "id": "sg_pte",
+        "label": "Singapore Pte Ltd",
+        "country": "Singapore",
+        "country_code": "SG",
+        "entity_type": "Private Limited (Pte. Ltd.)",
+        "summary": "Asia's hub for cross-border venture. Strong rule of law, English-language filings, attractive territorial tax with startup tax exemption.",
+        "est_cost_usd": [600, 1500],
+        "time_to_form_days": [1, 5],
+        "fundraising_friendly": True,
+        "atlas_supported": False,
+        "best_for": ["APAC market entry", "Cross-border SaaS / fintech", "Holding co for regional ops"],
+        "pros": [
+            "Startup Tax Exemption: 75% off first S$100k profits for 3 years",
+            "17% headline corporate tax — among the lowest in developed Asia",
+            "Strong IP regime + extensive tax treaties",
+        ],
+        "cons": [
+            "Requires at least one Singapore-resident director (nominee director ~$2k/yr)",
+            "Annual ACRA + IRAS filings",
+            "Bank account opening can take 2–4 weeks",
+        ],
+        "tax_summary": "17% corporate tax with effective rate ~4–8% in years 1–3 due to startup exemptions. Territorial — foreign-sourced income often not taxed.",
+        "templates": ["sg_constitution", "sg_acra_form_45_kit", "sg_first_directors_resolution"],
+    },
+    "ee_oy": {
+        "id": "ee_oy",
+        "label": "Estonia OÜ (e-Residency)",
+        "country": "Estonia",
+        "country_code": "EE",
+        "entity_type": "Osaühing (Private Limited)",
+        "summary": "Fully remote incorporation via e-Residency. Famously simple: 0% corporate tax on retained earnings, only taxed when distributed.",
+        "est_cost_usd": [200, 500],
+        "time_to_form_days": [3, 14],
+        "fundraising_friendly": False,
+        "atlas_supported": False,
+        "best_for": ["Distributed / remote-first teams", "Bootstrapped EU SaaS", "Crypto / digital-product companies"],
+        "pros": [
+            "0% corporate tax on retained / reinvested earnings",
+            "100% online: incorporate, sign, file taxes from anywhere with the e-Residency card",
+            "EU-member status — single market access",
+        ],
+        "cons": [
+            "20% distribution tax when paying dividends (14% for regular distributions)",
+            "Most US/EU institutional VCs prefer DE C-Corp or UK Ltd",
+            "Must apply for e-Residency first (6–8 weeks, ~€100)",
+        ],
+        "tax_summary": "0% on retained earnings. 20/80 distribution tax (effectively 20%) on dividends. 14/86 reduced rate for regular dividends.",
+        "templates": ["ee_articles_of_association", "ee_e_residency_application_kit", "ee_founding_resolution"],
+    },
+}
+
+
+# Jurisdiction-specific document template stubs. These are intentionally
+# concise placeholders — operators replace with vetted counsel-reviewed
+# text per jurisdiction. The {company_name} / {jurisdiction} placeholders
+# are filled at generation time below.
+_JURISDICTION_TEMPLATES = {
+    "certificate_of_incorporation_de": {
+        "title": "Certificate of Incorporation (Delaware C-Corp)",
+        "layer": "portfolio",
+        "content": """CERTIFICATE OF INCORPORATION OF {company_name}
+
+A Delaware Corporation
+
+FIRST. The name of the corporation is {company_name}.
+
+SECOND. The Registered Office in Delaware is c/o {registered_agent_name},
+        located at {registered_agent_address}, County of New Castle, Delaware.
+
+THIRD. The purpose of the Corporation is to engage in any lawful act or
+       activity for which corporations may be organized under the General
+       Corporation Law of Delaware.
+
+FOURTH. The total number of shares of stock the Corporation is authorized
+        to issue is 10,000,000 shares of Common Stock, par value $0.00001
+        per share.
+
+FIFTH. The Corporation reserves the right to amend, alter, change, or
+       repeal any provision contained in this Certificate.
+
+SIXTH. The directors shall have power to make and to alter or amend the
+       Bylaws of the Corporation.
+
+SEVENTH. To the fullest extent permitted by the DGCL, no director shall
+         be personally liable for monetary damages for breach of fiduciary
+         duty.
+
+IN WITNESS WHEREOF, the undersigned has executed this Certificate on
+{incorporation_date}.
+
+____________________________
+Incorporator""",
+    },
+    "stock_purchase_agreement": {
+        "title": "Founders' Restricted Stock Purchase Agreement",
+        "layer": "portfolio",
+        "content": """RESTRICTED STOCK PURCHASE AGREEMENT — {company_name}
+
+This Restricted Stock Purchase Agreement (the "Agreement") is entered
+into on {incorporation_date} between {company_name}, a Delaware
+corporation (the "Company"), and the Founder identified on Exhibit A
+(the "Purchaser").
+
+1. PURCHASE OF SHARES.
+   Purchaser hereby purchases _______ shares of the Company's Common
+   Stock (the "Shares") at $0.0001 per share, for total consideration
+   of $_______.
+
+2. VESTING.
+   The Shares vest 25% on the one-year anniversary of the Vesting
+   Commencement Date, and 1/48th monthly thereafter, subject to
+   continuous service.
+
+3. RIGHT OF REPURCHASE.
+   Upon termination of service, the Company may repurchase any
+   unvested Shares at the Original Purchase Price.
+
+4. SECTION 83(b) ELECTION.
+   Purchaser is strongly advised to file a Section 83(b) election
+   with the IRS within 30 days of this Agreement.
+
+5. RIGHT OF FIRST REFUSAL.
+   The Company has a right of first refusal on any proposed transfer
+   of vested Shares.
+
+____________________________     ____________________________
+{company_name}                   Founder""",
+    },
+    "ein_application_kit": {
+        "title": "IRS EIN Application Kit (Form SS-4)",
+        "layer": "compliance",
+        "content": """EIN APPLICATION KIT — {company_name}
+
+This kit walks you through obtaining an Employer Identification
+Number (EIN) for {company_name} from the Internal Revenue Service.
+
+1. ELIGIBILITY
+   Form SS-4 may be filed online at irs.gov/EIN if the responsible
+   party has a US SSN or ITIN. Otherwise, fax/mail Form SS-4.
+
+2. REQUIRED INFORMATION
+   - Legal name: {company_name}
+   - Trade name (DBA): _______________
+   - Mailing address: _______________
+   - Responsible party (full legal name + SSN/ITIN): _______________
+   - Reason for applying: Started a new business
+   - Date business started: {incorporation_date}
+   - Closing month of accounting year: December
+   - Highest number of employees expected in next 12 months: _______
+
+3. NEXT STEPS AFTER RECEIVING EIN
+   - Open a US business bank account
+   - Apply for state tax IDs where you will operate
+   - Register for sales tax / payroll tax as applicable""",
+    },
+    "member_consent": {
+        "title": "Initial Member Written Consent",
+        "layer": "gp",
+        "content": """WRITTEN CONSENT OF THE INITIAL MEMBERS OF {company_name}
+
+The undersigned, being all the initial members of {company_name},
+a {jurisdiction} limited liability company, hereby consent to the
+following actions:
+
+1. ADOPTION OF OPERATING AGREEMENT.
+   The Operating Agreement attached as Exhibit A is hereby adopted.
+
+2. APPOINTMENT OF MANAGER.
+   _______________ is appointed as the initial Manager.
+
+3. AUTHORIZATION OF BANK ACCOUNT.
+   The Manager is authorized to open bank accounts in the name of
+   the Company at any FDIC-insured institution.
+
+4. ISSUANCE OF MEMBERSHIP INTERESTS.
+   Membership interests are issued per the schedule on Exhibit B.
+
+Effective: {incorporation_date}
+
+____________________________
+Initial Member(s)""",
+    },
+    "uk_memorandum_of_association": {
+        "title": "Memorandum of Association (UK Ltd)",
+        "layer": "portfolio",
+        "content": """MEMORANDUM OF ASSOCIATION OF {company_name} LIMITED
+
+Each subscriber to this memorandum of association wishes to form
+a company under the Companies Act 2006 and agrees to become a
+member of the company and to take at least one share.
+
+Name of each subscriber                 Signature
+________________________                ________________________
+________________________                ________________________
+
+Date: {incorporation_date}
+
+This memorandum is in the prescribed form for companies limited
+by shares per the Companies (Registration) Regulations 2008.""",
+    },
+    "uk_articles_of_association": {
+        "title": "Articles of Association (UK Ltd) — Model Articles",
+        "layer": "portfolio",
+        "content": """ARTICLES OF ASSOCIATION OF {company_name} LIMITED
+
+The Company adopts the Model Articles for private companies
+limited by shares contained in Schedule 1 of the Companies (Model
+Articles) Regulations 2008, with the following amendments:
+
+PART 1 — INTERPRETATION AND LIMITATION OF LIABILITY
+1. Defined terms apply as in the Model Articles.
+
+PART 2 — DIRECTORS
+2. Decisions to be taken by the directors by majority vote.
+3. Number of directors: minimum 1, maximum 7.
+
+PART 3 — SHARES AND DISTRIBUTIONS
+4. Authorised share capital: 10,000 Ordinary Shares of £0.0001 each.
+5. Pre-emption rights apply on the issue and transfer of shares.
+
+PART 4 — DECISION-MAKING BY MEMBERS
+6. Written resolutions permitted in lieu of meetings.
+
+Adopted: {incorporation_date}""",
+    },
+    "uk_form_in01_kit": {
+        "title": "UK IN01 Filing Kit (Companies House)",
+        "layer": "compliance",
+        "content": """COMPANIES HOUSE IN01 FILING KIT — {company_name} LIMITED
+
+Filing fee: £50 standard (24h) or £78 same-day.
+
+REQUIRED INFORMATION
+1. Proposed company name: {company_name} Limited
+2. Registered office address (must be in UK): _______________
+3. Director(s) — full name, DOB, nationality, occupation, residential
+   address (kept private), service address (public).
+4. Shareholder(s) — initial subscriber details.
+5. People with significant control (PSC) — anyone holding >25% shares
+   or voting rights.
+6. SIC code(s) — choose up to 4 from the official list.
+7. Statement of capital — number, nominal value, currency.
+
+SUBMISSION
+- Online via Companies House WebFiling (recommended).
+- Paper IN01 by post to Cardiff or Edinburgh registry.
+
+POST-INCORPORATION
+- Register for Corporation Tax with HMRC within 3 months.
+- Set up PAYE if employing staff; consider VAT registration.""",
+    },
+    "sg_constitution": {
+        "title": "Company Constitution (Singapore Pte Ltd)",
+        "layer": "portfolio",
+        "content": """CONSTITUTION OF {company_name} PTE. LTD.
+
+Adopted in accordance with Section 32 of the Companies Act 1967.
+
+1. NAME. The name of the Company is {company_name} PTE. LTD.
+
+2. REGISTERED OFFICE. The registered office of the Company shall
+   be in Singapore.
+
+3. OBJECTS. The Company has full capacity to carry on or undertake
+   any business or activity, do any act or enter into any
+   transaction.
+
+4. LIABILITY. The liability of the members is limited to the
+   amount unpaid on their shares.
+
+5. SHARE CAPITAL. The share capital of the Company at incorporation
+   is S$1.00 divided into 1 ordinary share of S$1.00. Additional
+   shares may be issued as the Directors determine.
+
+6. DIRECTORS. The Company shall have not fewer than one director
+   ordinarily resident in Singapore.
+
+7. TRANSFER OF SHARES. Shares are transferable by instrument in
+   writing in the form approved by the Directors, subject to
+   pre-emption rights.
+
+Adopted: {incorporation_date}""",
+    },
+    "sg_acra_form_45_kit": {
+        "title": "ACRA Filing Kit — BizFile Incorporation Pack",
+        "layer": "compliance",
+        "content": """ACRA BIZFILE INCORPORATION KIT — {company_name} PTE. LTD.
+
+Filing channel: ACRA BizFile+ (https://www.bizfile.gov.sg)
+Government fee: S$315 (S$15 name application + S$300 incorporation)
+
+REQUIRED PARTIES
+- At least 1 director ordinarily resident in Singapore (citizen, PR,
+  or EP/EntrePass holder). Most foreign founders use a nominee
+  director service for the first year (~S$2,500/yr).
+- 1 company secretary (must be Singapore-resident; appointed within
+  6 months).
+- 1–50 shareholders (individuals or corporations; foreigners allowed).
+
+REQUIRED INFORMATION
+1. Proposed company name (with ACRA name check)
+2. Principal business activity and SSIC code
+3. Registered office address (must be in Singapore; no PO box)
+4. Share capital (any currency; minimum S$1)
+5. Constitution (use Model Constitution or upload custom)
+6. Director(s), Secretary, Shareholder(s) particulars
+
+POST-INCORPORATION
+- Open corporate bank account (DBS, OCBC, UOB, or digital banks like Aspire)
+- Register for GST if turnover will exceed S$1m/year
+- Apply for sector-specific licenses if regulated activity""",
+    },
+    "sg_first_directors_resolution": {
+        "title": "First Directors' Resolution (Singapore)",
+        "layer": "gp",
+        "content": """RESOLUTIONS OF THE FIRST DIRECTORS OF {company_name} PTE. LTD.
+
+Date: {incorporation_date}
+
+The undersigned, being all the directors of {company_name} PTE.
+LTD. (the "Company"), pass the following written resolutions:
+
+1. ADOPTION OF CONSTITUTION.
+   The Constitution lodged with ACRA on incorporation is adopted.
+
+2. APPOINTMENT OF COMPANY SECRETARY.
+   _______________ is appointed Company Secretary effective today.
+
+3. REGISTERED OFFICE.
+   The registered office is fixed at _______________, Singapore.
+
+4. FINANCIAL YEAR END.
+   The financial year end is 31 December.
+
+5. AUDITOR.
+   The Company is exempt from audit (small company exemption) and
+   no auditor is appointed at this time.
+
+6. BANK ACCOUNT.
+   Directors are authorised to open and operate bank accounts at
+   _______________ in the Company's name.
+
+____________________________
+Director(s)""",
+    },
+    "ee_articles_of_association": {
+        "title": "Articles of Association (Estonia OÜ)",
+        "layer": "portfolio",
+        "content": """ARTICLES OF ASSOCIATION OF {company_name} OÜ
+
+Adopted in accordance with the Estonian Commercial Code.
+
+§1. BUSINESS NAME. The business name is "{company_name} OÜ".
+
+§2. REGISTERED OFFICE. The registered office is in Estonia.
+
+§3. AREA OF ACTIVITY. The company may engage in any lawful
+    economic activity not requiring a special licence.
+
+§4. SHARE CAPITAL. The share capital is EUR 0.01, divided into
+    one share of EUR 0.01. (Minimum since 2023 reform.)
+
+§5. MANAGEMENT BOARD. The Management Board has 1 to 5 members
+    appointed for an unspecified term.
+
+§6. SUPERVISORY BOARD. No supervisory board is established.
+
+§7. REPRESENTATION. Each Management Board member may represent
+    the company solely.
+
+§8. SHAREHOLDER RESOLUTIONS. Resolutions are adopted by majority
+    of votes represented unless the law requires a higher quorum.
+
+§9. PROFIT DISTRIBUTION. Profit may be distributed only after the
+    annual report is approved.
+
+Adopted: {incorporation_date}""",
+    },
+    "ee_e_residency_application_kit": {
+        "title": "Estonia e-Residency Application Kit",
+        "layer": "compliance",
+        "content": """E-RESIDENCY APPLICATION KIT — for {company_name} founders
+
+e-Residency lets you incorporate and run an Estonian OÜ entirely
+online from anywhere in the world.
+
+1. APPLY FOR e-RESIDENCY (do this FIRST, ~6–8 weeks)
+   - Apply at https://e-resident.gov.ee/become-an-e-resident
+   - Government fee: €100–€120 + €30 courier
+   - Required: passport, photo, motivation statement, criminal record check
+   - Pick up the digital ID card at the chosen embassy / pickup point
+
+2. INCORPORATE THE OÜ (after receiving e-Residency, same day)
+   - Use a Company Service Provider (CSP) — required for non-residents
+     for the registered address. Typical cost: €200–€500/yr.
+   - File via the Estonian Business Register portal using the digital ID.
+   - State fee: €265.
+   - Share capital: EUR 0.01 minimum (since 2023; pay-up flexible).
+
+3. POST-INCORPORATION
+   - Open a business bank account (Wise, LHV, Payoneer, Revolut Business)
+   - Register for VAT if EU turnover will exceed €40k/year
+   - File monthly VAT and annual tax returns via e-Tax Board""",
+    },
+    "ee_founding_resolution": {
+        "title": "Founding Resolution (Estonia OÜ)",
+        "layer": "gp",
+        "content": """FOUNDING RESOLUTION OF {company_name} OÜ
+
+Date: {incorporation_date}
+
+The founder(s) of {company_name} OÜ resolve as follows:
+
+1. ESTABLISHMENT.
+   {company_name} OÜ is established under the Estonian Commercial
+   Code with share capital of EUR 0.01.
+
+2. ARTICLES OF ASSOCIATION.
+   The Articles of Association attached as Annex 1 are approved.
+
+3. MANAGEMENT BOARD.
+   The following person(s) are appointed to the Management Board:
+   _______________
+
+4. CONTRIBUTION.
+   The share capital contribution of EUR 0.01 is paid in full / is
+   deferred per § 140¹ of the Commercial Code.
+
+5. REGISTERED OFFICE.
+   The registered office is _______________, Estonia.
+
+____________________________
+Founder(s)""",
+    },
+}
+
+# Merge into the master TEMPLATES dict so all existing endpoints
+# (templates listing, single-template fetch, generate_document, document
+# rendering) just work.
+TEMPLATES.update(_JURISDICTION_TEMPLATES)
+
+
+@router.get("/jurisdictions")
+def list_jurisdictions(user: User = Depends(get_current_user)):
+    """Static catalogue powering the /incorporate wizard's compare table."""
+    return {"jurisdictions": list(JURISDICTIONS.values())}
+
+
+class IncorporateWizardRequest(BaseModel):
+    project_id: int
+    jurisdiction_id: str
+    company_name: str
+    registered_agent_name: Optional[str] = None
+    registered_agent_address: Optional[str] = None
+    intent_notes: Optional[str] = None
+
+
+@router.post("/incorporate/wizard")
+def incorporate_wizard(
+    body: IncorporateWizardRequest,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Task #30 — Jurisdiction-aware incorporation hand-off.
+
+    1. Validates the chosen jurisdiction and the caller's access to the
+       project (founder-of, partner, or admin).
+    2. Creates an `Entity` row with the right jurisdiction + status.
+    3. Generates the jurisdiction-specific document set into Documents
+       (already surfaces in LegalPage).
+    4. For Delaware C-Corp, returns a `stripe_atlas` hand-off block so
+       the UI can deep-link the user to Atlas with the company name
+       pre-filled. For other jurisdictions, returns the generated
+       documents only — filing + payment is out-of-scope per the brief.
+    """
+    j = JURISDICTIONS.get(body.jurisdiction_id)
+    if not j:
+        raise HTTPException(status_code=400, detail=f"Unknown jurisdiction: {body.jurisdiction_id}")
+    if not body.company_name or not body.company_name.strip():
+        raise HTTPException(status_code=400, detail="company_name is required")
+
+    project = session.get(Project, body.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Access: admin/partner OR the founder bound to this specific project.
+    # Investors are NOT permitted to mutate entity/legal state for projects
+    # they don't own. We deliberately bypass `ensure_founder_access` here
+    # because its `is_privileged` helper still treats investors as
+    # privileged for read-path back-compat — that would be a cross-project
+    # IDOR on this write path.
+    role = (user.role.value if hasattr(user.role, "value") else str(user.role)).lower()
+    if role not in ("admin", "partner"):
+        owns_project = (
+            project.founder_id is not None
+            and getattr(user, "founder_id", None) == project.founder_id
+        )
+        if not owns_project:
+            raise HTTPException(status_code=403, detail="Forbidden: you do not own this project")
+
+    # Idempotency: if the project is already incorporated in this
+    # jurisdiction, return the existing entity + docs rather than
+    # double-billing the documents table.
+    existing_entity = session.get(Entity, project.entity_id) if project.entity_id else None
+    reused_entity = bool(existing_entity and (existing_entity.jurisdiction or "").lower() == j["label"].lower())
+
+    if reused_entity:
+        entity = existing_entity
+    else:
+        entity = Entity(
+            name=body.company_name.strip(),
+            entity_type="subsidiary",
+            jurisdiction=j["label"],
+            incorporation_date=datetime.utcnow().date(),
+            status="forming",
+        )
+        session.add(entity)
+        session.commit()
+        session.refresh(entity)
+        project.entity_id = entity.id
+        project.updated_at = datetime.utcnow()
+        session.add(project)
+        session.commit()
+
+    # Generate jurisdiction-specific documents.
+    from backend.app.services.file_storage import store_contract_bytes
+    fill = {
+        "company_name": body.company_name.strip(),
+        "jurisdiction": j["label"],
+        "incorporation_date": datetime.utcnow().date().isoformat(),
+        "registered_agent_name": body.registered_agent_name or "[Registered Agent]",
+        "registered_agent_address": body.registered_agent_address or "[Registered Agent Address]",
+    }
+    # Map jurisdiction template keys → DocumentType enum (which is a
+    # Postgres enum and must match an existing value). Anything not in
+    # the enum stores as DocumentType.OTHER and the actual template key
+    # is preserved in `template_name` for dedup + display.
+    _ALLOWED_DT = {dt.value for dt in DocumentType}
+    generated: list[dict] = []
+    for tkey in j["templates"]:
+        template = TEMPLATES.get(tkey)
+        if not template:
+            continue
+        doc_type_value = tkey if tkey in _ALLOWED_DT else DocumentType.OTHER.value
+
+        # Dedup by `template_name` (the real key), since multiple
+        # jurisdiction docs share doc_type=OTHER.
+        already = session.exec(
+            select(Document).where(
+                Document.project_id == project.id,
+                Document.template_name == tkey,
+            )
+        ).first()
+        if already:
+            generated.append({"id": already.id, "title": template["title"], "doc_type": tkey, "reused": True})
+            continue
+
+        body_text = template["content"]
+        for k, v in fill.items():
+            body_text = body_text.replace("{" + k + "}", str(v))
+
+        doc = Document(
+            project_id=project.id,
+            title=template["title"],
+            doc_type=doc_type_value,
+            template_name=tkey,
+            status=DocumentStatus.GENERATED,
+            content=body_text,
+        )
+        session.add(doc)
+        session.commit()
+        session.refresh(doc)
+        try:
+            ct = "text/plain"
+            obj = store_contract_bytes(doc.uid, body_text.encode("utf-8"), ct)
+            doc.file_key = obj.file_key
+            doc.file_size = obj.size
+            doc.file_sha256 = obj.sha256
+            doc.file_content_type = obj.content_type
+            doc.content = None
+            session.add(doc)
+            session.commit()
+        except Exception:  # noqa: BLE001
+            pass
+        generated.append({"id": doc.id, "title": template["title"], "doc_type": tkey, "reused": False})
+
+    # Hand-off block for Delaware C-Corp via Stripe Atlas. Other
+    # jurisdictions get a "next steps" block listing the per-country
+    # filing portal — filing itself is out of scope.
+    handoff: dict = {"type": "documents_only", "next_steps": []}
+    if j["atlas_supported"]:
+        from urllib.parse import urlencode
+        handoff = {
+            "type": "stripe_atlas",
+            "provider": "Stripe Atlas",
+            "url": "https://atlas.stripe.com/start?" + urlencode({
+                "company": body.company_name.strip(),
+                "ref": f"axal-studioos-p{project.id}",
+            }),
+            "summary": "Continue incorporation on Stripe Atlas — your company name is pre-filled.",
+        }
+    elif j["id"] == "uk_ltd":
+        handoff["next_steps"] = [
+            "File IN01 on Companies House (https://www.gov.uk/limited-company-formation)",
+            "Register for Corporation Tax with HMRC within 3 months",
+            "Open a UK business bank account",
+        ]
+    elif j["id"] == "sg_pte":
+        handoff["next_steps"] = [
+            "Submit incorporation via ACRA BizFile+ (https://www.bizfile.gov.sg)",
+            "Engage a Singapore-resident director (or nominee director service)",
+            "Appoint a company secretary within 6 months",
+        ]
+    elif j["id"] == "ee_oy":
+        handoff["next_steps"] = [
+            "Apply for e-Residency (https://e-resident.gov.ee) if you don't already have it",
+            "Engage a Company Service Provider for the registered address",
+            "File the OÜ via the Estonian Business Register e-portal",
+        ]
+    elif j["id"] == "us_de_llc":
+        handoff["next_steps"] = [
+            "File the Certificate of Formation with the Delaware Division of Corporations",
+            "Apply for an EIN via IRS Form SS-4 (kit included)",
+            "Open a US business bank account",
+        ]
+
+    return {
+        "ok": True,
+        "jurisdiction": j,
+        "entity": {
+            "id": entity.id,
+            "uid": entity.uid,
+            "name": entity.name,
+            "jurisdiction": entity.jurisdiction,
+            "status": entity.status,
+            "reused": reused_entity,
+        },
+        "documents": generated,
+        "handoff": handoff,
+    }
+
+
 @router.post("/incorporate")
 def incorporate_project(project_id: int, jurisdiction: str = "Delaware", session: Session = Depends(get_session), user: User = Depends(require_partner)):
     # Incorporation is a partner/admin action — never founder-self-service.

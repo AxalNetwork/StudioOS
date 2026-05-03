@@ -13,6 +13,7 @@ import ScoringPage from './pages/ScoringPage';
 import ProjectsPage from './pages/ProjectsPage';
 import ProjectDetail from './pages/ProjectDetail';
 import LegalPage from './pages/LegalPage';
+import IncorporatePage from './pages/IncorporatePage';
 import PartnersPage from './pages/PartnersPage';
 import CapitalPage from './pages/CapitalPage';
 import TicketsPage from './pages/TicketsPage';
@@ -121,6 +122,7 @@ const NAV_BY_ROLE = {
 
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+    { to: '/incorporate', icon: Scale, label: 'Incorporate' },
     { to: '/trust', icon: Lock, label: 'Trust Center' },
 
     { section: 'Advanced' },
@@ -162,6 +164,7 @@ const NAV_BY_ROLE = {
 
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+    { to: '/incorporate', icon: Scale, label: 'Incorporate' },
     { to: '/trust', icon: Lock, label: 'Trust Center' },
 
     { section: 'Network & Growth' },
@@ -820,6 +823,7 @@ export default function App() {
       <Route path="/projects" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectsPage />)} />
       <Route path="/projects/:id" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectDetail />)} />
       <Route path="/legal" element={guard(['admin', 'founder'], <LegalPage />)} />
+      <Route path="/incorporate" element={guard(['admin', 'founder', 'partner', 'investor'], <IncorporatePage />)} />
       <Route path="/partners" element={guard(['admin', 'partner', 'investor'], <PartnersPage />)} />
       <Route path="/capital" element={guard(['admin', 'investor'], <CapitalPage />)} />
       <Route path="/tickets" element={guard(['admin', 'founder', 'partner', 'investor'], <TicketsPage />)} />

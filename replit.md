@@ -37,6 +37,7 @@ The user prefers clear and concise communication. They value iterative developme
 - **Trust Layer Hardening**: Includes KYB (Know Your Business) via Sumsub (or mock), investor accreditation verification, and per-role NDA acceptance with legal proof.
 - **Founder Risk Profile**: Auto-pulls founder background data (or synthesizes it) to generate a risk score and breakdown for due diligence.
 - **Reference Check Workflow**: Manages scheduling, consent, recording, transcription (Whisper), and summarization (Llama/GPT-4o-mini) of reference calls, integrated with the Deals pipeline.
+- **Jurisdiction Wizard + Incorporation Flow**: `/incorporate` decision tree across Delaware C-Corp, Delaware LLC, UK Ltd, Singapore Pte Ltd, and Estonia OÜ (e-Residency) with per-jurisdiction explainers (cost, time-to-form, fundraising-friendliness, taxes). Delaware C-Corp routes to Stripe Atlas with the company name pre-filled; other jurisdictions generate the right founder document set from legal templates and surface in `/legal`. Backed by `GET /api/legal/jurisdictions` and `POST /api/legal/incorporate/wizard`.
 
 ### Architectural Decisions
 - Cloudflare Worker is the primary production API, FastAPI for local development.
