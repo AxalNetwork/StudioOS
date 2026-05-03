@@ -623,6 +623,32 @@ export const api = {
     request(`/captable/scenarios/${uid}`, { method: 'DELETE' }),
   exportCapTableCsvUrl: (uid) => `/api/captable/scenarios/${uid}/export.csv`,
 
+  // ---------- Trust layer (Task #58) ----------
+  getTrustSummary: () => request('/trust/summary'),
+  getKybStatus: () => request('/trust/kyb/status'),
+  startKyb: (payload) => request('/trust/kyb/start', { method: 'POST', body: JSON.stringify(payload) }),
+  submitKyb: (payload) => request('/trust/kyb/submit', { method: 'POST', body: JSON.stringify(payload) }),
+  getAccreditationStatus: () => request('/trust/accreditation/status'),
+  uploadAccreditation: (basis, file) => {
+    const fd = new FormData();
+    fd.append('basis', basis);
+    fd.append('file', file);
+    return request('/trust/accreditation/upload', { method: 'POST', body: fd });
+  },
+  reviewAccreditation: (investorId, decision) =>
+    request(`/trust/accreditation/${investorId}/review`, {
+      method: 'POST', body: JSON.stringify({ decision }),
+    }),
+  getAccreditationBadge: (investorId) => request(`/trust/accreditation/badge/${investorId}`),
+  getRequiredNdas: () => request('/trust/nda/required'),
+  getNdaPreview: (role) => request(`/trust/nda/${role}/preview`),
+  signNda: (role, signer_name) =>
+    request('/trust/nda/sign', {
+      method: 'POST',
+      body: JSON.stringify({ role, signer_name, accepted: true }),
+    }),
+  getNdaStatus: () => request('/trust/nda/status'),
+
   // ---------- Founder risk (Task #41, admin/partner/investor only) ----------
   getFounderRiskByDeal: (dealId) => request(`/founder-risk/by-deal/${dealId}`),
   getFounderRiskByFounder: (founderId) => request(`/founder-risk/by-founder/${founderId}`),

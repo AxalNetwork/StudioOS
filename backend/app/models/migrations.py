@@ -639,6 +639,68 @@ def ensure_partner_directory_columns() -> None:
         session.commit()
 
 
+def ensure_trust_layer_columns() -> None:
+    """Task #58 — Trust layer hardening. Idempotent.
+
+    Adds:
+      - partners: kyb_provider / kyb_ref_id / kyb_data
+      - investors: accreditation_document_id / accreditation_basis
+                   / accreditation_verified_at / accreditation_verified_by
+      - new table: nda_acceptances
+    """
+    partner_cols = [
+        ("kyb_provider", "VARCHAR"),
+        ("kyb_ref_id", "VARCHAR"),
+        ("kyb_data", "TEXT"),
+    ]
+    investor_cols = [
+        ("accreditation_document_id", "INTEGER"),
+        ("accreditation_basis", "VARCHAR"),
+        ("accreditation_verified_at", "TIMESTAMP"),
+        ("accreditation_verified_by", "INTEGER"),
+    ]
+    with Session(engine) as session:
+        for col, ddl in partner_cols:
+            try:
+                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_trust_layer_columns: partners.%s: %s", col, exc)
+                session.rollback()
+        for col, ddl in investor_cols:
+            try:
+                session.exec(text(f"ALTER TABLE investors ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_trust_layer_columns: investors.%s: %s", col, exc)
+                session.rollback()
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS nda_acceptances (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    role VARCHAR NOT NULL,
+                    document_id INTEGER REFERENCES documents(id),
+                    status VARCHAR DEFAULT 'pending' NOT NULL,
+                    signed_at TIMESTAMP,
+                    signed_ip VARCHAR,
+                    signed_name VARCHAR,
+                    revoked_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    UNIQUE(user_id, role)
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_nda_acceptances_user ON nda_acceptances(user_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_nda_acceptances_role ON nda_acceptances(role)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_nda_acceptances_status ON nda_acceptances(status)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_trust_layer_columns: nda_acceptances: %s", exc)
+            session.rollback()
+
+
 def ensure_cap_table_scenarios_table() -> None:
     """Task #27 — Cap-table simulator scenarios. Idempotent."""
     ddl = """

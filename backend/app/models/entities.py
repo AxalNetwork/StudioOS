@@ -357,6 +357,12 @@ class Partner(SQLModel, table=True):
     response_time_hours: Optional[int] = None   # typical first-response SLA
     kyb_status: str = Field(default="unverified", index=True)      # unverified | pending | verified | rejected
     kyb_verified_at: Optional[datetime] = None
+    # Task #58 — Trust layer hardening: Sumsub KYB extension fields. Provider
+    # is "sumsub" when an applicant has been created against the live SDK,
+    # "mock" when the deterministic fallback ran (no SUMSUB_APP_TOKEN set).
+    kyb_provider: Optional[str] = None
+    kyb_ref_id: Optional[str] = None              # Sumsub applicantId / mock ref
+    kyb_data: Optional[str] = None                # provider-specific JSON blob
     website: Optional[str] = None
     listed: bool = Field(default=False, index=True)  # opt-in to marketplace listing
     # Task #51 — Stripe Connect onboarding state. Populated when the
@@ -745,6 +751,33 @@ class Investor(SQLModel, table=True):
     sector_focus: Optional[str] = None  # comma-separated tags or JSON string
     stage_focus: Optional[str] = None   # comma-separated stages
     notes: Optional[str] = None
+    # Task #58 — Trust layer: link to the accreditation document (uploaded
+    # by the investor, reviewed by admin) and reviewer audit columns. When
+    # `accreditation_status='verified'`, the investor earns the badge.
+    accreditation_document_id: Optional[int] = Field(default=None, foreign_key="documents.id")
+    accreditation_basis: Optional[str] = None     # income | net_worth | entity | knowledgeable_employee
+    accreditation_verified_at: Optional[datetime] = None
+    accreditation_verified_by: Optional[int] = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class NDAAcceptance(SQLModel, table=True):
+    """Task #58 — per-role NDA tracking. One row per (user, role) NDA. The
+    NDA *body* lives in the `documents` table (DocumentType.OTHER, template
+    `nda_<role>`); this table links the user to that signed document and
+    captures the legal-proof signature timestamp + IP."""
+    __tablename__ = "nda_acceptances"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    role: str = Field(index=True)                  # founder | partner | investor
+    document_id: Optional[int] = Field(default=None, foreign_key="documents.id")
+    status: str = Field(default="pending", index=True)  # pending | signed | declined | revoked
+    signed_at: Optional[datetime] = None
+    signed_ip: Optional[str] = None
+    signed_name: Optional[str] = None              # typed name capture for legal proof
+    revoked_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

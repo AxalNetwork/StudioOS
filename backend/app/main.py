@@ -78,6 +78,7 @@ async def lifespan(app: FastAPI):
             ensure_references_table,
             ensure_founder_risk_profiles_table,
             ensure_cap_table_scenarios_table,
+            ensure_trust_layer_columns,
         )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
@@ -112,6 +113,9 @@ async def lifespan(app: FastAPI):
         # Task #27 — cap-table simulator scenarios.
         ensure_cap_table_scenarios_table()
         logger.info("StudioOS migrations: cap_table_scenarios table ensured")
+        # Task #58 — trust layer hardening.
+        ensure_trust_layer_columns()
+        logger.info("StudioOS migrations: trust layer columns ensured")
     except Exception as exc:  # noqa: BLE001
         # Migrations are best-effort: a failure here must not prevent the API
         # from booting (e.g. fresh DB, missing legacy tables).
@@ -299,6 +303,8 @@ from backend.app.api.routes import founder_risk as _founder_risk
 app.include_router(_founder_risk.router, prefix="/api")
 from backend.app.api.routes import captable as _captable
 app.include_router(_captable.router, prefix="/api")
+from backend.app.api.routes import trust as _trust
+app.include_router(_trust.router, prefix="/api")
 app.include_router(funds.router, prefix="/api")
 app.include_router(liquidity.router, prefix="/api")
 app.include_router(partnernet.router, prefix="/api")

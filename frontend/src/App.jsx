@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
-  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package,
+  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock,
   Settings as SettingsIcon, PieChart as PieIcon
 } from 'lucide-react';
 import { api } from './lib/api';
@@ -31,6 +31,7 @@ import LoginPage from './pages/LoginPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import ESignPage from './pages/ESignPage';
 import KYCPage from './pages/KYCPage';
+import TrustCenterPage from './pages/TrustCenterPage';
 import ReferEarnPage from './pages/ReferEarnPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import PayoutsPage from './pages/PayoutsPage';
@@ -111,6 +112,7 @@ const NAV_BY_ROLE = {
 
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+    { to: '/trust', icon: Lock, label: 'Trust Center' },
 
     { section: 'Advanced' },
     { to: '/monitoring', icon: Activity, label: 'Monitoring' },
@@ -151,6 +153,7 @@ const NAV_BY_ROLE = {
 
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+    { to: '/trust', icon: Lock, label: 'Trust Center' },
 
     { section: 'Network & Growth' },
     { to: '/services', icon: Package, label: 'Service Catalogue' },
@@ -210,6 +213,7 @@ const NAV_BY_ROLE = {
     { to: '/activity', icon: Activity, label: 'Activity Log' },
     { to: '/tickets', icon: Ticket, label: 'Support' },
     { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
+    { to: '/trust', icon: Lock, label: 'Trust Center' },
 
     { divider: true },
     { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal', highlight: true },
@@ -241,6 +245,7 @@ const NAV_BY_ROLE = {
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
     { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
+    { to: '/trust', icon: Lock, label: 'Trust Center' },
 
     { section: 'Support' },
     { to: '/activity', icon: Activity, label: 'Activity Log' },
@@ -785,6 +790,7 @@ export default function App() {
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
+      <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor'], <TrustCenterPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/spinouts" element={guard(['admin', 'founder', 'partner', 'investor'], <SpinOutsPage />)} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
