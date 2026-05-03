@@ -610,6 +610,14 @@ export const api = {
   retagPersonaAdmin: (user_id, persona_id) =>
     request(`/personas/admin/${user_id}/retag`, { method: 'POST', body: JSON.stringify({ persona_id }) }),
 
+  // ---------- Founder risk (Task #41, admin/partner/investor only) ----------
+  getFounderRiskByDeal: (dealId) => request(`/founder-risk/by-deal/${dealId}`),
+  getFounderRiskByFounder: (founderId) => request(`/founder-risk/by-founder/${founderId}`),
+  pullFounderRisk: (founderId) =>
+    request(`/founder-risk/${founderId}/pull`, { method: 'POST' }),
+  recomputeFounderRisk: (founderId) =>
+    request(`/founder-risk/${founderId}/recompute`, { method: 'POST' }),
+
   // ---------- Reference checks (Task #43, admin/investor only) ----------
   listReferences: (dealId) =>
     request(`/references${dealId != null ? `?deal_id=${dealId}` : ''}`),

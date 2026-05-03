@@ -265,6 +265,72 @@ def run_brain_score(payload: dict) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Task #41 — Founder risk score (deterministic, weighted sum)
+#
+# Inputs come from FounderRiskProfile (populated via PitchBook integration or
+# the synthetic fallback). Output is a 0..100 risk score where LOWER means
+# SAFER (less risky founder), plus a band (`low` / `medium` / `high`) and a
+# breakdown trace so the UI can explain why.
+#
+# The math is intentionally simple and hand-tunable rather than ML-driven —
+# we want partner trust and reproducibility on the deal page.
+# ---------------------------------------------------------------------------
+def _risk_band(score: float) -> str:
+    if score <= 30:
+        return "low"
+    if score <= 60:
+        return "medium"
+    return "high"
+
+
+def compute_founder_risk_score(profile: dict) -> dict:
+    """Deterministic risk score from a founder risk profile dict.
+
+    Weights:
+      base_risk:              50  (everyone starts mid-risk; signals adjust)
+      exits:                 -12 each, capped at -36 (3+ exits floors the bonus)
+      failures:              +10 each, capped at +30
+      domain expertise (yrs): -1 each, capped at -15
+      senior prior roles:    -3 each, capped at -12
+      no signal at all:      +20 (unknown founders are riskier than known)
+
+    Final score clamped to [0, 100]. Lower score = safer founder.
+    """
+    exits = max(0, int(profile.get("exits_count") or 0))
+    failures = max(0, int(profile.get("failures_count") or 0))
+    years = max(0, int(profile.get("domain_expertise_years") or 0))
+    prior_roles = profile.get("prior_roles") or []
+    senior_roles = sum(
+        1 for r in prior_roles
+        if str(r.get("seniority", "")).lower() in ("senior", "executive", "c-level", "founder")
+    )
+
+    has_any_signal = bool(exits or failures or years or prior_roles)
+
+    breakdown = {
+        "base":              {"points": 50.0, "rationale": "Baseline mid-risk"},
+        "exits":             {"points": round(-12.0 * min(exits, 3), 1),
+                               "rationale": f"{exits} successful exit(s)"},
+        "failures":          {"points": round( 10.0 * min(failures, 3), 1),
+                               "rationale": f"{failures} prior shut-down(s)"},
+        "domain_expertise":  {"points": round(-1.0 * min(years, 15), 1),
+                               "rationale": f"{years} yrs domain expertise"},
+        "senior_roles":      {"points": round(-3.0 * min(senior_roles, 4), 1),
+                               "rationale": f"{senior_roles} senior prior role(s)"},
+        "unknown_penalty":   {"points": (20.0 if not has_any_signal else 0.0),
+                               "rationale": "No signal on file"
+                                            if not has_any_signal else "Signal present"},
+    }
+    raw = sum(b["points"] for b in breakdown.values())
+    score = round(max(0.0, min(100.0, raw)), 1)
+    return {
+        "risk_score": score,
+        "risk_band": _risk_band(score),
+        "breakdown": breakdown,
+    }
+
+
 def run_full_score(data: dict) -> dict:
     market = score_market(
         tam=data.get("tam", 0),

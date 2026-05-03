@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { ArrowRight, ChevronDown, ChevronRight, Filter } from 'lucide-react';
 import ReferenceChecksPanel from '../components/ReferenceChecksPanel';
+import FounderRiskBadge from '../components/FounderRiskBadge';
 
 function getCurrentRole() {
   try { return JSON.parse(localStorage.getItem('user') || '{}').role || null; }
@@ -26,6 +27,7 @@ export default function DealsPage() {
   const [expanded, setExpanded] = useState(null);
   const role = getCurrentRole();
   const canSeeReferences = role === 'admin' || role === 'investor';
+  const canSeeRisk = role === 'admin' || role === 'partner' || role === 'investor';
 
   useEffect(() => {
     loadDeals();
@@ -121,6 +123,7 @@ export default function DealsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {canSeeRisk && <FounderRiskBadge dealId={deal.id} />}
                     {nextStatus && deal.status !== 'rejected' && (
                       <button onClick={() => updateDeal(deal.id, nextStatus)} className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-medium flex items-center gap-1">
                         <ArrowRight size={12} /> {nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}

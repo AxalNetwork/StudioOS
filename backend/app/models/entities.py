@@ -397,6 +397,38 @@ def _partner_assign_slug(_mapper, _connection, target: "Partner") -> None:
 
 
 # ---------------------------------------------------------------------------
+# Task #41 — Founder risk profile
+# Auto-pull external signal on a founder (LinkedIn / Crunchbase via PitchBook
+# integration) and compute a deterministic risk score surfaced on the deal
+# record. One row per founder; refreshed via /founder-risk/{founder_id}/pull.
+# ---------------------------------------------------------------------------
+class FounderRiskProfile(SQLModel, table=True):
+    __tablename__ = "founder_risk_profiles"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    founder_id: int = Field(foreign_key="founders.id", unique=True, index=True)
+    # Raw signal — JSON blobs so the schema doesn't churn as PitchBook
+    # response shape evolves.
+    prior_roles_json: Optional[str] = None    # [{title, company, years, seniority}]
+    exits_count: int = 0                       # successful acquisitions / IPOs
+    failures_count: int = 0                    # shut-downs / fire-sales
+    domain_expertise_years: int = 0
+    domain_tags_json: Optional[str] = None     # ["fintech","ai/ml","b2b-saas"]
+    notable_signals_json: Optional[str] = None # free-form ["YC W19 alum", ...]
+    raw_payload_json: Optional[str] = None     # full provider response (audit)
+    # Provenance
+    source_provider: Optional[str] = None      # "pitchbook" | "synthetic"
+    source_integration_uid: Optional[str] = None
+    pulled_at: Optional[datetime] = None
+    # Deterministic computed fields (lower = safer founder)
+    risk_score: Optional[float] = None         # 0.0 - 100.0
+    risk_band: Optional[str] = None            # low | medium | high
+    score_breakdown_json: Optional[str] = None # weighting trace for the UI
+    computed_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
 # Task #43 — Reference check workflow
 # Standardise reference calls so they're recorded, transcribed, summarised,
 # and tagged. Surfaced in the deal record. Admin / investor only.

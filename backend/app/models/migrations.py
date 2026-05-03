@@ -639,6 +639,55 @@ def ensure_partner_directory_columns() -> None:
         session.commit()
 
 
+def ensure_founder_risk_profiles_table() -> None:
+    """Task #41 — Founder risk profile.
+
+    One row per founder; populated from PitchBook (or synthetic fallback).
+    Idempotent CREATE TABLE IF NOT EXISTS + indexes.
+    """
+    ddl = """
+    CREATE TABLE IF NOT EXISTS founder_risk_profiles (
+        id SERIAL PRIMARY KEY,
+        founder_id INTEGER NOT NULL UNIQUE REFERENCES founders(id),
+        prior_roles_json TEXT,
+        exits_count INTEGER DEFAULT 0 NOT NULL,
+        failures_count INTEGER DEFAULT 0 NOT NULL,
+        domain_expertise_years INTEGER DEFAULT 0 NOT NULL,
+        domain_tags_json TEXT,
+        notable_signals_json TEXT,
+        raw_payload_json TEXT,
+        source_provider VARCHAR,
+        source_integration_uid VARCHAR,
+        pulled_at TIMESTAMP,
+        risk_score DOUBLE PRECISION,
+        risk_band VARCHAR,
+        score_breakdown_json TEXT,
+        computed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )
+    """
+    indexes = (
+        ("ix_founder_risk_profiles_founder", "founder_id"),
+        ("ix_founder_risk_profiles_band",    "risk_band"),
+    )
+    with Session(engine) as session:
+        try:
+            session.exec(text(ddl))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_founder_risk_profiles_table: CREATE failed: %s", exc)
+            session.rollback()
+        for name, expr in indexes:
+            try:
+                session.exec(text(
+                    f"CREATE INDEX IF NOT EXISTS {name} ON founder_risk_profiles({expr})"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_founder_risk_profiles_table: %s INDEX failed: %s", name, exc)
+        session.commit()
+
+
 def ensure_references_table() -> None:
     """Task #43 — Reference check workflow.
 
