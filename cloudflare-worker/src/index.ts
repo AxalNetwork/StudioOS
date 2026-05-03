@@ -47,6 +47,7 @@ import pipeline from './routes/pipeline';
 import search from './routes/search';
 import kyc from './routes/kyc';
 import esign from './routes/esign';
+import integrations from './routes/integrations';
 import network from './routes/network';
 import networkfx from './routes/networkfx';
 import profiling from './routes/profiling';
@@ -162,6 +163,7 @@ app.route('/api/studioops', studioops);
 app.route('/api/dashboard', dashboard);
 app.route('/api/matches', matches);
 app.route('/api/settings', settings);
+app.route('/api/integrations', integrations);
 app.route('/api/personas', personas);
 
 app.notFound((c) => c.json({ detail: 'Not found' }, 404));
