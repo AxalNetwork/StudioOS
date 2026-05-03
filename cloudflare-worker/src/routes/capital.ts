@@ -151,6 +151,25 @@ capital.post('/calls', async (c) => {
     VALUES (${resolvedLpId}, ${data.project_id || null}, ${data.amount}, ${data.due_date || null})
     RETURNING *
   `;
+
+  // Phase 0.2 notify — fire after commit, never block the 201.
+  try {
+    const lpRow = await sql`SELECT user_id FROM limited_partners WHERE id = ${resolvedLpId}`;
+    const lpUserId = lpRow[0]?.user_id;
+    if (lpUserId) {
+      const { notify } = await import('../services/notify');
+      await notify(c.env, {
+        userId: lpUserId,
+        type: 'capital_call_issued',
+        title: `Capital call: $${call.amount}`,
+        body: `A capital call has been issued${call.due_date ? ` (due ${call.due_date})` : ''}.`,
+        link: '/capital',
+        payload: { call_id: call.id, amount: call.amount, due_date: call.due_date },
+        channels: ['in_app', 'email', 'slack'],
+      });
+    }
+  } catch (e) { console.warn('[capital] notify capital_call_issued failed', e); }
+
   await sql.end();
   return c.json(callDto(call), 201);
 });
@@ -194,6 +213,26 @@ capital.post('/calls/:id/pay', async (c) => {
   }
 
   const [updated] = await sql`SELECT * FROM capital_calls WHERE id = ${id}`;
+
+  try {
+    if (lpId) {
+      const lpRow = await sql`SELECT user_id FROM limited_partners WHERE id = ${lpId}`;
+      const lpUserId = lpRow[0]?.user_id;
+      if (lpUserId) {
+        const { notify } = await import('../services/notify');
+        await notify(c.env, {
+          userId: lpUserId,
+          type: 'capital_call_paid',
+          title: `Capital call marked paid: $${updated.amount}`,
+          body: 'Thanks — your capital call has been recorded as paid.',
+          link: '/capital',
+          payload: { call_id: updated.id, amount: updated.amount },
+          channels: ['in_app', 'email'],
+        });
+      }
+    }
+  } catch (e) { console.warn('[capital] notify capital_call_paid failed', e); }
+
   await sql.end();
   return c.json({ status: 'paid', call: callDto(updated) });
 });

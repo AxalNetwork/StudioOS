@@ -72,6 +72,34 @@ deals.put('/:id', async (c) => {
   if (data.amount !== undefined) await sql`UPDATE deals SET amount = ${data.amount}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
 
   const [updated] = await sql`SELECT * FROM deals WHERE id = ${id}`;
+
+  // Phase 0.2 notify — surface stage changes to the founder behind the project.
+  try {
+    if (data.status) {
+      const own = await sql`
+        SELECT f.user_id AS founder_user_id, p.name AS project_name
+        FROM deals d
+        LEFT JOIN projects p ON p.id = d.project_id
+        LEFT JOIN founders f ON f.id = p.founder_id
+        WHERE d.id = ${id}
+      `;
+      const founderUserId = own[0]?.founder_user_id;
+      const projectName = own[0]?.project_name || 'your project';
+      if (founderUserId) {
+        const { notify } = await import('../services/notify');
+        await notify(c.env, {
+          userId: founderUserId,
+          type: 'deal_stage_change',
+          title: `${projectName}: deal stage → ${data.status}`,
+          body: 'A partner updated the deal stage on your project.',
+          link: '/deals',
+          payload: { deal_id: updated.id, status: updated.status },
+          channels: ['in_app', 'email'],
+        });
+      }
+    }
+  } catch (e) { console.warn('[deals] notify deal_stage_change failed', e); }
+
   await sql.end();
   return c.json(updated);
 });

@@ -663,6 +663,7 @@ export default function App() {
       <Route path="/esign/:token" element={<ESignPage />} />
       <Route path="/settings/email/confirm" element={<EmailChangeConfirmPage />} />
       <Route path="/settings/email/revoke" element={<EmailChangeRevokePage />} />
+      <Route path="/settings/:section" element={guard(['admin', 'founder', 'partner', 'investor'], <SettingsPage />)} />
 
       {/* Phase 0.1 — investor role added to every guard a partner currently
           passes. Investor-only nav is curated above (NAV_BY_ROLE.investor)

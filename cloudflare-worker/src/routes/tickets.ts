@@ -200,6 +200,24 @@ tickets.put('/:id', async (c) => {
   }
 
   const [updated] = await sql`SELECT * FROM tickets WHERE id = ${id}`;
+
+  // Phase 0.2 notify — page the ticket owner on any update they didn't make.
+  try {
+    const ownerId = updated?.user_id;
+    if (ownerId && ownerId !== user.id) {
+      const { notify } = await import('../services/notify');
+      await notify(c.env, {
+        userId: ownerId,
+        type: 'ticket_update',
+        title: `Ticket #${updated.id} updated`,
+        body: `Status: ${updated.status}${updated.assigned_to ? ` · assigned to user #${updated.assigned_to}` : ''}.`,
+        link: '/tickets',
+        payload: { ticket_id: updated.id, status: updated.status },
+        channels: ['in_app', 'email'],
+      });
+    }
+  } catch (e) { console.warn('[tickets] notify ticket_update failed', e); }
+
   await sql.end();
   return c.json(updated);
 });

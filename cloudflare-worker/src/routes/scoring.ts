@@ -242,6 +242,27 @@ scoring.post('/score', async (c) => {
     try { await autoCreateStudioOpsForProject(c.env, projectId, newStatus, user.id); } catch {}
   }
 
+  // Phase 0.2 notify — page the founder when an official score lands on
+  // their project. Sandbox runs and self-runs are intentionally silent.
+  try {
+    if (!effectiveSandbox && project.founder_id) {
+      const fr = await sql`SELECT user_id FROM founders WHERE id = ${project.founder_id}`;
+      const founderUserId = fr[0]?.user_id;
+      if (founderUserId && founderUserId !== user.id) {
+        const { notify } = await import('../services/notify');
+        await notify(c.env, {
+          userId: founderUserId,
+          type: 'score_generated',
+          title: `${project.name || 'Your project'}: new score ${result.total_score}`,
+          body: `Tier: ${result.tier || newStatus}.${reviewStatus === 'flagged' ? ' Pending admin review.' : ''}`,
+          link: `/projects/${projectId}`,
+          payload: { snapshot_id: snapshot.id, total_score: result.total_score, tier: result.tier },
+          channels: ['in_app', 'email'],
+        });
+      }
+    }
+  } catch (e) { console.warn('[scoring] notify score_generated failed', e); }
+
   return c.json({
     ...result,
     snapshot_id: snapshot.id,

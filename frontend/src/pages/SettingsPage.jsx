@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import {
   User, Globe, Mail, ShieldCheck, Bell, Lock, Briefcase, Users,
@@ -49,16 +50,25 @@ const NOTIFICATION_EVENTS = [
   { key: 'deal_assigned', label: 'New deal assigned to me' },
   { key: 'pipeline_status_change', label: 'Pipeline status changes' },
   { key: 'capital_call_issued', label: 'Capital call issued' },
+  { key: 'capital_call_paid', label: 'Capital call marked paid' },
   { key: 'agreement_ready_to_sign', label: 'Agreement ready to sign' },
   { key: 'kyc_status_change', label: 'KYC status updates' },
   { key: 'mentions_and_comments', label: 'Mentions & comments' },
+  { key: 'ticket_update', label: 'Ticket updates' },
+  { key: 'deal_stage_change', label: 'Deal stage changes' },
+  { key: 'score_generated', label: 'New score generated for your project' },
+  { key: 'vote_threshold_reached', label: 'Pipeline vote threshold reached' },
   { key: 'weekly_digest', label: 'Weekly digest' },
   { key: 'product_announcements', label: 'Product announcements' },
 ];
 
+// Channel keys are the canonical names used by services/notify.{py,ts}.
+// `inapp` is kept as an alias-only column for legacy `notification_prefs`
+// rows, but the new subsystem reads/writes `in_app`.
 const NOTIFICATION_CHANNELS = [
   { key: 'email', label: 'Email' },
-  { key: 'inapp', label: 'In-app' },
+  { key: 'in_app', label: 'In-app' },
+  { key: 'slack', label: 'Slack' },
   // SMS column reserved — wired in the table as disabled until Twilio is provisioned.
   { key: 'sms', label: 'SMS', disabled: true, hint: 'Coming soon' },
 ];
@@ -85,11 +95,39 @@ const SECTIONS = [
 
 // ---------- Page ------------------------------------------------------------
 
+// Map a deep-link URL path → preselected section id. The page is mounted
+// at both `/settings` (top-level) and `/settings/:section` so the bell can
+// land users directly on the notification matrix.
+const PATH_TO_SECTION = {
+  notifications: 'notifications',
+  profile: 'profile',
+  jurisdictions: 'jurisdictions',
+  auth: 'auth',
+  privacy: 'privacy',
+  role: 'role',
+};
+
 export default function SettingsPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const initialSection = (() => {
+    const m = location.pathname.match(/^\/settings\/([^/]+)/);
+    if (m && PATH_TO_SECTION[m[1]]) return PATH_TO_SECTION[m[1]];
+    return 'profile';
+  })();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [active, setActive] = useState('profile');
+  const [active, setActive] = useState(initialSection);
+
+  // Keep the URL in lockstep with the active section so deep links work
+  // both ways (bell → /settings/notifications, sidebar click → URL update).
+  useEffect(() => {
+    const want = active === 'profile' ? '/settings' : `/settings/${active}`;
+    if (location.pathname !== want && location.pathname.startsWith('/settings')) {
+      navigate(want, { replace: true });
+    }
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
@@ -625,10 +663,13 @@ function AuthSection({ data, flash }) {
 function NotificationsSection({ data, patch }) {
   const prefs = data.notification_prefs || {};
   const setEvent = (eventKey, channel, value) => {
-    const next = {
-      ...prefs,
-      [eventKey]: { ...(prefs[eventKey] || {}), [channel]: value },
-    };
+    const cur = { ...(prefs[eventKey] || {}) };
+    cur[channel] = value;
+    // Keep `inapp`/`in_app` mirrored so the new bell subsystem and any
+    // legacy reader stay consistent during the transition.
+    if (channel === 'in_app') cur.inapp = value;
+    if (channel === 'inapp') cur.in_app = value;
+    const next = { ...prefs, [eventKey]: cur };
     patch({ notification_prefs: next });
   };
 

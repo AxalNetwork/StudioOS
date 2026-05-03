@@ -456,6 +456,38 @@ export async function sendFlaggedScoreDigestEmail(
   }
 }
 
+/**
+ * Generic transactional sender for the Phase 0.2 notification center.
+ * Used by services/notify.ts when a notification's resolved channels
+ * include 'email'. Returns false on any failure so callers can swallow.
+ */
+export async function sendNotificationEmail(
+  env: Env,
+  to: string,
+  subject: string,
+  body: string,
+): Promise<boolean> {
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+    return false;
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const safeBody = escapeHtml(body || subject);
+    const html = `<p style="font-family:'Space Grotesk',sans-serif;font-size:14px;color:#111;">${safeBody}</p>`;
+    const rawEmail = buildRawEmail(to, subject, html, body || subject);
+    const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+    return res.ok;
+  } catch (e: any) {
+    console.error(`[EMAIL] notification send failed for ${to}: ${e?.message || 'unknown'}`);
+    return false;
+  }
+}
+
 export async function sendVerificationEmail(env: Env, to: string, name: string, verificationUrl: string): Promise<boolean> {
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
     console.error('[EMAIL] Gmail credentials missing');

@@ -151,7 +151,7 @@ export default function NotificationBell({ userId }) {
                 className="p-1.5 rounded hover:bg-gray-100 text-gray-500" disabled={!count}>
                 <CheckCheck size={14} />
               </button>
-              <button onClick={() => { setOpen(false); navigate('/settings'); }} title="Notification settings"
+              <button onClick={() => { setOpen(false); navigate('/settings/notifications'); }} title="Notification settings"
                 className="p-1.5 rounded hover:bg-gray-100 text-gray-500">
                 <SettingsIcon size={14} />
               </button>
