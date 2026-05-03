@@ -258,6 +258,14 @@ export const api = {
   onboardingSaveProgress: (payload) => request('/onboarding/progress', { method: 'PUT', body: JSON.stringify(payload) }),
   onboardingComplete: (flow) => request('/onboarding/complete', { method: 'POST', body: JSON.stringify({ flow }) }),
 
+  // Task #24 — Brand & landing page generator.
+  brandSuggest: (payload) => request('/brand/suggest', { method: 'POST', body: JSON.stringify(payload) }),
+  brandLogo: (payload) => request('/brand/logo', { method: 'POST', body: JSON.stringify(payload) }),
+  brandGetLanding: (projectId) => request(`/brand/landing/by-project/${projectId}`),
+  brandSaveLanding: (projectId, payload) => request(`/brand/landing/by-project/${projectId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  brandPublishLanding: (projectId, published) => request(`/brand/landing/by-project/${projectId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
+  brandListWaitlist: (projectId) => request(`/brand/landing/by-project/${projectId}/waitlist`),
+
   matchPreferences: () => request('/matches/preferences'),
   matchPreferencesSave: (data) => request('/matches/preferences', { method: 'PUT', body: JSON.stringify(data) }),
   matchDealFlow: () => request('/matches/deal-flow'),

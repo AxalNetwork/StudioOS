@@ -54,6 +54,7 @@ import AcademyLessonPage from './pages/AcademyLessonPage';
 import OnboardingFounderPage from './pages/OnboardingFounderPage';
 import OnboardingInvestorPage from './pages/OnboardingInvestorPage';
 import OnboardingPartnerPage from './pages/OnboardingPartnerPage';
+import BrandBuilderPage from './pages/BrandBuilderPage';
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
 import EmailChangeRevokePage from './pages/EmailChangeRevokePage';
@@ -123,6 +124,7 @@ const NAV_BY_ROLE = {
 
     { section: 'Intelligence' },
     { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
+    { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
 
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
@@ -728,6 +730,7 @@ export default function App() {
       <Route path="/onboarding/founder" element={guard(['admin', 'founder'], <OnboardingFounderPage />)} />
       <Route path="/onboarding/investor" element={guard(['admin', 'investor'], <OnboardingInvestorPage />)} />
       <Route path="/onboarding/partner" element={guard(['admin', 'partner'], <OnboardingPartnerPage />)} />
+      <Route path="/build/brand" element={guard(['admin', 'founder'], <BrandBuilderPage />)} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
       <Route path="/scoring" element={guard(['admin', 'partner', 'investor'], <ScoringPage />)} />
       <Route path="/projects" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectsPage />)} />

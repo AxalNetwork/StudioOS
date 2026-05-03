@@ -57,6 +57,7 @@ import matches from './routes/matches';
 import settings from './routes/settings';
 import personas from './routes/personas';
 import onboarding from './routes/onboarding';
+import brand, { renderLandingHtml } from './routes/brand';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import { processQueueBatch } from './services/queueWorker';
@@ -154,6 +155,12 @@ app.route('/api/email', email);
 app.route('/api/pipeline', pipeline);
 app.route('/api/search', search);
 app.route('/api/onboarding', onboarding);
+app.route('/api/brand', brand);
+
+// Public landing page HTML (no /api prefix). Founders publish via the
+// authenticated /api/brand/landing/by-project/:pid/publish endpoint;
+// this route renders the page for un-authenticated visitors.
+app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug')));
 app.route('/api/kyc', kyc);
 // Frontend (`frontend/src/lib/api.js`) calls `/api/legal/esign/...` — mount
 // the esign router under that path, NOT `/api/esign`. Mounting it inside
