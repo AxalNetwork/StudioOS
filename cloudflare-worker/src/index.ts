@@ -56,6 +56,7 @@ import dashboard from './routes/dashboard';
 import matches from './routes/matches';
 import settings from './routes/settings';
 import personas from './routes/personas';
+import onboarding from './routes/onboarding';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import { processQueueBatch } from './services/queueWorker';
@@ -152,6 +153,7 @@ app.route('/api/liquidity', liquidity);
 app.route('/api/email', email);
 app.route('/api/pipeline', pipeline);
 app.route('/api/search', search);
+app.route('/api/onboarding', onboarding);
 app.route('/api/kyc', kyc);
 // Frontend (`frontend/src/lib/api.js`) calls `/api/legal/esign/...` — mount
 // the esign router under that path, NOT `/api/esign`. Mounting it inside

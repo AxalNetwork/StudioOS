@@ -253,6 +253,11 @@ export const api = {
   },
   searchBackfill: (types) => request('/search/backfill', { method: 'POST', body: JSON.stringify({ types }) }),
 
+  // Phase 0.2 / Task #23 — onboarding wizard progress.
+  onboardingGetProgress: () => request('/onboarding/progress'),
+  onboardingSaveProgress: (payload) => request('/onboarding/progress', { method: 'PUT', body: JSON.stringify(payload) }),
+  onboardingComplete: (flow) => request('/onboarding/complete', { method: 'POST', body: JSON.stringify({ flow }) }),
+
   matchPreferences: () => request('/matches/preferences'),
   matchPreferencesSave: (data) => request('/matches/preferences', { method: 'PUT', body: JSON.stringify(data) }),
   matchDealFlow: () => request('/matches/deal-flow'),

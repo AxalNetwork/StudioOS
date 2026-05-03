@@ -51,6 +51,9 @@ import FundsPage from './pages/FundsPage';
 import SettingsPage from './pages/SettingsPage';
 import OnboardingPersonaPage from './pages/OnboardingPersonaPage';
 import AcademyLessonPage from './pages/AcademyLessonPage';
+import OnboardingFounderPage from './pages/OnboardingFounderPage';
+import OnboardingInvestorPage from './pages/OnboardingInvestorPage';
+import OnboardingPartnerPage from './pages/OnboardingPartnerPage';
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
 import EmailChangeRevokePage from './pages/EmailChangeRevokePage';
@@ -486,6 +489,8 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   const [kycStatus, setKycStatus] = useState(user?.kyc_status || null);
   const [accessLevel, setAccessLevel] = useState(user?.access_level || null);
   const [primaryPersonaId, setPrimaryPersonaId] = useState(null);
+  const [onboardingFlow, setOnboardingFlow] = useState(null);
+  const [onboardingComplete, setOnboardingComplete] = useState(true);
 
   useEffect(() => {
     if (!user) return;
@@ -511,12 +516,41 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
         const primary = r?.personas?.find((p) => p.is_primary) || r?.personas?.[0];
         setPrimaryPersonaId(primary?.persona_id || null);
       } catch {}
+      // Phase 0.2 / Task #23 — onboarding resume.
+      // Fetch the per-user wizard progress so RequireAuth can redirect
+      // unfinished users back to the right /onboarding/<role> step.
+      try {
+        const p = await api.onboardingGetProgress();
+        if (cancelled) return;
+        setOnboardingFlow(p?.flow || null);
+        setOnboardingComplete(!!p?.completed_at);
+      } catch {
+        // Endpoint missing or transient error — don't block login.
+        if (!cancelled) setOnboardingComplete(true);
+      }
     })();
     return () => { cancelled = true; };
   }, [user?.id]);
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Phase 0.2 / Task #23 — wizard resume gate.
+  // Roles that have a dedicated wizard land back on it until completion.
+  // Admins are exempt; persona-only flows (/onboarding/persona) and the
+  // wizard pages themselves are always reachable so the user can finish.
+  const wizardForRole = { founder: '/onboarding/founder', investor: '/onboarding/investor', partner: '/onboarding/partner' };
+  const myWizard = wizardForRole[user.role];
+  const onWizardPath = location.pathname.startsWith('/onboarding/');
+  if (
+    myWizard &&
+    !isImpersonating &&
+    !onboardingComplete &&
+    onboardingFlow === user.role &&
+    !onWizardPath
+  ) {
+    return <Navigate to={myWizard} replace />;
   }
 
   // Onboarding gate: non-admin users must complete KYC before accessing other pages.
@@ -529,6 +563,11 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   // The /kyc, /activity, /tickets routes remain reachable for everyone.
   const effectiveRole = (realUser || user)?.role;
   const ALLOWED_BEFORE_KYC = ['/kyc', '/activity', '/tickets'];
+  // Onboarding wizards (/onboarding/*) are always reachable so the
+  // wizard-resume gate above can land users without bouncing them to
+  // /kyc — otherwise the two gates form a `/kyc` ↔ `/onboarding/<role>`
+  // redirect loop for incomplete, not-yet-approved users.
+  const onOnboardingPath = location.pathname.startsWith('/onboarding/');
   if (
     effectiveRole !== 'admin' &&
     effectiveRole !== 'founder' &&
@@ -536,7 +575,8 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     accessLevel !== 'limited' &&
     kycStatus &&
     kycStatus !== 'approved' &&
-    !ALLOWED_BEFORE_KYC.includes(location.pathname)
+    !ALLOWED_BEFORE_KYC.includes(location.pathname) &&
+    !onOnboardingPath
   ) {
     return <Navigate to="/kyc" replace />;
   }
@@ -674,6 +714,9 @@ export default function App() {
           stay permissive so deep links keep working during the split. */}
       <Route path="/dashboard" element={guard(['admin', 'founder', 'partner', 'investor'], <Dashboard />)} />
       <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
+      <Route path="/onboarding/founder" element={guard(['admin', 'founder'], <OnboardingFounderPage />)} />
+      <Route path="/onboarding/investor" element={guard(['admin', 'investor'], <OnboardingInvestorPage />)} />
+      <Route path="/onboarding/partner" element={guard(['admin', 'partner'], <OnboardingPartnerPage />)} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
       <Route path="/scoring" element={guard(['admin', 'partner', 'investor'], <ScoringPage />)} />
       <Route path="/projects" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectsPage />)} />

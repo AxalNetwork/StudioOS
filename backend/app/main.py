@@ -260,6 +260,8 @@ app.include_router(partnernet.router, prefix="/api")
 app.include_router(pipeline_votes.router, prefix="/api")
 from backend.app.api.routes import search as _search  # noqa: E402
 app.include_router(_search.router, prefix="/api")
+from backend.app.api.routes import onboarding as _onboarding  # noqa: E402
+app.include_router(_onboarding.router, prefix="/api")
 app.include_router(personas.router, prefix="/api")
 app.include_router(integrations.router, prefix="/api")
 from backend.app.api.routes import email as email_routes  # noqa: E402
