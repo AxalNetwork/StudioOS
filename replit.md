@@ -27,6 +27,7 @@ The user prefers clear and concise communication. They value iterative developme
 - **Financial Model Builder**: Allows founders to create and analyze financial projections, runway, and breakeven points.
 - **Progress Tracking**: Modules for customer discovery (interviews), roadmap (OKRs with Kanban), and metrics snapshots (MRR, users, LTV-CAC, churn).
 - **Demand Insights**: Aggregates founder needs into heatmaps, trends, and an insight feed for partners and investors.
+- **Reference Check Workflow** (Task #43): Admin/investor-only flow to schedule reference calls, capture explicit consent (snapshotted text + audit trail), upload audio recordings (50MB cap, audio mime allowlist), transcribe via Whisper, and summarise via Llama (`LLAMA_API_URL`/`LLAMA_API_KEY`, OpenAI-compatible) → OpenAI `gpt-4o-mini` → keyword fallback. Output includes summary, tags, strengths, red flags, quotes, and overall sentiment. Recording upload is hard-gated on consent; consent withdrawal cascades a wipe of recording + transcript + summary. Recordings served only via short-lived signed tokens (`/api/files/references/{token}`). Surfaced as an expandable panel on the Deals pipeline page; partners and founders are blocked at the API layer.
 
 ### Architectural Decisions
 - The Cloudflare Worker is the primary production API, with FastAPI serving as the local development backend.

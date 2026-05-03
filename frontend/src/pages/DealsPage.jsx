@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { ArrowRight, Filter } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronRight, Filter } from 'lucide-react';
+import ReferenceChecksPanel from '../components/ReferenceChecksPanel';
+
+function getCurrentRole() {
+  try { return JSON.parse(localStorage.getItem('user') || '{}').role || null; }
+  catch { return null; }
+}
 
 const STATUSES = ['all', 'applied', 'scored', 'active', 'funded', 'rejected'];
 const statusColors = {
@@ -17,6 +23,9 @@ export default function DealsPage() {
   const [deals, setDeals] = useState([]);
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(null);
+  const role = getCurrentRole();
+  const canSeeReferences = role === 'admin' || role === 'investor';
 
   useEffect(() => {
     loadDeals();
@@ -85,29 +94,46 @@ export default function DealsPage() {
             const currentIdx = PIPELINE.indexOf(deal.status);
             const nextStatus = currentIdx >= 0 && currentIdx < PIPELINE.length - 1 ? PIPELINE[currentIdx + 1] : null;
 
+            const isOpen = expanded === deal.id;
             return (
-              <div key={deal.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-1">
-                    <span className="text-gray-900 font-medium">{deal.project_name || `Project #${deal.project_id}`}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${statusColors[deal.status] || 'bg-gray-200 text-gray-700'}`}>
-                      {deal.status?.toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    {deal.project_sector && <span className="mr-4">{deal.project_sector}</span>}
-                    {deal.partner_name && <span className="mr-4">Partner: {deal.partner_name}</span>}
-                    {deal.amount && <span>${deal.amount.toLocaleString()}</span>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {nextStatus && deal.status !== 'rejected' && (
-                    <button onClick={() => updateDeal(deal.id, nextStatus)} className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-medium flex items-center gap-1">
-                      <ArrowRight size={12} /> {nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}
+              <div key={deal.id} className="bg-white border border-gray-200 rounded-xl">
+                <div className="p-4 flex items-center gap-4">
+                  {canSeeReferences && (
+                    <button
+                      onClick={() => setExpanded(isOpen ? null : deal.id)}
+                      className="text-gray-400 hover:text-gray-700"
+                      aria-label={isOpen ? 'Collapse' : 'Expand'}
+                    >
+                      {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                     </button>
                   )}
-                  <span className="text-xs text-gray-600">{new Date(deal.created_at).toLocaleDateString()}</span>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-1">
+                      <span className="text-gray-900 font-medium">{deal.project_name || `Project #${deal.project_id}`}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${statusColors[deal.status] || 'bg-gray-200 text-gray-700'}`}>
+                        {deal.status?.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {deal.project_sector && <span className="mr-4">{deal.project_sector}</span>}
+                      {deal.partner_name && <span className="mr-4">Partner: {deal.partner_name}</span>}
+                      {deal.amount && <span>${deal.amount.toLocaleString()}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {nextStatus && deal.status !== 'rejected' && (
+                      <button onClick={() => updateDeal(deal.id, nextStatus)} className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-medium flex items-center gap-1">
+                        <ArrowRight size={12} /> {nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}
+                      </button>
+                    )}
+                    <span className="text-xs text-gray-600">{new Date(deal.created_at).toLocaleDateString()}</span>
+                  </div>
                 </div>
+                {isOpen && canSeeReferences && (
+                  <div className="border-t border-gray-100 p-4 bg-gray-50/50">
+                    <ReferenceChecksPanel dealId={deal.id} currentUserRole={role} />
+                  </div>
+                )}
               </div>
             );
           })

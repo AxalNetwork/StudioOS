@@ -396,6 +396,48 @@ def _partner_assign_slug(_mapper, _connection, target: "Partner") -> None:
         target.slug = f"{base}-{suffix}" if suffix else base
 
 
+# ---------------------------------------------------------------------------
+# Task #43 — Reference check workflow
+# Standardise reference calls so they're recorded, transcribed, summarised,
+# and tagged. Surfaced in the deal record. Admin / investor only.
+# ---------------------------------------------------------------------------
+class Reference(SQLModel, table=True):
+    __tablename__ = "references"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    deal_id: int = Field(foreign_key="deals.id", index=True)
+    # Reference contact details
+    reference_name: str
+    reference_email: Optional[str] = None
+    reference_role: Optional[str] = None         # e.g. "Former CTO", "Customer", "Investor"
+    relationship: Optional[str] = None           # narrative — how they know the founder
+    # Scheduling
+    scheduled_at: Optional[datetime] = None
+    # Consent — explicit, captured before any recording is uploaded.
+    # `consent_text` snapshots the exact wording the reference agreed to so
+    # we have an audit trail even if the policy text changes later.
+    consent_given: bool = Field(default=False, index=True)
+    consent_given_at: Optional[datetime] = None
+    consent_text: Optional[str] = None
+    consent_captured_by: Optional[int] = Field(default=None, foreign_key="users.id")
+    # Recording (file-storage key, served via signed URL — never inline)
+    recording_file_key: Optional[str] = None
+    recording_size_bytes: Optional[int] = None
+    recording_content_type: Optional[str] = None
+    recording_uploaded_at: Optional[datetime] = None
+    # AI artefacts
+    transcript: Optional[str] = None
+    transcribed_at: Optional[datetime] = None
+    summary_json: Optional[str] = None           # {summary, tags[], red_flags[], strengths[], quotes[]}
+    summarized_at: Optional[datetime] = None
+    # Lifecycle: scheduled → recorded → transcribed → summarized | cancelled
+    status: str = Field(default="scheduled", index=True)
+    notes: Optional[str] = None
+    created_by: Optional[int] = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class PartnerReview(SQLModel, table=True):
     __tablename__ = "partner_reviews"
     id: Optional[int] = Field(default=None, primary_key=True)

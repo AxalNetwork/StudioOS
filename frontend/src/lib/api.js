@@ -7,8 +7,15 @@ function getAuthHeaders() {
 
 async function request(path, options = {}) {
   try {
+    // FormData uploads must NOT carry an explicit Content-Type — the browser
+    // sets it (with the multipart boundary). Setting application/json here
+    // would corrupt the request body.
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    const baseHeaders = isFormData
+      ? { ...getAuthHeaders(), ...options.headers }
+      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...options.headers };
     const res = await fetch(`${BASE}${path}`, {
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...options.headers },
+      headers: baseHeaders,
       ...options,
     });
     if (!res.ok) {
@@ -602,6 +609,28 @@ export const api = {
   listPersonasAdmin: () => request('/personas/admin/list'),
   retagPersonaAdmin: (user_id, persona_id) =>
     request(`/personas/admin/${user_id}/retag`, { method: 'POST', body: JSON.stringify({ persona_id }) }),
+
+  // ---------- Reference checks (Task #43, admin/investor only) ----------
+  listReferences: (dealId) =>
+    request(`/references${dealId != null ? `?deal_id=${dealId}` : ''}`),
+  getReference: (id) => request(`/references/${id}`),
+  createReference: (data) =>
+    request('/references', { method: 'POST', body: JSON.stringify(data) }),
+  updateReference: (id, data) =>
+    request(`/references/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteReference: (id) => request(`/references/${id}`, { method: 'DELETE' }),
+  captureReferenceConsent: (id, data) =>
+    request(`/references/${id}/consent`, { method: 'POST', body: JSON.stringify(data) }),
+  uploadReferenceRecording: (id, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request(`/references/${id}/recording`, { method: 'POST', body: fd });
+  },
+  getReferenceRecordingUrl: (id) => request(`/references/${id}/recording-url`),
+  transcribeReference: (id) =>
+    request(`/references/${id}/transcribe`, { method: 'POST' }),
+  summarizeReference: (id) =>
+    request(`/references/${id}/summarize`, { method: 'POST' }),
 
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {

@@ -639,6 +639,65 @@ def ensure_partner_directory_columns() -> None:
         session.commit()
 
 
+def ensure_references_table() -> None:
+    """Task #43 — Reference check workflow.
+
+    Idempotently creates the `references` table that backs scheduled
+    reference calls, consent capture, recording uploads, Whisper
+    transcription, and Llama / OpenAI summarisation.
+    """
+    ddl = """
+    CREATE TABLE IF NOT EXISTS "references" (
+        id SERIAL PRIMARY KEY,
+        uid VARCHAR UNIQUE NOT NULL,
+        deal_id INTEGER NOT NULL REFERENCES deals(id),
+        reference_name VARCHAR NOT NULL,
+        reference_email VARCHAR,
+        reference_role VARCHAR,
+        relationship VARCHAR,
+        scheduled_at TIMESTAMP,
+        consent_given BOOLEAN DEFAULT FALSE NOT NULL,
+        consent_given_at TIMESTAMP,
+        consent_text TEXT,
+        consent_captured_by INTEGER REFERENCES users(id),
+        recording_file_key VARCHAR,
+        recording_size_bytes INTEGER,
+        recording_content_type VARCHAR,
+        recording_uploaded_at TIMESTAMP,
+        transcript TEXT,
+        transcribed_at TIMESTAMP,
+        summary_json TEXT,
+        summarized_at TIMESTAMP,
+        status VARCHAR DEFAULT 'scheduled' NOT NULL,
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )
+    """
+    indexes = (
+        ("ix_references_uid",     "uid"),
+        ("ix_references_deal_id", "deal_id"),
+        ("ix_references_status",  "status"),
+        ("ix_references_consent", "consent_given"),
+    )
+    with Session(engine) as session:
+        try:
+            session.exec(text(ddl))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_references_table: CREATE failed: %s", exc)
+            session.rollback()
+        for name, expr in indexes:
+            try:
+                session.exec(text(
+                    f'CREATE INDEX IF NOT EXISTS {name} ON "references"({expr})'
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_references_table: %s INDEX failed: %s", name, exc)
+        session.commit()
+
+
 def ensure_service_catalogue_columns() -> None:
     """Task #51 — Service catalogue + engagement lifecycle.
 

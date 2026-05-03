@@ -27,6 +27,24 @@ def download_contract_by_token(token: str):
     if not file_key.startswith("contracts/"):
         raise HTTPException(status_code=403, detail="Token not valid for this resource")
 
+    return _serve_signed(file_key)
+
+
+@router.get("/files/references/{token}")
+def download_reference_recording(token: str):
+    """Task #43 — stream a reference-call recording via short-lived token."""
+    try:
+        payload = verify_signed_token(token)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=f"Invalid or expired link: {exc}")
+    file_key = payload["k"]
+    if not file_key.startswith("references/"):
+        raise HTTPException(status_code=403, detail="Token not valid for this resource")
+    return _serve_signed(file_key, default_ct="audio/mpeg")
+
+
+def _serve_signed(file_key: str, *, default_ct: str = "application/octet-stream") -> Response:
+
     try:
         data = get_storage().get(file_key)
     except Exception:  # noqa: BLE001
@@ -37,7 +55,14 @@ def download_contract_by_token(token: str):
     # stored-XSS sink for anyone who opens a share link. Force a download with
     # an opaque content type. PDFs are safe to inline, but we still attach.
     filename = file_key.rsplit("/", 1)[-1]
-    ct = "application/pdf" if file_key.endswith(".pdf") else "application/octet-stream"
+    if file_key.endswith(".pdf"):
+        ct = "application/pdf"
+    elif file_key.startswith("references/"):
+        # Audio recordings — content-type stored in sidecar/head().
+        head = get_storage().head(file_key) or {}
+        ct = head.get("content_type") or default_ct
+    else:
+        ct = default_ct
     return Response(
         content=data,
         media_type=ct,
