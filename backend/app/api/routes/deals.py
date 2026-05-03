@@ -85,7 +85,10 @@ def update_deal(deal_id: int, data: DealUpdate, session: Session = Depends(get_s
         raise HTTPException(status_code=404, detail="Deal not found")
 
     update_data = data.model_dump(exclude_unset=True)
-    prior_stage = getattr(deal, "stage", None)
+    # The Deal model uses `status` (DealStatus enum) — there is no `stage`
+    # column. Track stringified status so the publisher fires on transitions
+    # like APPLIED -> SCREENING -> DD -> IC -> CLOSED.
+    prior_stage = str(getattr(deal, "status", None) or "")
     for key, val in update_data.items():
         setattr(deal, key, val)
     deal.updated_at = datetime.utcnow()
@@ -94,7 +97,7 @@ def update_deal(deal_id: int, data: DealUpdate, session: Session = Depends(get_s
     session.refresh(deal)
 
     # Phase 0.2 — notify the owning founder when a deal stage advances.
-    new_stage = getattr(deal, "stage", None)
+    new_stage = str(getattr(deal, "status", None) or "")
     if new_stage and new_stage != prior_stage and deal.project_id:
         try:
             from backend.app.services.notify import notify
@@ -115,6 +118,7 @@ def update_deal(deal_id: int, data: DealUpdate, session: Session = Depends(get_s
                     body=f"Your deal moved from {prior_stage or 'open'} to {new_stage}",
                     link="/deals",
                     payload={"deal_id": deal.id, "from": prior_stage, "to": new_stage},
+                    channels=("in_app", "email", "slack"),
                 )
         except Exception:
             pass

@@ -105,16 +105,21 @@ realtime.get('/pipeline/ws/:deal_id', async (c) => {
 
   const user = await authenticateForUpgrade(c);
   if (!user) return c.json({ error: 'Unauthorized' }, 401);
-  if (!['admin', 'partner', 'investor'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403);
-  if (!kycOk(user)) return c.json({ error: 'KYC verification required', kyc_required: true }, 403);
-  if (!(await checkUpgradeRate(c.env, user.id))) return c.json({ error: 'Too many WS upgrades' }, 429);
 
   const dealId = c.req.param('deal_id');
-  // Special channel "overview" is the global board feed (all deals).
-  // Otherwise must be a numeric deal_id.
-  if (dealId !== 'overview' && !/^\d+$/.test(dealId)) {
-    return c.json({ error: 'Invalid deal_id' }, 400);
+  // Special channel "overview" is the global notifications + board feed —
+  // any authenticated active user may subscribe (founders need it for the
+  // bell). The PipelineRoom DO filters per-user `notification` frames by
+  // socket attachment, and only emits aggregate events (vote_updated,
+  // stage_change) on this channel — those are non-PII, board-level data.
+  // Per-deal numeric rooms remain restricted to admin/partner/investor.
+  const isOverview = dealId === 'overview';
+  if (!isOverview) {
+    if (!/^\d+$/.test(dealId)) return c.json({ error: 'Invalid deal_id' }, 400);
+    if (!['admin', 'partner', 'investor'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403);
+    if (!kycOk(user)) return c.json({ error: 'KYC verification required', kyc_required: true }, 403);
   }
+  if (!(await checkUpgradeRate(c.env, user.id))) return c.json({ error: 'Too many WS upgrades' }, 429);
 
   const roomName = dealId === 'overview' ? 'overview' : `deal:${dealId}`;
   const id = c.env.PIPELINE_ROOM.idFromName(roomName);

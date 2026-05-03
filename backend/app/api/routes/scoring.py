@@ -213,6 +213,7 @@ async def score_startup(
                         body=f"Total score: {result.get('total_score')}",
                         link=f"/projects/{project.id}",
                         payload={"project_id": project.id, "snapshot_id": snapshot.id, "total_score": result.get("total_score")},
+                        channels=("in_app", "email", "slack"),
                     )
             except Exception:
                 pass

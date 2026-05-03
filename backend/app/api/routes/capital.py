@@ -225,7 +225,7 @@ def create_capital_call(
                 body=f"${call.amount:,.0f} due {due.isoformat() if due else 'soon'}",
                 link="/capital",
                 payload={"call_id": call.id, "amount": call.amount, "due_date": due.isoformat() if due else None},
-                channels=("in_app", "email"),
+                channels=("in_app", "email", "slack"),
             )
         except Exception:
             pass
@@ -319,6 +319,7 @@ def mark_call_paid(
                     body=f"${call.amount:,.0f} payment confirmed",
                     link="/capital",
                     payload={"call_id": call.id, "amount": call.amount},
+                    channels=("in_app", "email", "slack"),
                 )
             except Exception:
                 pass

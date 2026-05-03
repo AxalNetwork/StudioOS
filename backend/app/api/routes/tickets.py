@@ -111,6 +111,7 @@ def update_ticket(
                 body=f"Status: {ticket.status}" + (f" · Assigned to {ticket.assigned_to}" if ticket.assigned_to else ""),
                 link="/tickets",
                 payload={"ticket_id": ticket.id, "status": str(ticket.status)},
+                channels=("in_app", "email", "slack"),
             )
         except Exception:
             pass

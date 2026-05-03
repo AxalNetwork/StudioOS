@@ -318,6 +318,7 @@ async def cast_vote(
                             body=f"Deal #{deal_id} hit {public['total_voters']} voters · weight {public['total_weight']}",
                             link="/pipeline",
                             payload={"deal_id": deal_id, "tally": public},
+                            channels=("in_app", "email", "slack"),
                         )
         except Exception:
             pass
