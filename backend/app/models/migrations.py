@@ -1335,6 +1335,77 @@ def ensure_section_83b_tracker_table() -> None:
             session.rollback()
 
 
+def ensure_compliance_events_table() -> None:
+    """Task #32 — compliance calendar.
+
+    Creates ``compliance_events`` for jurisdiction-specific recurring
+    deadlines (annual report, franchise tax, registered agent renewal,
+    board meetings) seeded from the incorporation wizard. Idempotent.
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS compliance_events (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    entity_id INTEGER REFERENCES entities(id) ON DELETE SET NULL,
+                    jurisdiction VARCHAR NOT NULL,
+                    event_type VARCHAR NOT NULL,
+                    title VARCHAR NOT NULL,
+                    description TEXT,
+                    due_date DATE NOT NULL,
+                    completion_status VARCHAR DEFAULT 'pending' NOT NULL,
+                    completed_at TIMESTAMP,
+                    completed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    recurrence VARCHAR DEFAULT 'annual' NOT NULL,
+                    source VARCHAR DEFAULT 'auto' NOT NULL,
+                    reminders_sent_json TEXT DEFAULT '[]' NOT NULL,
+                    created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_compliance_events_project ON compliance_events(project_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_compliance_events_due ON compliance_events(due_date)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_compliance_events_status ON compliance_events(completion_status)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_compliance_events_type ON compliance_events(event_type)"))
+            # Idempotency for auto-seeded events: a given (project, event_type,
+            # due_date) tuple should never be inserted twice by the seeder.
+            session.exec(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_compliance_event_seed "
+                "ON compliance_events(project_id, event_type, due_date)"
+            ))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_compliance_events_table: %s", exc)
+            session.rollback()
+
+
+def ensure_compliance_reminder_runs_table() -> None:
+    """Task #32 — daily lease for the compliance reminder loop.
+
+    Replaces the /tmp anchor file: a single-row-per-UTC-day primary
+    key + ``INSERT ... ON CONFLICT DO NOTHING`` gives an atomic,
+    multi-worker-safe ``claim today`` semantics. The architect flagged
+    the /tmp anchor as not lock-safe across workers / restarts.
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS compliance_reminder_runs (
+                    run_date DATE PRIMARY KEY,
+                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    pinged INTEGER DEFAULT 0 NOT NULL,
+                    scanned INTEGER DEFAULT 0 NOT NULL
+                )
+            """))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_compliance_reminder_runs_table: %s", exc)
+            session.rollback()
+
+
 def ensure_portfolio_health_tables() -> None:
     """Task #44 — Portfolio health score + predictive failure. Idempotent."""
     with Session(engine) as session:

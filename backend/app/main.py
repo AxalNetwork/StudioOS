@@ -86,6 +86,8 @@ async def lifespan(app: FastAPI):
             ensure_watchlist_decision_tables,
             ensure_push_subscriptions_table,
             ensure_section_83b_tracker_table,
+            ensure_compliance_events_table,
+            ensure_compliance_reminder_runs_table,
         )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
@@ -144,6 +146,10 @@ async def lifespan(app: FastAPI):
         # Task #57 — web push subscriptions table.
         ensure_push_subscriptions_table()
         logger.info("StudioOS migrations: push subscriptions table ensured")
+        # Task #32 — compliance calendar events table + daily-run lease.
+        ensure_compliance_events_table()
+        ensure_compliance_reminder_runs_table()
+        logger.info("StudioOS migrations: compliance_events table ensured")
     except Exception as exc:  # noqa: BLE001
         # Migrations are best-effort: a failure here must not prevent the API
         # from booting (e.g. fresh DB, missing legacy tables).
@@ -165,6 +171,14 @@ async def lifespan(app: FastAPI):
         health_task = asyncio.create_task(_dhl(health_stop))
     except Exception as exc:  # noqa: BLE001
         logger.warning("StudioOS: failed to start portfolio health loop: %s", exc)
+    # Task #32 — compliance calendar daily reminder loop.
+    compliance_stop = asyncio.Event()
+    compliance_task = None
+    try:
+        from backend.app.services.compliance_reminders import reminder_loop as _crl
+        compliance_task = asyncio.create_task(_crl(compliance_stop))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("StudioOS: failed to start compliance reminder loop: %s", exc)
     logger.info("StudioOS ready")
     yield
     logger.info("StudioOS shutting down")
@@ -180,6 +194,12 @@ async def lifespan(app: FastAPI):
             await asyncio.wait_for(health_task, timeout=5)
         except Exception:  # noqa: BLE001
             health_task.cancel()
+    if compliance_task:
+        compliance_stop.set()
+        try:
+            await asyncio.wait_for(compliance_task, timeout=5)
+        except Exception:  # noqa: BLE001
+            compliance_task.cancel()
 
 
 app = FastAPI(
@@ -351,6 +371,8 @@ from backend.app.api.routes import mentors as _mentors
 app.include_router(_mentors.router, prefix="/api")
 from backend.app.api.routes import calendar as _calendar
 app.include_router(_calendar.router, prefix="/api")
+from backend.app.api.routes import compliance as _compliance
+app.include_router(_compliance.router, prefix="/api")
 from backend.app.api.routes import cofounder as _cofounder
 app.include_router(_cofounder.router, prefix="/api")
 from backend.app.api.routes import portfolio_health as _portfolio_health

@@ -107,6 +107,21 @@ export const api = {
     request('/legal/83b/trackers', { method: 'POST', body: JSON.stringify(data) }),
   legal83bUpdate: (id, data) =>
     request(`/legal/83b/trackers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // Task #32 — Compliance calendar
+  complianceList: (projectId, status) => {
+    const q = new URLSearchParams();
+    if (projectId) q.set('project_id', String(projectId));
+    if (status) q.set('status', status);
+    const qs = q.toString();
+    return request(`/compliance/events${qs ? `?${qs}` : ''}`);
+  },
+  complianceCreate: (data) =>
+    request('/compliance/events', { method: 'POST', body: JSON.stringify(data) }),
+  complianceUpdate: (id, data) =>
+    request(`/compliance/events/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  complianceDelete: (id) =>
+    request(`/compliance/events/${id}`, { method: 'DELETE' }),
+
   legal83bUploadReceipt: (id, file) => {
     const fd = new FormData();
     fd.append('file', file);

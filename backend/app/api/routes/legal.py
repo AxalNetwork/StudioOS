@@ -1907,6 +1907,35 @@ def incorporate_wizard(
             "Open a US business bank account",
         ]
 
+    # Task #32 — auto-populate the compliance calendar with the standard
+    # recurring deadlines for this jurisdiction (annual report, franchise
+    # tax, registered agent, board meetings). Idempotent via a unique
+    # index on (project_id, event_type, due_date) — re-running the wizard
+    # is a no-op. Failures here must NOT break incorporation.
+    seeded_compliance: list[dict] = []
+    try:
+        from backend.app.api.routes.compliance import seed_standard_events_for_jurisdiction
+        seeded = seed_standard_events_for_jurisdiction(
+            session=session,
+            project_id=project.id,
+            entity=entity,
+            jurisdiction_id=j["id"],
+            jurisdiction_label=j["label"],
+            user_id=user.id,
+            incorporation_date=entity.incorporation_date,
+        )
+        seeded_compliance = [
+            {
+                "id": ev.id,
+                "event_type": ev.event_type,
+                "title": ev.title,
+                "due_date": ev.due_date.isoformat(),
+            }
+            for ev in seeded
+        ]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("incorporate_wizard: compliance seed failed: %s", exc)
+
     return {
         "ok": True,
         "jurisdiction": j,
@@ -1920,6 +1949,7 @@ def incorporate_wizard(
         },
         "documents": generated,
         "handoff": handoff,
+        "compliance_events": seeded_compliance,
     }
 
 

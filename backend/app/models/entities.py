@@ -1068,6 +1068,36 @@ class Section83bTracker(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class ComplianceEvent(SQLModel, table=True):
+    """Task #32 — recurring compliance reminders.
+
+    Auto-populated from the incorporation wizard for each jurisdiction
+    (annual report, franchise tax, registered agent renewal, board
+    meetings) and surfaced at /compliance with mark-complete + reminder
+    pings at T-30/14/7/1 days. Reminders fired are recorded in
+    ``reminders_sent_json`` so the daily loop never double-pings.
+    """
+    __tablename__ = "compliance_events"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    entity_id: Optional[int] = Field(default=None, foreign_key="entities.id", index=True)
+    jurisdiction: str = Field(index=True)               # JURISDICTIONS[].label
+    event_type: str = Field(index=True)                 # annual_report | franchise_tax | registered_agent | board_meeting | other
+    title: str
+    description: Optional[str] = None
+    due_date: date = Field(index=True)
+    completion_status: str = Field(default="pending", index=True)  # pending | completed | snoozed
+    completed_at: Optional[datetime] = None
+    completed_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    recurrence: str = Field(default="annual")           # annual | quarterly | monthly | one_time
+    source: str = Field(default="auto")                 # auto | manual
+    reminders_sent_json: str = Field(default="[]")      # ["T-30","T-14","T-7","T-1"]
+    created_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class UserCompanyLink(SQLModel, table=True):
     __tablename__ = "user_company_links"
     __table_args__ = (
