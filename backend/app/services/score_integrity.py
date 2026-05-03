@@ -89,22 +89,24 @@ def assert_official_inputs_complete(payload: dict[str, Any]) -> None:
 
 def _secret() -> bytes:
     """Use the dedicated SCORING_HMAC_SECRET if set, otherwise fall back to
-    JWT_SECRET so dev environments work without extra config. The Worker
-    follows the same fallback order.
+    JWT_SECRET so operators only have to rotate one key. The Worker follows
+    the same fallback order.
 
-    In production we FAIL FAST if neither is set (or is too short) — the
-    previous behavior silently used a hardcoded `dev-insecure-key`, which
-    would let signatures be forged by anyone with access to the source.
+    We FAIL FAST in ALL environments if neither is set (or is too short).
+    A previous version returned a hardcoded `dev-insecure-key` in
+    non-production envs, which is unsafe defense-in-depth: if a deploy
+    ever ran without ENVIRONMENT=production by mistake, score signatures
+    could be forged by anyone reading the public source. Local devs and
+    tests must set JWT_SECRET (or SCORING_HMAC_SECRET) explicitly — see
+    .env.example.
     """
     secret = os.environ.get("SCORING_HMAC_SECRET") or os.environ.get("JWT_SECRET") or ""
     if len(secret) < 16:
-        env = os.environ.get("ENVIRONMENT", "").lower()
-        if env in ("production", "prod"):
-            raise RuntimeError(
-                "SCORING_HMAC_SECRET (or JWT_SECRET) is missing or shorter than 16 chars; "
-                "refusing to sign with an insecure fallback in production."
-            )
-        secret = "studioos-dev-scoring-hmac-fallback-do-not-ship"
+        raise RuntimeError(
+            "SCORING_HMAC_SECRET (or JWT_SECRET) is missing or shorter than 16 chars; "
+            "set it in your .env (dev) or via `wrangler secret put` (prod). "
+            "Refusing to sign with an insecure key."
+        )
     return secret.encode("utf-8")
 
 

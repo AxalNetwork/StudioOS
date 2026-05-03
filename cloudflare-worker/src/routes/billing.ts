@@ -35,7 +35,7 @@ function isValidPlan(p: unknown): p is 'mi_pro_monthly' | 'mi_pro_annual' {
 }
 
 async function stripeCall<T>(env: Env, path: string, body: Record<string, string>): Promise<T> {
-  const key = (env as Env & { STRIPE_SECRET_KEY?: string }).STRIPE_SECRET_KEY;
+  const key = env.STRIPE_SECRET_KEY;
   if (!key) throw new Error('stripe_not_configured');
   const form = new URLSearchParams(body);
   const res = await fetch(`https://api.stripe.com/v1${path}`, {
@@ -60,7 +60,7 @@ billing.post('/mi-pro/checkout', async (c) => {
   const plan = body.plan;
   if (!isValidPlan(plan)) return c.json({ error: 'invalid_plan' }, 400);
 
-  const stripeKey = (c.env as Env & { STRIPE_SECRET_KEY?: string }).STRIPE_SECRET_KEY;
+  const stripeKey = c.env.STRIPE_SECRET_KEY;
   const priceEnvKey = PLAN_TO_PRICE_ENV[plan];
   // Cast through `unknown` because the `Env` type doesn't carry an index
   // signature for these dynamically-named price-id vars (STRIPE_PRICE_*).
@@ -133,7 +133,7 @@ billing.get('/mi-pro/status', async (c) => {
 // Dev-only: flip the user to active Pro without a real Stripe round-trip.
 // 404s when STRIPE_SECRET_KEY is set so prod can't accidentally expose this.
 billing.all('/mi-pro/dev-upgrade', async (c) => {
-  const stripeKey = (c.env as Env & { STRIPE_SECRET_KEY?: string }).STRIPE_SECRET_KEY;
+  const stripeKey = c.env.STRIPE_SECRET_KEY;
   if (stripeKey) return c.json({ error: 'not_found' }, 404);
   const user = (await requireAuth(c)) as MiUser;
   await ensureMiPaywallSchema(c.env);
@@ -162,7 +162,7 @@ billing.post('/stripe/webhook', async (c) => {
   await ensureMiPaywallSchema(c.env);
   const raw = await c.req.text();
   const sig = c.req.header('stripe-signature') ?? '';
-  const secret = (c.env as Env & { STRIPE_WEBHOOK_SECRET?: string }).STRIPE_WEBHOOK_SECRET;
+  const secret = c.env.STRIPE_WEBHOOK_SECRET;
   if (secret) {
     const ok = await verifyStripeSignature(raw, sig, secret);
     if (!ok) return c.json({ error: 'invalid_signature' }, 400);

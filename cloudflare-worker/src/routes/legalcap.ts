@@ -637,7 +637,7 @@ legalcap.post('/subsidiary/spinout', async (c) => {
   // === Stripe Atlas placeholder ===
   // Real integration would call Atlas API with env.STRIPE_ATLAS_API_KEY here.
   // For now we stamp a mock reference + 'pending' status, which a future cron/webhook can flip to 'incorporated'.
-  const stripeKey = (c.env as any).STRIPE_ATLAS_API_KEY;
+  const stripeKey = c.env.STRIPE_ATLAS_API_KEY;
   const stripeRef = stripeKey ? `atlas_pending_${Date.now()}` : `mock_atlas_${Date.now()}`;
   const stripeStatus = stripeKey ? 'pending' : 'pending'; // identical until real API is wired
 
@@ -911,7 +911,7 @@ legalcap.post('/spinout/stripe-atlas', async (c) => {
     .bind(sub.id).run();
   if (!reserve.meta?.changes) return c.json({ error: 'Incorporation already in progress' }, 409);
 
-  const stripeKey = (c.env as any).STRIPE_ATLAS_API_KEY;
+  const stripeKey = c.env.STRIPE_ATLAS_API_KEY;
   // Real flow would: POST to Atlas API with company name + jurisdiction → poll for incorporation.
   // For now: mock the start + mock immediate completion to keep wizard end-to-end testable.
   const atlasId = stripeKey ? `atlas_${crypto.randomUUID().slice(0, 12)}` : `mock_atlas_${Date.now()}`;

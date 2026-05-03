@@ -21,6 +21,12 @@ export interface Env {
   GITHUB_REPO_NAME?: string;
   PERSONA_API_KEY?: string;
   SUMSUB_API_KEY?: string;
+  // Stripe — used by routes/billing.ts and routes/funds.ts. Set via
+  // `wrangler secret put STRIPE_SECRET_KEY` etc. When unset, billing
+  // falls back to a dev /dev-upgrade flow and Atlas calls are stubbed.
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_ATLAS_API_KEY?: string;
   AI?: any;
   // R2 bucket for KYC documents and other large/private blobs.
   // Optional so unit-test envs without R2 bindings still type-check.

@@ -86,21 +86,21 @@ export function assertOfficialInputsComplete(body: Record<string, unknown>): voi
 
 // HMAC keying. SCORING_HMAC_SECRET wins when present; otherwise JWT_SECRET.
 // The boot guard enforces ≥32 bytes for JWT_SECRET in production.
-// In production we FAIL FAST if neither is set (or is too short to be
-// secure) — the previous behavior of silently using a hardcoded fallback
-// would let signatures be forged by anyone with access to the source.
+// In ALL environments we FAIL FAST if neither is set (or is too short to
+// be secure). A previous version returned a hardcoded fallback string in
+// non-production environments, which is unsafe defense-in-depth: if a
+// deploy ever ran without ENVIRONMENT=production by mistake, score
+// signatures could be forged by anyone reading the public source. Local
+// devs and tests must set JWT_SECRET (or SCORING_HMAC_SECRET) explicitly
+// — see .env.example.
 function hmacKey(env: Env): string {
   const k = env.SCORING_HMAC_SECRET || env.JWT_SECRET || '';
   if (!k || k.length < 16) {
-    const isProd = (env as unknown as { ENVIRONMENT?: string }).ENVIRONMENT === 'production';
-    if (isProd) {
-      throw new Error(
-        'SCORING_HMAC_SECRET (or JWT_SECRET) is missing or shorter than 16 chars. ' +
-        'Refusing to sign with an insecure fallback in production.',
-      );
-    }
-    // Dev only: stable predictable key so local tests work without env vars.
-    return 'studioos-dev-scoring-hmac-fallback-do-not-ship';
+    throw new Error(
+      'SCORING_HMAC_SECRET (or JWT_SECRET) is missing or shorter than 16 chars. ' +
+      'Set it via `wrangler secret put SCORING_HMAC_SECRET` in production, ' +
+      'or in your local .env for dev. Refusing to sign with an insecure key.',
+    );
   }
   return k;
 }
