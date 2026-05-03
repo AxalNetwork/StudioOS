@@ -100,6 +100,7 @@ class UserRole(str, Enum):
     FOUNDER = "founder"
     PARTNER = "partner"      # service providers (legal, accounting, design, recruiting, GTM, etc.)
     INVESTOR = "investor"    # capital allocators (LP / VC / Angel / Scout). Phase 0.1 split.
+    MENTOR = "mentor"        # Task #35 — operator-mentors offering office hours / 1:1 guidance.
 
 
 class User(SQLModel, table=True):
@@ -114,6 +115,8 @@ class User(SQLModel, table=True):
     partner_id: Optional[int] = Field(default=None, foreign_key="partners.id")
     # Phase 0.1 — link to investor profile when role == 'investor'.
     investor_id: Optional[int] = Field(default=None, foreign_key="investors.id")
+    # Task #35 — link to the mentor profile when role == 'mentor'.
+    mentor_id: Optional[int] = Field(default=None, foreign_key="mentors.id")
     is_active: bool = True
     email_verified: bool = False
     verification_token: Optional[str] = None
@@ -1112,3 +1115,114 @@ class MetricsSnapshot(SQLModel, table=True):
     notes: Optional[str] = None
     created_by: Optional[int] = Field(default=None, foreign_key="users.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Task #35 — Mentor matching + office hours
+# ---------------------------------------------------------------------------
+class Mentor(SQLModel, table=True):
+    """Operator-mentor profile. Distinct from Partner (service providers) and
+    Investor (capital allocators) — mentors offer 1:1 guidance, sometimes
+    free, sometimes for an hourly rate. Linked 1:1 to a User via
+    ``users.mentor_id`` once the user role is 'mentor'."""
+    __tablename__ = "mentors"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    name: str
+    email: str = Field(unique=True, index=True)
+    headline: Optional[str] = None             # e.g. "ex-Stripe payments PM"
+    bio: Optional[str] = None
+    specialties_json: str = "[]"               # ["fintech","gtm","fundraising",...]
+    sectors_json: str = "[]"                   # ["b2b_saas","fintech","ai",...]
+    timezone: Optional[str] = None             # IANA name, e.g. "America/New_York"
+    capacity_per_week: int = 4                 # soft cap; UI surfaces remaining bookings/week
+    hourly_rate: float = 0.0                   # 0 == free office hours
+    currency: str = "USD"
+    accepting_bookings: bool = Field(default=True, index=True)
+    listed: bool = Field(default=True, index=True)  # opt-in to public directory
+    rating_avg: Optional[float] = None         # cached over MentorReview rows
+    rating_count: int = 0
+    # Cal.com integration — when set, slot/booking creation is mirrored to
+    # the configured Cal.com event type. When null we are the source of truth.
+    calcom_username: Optional[str] = None
+    calcom_event_type_id: Optional[int] = None
+    status: str = Field(default="active", index=True)  # active | paused | suspended
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class OfficeHourSlot(SQLModel, table=True):
+    """A bookable office-hour window published by a mentor.
+
+    A slot may have ``capacity > 1`` for group office hours. Once
+    ``capacity`` accepted (confirmed/completed) bookings exist the slot
+    is considered fully booked and the booking endpoint refuses new
+    requests with a 409. Cancelled bookings free their spot.
+    """
+    __tablename__ = "office_hours_slots"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    mentor_id: int = Field(foreign_key="mentors.id", index=True)
+    start_at: datetime = Field(index=True)
+    duration_min: int = 30
+    capacity: int = 1                          # > 1 ⇒ group office hours
+    location_kind: str = "video"               # video | phone | in_person
+    location_uri: Optional[str] = None         # zoom/meet link (filled by mentor or Cal.com mirror)
+    notes: Optional[str] = None                # mentor-facing prep notes
+    status: str = Field(default="open", index=True)  # open | cancelled
+    calcom_event_id: Optional[str] = None      # mirror id when Cal.com is wired
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class MentorBooking(SQLModel, table=True):
+    """A confirmed (or pending) office-hours booking against a slot.
+
+    Lifecycle: ``requested`` → ``confirmed`` → ``completed``
+                                      ↘ ``cancelled`` (either side, any time before completed)
+                                      ↘ ``no_show`` (mentor stamps after the fact)
+    """
+    __tablename__ = "mentor_bookings"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    slot_id: int = Field(foreign_key="office_hours_slots.id", index=True)
+    mentor_id: int = Field(foreign_key="mentors.id", index=True)
+    requester_user_id: int = Field(foreign_key="users.id", index=True)
+    project_id: Optional[int] = Field(default=None, foreign_key="projects.id", index=True)
+    topic: str
+    questions: Optional[str] = None            # what the mentee wants to discuss
+    scheduled_start: datetime
+    scheduled_end: datetime
+    status: str = Field(default="requested", index=True)  # requested|confirmed|completed|cancelled|no_show
+    cancelled_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    cancel_reason: Optional[str] = None
+    confirmed_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
+    meeting_uri: Optional[str] = None          # snapshotted from slot at booking time
+    calcom_booking_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class MentorReview(SQLModel, table=True):
+    """Two-sided review: after a booking moves to ``completed`` either party
+    may file exactly one review describing the other. Direction is encoded by
+    ``reviewer_role`` ∈ {mentor, mentee}: a mentor-authored review describes
+    the mentee, a mentee-authored review describes the mentor. Mentor's
+    public ``rating_avg`` aggregates only mentee→mentor rows.
+    """
+    __tablename__ = "mentor_reviews"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    booking_id: int = Field(foreign_key="mentor_bookings.id", index=True)
+    mentor_id: int = Field(foreign_key="mentors.id", index=True)
+    reviewer_user_id: int = Field(foreign_key="users.id", index=True)
+    reviewer_role: str = Field(index=True)     # 'mentor' (about mentee) | 'mentee' (about mentor)
+    rating: int = Field(ge=1, le=5)
+    comment: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("booking_id", "reviewer_role", name="uq_mentor_reviews_booking_role"),
+    )

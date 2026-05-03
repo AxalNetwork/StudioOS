@@ -701,6 +701,151 @@ def ensure_trust_layer_columns() -> None:
             session.rollback()
 
 
+def ensure_mentor_tables() -> None:
+    """Task #35 — Mentor matching + office hours. Idempotent.
+
+    Creates four tables (``mentors``, ``office_hours_slots``,
+    ``mentor_bookings``, ``mentor_reviews``) and adds ``users.mentor_id``.
+    All DDL is wrapped in IF NOT EXISTS so we can safely run on every boot.
+    Also extends the Postgres ``userrole`` enum to include ``MENTOR`` so
+    new mentor-role users can be inserted.
+    """
+    with Session(engine) as session:
+        # Extend the userrole enum first. Postgres requires ``ALTER TYPE
+        # ... ADD VALUE`` to run outside any open transaction, so use an
+        # AUTOCOMMIT connection here. SQLite (local dev) doesn't have an
+        # enum at all and silently no-ops on the exception path.
+        try:
+            with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                conn.exec_driver_sql("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'MENTOR'")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_mentor_tables: ALTER TYPE userrole: %s", exc)
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS mentors (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    name VARCHAR NOT NULL,
+                    email VARCHAR NOT NULL UNIQUE,
+                    headline VARCHAR,
+                    bio TEXT,
+                    specialties_json TEXT DEFAULT '[]' NOT NULL,
+                    sectors_json TEXT DEFAULT '[]' NOT NULL,
+                    timezone VARCHAR,
+                    capacity_per_week INTEGER DEFAULT 4 NOT NULL,
+                    hourly_rate DOUBLE PRECISION DEFAULT 0 NOT NULL,
+                    currency VARCHAR DEFAULT 'USD' NOT NULL,
+                    accepting_bookings BOOLEAN DEFAULT TRUE NOT NULL,
+                    listed BOOLEAN DEFAULT TRUE NOT NULL,
+                    rating_avg DOUBLE PRECISION,
+                    rating_count INTEGER DEFAULT 0 NOT NULL,
+                    calcom_username VARCHAR,
+                    calcom_event_type_id INTEGER,
+                    status VARCHAR DEFAULT 'active' NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_mentors_listed ON mentors(listed)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_mentors_status ON mentors(status)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_mentor_tables: mentors: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS mentor_id INTEGER REFERENCES mentors(id)"
+            ))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_mentor_tables: users.mentor_id: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS office_hours_slots (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    mentor_id INTEGER NOT NULL REFERENCES mentors(id),
+                    start_at TIMESTAMP NOT NULL,
+                    duration_min INTEGER DEFAULT 30 NOT NULL,
+                    capacity INTEGER DEFAULT 1 NOT NULL,
+                    location_kind VARCHAR DEFAULT 'video' NOT NULL,
+                    location_uri VARCHAR,
+                    notes TEXT,
+                    status VARCHAR DEFAULT 'open' NOT NULL,
+                    calcom_event_id VARCHAR,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_slots_mentor ON office_hours_slots(mentor_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_slots_start ON office_hours_slots(start_at)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_slots_status ON office_hours_slots(status)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_mentor_tables: office_hours_slots: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS mentor_bookings (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    slot_id INTEGER NOT NULL REFERENCES office_hours_slots(id),
+                    mentor_id INTEGER NOT NULL REFERENCES mentors(id),
+                    requester_user_id INTEGER NOT NULL REFERENCES users(id),
+                    project_id INTEGER REFERENCES projects(id),
+                    topic VARCHAR NOT NULL,
+                    questions TEXT,
+                    scheduled_start TIMESTAMP NOT NULL,
+                    scheduled_end TIMESTAMP NOT NULL,
+                    status VARCHAR DEFAULT 'requested' NOT NULL,
+                    cancelled_by_user_id INTEGER REFERENCES users(id),
+                    cancel_reason VARCHAR,
+                    confirmed_at TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    cancelled_at TIMESTAMP,
+                    meeting_uri VARCHAR,
+                    calcom_booking_id VARCHAR,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_bookings_slot ON mentor_bookings(slot_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_bookings_mentor ON mentor_bookings(mentor_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_bookings_requester ON mentor_bookings(requester_user_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_bookings_status ON mentor_bookings(status)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_mentor_tables: mentor_bookings: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS mentor_reviews (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    booking_id INTEGER NOT NULL REFERENCES mentor_bookings(id),
+                    mentor_id INTEGER NOT NULL REFERENCES mentors(id),
+                    reviewer_user_id INTEGER NOT NULL REFERENCES users(id),
+                    reviewer_role VARCHAR NOT NULL,
+                    rating INTEGER NOT NULL,
+                    comment TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    UNIQUE(booking_id, reviewer_role)
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_reviews_mentor ON mentor_reviews(mentor_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_reviews_booking ON mentor_reviews(booking_id)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_mentor_tables: mentor_reviews: %s", exc)
+            session.rollback()
+
+
 def ensure_cap_table_scenarios_table() -> None:
     """Task #27 — Cap-table simulator scenarios. Idempotent."""
     ddl = """

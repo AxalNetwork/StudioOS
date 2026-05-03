@@ -679,6 +679,41 @@ export const api = {
   summarizeReference: (id) =>
     request(`/references/${id}/summarize`, { method: 'POST' }),
 
+  // ---------- Mentor matching + office hours (Task #35) ----------
+  listMentors: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.specialty) qs.set('specialty', opts.specialty);
+    if (opts.sector) qs.set('sector', opts.sector);
+    if (opts.q) qs.set('q', opts.q);
+    if (opts.free_only) qs.set('free_only', '1');
+    if (opts.max_rate != null) qs.set('max_rate', opts.max_rate);
+    if (opts.accepting_only === false) qs.set('accepting_only', 'false');
+    const s = qs.toString();
+    return request(`/mentors/${s ? `?${s}` : ''}`);
+  },
+  getMentor: (uid) => request(`/mentors/${uid}`),
+  upsertMyMentor: (data) => request('/mentors/me', { method: 'POST', body: JSON.stringify(data) }),
+  getMyMentor: () => request('/mentors/me'),
+  listMentorSlots: (uid, upcomingOnly = true) =>
+    request(`/mentors/${uid}/slots?upcoming_only=${upcomingOnly ? 'true' : 'false'}`),
+  createMentorSlot: (data) => request('/mentors/me/slots', { method: 'POST', body: JSON.stringify(data) }),
+  cancelMentorSlot: (slotId) => request(`/mentors/me/slots/${slotId}`, { method: 'DELETE' }),
+  bookMentorSlot: (slotId, data) =>
+    request(`/mentors/slots/${slotId}/book`, { method: 'POST', body: JSON.stringify(data) }),
+  listMyMentorBookings: (status) =>
+    request(`/mentors/me/bookings${status ? `?status=${status}` : ''}`),
+  listMyMenteeBookings: (status) =>
+    request(`/mentors/bookings/me${status ? `?status=${status}` : ''}`),
+  confirmMentorBooking: (id) => request(`/mentors/bookings/${id}/confirm`, { method: 'POST' }),
+  cancelMentorBooking: (id, reason) =>
+    request(`/mentors/bookings/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  completeMentorBooking: (id) => request(`/mentors/bookings/${id}/complete`, { method: 'POST' }),
+  noShowMentorBooking: (id, reason) =>
+    request(`/mentors/bookings/${id}/no-show`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  fileMentorReview: (bookingId, data) =>
+    request(`/mentors/bookings/${bookingId}/review`, { method: 'POST', body: JSON.stringify(data) }),
+  listBookingReviews: (bookingId) => request(`/mentors/bookings/${bookingId}/reviews`),
+
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {
     const qs = new URLSearchParams();

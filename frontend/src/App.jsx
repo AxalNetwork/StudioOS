@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
-  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock,
+  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock, Calendar,
   Settings as SettingsIcon, PieChart as PieIcon
 } from 'lucide-react';
 import { api } from './lib/api';
@@ -32,6 +32,8 @@ import VerifyEmailPage from './pages/VerifyEmailPage';
 import ESignPage from './pages/ESignPage';
 import KYCPage from './pages/KYCPage';
 import TrustCenterPage from './pages/TrustCenterPage';
+import MentorsPage from './pages/MentorsPage';
+import OfficeHoursPage from './pages/OfficeHoursPage';
 import ReferEarnPage from './pages/ReferEarnPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import PayoutsPage from './pages/PayoutsPage';
@@ -176,6 +178,7 @@ const NAV_BY_ROLE = {
     // route itself remains reachable by direct URL.
 
     { divider: true },
+    { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
     { to: '/founder', icon: Rocket, label: 'Founder Portal', highlight: true },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
   ],
@@ -216,6 +219,7 @@ const NAV_BY_ROLE = {
     { to: '/trust', icon: Lock, label: 'Trust Center' },
 
     { divider: true },
+    { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
     { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal', highlight: true },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
   ],
@@ -252,7 +256,19 @@ const NAV_BY_ROLE = {
     { to: '/tickets', icon: Ticket, label: 'Support' },
 
     { divider: true },
+    { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
     { to: '/partner-portal', icon: UserCircle, label: 'Investor Portal', highlight: true },
+    { to: '/settings', icon: SettingsIcon, label: 'Settings' },
+  ],
+
+  // Task #35 — mentor lane. Manages own office hours + reviews mentees.
+  mentor: [
+    { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
+    { to: '/mentors', icon: UserCircle, label: 'Mentor Directory' },
+    { section: 'Account' },
+    { to: '/tickets', icon: Ticket, label: 'Support' },
+    { to: '/activity', icon: Activity, label: 'Activity Log' },
+    { divider: true },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
   ],
 };
@@ -262,6 +278,7 @@ const ROLE_LABELS = {
   founder: 'Founder',
   partner: 'Partner',
   investor: 'Investor',
+  mentor: 'Mentor',
 };
 
 const ROLE_COLORS = {
@@ -269,6 +286,7 @@ const ROLE_COLORS = {
   founder: 'bg-blue-100 text-blue-700',
   partner: 'bg-emerald-100 text-emerald-700',
   investor: 'bg-purple-100 text-purple-700',
+  mentor: 'bg-amber-100 text-amber-700',
 };
 
 const ROLE_DEFAULT_PATH = {
@@ -276,6 +294,7 @@ const ROLE_DEFAULT_PATH = {
   founder: '/founder',
   partner: '/partner-portal',
   investor: '/dashboard',
+  mentor: '/office-hours',
 };
 
 const ViewModeContext = createContext(null);
@@ -751,13 +770,13 @@ export default function App() {
       <Route path="/esign/:token" element={<ESignPage />} />
       <Route path="/settings/email/confirm" element={<EmailChangeConfirmPage />} />
       <Route path="/settings/email/revoke" element={<EmailChangeRevokePage />} />
-      <Route path="/settings/:section" element={guard(['admin', 'founder', 'partner', 'investor'], <SettingsPage />)} />
+      <Route path="/settings/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SettingsPage />)} />
 
       {/* Phase 0.1 — investor role added to every guard a partner currently
           passes. Investor-only nav is curated above (NAV_BY_ROLE.investor)
           so we get a tighter capital-allocator surface; per-route guards
           stay permissive so deep links keep working during the split. */}
-      <Route path="/dashboard" element={guard(['admin', 'founder', 'partner', 'investor'], <Dashboard />)} />
+      <Route path="/dashboard" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <Dashboard />)} />
       <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
       <Route path="/onboarding/founder" element={guard(['admin', 'founder'], <OnboardingFounderPage />)} />
       <Route path="/onboarding/investor" element={guard(['admin', 'investor'], <OnboardingInvestorPage />)} />
@@ -788,6 +807,8 @@ export default function App() {
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'], <DealsPage />)} />
       <Route path="/market-intel" element={guard(['admin', 'partner', 'investor'], <MarketIntelPage />)} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
+      <Route path="/mentors" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <MentorsPage />)} />
+      <Route path="/office-hours" element={guard(['admin', 'mentor'], <OfficeHoursPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor'], <TrustCenterPage />)} />
