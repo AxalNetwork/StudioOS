@@ -80,10 +80,20 @@ class _ConnectionManager:
         self._owners: dict[WebSocket, tuple[int, str]] = {}
         self._lock = asyncio.Lock()
 
-    async def connect(self, ws: WebSocket, user_id: int, role: str = "") -> None:
+    @staticmethod
+    def _normalize_role(role) -> str:
+        # `user.role` is a UserRole Enum (str subclass) — `str(UserRole.ADMIN)`
+        # returns "UserRole.ADMIN", not "admin". Prefer `.value` when present
+        # so the lowercase compare against PRIVILEGED_ROLES actually matches.
+        if role is None:
+            return ""
+        val = getattr(role, "value", role)
+        return str(val).lower()
+
+    async def connect(self, ws: WebSocket, user_id: int, role="") -> None:
         await ws.accept()
         async with self._lock:
-            self._owners[ws] = (user_id, str(role or "").lower())
+            self._owners[ws] = (user_id, self._normalize_role(role))
 
     async def disconnect(self, ws: WebSocket) -> None:
         async with self._lock:
