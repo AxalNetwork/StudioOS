@@ -277,6 +277,8 @@ from backend.app.api.routes import notifications as notifications_routes  # noqa
 app.include_router(notifications_routes.router, prefix="/api")
 from backend.app.api.routes import financials as financials_routes  # noqa: E402
 app.include_router(financials_routes.router, prefix="/api")
+from backend.app.api.routes import progress as progress_routes  # noqa: E402
+app.include_router(progress_routes.router, prefix="/api")
 
 
 # ---------------------------------------------------------------------------

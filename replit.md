@@ -105,3 +105,34 @@ The recompute is persisted on the model row (`capital_recompute_json`) and surfa
 - `api.js`: `getFinancialModel`, `saveFinancialModel`, `recomputeFinancialModel`, `downloadFinancialModelXlsx` (token-aware blob download).
 
 **Dependency added:** `openpyxl` (Python).
+
+## Task #28 — Customer discovery, roadmap, metrics (this commit)
+
+Three founder sub-pages under `/build` that replace self-reported scoring inputs with observable signals.
+
+**Schema (auto-created via SQLModel `metadata.create_all`):**
+- `interviews` — Mom-Test interview log with `hypotheses_json` ([{hypothesis, status: validated/invalidated/inconclusive, evidence}]) and `pains_json`.
+- `okrs` — kanban-backed objectives with `kanban_status` ∈ {now, next, later, done}, `key_results_json` ([{text, target, current, unit}]), and `quarter`.
+- `metrics_snapshots` — periodic MRR/ARR/CAC/LTV/churn/active_users with `source` ∈ {manual, stripe}.
+
+**Backend (`backend/app/api/routes/progress.py`, mounted at `/api`):**
+- Discovery: `GET/POST /progress/discovery/{project_id}`, `PUT/DELETE /progress/discovery/interview/{id}`.
+- Roadmap: `GET/POST /progress/roadmap/{project_id}`, `PUT/DELETE /progress/roadmap/okr/{id}`, `POST /progress/roadmap/okr/{id}/move` for kanban drag.
+- Metrics: `GET/POST /progress/metrics/{project_id}`, `DELETE /progress/metrics/{snapshot_id}`, `POST /progress/metrics/{project_id}/import-stripe` (reads `Integration.last_sync_payload` for `provider_name in {stripe, stripe_billing}`; returns 400 with `code: stripe_not_connected` or `code: stripe_no_data` instead of silently fabricating data).
+- `GET /progress/signals/{project_id}` — aggregates the three tables into v2 traction sliders.
+
+**Scoring hook (traction category, max 15 in `services/scoring.py::SCORING_V2_WEIGHTS["traction"]`):**
+- `users` (max 6): `sqrt(active_users)/5` base + period-over-period growth bonus (30% growth → +3).
+- `revenue` (max 6): log-scale on MRR ($1k=4, $10k=6, $100k=8, $1M+=10), with −2 churn penalty when monthly churn > 10%.
+- `signals` (max 3): interview cadence (20 interviews → 5/5) + validated-hypothesis count (10 validated → 5/5), capped at 10.
+
+**Authorization (mirrors financials.py via `backend/app/api/deps.py`):**
+- `_ensure_can_view`: privileged read (admin/partner/investor) + founder owns project.
+- `_ensure_can_edit`: admin always; founder only if `user.founder_id == project.founder_id`; partner/investor blocked.
+
+**Frontend pages (founder nav under Intelligence):**
+- `/build/discovery` — `DiscoveryPage.jsx`: project picker, interview list, per-interview hypothesis grid (validated/invalidated/inconclusive), pain-tag chips, modal with Mom-Test notes + hypothesis editor.
+- `/build/roadmap` — `RoadmapPage.jsx`: 4-column kanban (Now/Next/Later/Done) with KR progress bars and "Move to next" affordance per card.
+- `/build/metrics` — `MetricsPage.jsx`: stat cards (MRR / users / LTV-CAC / traction score), Recharts MRR + active-users charts, snapshot history table, "Import from Stripe" button (surfaces `stripe_not_connected` / `stripe_no_data` errors), traction signal breakdown card.
+
+**`api.js` additions:** `listInterviews`, `createInterview`, `updateInterview`, `deleteInterview`, `listOkrs`, `createOkr`, `updateOkr`, `moveOkr`, `deleteOkr`, `listMetricsSnapshots`, `createMetricsSnapshot`, `deleteMetricsSnapshot`, `importMetricsFromStripe`, `getProgressSignals`.

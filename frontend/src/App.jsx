@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
-  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug,
+  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare,
   Settings as SettingsIcon
 } from 'lucide-react';
 import { api } from './lib/api';
@@ -57,6 +57,9 @@ import OnboardingPartnerPage from './pages/OnboardingPartnerPage';
 import BrandBuilderPage from './pages/BrandBuilderPage';
 import PitchDeckPage from './pages/PitchDeckPage';
 import FinancialsPage from './pages/FinancialsPage';
+import DiscoveryPage from './pages/DiscoveryPage';
+import RoadmapPage from './pages/RoadmapPage';
+import MetricsPage from './pages/MetricsPage';
 import PitchDeckPrintPage from './pages/PitchDeckPrintPage';
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
@@ -130,6 +133,9 @@ const NAV_BY_ROLE = {
     { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
     { to: '/build/deck', icon: Sparkles, label: 'Pitch Deck' },
     { to: '/build/financials', icon: DollarSign, label: 'Financial Model' },
+    { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
+    { to: '/build/roadmap', icon: Layers, label: 'Roadmap' },
+    { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
 
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
@@ -738,6 +744,9 @@ export default function App() {
       <Route path="/build/brand" element={guard(['admin', 'founder'], <BrandBuilderPage />)} />
       <Route path="/build/deck" element={guard(['admin', 'founder'], <PitchDeckPage />)} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], <FinancialsPage />)} />
+      <Route path="/build/discovery" element={guard(['admin', 'founder', 'partner', 'investor'], <DiscoveryPage />)} />
+      <Route path="/build/roadmap" element={guard(['admin', 'founder', 'partner', 'investor'], <RoadmapPage />)} />
+      <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], <MetricsPage />)} />
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />

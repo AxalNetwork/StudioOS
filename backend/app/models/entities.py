@@ -675,3 +675,56 @@ class FinancialModel(SQLModel, table=True):
     updated_by: Optional[int] = Field(default=None, foreign_key="users.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Task #28 — Customer discovery / roadmap / metrics
+# Three tables that feed real signals into the scoring algo instead of
+# self-report. See `backend/app/api/routes/progress.py`.
+# ---------------------------------------------------------------------------
+class Interview(SQLModel, table=True):
+    __tablename__ = "interviews"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    interviewee_name: str
+    interviewee_role: Optional[str] = None
+    interview_date: date = Field(default_factory=date.today, index=True)
+    notes: str = ""                      # Mom-Test interview notes
+    hypotheses_json: str = "[]"          # [{hypothesis, status, evidence}]
+    pains_json: str = "[]"               # ["pain text", ...]
+    created_by: Optional[int] = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class OKR(SQLModel, table=True):
+    __tablename__ = "okrs"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    objective: str
+    key_results_json: str = "[]"         # [{text, target, current, unit}]
+    kanban_status: str = Field(default="now", index=True)  # now | next | later | done
+    quarter: Optional[str] = None        # e.g. "2026-Q2"
+    sort_order: int = 0
+    created_by: Optional[int] = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class MetricsSnapshot(SQLModel, table=True):
+    __tablename__ = "metrics_snapshots"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    snapshot_date: date = Field(default_factory=date.today, index=True)
+    mrr: Optional[float] = None
+    arr: Optional[float] = None
+    cac: Optional[float] = None
+    ltv: Optional[float] = None
+    monthly_churn_pct: Optional[float] = None
+    active_users: Optional[int] = None
+    new_users: Optional[int] = None
+    source: str = Field(default="manual", index=True)  # manual | stripe
+    notes: Optional[str] = None
+    created_by: Optional[int] = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)

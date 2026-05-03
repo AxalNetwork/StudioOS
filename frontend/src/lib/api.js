@@ -154,6 +154,22 @@ export const api = {
       .catch((e) => alert(e.message));
   },
 
+  // Task #28 — Discovery / Roadmap / Metrics
+  listInterviews: (projectId) => request(`/progress/discovery/${projectId}`),
+  createInterview: (projectId, data) => request(`/progress/discovery/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  updateInterview: (id, data) => request(`/progress/discovery/interview/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteInterview: (id) => request(`/progress/discovery/interview/${id}`, { method: 'DELETE' }),
+  listOkrs: (projectId) => request(`/progress/roadmap/${projectId}`),
+  createOkr: (projectId, data) => request(`/progress/roadmap/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  updateOkr: (id, data) => request(`/progress/roadmap/okr/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  moveOkr: (id, kanban_status, sort_order = 0) => request(`/progress/roadmap/okr/${id}/move`, { method: 'POST', body: JSON.stringify({ kanban_status, sort_order }) }),
+  deleteOkr: (id) => request(`/progress/roadmap/okr/${id}`, { method: 'DELETE' }),
+  listMetricsSnapshots: (projectId) => request(`/progress/metrics/${projectId}`),
+  createMetricsSnapshot: (projectId, data) => request(`/progress/metrics/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteMetricsSnapshot: (id) => request(`/progress/metrics/${id}`, { method: 'DELETE' }),
+  importMetricsFromStripe: (projectId) => request(`/progress/metrics/${projectId}/import-stripe`, { method: 'POST' }),
+  getProgressSignals: (projectId) => request(`/progress/signals/${projectId}`),
+
   askAdvisory: (data) => request('/advisory/ask', { method: 'POST', body: JSON.stringify(data) }),
   financialPlan: (data) => request('/advisory/financial-plan', { method: 'POST', body: JSON.stringify(data) }),
   runDiligence: (data) => request('/advisory/diligence', { method: 'POST', body: JSON.stringify(data) }),
