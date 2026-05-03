@@ -69,7 +69,7 @@ def anomalies(_: User = Depends(require_admin)):
 
 @router.get("/throughput")
 def throughput(user: User = Depends(get_current_user)):
-    if user.role not in (UserRole.ADMIN, UserRole.PARTNER):
+    if user.role not in (UserRole.ADMIN, UserRole.PARTNER, UserRole.INVESTOR):
         raise HTTPException(status_code=403, detail="Forbidden")
     return {"window_minutes": 60, "requests": 0, "spinouts_completed": 0}
 

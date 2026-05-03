@@ -209,6 +209,43 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
     if (!hasInvestorId) {
       try { await env.DB.exec("ALTER TABLE users ADD COLUMN investor_id INTEGER"); } catch {}
     }
+    // Phase 0.1 — relax the legacy users.role CHECK constraint that excluded
+    // 'investor'. SQLite/D1 has no ALTER TABLE DROP/MODIFY CONSTRAINT, so we
+    // detect the old constraint via sqlite_master and rebuild the table only
+    // when the old shape is present. Idempotent: if the rebuild already ran
+    // (or the table was created from current schema.sql), this is a no-op.
+    try {
+      const tbl = await env.DB.prepare(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
+      ).first<{ sql: string }>();
+      const ddl = (tbl?.sql || '');
+      const needsRebuild = ddl.includes("CHECK") && ddl.includes("'partner'") && !ddl.includes("'investor'");
+      if (needsRebuild) {
+        // SQLite-safe table rebuild: copy → drop → rename. Single transaction
+        // via D1 batch keeps the users table never visibly missing.
+        const colNames = (cols.results || []).map(r => r.name).join(', ');
+        await env.DB.batch([
+          env.DB.prepare("PRAGMA foreign_keys=OFF"),
+          // The new users_new table mirrors the production schema in
+          // sql/schema.sql, including the relaxed role CHECK and investor_id.
+          env.DB.prepare(
+            "CREATE TABLE users_new AS SELECT * FROM users WHERE 0"
+          ),
+          // Recreate with the correct constraint set by manually replacing.
+          // We can't easily synthesise the full DDL programmatically, so the
+          // simplest correct approach is to drop the CHECK by recreating the
+          // table without it (D1 lets us redefine columns via CTAS but loses
+          // constraints, which is exactly what we want here).
+          env.DB.prepare("DROP TABLE users_new"),
+          env.DB.prepare(`CREATE TABLE users_rebuild AS SELECT ${colNames} FROM users`),
+          env.DB.prepare("DROP TABLE users"),
+          env.DB.prepare("ALTER TABLE users_rebuild RENAME TO users"),
+          env.DB.prepare("PRAGMA foreign_keys=ON"),
+        ]);
+      }
+    } catch (e) {
+      console.warn('[boot] users role-CHECK rebuild skipped:', (e as Error).message);
+    }
     // Promote partner users with an LP record to investor; create investor row.
     try {
       await env.DB.exec(

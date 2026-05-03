@@ -346,18 +346,10 @@ def ensure_investor_role_split() -> None:
         logger.debug("ensure_investor_role_split: enum extend skipped: %s", exc)
 
     with Session(engine) as session:
-        # Step 1 — column on users
-        try:
-            session.exec(text(
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS investor_id INTEGER REFERENCES investors(id)"
-            ))
-            session.commit()
-        except Exception:
-            session.rollback()
-
-        # Step 2 — investors table (Postgres dev). The SQLModel metadata in
-        # `init_db()` should already create it on a fresh DB, but this keeps
-        # existing dev/preview DBs in sync without a manual migration.
+        # Step 1 — investors table FIRST (the FK in step 2 references it).
+        # The SQLModel metadata in `init_db()` should already create it on a
+        # fresh DB, but this keeps existing dev/preview DBs in sync without a
+        # manual migration.
         try:
             session.exec(text(
                 """
@@ -385,6 +377,16 @@ def ensure_investor_role_split() -> None:
         except Exception as exc:
             session.rollback()
             logger.warning("ensure_investor_role_split: investors table create failed: %s", exc)
+
+        # Step 2 — users.investor_id FK (depends on investors existing).
+        try:
+            session.exec(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS investor_id INTEGER REFERENCES investors(id)"
+            ))
+            session.commit()
+        except Exception as exc:
+            session.rollback()
+            logger.warning("ensure_investor_role_split: users.investor_id add failed: %s", exc)
 
         # Step 3a — sweep: any user already at role='INVESTOR' but missing an
         # investors row / investor_id link gets backfilled. This makes the

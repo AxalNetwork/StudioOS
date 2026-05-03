@@ -32,7 +32,8 @@ const VALID_TYPES: EntityType[] = ['project', 'partner', 'document'];
  * leaking the existence of restricted indices.
  */
 function allowedTypes(role: string): EntityType[] {
-  if (role === 'admin' || role === 'partner') return ['project', 'partner', 'document'];
+  // Phase 0.1: investors get the same broad search scope as partners.
+  if (role === 'admin' || role === 'partner' || role === 'investor') return ['project', 'partner', 'document'];
   return ['project'];
 }
 
