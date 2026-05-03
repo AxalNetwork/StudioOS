@@ -467,4 +467,19 @@ export const api = {
   listPersonasAdmin: () => request('/personas/admin/list'),
   retagPersonaAdmin: (user_id, persona_id) =>
     request(`/personas/admin/${user_id}/retag`, { method: 'POST', body: JSON.stringify({ persona_id }) }),
+
+  // ---------- Notifications (Phase 0.2) ----------
+  listNotifications: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.limit) qs.set('limit', opts.limit);
+    if (opts.onlyUnread) qs.set('only_unread', '1');
+    const q = qs.toString();
+    return request(`/notifications${q ? `?${q}` : ''}`);
+  },
+  notificationsUnreadCount: () => request('/notifications/unread-count'),
+  markNotificationsRead: (data) =>
+    request('/notifications/mark-read', { method: 'POST', body: JSON.stringify(data) }),
+  getNotificationPrefs: () => request('/notifications/prefs'),
+  putNotificationPrefs: (prefs) =>
+    request('/notifications/prefs', { method: 'PUT', body: JSON.stringify({ prefs }) }),
 };

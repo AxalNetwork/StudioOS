@@ -628,6 +628,29 @@ class GrowthSprint(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class Notification(SQLModel, table=True):
+    """Phase 0.2 — single notification subsystem.
+
+    Every later feature publishes via `notify(user_id, type, payload, channels)`
+    in `backend/app/services/notify.py`; this row is the in-app surface, while
+    `channel` records *which* channels were dispatched (in_app/email/slack).
+    `payload` is JSON so each event-type can carry arbitrary structured data
+    (deal id, score, capital call amount, etc.) without schema churn.
+    """
+    __tablename__ = "notifications_inbox"  # avoid clash with worker-side `notifications`
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    type: str = Field(index=True)               # e.g. 'capital_call_issued'
+    title: str
+    body: Optional[str] = None
+    link: Optional[str] = None                  # in-app deep link
+    payload: Optional[str] = None               # JSON blob
+    channel: str = Field(default="in_app", index=True)  # csv: in_app,email,slack
+    read_at: Optional[datetime] = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
 class UserCompanyLink(SQLModel, table=True):
     __tablename__ = "user_company_links"
     __table_args__ = (

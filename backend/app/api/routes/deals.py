@@ -85,10 +85,37 @@ def update_deal(deal_id: int, data: DealUpdate, session: Session = Depends(get_s
         raise HTTPException(status_code=404, detail="Deal not found")
 
     update_data = data.model_dump(exclude_unset=True)
+    prior_stage = getattr(deal, "stage", None)
     for key, val in update_data.items():
         setattr(deal, key, val)
     deal.updated_at = datetime.utcnow()
     session.add(deal)
     session.commit()
     session.refresh(deal)
+
+    # Phase 0.2 — notify the owning founder when a deal stage advances.
+    new_stage = getattr(deal, "stage", None)
+    if new_stage and new_stage != prior_stage and deal.project_id:
+        try:
+            from backend.app.services.notify import notify
+            from backend.app.models.entities import Project
+            project = session.get(Project, deal.project_id)
+            founder_user_id = None
+            if project and getattr(project, "founder_id", None):
+                from sqlalchemy import text as _t
+                row = session.exec(_t(
+                    "SELECT user_id FROM founders WHERE id = :fid"
+                ).bindparams(fid=project.founder_id)).first()
+                founder_user_id = row[0] if row else None
+            if founder_user_id:
+                notify(
+                    user_id=founder_user_id,
+                    type="deal_stage_change",
+                    title=f"Deal stage: {new_stage}",
+                    body=f"Your deal moved from {prior_stage or 'open'} to {new_stage}",
+                    link="/deals",
+                    payload={"deal_id": deal.id, "from": prior_stage, "to": new_stage},
+                )
+        except Exception:
+            pass
     return deal

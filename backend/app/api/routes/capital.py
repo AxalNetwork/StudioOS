@@ -213,6 +213,22 @@ def create_capital_call(
     session.add(call)
     session.commit()
     session.refresh(call)
+
+    # Phase 0.2 — notify the LP/investor that a capital call was issued.
+    if lp.user_id:
+        try:
+            from backend.app.services.notify import notify
+            notify(
+                user_id=lp.user_id,
+                type="capital_call_issued",
+                title="Capital call issued",
+                body=f"${call.amount:,.0f} due {due.isoformat() if due else 'soon'}",
+                link="/capital",
+                payload={"call_id": call.id, "amount": call.amount, "due_date": due.isoformat() if due else None},
+                channels=("in_app", "email"),
+            )
+        except Exception:
+            pass
     return _call_dto(call)
 
 
@@ -289,6 +305,23 @@ def mark_call_paid(
 
     session.commit()
     session.refresh(call)
+
+    # Phase 0.2 — notify LP that their call was marked paid.
+    if lp_id:
+        lp_for_notify = session.get(LimitedPartner, lp_id)
+        if lp_for_notify and lp_for_notify.user_id:
+            try:
+                from backend.app.services.notify import notify
+                notify(
+                    user_id=lp_for_notify.user_id,
+                    type="capital_call_paid",
+                    title="Capital call marked paid",
+                    body=f"${call.amount:,.0f} payment confirmed",
+                    link="/capital",
+                    payload={"call_id": call.id, "amount": call.amount},
+                )
+            except Exception:
+                pass
     return {"status": "paid", "call": _call_dto(call)}
 
 

@@ -269,6 +269,23 @@ async def cast_vote(
     public = _build_public_tally(deal_id, session)
     await manager.broadcast({"type": "vote_updated", "deal_id": deal_id, "tally": public})
 
+    # Phase 0.2 — notify admins when the vote threshold is first reached.
+    if public.get("threshold_reached"):
+        try:
+            from backend.app.services.notify import notify
+            admins = session.exec(select(User).where(User.role == UserRole.ADMIN)).all()
+            for admin in admins:
+                notify(
+                    user_id=admin.id,
+                    type="vote_threshold_reached",
+                    title="Vote threshold reached",
+                    body=f"Deal #{deal_id} hit {public['total_voters']} voters · weight {public['total_weight']}",
+                    link="/pipeline",
+                    payload={"deal_id": deal_id, "tally": public},
+                )
+        except Exception:
+            pass
+
     # Caller gets the same public tally PLUS their own vote attached.
     return _build_tally(deal_id, session, viewer=user)
 

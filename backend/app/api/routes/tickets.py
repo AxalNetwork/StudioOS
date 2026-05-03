@@ -99,4 +99,19 @@ def update_ticket(
     session.add(ticket)
     session.commit()
     session.refresh(ticket)
+
+    # Phase 0.2 — notify ticket owner of any update by another actor.
+    if ticket.user_id and ticket.user_id != user.id:
+        try:
+            from backend.app.services.notify import notify
+            notify(
+                user_id=ticket.user_id,
+                type="ticket_update",
+                title=f"Ticket updated: {ticket.title}",
+                body=f"Status: {ticket.status}" + (f" · Assigned to {ticket.assigned_to}" if ticket.assigned_to else ""),
+                link="/tickets",
+                payload={"ticket_id": ticket.id, "status": str(ticket.status)},
+            )
+        except Exception:
+            pass
     return ticket

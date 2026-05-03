@@ -255,6 +255,8 @@ app.include_router(email_routes.router, prefix="/api")
 app.include_router(email_routes.unsubscribe_router, prefix="/api")
 from backend.app.api.routes import settings as settings_routes  # noqa: E402
 app.include_router(settings_routes.router, prefix="/api")
+from backend.app.api.routes import notifications as notifications_routes  # noqa: E402
+app.include_router(notifications_routes.router, prefix="/api")
 
 
 # ---------------------------------------------------------------------------

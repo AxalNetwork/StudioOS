@@ -54,6 +54,7 @@ import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
 import EmailChangeRevokePage from './pages/EmailChangeRevokePage';
 import InactivityWarningModal from './components/InactivityWarningModal';
+import NotificationBell from './components/NotificationBell';
 import useInactivityTimeout from './hooks/useInactivityTimeout';
 
 // Item shapes:
@@ -456,6 +457,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                   Impersonating {user.name}
                 </span>
               )}
+              <NotificationBell userId={user?.id} />
               <button className="lg:hidden text-gray-600" onClick={() => setSidebarOpen(true)}>
                 <Menu size={20} />
               </button>

@@ -196,6 +196,27 @@ async def score_startup(
         result["requires_admin_review"] = (review_status == "flagged")
         result["anomaly_flags"] = flags
 
+        # Phase 0.2 — notify the founder when an OFFICIAL score is generated.
+        if not is_sandbox and project and getattr(project, "founder_id", None):
+            try:
+                from backend.app.services.notify import notify
+                from sqlalchemy import text as _t
+                row = session.exec(_t(
+                    "SELECT user_id FROM founders WHERE id = :fid"
+                ).bindparams(fid=project.founder_id)).first()
+                founder_user_id = row[0] if row else None
+                if founder_user_id:
+                    notify(
+                        user_id=founder_user_id,
+                        type="score_generated",
+                        title=f"New score for {project.name}",
+                        body=f"Total score: {result.get('total_score')}",
+                        link=f"/projects/{project.id}",
+                        payload={"project_id": project.id, "snapshot_id": snapshot.id, "total_score": result.get("total_score")},
+                    )
+            except Exception:
+                pass
+
         # Epic 5 — admin alert when a snapshot transitions to flagged. Best-effort:
         # an in-app activity_log row goes in the same transaction so admins
         # always see it on MonitoringPage; email is fire-and-forget below.
