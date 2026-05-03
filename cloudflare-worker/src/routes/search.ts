@@ -1,9 +1,12 @@
 /**
- * Semantic search — Vectorize-backed full-text search across projects,
- * partners (users), and legal documents.
+ * Semantic search — Vectorize-backed search across projects, deals,
+ * founders, partners, legal documents, and academy lessons.
  *
- * GET  /api/search?q=...&type=project|partner|document&limit=10
+ * GET  /api/search?q=...&type=...&limit=10[&grouped=1]
  *      Any authenticated user. Returns hits ranked by cosine similarity.
+ *      `grouped=1` (or no `type`) returns `{ groups: { project: [...], ... } }`
+ *      so the cmd-K palette can render one section per entity type without
+ *      a second pass.
  *
  * POST /api/search/backfill
  *      Admin only. Enqueues `embed_entity` jobs for every existing row so
@@ -13,34 +16,66 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
-import { searchSemantic, type EntityType } from '../services/vectorize';
+import { searchSemantic, type EntityType, ALL_ENTITY_TYPES, type SearchHit } from '../services/vectorize';
 import { Jobs } from '../models/jobs';
 
 const search = new Hono<{ Bindings: Env }>();
 
-const VALID_TYPES: EntityType[] = ['project', 'partner', 'document'];
+const VALID_TYPES = ALL_ENTITY_TYPES;
+
+/**
+ * Bootstrap the academy_lessons table on demand (matches the lazy CREATE
+ * pattern used by other worker routes — no migration runner in dev).
+ * Safe to call repeatedly; CREATE TABLE IF NOT EXISTS is a no-op when
+ * the table already exists.
+ */
+async function ensureAcademySchema(env: Env): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS academy_lessons (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         slug TEXT UNIQUE,
+         title TEXT NOT NULL,
+         summary TEXT,
+         body TEXT,
+         created_at TEXT DEFAULT (datetime('now')),
+         updated_at TEXT DEFAULT (datetime('now'))
+       )`
+    ).run();
+  } catch (e: any) {
+    console.error('academy_lessons schema:', e?.message);
+  }
+}
 
 /**
  * Role-based scope:
- *  - admin   → all entity types
- *  - partner → all entity types
- *  - founder → projects only (no partner directory, no legal docs)
- *  - other   → projects only (conservative default)
+ *  - admin/partner/investor → every entity type
+ *  - founder/other          → projects + academy lessons (their own learning surface)
  *
- * Founders requesting `type=partner` or `type=document` get an empty result
- * with a `warning` rather than a 403 — that keeps the UI simple and avoids
- * leaking the existence of restricted indices.
+ * Founders requesting a restricted type get an empty result with a
+ * `warning`, not a 403 — keeps the UI simple and avoids leaking the
+ * existence of restricted indices.
  */
 function allowedTypes(role: string): EntityType[] {
-  // Phase 0.1: investors get the same broad search scope as partners.
-  if (role === 'admin' || role === 'partner' || role === 'investor') return ['project', 'partner', 'document'];
-  return ['project'];
+  if (role === 'admin' || role === 'partner' || role === 'investor') return VALID_TYPES;
+  return ['project', 'academy_lesson'];
+}
+
+function scrubSnippet(h: SearchHit): SearchHit {
+  // Security #8 defense-in-depth: legacy document vectors may still
+  // carry contract body fragments in `snippet`. Always replace at the
+  // wire for `document` hits.
+  if (h.type === 'document') {
+    return { ...h, snippet: 'Legal document — open to view (download required)' };
+  }
+  return h;
 }
 
 search.get('/', async (c) => {
   const user = await requireAuth(c);
   const q = (c.req.query('q') || '').trim();
-  if (!q) return c.json({ query: '', hits: [] });
+  const grouped = c.req.query('grouped') === '1' || c.req.query('grouped') === 'true';
+  if (!q) return c.json({ query: '', hits: [], groups: {} });
   if (q.length > 500) return c.json({ error: 'query too long (max 500 chars)' }, 400);
 
   const typeParam = c.req.query('type');
@@ -48,37 +83,41 @@ search.get('/', async (c) => {
   const limit = Math.max(1, Math.min(25, parseInt(c.req.query('limit') || '10', 10) || 10));
 
   if (!c.env.VECTORIZE) {
-    return c.json({ query: q, hits: [], warning: 'search index unavailable' });
+    return c.json({ query: q, hits: [], groups: {}, warning: 'search index unavailable' });
   }
+
+  await ensureAcademySchema(c.env);
 
   const allowed = allowedTypes((user as any).role || 'founder');
 
-  // If a specific type was requested but is not allowed for this role, return empty.
   if (requestedType && !allowed.includes(requestedType)) {
-    return c.json({ query: q, type: requestedType, hits: [], warning: 'type not available for your role' });
+    return c.json({ query: q, type: requestedType, hits: [], groups: {}, warning: 'type not available for your role' });
   }
 
-  // For unscoped queries, fetch all then filter by allowed types in metadata.
-  // For scoped queries, push the filter to Vectorize.
-  let hits;
+  let hits: SearchHit[];
   if (requestedType) {
     hits = await searchSemantic(c.env, q, { topK: limit, type: requestedType });
   } else if (allowed.length === VALID_TYPES.length) {
-    hits = await searchSemantic(c.env, q, { topK: limit });
+    // Pull a wider set when grouping so each group still has decent depth
+    // even if one type dominates the global ranking.
+    hits = await searchSemantic(c.env, q, { topK: grouped ? Math.min(50, limit * VALID_TYPES.length) : limit });
   } else {
-    // Restricted role with no explicit type — fetch a wider set then filter.
     const wide = await searchSemantic(c.env, q, { topK: limit * 3 });
-    hits = wide.filter(h => allowed.includes(h.type)).slice(0, limit);
+    hits = wide.filter(h => allowed.includes(h.type));
+    if (!grouped) hits = hits.slice(0, limit);
   }
-  // Security #8 defense-in-depth: even though `vectorize.embedAndUpsertById`
-  // now stores neutral metadata for documents, vectors indexed by older
-  // worker versions may still carry contract body fragments in
-  // `snippet`. Scrub at response time — for `document` hits we replace
-  // the snippet with the same neutral pattern unconditionally. Until a
-  // full backfill purges legacy vectors, this is the wire-level guard.
-  hits = hits.map(h => h.type === 'document'
-    ? { ...h, snippet: 'Legal document — open to view (download required)' }
-    : h);
+  hits = hits.map(scrubSnippet);
+
+  if (grouped || !requestedType) {
+    const groups: Record<string, SearchHit[]> = {};
+    for (const t of allowed) groups[t] = [];
+    for (const h of hits) {
+      if (!allowed.includes(h.type)) continue;
+      if (!groups[h.type]) groups[h.type] = [];
+      if (groups[h.type].length < limit) groups[h.type].push(h);
+    }
+    return c.json({ query: q, type: requestedType || 'all', allowed_types: allowed, groups, hits });
+  }
   return c.json({ query: q, type: requestedType || 'all', allowed_types: allowed, hits });
 });
 
@@ -86,16 +125,21 @@ search.get('/', async (c) => {
  * Bounded backfill — chunked to avoid runaway D1+queue load.
  *
  * Body: { types?: EntityType[], since_id?: number, chunk?: number }
- *
- * Walks rows in id order from `since_id` (default 0). Caps the total embed
- * jobs enqueued per call at MAX_PER_CALL (across all requested types).
- * Returns `next_since` cursors per type so the operator can call again to
- * resume — keeps any single request short and predictable.
  */
 const MAX_PER_CALL = 500;
 
+const TABLE_BY_TYPE: Record<EntityType, string> = {
+  project: 'projects',
+  deal: 'deals',
+  founder: 'founders',
+  partner: 'users',
+  document: 'legal_documents',
+  academy_lesson: 'academy_lessons',
+};
+
 search.post('/backfill', async (c) => {
   await requireAdmin(c);
+  await ensureAcademySchema(c.env);
   const body = await c.req.json().catch(() => ({} as any));
   const requested: EntityType[] = Array.isArray(body.types) && body.types.length
     ? body.types.filter((t: any) => VALID_TYPES.includes(t))
@@ -109,7 +153,7 @@ search.post('/backfill', async (c) => {
 
   for (const type of requested) {
     if (remaining <= 0) { counts[type] = 0; nextSince[type] = sinceIn[type] ?? 0; continue; }
-    const table = type === 'project' ? 'projects' : type === 'partner' ? 'users' : 'legal_documents';
+    const table = TABLE_BY_TYPE[type];
     const since = Number(sinceIn[type] ?? 0);
     const rows = await c.env.DB.prepare(
       `SELECT id FROM ${table} WHERE id > ? ORDER BY id ASC LIMIT ?`
@@ -119,7 +163,7 @@ search.post('/backfill', async (c) => {
       await Jobs.enqueue(c.env, 'embed_entity', { type, id });
     }
     counts[type] = ids.length;
-    nextSince[type] = ids.length === remaining ? ids[ids.length - 1] : null; // null = done
+    nextSince[type] = ids.length === remaining ? ids[ids.length - 1] : null;
     remaining -= ids.length;
   }
   const done = Object.values(nextSince).every(v => v === null);

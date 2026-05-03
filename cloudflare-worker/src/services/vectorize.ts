@@ -17,7 +17,9 @@ import type { Env } from '../types';
 const EMBED_MODEL = '@cf/baai/bge-base-en-v1.5';
 const MAX_INPUT_CHARS = 4000; // bge models cap around 512 tokens; ~4k chars is safe.
 
-export type EntityType = 'project' | 'partner' | 'document';
+export type EntityType = 'project' | 'deal' | 'founder' | 'partner' | 'document' | 'academy_lesson';
+
+export const ALL_ENTITY_TYPES: EntityType[] = ['project', 'deal', 'founder', 'partner', 'document', 'academy_lesson'];
 
 export interface SearchHit {
   id: string;
@@ -172,6 +174,51 @@ export async function embedAndUpsertById(env: Env, type: EntityType, id: number)
       title: `${row.name} (${row.role})`,
       url: `/admin?user=${id}`,
       snippet: `${row.role} • ${row.email}`,
+    });
+  }
+  if (type === 'deal') {
+    const row = await env.DB.prepare(
+      `SELECT d.id, d.status, d.notes, d.amount, p.name AS project_name, p.sector
+         FROM deals d LEFT JOIN projects p ON p.id = d.project_id
+        WHERE d.id = ?`
+    ).bind(id).first<any>();
+    if (!row) { await deleteEntity(env, type, id); return false; }
+    const text = [row.project_name, row.sector, row.status, row.notes].filter(Boolean).join('\n');
+    return upsertEntity(env, {
+      type, id,
+      text,
+      title: `Deal — ${row.project_name || `#${id}`}`,
+      url: `/deals?id=${id}`,
+      // Snippet is wire-visible; keep it neutral (status + sector), no notes body.
+      snippet: `${row.status || 'applied'} • ${row.sector || 'sector unknown'}`,
+    });
+  }
+  if (type === 'founder') {
+    const row = await env.DB.prepare(
+      `SELECT id, name, email, domain_expertise, experience_years, bio FROM founders WHERE id = ?`
+    ).bind(id).first<any>();
+    if (!row) { await deleteEntity(env, type, id); return false; }
+    const text = [row.name, row.domain_expertise, row.bio].filter(Boolean).join('\n');
+    return upsertEntity(env, {
+      type, id,
+      text,
+      title: row.name,
+      url: `/founder?id=${id}`,
+      snippet: `${row.domain_expertise || 'founder'} • ${row.experience_years || 0}y exp`,
+    });
+  }
+  if (type === 'academy_lesson') {
+    const row = await env.DB.prepare(
+      `SELECT id, slug, title, summary, body FROM academy_lessons WHERE id = ?`
+    ).bind(id).first<any>();
+    if (!row) { await deleteEntity(env, type, id); return false; }
+    const text = [row.title, row.summary, row.body].filter(Boolean).join('\n');
+    return upsertEntity(env, {
+      type, id,
+      text,
+      title: row.title,
+      url: `/academy/${row.slug || id}`,
+      snippet: (row.summary || '').slice(0, 200),
     });
   }
   if (type === 'document') {

@@ -244,10 +244,11 @@ export const api = {
     return request(`/integrations/${encodeURIComponent(uid)}/logs${q ? `?${q}` : ''}`);
   },
 
-  searchSemantic: (q, type, limit = 10) => {
+  searchSemantic: (q, type, limit = 10, grouped = false) => {
     const params = new URLSearchParams({ q });
     if (type) params.set('type', type);
     if (limit) params.set('limit', String(limit));
+    if (grouped) params.set('grouped', '1');
     return request(`/search?${params.toString()}`);
   },
   searchBackfill: (types) => request('/search/backfill', { method: 'POST', body: JSON.stringify({ types }) }),

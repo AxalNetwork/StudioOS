@@ -55,6 +55,7 @@ import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
 import EmailChangeRevokePage from './pages/EmailChangeRevokePage';
 import InactivityWarningModal from './components/InactivityWarningModal';
 import NotificationBell from './components/NotificationBell';
+import CommandPalette from './components/CommandPalette';
 import useInactivityTimeout from './hooks/useInactivityTimeout';
 
 // Item shapes:
@@ -474,6 +475,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         onStay={stayLoggedIn}
         onLogout={logoutNow}
       />
+      <CommandPalette />
     </ViewModeContext.Provider>
   );
 }
