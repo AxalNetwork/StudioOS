@@ -58,6 +58,7 @@ import settings from './routes/settings';
 import personas from './routes/personas';
 import onboarding from './routes/onboarding';
 import brand, { renderLandingHtml } from './routes/brand';
+import decks from './routes/decks';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import { processQueueBatch } from './services/queueWorker';
@@ -156,6 +157,7 @@ app.route('/api/pipeline', pipeline);
 app.route('/api/search', search);
 app.route('/api/onboarding', onboarding);
 app.route('/api/brand', brand);
+app.route('/api/decks', decks);
 
 // Public landing page HTML (no /api prefix). Founders publish via the
 // authenticated /api/brand/landing/by-project/:pid/publish endpoint;

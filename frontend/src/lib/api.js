@@ -266,6 +266,15 @@ export const api = {
   brandPublishLanding: (projectId, published) => request(`/brand/landing/by-project/${projectId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
   brandListWaitlist: (projectId) => request(`/brand/landing/by-project/${projectId}/waitlist`),
 
+  // Task #25 — Pitch deck builder.
+  deckGenerate: (projectId) => request('/decks/generate', { method: 'POST', body: JSON.stringify({ project_id: projectId }) }),
+  deckListVersions: (projectId) => request(`/decks/by-project/${projectId}`),
+  deckGet: (id) => request(`/decks/${id}`),
+  deckUpdate: (id, payload) => request(`/decks/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  deckRestore: (id) => request(`/decks/${id}/restore`, { method: 'POST', body: JSON.stringify({}) }),
+  deckShare: (id, payload) => request(`/decks/${id}/share`, { method: 'POST', body: JSON.stringify(payload || {}) }),
+  deckShareRead: (token) => request(`/decks/share/${encodeURIComponent(token)}`),
+
   matchPreferences: () => request('/matches/preferences'),
   matchPreferencesSave: (data) => request('/matches/preferences', { method: 'PUT', body: JSON.stringify(data) }),
   matchDealFlow: () => request('/matches/deal-flow'),

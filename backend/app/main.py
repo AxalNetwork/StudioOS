@@ -264,6 +264,8 @@ from backend.app.api.routes import onboarding as _onboarding  # noqa: E402
 app.include_router(_onboarding.router, prefix="/api")
 from backend.app.api.routes import brand as _brand  # noqa: E402
 app.include_router(_brand.router, prefix="/api")
+from backend.app.api.routes import decks as _decks  # noqa: E402
+app.include_router(_decks.router, prefix="/api")
 app.include_router(personas.router, prefix="/api")
 app.include_router(integrations.router, prefix="/api")
 from backend.app.api.routes import email as email_routes  # noqa: E402

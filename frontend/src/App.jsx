@@ -55,6 +55,8 @@ import OnboardingFounderPage from './pages/OnboardingFounderPage';
 import OnboardingInvestorPage from './pages/OnboardingInvestorPage';
 import OnboardingPartnerPage from './pages/OnboardingPartnerPage';
 import BrandBuilderPage from './pages/BrandBuilderPage';
+import PitchDeckPage from './pages/PitchDeckPage';
+import PitchDeckPrintPage from './pages/PitchDeckPrintPage';
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
 import EmailChangeRevokePage from './pages/EmailChangeRevokePage';
@@ -125,6 +127,7 @@ const NAV_BY_ROLE = {
     { section: 'Intelligence' },
     { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
     { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
+    { to: '/build/deck', icon: Sparkles, label: 'Pitch Deck' },
 
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
@@ -731,6 +734,9 @@ export default function App() {
       <Route path="/onboarding/investor" element={guard(['admin', 'investor'], <OnboardingInvestorPage />)} />
       <Route path="/onboarding/partner" element={guard(['admin', 'partner'], <OnboardingPartnerPage />)} />
       <Route path="/build/brand" element={guard(['admin', 'founder'], <BrandBuilderPage />)} />
+      <Route path="/build/deck" element={guard(['admin', 'founder'], <PitchDeckPage />)} />
+      <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
+      <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
       <Route path="/scoring" element={guard(['admin', 'partner', 'investor'], <ScoringPage />)} />
       <Route path="/projects" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectsPage />)} />
