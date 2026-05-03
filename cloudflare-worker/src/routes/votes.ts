@@ -23,7 +23,9 @@ const votes = new Hono<{ Bindings: Env }>();
 // cross-stack divergence on when admins get paged.
 const VOTE_THRESHOLD_VOTERS = 5;
 const VOTE_THRESHOLD_WEIGHT = 12;
-const VOTE_TYPES = new Set(['strong_buy', 'buy', 'pass', 'strong_pass']);
+// Mirror backend VOTE_TYPES exactly — same casing the FastAPI route accepts
+// and what the React client sends from PipelinePage VOTE_OPTIONS.
+const VOTE_TYPES = new Set(['Strong_Buy', 'Buy', 'Hold', 'Pass']);
 
 let votesMigrated = false;
 async function ensureSchema(env: Env): Promise<void> {
@@ -59,10 +61,14 @@ votes.post('/:deal_id', async (c) => {
 
   const body: any = await c.req.json().catch(() => ({}));
   const voteType: string = body?.vote_type;
-  const weight: number = Math.max(1, Math.min(parseInt(body?.weight ?? 1, 10) || 1, 5));
+  // User weight mirrors backend _user_weight: admin=4, lp=3, partner=2, founder=1.
+  const role = String((user as any).role || '').toLowerCase();
+  const weight: number = role === 'admin' ? 4 : role === 'lp' || role === 'investor' ? 3 : role === 'partner' ? 2 : 1;
   const comment: string | null = typeof body?.comment === 'string' ? body.comment.slice(0, 2000) : null;
   const anonymous: number = body?.anonymous ? 1 : 0;
-  if (!VOTE_TYPES.has(voteType)) return c.json({ error: 'Invalid vote_type' }, 422);
+  if (!VOTE_TYPES.has(voteType)) {
+    return c.json({ detail: `vote_type must be one of ${[...VOTE_TYPES].sort().join(', ')}` }, 400);
+  }
 
   try {
     await ensureSchema(c.env);
@@ -84,18 +90,43 @@ votes.post('/:deal_id', async (c) => {
       ).bind(dealId, user.id, voteType, weight, comment, anonymous).run();
     }
 
-    const tally: any = await c.env.DB.prepare(
-      `SELECT
-         COUNT(*) AS total_voters,
-         COALESCE(SUM(weight), 0) AS total_weight,
-         SUM(CASE WHEN vote_type = 'strong_buy' THEN 1 ELSE 0 END) AS strong_buy
-       FROM pipeline_votes WHERE deal_id = ?`,
-    ).bind(dealId).first();
-    const totalVoters = Number(tally?.total_voters || 0);
-    const totalWeight = Number(tally?.total_weight || 0);
-    const strongBuy = Number(tally?.strong_buy || 0);
+    // Build the per-type breakdown the backend's _build_public_tally returns.
+    const grouped: any = await c.env.DB.prepare(
+      `SELECT vote_type,
+              COUNT(id) AS count,
+              COALESCE(SUM(weight), 0) AS weight
+         FROM pipeline_votes
+        WHERE deal_id = ?
+        GROUP BY vote_type`,
+    ).bind(dealId).all();
+    const byType: Record<string, { count: number; weight: number }> = {
+      Strong_Buy: { count: 0, weight: 0 },
+      Buy: { count: 0, weight: 0 },
+      Hold: { count: 0, weight: 0 },
+      Pass: { count: 0, weight: 0 },
+    };
+    let totalVoters = 0;
+    let totalWeight = 0;
+    for (const r of (grouped?.results || [])) {
+      const vt = String(r.vote_type);
+      if (vt in byType) byType[vt] = { count: Number(r.count), weight: Number(r.weight) };
+      totalVoters += Number(r.count);
+      totalWeight += Number(r.weight);
+    }
+    const sbWeight = byType.Strong_Buy.weight + byType.Buy.weight;
+    const strongBuyPct = totalWeight ? Math.round((sbWeight / totalWeight) * 1000) / 10 : 0;
     const thresholdReached =
       totalVoters >= VOTE_THRESHOLD_VOTERS && totalWeight >= VOTE_THRESHOLD_WEIGHT;
+
+    const publicTally = {
+      deal_id: dealId,
+      total_voters: totalVoters,
+      total_weight: totalWeight,
+      strong_buy_pct: strongBuyPct,
+      by_type: byType,
+      threshold_reached: thresholdReached,
+      threshold: { voters_required: VOTE_THRESHOLD_VOTERS, weight_required: VOTE_THRESHOLD_WEIGHT },
+    };
 
     if (thresholdReached) {
       try {
@@ -118,10 +149,7 @@ votes.post('/:deal_id', async (c) => {
               title: 'Vote threshold reached',
               body: `Deal #${dealId} hit ${totalVoters} voters · weight ${totalWeight}`,
               link: '/pipeline',
-              payload: {
-                deal_id: dealId,
-                tally: { total_voters: totalVoters, total_weight: totalWeight, strong_buy: strongBuy },
-              },
+              payload: { deal_id: dealId, tally: publicTally },
               channels: ['in_app', 'email', 'slack'],
             });
           }
@@ -129,15 +157,18 @@ votes.post('/:deal_id', async (c) => {
       } catch (e) { console.warn('[votes] notify vote_threshold_reached failed', e); }
     }
 
+    // Match backend cast_vote response exactly: the public tally fields
+    // live at the TOP LEVEL, plus a `my_vote` block. PipelinePage reads
+    // total_voters / total_weight / strong_buy_pct / by_type / my_vote
+    // directly from this payload to refresh local state.
     return c.json({
-      ok: true,
-      deal_id: dealId,
-      tally: {
-        total_voters: totalVoters,
-        total_weight: totalWeight,
-        strong_buy: strongBuy,
-        threshold_reached: thresholdReached,
-        threshold: { voters: VOTE_THRESHOLD_VOTERS, weight: VOTE_THRESHOLD_WEIGHT },
+      ...publicTally,
+      my_vote: {
+        vote_type: voteType,
+        weight,
+        comment,
+        anonymous: !!anonymous,
+        updated_at: new Date().toISOString(),
       },
     });
   } catch (e: any) {
