@@ -49,6 +49,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("StudioOS starting up — initializing database")
+    # Phase 0.2 — capture the main asyncio event loop so sync route handlers
+    # (tickets/deals/capital) can schedule WS broadcasts via the notification
+    # publisher without resorting to per-call asyncio.run(), which is unsafe
+    # to call from a worker thread that already has a different loop policy.
+    try:
+        import asyncio as _asyncio
+        from backend.app.services import notify as _notify
+        _notify.MAIN_LOOP = _asyncio.get_running_loop()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("StudioOS: failed to capture main loop for notify: %s", _exc)
     init_db()
     # Audit #1: seal legacy write paths to lp_investors and entities(type=vc_fund).
     install_db_guards()

@@ -81,24 +81,47 @@ def _send_email(to_email: str, subject: str, body: str) -> None:
         logger.warning("notify: email send failed: %s", exc)
 
 
+# Captured by main.py:lifespan at startup. Lets sync route handlers
+# (which run on a worker thread) schedule async WS broadcasts on the
+# server's main event loop in a thread-safe way. None until startup.
+MAIN_LOOP: Optional["asyncio.AbstractEventLoop"] = None
+
+
 def _broadcast_ws(user_id: int, payload: dict) -> None:
     """Push to any connected WebSocket clients via the pipeline overview hub.
 
-    The pipeline_votes manager broadcasts to ALL connected clients; the
-    frontend filters by user_id so other users ignore the message. This
-    keeps us from standing up a per-user channel for v1.
+    Three call contexts to handle:
+      1. Async route already running on the server loop -> create_task.
+      2. Sync route running on a worker thread, MAIN_LOOP captured at
+         startup -> run_coroutine_threadsafe (loop-safe, no new loop).
+      3. Test / standalone scripts with no captured loop -> asyncio.run
+         as a last-resort fallback so logic still exercises in unit tests.
+
+    The PipelineRoom DO + backend manager filter `type:"notification"`
+    frames to the recipient's socket(s); other connected clients never
+    see them.
     """
     try:
         from backend.app.api.routes.pipeline_votes import manager
         msg = {"type": "notification", "user_id": user_id, "notification": payload}
-        # manager.broadcast is async; schedule on running loop or run sync.
         try:
             loop = asyncio.get_running_loop()
             loop.create_task(manager.broadcast(msg))
+            return
         except RuntimeError:
+            pass
+        if MAIN_LOOP is not None and MAIN_LOOP.is_running():
+            try:
+                asyncio.run_coroutine_threadsafe(manager.broadcast(msg), MAIN_LOOP)
+                return
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("notify: run_coroutine_threadsafe failed: %s", exc)
+        try:
             asyncio.run(manager.broadcast(msg))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("notify: ws broadcast fallback failed: %s", exc)
     except Exception as exc:
-        logger.debug("notify: ws broadcast skipped: %s", exc)
+        logger.warning("notify: ws broadcast skipped: %s", exc)
 
 
 def notify(

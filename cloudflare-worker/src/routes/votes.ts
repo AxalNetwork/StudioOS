@@ -61,9 +61,12 @@ votes.post('/:deal_id', async (c) => {
 
   const body: any = await c.req.json().catch(() => ({}));
   const voteType: string = body?.vote_type;
-  // User weight mirrors backend _user_weight: admin=4, lp=3, partner=2, founder=1.
+  // Mirror backend _user_weight: admin=3, LP=3, partner=2, everyone else=1.
   const role = String((user as any).role || '').toLowerCase();
-  const weight: number = role === 'admin' ? 4 : role === 'lp' || role === 'investor' ? 3 : role === 'partner' ? 2 : 1;
+  const weight: number =
+    role === 'admin' ? 3 :
+    role === 'lp' || role === 'investor' ? 3 :
+    role === 'partner' ? 2 : 1;
   const comment: string | null = typeof body?.comment === 'string' ? body.comment.slice(0, 2000) : null;
   const anonymous: number = body?.anonymous ? 1 : 0;
   if (!VOTE_TYPES.has(voteType)) {
