@@ -13,16 +13,6 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, canViewLpData } from '../auth';
 
-// Phase 0.1 — LP/capital data is investor-only (admin always passes).
-async function requireLpAccess(c: any) {
-  const user = await requireAuth(c);
-  if (!canViewLpData(user)) return c.json({ error: "Forbidden: investor access required" }, 403);
-  if (!canViewLpData(user)) {
-    return c.json({ error: 'Forbidden: investor access required' }, 403);
-  }
-  return user;
-}
-
 const capital = new Hono<{ Bindings: Env }>();
 
 function lpDto(row: any) {

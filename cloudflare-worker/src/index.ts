@@ -290,11 +290,12 @@ export default {
         { status: 503, headers: { 'content-type': 'application/json' } },
       );
     }
-    // Fire-and-forget — never block a request on the migration. Subsequent
-    // requests within the same isolate hit the in-memory `_investorSchemaReady`
-    // short-circuit and pay zero cost.
+    // Phase 0.1 — block the FIRST request per isolate on the role-split
+    // migration so RBAC + schema rebuild are deterministic before any
+    // protected route runs (architect blocking-fix). Subsequent requests
+    // hit the in-memory `_investorSchemaReady` short-circuit (zero cost).
     if (!_investorSchemaReady && env.DB) {
-      ctx.waitUntil(ensureInvestorSchema(env));
+      await ensureInvestorSchema(env);
     }
     return app.fetch(request, env, ctx);
   },

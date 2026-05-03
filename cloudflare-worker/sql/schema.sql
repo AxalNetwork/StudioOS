@@ -43,6 +43,26 @@ CREATE TABLE IF NOT EXISTS entities (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Phase 0.1 — investor (LP / VC / Angel / Scout) profile, parallel to partner.
+-- Defined before `users` because users.investor_id FK references it.
+CREATE TABLE IF NOT EXISTS investors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
+    user_id INTEGER,
+    investor_type TEXT NOT NULL DEFAULT 'angel',
+    accreditation_status TEXT NOT NULL DEFAULT 'unverified',
+    check_size_min REAL,
+    check_size_max REAL,
+    sector_focus TEXT,
+    stage_focus TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_investors_user ON investors(user_id);
+CREATE INDEX IF NOT EXISTS idx_investors_type ON investors(investor_type);
+
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
