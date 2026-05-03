@@ -255,6 +255,9 @@ def get_settings(
         "email": user.email,
         "name": user.name,
         "role": user.role,
+        # Task #55 — expose the public handle so the Settings UI can
+        # show "Your public profile lives at /u/<handle>".
+        "handle": getattr(user, "handle", None),
         "email_verified": user.email_verified,
         "totp_configured": bool(user.password_hash),
         "kyc_status": getattr(user, "kyc_status", None) or "not_started",

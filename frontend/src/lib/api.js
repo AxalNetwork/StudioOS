@@ -238,6 +238,8 @@ export const api = {
     return request(`/marketplace/public/partners${q.length ? `?${new URLSearchParams(q)}` : ''}`);
   },
   publicGetPartner: (slug) => request(`/marketplace/public/partners/${encodeURIComponent(slug)}`),
+  // Task #55 — public profile page (/u/:handle), unauthenticated.
+  publicGetUserByHandle: (handle) => request(`/public/u/${encodeURIComponent(handle)}`),
   setPartnerFeatured: (partnerId, body) => request(`/marketplace/providers/${partnerId}/featured`, {
     method: 'POST', body: JSON.stringify(body),
   }),

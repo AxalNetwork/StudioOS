@@ -79,6 +79,7 @@ import ServiceCatalogPage from './pages/ServiceCatalogPage';
 import PartnerInsightsPage from './pages/PartnerInsightsPage';
 import PublicDirectoryPage from './pages/PublicDirectoryPage';
 import PublicPartnerProfilePage from './pages/PublicPartnerProfilePage';
+import PublicProfilePage from './pages/PublicProfilePage';
 import PitchDeckPrintPage from './pages/PitchDeckPrintPage';
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
@@ -882,6 +883,8 @@ export default function App() {
           land on the internal CRM at /partners. */}
       <Route path="/directory" element={<PublicDirectoryPage />} />
       <Route path="/partners/:slug" element={<PublicPartnerProfilePage />} />
+      {/* Task #55 — Public profile pages, unauthenticated, role-tailored. */}
+      <Route path="/u/:handle" element={<PublicProfilePage />} />
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />

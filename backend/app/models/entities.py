@@ -123,6 +123,10 @@ class User(SQLModel, table=True):
     verification_token_expires: Optional[datetime] = None
     admin_notes: Optional[str] = None
     last_active_at: Optional[datetime] = None
+    # Task #55 — opaque public handle used at /u/<handle>. Backfilled
+    # by ensure_user_handle_column on first boot; uniqueness enforced
+    # by a functional unique index on LOWER(handle).
+    handle: Optional[str] = Field(default=None, index=True)
     # 'limited' = admin granted browse-only access without KYC. The user
     # can use the platform but cannot sign legal agreements (enforced in
     # the esign sign endpoint). Null = normal flow.

@@ -730,13 +730,70 @@ function NotificationsSection({ data, patch }) {
   );
 }
 
+// Task #55 — per-role public-profile field map. Owner sees toggles
+// only for fields that actually render on /u/<handle> for their role,
+// so the editor stays focused.
+const PUBLIC_PROFILE_FIELDS_COMMON = [
+  { key: 'name', label: 'Name' },
+  { key: 'bio', label: 'Bio' },
+  { key: 'headshot', label: 'Headshot' },
+  { key: 'socials', label: 'Social links' },
+];
+const PUBLIC_PROFILE_FIELDS_BY_ROLE = {
+  founder: [
+    { key: 'projects', label: 'Projects (names + stage)' },
+    { key: 'traction', label: 'Traction summary (users + revenue)' },
+  ],
+  investor: [
+    { key: 'thesis', label: 'Investment thesis (sectors, stages, check size)' },
+    { key: 'portfolio_summary', label: 'Portfolio engagements count' },
+  ],
+  partner: [
+    { key: 'services', label: 'Services & categories' },
+    { key: 'reviews', label: 'Reviews summary' },
+    { key: 'pricing', label: 'Pricing tier & hourly rate' },
+  ],
+};
+// Defaults must mirror backend `_DEFAULTS` in public_profiles.py so the
+// owner-side toggles reflect what visitors actually see when no
+// override has been saved yet.
+const PUBLIC_PROFILE_DEFAULTS = {
+  founder:  { name: true, bio: true, headshot: true, socials: false, projects: true, traction: true },
+  investor: { name: true, bio: true, headshot: true, socials: false, thesis: true, portfolio_summary: false },
+  partner:  { name: true, bio: true, headshot: true, socials: false, services: true, reviews: true, pricing: false },
+  admin:    { name: true, bio: true, headshot: true, socials: false },
+  mentor:   { name: true, bio: true, headshot: true, socials: false },
+};
+
 function PrivacySection({ data, patch, flash, reload }) {
-  const pp = data.privacy_prefs?.public_profile || { name: true, bio: true, headshot: true, socials: false };
+  const role = (data.role || 'founder').toLowerCase();
+  const defaults = PUBLIC_PROFILE_DEFAULTS[role] || PUBLIC_PROFILE_DEFAULTS.admin;
+  const saved = data.privacy_prefs?.public_profile || {};
+  const pp = { ...defaults, ...saved };
+  const fieldList = [
+    ...PUBLIC_PROFILE_FIELDS_COMMON,
+    ...(PUBLIC_PROFILE_FIELDS_BY_ROLE[role] || []),
+  ];
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const setVisible = (key, value) => {
     patch({ privacy_prefs: { ...data.privacy_prefs, public_profile: { ...pp, [key]: value } } });
+  };
+
+  const publicUrl = data.handle
+    ? `${window.location.origin}/u/${data.handle}`
+    : null;
+  const copyPublicUrl = async () => {
+    if (!publicUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      flash('Copy failed — select & copy manually', 'error');
+    }
   };
 
   const exportData = async () => {
@@ -788,14 +845,21 @@ function PrivacySection({ data, patch, flash, reload }) {
 
   return (
     <>
-      <Card title="Public profile" description="Choose what's visible when other Axal members view your profile.">
+      <Card title="Public profile" description="Anyone with the link below can view this page. Choose what's visible per field.">
+        {publicUrl && (
+          <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-violet-700">Your public link</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <a href={publicUrl} target="_blank" rel="noreferrer noopener"
+                 className="font-mono text-sm text-violet-900 hover:underline break-all">{publicUrl}</a>
+              <button onClick={copyPublicUrl} className="ml-auto rounded-md border border-violet-300 bg-white px-2 py-1 text-xs text-violet-700 hover:bg-violet-100">
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        )}
         <div className="space-y-2">
-          {[
-            { key: 'name', label: 'Name' },
-            { key: 'bio', label: 'Bio' },
-            { key: 'headshot', label: 'Headshot' },
-            { key: 'socials', label: 'Social links' },
-          ].map(({ key, label }) => (
+          {fieldList.map(({ key, label }) => (
             <label key={key} className="flex items-center gap-3 text-sm text-gray-800">
               <input type="checkbox" checked={pp[key] !== false}
                 onChange={e => setVisible(key, e.target.checked)}
@@ -804,6 +868,9 @@ function PrivacySection({ data, patch, flash, reload }) {
             </label>
           ))}
         </div>
+        <p className="mt-3 text-xs text-gray-500">
+          Email and account details are never published. Inactive or deletion-requested accounts return 404.
+        </p>
       </Card>
 
       <Card title="Your data" description="Download everything we know about you, or request deletion.">

@@ -1583,3 +1583,71 @@ def ensure_cofounder_tables() -> None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("ensure_cofounder_tables: cofounder_connections: %s", exc)
             session.rollback()
+
+
+def ensure_user_handle_column() -> None:
+    """Task #55 — Public profile pages.
+
+    Adds a unique, lowercase ``handle`` column to ``users`` so a stable
+    public URL exists at ``/u/<handle>``. The handle is opaque (cannot
+    be derived back to the email) but human-friendly: a slug of the
+    user's name plus a 6-char uid suffix to guarantee uniqueness.
+
+    Backfill strategy: any pre-existing user with NULL handle is
+    assigned ``slug(name)-<uid[:6]>``. If two users would collide on
+    that key (extremely unlikely given the uid suffix) we fall back to
+    a fresh 6-hex random suffix and retry.
+
+    Idempotent — safe to run on every boot.
+    """
+    import re
+    import secrets
+
+    def _slug(name: str) -> str:
+        s = re.sub(r"[^a-z0-9]+", "-", (name or "user").lower()).strip("-")
+        return (s or "user")[:40]
+
+    with Session(engine) as session:
+        try:
+            session.exec(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS handle VARCHAR(64)"
+            ))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_user_handle_column add: %s", exc)
+            session.rollback()
+            return
+        try:
+            rows = session.exec(text(
+                "SELECT id, name, uid FROM users WHERE handle IS NULL OR handle = ''"
+            )).all()
+            for r in rows:
+                m = r._mapping  # type: ignore[attr-defined]
+                base = _slug(m["name"]) or "user"
+                suffix = (m["uid"] or "")[:6] or secrets.token_hex(3)
+                candidate = f"{base}-{suffix}"
+                # Resolve rare collisions deterministically.
+                for _ in range(5):
+                    exists = session.exec(text(
+                        "SELECT 1 FROM users WHERE LOWER(handle) = LOWER(:h) LIMIT 1"
+                    ).bindparams(h=candidate)).first()
+                    if not exists:
+                        break
+                    candidate = f"{base}-{secrets.token_hex(3)}"
+                try:
+                    session.exec(text(
+                        "UPDATE users SET handle = :h WHERE id = :i"
+                    ).bindparams(h=candidate, i=m["id"]))
+                    session.commit()
+                except Exception:
+                    session.rollback()
+            # Unique index after backfill so the migration never blocks
+            # on a duplicate from a prior partial run.
+            session.exec(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_handle_lower "
+                "ON users (LOWER(handle))"
+            ))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_user_handle_column backfill: %s", exc)
+            session.rollback()
