@@ -673,7 +673,7 @@ export default function App() {
       <Route path="/projects/:id" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectDetail />)} />
       <Route path="/legal" element={guard(['admin', 'founder'], <LegalPage />)} />
       <Route path="/partners" element={guard(['admin', 'partner', 'investor'], <PartnersPage />)} />
-      <Route path="/capital" element={guard(['admin', 'partner', 'investor'], <CapitalPage />)} />
+      <Route path="/capital" element={guard(['admin', 'investor'], <CapitalPage />)} />
       <Route path="/tickets" element={guard(['admin', 'founder', 'partner', 'investor'], <TicketsPage />)} />
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'], <DealsPage />)} />
       <Route path="/market-intel" element={guard(['admin', 'partner', 'investor'], <MarketIntelPage />)} />
@@ -684,7 +684,7 @@ export default function App() {
       <Route path="/spinouts" element={guard(['admin', 'founder', 'partner', 'investor'], <SpinOutsPage />)} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], <LiquidityPage currentUser={user} />)} />
-      <Route path="/funds" element={guard(['admin', 'partner', 'investor'], <FundsPage currentUser={user} />)} />
+      <Route path="/funds" element={guard(['admin', 'investor'], <FundsPage currentUser={user} />)} />
       <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferEarnPage />)} />
       <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />

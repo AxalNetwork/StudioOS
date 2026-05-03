@@ -68,6 +68,9 @@ privateData.get('/portfolio/metrics', async (c) => {
   }
 
   if (user.role === 'partner' || user.role === 'investor') {
+    // Preserve the actual role label so the UI can divergence partner vs
+    // investor surfaces (architect feedback — no role flattening).
+    const roleLabel = user.role;
     const deals = user.partner_id ? await sql`SELECT d.*, p.name as project_name, p.sector FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.partner_id = ${user.partner_id} ORDER BY d.created_at DESC` : [];
     const committed = await sql`SELECT COALESCE(SUM(commitment_amount), 0) as total FROM limited_partners`;
     const called = await sql`SELECT COALESCE(SUM(invested_amount), 0) as total FROM limited_partners`;
@@ -75,7 +78,7 @@ privateData.get('/portfolio/metrics', async (c) => {
     await sql.end();
 
     const tvpi = Number(called[0].total) > 0 ? Math.round(Number(committed[0].total) / Number(called[0].total) * 100) / 100 : 0;
-    return c.json({ role: 'investor', deals, total_deals: deals.length, active_deals: deals.filter((d: any) => ['applied', 'scored', 'active'].includes(d.status)).length, fund_metrics: { total_committed: Number(committed[0].total), total_called: Number(called[0].total), tvpi, portfolio_companies: portfolio.length }, portfolio });
+    return c.json({ role: roleLabel, deals, total_deals: deals.length, active_deals: deals.filter((d: any) => ['applied', 'scored', 'active'].includes(d.status)).length, fund_metrics: { total_committed: Number(committed[0].total), total_called: Number(called[0].total), tvpi, portfolio_companies: portfolio.length }, portfolio });
   }
 
   const allProjects = await sql`SELECT * FROM projects`;

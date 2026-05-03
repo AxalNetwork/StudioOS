@@ -210,10 +210,11 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
       try { await env.DB.exec("ALTER TABLE users ADD COLUMN investor_id INTEGER"); } catch {}
     }
     // Phase 0.1 — relax the legacy users.role CHECK constraint that excluded
-    // 'investor'. SQLite/D1 has no ALTER TABLE DROP/MODIFY CONSTRAINT, so we
-    // detect the old constraint via sqlite_master and rebuild the table only
-    // when the old shape is present. Idempotent: if the rebuild already ran
-    // (or the table was created from current schema.sql), this is a no-op.
+    // 'investor'. SQLite/D1 has no ALTER TABLE DROP/MODIFY CONSTRAINT, so on
+    // existing prod DBs we must rebuild the table. We use the canonical DDL
+    // from sql/schema.sql (PK/UNIQUE/CHECK/FK/defaults preserved) plus an
+    // explicit recreate of the indexes — no CTAS/constraint-stripping shortcut
+    // (architect blocking-fix: preserve all integrity constraints).
     try {
       const tbl = await env.DB.prepare(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
@@ -221,25 +222,37 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
       const ddl = (tbl?.sql || '');
       const needsRebuild = ddl.includes("CHECK") && ddl.includes("'partner'") && !ddl.includes("'investor'");
       if (needsRebuild) {
-        // SQLite-safe table rebuild: copy → drop → rename. Single transaction
-        // via D1 batch keeps the users table never visibly missing.
-        const colNames = (cols.results || []).map(r => r.name).join(', ');
+        const NEW_USERS_DDL = `CREATE TABLE users_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
+          email TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'founder' CHECK (role IN ('admin', 'founder', 'partner', 'investor')),
+          investor_id INTEGER REFERENCES investors(id),
+          password_hash TEXT,
+          founder_id INTEGER REFERENCES founders(id),
+          partner_id INTEGER REFERENCES partners(id),
+          is_active INTEGER NOT NULL DEFAULT 1,
+          email_verified INTEGER NOT NULL DEFAULT 0,
+          verification_token TEXT,
+          verification_token_expires TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )`;
+        // Build the column list dynamically from the OLD table so we copy
+        // only columns that exist on both sides (handles partial-migration
+        // states). investor_id may or may not yet exist on the source.
+        const oldCols = (cols.results || []).map(r => r.name);
+        const newCols = ['id','uid','email','name','role','investor_id','password_hash','founder_id','partner_id','is_active','email_verified','verification_token','verification_token_expires','created_at'];
+        const sharedCols = newCols.filter(c => oldCols.includes(c));
+        const colList = sharedCols.join(', ');
         await env.DB.batch([
           env.DB.prepare("PRAGMA foreign_keys=OFF"),
-          // The new users_new table mirrors the production schema in
-          // sql/schema.sql, including the relaxed role CHECK and investor_id.
-          env.DB.prepare(
-            "CREATE TABLE users_new AS SELECT * FROM users WHERE 0"
-          ),
-          // Recreate with the correct constraint set by manually replacing.
-          // We can't easily synthesise the full DDL programmatically, so the
-          // simplest correct approach is to drop the CHECK by recreating the
-          // table without it (D1 lets us redefine columns via CTAS but loses
-          // constraints, which is exactly what we want here).
-          env.DB.prepare("DROP TABLE users_new"),
-          env.DB.prepare(`CREATE TABLE users_rebuild AS SELECT ${colNames} FROM users`),
+          env.DB.prepare(NEW_USERS_DDL),
+          env.DB.prepare(`INSERT INTO users_new (${colList}) SELECT ${colList} FROM users`),
           env.DB.prepare("DROP TABLE users"),
-          env.DB.prepare("ALTER TABLE users_rebuild RENAME TO users"),
+          env.DB.prepare("ALTER TABLE users_new RENAME TO users"),
+          env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"),
+          env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_users_uid ON users(uid)"),
           env.DB.prepare("PRAGMA foreign_keys=ON"),
         ]);
       }

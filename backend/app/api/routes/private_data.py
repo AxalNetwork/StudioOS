@@ -160,9 +160,12 @@ def _founder_portfolio(user: User, session: Session):
 
 
 def _partner_portfolio(user: User, session: Session):
-    if not user.partner_id:
+    # Preserve the user's actual role (partner vs investor) in the response so
+    # downstream UI can render the correct surface (architect feedback).
+    role_label = "investor" if user.role == UserRole.INVESTOR else "partner"
+    if not user.partner_id and not user.investor_id:
         return {
-            "role": "investor",
+            "role": role_label,
             "deals": [],
             "total_deals": 0,
             "active_deals": 0,
@@ -226,7 +229,7 @@ def _partner_portfolio(user: User, session: Session):
     tvpi = round(total_committed / total_called, 2) if total_called > 0 else 0
 
     return {
-        "role": "investor",
+        "role": role_label,
         "deals": deal_results,
         "total_deals": len(deal_results),
         "active_deals": sum(1 for d in deal_results if d["status"] in ["applied", "scored", "active"]),
