@@ -11,7 +11,17 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth } from '../auth';
+import { requireAuth, canViewLpData } from '../auth';
+
+// Phase 0.1 — LP/capital data is investor-only (admin always passes).
+async function requireLpAccess(c: any) {
+  const user = await requireAuth(c);
+  if (!canViewLpData(user)) return c.json({ error: "Forbidden: investor access required" }, 403);
+  if (!canViewLpData(user)) {
+    return c.json({ error: 'Forbidden: investor access required' }, 403);
+  }
+  return user;
+}
 
 const capital = new Hono<{ Bindings: Env }>();
 
@@ -41,7 +51,8 @@ function callDto(row: any) {
 }
 
 capital.get('/investors', async (c) => {
-  await requireAuth(c);
+  const __u = await requireAuth(c);
+  if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
   const sql = getSQL(c.env);
   const rows = await sql`
     SELECT lp.*, f.name AS fund_name, u.name AS user_name, u.email AS user_email
@@ -55,7 +66,8 @@ capital.get('/investors', async (c) => {
 });
 
 capital.post('/investors', async (c) => {
-  await requireAuth(c);
+  const __u = await requireAuth(c);
+  if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
   const data = await c.req.json();
   const sql = getSQL(c.env);
   const fundName = data.fund_name || 'Axal Fund I';
@@ -97,7 +109,8 @@ capital.post('/investors', async (c) => {
 });
 
 capital.get('/investors/:id', async (c) => {
-  await requireAuth(c);
+  const __u = await requireAuth(c);
+  if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
   const lps = await sql`
@@ -114,7 +127,8 @@ capital.get('/investors/:id', async (c) => {
 });
 
 capital.post('/calls', async (c) => {
-  await requireAuth(c);
+  const __u = await requireAuth(c);
+  if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
   const data = await c.req.json();
   // Accept either canonical or legacy field name.
   const lpId = data.limited_partner_id ?? data.lp_investor_id;
@@ -152,7 +166,8 @@ capital.post('/calls', async (c) => {
 });
 
 capital.get('/calls', async (c) => {
-  await requireAuth(c);
+  const __u = await requireAuth(c);
+  if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
   const status = c.req.query('status');
   const sql = getSQL(c.env);
   const rows = status
@@ -163,7 +178,8 @@ capital.get('/calls', async (c) => {
 });
 
 capital.post('/calls/:id/pay', async (c) => {
-  await requireAuth(c);
+  const __u = await requireAuth(c);
+  if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
   const calls = await sql`SELECT * FROM capital_calls WHERE id = ${id}`;
@@ -193,7 +209,8 @@ capital.post('/calls/:id/pay', async (c) => {
 });
 
 capital.post('/capitalCall', async (c) => {
-  await requireAuth(c);
+  const __u = await requireAuth(c);
+  if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
   const data = await c.req.json();
   const sql = getSQL(c.env);
   const projects = await sql`SELECT * FROM projects WHERE id = ${data.startup_id}`;
@@ -233,6 +250,7 @@ capital.post('/capitalCall', async (c) => {
 
 capital.get('/portfolio', async (c) => {
   const user = await requireAuth(c);
+  if (!canViewLpData(user)) return c.json({ error: "Forbidden: investor access required" }, 403);
   const sql = getSQL(c.env);
   const projects = await sql`SELECT * FROM projects WHERE status IN ('spinout', 'active', 'tier_1', 'tier_2')`;
   // LP-facing portfolio: every score goes through the verified-read helper so

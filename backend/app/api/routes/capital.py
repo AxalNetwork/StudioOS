@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, func, select
 
 from backend.app.api.routes.auth import get_current_user
+from backend.app.api.deps import require_admin_or_investor
 from backend.app.database import get_session
 from backend.app.models.entities import (
     CapitalCall,
@@ -100,7 +101,7 @@ def _get_or_create_fund(session: Session, name: str) -> VCFund:
 # Investors (LPs)
 # ---------------------------------------------------------------------------
 @router.get("/investors")
-def list_investors(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def list_investors(session: Session = Depends(get_session), user: User = Depends(require_admin_or_investor)):
     lps = session.exec(select(LimitedPartner).order_by(LimitedPartner.created_at.desc())).all()
     funds = {f.id: f for f in session.exec(select(VCFund)).all()}
     return [_lp_dto(lp, funds.get(lp.fund_id), user) for lp in lps]
@@ -110,7 +111,7 @@ def list_investors(session: Session = Depends(get_session), user: User = Depends
 def create_investor(
     data: LPInvestorCreate,
     session: Session = Depends(get_session),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin_or_investor),
 ):
     fund_name = data.fund_name or "Axal Fund I"
     fund = _get_or_create_fund(session, fund_name)
@@ -151,7 +152,7 @@ def create_investor(
 def get_investor(
     investor_id: int,
     session: Session = Depends(get_session),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin_or_investor),
 ):
     lp = session.get(LimitedPartner, investor_id)
     if not lp:
@@ -170,7 +171,7 @@ def get_investor(
 def create_capital_call(
     data: CapitalCallCreate,
     session: Session = Depends(get_session),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin_or_investor),
 ):
     lp_id = data.limited_partner_id or data.lp_investor_id
     if not lp_id:
@@ -249,7 +250,7 @@ def lp_portal(
 def list_capital_calls(
     status: str | None = None,
     session: Session = Depends(get_session),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin_or_investor),
 ):
     stmt = select(CapitalCall).order_by(CapitalCall.created_at.desc())
     if status:
@@ -261,7 +262,7 @@ def list_capital_calls(
 def mark_call_paid(
     call_id: int,
     session: Session = Depends(get_session),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin_or_investor),
 ):
     call = session.get(CapitalCall, call_id)
     if not call:
@@ -295,7 +296,7 @@ def mark_call_paid(
 def capital_call_with_partners(
     data: CapitalCallRequest,
     session: Session = Depends(get_session),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin_or_investor),
 ):
     project = session.get(Project, data.startup_id)
     if not project:
@@ -349,7 +350,7 @@ def capital_call_with_partners(
 # Funds
 # ---------------------------------------------------------------------------
 @router.get("/funds")
-def list_funds(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def list_funds(session: Session = Depends(get_session), user: User = Depends(require_admin_or_investor)):
     """Canonical fund listing. Replaces the old `entities` rows with type=vc_fund."""
     funds = session.exec(select(VCFund).order_by(VCFund.created_at.desc())).all()
     return [
@@ -374,7 +375,7 @@ def list_funds(session: Session = Depends(get_session), user: User = Depends(get
 # Portfolio
 # ---------------------------------------------------------------------------
 @router.get("/portfolio")
-def portfolio_overview(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def portfolio_overview(session: Session = Depends(get_session), user: User = Depends(require_admin_or_investor)):
     projects = session.exec(
         select(Project).where(Project.status.in_(["spinout", "active", "tier_1", "tier_2"]))
     ).all()

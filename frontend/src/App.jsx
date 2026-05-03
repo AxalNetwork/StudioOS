@@ -163,7 +163,8 @@ const NAV_BY_ROLE = {
     { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
 
     { section: 'Capital & Liquidity' },
-    { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
+    // Phase 0.1 — /capital and /funds are investor-only LP surfaces; partners
+    // see liquidity + payouts (their commission/exit surface).
     { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     { to: '/payouts', icon: Wallet, label: 'Payouts' },
 

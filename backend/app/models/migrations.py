@@ -345,6 +345,12 @@ def ensure_investor_role_split() -> None:
         # Non-PG dialects (sqlite) raise — that's fine, the role column is TEXT.
         logger.debug("ensure_investor_role_split: enum extend skipped: %s", exc)
 
+    is_pg = engine.dialect.name.startswith("postgres")
+    # Dialect-portable helpers (architect feedback: don't silently skip on sqlite).
+    role_cast = "role::text" if is_pg else "role"
+    u_role_cast = "u.role::text" if is_pg else "u.role"
+    uuid_expr = "gen_random_uuid()::text" if is_pg else "lower(hex(randomblob(16)))"
+
     with Session(engine) as session:
         # Step 1 — investors table FIRST (the FK in step 2 references it).
         # The SQLModel metadata in `init_db()` should already create it on a
@@ -395,21 +401,21 @@ def ensure_investor_role_split() -> None:
         # row insert (architect feedback: don't gate on the just-promoted set).
         try:
             session.exec(text(
-                """
+                f"""
                 INSERT INTO investors (uid, user_id, investor_type, accreditation_status)
-                SELECT gen_random_uuid()::text, u.id, 'lp', 'verified'
+                SELECT {uuid_expr}, u.id, 'lp', 'verified'
                 FROM users u
-                WHERE upper(u.role::text) = 'INVESTOR'
+                WHERE upper({u_role_cast}) = 'INVESTOR'
                   AND NOT EXISTS (SELECT 1 FROM investors i WHERE i.user_id = u.id)
                 """
             ))
             session.commit()
             session.exec(text(
-                """
+                f"""
                 UPDATE users SET investor_id = (
                     SELECT i.id FROM investors i WHERE i.user_id = users.id LIMIT 1
                 )
-                WHERE upper(role::text) = 'INVESTOR' AND investor_id IS NULL
+                WHERE upper({role_cast}) = 'INVESTOR' AND investor_id IS NULL
                 """
             ))
             session.commit()
@@ -422,20 +428,38 @@ def ensure_investor_role_split() -> None:
         # PG enum values are uppercase; cast to text on both sides so the
         # comparison stays dialect-agnostic (sqlite stores raw TEXT).
         try:
-            promoted = session.exec(text(
-                """
-                WITH lp_users AS (
+            if is_pg:
+                promoted = session.exec(text(
+                    f"""
+                    WITH lp_users AS (
+                        SELECT DISTINCT u.id AS user_id
+                        FROM users u
+                        JOIN limited_partners lp
+                          ON lp.user_id = u.id OR lower(lp.email) = lower(u.email)
+                        WHERE upper({u_role_cast}) = 'PARTNER'
+                    )
+                    UPDATE users SET role = 'INVESTOR'
+                    WHERE id IN (SELECT user_id FROM lp_users)
+                    RETURNING id
+                    """
+                )).all()
+            else:
+                # SQLite: no RETURNING in older versions; do select-then-update.
+                rows = session.exec(text(
+                    """
                     SELECT DISTINCT u.id AS user_id
                     FROM users u
                     JOIN limited_partners lp
                       ON lp.user_id = u.id OR lower(lp.email) = lower(u.email)
-                    WHERE upper(u.role::text) = 'PARTNER'
-                )
-                UPDATE users SET role = 'INVESTOR'
-                WHERE id IN (SELECT user_id FROM lp_users)
-                RETURNING id
-                """
-            )).all()
+                    WHERE upper(u.role) = 'PARTNER'
+                    """
+                )).all()
+                ids = [r[0] if isinstance(r, tuple) else r.user_id for r in rows]
+                if ids:
+                    session.exec(text(
+                        f"UPDATE users SET role = 'INVESTOR' WHERE id IN ({','.join(str(int(i)) for i in ids)})"
+                    ))
+                promoted = [(i,) for i in ids]
             session.commit()
             if promoted:
                 logger.info(
@@ -449,9 +473,9 @@ def ensure_investor_role_split() -> None:
                     uid = row[0] if isinstance(row, tuple) else row.id
                     try:
                         session.exec(text(
-                            """
+                            f"""
                             INSERT INTO investors (uid, user_id, investor_type, accreditation_status)
-                            SELECT gen_random_uuid()::text, :uid, 'lp', 'verified'
+                            SELECT {uuid_expr}, :uid, 'lp', 'verified'
                             WHERE NOT EXISTS (SELECT 1 FROM investors WHERE user_id = :uid)
                             """
                         ), {"uid": uid})
