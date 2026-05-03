@@ -5,7 +5,7 @@ import {
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
   ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock, Calendar,
-  Settings as SettingsIcon, PieChart as PieIcon, Heart
+  Settings as SettingsIcon, PieChart as PieIcon, Heart, Bookmark
 } from 'lucide-react';
 import { api } from './lib/api';
 import Dashboard from './pages/Dashboard';
@@ -37,6 +37,7 @@ import OfficeHoursPage from './pages/OfficeHoursPage';
 import CalendarPage from './pages/CalendarPage';
 import CofounderPage from './pages/CofounderPage';
 import PortfolioHealthPage from './pages/PortfolioHealthPage';
+import WatchlistJournalPage from './pages/WatchlistJournalPage';
 import ReferEarnPage from './pages/ReferEarnPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import PayoutsPage from './pages/PayoutsPage';
@@ -115,6 +116,7 @@ const NAV_BY_ROLE = {
     { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     { to: '/payouts', icon: Wallet, label: 'Payouts' },
     { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+    { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
 
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
@@ -216,6 +218,7 @@ const NAV_BY_ROLE = {
     { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     { to: '/payouts', icon: Wallet, label: 'Payouts' },
     { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+    { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
 
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
@@ -255,6 +258,7 @@ const NAV_BY_ROLE = {
     { to: '/funds', icon: TrendingUp, label: 'Funds' },
     { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+    { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
 
     { section: 'Legal & Compliance' },
     { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
@@ -825,6 +829,7 @@ export default function App() {
       <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <CalendarPage />)} />
       <Route path="/cofounder" element={guard(['admin', 'founder'], <CofounderPage />)} />
       <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], <PortfolioHealthPage />)} />
+      <Route path="/watchlist" element={guard(['admin', 'partner', 'investor'], <WatchlistJournalPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor'], <TrustCenterPage />)} />

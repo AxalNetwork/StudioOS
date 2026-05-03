@@ -794,6 +794,37 @@ export const api = {
   portfolioHealthRecomputeOne: (projectUid) =>
     request(`/portfolio/health/recompute/${projectUid}`, { method: 'POST' }),
 
+  // ---------- Watchlist + Decision Journal (Task #49) ----------
+  watchlistList: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.status) qs.set('status', opts.status);
+    if (opts.owner) qs.set('owner', opts.owner);
+    const s = qs.toString();
+    return request(`/watchlist${s ? `?${s}` : ''}`);
+  },
+  watchlistCreate: (data) => request('/watchlist', { method: 'POST', body: JSON.stringify(data) }),
+  watchlistGet: (uid) => request(`/watchlist/${uid}`),
+  watchlistUpdate: (uid, data) => request(`/watchlist/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  watchlistDelete: (uid) => request(`/watchlist/${uid}`, { method: 'DELETE' }),
+  watchlistConvert: (uid, data = {}) =>
+    request(`/watchlist/${uid}/convert`, { method: 'POST', body: JSON.stringify(data) }),
+
+  journalList: (opts = {}) => {
+    const qs = new URLSearchParams();
+    for (const k of ['decision', 'outcome_status', 'project_uid', 'owner']) {
+      if (opts[k]) qs.set(k, opts[k]);
+    }
+    const s = qs.toString();
+    return request(`/journal${s ? `?${s}` : ''}`);
+  },
+  journalCreate: (data) => request('/journal', { method: 'POST', body: JSON.stringify(data) }),
+  journalGet: (uid) => request(`/journal/${uid}`),
+  journalUpdate: (uid, data) => request(`/journal/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  journalRecordOutcome: (uid, data) =>
+    request(`/journal/${uid}/outcome`, { method: 'POST', body: JSON.stringify(data) }),
+  journalDelete: (uid) => request(`/journal/${uid}`, { method: 'DELETE' }),
+  antiportfolio: (owner = 'me') => request(`/antiportfolio?owner=${encodeURIComponent(owner)}`),
+
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {
     const qs = new URLSearchParams();

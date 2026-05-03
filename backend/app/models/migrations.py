@@ -1215,6 +1215,78 @@ def ensure_calendar_tables() -> None:
             session.rollback()
 
 
+def ensure_watchlist_decision_tables() -> None:
+    """Task #49 — Watchlist + decision journal. Idempotent."""
+    with Session(engine) as session:
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS watchlist_items (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+                    external_name VARCHAR,
+                    external_url VARCHAR,
+                    sector VARCHAR,
+                    stage VARCHAR,
+                    thesis TEXT,
+                    conviction VARCHAR DEFAULT 'medium' NOT NULL,
+                    source VARCHAR,
+                    tags_json TEXT DEFAULT '[]' NOT NULL,
+                    status VARCHAR DEFAULT 'watching' NOT NULL,
+                    converted_deal_id INTEGER REFERENCES deals(id) ON DELETE SET NULL,
+                    converted_at TIMESTAMP,
+                    passed_reason TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    CONSTRAINT uq_watchlist_owner_project UNIQUE (owner_user_id, project_id)
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_watchlist_owner ON watchlist_items(owner_user_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_watchlist_status ON watchlist_items(status)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_watchlist_project ON watchlist_items(project_id)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_watchlist_decision_tables: watchlist_items: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS decision_journal_entries (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+                    watchlist_item_id INTEGER REFERENCES watchlist_items(id) ON DELETE SET NULL,
+                    deal_id INTEGER REFERENCES deals(id) ON DELETE SET NULL,
+                    decision VARCHAR DEFAULT 'defer' NOT NULL,
+                    conviction INTEGER DEFAULT 3 NOT NULL,
+                    thesis TEXT NOT NULL,
+                    key_risks TEXT,
+                    expected_outcome TEXT,
+                    expected_multiple DOUBLE PRECISION,
+                    expected_timeline_months INTEGER,
+                    tags_json TEXT DEFAULT '[]' NOT NULL,
+                    decided_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    outcome_status VARCHAR DEFAULT 'pending' NOT NULL,
+                    outcome_notes TEXT,
+                    outcome_actual_multiple DOUBLE PRECISION,
+                    outcome_recorded_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_journal_owner ON decision_journal_entries(owner_user_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_journal_project ON decision_journal_entries(project_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_journal_decision ON decision_journal_entries(decision)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_journal_outcome ON decision_journal_entries(outcome_status)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_journal_decided_at ON decision_journal_entries(decided_at)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_watchlist_decision_tables: decision_journal_entries: %s", exc)
+            session.rollback()
+
+
 def ensure_portfolio_health_tables() -> None:
     """Task #44 — Portfolio health score + predictive failure. Idempotent."""
     with Session(engine) as session:

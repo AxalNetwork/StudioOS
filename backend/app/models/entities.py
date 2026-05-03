@@ -1449,3 +1449,76 @@ class PortfolioHealthSnapshot(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("project_id", "snapshot_date", name="uq_portfolio_health_day"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Task #49 — Watchlist + decision journal
+# ---------------------------------------------------------------------------
+class WatchlistItem(SQLModel, table=True):
+    """Deals an investor / partner / admin is watching but has NOT yet
+    pulled into the formal pipeline. Either an existing in-system project
+    (``project_id`` set) or an external prospect captured by free-form
+    name + URL (``project_id`` null). UNIQUE(owner_user_id, project_id)
+    so a user can only watch the same in-system project once; external
+    items are unique by name within an owner via the partial unique
+    index in the migration."""
+    __tablename__ = "watchlist_items"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    owner_user_id: int = Field(foreign_key="users.id", index=True)
+    project_id: Optional[int] = Field(default=None, foreign_key="projects.id", index=True)
+    # Free-form fields for external prospects not yet in the system
+    external_name: Optional[str] = None
+    external_url: Optional[str] = None
+    sector: Optional[str] = None
+    stage: Optional[str] = None
+    thesis: Optional[str] = None
+    conviction: str = Field(default="medium", index=True)  # low | medium | high
+    source: Optional[str] = Field(default=None, index=True)  # referral | inbound | cold | conf | portfolio_intro | ...
+    tags_json: str = Field(default="[]")
+    # watching | converted (-> deal created) | passed_on (declined to pursue) | archived
+    status: str = Field(default="watching", index=True)
+    converted_deal_id: Optional[int] = Field(default=None, foreign_key="deals.id")
+    converted_at: Optional[datetime] = None
+    passed_reason: Optional[str] = None        # why we walked away (anti-portfolio fuel)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "project_id", name="uq_watchlist_owner_project"),
+    )
+
+
+class DecisionJournalEntry(SQLModel, table=True):
+    """Pre-vote rationale + post-outcome comparison. The investor (or
+    admin/partner) writes the thesis BEFORE the IC vote so that future
+    self can grade past decisions honestly. Once an outcome lands,
+    ``outcome_status`` flips from 'pending' and the antiportfolio
+    rollup includes it."""
+    __tablename__ = "decision_journal_entries"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    owner_user_id: int = Field(foreign_key="users.id", index=True)
+    # Either points at an in-system project or at a watchlist item (for
+    # decisions made on external prospects we never onboarded). At least
+    # one must be set; enforced at the service layer.
+    project_id: Optional[int] = Field(default=None, foreign_key="projects.id", index=True)
+    watchlist_item_id: Optional[int] = Field(default=None, foreign_key="watchlist_items.id", index=True)
+    deal_id: Optional[int] = Field(default=None, foreign_key="deals.id")
+    # invest | pass | defer
+    decision: str = Field(default="defer", index=True)
+    conviction: int = Field(default=3)         # 1..5
+    thesis: str                                # required
+    key_risks: Optional[str] = None
+    expected_outcome: Optional[str] = None
+    expected_multiple: Optional[float] = None  # e.g. 10.0 for 10x
+    expected_timeline_months: Optional[int] = None
+    tags_json: str = Field(default="[]")
+    decided_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    # pending | hit | miss | partial | inconclusive
+    outcome_status: str = Field(default="pending", index=True)
+    outcome_notes: Optional[str] = None
+    outcome_actual_multiple: Optional[float] = None
+    outcome_recorded_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
