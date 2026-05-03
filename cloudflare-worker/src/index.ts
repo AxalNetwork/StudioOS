@@ -169,6 +169,10 @@ app.route('/api/integrations', integrations);
 app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/pipeline/votes', votesRoutes);
+// The frontend (and backend) cast endpoint is the singular `/vote/:deal_id`;
+// the plural `/votes/:deal_id` exists as a back-compat alias. Both go to
+// the same handler so the threshold publisher fires regardless of caller.
+app.route('/api/pipeline/vote', votesRoutes);
 
 app.notFound((c) => c.json({ detail: 'Not found' }, 404));
 

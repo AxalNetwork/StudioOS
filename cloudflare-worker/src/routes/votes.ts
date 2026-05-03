@@ -19,8 +19,10 @@ import { requireAuth } from '../auth';
 
 const votes = new Hono<{ Bindings: Env }>();
 
-const VOTE_THRESHOLD_VOTERS = 3;
-const VOTE_THRESHOLD_WEIGHT = 6;
+// Mirror backend/app/api/routes/pipeline_votes.py — keep in sync to avoid
+// cross-stack divergence on when admins get paged.
+const VOTE_THRESHOLD_VOTERS = 5;
+const VOTE_THRESHOLD_WEIGHT = 12;
 const VOTE_TYPES = new Set(['strong_buy', 'buy', 'pass', 'strong_pass']);
 
 let votesMigrated = false;
