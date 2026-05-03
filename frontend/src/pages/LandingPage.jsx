@@ -1,400 +1,417 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Zap, Target, Brain, Globe, FileText, Users, DollarSign,
-  Rocket, ChevronRight, Shield, BarChart3, ArrowRight, Clock,
-  Search, ClipboardCheck, Hammer, Banknote, Repeat
+  Users, Banknote, GitBranch, Radar, Scale,
+  Handshake, Rocket, ArrowRight,
 } from 'lucide-react';
-import Footer from '../components/Footer';
+import PublicNav from '../components/PublicNav';
+import PublicFooter from '../components/PublicFooter';
+import { BRAND, NETWORK_LAYERS, LANES } from '../brand/gvpn';
 
-const THESIS_PILLS = [
-  'AI',
-  'Blockchain',
-  'Quantum',
-  'Digital Infrastructure',
-  'Frontier Software',
+const LAYER_ICONS = {
+  partners: Users,
+  capital: Banknote,
+  deals: GitBranch,
+  intelligence: Radar,
+  legal: Scale,
+};
+
+const LANE_ACCENT = {
+  violet: { dot: 'bg-gvpn-violet', border: 'border-gvpn-violet/40', text: 'text-gvpn-violet', btn: 'bg-gvpn-violet hover:opacity-90' },
+  mint:   { dot: 'bg-gvpn-mint',   border: 'border-gvpn-mint/40',   text: 'text-gvpn-mint',   btn: 'bg-gvpn-mint hover:opacity-90 text-gvpn-ink' },
+  amber:  { dot: 'bg-gvpn-amber',  border: 'border-gvpn-amber/40',  text: 'text-gvpn-amber',  btn: 'bg-gvpn-amber hover:opacity-90 text-gvpn-ink' },
+};
+
+const LANE_BULLETS = {
+  partner: [
+    'Weighted community voting on every deal (your vote counts 2x)',
+    'Referral codes + revenue share on closed deals',
+    'Partner directory + integrations marketplace',
+    'Direct line into deal flow before public announcement',
+  ],
+  lp: [
+    'Track commitments, calls, distributions in one ledger',
+    'Auto-generated LPAs (AI-drafted, human-reviewed)',
+    'TVPI / DPI charts per fund vintage',
+    'Secondary marketplace for early liquidity',
+  ],
+  founder: [
+    'Get scored within 72 hours (100-point diligence)',
+    'AI deal memo generated automatically',
+    'If selected, enter Spin-Out Lab — funded in 30 days',
+    'Lifetime founder portal: legal, capital, advisory',
+  ],
+};
+
+const LANE_ICONS = { partner: Handshake, lp: Banknote, founder: Rocket };
+
+const FALLBACK_STATS = {
+  partners: 200,
+  funds: 4,
+  deals_scored: 1200,
+  spinouts: 38,
+};
+
+function useCountUp(target, durationMs = 600) {
+  const [value, setValue] = useState(0);
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (startedRef.current) return;
+    if (typeof target !== 'number' || Number.isNaN(target)) return;
+    startedRef.current = true;
+    const start = performance.now();
+    let raf;
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      setValue(Math.round(target * (0.5 - 0.5 * Math.cos(Math.PI * t)))); // ease-in-out
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, durationMs]);
+  return value;
+}
+
+function StatCell({ label, value, suffix }) {
+  const n = useCountUp(value);
+  return (
+    <div className="flex flex-col items-center text-center px-4">
+      <div className="text-2xl md:text-3xl font-semibold text-white tabular-nums">
+        {n.toLocaleString()}{suffix || ''}
+      </div>
+      <div className="text-[10px] uppercase tracking-wider text-gray-400 mt-1">{label}</div>
+    </div>
+  );
+}
+
+function TrustBar() {
+  const [stats, setStats] = useState(FALLBACK_STATS);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch('/api/dashboard/stats', { signal: ctrl.signal });
+        if (!res.ok) throw new Error('non-200');
+        const data = await res.json();
+        setStats({
+          partners: Number(data?.partners ?? FALLBACK_STATS.partners),
+          funds: Number(data?.funds ?? FALLBACK_STATS.funds),
+          deals_scored: Number(data?.deals_scored ?? FALLBACK_STATS.deals_scored),
+          spinouts: Number(data?.spinouts ?? FALLBACK_STATS.spinouts),
+        });
+      } catch {
+        /* silent — fallback already set */
+      }
+    })();
+    return () => ctrl.abort();
+  }, []);
+  return (
+    <section className="border-y border-white/10 bg-white/[0.02]">
+      <div className="max-w-7xl mx-auto px-6 py-5 grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-white/10">
+        <StatCell label="Partners in network" value={stats.partners} suffix="+" />
+        <StatCell label="Funds under management" value={stats.funds} />
+        <StatCell label="Deals scored" value={stats.deals_scored} suffix="+" />
+        <StatCell label="Spin-outs completed" value={stats.spinouts} />
+      </div>
+    </section>
+  );
+}
+
+function HeroLaneCard({ lane }) {
+  const a = LANE_ACCENT[lane.accent];
+  return (
+    <Link
+      to={lane.href}
+      className={`flex flex-col gap-3 rounded-2xl bg-white/[0.03] border ${a.border} hover:bg-white/[0.06] p-5 transition-all`}
+    >
+      <span className={`inline-flex items-center gap-2 text-xs font-medium ${a.text}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${a.dot}`} /> {lane.short}
+      </span>
+      <div className={`inline-flex items-center justify-center gap-2 text-sm font-medium rounded-xl px-4 py-2.5 text-white ${a.btn}`}>
+        {lane.label} <ArrowRight size={14} />
+      </div>
+      <p className="text-xs text-gray-400 leading-relaxed">{lane.blurb}</p>
+    </Link>
+  );
+}
+
+function NetworkLayerCard({ layer }) {
+  const Icon = LAYER_ICONS[layer.id] || Users;
+  return (
+    <a
+      href={`#layer-${layer.id}`}
+      className="group rounded-2xl bg-white/[0.02] border border-white/10 hover:border-gvpn-violet/40 p-6 transition-all"
+    >
+      <div className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-center mb-4 group-hover:border-gvpn-violet/40 transition-colors">
+        <Icon size={18} className="text-gvpn-violet" />
+      </div>
+      <h3 className="text-lg font-semibold text-white mb-1.5">{layer.name}</h3>
+      <p className="text-sm text-gray-400 leading-relaxed">{layer.blurb}</p>
+    </a>
+  );
+}
+
+function LaneCard({ id, title, accent, bullets, ctaLabel, ctaHref }) {
+  const a = LANE_ACCENT[accent];
+  const Icon = LANE_ICONS[id] || Handshake;
+  return (
+    <div className={`rounded-2xl bg-white/[0.03] border ${a.border} p-6 flex flex-col`}>
+      <div className="flex items-center gap-2 mb-3">
+        <Icon size={18} className={a.text} />
+        <h3 className="text-lg font-semibold text-white">{title}</h3>
+      </div>
+      <ul className="space-y-2 mb-6 flex-1">
+        {bullets.map((b, i) => (
+          <li key={i} className="flex items-start gap-2 text-sm text-gray-300 leading-relaxed">
+            <span className={`w-1 h-1 rounded-full ${a.dot} mt-2 shrink-0`} />
+            <span>{b}</span>
+          </li>
+        ))}
+      </ul>
+      <Link to={ctaHref} className={`inline-flex items-center gap-2 text-sm font-medium rounded-xl px-4 py-2.5 ${a.btn} text-white justify-center`}>
+        {ctaLabel} <ArrowRight size={14} />
+      </Link>
+    </div>
+  );
+}
+
+const SPINOUT_WEEKS = [
+  { n: 1, title: 'Diligence & scoring',  desc: '100-pt scoring, AI memo, reference checks.' },
+  { n: 2, title: 'Legal formation',      desc: 'Delaware C-Corp via the legal engine.' },
+  { n: 3, title: 'Capital match',        desc: 'LP introductions and SAFE generation.' },
+  { n: 4, title: 'Public launch',        desc: 'First capital call + portal handoff.' },
 ];
 
-const PIPELINE_WEEKS = [
-  {
-    week: 'Week 1',
-    title: 'Intake',
-    icon: Search,
-    color: 'from-violet-500 to-violet-600',
-    items: [
-      'Founder + partner intake',
-      'Sector & thesis fit check',
-      '100-point AI scoring',
-      'Initial partner matching',
-    ],
-    output: 'Qualified Opportunity',
-  },
-  {
-    week: 'Week 2',
-    title: 'Diligence',
-    icon: ClipboardCheck,
-    color: 'from-blue-500 to-blue-600',
-    items: [
-      'Automated tech & market diligence',
-      'Reusable diligence packet',
-      'Reference & background checks',
-      'Risk + KYC review',
-    ],
-    output: 'Shared Diligence Pack',
-  },
-  {
-    week: 'Week 3',
-    title: 'Build',
-    icon: Hammer,
-    color: 'from-emerald-500 to-emerald-600',
-    items: [
-      'Auto incorporation',
-      '18-template legal pack',
-      'Cap table + SAFE',
-      'Investor materials',
-    ],
-    output: 'Investable Entity',
-  },
-  {
-    week: 'Week 4',
-    title: 'Fund',
-    icon: Banknote,
-    color: 'from-orange-500 to-orange-600',
-    items: [
-      'Capital calls',
-      'Syndicated commitments',
-      'Closing + wires',
-      'LP dashboards live',
-    ],
-    output: 'Funded Company',
-  },
-];
-
-const FOUNDER_BENEFITS = [
-  {
-    icon: Globe,
-    title: 'Global partner intros',
-    desc: 'Warm-routed to investors and operators across our network.',
-  },
-  {
-    icon: Brain,
-    title: 'AI strategy advisor',
-    desc: 'Always-on guidance for GTM, fundraising, and financials.',
-  },
-  {
-    icon: FileText,
-    title: '18 legal templates',
-    desc: 'Incorporation, SAFE, equity splits, IP — generated for you.',
-  },
-  {
-    icon: Shield,
-    title: 'Diligence done once',
-    desc: 'A single diligence pack reused across every partner you meet.',
-  },
-  {
-    icon: DollarSign,
-    title: 'Capital on tap',
-    desc: 'Capital calls and LP dashboards built into the pipeline.',
-  },
-  {
-    icon: Repeat,
-    title: 'Secondary liquidity',
-    desc: 'Marketplace for early liquidity for founders and employees.',
-  },
+const HOW_IT_WORKS = [
+  { title: 'Sourcing', desc: 'Partners refer founders and deals through warm channels and shared diligence packs.' },
+  { title: 'Scoring', desc: 'A 100-point engine plus AI memo turns intake into a decision in 72 hours.' },
+  { title: 'Capital', desc: 'LPs commit through the Capital Lane; capital calls and distributions live in one ledger.' },
+  { title: 'Build', desc: 'Selected founders enter Spin-Out Lab — incorporation, SAFE, advisor network in 30 days.' },
 ];
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-gray-900">
-      <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <img src="/axal-mark.png" alt="Axal VC" className="h-8" />
-            <span style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-lg font-bold text-gray-900">Axal VC</span>
-          </div>
-          <div className="hidden md:flex items-center gap-7">
-            <a href="#network" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Network</a>
-            <a href="#platform" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Platform</a>
-            <a href="#pipeline" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">4-Week Pipeline</a>
-            <a href="#founders" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Founders</a>
-            <a href="#contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">Contact</a>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm text-gray-700 hover:text-gray-900 border border-gray-300 hover:border-gray-400 transition-colors px-4 py-2 rounded-lg">
-              Sign In
-            </Link>
-            <Link to="/register" className="text-sm bg-violet-600 hover:bg-violet-700 transition-colors text-white px-5 py-2 rounded-lg font-medium">
-              Get Started
-            </Link>
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-gvpn-ink text-gray-100">
+      <PublicNav />
 
-      <section className="pt-32 pb-20 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-violet-100 border border-violet-300 rounded-full text-xs text-violet-700 mb-8">
-              <Zap size={12} /> Axal VC · Global Venture Partner Network
+      {/* HERO */}
+      <section className="px-6 pt-20 pb-16 md:pt-28 md:pb-24">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center max-w-3xl mx-auto">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/15 bg-white/[0.03] text-[11px] uppercase tracking-wider text-gray-300 mb-6">
+              <span className="w-1.5 h-1.5 rounded-full bg-gvpn-violet" /> {BRAND.name}
             </div>
-            <h1 className="text-5xl md:text-7xl font-bold leading-tight mb-6 text-gray-900">
-              From Idea to{' '}
-              <span className="text-violet-600">Funded Company</span>
-              <br />in 30 Days
+            <h1
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+              className="text-4xl md:text-6xl font-semibold leading-[1.05] tracking-tight text-white mb-5"
+            >
+              Where venture builders meet capital,{' '}
+              <span className="text-gvpn-violet">globally.</span>
             </h1>
-            <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto mb-8 leading-relaxed">
-              The operating system for how global partners and founders source,
-              diligence, fund, and exit — together.
+            <p className="text-base md:text-lg text-gray-400 max-w-2xl mx-auto leading-relaxed">
+              One network. Three lanes — partners, capital, founders. Built on a 7-engine venture OS,
+              with <span className="text-gvpn-amber">Spin-Out Lab</span> as our niche 30-day sprint.
             </p>
-
-            <div className="flex flex-wrap items-center justify-center gap-2 mb-10">
-              {THESIS_PILLS.map((p) => (
-                <span key={p} className="text-xs px-3 py-1 rounded-full bg-gray-100 border border-gray-200 text-gray-700">
-                  {p}
-                </span>
-              ))}
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Link to="/register" className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-7 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20 hover:shadow-violet-600/40">
-                Become a Partner <ArrowRight size={16} />
-              </Link>
-              <a href="#founders" className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 transition-all px-7 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/40">
-                For Founders <ArrowRight size={16} />
-              </a>
-              <a href="#pipeline" className="flex items-center gap-2 bg-white hover:bg-violet-50 border border-violet-300 text-violet-700 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium">
-                Watch the 4-Week Pipeline <ChevronRight size={16} />
-              </a>
-            </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-20 max-w-3xl mx-auto">
-            {[
-              { value: '30', label: 'Days to Launch', suffix: '' },
-              { value: '100', label: 'Point Scoring', suffix: 'pt' },
-              { value: '88', label: 'Match Rate', suffix: '%' },
-              { value: '4', label: 'Idea to Funded', suffix: ' wks' },
-            ].map((stat, i) => (
-              <div key={i} className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
-                <div className="text-2xl md:text-3xl font-bold text-violet-600">{stat.value}<span className="text-lg">{stat.suffix}</span></div>
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">{stat.label}</div>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-10 max-w-4xl mx-auto">
+            {LANES.map((l) => <HeroLaneCard key={l.id} lane={l} />)}
           </div>
         </div>
       </section>
 
-      <section id="about" className="py-20 px-6 bg-gray-50">
+      <TrustBar />
+
+      {/* NETWORK LAYERS */}
+      <section id="network" className="px-6 py-20">
         <div className="max-w-7xl mx-auto">
-          <div className="max-w-3xl mx-auto text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">A Venture Studio, Reimagined</h2>
-            <p className="text-gray-600 leading-relaxed">
-              Traditional VCs are fragmented, manual, and relationship-driven.
-              Axal is building a programmable venture network — the AWS for venture capital.
-              We combine data, AI, and global partnerships into a single operating system.
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <h2
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+              className="text-3xl md:text-4xl font-semibold text-white mb-3"
+            >
+              Five layers, one operating system.
+            </h2>
+            <p className="text-gray-400">
+              Every layer is live in StudioOS — the engine under the network.
             </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-6">
-            {[
-              {
-                icon: Brain,
-                title: 'Intelligence Engine',
-                desc: 'AI-powered scoring, market intelligence, and predictive analytics turn raw data into investment decisions in 24 hours.',
-              },
-              {
-                icon: Rocket,
-                title: '30-Day Spin-Out',
-                desc: 'From validated idea to funded entity in 4 weeks. Automated incorporation, legal frameworks, and capital deployment.',
-              },
-              {
-                icon: Users,
-                title: 'Partner Network',
-                desc: 'AI-matched partners bring deals, capital, and expertise. Referral systems create compounding network effects.',
-              },
-            ].map((item, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-2xl p-8 hover:border-violet-300 hover:shadow-lg transition-all">
-                <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center mb-5">
-                  <item.icon size={22} className="text-violet-600" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2 text-gray-900">{item.title}</h3>
-                <p className="text-sm text-gray-600 leading-relaxed">{item.desc}</p>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {NETWORK_LAYERS.map((layer) => <NetworkLayerCard key={layer.id} layer={layer} />)}
           </div>
         </div>
       </section>
 
-      <section id="pipeline" className="py-20 px-6">
+      {/* SPIN-OUT LAB NICHE CALLOUT */}
+      <section className="px-6 pb-20">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-[11px] text-emerald-700 mb-4">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live in Production
-            </div>
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">The 4-Week Pipeline</h2>
-            <p className="text-gray-600 max-w-xl mx-auto">
-              Every venture goes through a fixed 4-week cycle — Intake, Diligence, Build, Fund — fully systematized and partially automated.
-            </p>
-          </div>
-          <div className="grid md:grid-cols-4 gap-4">
-            {PIPELINE_WEEKS.map((step, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-2xl p-6 relative overflow-hidden hover:shadow-lg transition-all">
-                <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${step.color}`} />
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-xs text-gray-500 font-medium">{step.week}</div>
-                  <step.icon size={16} className="text-gray-400" />
-                </div>
-                <h3 className="text-lg font-semibold mb-4 text-gray-900">{step.title}</h3>
-                <ul className="space-y-2 mb-4">
-                  {step.items.map((item, j) => (
-                    <li key={j} className="flex items-center gap-2 text-xs text-gray-600">
-                      <div className="w-1 h-1 rounded-full bg-gray-400" /> {item}
-                    </li>
-                  ))}
-                </ul>
-                <div className="pt-3 border-t border-gray-200">
-                  <span className="text-[10px] text-gray-500 uppercase">Output:</span>
-                  <div className="text-xs text-violet-600 font-medium mt-0.5">{step.output}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="founders" className="py-20 px-6 bg-gradient-to-b from-emerald-50/40 to-white">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-12 items-start">
-            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-100 border border-emerald-200 rounded-full text-[11px] text-emerald-700 mb-4">
-                <Rocket size={11} /> For Founders Going Global
-              </div>
-              <h2 className="text-3xl md:text-4xl font-bold mb-5 text-gray-900">
-                Build a global company without the global overhead.
+          <div className="rounded-3xl bg-gvpn-amber/10 border border-gvpn-amber/40 p-8 md:p-12 grid md:grid-cols-3 gap-8">
+            <div className="md:col-span-2">
+              <span className="text-[11px] uppercase tracking-wider text-gvpn-amber font-medium">
+                Niche product
+              </span>
+              <h2
+                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                className="text-2xl md:text-3xl font-semibold text-white mt-2 mb-4"
+              >
+                Spin-Out Lab — a focused 30-day venture sprint.
               </h2>
-              <p className="text-gray-600 leading-relaxed mb-4">
-                Most founders lose months stitching together intros, lawyers, term sheets, and
-                cap-table tools. Axal collapses that into a single pipeline: warm partner intros,
-                an AI strategy advisor in your corner, a full legal pack, and capital that's
-                already pre-wired into the platform.
-              </p>
-              <p className="text-gray-600 leading-relaxed mb-8">
-                You run diligence once. You sign legals once. Then partners across the network
-                can fund you, advise you, and — when it's time — give your team early liquidity
-                through the secondary market.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Link to="/register" className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 transition-all px-6 py-3 rounded-xl text-sm font-medium text-white shadow-lg shadow-emerald-600/20">
-                  Apply as a Founder <ArrowRight size={14} />
-                </Link>
-                <a href="#pipeline" className="flex items-center gap-2 bg-white border border-gray-300 hover:border-gray-400 transition-colors px-6 py-3 rounded-xl text-sm font-medium text-gray-900">
-                  See the Pipeline <ChevronRight size={14} />
-                </a>
+              <div className="space-y-3 text-sm text-gray-300 leading-relaxed">
+                <p>
+                  Most of GVPN is a continuous network. Spin-Out Lab is the opposite — a finite,
+                  30-day sprint for founders we underwrite from intake to incorporation.
+                </p>
+                <p>
+                  Powered by the same engine: 100-point scoring, AI deal memos, automated diligence,
+                  legal formation across 18 templates, capital match. Squeezed into four weeks.
+                </p>
+                <p>
+                  Cohort-based. ~12 sprints/year. Apply once, get scored within 72 hours.
+                </p>
               </div>
+              <Link
+                to="/spinout-lab"
+                className="inline-flex items-center gap-2 mt-6 bg-gvpn-amber text-gvpn-ink hover:opacity-90 transition-opacity px-5 py-2.5 rounded-xl text-sm font-medium"
+              >
+                See the 4-week playbook <ArrowRight size={14} />
+              </Link>
             </div>
-            <div className="grid sm:grid-cols-2 gap-4">
-              {FOUNDER_BENEFITS.map((b, i) => (
-                <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 hover:border-emerald-300 hover:shadow-md transition-all">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center mb-3">
-                    <b.icon size={18} className="text-emerald-700" />
-                  </div>
-                  <div className="text-sm font-semibold text-gray-900 mb-1">{b.title}</div>
-                  <div className="text-xs text-gray-600 leading-relaxed">{b.desc}</div>
-                </div>
-              ))}
+            <div className="md:col-span-1">
+              <ol className="space-y-4">
+                {SPINOUT_WEEKS.map((w) => (
+                  <li key={w.n} className="flex gap-3">
+                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gvpn-amber text-gvpn-ink text-xs font-semibold flex items-center justify-center">
+                      {w.n}
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-white">Week {w.n} — {w.title}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">{w.desc}</div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
             </div>
           </div>
         </div>
       </section>
 
-      <section id="platform" className="py-20 px-6 bg-gray-50">
+      {/* THREE LANES */}
+      <section id="lanes" className="px-6 pb-20">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">StudioOS Platform</h2>
-            <p className="text-gray-600 max-w-xl mx-auto">Seven integrated engines powering the entire venture creation lifecycle.</p>
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <h2
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+              className="text-3xl md:text-4xl font-semibold text-white mb-3"
+            >
+              Three lanes into the network.
+            </h2>
+            <p className="text-gray-400">
+              Pick the door that fits — every lane is a first-class citizen.
+            </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[
-              { icon: BarChart3, title: 'Market Intelligence', desc: 'Real-time sector signals, competitive data, and gap opportunities.', to: '/market-intel' },
-              { icon: Target, title: 'Scoring Engine', desc: '100-point algorithm with AI augmentation for instant Go/No-Go decisions.', to: '/scoring' },
-              { icon: Brain, title: 'AI Advisory', desc: 'Strategy, GTM, fundraising advice and financial planning for founders.', to: '/advisory' },
-              { icon: FileText, title: 'Legal Engine', desc: 'Auto incorporation, SAFE agreements, equity splits, IP licensing.', to: '/legal' },
-              { icon: Users, title: 'Partner Matchmaking', desc: 'AI-powered matching with referral tracking and deal syndication.', to: '/matches' },
-              { icon: DollarSign, title: 'Capital Engine', desc: 'Automated capital calls, LP portal, and live portfolio performance.', to: '/funds' },
-              { icon: Rocket, title: 'Orchestration / Spin-Out', desc: 'The 30-day workflow engine that drives every venture from intake to launch.', to: '/studio-ops' },
-            ].map((f, i) => (
-              <Link key={i} to={f.to} className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all group">
-                <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
-                  <f.icon size={18} className="text-violet-600" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <LaneCard
+              id="partner"
+              title="For Partners & Operators"
+              accent="violet"
+              bullets={LANE_BULLETS.partner}
+              ctaLabel="Apply as Partner"
+              ctaHref="/register?lane=partner"
+            />
+            <LaneCard
+              id="lp"
+              title="For LPs & Funds"
+              accent="mint"
+              bullets={LANE_BULLETS.lp}
+              ctaLabel="Open LP Account"
+              ctaHref="/register?lane=lp"
+            />
+            <LaneCard
+              id="founder"
+              title="For Founders"
+              accent="amber"
+              bullets={LANE_BULLETS.founder}
+              ctaLabel="Submit Your Pitch"
+              ctaHref="/register?lane=founder"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* HOW THE NETWORK WORKS */}
+      <section id="deals" className="px-6 pb-20">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <h2
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+              className="text-3xl md:text-4xl font-semibold text-white mb-3"
+            >
+              How the network works.
+            </h2>
+            <p className="text-gray-400">
+              Not a linear funnel. A loop — every deal feeds the next.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {HOW_IT_WORKS.map((s, i) => (
+              <div key={i} className="rounded-2xl bg-white/[0.02] border border-white/10 p-5">
+                <div className="text-[11px] uppercase tracking-wider text-gray-500 mb-2">
+                  Step {i + 1}
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-sm font-semibold mb-1 text-gray-900 flex items-center gap-1.5">
-                    {f.title}
-                    <ChevronRight size={12} className="text-gray-400 group-hover:text-violet-600 group-hover:translate-x-0.5 transition-all" />
-                  </h3>
-                  <p className="text-xs text-gray-600 leading-relaxed">{f.desc}</p>
-                </div>
-              </Link>
+                <h3 className="text-base font-semibold text-white mb-1.5">{s.title}</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">{s.desc}</p>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section id="network" className="py-20 px-6">
+      {/* SOCIAL PROOF */}
+      <section id="capital" className="px-6 pb-24">
         <div className="max-w-7xl mx-auto">
-          <div className="bg-gradient-to-br from-violet-50 to-violet-100 border border-violet-300 rounded-3xl p-10 md:p-16 text-center">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">Become a Partner</h2>
-            <p className="text-gray-700 max-w-xl mx-auto mb-8 leading-relaxed">
-              Join our global network of investors, operators, and service providers.
-              Get matched with high-potential startups, access proprietary deal flow,
-              and earn through referral commissions and equity participation.
-            </p>
-            <div className="grid md:grid-cols-3 gap-6 mb-10 max-w-2xl mx-auto text-left">
-              {[
-                { icon: Globe, title: 'Deal Access', desc: 'AI-scored startups delivered to your dashboard' },
-                { icon: Shield, title: 'Verified Diligence', desc: 'Automated legal, tech, and financial checks' },
-                { icon: Clock, title: 'Speed', desc: '30-day cycle from idea to funded company' },
-              ].map((b, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <b.icon size={18} className="text-violet-600 mt-0.5 shrink-0" />
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{b.title}</div>
-                    <div className="text-xs text-gray-600">{b.desc}</div>
-                  </div>
+          <div className="rounded-3xl bg-white/[0.02] border border-white/10 p-10 md:p-14">
+            <div className="text-center max-w-2xl mx-auto mb-10">
+              <span className="text-[11px] uppercase tracking-wider text-gray-500">
+                Social proof
+              </span>
+              <h2
+                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                className="text-2xl md:text-3xl font-semibold text-white mt-2"
+              >
+                Operators, LPs, and founders already on the network.
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 opacity-60 hover:opacity-100 transition-opacity mb-10">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-10 rounded bg-white/5 border border-white/10 flex items-center justify-center text-[10px] text-gray-500"
+                >
+                  partner {i + 1}
                 </div>
               ))}
             </div>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link to="/register" className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-8 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20">
-                Apply Now <ArrowRight size={16} />
-              </Link>
-              <Link to="/login" className="flex items-center gap-2 bg-white hover:bg-gray-100 transition-colors px-8 py-3.5 rounded-xl text-sm font-medium text-gray-900 border border-gray-200">
-                Sign In to Dashboard
-              </Link>
+            <div className="grid md:grid-cols-2 gap-6">
+              <blockquote className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+                <p className="text-sm text-gray-300 leading-relaxed">
+                  "The Capital Lane is the first LP portal where commitments, calls and distributions
+                  actually reconcile. We stopped maintaining a parallel spreadsheet."
+                </p>
+                <footer className="text-xs text-gray-500 mt-3">— LP, multi-stage fund</footer>
+              </blockquote>
+              <blockquote className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+                <p className="text-sm text-gray-300 leading-relaxed">
+                  "Spin-Out Lab took us from a thesis deck to incorporated, scored, and matched
+                  with three LPs in 28 days."
+                </p>
+                <footer className="text-xs text-gray-500 mt-3">— Founder, Cohort 03</footer>
+              </blockquote>
             </div>
           </div>
         </div>
       </section>
 
-      <section id="contact" className="py-20 px-6 bg-gray-900 text-white">
-        <div className="max-w-5xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            Building in <span className="text-violet-400">AI</span>, <span className="text-violet-400">Blockchain</span>, <span className="text-violet-400">Quantum</span>, <span className="text-violet-400">Digital Infrastructure</span>, or <span className="text-violet-400">Frontier Software</span>?
-          </h2>
-          <p className="text-gray-300 max-w-2xl mx-auto mb-8 leading-relaxed">
-            Whether you're a partner sourcing the next thesis-aligned company or a founder going
-            global from day one — start with a 30-second intake.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link to="/register" className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-7 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/30">
-              Get Started <ArrowRight size={16} />
-            </Link>
-            <Link to="/login" className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium text-white">
-              Sign In
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <Footer />
+      <PublicFooter />
     </div>
   );
 }

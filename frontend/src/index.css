@@ -7,6 +7,13 @@
   --color-surface: #111827;
   --color-surface-light: #1f2937;
   --color-surface-lighter: #374151;
+
+  /* GVPN brand tokens — used on the public marketing surface only. */
+  --color-gvpn-ink: #0B0B12;
+  --color-gvpn-paper: #F6F5F0;
+  --color-gvpn-violet: #6D5BFF;
+  --color-gvpn-mint: #5DE0B8;
+  --color-gvpn-amber: #F2B33D;
 }
 
 body {

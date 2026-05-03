@@ -20,6 +20,8 @@ export default function RegisterPage() {
   const [emailWarning, setEmailWarning] = useState(false);
   const [verificationUrl, setVerificationUrl] = useState('');
   const [refCode, setRefCode] = useState('');
+  const [lane, setLane] = useState(null); // 'partner' | 'lp' | 'founder' | null
+  const [productIntent, setProductIntent] = useState(null); // 'spinout-lab' | null
   // Which "I can't scan the QR" app card is expanded on step 4. null = all collapsed.
   const [manualOpen, setManualOpen] = useState(null);
 
@@ -27,12 +29,54 @@ export default function RegisterPage() {
     const params = new URLSearchParams(window.location.search);
     const r = params.get('ref');
     if (r) setRefCode(r.toUpperCase());
+    const l = params.get('lane');
+    if (l && ['partner', 'lp', 'founder'].includes(l)) {
+      setLane(l);
+      try { localStorage.setItem('gvpn:intent', JSON.stringify({ lane: l, ts: Date.now() })); } catch {}
+    } else {
+      try {
+        const saved = JSON.parse(localStorage.getItem('gvpn:intent') || 'null');
+        if (saved?.lane) setLane(saved.lane);
+      } catch {}
+    }
+    const p = params.get('product');
+    if (p === 'spinout-lab') setProductIntent('spinout-lab');
   }, []);
 
-  // Chatbot state (step 2)
+  const laneCopy = {
+    partner: {
+      title: 'Join the Partner Network',
+      desc: "Get matched with deals before they go public. We use TOTP for secure, passwordless authentication.",
+      chatGreeting: "Welcome to the GVPN Partner Network. To match you with the right deal flow, tell me what you bring — sector expertise, capital, distribution, technical, legal, or operational?",
+    },
+    lp: {
+      title: 'Open your LP Account',
+      desc: 'Track commitments, calls, and distributions. We use TOTP for secure, passwordless authentication.',
+      chatGreeting: "Welcome to GVPN's Capital Lane. To set up your LP profile, tell me about your fund or family office: vintage focus, ticket size, sectors, and any restrictions.",
+    },
+    founder: {
+      title: 'Submit your pitch',
+      desc: "We'll score your venture within 72 hours. We use TOTP for secure, passwordless authentication.",
+      chatGreeting: "Welcome to GVPN. To run our 100-point scoring on your venture, tell me about it: problem, team, traction, and the next 12 months. If you're applying to Spin-Out Lab, mention that too.",
+    },
+  };
+  const activeLane = lane && laneCopy[lane] ? laneCopy[lane] : null;
+
+  // Chatbot state (step 2) — greeting reflects lane intent when known.
+  const DEFAULT_GREETING = "Welcome to the Global Venture Partner Network. Are you joining as an Investor (LP / Syndicate / Co-Investor), a Founder, an Operator/Advisor, a Legal or Technical Partner, or a Liquidity Provider?";
   const [chatMessages, setChatMessages] = useState([
-    { role: 'assistant', content: "Welcome to Axal VC. I'm here to understand how you'd like to engage with our 30-Day Spin-Out Engine. Are you joining as an Investor (LP / Syndicate / Co-Investor), a Founder, an Operator/Advisor, a Legal or Technical Partner, or a Liquidity Provider?" },
+    { role: 'assistant', content: DEFAULT_GREETING },
   ]);
+  // When lane resolves from URL/localStorage after first render, swap the
+  // initial greeting — but only if the user hasn't typed anything yet.
+  useEffect(() => {
+    if (!activeLane) return;
+    setChatMessages((prev) => {
+      const onlyDefault = prev.length === 1 && prev[0].role === 'assistant';
+      if (!onlyDefault) return prev;
+      return [{ role: 'assistant', content: activeLane.chatGreeting }];
+    });
+  }, [lane]); // eslint-disable-line react-hooks/exhaustive-deps
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
@@ -197,7 +241,7 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-white flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
         <Link to="/" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-8">
-          <ArrowLeft size={14} /> Back to Axal VC
+          <ArrowLeft size={14} /> Back to GVPN
         </Link>
 
         <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
@@ -215,8 +259,14 @@ export default function RegisterPage() {
 
           {step === 1 && (
             <>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">Create Your Account</h2>
-              <p className="text-sm text-gray-600 mb-6">Join the Axal partner network. We use TOTP for secure, passwordless authentication.</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">{activeLane?.title || 'Create Your Account'}</h2>
+              <p className="text-sm text-gray-600 mb-6">{activeLane?.desc || 'Join the Global Venture Partner Network. We use TOTP for secure, passwordless authentication.'}</p>
+
+              {productIntent === 'spinout-lab' && (
+                <div className="bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 mb-4 text-xs text-amber-800">
+                  You're applying for <b>Spin-Out Lab</b> — our 30-day cohort.
+                </div>
+              )}
 
               {refCode && (
                 <div className="bg-violet-50 border border-violet-300 rounded-lg px-3 py-2 mb-4 text-xs text-violet-700">

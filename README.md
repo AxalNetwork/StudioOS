@@ -1,6 +1,8 @@
-# Axal StudioOS
+# GVPN OS
 
-The 30-Day Spin-Out Engine — an API-first venture studio operating system that takes a startup from intake → AI scoring → legal formation → fundraising → portfolio monitoring.
+**Global Venture Partner Network** operating system — the platform where founders, partners, LPs, and capital connect across borders. Includes **Spin-Out Lab**, a niche 30-day venture sprint product that takes a startup from intake → AI scoring → legal formation → fundraising → portfolio monitoring.
+
+Internal codename: Axal StudioOS. Operated by Axal Management, LLC.
 
 ## Repo layout
 

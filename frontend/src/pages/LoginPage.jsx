@@ -35,7 +35,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-white flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <Link to="/" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-8">
-          <ArrowLeft size={14} /> Back to Axal VC
+          <ArrowLeft size={14} /> Back to GVPN
         </Link>
 
         <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">

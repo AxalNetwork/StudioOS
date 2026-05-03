@@ -25,6 +25,7 @@ import ActivityPage from './pages/ActivityPage';
 import AdminPage from './pages/AdminPage';
 import ApiBridgePage from './pages/ApiBridgePage';
 import LandingPage from './pages/LandingPage';
+import SpinoutLabPage from './pages/SpinoutLabPage';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
@@ -52,7 +53,6 @@ import OnboardingPersonaPage from './pages/OnboardingPersonaPage';
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
 import EmailChangeRevokePage from './pages/EmailChangeRevokePage';
-import Footer from './components/Footer';
 import InactivityWarningModal from './components/InactivityWarningModal';
 import useInactivityTimeout from './hooks/useInactivityTimeout';
 
@@ -615,6 +615,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/dashboard'} replace /> : <LandingPage />} />
+      <Route path="/spinout-lab" element={<SpinoutLabPage />} />
       <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
