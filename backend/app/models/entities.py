@@ -1226,3 +1226,102 @@ class MentorReview(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("booking_id", "reviewer_role", name="uq_mentor_reviews_booking_role"),
     )
+
+
+# ===========================================================================
+# Task #56 — Unified calendar layer
+# ===========================================================================
+class IcMeeting(SQLModel, table=True):
+    """Investment Committee meeting — admin/investor schedules a session
+    around a specific deal (optional) with N investor attendees. Surfaces
+    on the unified calendar feed for everyone invited."""
+    __tablename__ = "ic_meetings"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    title: str
+    agenda: Optional[str] = None
+    start_at: datetime = Field(index=True)
+    duration_min: int = Field(default=60, ge=10, le=600)
+    deal_id: Optional[int] = Field(default=None, foreign_key="deals.id", index=True)
+    organizer_user_id: int = Field(foreign_key="users.id", index=True)
+    location_kind: str = Field(default="video")  # video | phone | in_person
+    location_uri: Optional[str] = None
+    status: str = Field(default="scheduled", index=True)  # scheduled | cancelled | completed
+    cancelled_at: Optional[datetime] = None
+    cancel_reason: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class IcMeetingAttendee(SQLModel, table=True):
+    """Many-to-many between ic_meetings and users. Each row is one invitee."""
+    __tablename__ = "ic_meeting_attendees"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    meeting_id: int = Field(foreign_key="ic_meetings.id", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    rsvp: str = Field(default="invited")  # invited | accepted | declined | tentative
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "user_id", name="uq_ic_attendees_meeting_user"),
+    )
+
+
+class FounderCheckin(SQLModel, table=True):
+    """Recurring/one-off check-in between a founder and an
+    advisor/partner/investor. Acts as a calendar source for the founder
+    portal + the partner/investor side."""
+    __tablename__ = "founder_checkins"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    founder_user_id: int = Field(foreign_key="users.id", index=True)
+    counterpart_user_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
+    project_id: Optional[int] = Field(default=None, foreign_key="projects.id", index=True)
+    title: str
+    notes: Optional[str] = None
+    start_at: datetime = Field(index=True)
+    duration_min: int = Field(default=30, ge=10, le=240)
+    location_kind: str = Field(default="video")
+    location_uri: Optional[str] = None
+    status: str = Field(default="scheduled", index=True)  # scheduled | cancelled | completed
+    cancelled_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class GoogleOAuthToken(SQLModel, table=True):
+    """Per-user Google OAuth credentials for Calendar push-sync.
+
+    We deliberately store the long-lived refresh token only — access tokens
+    are minted on demand via the standard google token endpoint. One row
+    per user; an upsert replaces the prior token (revocation flow is
+    handled separately at the Google side).
+    """
+    __tablename__ = "google_oauth_tokens"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", unique=True, index=True)
+    refresh_token: str
+    scope: str = Field(default="")
+    google_email: Optional[str] = None
+    last_synced_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CalendarSyncRecord(SQLModel, table=True):
+    """Idempotency table for Google Calendar mirror.
+
+    Maps (user_id, source_kind, source_id) → google_event_id so re-syncs
+    update instead of duplicate. Cleared on disconnect.
+    """
+    __tablename__ = "calendar_sync_records"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    source_kind: str = Field(index=True)        # mentor_booking | ic_meeting | founder_checkin
+    source_id: int = Field(index=True)
+    google_event_id: str
+    last_synced_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "source_kind", "source_id", name="uq_cal_sync_user_source"),
+    )

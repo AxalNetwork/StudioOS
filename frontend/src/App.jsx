@@ -34,6 +34,7 @@ import KYCPage from './pages/KYCPage';
 import TrustCenterPage from './pages/TrustCenterPage';
 import MentorsPage from './pages/MentorsPage';
 import OfficeHoursPage from './pages/OfficeHoursPage';
+import CalendarPage from './pages/CalendarPage';
 import ReferEarnPage from './pages/ReferEarnPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import PayoutsPage from './pages/PayoutsPage';
@@ -178,6 +179,7 @@ const NAV_BY_ROLE = {
     // route itself remains reachable by direct URL.
 
     { divider: true },
+    { to: '/calendar', icon: Calendar, label: 'Calendar' },
     { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
     { to: '/founder', icon: Rocket, label: 'Founder Portal', highlight: true },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
@@ -219,6 +221,7 @@ const NAV_BY_ROLE = {
     { to: '/trust', icon: Lock, label: 'Trust Center' },
 
     { divider: true },
+    { to: '/calendar', icon: Calendar, label: 'Calendar' },
     { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
     { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal', highlight: true },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
@@ -256,6 +259,7 @@ const NAV_BY_ROLE = {
     { to: '/tickets', icon: Ticket, label: 'Support' },
 
     { divider: true },
+    { to: '/calendar', icon: Calendar, label: 'Calendar' },
     { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
     { to: '/partner-portal', icon: UserCircle, label: 'Investor Portal', highlight: true },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
@@ -264,11 +268,13 @@ const NAV_BY_ROLE = {
   // Task #35 — mentor lane. Manages own office hours + reviews mentees.
   mentor: [
     { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
+    { to: '/calendar', icon: Calendar, label: 'Calendar' },
     { to: '/mentors', icon: UserCircle, label: 'Mentor Directory' },
     { section: 'Account' },
     { to: '/tickets', icon: Ticket, label: 'Support' },
     { to: '/activity', icon: Activity, label: 'Activity Log' },
     { divider: true },
+    { to: '/calendar', icon: Calendar, label: 'Calendar' },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
   ],
 };
@@ -809,6 +815,7 @@ export default function App() {
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
       <Route path="/mentors" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <MentorsPage />)} />
       <Route path="/office-hours" element={guard(['admin', 'mentor'], <OfficeHoursPage />)} />
+      <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <CalendarPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor'], <TrustCenterPage />)} />

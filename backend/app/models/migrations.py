@@ -1094,3 +1094,122 @@ def ensure_service_catalogue_columns() -> None:
                 logger.warning("ensure_service_catalogue_columns: %s INDEX failed: %s", name, exc)
 
         session.commit()
+
+
+def ensure_calendar_tables() -> None:
+    """Task #56 — Unified calendar layer. Idempotent.
+
+    Creates ``ic_meetings``, ``ic_meeting_attendees``, ``founder_checkins``,
+    ``google_oauth_tokens`` and ``calendar_sync_records``. All DDL is
+    IF NOT EXISTS so it runs safely on every boot.
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS ic_meetings (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    title VARCHAR NOT NULL,
+                    agenda TEXT,
+                    start_at TIMESTAMP NOT NULL,
+                    duration_min INTEGER DEFAULT 60 NOT NULL,
+                    deal_id INTEGER REFERENCES deals(id),
+                    organizer_user_id INTEGER NOT NULL REFERENCES users(id),
+                    location_kind VARCHAR DEFAULT 'video' NOT NULL,
+                    location_uri VARCHAR,
+                    status VARCHAR DEFAULT 'scheduled' NOT NULL,
+                    cancelled_at TIMESTAMP,
+                    cancel_reason VARCHAR,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_ic_meetings_start ON ic_meetings(start_at)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_ic_meetings_deal ON ic_meetings(deal_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_ic_meetings_status ON ic_meetings(status)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_calendar_tables: ic_meetings: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS ic_meeting_attendees (
+                    id SERIAL PRIMARY KEY,
+                    meeting_id INTEGER NOT NULL REFERENCES ic_meetings(id) ON DELETE CASCADE,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    rsvp VARCHAR DEFAULT 'invited' NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    CONSTRAINT uq_ic_attendees_meeting_user UNIQUE (meeting_id, user_id)
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_ic_attendees_meeting ON ic_meeting_attendees(meeting_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_ic_attendees_user ON ic_meeting_attendees(user_id)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_calendar_tables: ic_meeting_attendees: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS founder_checkins (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    founder_user_id INTEGER NOT NULL REFERENCES users(id),
+                    counterpart_user_id INTEGER REFERENCES users(id),
+                    project_id INTEGER REFERENCES projects(id),
+                    title VARCHAR NOT NULL,
+                    notes TEXT,
+                    start_at TIMESTAMP NOT NULL,
+                    duration_min INTEGER DEFAULT 30 NOT NULL,
+                    location_kind VARCHAR DEFAULT 'video' NOT NULL,
+                    location_uri VARCHAR,
+                    status VARCHAR DEFAULT 'scheduled' NOT NULL,
+                    cancelled_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_checkins_founder ON founder_checkins(founder_user_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_checkins_counterpart ON founder_checkins(counterpart_user_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_checkins_start ON founder_checkins(start_at)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_calendar_tables: founder_checkins: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS google_oauth_tokens (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                    refresh_token TEXT NOT NULL,
+                    scope VARCHAR DEFAULT '' NOT NULL,
+                    google_email VARCHAR,
+                    last_synced_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_calendar_tables: google_oauth_tokens: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS calendar_sync_records (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    source_kind VARCHAR NOT NULL,
+                    source_id INTEGER NOT NULL,
+                    google_event_id VARCHAR NOT NULL,
+                    last_synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    CONSTRAINT uq_cal_sync_user_source UNIQUE (user_id, source_kind, source_id)
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cal_sync_user ON calendar_sync_records(user_id)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_calendar_tables: calendar_sync_records: %s", exc)
+            session.rollback()

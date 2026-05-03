@@ -80,6 +80,7 @@ async def lifespan(app: FastAPI):
             ensure_cap_table_scenarios_table,
             ensure_trust_layer_columns,
             ensure_mentor_tables,
+            ensure_calendar_tables,
         )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
@@ -120,6 +121,9 @@ async def lifespan(app: FastAPI):
         # Task #35 — mentor matching + office hours.
         ensure_mentor_tables()
         logger.info("StudioOS migrations: mentor tables ensured")
+        # Task #56 — unified calendar layer.
+        ensure_calendar_tables()
+        logger.info("StudioOS migrations: calendar tables ensured")
     except Exception as exc:  # noqa: BLE001
         # Migrations are best-effort: a failure here must not prevent the API
         # from booting (e.g. fresh DB, missing legacy tables).
@@ -311,6 +315,8 @@ from backend.app.api.routes import trust as _trust
 app.include_router(_trust.router, prefix="/api")
 from backend.app.api.routes import mentors as _mentors
 app.include_router(_mentors.router, prefix="/api")
+from backend.app.api.routes import calendar as _calendar
+app.include_router(_calendar.router, prefix="/api")
 app.include_router(funds.router, prefix="/api")
 app.include_router(liquidity.router, prefix="/api")
 app.include_router(partnernet.router, prefix="/api")

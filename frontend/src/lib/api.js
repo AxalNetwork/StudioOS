@@ -714,6 +714,40 @@ export const api = {
     request(`/mentors/bookings/${bookingId}/review`, { method: 'POST', body: JSON.stringify(data) }),
   listBookingReviews: (bookingId) => request(`/mentors/bookings/${bookingId}/reviews`),
 
+  // ---------- Unified calendar (Task #56) ----------
+  listCalendarEvents: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.from) qs.set('from', opts.from);
+    if (opts.to) qs.set('to', opts.to);
+    if (opts.kinds) qs.set('kinds', opts.kinds);
+    const s = qs.toString();
+    return request(`/calendar/events${s ? `?${s}` : ''}`);
+  },
+  calendarIcsUrl: () => `${BASE}/calendar/events.ics`,
+
+  // IC meetings
+  listIcMeetings: () => request('/calendar/ic-meetings'),
+  createIcMeeting: (data) => request('/calendar/ic-meetings', { method: 'POST', body: JSON.stringify(data) }),
+  rsvpIcMeeting: (id, rsvp) =>
+    request(`/calendar/ic-meetings/${id}/rsvp?rsvp=${encodeURIComponent(rsvp)}`, { method: 'POST' }),
+  cancelIcMeeting: (id, reason) =>
+    request(`/calendar/ic-meetings/${id}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`, { method: 'DELETE' }),
+
+  // Founder check-ins
+  listCheckins: () => request('/calendar/founder-checkins'),
+  createCheckin: (data) => request('/calendar/founder-checkins', { method: 'POST', body: JSON.stringify(data) }),
+  cancelCheckin: (id) => request(`/calendar/founder-checkins/${id}`, { method: 'DELETE' }),
+
+  // Google Calendar sync
+  googleCalStatus: () => request('/calendar/google/status'),
+  googleCalConnect: () => request('/calendar/google/connect', { method: 'POST' }),
+  googleCalDisconnect: () => request('/calendar/google', { method: 'DELETE' }),
+  googleCalSync: () => request('/calendar/google/sync', { method: 'POST' }),
+
+  // Per-user Cal.com key (mentor-only)
+  attachMyCalcomKey: (data) =>
+    request('/calendar/me/calcom', { method: 'POST', body: JSON.stringify(data) }),
+
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {
     const qs = new URLSearchParams();
