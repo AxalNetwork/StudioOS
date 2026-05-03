@@ -22,7 +22,8 @@ from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/scoring", tags=["Scoring Engine"])
 
-require_partner = require_role("partner")
+# Phase 0.1 split — investors (migrated partners) keep scoring access.
+require_partner = require_role("partner", "investor")
 
 
 def _is_founder(user: User) -> bool:
@@ -397,7 +398,7 @@ def get_project_scores(
         # hidden-on-mismatch case the reviewer flagged. Founder reads of
         # their own row stay un-audited (the LP-visibility guarantee is
         # what we're auditing).
-        if role_val in ("lp", "partner", "admin") and not snap.is_sandbox:
+        if role_val in ("lp", "partner", "investor", "admin") and not snap.is_sandbox:
             audit_entries.append(ActivityLog(
                 project_id=snap.project_id,
                 user_id=user.id,

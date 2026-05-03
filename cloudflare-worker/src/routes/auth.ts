@@ -95,7 +95,7 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   if (!email || !name) return c.json({ error: 'Email and name required' }, 400);
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   if (!emailRe.test(String(email).trim())) return c.json({ error: 'Please enter a valid email address' }, 400);
-  if (role && !['founder', 'partner'].includes(role)) return c.json({ error: 'Invalid role' }, 400);
+  if (role && !['founder', 'partner', 'investor'].includes(role)) return c.json({ error: 'Invalid role' }, 400);
 
   const clientIp = c.req.header('cf-connecting-ip') || undefined;
   const turnstileOk = await verifyTurnstile(c.env, turnstileToken, clientIp);
@@ -138,7 +138,8 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
     }
     await sql`UPDATE users SET name = ${name}, role = ${role || 'partner'} WHERE id = ${user.id}`;
     await sql.end();
-    try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'partner', id: user.id }); } catch {}
+    // Phase 0.1: investors embed under their own entity bucket; partners stay legacy.
+    try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: role === 'investor' ? 'investor' : 'partner', id: user.id }); } catch {}
     const { sent: emailSent, verificationUrl, tokenStored } = await sendVerification(c.env, email, name, user.id);
     return c.json({
       message: emailSent ? 'Verification email sent' : 'Account created but email delivery failed',
@@ -149,7 +150,7 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   const [user] = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${name}, ${role || 'partner'}, false) RETURNING *`;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`User ${name} (${email}) registered as ${role || 'partner'} — pending email verification`}, ${email}, ${user.id})`;
   await sql.end();
-  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'partner', id: user.id }); } catch {}
+  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: role === 'investor' ? 'investor' : 'partner', id: user.id }); } catch {}
 
   if (ref_code) {
     try {

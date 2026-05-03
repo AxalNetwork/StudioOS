@@ -60,7 +60,7 @@ export default function PipelinePage() {
   };
   useEffect(() => { (async () => { try { setMe(await api.getCurrentUser()); } catch {} reload(); })(); }, []);
 
-  const canEdit = me && (me.role === 'admin' || me.role === 'partner');
+  const canEdit = me && (me.role === 'admin' || me.role === 'partner' || me.role === 'investor');
 
   // Live board updates: subscribe to the global pipeline 'overview' room
   // once we know the user has board-edit access. Any stage_advanced /

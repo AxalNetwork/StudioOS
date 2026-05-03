@@ -40,7 +40,7 @@ def create_user(data: UserCreate, session: Session = Depends(get_session), admin
     user = User(
         email=data.email,
         name=data.name,
-        role=data.role if data.role in ["founder", "partner"] else "partner",
+        role=data.role if data.role in ["founder", "partner", "investor"] else "partner",
         founder_id=data.founder_id,
         partner_id=data.partner_id,
     )

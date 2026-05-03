@@ -176,7 +176,42 @@ const NAV_BY_ROLE = {
     { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
 
     { divider: true },
-    { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal', highlight: true },
+    { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal', highlight: true },
+    { to: '/settings', icon: SettingsIcon, label: 'Settings' },
+  ],
+
+  // Phase 0.1 — investor lane. Capital-allocator nav: scoring, deal flow,
+  // matches, market intel, capital, liquidity, funds, legal-capital. No
+  // partner-side payouts/relationships/refer surface — that's service-provider
+  // territory.
+  investor: [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+
+    { section: 'Intelligence' },
+    { to: '/scoring', icon: Target, label: 'Scoring Engine' },
+    { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
+    { to: '/matches', icon: Sparkles, label: 'AI Matches' },
+    { to: '/deals', icon: Handshake, label: 'Deal Flow' },
+
+    { section: 'Pipeline' },
+    { to: '/projects', icon: Zap, label: 'Projects' },
+    { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
+
+    { section: 'Capital & Liquidity' },
+    { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
+    { to: '/funds', icon: TrendingUp, label: 'Funds' },
+    { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
+
+    { section: 'Legal & Compliance' },
+    { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+    { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
+
+    { section: 'Support' },
+    { to: '/activity', icon: Activity, label: 'Activity Log' },
+    { to: '/tickets', icon: Ticket, label: 'Support' },
+
+    { divider: true },
+    { to: '/partner-portal', icon: UserCircle, label: 'Investor Portal', highlight: true },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
   ],
 };
@@ -184,19 +219,22 @@ const NAV_BY_ROLE = {
 const ROLE_LABELS = {
   admin: 'Admin',
   founder: 'Founder',
-  partner: 'Partner / Investor',
+  partner: 'Partner',
+  investor: 'Investor',
 };
 
 const ROLE_COLORS = {
   admin: 'bg-violet-100 text-violet-700',
   founder: 'bg-blue-100 text-blue-700',
   partner: 'bg-emerald-100 text-emerald-700',
+  investor: 'bg-purple-100 text-purple-700',
 };
 
 const ROLE_DEFAULT_PATH = {
   admin: '/dashboard',
   founder: '/founder',
   partner: '/partner-portal',
+  investor: '/dashboard',
 };
 
 const ViewModeContext = createContext(null);
@@ -623,39 +661,43 @@ export default function App() {
       <Route path="/settings/email/confirm" element={<EmailChangeConfirmPage />} />
       <Route path="/settings/email/revoke" element={<EmailChangeRevokePage />} />
 
-      <Route path="/dashboard" element={guard(['admin', 'founder', 'partner'], <Dashboard />)} />
-      <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner'], <OnboardingPersonaPage />)} />
+      {/* Phase 0.1 — investor role added to every guard a partner currently
+          passes. Investor-only nav is curated above (NAV_BY_ROLE.investor)
+          so we get a tighter capital-allocator surface; per-route guards
+          stay permissive so deep links keep working during the split. */}
+      <Route path="/dashboard" element={guard(['admin', 'founder', 'partner', 'investor'], <Dashboard />)} />
+      <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
-      <Route path="/scoring" element={guard(['admin', 'partner'], <ScoringPage />)} />
-      <Route path="/projects" element={guard(['admin', 'founder', 'partner'], <ProjectsPage />)} />
-      <Route path="/projects/:id" element={guard(['admin', 'founder', 'partner'], <ProjectDetail />)} />
+      <Route path="/scoring" element={guard(['admin', 'partner', 'investor'], <ScoringPage />)} />
+      <Route path="/projects" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectsPage />)} />
+      <Route path="/projects/:id" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectDetail />)} />
       <Route path="/legal" element={guard(['admin', 'founder'], <LegalPage />)} />
-      <Route path="/partners" element={guard(['admin', 'partner'], <PartnersPage />)} />
-      <Route path="/capital" element={guard(['admin', 'partner'], <CapitalPage />)} />
-      <Route path="/tickets" element={guard(['admin', 'founder', 'partner'], <TicketsPage />)} />
-      <Route path="/deals" element={guard(['admin', 'partner'], <DealsPage />)} />
-      <Route path="/market-intel" element={guard(['admin', 'partner'], <MarketIntelPage />)} />
+      <Route path="/partners" element={guard(['admin', 'partner', 'investor'], <PartnersPage />)} />
+      <Route path="/capital" element={guard(['admin', 'partner', 'investor'], <CapitalPage />)} />
+      <Route path="/tickets" element={guard(['admin', 'founder', 'partner', 'investor'], <TicketsPage />)} />
+      <Route path="/deals" element={guard(['admin', 'partner', 'investor'], <DealsPage />)} />
+      <Route path="/market-intel" element={guard(['admin', 'partner', 'investor'], <MarketIntelPage />)} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
-      <Route path="/activity" element={guard(['admin', 'founder', 'partner'], <ActivityPage />)} />
-      <Route path="/kyc" element={guard(['admin', 'founder', 'partner'], <KYCPage />)} />
+      <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor'], <ActivityPage />)} />
+      <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
-      <Route path="/spinouts" element={guard(['admin', 'founder', 'partner'], <SpinOutsPage />)} />
+      <Route path="/spinouts" element={guard(['admin', 'founder', 'partner', 'investor'], <SpinOutsPage />)} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
-      <Route path="/liquidity" element={guard(['admin', 'founder', 'partner'], <LiquidityPage currentUser={user} />)} />
-      <Route path="/funds" element={guard(['admin', 'partner'], <FundsPage currentUser={user} />)} />
+      <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], <LiquidityPage currentUser={user} />)} />
+      <Route path="/funds" element={guard(['admin', 'partner', 'investor'], <FundsPage currentUser={user} />)} />
       <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
-      <Route path="/refer" element={guard(['admin', 'founder', 'partner'], <ReferEarnPage />)} />
-      <Route path="/integrations" element={guard(['admin', 'partner'], <IntegrationsPage />)} />
-      <Route path="/payouts" element={guard(['admin', 'founder', 'partner'], <PayoutsPage />)} />
-      <Route path="/network" element={guard(['admin', 'founder', 'partner'], <NetworkPage />)} />
-      <Route path="/matches" element={guard(['admin', 'partner'], <MatchesPage />)} />
-      <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner'], <StudioOpsPage />)} />
-      <Route path="/network-effects" element={guard(['admin', 'founder', 'partner'], <NetworkEffectsPage />)} />
-      <Route path="/pipeline" element={guard(['admin', 'founder', 'partner'], <PipelinePage />)} />
-      <Route path="/relationships" element={guard(['admin', 'founder', 'partner'], <RelationshipsPage />)} />
-      <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner'], <LegalCapitalPage />)} />
-      <Route path="/partner-portal" element={guard(['admin', 'partner'], <PartnerPortal />)} />
-      <Route path="/settings" element={guard(['admin', 'founder', 'partner'], <SettingsPage />)} />
+      <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferEarnPage />)} />
+      <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />
+      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <PayoutsPage />)} />
+      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkPage />)} />
+      <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
+      <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], <StudioOpsPage />)} />
+      <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
+      <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], <PipelinePage />)} />
+      <Route path="/relationships" element={guard(['admin', 'founder', 'partner', 'investor'], <RelationshipsPage />)} />
+      <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
+      <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], <PartnerPortal />)} />
+      <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor'], <SettingsPage />)} />
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />

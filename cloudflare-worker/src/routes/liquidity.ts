@@ -42,8 +42,8 @@ liquidity.post('/list', async (c) => {
   let allowed = false;
   if (user.role === 'admin') {
     allowed = true;
-  } else if (user.role === 'partner') {
-    // Investment partners may broker secondaries; they're allowed by role.
+  } else if (user.role === 'partner' || user.role === 'investor') {
+    // Investment partners / investors may broker secondaries; allowed by role.
     allowed = true;
   } else if (user.role === 'founder') {
     // Must be the founder of the underlying project (subsidiaries.deal_id -> projects.id -> founders -> users by email).
@@ -100,8 +100,8 @@ liquidity.get('/marketplace', async (c) => {
 // POST /api/liquidity/match — enqueue AI buyer matching for a listing
 liquidity.post('/match', async (c) => {
   const user = await requireAuth(c);
-  if (!['admin', 'partner'].includes(user.role)) {
-    return c.json({ error: 'Admins/partners only' }, 403);
+  if (!['admin', 'partner', 'investor'].includes(user.role)) {
+    return c.json({ error: 'Admins/partners/investors only' }, 403);
   }
   const body = await c.req.json<{ listing_id: number }>();
   if (!body?.listing_id) return c.json({ error: 'listing_id required' }, 400);
@@ -115,8 +115,8 @@ liquidity.post('/match', async (c) => {
 // GET /api/liquidity/listings/:id/matches — see proposed buyers (admin/partner)
 liquidity.get('/listings/:id/matches', async (c) => {
   const user = await requireAuth(c);
-  if (!['admin', 'partner'].includes(user.role)) {
-    return c.json({ error: 'Admins/partners only' }, 403);
+  if (!['admin', 'partner', 'investor'].includes(user.role)) {
+    return c.json({ error: 'Admins/partners/investors only' }, 403);
   }
   const id = parseInt(c.req.param('id'), 10);
   const items = await Matches.forListing(c.env, id);
@@ -238,8 +238,8 @@ liquidity.get('/my-portfolio', async (c) => {
 // GET /api/liquidity/events — recent liquidity events (admin/partner observability)
 liquidity.get('/events', async (c) => {
   const user = await requireAuth(c);
-  if (!['admin', 'partner'].includes(user.role)) {
-    return c.json({ error: 'Admins/partners only' }, 403);
+  if (!['admin', 'partner', 'investor'].includes(user.role)) {
+    return c.json({ error: 'Admins/partners/investors only' }, 403);
   }
   const items = await LiquidityEvents.listRecent(c.env, 100);
   return c.json({ ok: true, items });

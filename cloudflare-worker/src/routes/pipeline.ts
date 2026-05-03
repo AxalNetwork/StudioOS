@@ -7,7 +7,8 @@ import { notifyPipelineRoom } from '../services/realtime';
 const pipeline = new Hono<{ Bindings: Env }>();
 
 const STAGES = ['idea', 'mvp_dev', 'traction_review', 'decision_gate', 'spinout_ready', 'iterate'];
-const ADVANCE_ROLES = new Set(['admin', 'partner']); // operators/advisors map to partner; admins always allowed
+// Phase 0.1 split: pipeline advance is investor-side; partner kept for backcompat.
+const ADVANCE_ROLES = new Set(['admin', 'partner', 'investor']);
 const REVIEW_RATE_LIMIT = 60; // per hour
 
 let migrated = false;

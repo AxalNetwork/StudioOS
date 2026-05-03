@@ -39,7 +39,7 @@ def _safe_json_loads(s: str | None, default):
     except (ValueError, TypeError):
         return default
 
-ALLOWED_ROLES = {"admin", "operator", "service_provider", "partner", "founder"}
+ALLOWED_ROLES = {"admin", "operator", "service_provider", "partner", "investor", "founder"}
 
 PROVIDER_CATALOGUE = [
     {

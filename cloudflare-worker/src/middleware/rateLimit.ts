@@ -17,7 +17,7 @@ const BUCKETS: Bucket[] = [
     name: 'spinout',
     limit: 5,
     windowSec: 3600,
-    test: (p, m, r) => p.startsWith('/api/spinout/') && m !== 'GET' && (r === 'admin' || r === 'partner'),
+    test: (p, m, r) => p.startsWith('/api/spinout/') && m !== 'GET' && (r === 'admin' || r === 'partner' || r === 'investor'),
     scope: 'user',
   },
   // 10 AI scoring / matching calls per minute per user

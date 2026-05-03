@@ -10,7 +10,7 @@ async function listProjectsHandler(c: any) {
   const user = await requireAuth(c);
   const status = c.req.query('status');
   const sql = getSQL(c.env);
-  const isPrivileged = user.role === 'admin' || user.role === 'partner';
+  const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
   // IDOR guard: founders can only see their OWN projects.
   let rows: any;
   if (isPrivileged) {
@@ -204,9 +204,9 @@ projects.put('/:id', async (c) => {
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
 
-  // RBAC: admins/partners can edit any project; founders can only edit their own.
+  // RBAC: admins/partners/investors can edit any project; founders can only edit their own.
   const project = rows[0];
-  const isPrivileged = user.role === 'admin' || user.role === 'partner';
+  const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
   const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
   if (!isPrivileged && !isOwner) {
     await sql.end();
@@ -246,7 +246,7 @@ projects.delete('/:id', async (c) => {
 });
 
 projects.post('/:id/advance-week', async (c) => {
-  await requireRole(c, 'partner');
+  await requireRole(c, 'partner', 'investor');
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;

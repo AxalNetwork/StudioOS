@@ -233,7 +233,7 @@ Detected anomalies: ${anomalies.length === 0 ? 'none' : anomalies.map(a => `${a.
 // ---------- /throughput (operator-visible limited stats) ----------
 monitoring.get('/throughput', async (c) => {
   const user = await requireAuth(c);
-  if (user.role !== 'admin' && user.role !== 'partner') {
+  if (user.role !== 'admin' && user.role !== 'partner' && user.role !== 'investor') {
     return c.json({ detail: 'Forbidden' }, 403);
   }
   const sql = getSQL(c.env);

@@ -105,7 +105,7 @@ realtime.get('/pipeline/ws/:deal_id', async (c) => {
 
   const user = await authenticateForUpgrade(c);
   if (!user) return c.json({ error: 'Unauthorized' }, 401);
-  if (!['admin', 'partner'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403);
+  if (!['admin', 'partner', 'investor'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403);
   if (!kycOk(user)) return c.json({ error: 'KYC verification required', kyc_required: true }, 403);
   if (!(await checkUpgradeRate(c.env, user.id))) return c.json({ error: 'Too many WS upgrades' }, 429);
 

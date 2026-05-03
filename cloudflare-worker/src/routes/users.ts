@@ -22,7 +22,7 @@ users.post('/', async (c) => {
   const sql = getSQL(c.env);
   const existing = await sql`SELECT id FROM users WHERE email = ${data.email}`;
   if (existing.length > 0) { await sql.end(); return c.json({ error: 'User with this email already exists' }, 409); }
-  const validRole = ['founder', 'partner'].includes(data.role) ? data.role : 'partner';
+  const validRole = ['founder', 'partner', 'investor'].includes(data.role) ? data.role : 'partner';
   const [user] = await sql`INSERT INTO users (email, name, role, founder_id, partner_id) VALUES (${data.email}, ${data.name}, ${validRole}, ${data.founder_id || null}, ${data.partner_id || null}) RETURNING id, uid, email, name, role, is_active, email_verified, created_at`;
   await sql.end();
   return c.json(user, 201);

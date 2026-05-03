@@ -9,7 +9,7 @@ deals.get('/', async (c) => {
   const user = await requireAuth(c);
   const status = c.req.query('status');
   const sql = getSQL(c.env);
-  const isPrivileged = user.role === 'admin' || user.role === 'partner';
+  const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
   // IDOR guard: founders can only list deals on their own projects.
   let rows: any;
   if (isPrivileged) {
@@ -58,8 +58,8 @@ deals.get('/:id', async (c) => {
 });
 
 deals.put('/:id', async (c) => {
-  // Deal mutation is a partner/admin operation only.
-  await requireRole(c, 'partner');
+  // Deal mutation is a partner/investor/admin operation (Phase 0.1 split).
+  await requireRole(c, 'partner', 'investor');
   const id = parseInt(c.req.param('id'));
   const data = await c.req.json();
   const sql = getSQL(c.env);

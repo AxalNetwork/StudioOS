@@ -22,7 +22,7 @@ import { requireAuth } from '../auth';
 
 const integrations = new Hono<{ Bindings: Env }>();
 
-const ALLOWED_ROLES = new Set(['admin', 'operator', 'service_provider', 'partner', 'founder']);
+const ALLOWED_ROLES = new Set(['admin', 'operator', 'service_provider', 'partner', 'investor', 'founder']);
 
 const PROVIDER_CATALOGUE = [
   {

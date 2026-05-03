@@ -134,7 +134,7 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
         `SELECT u.id AS user_id, u.email, u.name, u.role,
                 COALESCE(SUM(lp.commitment_amount - lp.invested_amount), 0) AS available_capital
            FROM users u LEFT JOIN limited_partners lp ON lp.user_id = u.id
-          WHERE u.id != ? AND (u.role = 'partner' OR lp.id IS NOT NULL)
+          WHERE u.id != ? AND (u.role = 'partner' OR u.role = 'investor' OR lp.id IS NOT NULL)
           GROUP BY u.id LIMIT 50`
       ).bind(listing.user_id).all<{ user_id: number; email: string; name: string; role: any; available_capital: number }>();
       const candidates: BuyerCandidate[] = (cands.results || []).map(r => ({

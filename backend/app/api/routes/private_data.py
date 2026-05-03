@@ -62,7 +62,7 @@ def get_user_profile(user: User = Depends(get_current_user), session: Session = 
 
 
 @router.get("/market/private-signals")
-def get_private_signals(user: User = Depends(require_role(UserRole.ADMIN, UserRole.PARTNER))):
+def get_private_signals(user: User = Depends(require_role(UserRole.ADMIN, UserRole.PARTNER, UserRole.INVESTOR))):
     signals = []
     for s in MARKET_PULSE:
         conviction = "neutral"
@@ -102,7 +102,7 @@ def get_portfolio_metrics(
 
     if role == UserRole.FOUNDER:
         return _founder_portfolio(user, session)
-    elif role == UserRole.PARTNER:
+    elif role == UserRole.PARTNER or role == UserRole.INVESTOR:
         return _partner_portfolio(user, session)
     elif role == UserRole.ADMIN:
         return _admin_portfolio(session)
@@ -162,11 +162,11 @@ def _founder_portfolio(user: User, session: Session):
 def _partner_portfolio(user: User, session: Session):
     if not user.partner_id:
         return {
-            "role": "partner",
+            "role": "investor",
             "deals": [],
             "total_deals": 0,
             "active_deals": 0,
-            "message": "No partner profile linked to this account",
+            "message": "No partner / investor profile linked to this account",
         }
 
     deals_query = select(Deal).where(Deal.partner_id == user.partner_id).order_by(Deal.created_at.desc())
@@ -226,7 +226,7 @@ def _partner_portfolio(user: User, session: Session):
     tvpi = round(total_committed / total_called, 2) if total_called > 0 else 0
 
     return {
-        "role": "partner",
+        "role": "investor",
         "deals": deal_results,
         "total_deals": len(deal_results),
         "active_deals": sum(1 for d in deal_results if d["status"] in ["applied", "scored", "active"]),

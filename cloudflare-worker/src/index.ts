@@ -190,6 +190,45 @@ app.onError((err: any, c) => {
 // In prod a weak/missing secret aborts the request with a generic 503.
 import { assertJwtSecretStrength } from './auth';
 
+// Phase 0.1 — D1 schema migration for the partner→investor split.
+// Lazy, idempotent, runs at most once per worker isolate. We piggy-back on the
+// fetch entry point because workers have no startup hook; the cold-start
+// penalty is one cheap PRAGMA + two CREATE/ALTER ... IF NOT EXISTS calls.
+let _investorSchemaReady = false;
+async function ensureInvestorSchema(env: Env): Promise<void> {
+  if (_investorSchemaReady) return;
+  try {
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS investors (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, user_id INTEGER, investor_type TEXT NOT NULL DEFAULT 'angel', accreditation_status TEXT NOT NULL DEFAULT 'unverified', check_size_min REAL, check_size_max REAL, sector_focus TEXT, stage_focus TEXT, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    );
+    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_investors_user ON investors(user_id)");
+    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_investors_type ON investors(investor_type)");
+    // SQLite/D1 lacks ADD COLUMN IF NOT EXISTS. Probe pragma instead.
+    const cols = await env.DB.prepare("PRAGMA table_info(users)").all<{ name: string }>();
+    const hasInvestorId = (cols.results || []).some(r => r.name === 'investor_id');
+    if (!hasInvestorId) {
+      try { await env.DB.exec("ALTER TABLE users ADD COLUMN investor_id INTEGER"); } catch {}
+    }
+    // Promote partner users with an LP record to investor; create investor row.
+    try {
+      await env.DB.exec(
+        "UPDATE users SET role = 'investor' WHERE role = 'partner' AND id IN (SELECT DISTINCT u.id FROM users u JOIN limited_partners lp ON lp.user_id = u.id OR lower(lp.email) = lower(u.email))"
+      );
+      await env.DB.exec(
+        "INSERT INTO investors (uid, user_id, investor_type, accreditation_status) SELECT lower(hex(randomblob(16))), u.id, 'lp', 'verified' FROM users u WHERE u.role = 'investor' AND NOT EXISTS (SELECT 1 FROM investors i WHERE i.user_id = u.id)"
+      );
+      await env.DB.exec(
+        "UPDATE users SET investor_id = (SELECT i.id FROM investors i WHERE i.user_id = users.id LIMIT 1) WHERE role = 'investor' AND investor_id IS NULL"
+      );
+    } catch (e) {
+      console.warn('[boot] investor promote step skipped:', (e as Error).message);
+    }
+    _investorSchemaReady = true;
+  } catch (e) {
+    console.error('[boot] ensureInvestorSchema failed:', (e as Error).message);
+  }
+}
+
 export default {
   fetch: async (request: Request, env: Env, ctx: ExecutionContext) => {
     try {
@@ -200,6 +239,12 @@ export default {
         JSON.stringify({ ok: false, error: { code: 503, type: 'config_error', message: 'Service misconfigured' } }),
         { status: 503, headers: { 'content-type': 'application/json' } },
       );
+    }
+    // Fire-and-forget — never block a request on the migration. Subsequent
+    // requests within the same isolate hit the in-memory `_investorSchemaReady`
+    // short-circuit and pay zero cost.
+    if (!_investorSchemaReady && env.DB) {
+      ctx.waitUntil(ensureInvestorSchema(env));
     }
     return app.fetch(request, env, ctx);
   },

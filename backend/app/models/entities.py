@@ -90,7 +90,8 @@ class DealStatus(str, Enum):
 class UserRole(str, Enum):
     ADMIN = "admin"
     FOUNDER = "founder"
-    PARTNER = "partner"
+    PARTNER = "partner"      # service providers (legal, accounting, design, recruiting, GTM, etc.)
+    INVESTOR = "investor"    # capital allocators (LP / VC / Angel / Scout). Phase 0.1 split.
 
 
 class User(SQLModel, table=True):
@@ -103,6 +104,8 @@ class User(SQLModel, table=True):
     password_hash: Optional[str] = None
     founder_id: Optional[int] = Field(default=None, foreign_key="founders.id")
     partner_id: Optional[int] = Field(default=None, foreign_key="partners.id")
+    # Phase 0.1 — link to investor profile when role == 'investor'.
+    investor_id: Optional[int] = Field(default=None, foreign_key="investors.id")
     is_active: bool = True
     email_verified: bool = False
     verification_token: Optional[str] = None
@@ -366,6 +369,31 @@ class LimitedPartner(SQLModel, table=True):
     invested_amount: float = 0  # equivalent to legacy `called_capital`
     returns: float = 0
     status: str = "active"  # committed | active | redeemed
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Investor(SQLModel, table=True):
+    """Phase 0.1 — capital allocator profile. One row per investor user.
+
+    Replaces the conflated 'partner = service-provider OR LP/VC' role.
+    The `investor` UserRole is the canonical identity; this row carries
+    the funding profile (check size, sector / stage focus, accreditation).
+    A single user is linked via `User.investor_id`.
+    """
+    __tablename__ = "investors"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    user_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
+    # 'lp' | 'vc' | 'angel' | 'scout' | 'family_office' | 'corporate'
+    investor_type: str = Field(default="angel", index=True)
+    # 'unverified' | 'self_attested' | 'verified' | 'rejected'
+    accreditation_status: str = Field(default="unverified", index=True)
+    check_size_min: Optional[float] = None
+    check_size_max: Optional[float] = None
+    sector_focus: Optional[str] = None  # comma-separated tags or JSON string
+    stage_focus: Optional[str] = None   # comma-separated stages
+    notes: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

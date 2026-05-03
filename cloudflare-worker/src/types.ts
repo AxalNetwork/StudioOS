@@ -63,7 +63,8 @@ export interface User {
   uid: string;
   email: string;
   name: string;
-  role: 'admin' | 'founder' | 'partner';
+  role: 'admin' | 'founder' | 'partner' | 'investor';
+  investor_id?: number | null;
   password_hash: string | null;
   founder_id: number | null;
   partner_id: number | null;

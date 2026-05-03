@@ -196,7 +196,7 @@ export default function LiquidityPage({ currentUser }) {
   const [err, setErr] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  const isPrivileged = ['admin', 'partner'].includes(currentUser?.role);
+  const isPrivileged = ['admin', 'partner', 'investor'].includes(currentUser?.role);
 
   const load = async () => {
     setRefreshing(true); setErr('');

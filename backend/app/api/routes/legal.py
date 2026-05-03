@@ -11,7 +11,11 @@ from backend.app.services.access_policy import require_contract_view
 from datetime import datetime
 import time
 
-require_partner = require_role("partner")
+# Phase 0.1 split — both service-provider partners (e.g. lawyers) and
+# investors may view contracts depending on context; route-level access
+# stays permissive and per-document predicates in services.access_policy
+# narrow as needed.
+require_partner = require_role("partner", "investor")
 
 router = APIRouter(prefix="/legal", tags=["Legal & Compliance"])
 

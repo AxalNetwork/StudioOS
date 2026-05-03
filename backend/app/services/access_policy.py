@@ -249,12 +249,44 @@ def require_company_member_view(
     return company
 
 
+# ---------------------------------------------------------------------------
+# 5. ROLE-SPLIT PREDICATES (Phase 0.1)
+# ---------------------------------------------------------------------------
+# After the partner→partner+investor split we have two role-specific data
+# surfaces. The old "partner is privileged" rule still holds via
+# `is_privileged`, but for new endpoints prefer these strict predicates.
+def can_view_lp_data(viewer: Optional[User]) -> bool:
+    """LP commitments, capital calls, fund cashflows, distributions.
+
+    Strictly admin or investor. Service-provider partners must NOT see
+    capital data even though they share legacy `partner` privileges in
+    `is_privileged`. Use this predicate at any new LP / capital-call /
+    fund-cashflow endpoint.
+    """
+    if viewer is None:
+        return False
+    return viewer.role in (UserRole.ADMIN, UserRole.INVESTOR)
+
+
+def can_view_partner_demand(viewer: Optional[User]) -> bool:
+    """Founder needs / RFP demand boards (Phase 5).
+
+    Strictly admin or partner. Investors are LPs / VCs and have no
+    business browsing the partner-side demand feed.
+    """
+    if viewer is None:
+        return False
+    return viewer.role in (UserRole.ADMIN, UserRole.PARTNER)
+
+
 __all__ = [
     "can_view_contract",
     "can_view_signed_ip",
     "can_view_signer_email",
     "can_view_personal_contact",
     "can_view_company_member_list",
+    "can_view_lp_data",
+    "can_view_partner_demand",
     "require_contract_view",
     "require_company_member_view",
 ]

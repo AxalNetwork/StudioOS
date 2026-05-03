@@ -71,7 +71,7 @@ legal.post('/templates/:key/generate', async (c) => {
   const sql = getSQL(c.env);
   // IDOR guard: when generating against a project, founders may only do so for their own.
   // Founders may NOT generate unattached documents (no project_id).
-  const isPrivileged = user.role === 'admin' || user.role === 'partner';
+  const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
   if (body.project_id) {
     const p = await sql`SELECT founder_id FROM projects WHERE id = ${body.project_id}`;
     if (p.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
@@ -96,7 +96,7 @@ legal.get('/documents', async (c) => {
   const user = await requireAuth(c);
   const projectId = c.req.query('project_id');
   const sql = getSQL(c.env);
-  const isPrivileged = user.role === 'admin' || user.role === 'partner';
+  const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
   let docs: any;
   if (isPrivileged) {
     // Admins/partners see everything (optionally filtered by project_id).

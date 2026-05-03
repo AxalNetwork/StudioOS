@@ -51,7 +51,9 @@ dashboard.get('/', async (c) => {
 
   const sql = getSQL(c.env);
   const isAdmin = user.role === 'admin';
-  const isPartner = user.role === 'partner';
+  // Phase 0.1: investors share dashboard view with partners (capital-allocator lens).
+  const isInvestor = user.role === 'investor';
+  const isPartner = user.role === 'partner' || isInvestor;
   const isFounder = user.role === 'founder';
 
   // Run all queries in parallel for speed (Cloudflare Workers loves this).
@@ -205,7 +207,7 @@ dashboard.get('/', async (c) => {
       assigned_tasks: myTasks,
     },
     notifications,
-    role_view: isAdmin ? 'admin' : isPartner ? 'partner' : isFounder ? 'founder' : 'member',
+    role_view: isAdmin ? 'admin' : isInvestor ? 'investor' : isPartner ? 'partner' : isFounder ? 'founder' : 'member',
     cached: false,
     generated_at: new Date().toISOString(),
   };

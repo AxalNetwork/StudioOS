@@ -303,7 +303,7 @@ networkfx.get('/syndicates/:id/recommendations', async (c) => {
     recs = await sql`
       SELECT u.id, u.name, u.email, u.role, NULL as score, NULL as explanation
       FROM users u
-      WHERE u.kyc_status = 'approved' AND u.role IN ('partner', 'admin')
+      WHERE u.kyc_status = 'approved' AND u.role IN ('partner', 'investor', 'admin')
         AND u.id != ${synd.created_by}
         AND u.id NOT IN (SELECT user_id FROM syndicate_members WHERE syndicate_id = ${id})
       ORDER BY u.id DESC LIMIT 10

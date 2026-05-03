@@ -320,6 +320,153 @@ def consolidate_capital_tables() -> None:
         _try_apply_capital_call_not_null(session)
 
 
+def ensure_investor_role_split() -> None:
+    """Phase 0.1 — partner → partner + investor role split.
+
+    Idempotent. Steps:
+      1. Add `users.investor_id` column if missing.
+      2. Create `investors` table if missing.
+      3. Promote any user currently `role='partner'` who has a row in
+         `limited_partners` (matched on user_id OR email) to `role='investor'`,
+         creating an `investors` row of type 'lp' for them.
+
+    Service-provider partners with no LP record stay as `partner`.
+    """
+    # Step 0 — extend the Postgres `userrole` enum with the new label.
+    # ALTER TYPE ... ADD VALUE cannot run inside a transaction block, so we
+    # acquire an AUTOCOMMIT connection separately. SQLite (tests) silently
+    # skips this branch — its `role` column is plain TEXT.
+    try:
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            # PG enum labels for userrole are uppercase (ADMIN/FOUNDER/PARTNER);
+            # match the existing convention.
+            conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'INVESTOR'"))
+    except Exception as exc:
+        # Non-PG dialects (sqlite) raise — that's fine, the role column is TEXT.
+        logger.debug("ensure_investor_role_split: enum extend skipped: %s", exc)
+
+    with Session(engine) as session:
+        # Step 1 — column on users
+        try:
+            session.exec(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS investor_id INTEGER REFERENCES investors(id)"
+            ))
+            session.commit()
+        except Exception:
+            session.rollback()
+
+        # Step 2 — investors table (Postgres dev). The SQLModel metadata in
+        # `init_db()` should already create it on a fresh DB, but this keeps
+        # existing dev/preview DBs in sync without a manual migration.
+        try:
+            session.exec(text(
+                """
+                CREATE TABLE IF NOT EXISTS investors (
+                    id BIGSERIAL PRIMARY KEY,
+                    uid TEXT UNIQUE NOT NULL,
+                    user_id INTEGER REFERENCES users(id),
+                    investor_type TEXT NOT NULL DEFAULT 'angel',
+                    accreditation_status TEXT NOT NULL DEFAULT 'unverified',
+                    check_size_min DOUBLE PRECISION,
+                    check_size_max DOUBLE PRECISION,
+                    sector_focus TEXT,
+                    stage_focus TEXT,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            ))
+            session.commit()
+            session.exec(text("CREATE INDEX IF NOT EXISTS idx_investors_user ON investors(user_id)"))
+            session.commit()
+            session.exec(text("CREATE INDEX IF NOT EXISTS idx_investors_type ON investors(investor_type)"))
+            session.commit()
+        except Exception as exc:
+            session.rollback()
+            logger.warning("ensure_investor_role_split: investors table create failed: %s", exc)
+
+        # Step 3a — sweep: any user already at role='INVESTOR' but missing an
+        # investors row / investor_id link gets backfilled. This makes the
+        # promotion + investor-row + investor_id chain idempotent across
+        # reruns even if a previous boot died between the role flip and the
+        # row insert (architect feedback: don't gate on the just-promoted set).
+        try:
+            session.exec(text(
+                """
+                INSERT INTO investors (uid, user_id, investor_type, accreditation_status)
+                SELECT gen_random_uuid()::text, u.id, 'lp', 'verified'
+                FROM users u
+                WHERE upper(u.role::text) = 'INVESTOR'
+                  AND NOT EXISTS (SELECT 1 FROM investors i WHERE i.user_id = u.id)
+                """
+            ))
+            session.commit()
+            session.exec(text(
+                """
+                UPDATE users SET investor_id = (
+                    SELECT i.id FROM investors i WHERE i.user_id = users.id LIMIT 1
+                )
+                WHERE upper(role::text) = 'INVESTOR' AND investor_id IS NULL
+                """
+            ))
+            session.commit()
+        except Exception as exc:
+            session.rollback()
+            logger.warning("ensure_investor_role_split: backfill sweep failed: %s", exc)
+
+        # Step 3b — promote partner users with an LP record to investor role.
+        # Match by user_id first (canonical), fall back to email.
+        # PG enum values are uppercase; cast to text on both sides so the
+        # comparison stays dialect-agnostic (sqlite stores raw TEXT).
+        try:
+            promoted = session.exec(text(
+                """
+                WITH lp_users AS (
+                    SELECT DISTINCT u.id AS user_id
+                    FROM users u
+                    JOIN limited_partners lp
+                      ON lp.user_id = u.id OR lower(lp.email) = lower(u.email)
+                    WHERE upper(u.role::text) = 'PARTNER'
+                )
+                UPDATE users SET role = 'INVESTOR'
+                WHERE id IN (SELECT user_id FROM lp_users)
+                RETURNING id
+                """
+            )).all()
+            session.commit()
+            if promoted:
+                logger.info(
+                    "ensure_investor_role_split: promoted %d partner users to investor",
+                    len(promoted),
+                )
+                # Step 3b — create matching `investors` rows of type 'lp'
+                # so the new role has a profile to point at. Skip users that
+                # already have one.
+                for row in promoted:
+                    uid = row[0] if isinstance(row, tuple) else row.id
+                    try:
+                        session.exec(text(
+                            """
+                            INSERT INTO investors (uid, user_id, investor_type, accreditation_status)
+                            SELECT gen_random_uuid()::text, :uid, 'lp', 'verified'
+                            WHERE NOT EXISTS (SELECT 1 FROM investors WHERE user_id = :uid)
+                            """
+                        ), {"uid": uid})
+                        session.commit()
+                        # Backfill users.investor_id
+                        session.exec(text(
+                            "UPDATE users SET investor_id = (SELECT id FROM investors WHERE user_id = :uid LIMIT 1) "
+                            "WHERE id = :uid AND investor_id IS NULL"
+                        ), {"uid": uid})
+                        session.commit()
+                    except Exception:
+                        session.rollback()
+        except Exception as exc:
+            session.rollback()
+            logger.warning("ensure_investor_role_split: promote step skipped: %s", exc)
+
+
 def _recompute_fund_totals(session: Session) -> None:
     funds = session.exec(select(VCFund)).all()
     for fund in funds:

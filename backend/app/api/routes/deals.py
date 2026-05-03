@@ -7,7 +7,10 @@ from backend.app.api.routes.auth import get_current_user
 from backend.app.api.deps import is_privileged, ensure_founder_access, require_role
 from datetime import datetime
 
-require_partner = require_role("partner")
+# Phase 0.1 split: legacy "partner" callers were almost all capital
+# allocators (now `investor`). Allow both during transition; tighten in
+# Phase 4 once investor-only deal-flow surfaces ship.
+require_partner = require_role("partner", "investor")
 
 router = APIRouter(prefix="/deals", tags=["Deal Flow"])
 

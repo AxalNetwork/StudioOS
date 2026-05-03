@@ -356,7 +356,7 @@ admin.patch('/users/:userId/role', async (c) => {
   if (!role) {
     try { role = (await c.req.json()).role; } catch {}
   }
-  if (!role || !['admin', 'founder', 'partner'].includes(role)) {
+  if (!role || !['admin', 'founder', 'partner', 'investor'].includes(role)) {
     return c.json({ error: `Invalid role: ${role}` }, 400);
   }
   // Security policy: admin promotion is NOT allowed via this endpoint.

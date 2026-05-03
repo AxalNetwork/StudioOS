@@ -56,7 +56,8 @@ export default function Dashboard() {
   const { user, quick_stats, proprietary_deal_flow, ai_scored_opportunities, syndication_tools,
     performance_analytics, operator_workspace, notifications, role_view } = data;
 
-  const isPartner = role_view === 'partner' || role_view === 'admin';
+  // Phase 0.1: investor sees the same capital-allocator dashboard panels.
+  const isPartner = role_view === 'partner' || role_view === 'investor' || role_view === 'admin';
   const isOperator = role_view === 'founder' || role_view === 'admin' || (operator_workspace?.assigned_tasks?.length > 0);
   const unreadNotifs = notifications?.length || 0;
 

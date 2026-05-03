@@ -20,7 +20,7 @@ export default function RegisterPage() {
   const [emailWarning, setEmailWarning] = useState(false);
   const [verificationUrl, setVerificationUrl] = useState('');
   const [refCode, setRefCode] = useState('');
-  const [lane, setLane] = useState(null); // 'partner' | 'lp' | 'founder' | null
+  const [lane, setLane] = useState(null); // 'partner' | 'investor' | 'lp' | 'founder' | null
   const [productIntent, setProductIntent] = useState(null); // 'spinout-lab' | null
   // Which "I can't scan the QR" app card is expanded on step 4. null = all collapsed.
   const [manualOpen, setManualOpen] = useState(null);
@@ -30,7 +30,7 @@ export default function RegisterPage() {
     const r = params.get('ref');
     if (r) setRefCode(r.toUpperCase());
     const l = params.get('lane');
-    if (l && ['partner', 'lp', 'founder'].includes(l)) {
+    if (l && ['partner', 'investor', 'lp', 'founder'].includes(l)) {
       setLane(l);
       try { localStorage.setItem('gvpn:intent', JSON.stringify({ lane: l, ts: Date.now() })); } catch {}
     } else {

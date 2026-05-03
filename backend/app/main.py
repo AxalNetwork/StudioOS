@@ -60,6 +60,7 @@ async def lifespan(app: FastAPI):
             ensure_document_file_columns,
             ensure_user_access_level_column,
             ensure_score_anti_cheat_columns,
+            ensure_investor_role_split,
         )
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
@@ -73,6 +74,10 @@ async def lifespan(app: FastAPI):
         logger.info("StudioOS migrations: score anti-cheat columns ensured")
         consolidate_capital_tables()
         logger.info("StudioOS migrations: capital tables consolidated")
+        # Phase 0.1 — partner→investor split. Must run AFTER LimitedPartner
+        # consolidation so the promotion query sees a complete LP table.
+        ensure_investor_role_split()
+        logger.info("StudioOS migrations: investor role split applied")
     except Exception as exc:  # noqa: BLE001
         # Migrations are best-effort: a failure here must not prevent the API
         # from booting (e.g. fresh DB, missing legacy tables).

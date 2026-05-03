@@ -169,7 +169,7 @@ class TicketCreate(BaseModel):
 class UserCreate(BaseModel):
     email: str
     name: str
-    role: str = Field("founder", pattern="^(admin|founder|partner)$")
+    role: str = Field("founder", pattern="^(admin|founder|partner|investor)$")
     password: Optional[str] = None
     founder_id: Optional[int] = None
     partner_id: Optional[int] = None

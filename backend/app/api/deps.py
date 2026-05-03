@@ -31,12 +31,22 @@ def require_role(*roles: str):
     return _dep
 
 
-require_admin_or_partner = require_role("partner")
+# Backwards-compatible alias retained so existing imports keep working.
+# Phase 0.1 split: investor users (migrated from "partner") also pass.
+require_admin_or_partner = require_role("partner", "investor")
+require_admin_or_investor = require_role("investor")
+require_admin_or_partner_or_investor = require_role("partner", "investor")
 
 
 def is_privileged(user: User) -> bool:
-    """Admin/partner roles bypass per-row ownership checks."""
-    return user.role in (UserRole.ADMIN, UserRole.PARTNER)
+    """Admin / partner / investor roles bypass per-row ownership checks.
+
+    Phase 0.1: investor inherits the legacy "partner = privileged" semantics
+    so we don't break in-flight read paths during the role split. New code
+    should call the role-specific helpers in `services.access_policy` instead
+    (`can_view_lp_data`, `can_view_partner_demand`).
+    """
+    return user.role in (UserRole.ADMIN, UserRole.PARTNER, UserRole.INVESTOR)
 
 
 def can_access_founder_resource(user: User, owner_founder_id: int | None) -> bool:

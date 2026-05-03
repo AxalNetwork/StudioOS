@@ -144,9 +144,23 @@ export async function requireRole(
  * pass when the row's founder_id matches their own.
  */
 export function canAccessFounderResource(user: User, ownerFounderId: number | null | undefined): boolean {
-  if (user.role === 'admin' || user.role === 'partner') return true;
+  // Phase 0.1 split — admin / partner / investor all bypass founder ownership.
+  // Tighten in Phase 4 once role-specific predicates ship.
+  if (user.role === 'admin' || user.role === 'partner' || user.role === 'investor') return true;
   if (ownerFounderId == null) return false;
   return !!user.founder_id && user.founder_id === ownerFounderId;
+}
+
+/** Phase 0.1 — true iff viewer may see capital / LP / fund cashflow data.
+ * Strictly admin or investor. Mirrors `services.access_policy.can_view_lp_data`. */
+export function canViewLpData(user: User | null | undefined): boolean {
+  return !!user && (user.role === 'admin' || user.role === 'investor');
+}
+
+/** Phase 0.1 — true iff viewer may see partner-side demand boards.
+ * Strictly admin or partner. */
+export function canViewPartnerDemand(user: User | null | undefined): boolean {
+  return !!user && (user.role === 'admin' || user.role === 'partner');
 }
 
 export async function requireApprovedKyc(c: Context<{ Bindings: Env }>): Promise<User> {
