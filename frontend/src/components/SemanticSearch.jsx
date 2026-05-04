@@ -7,7 +7,7 @@ const TYPE_FILTERS = [
   { key: '', label: 'All', path: null },
   { key: 'project', label: 'Projects', path: '/projects' },
   { key: 'partner', label: 'Partners', path: '/partners' },
-  { key: 'document', label: 'Documents', path: '/legal' },
+  { key: 'document', label: 'Documents', path: '/legal-capital' },
 ];
 
 function iconForType(t) {
