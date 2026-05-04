@@ -32,9 +32,18 @@ export default function RelationshipsPage() {
     try {
       const [s, r, l, lb] = await Promise.all([
         api.partnerSummary(), api.partnerRelationships(),
-        api.activityLogs(50, 0), api.partnerLeaderboard(),
+        api.activityLogs(200, 0), api.partnerLeaderboard(),
       ]);
-      setSummary(s); setRels(r); setLogs(l); setLeaderboard(lb);
+      // Strip observability noise — http_get / http_post rows are per-request
+      // telemetry written by the middleware, not user-facing domain events.
+      const rawItems = l.items || l.logs || [];
+      const filtered = rawItems.filter(item => {
+        const action = item.action || item.action_type || '';
+        return !action.startsWith('http_');
+      });
+      setSummary(s); setRels(r);
+      setLogs({ items: filtered, total: filtered.length });
+      setLeaderboard(lb);
     } catch (e) { setErr(e.message); }
     finally { setLoading(false); }
   };
@@ -154,18 +163,23 @@ function RelationshipsTab({ rels, reload }) {
 }
 
 function ActivityTab({ logs }) {
-  if (logs.items.length === 0) return <Empty text="No activity yet." />;
+  if (logs.items.length === 0) return <Empty text="No domain activity yet. Actions like logins, KYC submissions, referrals, and role changes will appear here." />;
   return (
     <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
-      {logs.items.map(l => (
-        <div key={l.id} className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50">
-          <div className="flex-1 min-w-0">
-            <div className="font-medium text-gray-900">{ACTION_LABELS[l.action_type] || l.action_type}</div>
-            {l.entity_type && <div className="text-[10px] text-gray-500">on {l.entity_type} #{l.entity_id}</div>}
+      {logs.items.map((l, idx) => {
+        const action = l.action || l.action_type || '';
+        const label = ACTION_LABELS[action] || action.replace(/_/g, ' ');
+        const detail = l.details || l.description || '';
+        return (
+          <div key={l.id ?? idx} className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50">
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-gray-900">{label}</div>
+              {detail && <div className="text-[10px] text-gray-500 truncate">{detail}</div>}
+            </div>
+            <div className="text-[10px] text-gray-400 shrink-0">{new Date(l.created_at).toLocaleString()}</div>
           </div>
-          <div className="text-[10px] text-gray-400">{new Date(l.created_at).toLocaleString()}</div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
