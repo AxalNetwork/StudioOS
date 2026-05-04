@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-import { Plus, Trash2, AlertCircle, Save, X, Download, RefreshCw, TrendingUp } from 'lucide-react';
+import { Plus, Trash2, AlertCircle, Save, X, Download, RefreshCw, TrendingUp, FolderPlus } from 'lucide-react';
 import { api } from '../lib/api';
 
 const FIELDS = [
@@ -48,29 +48,53 @@ export default function MetricsPage() {
     (async () => {
       try {
         const list = await api.listProjects();
-        setProjects(list || []);
+        const safeList = list || [];
+        setProjects(safeList);
         const fromQuery = parseInt(searchParams.get('project_id'), 10);
-        if (fromQuery && (list || []).find((p) => p.id === fromQuery)) setProjectId(fromQuery);
-        else if ((list || []).length > 0) setProjectId(list[0].id);
+        if (fromQuery && safeList.find((p) => p.id === fromQuery)) {
+          setProjectId(fromQuery);
+        } else if (safeList.length > 0) {
+          // Stale ?project_id in URL (project was deleted, or never visible
+          // to this user) — fall back to the first available without
+          // surfacing a scary error.
+          if (fromQuery) setSearchParams({}, { replace: true });
+          setProjectId(safeList[0].id);
+        }
       } catch (e) { setError(e.message); }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!projectId) return;
     setSearchParams({ project_id: String(projectId) }, { replace: true });
     refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   async function refresh() {
+    if (!projectId) return;
     try {
+      setError(null);
       const [r1, r2] = await Promise.all([
         api.listMetricsSnapshots(projectId),
         api.getProgressSignals(projectId),
       ]);
       setSnapshots(r1.snapshots || []);
       setSignals(r2);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      // 404 here means the selected project was deleted out from under us
+      // (or the user lost access). Recover by clearing state — don't
+      // splash a red banner over a perfectly-loadable picker.
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg.includes('not found')) {
+        setSnapshots([]);
+        setSignals(null);
+        setError(`Project #${projectId} is no longer available. Pick another project from the dropdown.`);
+      } else {
+        setError(e.message || 'Failed to load metrics.');
+      }
+    }
   }
 
   async function handleSave() {
@@ -123,6 +147,8 @@ export default function MetricsPage() {
   }));
 
   const latest = snapshots[0];
+  const hasProjects = projects.length > 0;
+  const projectMissing = !projectId && hasProjects === false;
 
   return (
     <div className="space-y-6">
@@ -132,13 +158,27 @@ export default function MetricsPage() {
           <p className="text-sm text-gray-500 mt-1">Snapshot MRR, ARR, CAC, LTV, churn. Feeds users + revenue traction signals.</p>
         </div>
         <div className="flex gap-2">
-          <select value={projectId || ''} onChange={(e) => setProjectId(parseInt(e.target.value, 10))} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+          <select
+            value={projectId || ''}
+            onChange={(e) => setProjectId(parseInt(e.target.value, 10))}
+            disabled={!hasProjects}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
+          >
+            {!hasProjects && <option value="">No projects available</option>}
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <button onClick={handleStripeImport} disabled={importing} className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+          <button
+            onClick={handleStripeImport}
+            disabled={importing || !projectId}
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
             <Download size={14} /> {importing ? 'Importing…' : 'Import from Stripe'}
           </button>
-          <button onClick={() => setAdding(emptySnapshot())} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-3 py-2 text-sm font-medium">
+          <button
+            onClick={() => setAdding(emptySnapshot())}
+            disabled={!projectId}
+            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50 disabled:hover:bg-violet-600"
+          >
             <Plus size={14} /> Snapshot
           </button>
         </div>
@@ -146,12 +186,30 @@ export default function MetricsPage() {
 
       {error && <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-4 py-3 text-sm"><AlertCircle size={16} className="mt-0.5" />{error}</div>}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat label="MRR" value={fmt(latest?.mrr, '$')} sub={latest ? `as of ${latest.snapshot_date}` : 'No data'} />
-        <Stat label="Active users" value={fmt(latest?.active_users, '')} />
-        <Stat label="LTV / CAC" value={latest && latest.cac && latest.ltv ? (latest.ltv / latest.cac).toFixed(2) : '—'} />
-        <Stat label="Traction score" value={signals ? `${signals.total} / ${signals.max}` : '—'} sub="Feeds scoring engine" tone="violet" />
-      </div>
+      {!hasProjects && (
+        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center">
+          <FolderPlus size={32} className="mx-auto text-gray-400 mb-3" />
+          <h2 className="text-base font-semibold text-gray-900">No projects yet</h2>
+          <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+            Metrics snapshots are scoped to a project. Create or join one first, then come back here to start tracking MRR, CAC, LTV and churn.
+          </p>
+          <Link
+            to="/projects"
+            className="inline-flex items-center gap-2 mt-4 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-4 py-2 text-sm font-medium"
+          >
+            <Plus size={14} /> Go to Projects
+          </Link>
+        </div>
+      )}
+
+      {hasProjects && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Stat label="MRR" value={fmt(latest?.mrr, '$')} sub={latest ? `as of ${latest.snapshot_date}` : 'No data'} />
+          <Stat label="Active users" value={fmt(latest?.active_users, '')} />
+          <Stat label="LTV / CAC" value={latest && latest.cac && latest.ltv ? (latest.ltv / latest.cac).toFixed(2) : '—'} />
+          <Stat label="Traction score" value={signals ? `${signals.total} / ${signals.max}` : '—'} sub="Feeds scoring engine" tone="violet" />
+        </div>
+      )}
 
       {series.length > 1 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -182,6 +240,7 @@ export default function MetricsPage() {
         </div>
       )}
 
+      {hasProjects && (
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-900">Snapshot history</h3>
@@ -219,8 +278,9 @@ export default function MetricsPage() {
           </table>
         </div>
       </div>
+      )}
 
-      {signals && (
+      {hasProjects && signals && (
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp size={16} className="text-violet-600" />
