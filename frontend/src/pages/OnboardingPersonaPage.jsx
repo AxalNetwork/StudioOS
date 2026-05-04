@@ -49,7 +49,22 @@ export default function OnboardingPersonaPage() {
       setClassifyResult(r);
       if (r.persona_id && !r.needs_disambiguation) setChosenPersona(r.persona_id);
       setStage('confirm');
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') {
+        // Route missing on this deployment. Don't show "Not found" — let the
+        // user proceed by picking their persona manually instead of being
+        // stuck on an onboarding form they can't escape.
+        setClassifyResult({ persona_id: null, needs_disambiguation: true });
+        setStage('confirm');
+      } else if (e?.status >= 500) {
+        setError("Couldn't reach the persona router right now. Pick your role manually below or try again in a moment.");
+        setClassifyResult({ persona_id: null, needs_disambiguation: true });
+        setStage('confirm');
+      } else {
+        setError(e.message || 'Failed to classify');
+      }
+    }
     finally { setBusy(false); }
   };
 
