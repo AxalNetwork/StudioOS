@@ -190,26 +190,37 @@ export const api = {
   getFinancialModel: (projectId) => request(`/financials/${projectId}`),
   saveFinancialModel: (projectId, assumptions) => request(`/financials/${projectId}`, { method: 'PUT', body: JSON.stringify({ assumptions }) }),
   recomputeFinancialModel: (projectId) => request(`/financials/${projectId}/recompute`, { method: 'POST' }),
-  downloadFinancialModelXlsx: (projectId) => {
+  // Returns a promise so callers can await it and surface real errors in
+  // their own UI instead of relying on alert(). The previous version
+  // swallowed the backend's actual reason ("Project not found", "No
+  // financial model saved yet", etc.) behind a generic "Export failed".
+  downloadFinancialModelXlsx: async (projectId) => {
     const token = localStorage.getItem('token');
-    fetch(`/api/financials/${projectId}/export.xlsx`, {
+    const res = await fetch(`/api/financials/${projectId}/export.xlsx`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error('Export failed');
-        return res.blob().then((blob) => ({ blob, filename: (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || 'financials.xlsx' }));
-      })
-      .then(({ blob, filename }) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      })
-      .catch((e) => alert(e.message));
+    });
+    if (!res.ok) {
+      let detail = res.statusText || 'Export failed';
+      try {
+        const err = await res.json();
+        detail = err?.detail || err?.error || detail;
+      } catch {
+        // Body wasn't JSON (e.g. plain text or empty) — keep statusText.
+      }
+      const e = new Error(detail);
+      e.status = res.status;
+      throw e;
+    }
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || 'financials.xlsx';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   },
 
   // Task #28 — Discovery / Roadmap / Metrics

@@ -134,9 +134,21 @@ export default function FinancialsPage() {
     if (model) setAssumptions(model.assumptions);
   }
 
-  function handleExport() {
-    if (!projectId) return;
-    api.downloadFinancialModelXlsx(projectId);
+  async function handleExport() {
+    if (!projectId || !model) return;
+    setError(null);
+    try {
+      await api.downloadFinancialModelXlsx(projectId);
+    } catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg.includes('not found')) {
+        setError(`Can't export: project #${projectId} is no longer available. Pick another project from the dropdown.`);
+      } else if (msg.includes('no financial model')) {
+        setError('Save the model at least once before exporting.');
+      } else {
+        setError(e.message || 'Export failed.');
+      }
+    }
   }
 
   function setDriver(key, raw) {
@@ -169,8 +181,9 @@ export default function FinancialsPage() {
           </select>
           <button
             onClick={handleExport}
-            disabled={!projectId}
-            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            disabled={!projectId || !model}
+            title={!model ? 'Load a project model first' : 'Download as XLSX'}
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download size={14} /> Export XLSX
           </button>
