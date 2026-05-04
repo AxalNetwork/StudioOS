@@ -395,6 +395,7 @@ function QuickLinks({ role }) {
     { to: '/network-effects', label: 'Network Effects', icon: TrendingUp, roles: ['admin', 'partner', 'founder'] },
     { to: '/network', label: 'Referral Network', icon: Users, roles: ['admin', 'partner', 'founder'] },
     { to: '/studio-ops', label: 'Studio Ops', icon: Briefcase, roles: ['admin', 'partner', 'founder'] },
+    { to: '/docs', label: 'Documentation', icon: BookOpen, roles: ['admin', 'partner', 'founder', 'investor', 'mentor'] },
     { to: '/payouts', label: 'Payouts', icon: Wallet, roles: ['admin', 'partner', 'founder'] },
     { to: '/admin', label: 'Admin Panel', icon: Activity, roles: ['admin'] },
   ];
