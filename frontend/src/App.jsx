@@ -5,7 +5,7 @@ import {
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
   ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock, Calendar,
-  Settings as SettingsIcon, PieChart as PieIcon, Heart, Bookmark, Megaphone
+  Settings as SettingsIcon, PieChart as PieIcon, Heart, Bookmark, Megaphone, BookOpen
 } from 'lucide-react';
 import { api } from './lib/api';
 import Dashboard from './pages/Dashboard';
@@ -65,6 +65,7 @@ import FundsPage from './pages/FundsPage';
 import ReservesPage from './pages/ReservesPage';
 import WaterfallPage from './pages/WaterfallPage';
 import SettingsPage from './pages/SettingsPage';
+import DocsPage from './pages/DocsPage';
 import OnboardingPersonaPage from './pages/OnboardingPersonaPage';
 import AcademyLessonPage from './pages/AcademyLessonPage';
 import OnboardingFounderPage from './pages/OnboardingFounderPage';
@@ -157,6 +158,7 @@ const NAV_BY_ROLE = {
     { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
 
     { divider: true },
+    { to: '/docs', icon: BookOpen, label: 'Documentation' },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
   ],
 
@@ -216,6 +218,7 @@ const NAV_BY_ROLE = {
     { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
     { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
     { to: '/founder', icon: Rocket, label: 'Founder Portal', highlight: true },
+    { to: '/docs', icon: BookOpen, label: 'Documentation' },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
   ],
 
@@ -262,6 +265,7 @@ const NAV_BY_ROLE = {
     { to: '/calendar', icon: Calendar, label: 'Calendar' },
     { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
     { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal', highlight: true },
+    { to: '/docs', icon: BookOpen, label: 'Documentation' },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
   ],
 
@@ -304,6 +308,7 @@ const NAV_BY_ROLE = {
     { to: '/calendar', icon: Calendar, label: 'Calendar' },
     { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
     { to: '/partner-portal', icon: UserCircle, label: 'Investor Portal', highlight: true },
+    { to: '/docs', icon: BookOpen, label: 'Documentation' },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
   ],
 
@@ -317,6 +322,7 @@ const NAV_BY_ROLE = {
     { to: '/activity', icon: Activity, label: 'Activity Log' },
     { divider: true },
     { to: '/calendar', icon: Calendar, label: 'Calendar' },
+    { to: '/docs', icon: BookOpen, label: 'Documentation' },
     { to: '/settings', icon: SettingsIcon, label: 'Settings' },
   ],
 };
@@ -891,6 +897,7 @@ export default function App() {
       <Route path="/relationships" element={guard(['admin', 'founder', 'partner', 'investor'], <RelationshipsPage />)} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
       <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], <PartnerPortal />)} />
+      <Route path="/docs" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <DocsPage />)} />
       <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor'], <SettingsPage />)} />
 
       {/* Task #53 — Public partner directory + profiles (no auth). The
