@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import {
   Sparkles, Loader2, Plus, Trash2, Copy, Share2, Download,
   History, RotateCcw, ChevronLeft, ChevronRight, Image as ImageIcon,
+  FolderPlus,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
@@ -49,7 +50,16 @@ export default function PitchDeckPage() {
           const full = await api.deckGet(current.id);
           setDeck(full); setActiveIdx(0);
         } else { setDeck(null); }
-      } catch (e) { setError(e?.message || 'Failed to load decks'); }
+      } catch (e) {
+        // 404 here just means "no deck exists yet for this project" — that's the
+        // expected state until the user clicks Generate, so don't show a scary
+        // banner. Same for stale project ids: clear state and let the user pick
+        // another project from the dropdown.
+        const msg = (e?.message || '').toLowerCase();
+        const is404 = e?.status === 404 || msg.includes('not found');
+        setVersions([]); setDeck(null);
+        if (!is404) setError(e?.message || 'Failed to load decks');
+      }
     })();
   }, [projectId]);
 
@@ -144,6 +154,7 @@ export default function PitchDeckPage() {
 
   const slide = deck?.slides?.[activeIdx];
   const bulletsText = useMemo(() => (slide?.bullets || []).join('\n'), [slide]);
+  const hasProjects = projects.length > 0;
 
   return (
     <div className="max-w-6xl mx-auto py-8 px-4">
@@ -159,9 +170,11 @@ export default function PitchDeckPage() {
         <div className="flex items-center gap-2">
           <select
             value={projectId || ''} onChange={(e) => setProjectId(parseInt(e.target.value) || null)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            disabled={!hasProjects}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-400"
           >
-            <option value="">Pick a project…</option>
+            {!hasProjects && <option value="">No projects available</option>}
+            {hasProjects && <option value="">Pick a project…</option>}
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <button
@@ -174,7 +187,23 @@ export default function PitchDeckPage() {
         </div>
       </div>
 
-      {!deck && !busy && (
+      {!hasProjects && (
+        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center">
+          <FolderPlus size={32} className="mx-auto text-gray-400 mb-3" />
+          <h2 className="text-base font-semibold text-gray-900">No projects yet</h2>
+          <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+            The pitch deck builder pulls from a project's scoring data. Create or join a project first, then come back to generate a 10-slide deck.
+          </p>
+          <Link
+            to="/projects"
+            className="inline-flex items-center gap-2 mt-4 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-4 py-2 text-sm font-medium"
+          >
+            <Plus size={14} /> Go to Projects
+          </Link>
+        </div>
+      )}
+
+      {hasProjects && !deck && !busy && (
         <div className="border border-dashed border-gray-300 rounded-xl p-10 text-center text-gray-500">
           Pick a project and hit <strong>Generate deck</strong> to draft 10 slides from your project + scoring data.
         </div>
