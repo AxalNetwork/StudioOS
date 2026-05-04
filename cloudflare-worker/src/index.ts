@@ -37,6 +37,7 @@ import marketIntel from './routes/market-intel';
 import advisory from './routes/advisory';
 import activity from './routes/activity';
 import admin from './routes/admin';
+import adminContracts from './routes/admin-contracts';
 import privateData from './routes/private-data';
 import monitoring from './routes/monitoring';
 import infra from './routes/infra';
@@ -146,6 +147,9 @@ app.route('/api/users', users);
 app.route('/api/market-intel', marketIntel);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
+// Mount the more-specific /admin/contracts prefix FIRST so it takes
+// precedence over the generic /admin router (which has no contract routes).
+app.route('/api/admin/contracts', adminContracts);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);
