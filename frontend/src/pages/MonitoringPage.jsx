@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import InfrastructureTab from './InfrastructureTab';
-import { Activity, AlertTriangle, RefreshCw, Sparkles, ShieldAlert, Zap, Server, Clock, TrendingUp, ChevronDown } from 'lucide-react';
+import { Activity, AlertTriangle, RefreshCw, Sparkles, ShieldAlert, Zap, Server, Clock, TrendingUp, ChevronDown, X, User as UserIcon, Hash, Copy, Check } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from 'recharts';
 import { api } from '../lib/api';
 
@@ -74,11 +74,181 @@ function ChartPanel({ title, data, dataKey = 'count', color = '#7c3aed', type = 
   );
 }
 
+// ---------------------------------------------------------------------------
+// Recent Errors detail modal — shows full request meta, user, stack, and
+// related occurrences (same endpoint+status) so admins can triage at a glance
+// without leaving the page. Operates on data already loaded by /errors so it
+// works against either the FastAPI dev backend or the Cloudflare worker.
+// ---------------------------------------------------------------------------
+function ErrorDetailModal({ error, allErrors, onClose }) {
+  const [copied, setCopied] = useState(false);
+  if (!error) return null;
+
+  const ts = error.created_at ? new Date(error.created_at + (error.created_at.endsWith('Z') ? '' : 'Z')) : null;
+  const related = (allErrors || []).filter(
+    e => e.endpoint === error.endpoint && e.status_code === error.status_code && e.id !== error.id,
+  );
+  const sameUser = error.user_id
+    ? (allErrors || []).filter(e => e.user_id === error.user_id && e.id !== error.id)
+    : [];
+
+  const copyAll = async () => {
+    const blob = [
+      `${error.method} ${error.endpoint} → ${error.status_code}`,
+      `When: ${ts ? ts.toISOString() : '—'}`,
+      `User: ${error.email || (error.user_id ? `user#${error.user_id}` : 'anonymous')}`,
+      `Message: ${error.message || '—'}`,
+      '',
+      'Stack:',
+      error.stack_snippet || '(none captured)',
+    ].join('\n');
+    try {
+      await navigator.clipboard.writeText(blob);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-red-50">
+          <div className="flex items-center gap-2 min-w-0">
+            <Zap size={16} className="text-red-600 shrink-0" />
+            <div className="min-w-0">
+              <div className="font-mono text-sm text-red-900 truncate">
+                {error.method} {error.endpoint} → {error.status_code}
+              </div>
+              <div className="text-xs text-gray-600">
+                {ts ? ts.toLocaleString() : '—'}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={copyAll}
+              className="text-xs px-2.5 py-1.5 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1.5"
+              title="Copy details to clipboard"
+            >
+              {copied ? <Check size={12} /> : <Copy size={12} />}
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-md hover:bg-white/60 text-gray-500"
+              aria-label="Close"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto px-5 py-4 space-y-4">
+          {/* Meta grid */}
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="border border-gray-200 rounded-lg px-3 py-2">
+              <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Status</div>
+              <div className="font-mono text-red-700 font-semibold">{error.status_code}</div>
+            </div>
+            <div className="border border-gray-200 rounded-lg px-3 py-2">
+              <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Method</div>
+              <div className="font-mono text-gray-900 font-semibold">{error.method}</div>
+            </div>
+            <div className="border border-gray-200 rounded-lg px-3 py-2 col-span-2">
+              <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Endpoint</div>
+              <div className="font-mono text-gray-900 break-all">{error.endpoint}</div>
+            </div>
+            <div className="border border-gray-200 rounded-lg px-3 py-2 flex items-start gap-2">
+              <UserIcon size={13} className="text-gray-400 mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">User</div>
+                <div className="text-gray-900 truncate">
+                  {error.email || (error.user_id ? `user#${error.user_id}` : 'Anonymous')}
+                </div>
+                {error.name && <div className="text-gray-500 text-[11px] truncate">{error.name}</div>}
+              </div>
+            </div>
+            <div className="border border-gray-200 rounded-lg px-3 py-2 flex items-start gap-2">
+              <Hash size={13} className="text-gray-400 mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Error ID</div>
+                <div className="font-mono text-gray-900">#{error.id}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Message */}
+          <div>
+            <div className="text-xs font-semibold text-gray-700 mb-1.5">Message</div>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-800 font-mono whitespace-pre-wrap break-words">
+              {error.message || '(no message captured)'}
+            </div>
+          </div>
+
+          {/* Stack */}
+          <div>
+            <div className="text-xs font-semibold text-gray-700 mb-1.5">Stack trace</div>
+            {error.stack_snippet ? (
+              <pre className="bg-gray-900 text-gray-100 rounded-lg px-3 py-2.5 text-[11px] leading-relaxed font-mono overflow-x-auto whitespace-pre-wrap">
+                {error.stack_snippet}
+              </pre>
+            ) : (
+              <div className="text-xs text-gray-400 italic">No stack trace captured for this error.</div>
+            )}
+          </div>
+
+          {/* Related occurrences */}
+          {related.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-gray-700 mb-1.5">
+                Other occurrences of this error <span className="text-gray-400 font-normal">({related.length})</span>
+              </div>
+              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
+                {related.slice(0, 10).map(r => (
+                  <div key={r.id} className="px-3 py-1.5 text-[11px] flex items-center justify-between">
+                    <span className="text-gray-700 truncate">{r.email || (r.user_id ? `user#${r.user_id}` : 'anon')}</span>
+                    <span className="text-gray-500 font-mono shrink-0 ml-2">
+                      {new Date(r.created_at + (r.created_at.endsWith('Z') ? '' : 'Z')).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Other errors from same user */}
+          {sameUser.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-gray-700 mb-1.5">
+                Other recent errors from this user <span className="text-gray-400 font-normal">({sameUser.length})</span>
+              </div>
+              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
+                {sameUser.slice(0, 10).map(r => (
+                  <div key={r.id} className="px-3 py-1.5 text-[11px] flex items-center justify-between gap-2">
+                    <span className="text-red-700 font-mono truncate">{r.method} {r.endpoint} → {r.status_code}</span>
+                    <span className="text-gray-500 font-mono shrink-0">
+                      {new Date(r.created_at + (r.created_at.endsWith('Z') ? '' : 'Z')).toLocaleTimeString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MonitoringPage() {
   const [metrics, setMetrics] = useState(null);
   const [rateLimits, setRateLimits] = useState(null);
   const [anomalies, setAnomalies] = useState(null);
   const [errors, setErrors] = useState(null);
+  const [selectedError, setSelectedError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState('');
@@ -334,22 +504,30 @@ export default function MonitoringPage() {
         ) : (
           <div className="space-y-2">
             {errors.errors.slice(0, 10).map(e => (
-              <div key={e.id} className="border border-red-100 bg-red-50/50 rounded-lg px-3 py-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-red-800">{e.method} {e.endpoint} → {e.status_code}</span>
-                  <span className="text-gray-500">{new Date(e.created_at + 'Z').toLocaleString()}</span>
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => setSelectedError(e)}
+                className="w-full text-left border border-red-100 bg-red-50/50 hover:bg-red-50 hover:border-red-200 rounded-lg px-3 py-2 text-xs transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-300"
+                title="Click for details"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-red-800 truncate">{e.method} {e.endpoint} → {e.status_code}</span>
+                  <span className="text-gray-500 shrink-0">{new Date(e.created_at + 'Z').toLocaleString()}</span>
                 </div>
-                <div className="text-gray-700 mt-1">{e.message}</div>
-                {e.stack_snippet && (
-                  <pre className="mt-1 text-[10px] text-gray-500 whitespace-pre-wrap font-mono">{e.stack_snippet}</pre>
-                )}
-              </div>
+                <div className="text-gray-700 mt-1 truncate">{e.message}</div>
+              </button>
             ))}
           </div>
         )}
       </div>
       </>
       )}
+      <ErrorDetailModal
+        error={selectedError}
+        allErrors={errors?.errors || []}
+        onClose={() => setSelectedError(null)}
+      />
     </div>
   );
 }
