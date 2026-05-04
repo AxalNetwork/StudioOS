@@ -190,7 +190,7 @@ export default function MarketIntelPage() {
       {tab === 'macro' && macro && (
         <div>
           <TabExplainer text="Public-market lens on the venture environment. P/E ratios, IPO windows, and YoY growth set the ceiling on what your portfolio can exit at — and tell you when LPs are open to risk." />
-          <div className="grid md:grid-cols-2 gap-4 mb-6">
+          <div className="grid md:grid-cols-2 gap-4 mb-8">
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1.5">
                 Exit Environment
