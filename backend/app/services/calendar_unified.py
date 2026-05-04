@@ -44,6 +44,8 @@ from backend.app.models.entities import (
     Mentor,
     MentorBooking,
     OfficeHourSlot,
+    Partner,
+    PartnerBooking,
     User,
 )
 
@@ -313,11 +315,56 @@ def _checkin_events(session: Session, user: User,
     return out
 
 
+def _partner_office_hour_events(session: Session, user: User,
+                                from_dt: datetime, to_dt: datetime) -> list[dict]:
+    """Task #54 — Partner office-hour bookings the user is involved in.
+
+    Visible when (a) the user is the booking requester or (b) owns the
+    partner profile attached to the booking. Admin sees everything."""
+    is_admin = (getattr(user.role, "value", user.role) or "").lower() == "admin"
+    bookings = session.exec(
+        select(PartnerBooking).where(
+            PartnerBooking.scheduled_start >= from_dt,
+            PartnerBooking.scheduled_start <= to_dt,
+            PartnerBooking.status.in_(("requested", "confirmed", "completed")),
+        )
+    ).all()
+    out: list[dict] = []
+    for b in bookings:
+        is_requester = b.requester_user_id == user.id
+        is_partner_side = bool(user.partner_id and b.partner_id == user.partner_id)
+        if not (is_admin or is_requester or is_partner_side):
+            continue
+        partner = session.get(Partner, b.partner_id)
+        requester = session.get(User, b.requester_user_id)
+        out.append(_to_dict(
+            kind="partner_office_hour",
+            source_id=b.id, source_uid=b.uid,
+            title=f"Partner office hours — {b.topic}",
+            start_at=b.scheduled_start, end_at=b.scheduled_end,
+            status=b.status,
+            location_kind="video",
+            location_uri=b.meeting_uri,
+            organizer_email=(partner.email if partner else None),
+            attendees=[
+                {"email": partner.email if partner else None,
+                 "name": partner.name if partner else None, "role": "partner"},
+                {"email": requester.email if requester else None,
+                 "name": requester.name if requester else None, "role": "requester"},
+            ],
+            notes=b.questions,
+            project_id=b.project_id,
+        ))
+    return out
+
+
 def fetch_user_events(session: Session, user: User, *,
                       from_dt: datetime, to_dt: datetime,
                       kinds: Optional[Iterable[str]] = None) -> list[dict]:
     """Unified feed across all bookable surfaces, sorted by start_at."""
-    wanted = set(kinds) if kinds else {"mentor_booking", "ic_meeting", "founder_checkin"}
+    wanted = set(kinds) if kinds else {
+        "mentor_booking", "ic_meeting", "founder_checkin", "partner_office_hour",
+    }
     out: list[dict] = []
     if "mentor_booking" in wanted:
         out.extend(_mentor_events(session, user, from_dt, to_dt))
@@ -325,6 +372,8 @@ def fetch_user_events(session: Session, user: User, *,
         out.extend(_ic_events(session, user, from_dt, to_dt))
     if "founder_checkin" in wanted:
         out.extend(_checkin_events(session, user, from_dt, to_dt))
+    if "partner_office_hour" in wanted:
+        out.extend(_partner_office_hour_events(session, user, from_dt, to_dt))
     out.sort(key=lambda e: e["start_at"])
     return out
 

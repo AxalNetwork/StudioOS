@@ -1651,3 +1651,136 @@ def ensure_user_handle_column() -> None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("ensure_user_handle_column backfill: %s", exc)
             session.rollback()
+
+
+def ensure_task54_tables() -> None:
+    """Task #54 — Partner office hours + co-marketing pitch + attribution.
+
+    Idempotent. Creates four tables:
+      * partner_office_hour_slots
+      * partner_bookings
+      * comarketing_pitches
+      * comarketing_attributions
+    All DDL wraps IF NOT EXISTS so it can run on every boot.
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS partner_office_hour_slots (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    partner_id INTEGER NOT NULL REFERENCES partners(id),
+                    title VARCHAR,
+                    start_at TIMESTAMP NOT NULL,
+                    duration_min INTEGER DEFAULT 30 NOT NULL,
+                    capacity INTEGER DEFAULT 1 NOT NULL,
+                    location_kind VARCHAR DEFAULT 'video' NOT NULL,
+                    location_uri VARCHAR,
+                    notes TEXT,
+                    status VARCHAR DEFAULT 'open' NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_pohs_partner ON partner_office_hour_slots(partner_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_pohs_start ON partner_office_hour_slots(start_at)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_pohs_status ON partner_office_hour_slots(status)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_task54_tables: partner_office_hour_slots: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS partner_bookings (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    slot_id INTEGER NOT NULL REFERENCES partner_office_hour_slots(id),
+                    partner_id INTEGER NOT NULL REFERENCES partners(id),
+                    requester_user_id INTEGER NOT NULL REFERENCES users(id),
+                    project_id INTEGER REFERENCES projects(id),
+                    topic VARCHAR NOT NULL,
+                    questions TEXT,
+                    scheduled_start TIMESTAMP NOT NULL,
+                    scheduled_end TIMESTAMP NOT NULL,
+                    status VARCHAR DEFAULT 'requested' NOT NULL,
+                    cancelled_by_user_id INTEGER REFERENCES users(id),
+                    cancel_reason VARCHAR,
+                    confirmed_at TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    cancelled_at TIMESTAMP,
+                    meeting_uri VARCHAR,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_pbk_slot ON partner_bookings(slot_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_pbk_partner ON partner_bookings(partner_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_pbk_requester ON partner_bookings(requester_user_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_pbk_status ON partner_bookings(status)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_task54_tables: partner_bookings: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS comarketing_pitches (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    partner_id INTEGER NOT NULL REFERENCES partners(id),
+                    submitter_user_id INTEGER NOT NULL REFERENCES users(id),
+                    title VARCHAR NOT NULL,
+                    summary TEXT NOT NULL,
+                    asset_type VARCHAR DEFAULT 'webinar' NOT NULL,
+                    proposed_date TIMESTAMP,
+                    target_audience VARCHAR,
+                    distribution_channels VARCHAR,
+                    co_branding_notes TEXT,
+                    asset_url VARCHAR,
+                    status VARCHAR DEFAULT 'proposed' NOT NULL,
+                    review_notes TEXT,
+                    reviewed_by_user_id INTEGER REFERENCES users(id),
+                    reviewed_at TIMESTAMP,
+                    published_at TIMESTAMP,
+                    published_url VARCHAR,
+                    attribution_code VARCHAR UNIQUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cmp_partner ON comarketing_pitches(partner_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cmp_status ON comarketing_pitches(status)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cmp_asset ON comarketing_pitches(asset_type)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cmp_attr ON comarketing_pitches(attribution_code)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_task54_tables: comarketing_pitches: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS comarketing_attributions (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    pitch_id INTEGER NOT NULL REFERENCES comarketing_pitches(id),
+                    partner_id INTEGER NOT NULL REFERENCES partners(id),
+                    event_kind VARCHAR DEFAULT 'visit' NOT NULL,
+                    user_id INTEGER REFERENCES users(id),
+                    project_id INTEGER REFERENCES projects(id),
+                    lead_email VARCHAR,
+                    referrer VARCHAR,
+                    landing_path VARCHAR,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cma_pitch ON comarketing_attributions(pitch_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cma_partner ON comarketing_attributions(partner_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cma_kind ON comarketing_attributions(event_kind)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cma_user ON comarketing_attributions(user_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_cma_created ON comarketing_attributions(created_at)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_task54_tables: comarketing_attributions: %s", exc)
+            session.rollback()

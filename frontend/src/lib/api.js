@@ -791,6 +791,53 @@ export const api = {
   createCheckin: (data) => request('/calendar/founder-checkins', { method: 'POST', body: JSON.stringify(data) }),
   cancelCheckin: (id) => request(`/calendar/founder-checkins/${id}`, { method: 'DELETE' }),
 
+  // ---------- Partner office hours (Task #54) ----------
+  createPartnerSlot: (data) =>
+    request('/partner-office-hours/me/slots', { method: 'POST', body: JSON.stringify(data) }),
+  listMyPartnerSlots: (upcomingOnly = true) =>
+    request(`/partner-office-hours/me/slots?upcoming_only=${upcomingOnly ? 'true' : 'false'}`),
+  listPartnerSlots: (partnerUid, upcomingOnly = true) =>
+    request(`/partner-office-hours/partners/${partnerUid}/slots?upcoming_only=${upcomingOnly ? 'true' : 'false'}`),
+  cancelPartnerSlot: (slotId) =>
+    request(`/partner-office-hours/me/slots/${slotId}`, { method: 'DELETE' }),
+  bookPartnerSlot: (slotId, data) =>
+    request(`/partner-office-hours/slots/${slotId}/book`, { method: 'POST', body: JSON.stringify(data) }),
+  listMyPartnerBookings: (status) =>
+    request(`/partner-office-hours/me/bookings${status ? `?status=${status}` : ''}`),
+  listMyPartnerRequests: (status) =>
+    request(`/partner-office-hours/bookings/me${status ? `?status=${status}` : ''}`),
+  confirmPartnerBooking: (id) =>
+    request(`/partner-office-hours/bookings/${id}/confirm`, { method: 'POST' }),
+  cancelPartnerBooking: (id, reason) =>
+    request(`/partner-office-hours/bookings/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  completePartnerBooking: (id) =>
+    request(`/partner-office-hours/bookings/${id}/complete`, { method: 'POST' }),
+  noShowPartnerBooking: (id, reason) =>
+    request(`/partner-office-hours/bookings/${id}/no-show`, { method: 'POST', body: JSON.stringify({ reason }) }),
+
+  // ---------- Co-marketing (Task #54) ----------
+  submitCoMarketingPitch: (data) =>
+    request('/comarketing/me/pitches', { method: 'POST', body: JSON.stringify(data) }),
+  listMyCoMarketingPitches: (status) =>
+    request(`/comarketing/me/pitches${status ? `?status=${status}` : ''}`),
+  editCoMarketingPitch: (uid, data) =>
+    request(`/comarketing/me/pitches/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  withdrawCoMarketingPitch: (uid) =>
+    request(`/comarketing/me/pitches/${uid}/withdraw`, { method: 'POST' }),
+  adminCoMarketingQueue: (status) =>
+    request(`/comarketing/admin/queue${status ? `?status=${status}` : ''}`),
+  approveCoMarketingPitch: (uid, notes) =>
+    request(`/comarketing/admin/pitches/${uid}/approve`, { method: 'POST', body: JSON.stringify({ notes }) }),
+  rejectCoMarketingPitch: (uid, notes) =>
+    request(`/comarketing/admin/pitches/${uid}/reject`, { method: 'POST', body: JSON.stringify({ notes }) }),
+  publishCoMarketingPitch: (uid, data) =>
+    request(`/comarketing/admin/pitches/${uid}/publish`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  listPublishedCoMarketing: () => request('/comarketing/published'),
+  trackCoMarketing: (data) =>
+    request('/comarketing/track', { method: 'POST', body: JSON.stringify(data) }),
+  listMyCoMarketingAttributions: (pitchUid) =>
+    request(`/comarketing/me/attributions${pitchUid ? `?pitch_uid=${pitchUid}` : ''}`),
+
   // Google Calendar sync
   googleCalStatus: () => request('/calendar/google/status'),
   googleCalConnect: () => request('/calendar/google/connect', { method: 'POST' }),

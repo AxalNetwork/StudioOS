@@ -1642,3 +1642,120 @@ class DecisionJournalEntry(SQLModel, table=True):
     outcome_recorded_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ===========================================================================
+# Task #54 — Partner office hours + co-marketing
+# ===========================================================================
+class PartnerOfficeHourSlot(SQLModel, table=True):
+    """A bookable office-hour slot published by a Partner.
+
+    Mirrors the Mentor `OfficeHourSlot` shape but is partner-owned. Surfaces
+    on the unified calendar feed as `partner_office_hour` for both the
+    publishing partner (their bookings + the slot itself) and any user
+    holding a confirmed booking.
+    """
+    __tablename__ = "partner_office_hour_slots"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    partner_id: int = Field(foreign_key="partners.id", index=True)
+    title: Optional[str] = None                # short label, e.g. "GTM 1:1"
+    start_at: datetime = Field(index=True)
+    duration_min: int = 30
+    capacity: int = 1                          # > 1 ⇒ group office hours
+    location_kind: str = "video"               # video | phone | in_person
+    location_uri: Optional[str] = None
+    notes: Optional[str] = None
+    status: str = Field(default="open", index=True)  # open | cancelled
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PartnerBooking(SQLModel, table=True):
+    """A booking against a `PartnerOfficeHourSlot`. Mirrors `MentorBooking`
+    semantics: requested → confirmed → completed (or cancelled / no_show)."""
+    __tablename__ = "partner_bookings"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    slot_id: int = Field(foreign_key="partner_office_hour_slots.id", index=True)
+    partner_id: int = Field(foreign_key="partners.id", index=True)
+    requester_user_id: int = Field(foreign_key="users.id", index=True)
+    project_id: Optional[int] = Field(default=None, foreign_key="projects.id", index=True)
+    topic: str
+    questions: Optional[str] = None
+    scheduled_start: datetime
+    scheduled_end: datetime
+    status: str = Field(default="requested", index=True)  # requested|confirmed|completed|cancelled|no_show
+    cancelled_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    cancel_reason: Optional[str] = None
+    confirmed_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
+    meeting_uri: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CoMarketingPitch(SQLModel, table=True):
+    """A co-marketing proposal submitted by a Partner for admin approval.
+
+    Lifecycle:
+        proposed → approved → published   (success path)
+                ↘ rejected                (admin declines)
+                ↘ withdrawn               (partner self-cancel)
+
+    Once approved the platform may run the campaign (webinar, blog post,
+    podcast, etc). Inbound demand is then attributed back to the pitch via
+    `attribution_code` — any `?utm_comark=<code>` querystring at signup or
+    on a tracked landing page links the new lead to this row through the
+    `CoMarketingAttribution` table.
+    """
+    __tablename__ = "comarketing_pitches"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    partner_id: int = Field(foreign_key="partners.id", index=True)
+    submitter_user_id: int = Field(foreign_key="users.id", index=True)
+    title: str
+    summary: str
+    asset_type: str = Field(default="webinar", index=True)  # webinar | blog | podcast | event | newsletter | other
+    proposed_date: Optional[datetime] = None
+    target_audience: Optional[str] = None
+    distribution_channels: Optional[str] = None    # free-text: "LinkedIn, X, partner newsletter"
+    co_branding_notes: Optional[str] = None
+    asset_url: Optional[str] = None                # uploaded slide deck / outline / draft
+    status: str = Field(default="proposed", index=True)
+    review_notes: Optional[str] = None             # admin feedback (visible to partner)
+    reviewed_by_user_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    reviewed_at: Optional[datetime] = None
+    published_at: Optional[datetime] = None
+    published_url: Optional[str] = None            # public URL once live
+    # Attribution code — short, URL-safe, unique. Generated lazily on first
+    # approval; reused on subsequent re-publishes to keep historical UTM
+    # parameters stable.
+    attribution_code: Optional[str] = Field(default=None, unique=True, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CoMarketingAttribution(SQLModel, table=True):
+    """One row per inbound demand event tagged to a co-marketing pitch.
+
+    Created when a visitor lands with `?utm_comark=<attribution_code>` and
+    either signs up (linked via `user_id`) or submits a tracked CTA (linked
+    via `lead_email`). Used to compute partner co-marketing ROI in the
+    admin dashboard. Lightweight: no PII beyond the originating email +
+    referrer header.
+    """
+    __tablename__ = "comarketing_attributions"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    pitch_id: int = Field(foreign_key="comarketing_pitches.id", index=True)
+    partner_id: int = Field(foreign_key="partners.id", index=True)
+    event_kind: str = Field(default="visit", index=True)  # visit | signup | lead | conversion
+    user_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
+    project_id: Optional[int] = Field(default=None, foreign_key="projects.id", index=True)
+    lead_email: Optional[str] = None
+    referrer: Optional[str] = None
+    landing_path: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)

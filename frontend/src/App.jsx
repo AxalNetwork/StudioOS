@@ -5,7 +5,7 @@ import {
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
   ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock, Calendar,
-  Settings as SettingsIcon, PieChart as PieIcon, Heart, Bookmark
+  Settings as SettingsIcon, PieChart as PieIcon, Heart, Bookmark, Megaphone
 } from 'lucide-react';
 import { api } from './lib/api';
 import Dashboard from './pages/Dashboard';
@@ -39,6 +39,8 @@ import KYCPage from './pages/KYCPage';
 import TrustCenterPage from './pages/TrustCenterPage';
 import MentorsPage from './pages/MentorsPage';
 import OfficeHoursPage from './pages/OfficeHoursPage';
+import PartnerOfficeHoursPage from './pages/PartnerOfficeHoursPage';
+import CoMarketingPage from './pages/CoMarketingPage';
 import CalendarPage from './pages/CalendarPage';
 import CofounderPage from './pages/CofounderPage';
 import PortfolioHealthPage from './pages/PortfolioHealthPage';
@@ -143,6 +145,8 @@ const NAV_BY_ROLE = {
     { to: '/services', icon: Package, label: 'Service Catalogue' },
     { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
     { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
+    { to: '/partner/office-hours', icon: Calendar, label: 'Partner Office Hours' },
+    { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing Review' },
 
     { section: 'Portals' },
     { to: '/founder', icon: Rocket, label: 'Founder Portal' },
@@ -227,6 +231,8 @@ const NAV_BY_ROLE = {
     { to: '/services', icon: Package, label: 'My Service Catalogue' },
     { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
     { to: '/partners', icon: Users, label: 'Partners' },
+    { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
+    { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
     { to: '/refer', icon: Share2, label: 'Refer & Earn' },
     { to: '/relationships', icon: Handshake, label: 'Relationships' },
     { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
@@ -851,6 +857,8 @@ export default function App() {
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
       <Route path="/mentors" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <MentorsPage />)} />
       <Route path="/office-hours" element={guard(['admin', 'mentor'], <OfficeHoursPage />)} />
+      <Route path="/partner/office-hours" element={guard(['admin', 'partner'], <PartnerOfficeHoursPage />)} />
+      <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], <CoMarketingPage user={user} />)} />
       <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <CalendarPage />)} />
       <Route path="/cofounder" element={guard(['admin', 'founder'], <CofounderPage />)} />
       <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], <PortfolioHealthPage />)} />

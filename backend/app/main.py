@@ -81,6 +81,7 @@ async def lifespan(app: FastAPI):
             ensure_trust_layer_columns,
             ensure_mentor_tables,
             ensure_calendar_tables,
+            ensure_task54_tables,
             ensure_cofounder_tables,
             ensure_portfolio_health_tables,
             ensure_watchlist_decision_tables,
@@ -133,6 +134,9 @@ async def lifespan(app: FastAPI):
         # Task #56 — unified calendar layer.
         ensure_calendar_tables()
         logger.info("StudioOS migrations: calendar tables ensured")
+        # Task #54 — partner office hours + co-marketing pitches + attribution.
+        ensure_task54_tables()
+        logger.info("StudioOS migrations: task #54 tables ensured")
         # Task #38 — co-founder matching tables.
         ensure_cofounder_tables()
         logger.info("StudioOS migrations: cofounder tables ensured")
@@ -430,6 +434,11 @@ from backend.app.api.routes import services as services_routes  # noqa: E402
 app.include_router(services_routes.router, prefix="/api")
 from backend.app.api.routes import insights as insights_routes  # noqa: E402
 app.include_router(insights_routes.router, prefix="/api")
+# Task #54 — partner office hours + co-marketing pitch/approval/attribution.
+from backend.app.api.routes import partner_office_hours as _partner_office_hours  # noqa: E402
+app.include_router(_partner_office_hours.router, prefix="/api")
+from backend.app.api.routes import comarketing as _comarketing  # noqa: E402
+app.include_router(_comarketing.router, prefix="/api")
 
 
 # ---------------------------------------------------------------------------
