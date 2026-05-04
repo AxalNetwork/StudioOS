@@ -1784,3 +1784,65 @@ def ensure_task54_tables() -> None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("ensure_task54_tables: comarketing_attributions: %s", exc)
             session.rollback()
+
+
+def ensure_task46_tables() -> None:
+    """Task #46 — Reserve allocation + waterfall simulator.
+
+    Idempotent. Creates two tables:
+      * fund_reserve_allocations — per-(fund, project) follow-on $ plan
+      * fund_scenarios — saved reserves/waterfall scenarios (cached results)
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS fund_reserve_allocations (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    fund_id INTEGER NOT NULL REFERENCES vc_funds(id),
+                    project_id INTEGER NOT NULL REFERENCES projects(id),
+                    reserve_amount DOUBLE PRECISION DEFAULT 0 NOT NULL,
+                    initial_check DOUBLE PRECISION DEFAULT 0 NOT NULL,
+                    next_round_label VARCHAR,
+                    target_ownership_pct DOUBLE PRECISION,
+                    confidence VARCHAR DEFAULT 'medium' NOT NULL,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_fra_fund ON fund_reserve_allocations(fund_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_fra_project ON fund_reserve_allocations(project_id)"))
+            # One reserve plan per (fund, project) — bulk PUT relies on this for upsert semantics.
+            session.exec(text("""
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_fra_fund_project
+                ON fund_reserve_allocations(fund_id, project_id)
+            """))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_task46_tables: fund_reserve_allocations: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS fund_scenarios (
+                    id SERIAL PRIMARY KEY,
+                    uid VARCHAR NOT NULL UNIQUE,
+                    fund_id INTEGER NOT NULL REFERENCES vc_funds(id),
+                    kind VARCHAR NOT NULL,
+                    name VARCHAR NOT NULL,
+                    description TEXT,
+                    inputs_json TEXT DEFAULT '{}' NOT NULL,
+                    result_json TEXT DEFAULT '{}' NOT NULL,
+                    created_by_user_id INTEGER NOT NULL REFERENCES users(id),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_fsc_fund ON fund_scenarios(fund_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_fsc_kind ON fund_scenarios(kind)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_fsc_created ON fund_scenarios(created_at)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_task46_tables: fund_scenarios: %s", exc)
+            session.rollback()

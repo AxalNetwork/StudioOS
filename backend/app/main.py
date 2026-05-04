@@ -82,6 +82,7 @@ async def lifespan(app: FastAPI):
             ensure_mentor_tables,
             ensure_calendar_tables,
             ensure_task54_tables,
+            ensure_task46_tables,
             ensure_cofounder_tables,
             ensure_portfolio_health_tables,
             ensure_watchlist_decision_tables,
@@ -137,6 +138,9 @@ async def lifespan(app: FastAPI):
         # Task #54 — partner office hours + co-marketing pitches + attribution.
         ensure_task54_tables()
         logger.info("StudioOS migrations: task #54 tables ensured")
+        # Task #46 — reserve allocation + waterfall simulator tables.
+        ensure_task46_tables()
+        logger.info("StudioOS migrations: task #46 tables ensured")
         # Task #38 — co-founder matching tables.
         ensure_cofounder_tables()
         logger.info("StudioOS migrations: cofounder tables ensured")
@@ -439,6 +443,9 @@ from backend.app.api.routes import partner_office_hours as _partner_office_hours
 app.include_router(_partner_office_hours.router, prefix="/api")
 from backend.app.api.routes import comarketing as _comarketing  # noqa: E402
 app.include_router(_comarketing.router, prefix="/api")
+
+from backend.app.api.routes import fund_simulator as _fund_sim  # noqa: E402
+app.include_router(_fund_sim.router, prefix="/api")
 
 
 # ---------------------------------------------------------------------------

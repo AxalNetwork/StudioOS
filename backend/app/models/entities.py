@@ -1759,3 +1759,50 @@ class CoMarketingAttribution(SQLModel, table=True):
     landing_path: Optional[str] = None
     notes: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+# ---------------------------------------------------------------------------
+# Task #46 — Reserve allocation + waterfall simulator.
+# Two thin tables: per-(fund, project) reserve allocations + saved scenarios
+# (reserves OR waterfall, both share the same persistence shape).
+# ---------------------------------------------------------------------------
+class FundReserveAllocation(SQLModel, table=True):
+    """Planned follow-on dollars per portfolio company per fund.
+
+    One row per (fund, project). Capital is in *dollars* (not cents) to match
+    the rest of `vc_funds` / `limited_partners` / `capital_calls`.
+    """
+    __tablename__ = "fund_reserve_allocations"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    fund_id: int = Field(foreign_key="vc_funds.id", index=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    reserve_amount: float = 0.0  # dollars planned for follow-on
+    initial_check: float = 0.0  # dollars already invested (snapshotted; can be edited)
+    next_round_label: Optional[str] = None  # e.g., "Series A", "Series B"
+    target_ownership_pct: Optional[float] = None  # 0-100
+    confidence: str = Field(default="medium")  # low | medium | high
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class FundScenario(SQLModel, table=True):
+    """Saved simulator run — works for both reserves and waterfall.
+
+    `kind` discriminates; `inputs_json` is the canonical input snapshot,
+    `result_json` caches the engine output so re-opening a scenario doesn't
+    require re-simulating (and shows the numbers the user originally saw).
+    """
+    __tablename__ = "fund_scenarios"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    fund_id: int = Field(foreign_key="vc_funds.id", index=True)
+    kind: str = Field(index=True)  # reserves | waterfall
+    name: str
+    description: Optional[str] = None
+    inputs_json: str = "{}"
+    result_json: str = "{}"
+    created_by_user_id: int = Field(foreign_key="users.id", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

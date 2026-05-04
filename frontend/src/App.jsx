@@ -62,6 +62,8 @@ import RiskDisclosuresPage from './pages/RiskDisclosuresPage';
 import MonitoringPage from './pages/MonitoringPage';
 import LiquidityPage from './pages/LiquidityPage';
 import FundsPage from './pages/FundsPage';
+import ReservesPage from './pages/ReservesPage';
+import WaterfallPage from './pages/WaterfallPage';
 import SettingsPage from './pages/SettingsPage';
 import OnboardingPersonaPage from './pages/OnboardingPersonaPage';
 import AcademyLessonPage from './pages/AcademyLessonPage';
@@ -125,6 +127,8 @@ const NAV_BY_ROLE = {
     { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     { to: '/payouts', icon: Wallet, label: 'Payouts' },
     { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+    { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
+    { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
     { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
 
     { section: 'Legal & Compliance' },
@@ -283,6 +287,8 @@ const NAV_BY_ROLE = {
     { to: '/funds', icon: TrendingUp, label: 'Funds' },
     { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+    { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
+    { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
     { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
 
     { section: 'Legal & Compliance' },
@@ -871,6 +877,8 @@ export default function App() {
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], <LiquidityPage currentUser={user} />)} />
       <Route path="/funds" element={guard(['admin', 'investor'], <FundsPage currentUser={user} />)} />
+      <Route path="/portfolio/reserves" element={guard(['admin', 'investor'], <ReservesPage />)} />
+      <Route path="/portfolio/waterfall" element={guard(['admin', 'investor'], <WaterfallPage />)} />
       <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferEarnPage />)} />
       <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />

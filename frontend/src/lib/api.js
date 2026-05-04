@@ -948,4 +948,35 @@ export const api = {
     request('/notifications/push/unsubscribe', { method: 'POST', body: JSON.stringify(data) }),
   pushSubscriptions: () => request('/notifications/push/subscriptions'),
   pushTest: () => request('/notifications/push/test', { method: 'POST' }),
+
+  // Task #46 — Reserve allocation + waterfall simulator.
+  fundSimReservesList: (fundId) => request(`/fund-sim/funds/${fundId}/reserves`),
+  fundSimReservesReplace: (fundId, items) =>
+    request(`/fund-sim/funds/${fundId}/reserves`, {
+      method: 'PUT',
+      body: JSON.stringify({ items }),
+    }),
+  fundSimReservesSimulate: (fundId, body) =>
+    request(`/fund-sim/funds/${fundId}/reserves/simulate`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  fundSimWaterfall: (fundId, body) =>
+    request(`/fund-sim/funds/${fundId}/waterfall/simulate`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  fundSimScenariosList: (fundId, kind) =>
+    request(`/fund-sim/funds/${fundId}/scenarios${kind ? `?kind=${kind}` : ''}`),
+  fundSimScenarioCreate: (fundId, body) =>
+    request(`/fund-sim/funds/${fundId}/scenarios`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  fundSimScenarioGet: (uid) => request(`/fund-sim/scenarios/${uid}`),
+  fundSimScenarioDelete: (uid) =>
+    request(`/fund-sim/scenarios/${uid}`, { method: 'DELETE' }),
+  // Reuse the existing /api/capital/funds endpoint for the fund picker —
+  // it returns the canonical VCFund list with id/uid/name/total_commitment.
+  capitalFundsList: () => request('/capital/funds'),
 };
