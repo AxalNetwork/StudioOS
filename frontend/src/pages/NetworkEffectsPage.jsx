@@ -399,7 +399,6 @@ function MarketplaceSearch() {
               <option value="">Any role</option>
               <option value="partner">Partner</option>
               <option value="founder">Founder</option>
-              <option value="admin">Admin</option>
             </select>
             <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
           </div>
