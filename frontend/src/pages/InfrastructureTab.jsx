@@ -36,11 +36,40 @@ export default function InfrastructureTab() {
   const [err, setErr] = useState('');
 
   const load = async () => {
-    setErr('');
-    try {
-      const [q, m, d] = await Promise.all([api.infraQueue(), api.infraMetrics(60), api.infraDLQ()]);
-      setQueue(q); setMetrics(m); setDLQ(d);
-    } catch (e) { setErr(e.message || 'Failed to load infra'); }
+    // Use allSettled so a single misbehaving endpoint doesn't blank out the
+    // whole tab. The three calls are independent: if /infra/queue 500s, we
+    // still want the metrics chart and DLQ panel to render.
+    const [qr, mr, dr] = await Promise.allSettled([
+      api.infraQueue(), api.infraMetrics(60), api.infraDLQ(),
+    ]);
+    if (qr.status === 'fulfilled') setQueue(qr.value);
+    if (mr.status === 'fulfilled') setMetrics(mr.value);
+    if (dr.status === 'fulfilled') setDLQ(dr.value);
+
+    const failed = [qr, mr, dr].filter(r => r.status === 'rejected');
+    if (failed.length === 0) {
+      setErr('');
+      return;
+    }
+    // If everything failed, surface a single friendly line; otherwise note
+    // which slice is degraded so the user knows the rest of the tab is real.
+    const allFailed = failed.length === 3;
+    const has404 = failed.some(r => {
+      const reason = r.reason || {};
+      const msg = (reason.message || '').toLowerCase();
+      return reason.status === 404 || msg === 'not found';
+    });
+    if (allFailed && has404) {
+      // Endpoints aren't deployed on this backend — empty-state cards
+      // already convey "nothing to show", so stay quiet.
+      setErr('');
+    } else if (allFailed) {
+      setErr("Couldn't load infrastructure stats. The job-queue service may be temporarily unavailable — try Refresh in a moment.");
+    } else {
+      const labels = ['queue', 'throughput metrics', 'dead-letter queue'];
+      const which = failed.map(r => labels[[qr, mr, dr].indexOf(r)]).join(', ');
+      setErr(`Partial data: couldn't load ${which}. Other panels are up to date.`);
+    }
   };
 
   useEffect(() => {
