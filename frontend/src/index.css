@@ -49,6 +49,42 @@ input:-webkit-autofill:active {
   box-shadow: 0 0 0px 1000px #ffffff inset;
 }
 
+/* Modernize every native <select> across the app:
+   - Strip OS-rendered chevrons (different on macOS/Win/Linux/iOS).
+   - Inline a single, consistent chevron SVG (gray-500).
+   - Normalize padding/border/font so dropdowns feel like the rest of the
+     form controls (inputs, textareas).
+   - Keep date/color/file inputs untouched: this rule only targets <select>.
+   Components can opt out by passing `appearance-auto` or by overriding
+   background-image on their own className. */
+select:not([multiple]):not([size]) {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.625rem center;
+  background-size: 0.75rem;
+  padding-right: 2rem;
+  cursor: pointer;
+}
+
+select:not([multiple]):not([size]):disabled {
+  cursor: not-allowed;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23d1d5db' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+/* Hide the legacy IE/Edge dropdown arrow if present. */
+select::-ms-expand { display: none; }
+
+/* The native dropdown panel inherits the page's color-scheme; force light
+   so the menu items render with dark text on a white background even when
+   the OS is in dark mode. */
+select option {
+  background-color: #ffffff;
+  color: #111827;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
 }
