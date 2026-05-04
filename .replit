@@ -45,7 +45,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd frontend && node ../node_modules/.bin/vite"
+args = "cd frontend && npm run dev"
 waitForPort = 5000
 
 [[ports]]
