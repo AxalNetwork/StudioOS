@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Plus, Trash2, MessageSquare, CheckCircle2, XCircle, HelpCircle, AlertCircle, Save, X } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Plus, Trash2, MessageSquare, CheckCircle2, XCircle, HelpCircle, AlertCircle, Save, X, FolderPlus } from 'lucide-react';
 import { api } from '../lib/api';
 
 const STATUSES = [
@@ -34,21 +34,29 @@ export default function DiscoveryPage() {
     (async () => {
       try {
         const list = await api.listProjects();
-        setProjects(list || []);
+        const safeList = list || [];
+        setProjects(safeList);
         const fromQuery = parseInt(searchParams.get('project_id'), 10);
-        if (fromQuery && (list || []).find((p) => p.id === fromQuery)) setProjectId(fromQuery);
-        else if ((list || []).length > 0) setProjectId(list[0].id);
+        if (fromQuery && safeList.find((p) => p.id === fromQuery)) {
+          setProjectId(fromQuery);
+        } else if (safeList.length > 0) {
+          if (fromQuery) setSearchParams({}, { replace: true });
+          setProjectId(safeList[0].id);
+        }
       } catch (e) { setError(e.message); }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!projectId) return;
     setSearchParams({ project_id: String(projectId) }, { replace: true });
     refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   async function refresh() {
+    if (!projectId) return;
     setLoading(true);
     setError(null);
     try {
@@ -58,7 +66,16 @@ export default function DiscoveryPage() {
       ]);
       setInterviews(r1.interviews || []);
       setSignals(r2);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg.includes('not found')) {
+        setInterviews([]);
+        setSignals(null);
+        setError(`Project #${projectId} is no longer available. Pick another project from the dropdown.`);
+      } else {
+        setError(e.message || 'Failed to load discovery data.');
+      }
+    }
     finally { setLoading(false); }
   }
 
@@ -96,6 +113,8 @@ export default function DiscoveryPage() {
     return { interviews: interviews.length, hypotheses: h, validated: v, invalidated: inv };
   }, [interviews]);
 
+  const hasProjects = projects.length > 0;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
@@ -104,10 +123,20 @@ export default function DiscoveryPage() {
           <p className="text-sm text-gray-500 mt-1">Mom-Test interview log. Each validated hypothesis lifts the traction signals score.</p>
         </div>
         <div className="flex gap-2">
-          <select value={projectId || ''} onChange={(e) => setProjectId(parseInt(e.target.value, 10))} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+          <select
+            value={projectId || ''}
+            onChange={(e) => setProjectId(parseInt(e.target.value, 10))}
+            disabled={!hasProjects}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
+          >
+            {!hasProjects && <option value="">No projects available</option>}
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <button onClick={() => setEditing(emptyInterview())} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-3 py-2 text-sm font-medium">
+          <button
+            onClick={() => setEditing(emptyInterview())}
+            disabled={!projectId}
+            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50 disabled:hover:bg-violet-600"
+          >
             <Plus size={14} /> Log interview
           </button>
         </div>
@@ -115,15 +144,34 @@ export default function DiscoveryPage() {
 
       {error && <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-4 py-3 text-sm"><AlertCircle size={16} className="mt-0.5" />{error}</div>}
 
+      {!hasProjects && (
+        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center">
+          <FolderPlus size={32} className="mx-auto text-gray-400 mb-3" />
+          <h2 className="text-base font-semibold text-gray-900">No projects yet</h2>
+          <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+            Customer discovery is scoped to a project. Create or join one first, then log Mom-Test interviews to start validating hypotheses.
+          </p>
+          <Link
+            to="/projects"
+            className="inline-flex items-center gap-2 mt-4 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-4 py-2 text-sm font-medium"
+          >
+            <Plus size={14} /> Go to Projects
+          </Link>
+        </div>
+      )}
+
+      {hasProjects && (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Interviews" value={stats.interviews} />
         <Stat label="Hypotheses tested" value={stats.hypotheses} />
         <Stat label="Validated" value={stats.validated} tone="emerald" />
         <Stat label="Signals score" value={signals ? `${signals.factors.signals.points} / ${signals.factors.signals.max}` : '—'} sub="Feeds traction" tone="violet" />
       </div>
+      )}
 
-      {loading && <div className="text-sm text-gray-500">Loading…</div>}
+      {hasProjects && loading && <div className="text-sm text-gray-500">Loading…</div>}
 
+      {hasProjects && (
       <div className="space-y-3">
         {interviews.length === 0 && !loading && (
           <div className="bg-white border border-dashed border-gray-300 rounded-xl p-8 text-center text-gray-500 text-sm">
@@ -170,6 +218,7 @@ export default function DiscoveryPage() {
           </div>
         ))}
       </div>
+      )}
 
       {editing && <InterviewModal value={editing} onChange={setEditing} onSave={handleSave} onClose={() => setEditing(null)} />}
     </div>
