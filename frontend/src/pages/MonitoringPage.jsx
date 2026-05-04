@@ -386,7 +386,17 @@ function ScoreIntegrityTab({ focusSnapshotId = null }) {
       const r = await api.getScoreFlags(statusFilter);
       setItems(r.items || []);
     } catch (e) {
-      setErr(e?.message || 'Failed to load flags');
+      // A 404 here means the backend's /monitoring/score-flags route isn't
+      // available on this deployment (e.g. stale worker). The page's empty-
+      // state card already covers "nothing to review", so don't double up
+      // with a raw "Not found" red banner above it — just leave the queue
+      // empty and stay quiet. Surface every other error normally.
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') {
+        setItems([]);
+      } else {
+        setErr(e?.message || 'Failed to load flags');
+      }
     } finally { setBusy(false); }
   };
 
