@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Plus, Trash2, AlertCircle, Save, X, Target, ArrowRight } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Plus, Trash2, AlertCircle, Save, X, Target, ArrowRight, FolderPlus } from 'lucide-react';
 import { api } from '../lib/api';
 
 const COLUMNS = [
@@ -32,25 +32,44 @@ export default function RoadmapPage() {
     (async () => {
       try {
         const list = await api.listProjects();
-        setProjects(list || []);
+        const safeList = list || [];
+        setProjects(safeList);
         const fromQuery = parseInt(searchParams.get('project_id'), 10);
-        if (fromQuery && (list || []).find((p) => p.id === fromQuery)) setProjectId(fromQuery);
-        else if ((list || []).length > 0) setProjectId(list[0].id);
+        if (fromQuery && safeList.find((p) => p.id === fromQuery)) {
+          setProjectId(fromQuery);
+        } else if (safeList.length > 0) {
+          // Stale ?project_id in URL — silently fall back to the first
+          // available project rather than splashing a 404 banner.
+          if (fromQuery) setSearchParams({}, { replace: true });
+          setProjectId(safeList[0].id);
+        }
       } catch (e) { setError(e.message); }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!projectId) return;
     setSearchParams({ project_id: String(projectId) }, { replace: true });
     refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   async function refresh() {
+    if (!projectId) return;
     try {
+      setError(null);
       const r = await api.listOkrs(projectId);
       setOkrs(r.okrs || []);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg.includes('not found')) {
+        setOkrs([]);
+        setError(`Project #${projectId} is no longer available. Pick another project from the dropdown.`);
+      } else {
+        setError(e.message || 'Failed to load roadmap.');
+      }
+    }
   }
 
   async function handleSave() {
@@ -93,6 +112,8 @@ export default function RoadmapPage() {
     return i < order.length - 1 ? order[i + 1] : null;
   }
 
+  const hasProjects = projects.length > 0;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
@@ -101,10 +122,20 @@ export default function RoadmapPage() {
           <p className="text-sm text-gray-500 mt-1">Now / Next / Later kanban with OKR-style key results.</p>
         </div>
         <div className="flex gap-2">
-          <select value={projectId || ''} onChange={(e) => setProjectId(parseInt(e.target.value, 10))} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+          <select
+            value={projectId || ''}
+            onChange={(e) => setProjectId(parseInt(e.target.value, 10))}
+            disabled={!hasProjects}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
+          >
+            {!hasProjects && <option value="">No projects available</option>}
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <button onClick={() => setEditing(emptyOkr())} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-3 py-2 text-sm font-medium">
+          <button
+            onClick={() => setEditing(emptyOkr())}
+            disabled={!projectId}
+            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50 disabled:hover:bg-violet-600"
+          >
             <Plus size={14} /> Add OKR
           </button>
         </div>
@@ -112,6 +143,23 @@ export default function RoadmapPage() {
 
       {error && <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-4 py-3 text-sm"><AlertCircle size={16} className="mt-0.5" />{error}</div>}
 
+      {!hasProjects && (
+        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center">
+          <FolderPlus size={32} className="mx-auto text-gray-400 mb-3" />
+          <h2 className="text-base font-semibold text-gray-900">No projects yet</h2>
+          <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+            The roadmap is scoped to a project. Create or join one first, then come back here to plan OKRs across Now / Next / Later.
+          </p>
+          <Link
+            to="/projects"
+            className="inline-flex items-center gap-2 mt-4 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-4 py-2 text-sm font-medium"
+          >
+            <Plus size={14} /> Go to Projects
+          </Link>
+        </div>
+      )}
+
+      {hasProjects && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {COLUMNS.map((col) => {
           const items = okrs.filter((o) => o.kanban_status === col.key);
@@ -183,6 +231,7 @@ export default function RoadmapPage() {
           );
         })}
       </div>
+      )}
 
       {editing && <OkrModal value={editing} onChange={setEditing} onSave={handleSave} onClose={() => setEditing(null)} />}
     </div>
