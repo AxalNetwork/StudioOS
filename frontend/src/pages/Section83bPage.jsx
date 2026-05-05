@@ -255,7 +255,15 @@ export default function Section83bPage() {
     // wipe the other.
     const [tr, pr] = await Promise.allSettled([api.legal83bList(), api.listProjects()]);
     if (tr.status === 'fulfilled') setTrackers(tr.value.trackers || []);
-    else setError(tr.reason?.message || 'Failed to load trackers');
+    else {
+      // 404 = trackers route missing on this deployment (stale worker). The
+      // empty-state card already covers "No 83(b) trackers yet" — don't
+      // double up with a raw red banner above it.
+      const reason = tr.reason;
+      const msg = (reason?.message || '').toLowerCase();
+      if (reason?.status === 404 || msg === 'not found') setTrackers([]);
+      else setError(reason?.message || 'Failed to load trackers');
+    }
     if (pr.status === 'fulfilled') {
       const p = pr.value;
       setProjects(Array.isArray(p) ? p : (p?.projects || []));
