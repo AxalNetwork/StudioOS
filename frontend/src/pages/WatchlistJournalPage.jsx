@@ -93,7 +93,11 @@ function WatchlistTab({ canSeeAll }) {
   const load = () => {
     api.watchlistList({ status: filter || undefined, owner })
       .then(setData)
-      .catch((e) => setErr(e.message || 'Failed to load'));
+      .catch((e) => {
+        const msg = (e?.message || '').toLowerCase();
+        if (e?.status === 404 || msg === 'not found') setData({ counts: {}, items: [] });
+        else setErr(e.message || 'Failed to load');
+      });
   };
   useEffect(load, [filter, owner]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -305,7 +309,11 @@ function JournalTab({ canSeeAll }) {
       owner,
     })
       .then(setData)
-      .catch((e) => setErr(e.message || 'Failed to load'));
+      .catch((e) => {
+        const msg = (e?.message || '').toLowerCase();
+        if (e?.status === 404 || msg === 'not found') setData({ counts_by_decision: {}, items: [] });
+        else setErr(e.message || 'Failed to load');
+      });
   };
   useEffect(load, [decision, outcome, owner]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -550,7 +558,14 @@ function AntiPortfolioTab({ canSeeAll }) {
   const [err, setErr] = useState(null);
   const [owner, setOwner] = useState('me');
   const load = () => {
-    api.antiportfolio(owner).then(setData).catch((e) => setErr(e.message || 'Failed'));
+    api.antiportfolio(owner).then(setData).catch((e) => {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') {
+        setData({ total_passes: 0, counts: {}, regret_rate: 0, rows: [], biggest_regret: null });
+      } else {
+        setErr(e.message || 'Failed');
+      }
+    });
   };
   useEffect(load, [owner]); // eslint-disable-line
 
