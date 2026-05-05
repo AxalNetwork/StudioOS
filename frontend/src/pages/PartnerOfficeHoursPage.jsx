@@ -92,10 +92,18 @@ export default function PartnerOfficeHoursPage() {
 
   async function loadAll() {
     setErr(null); setLoading(true);
+    // 404 = office-hours route missing on this deployment (stale worker).
+    // The empty-state cards already cover "no slots / no bookings" — don't
+    // double up with a raw red banner above them.
+    const quiet404 = (e) => {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') return { items: [] };
+      throw e;
+    };
     try {
       const [sd, bd] = await Promise.all([
-        api.listMyPartnerSlots(true),
-        api.listMyPartnerBookings(),
+        api.listMyPartnerSlots(true).catch(quiet404),
+        api.listMyPartnerBookings().catch(quiet404),
       ]);
       setSlots(sd.items || []);
       setBookings(bd.items || []);

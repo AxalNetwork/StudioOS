@@ -89,7 +89,14 @@ function BrowseTab({ user }) {
         rows = rows.filter((n) => `${n.title} ${n.description}`.toLowerCase().includes(q));
       }
       setNeeds(rows);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      // 404 = needs route missing on this deployment (stale worker). The
+      // empty-state card already covers "no open needs right now" — don't
+      // double up with a raw red banner above it.
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') setNeeds([]);
+      else setError(e.message);
+    }
     finally { setLoading(false); }
   }
   useEffect(() => { load(); /* eslint-disable-line */ }, []);
@@ -163,7 +170,11 @@ function MyNeedsTab({ user }) {
 
   async function load() {
     try { const r = await api.listNeeds({ mine_only: true }); setNeeds(r.needs || []); }
-    catch (e) { setError(e.message); }
+    catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') setNeeds([]);
+      else setError(e.message);
+    }
   }
   useEffect(() => { load(); }, []);
 
@@ -494,7 +505,11 @@ function MyQuotesTab() {
   const [error, setError] = useState(null);
   async function load() {
     try { const r = await api.myQuotes(); setQuotes(r.quotes || []); }
-    catch (e) { setError(e.message); }
+    catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') setQuotes([]);
+      else setError(e.message);
+    }
   }
   useEffect(() => { load(); }, []);
   async function withdraw(id) {

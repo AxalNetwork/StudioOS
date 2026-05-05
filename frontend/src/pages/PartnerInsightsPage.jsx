@@ -28,11 +28,19 @@ export default function PartnerInsightsPage() {
 
   async function loadAll() {
     setLoading(true); setError(null);
+    // Each insights endpoint is independent — if the worker is missing one
+    // (404), we still want to render the others. The empty-state cards
+    // already cover "no data" so don't surface a raw red banner for 404s.
+    const quiet404 = (fallback) => (e) => {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') return fallback;
+      throw e;
+    };
     try {
       const [h, t, f, s] = await Promise.all([
-        api.insightsHeatmap(windowDays),
-        api.insightsTrends(6),
-        api.insightsFeed(Math.min(windowDays, 365)),
+        api.insightsHeatmap(windowDays).catch(quiet404({ matrix: [], stages: [], totals_by_category: {}, total_needs: 0 })),
+        api.insightsTrends(6).catch(quiet404({ months: [], series: [] })),
+        api.insightsFeed(Math.min(windowDays, 365)).catch(quiet404({ items: [], sectors: [], geographies: [] })),
         api.insightsNewsletterStatus().catch(() => ({ active: false })),
       ]);
       setHeat(h); setTrend(t); setFeed(f); setSub(s);
