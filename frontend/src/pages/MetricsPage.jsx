@@ -60,7 +60,17 @@ export default function MetricsPage() {
           if (fromQuery) setSearchParams({}, { replace: true });
           setProjectId(safeList[0].id);
         }
-      } catch (e) { setError(e.message); }
+      } catch (e) {
+        // Defensive 404 — backend may return "Not found" when the user has
+        // no project scope yet. Treat as the same "no projects" empty state
+        // rendered below; don't surface a raw red banner.
+        const msg = (e?.message || '').toLowerCase();
+        if (e?.status === 404 || msg.includes('not found')) {
+          setProjects([]);
+        } else {
+          setError(e.message || 'Failed to load projects.');
+        }
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -110,7 +120,14 @@ export default function MetricsPage() {
       await api.createMetricsSnapshot(projectId, payload);
       setAdding(null);
       await refresh();
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg.includes('not found')) {
+        setError(`Can't save: project #${projectId} is no longer available. Pick another project from the dropdown.`);
+      } else {
+        setError(e.message || 'Failed to save snapshot.');
+      }
+    }
   }
 
   async function handleDelete(id) {
@@ -118,7 +135,15 @@ export default function MetricsPage() {
     try {
       await api.deleteMetricsSnapshot(id);
       await refresh();
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg.includes('not found')) {
+        // Already gone — refresh to drop it from the list, no banner needed.
+        await refresh();
+      } else {
+        setError(e.message || 'Failed to delete snapshot.');
+      }
+    }
   }
 
   async function handleStripeImport() {
