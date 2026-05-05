@@ -73,7 +73,9 @@ export default function CalendarPage() {
     try { setGoogle(await api.googleCalStatus()); } catch (e) { setGoogle({ available: false, connected: false, error: e.message }); }
   }
   async function loadMicrosoft() {
-    try { setMicrosoft(await api.microsoftCalStatus()); } catch (e) { setMicrosoft({ available: false, connected: false, error: e.message }); }
+    // Microsoft Calendar integration is "coming soon" — skip the status probe
+    // until server credentials land. Leaves `microsoft` as null; the panel
+    // renders a static teaser and a disabled Connect button.
   }
 
   useEffect(() => {
@@ -237,45 +239,21 @@ export default function CalendarPage() {
         )}
       </section>
 
-      {/* Outlook / Microsoft 365 sync panel */}
+      {/* Outlook / Microsoft 365 sync panel — coming soon */}
       <section className="border border-slate-200 rounded-lg bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-semibold text-slate-900 flex items-center gap-2">
               <LinkIcon className="w-4 h-4 text-sky-600" /> Outlook / Microsoft 365 sync
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">Coming soon</span>
             </h2>
-            {microsoft?.available === false && (
-              <p className="text-sm text-amber-700 mt-1">Server-side Microsoft OAuth credentials are not configured. Ask an admin to set <code>MICROSOFT_CLIENT_ID</code>/<code>MICROSOFT_CLIENT_SECRET</code>.</p>
-            )}
-            {microsoft?.available && !microsoft.connected && (
-              <p className="text-sm text-slate-600 mt-1">Connect your Microsoft 365 / Outlook account to mirror upcoming events to your personal calendar.</p>
-            )}
-            {microsoft?.connected && (
-              <p className="text-sm text-slate-700 mt-1">
-                Connected as <span className="font-medium">{microsoft.microsoft_email || 'your Microsoft account'}</span>
-                {microsoft.last_synced_at && <> · last sync {new Date(microsoft.last_synced_at).toLocaleString()}</>}
-              </p>
-            )}
+            <p className="text-sm text-slate-600 mt-1">Microsoft Calendar integration is on the way. For now, use Google Calendar above to mirror your StudioOS events.</p>
           </div>
           <div className="flex items-center gap-2">
-            {microsoft?.connected ? (
-              <>
-                <button onClick={runMsSync} disabled={msSyncBusy}
-                        className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50">
-                  <RefreshCw className={`w-4 h-4 ${msSyncBusy ? 'animate-spin' : ''}`} />
-                  {msSyncBusy ? 'Syncing…' : 'Sync now'}
-                </button>
-                <button onClick={disconnectMicrosoft}
-                        className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 border border-rose-300 text-rose-700 rounded hover:bg-rose-50">
-                  Disconnect
-                </button>
-              </>
-            ) : (
-              <button onClick={connectMicrosoft} disabled={!microsoft?.available}
-                      className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50">
-                Connect Outlook
-              </button>
-            )}
+            <button disabled
+                    className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 bg-slate-200 text-slate-500 rounded cursor-not-allowed">
+              Connect Outlook
+            </button>
           </div>
         </div>
       </section>
