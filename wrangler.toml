@@ -161,14 +161,82 @@ persist            = true
 head_sampling_rate = 1
 
 # ===========================================================================
-# Environment: production (explicit – inherits everything above)
+# Environment: production
+# ---------------------------------------------------------------------------
+# IMPORTANT — Wrangler v2+ does NOT inherit binding tables (d1_databases,
+# kv_namespaces, ai, queues, durable_objects, vectorize, r2_buckets,
+# migrations, triggers) from the top-level config into a named environment.
+# Every binding must be re-declared under `[env.production.*]` or the
+# `--env production` deploy will produce a worker with NO bindings — which
+# breaks every DB-touching route (login, /me, etc.) and is exactly why
+# 2026-05-05 login outage happened. Keep this block in sync with the
+# top-level binding tables above when adding new bindings.
+#
+# Top-level keys (compatibility_date, compatibility_flags, main, minify,
+# workers_dev, observability) DO inherit and don't need duplicating.
+#
+# Secrets set via `wrangler secret put NAME --env production` are scoped
+# to this environment (LINKEDIN_CLIENT_ID / SECRET / REDIRECT_URI live here).
 # ===========================================================================
 [env.production]
 name = "studioos"
 
 [env.production.vars]
-APP_URL     = "https://axal.vc"
-ENVIRONMENT = "production"
+APP_URL           = "https://axal.vc"
+GITHUB_REPO_OWNER = "AxalNetwork"
+GITHUB_REPO_NAME  = "StudioOS"
+ENVIRONMENT       = "production"
+USE_CF_QUEUE      = "true"
+
+[[env.production.d1_databases]]
+binding       = "DB"
+database_name = "studioos-db"
+database_id   = "16a23acd-c82e-4ff1-a6c0-408e3eb014c8"
+
+[[env.production.kv_namespaces]]
+binding = "TOKENS"
+id      = "8dc26ed83d154d0ebbfcbc51f592d67c"
+
+[[env.production.kv_namespaces]]
+binding = "RATE_LIMITS"
+id      = "be811f14b6f342be961b8daa4513fb5b"
+
+[env.production.ai]
+binding = "AI"
+
+[[env.production.queues.producers]]
+binding = "JOB_QUEUE"
+queue   = "studioos-job-queue"
+
+[[env.production.queues.consumers]]
+queue              = "studioos-job-queue"
+max_batch_size     = 25
+max_batch_timeout  = 10
+max_retries        = 5
+dead_letter_queue  = "studioos-job-queue-dlq"
+
+[[env.production.durable_objects.bindings]]
+name       = "PIPELINE_ROOM"
+class_name = "PipelineRoom"
+
+[[env.production.durable_objects.bindings]]
+name       = "ONBOARDING_CHAT"
+class_name = "OnboardingChat"
+
+[[env.production.migrations]]
+tag                = "v1-realtime"
+new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
+
+[[env.production.vectorize]]
+binding    = "VECTORIZE"
+index_name = "axal-search"
+
+[[env.production.r2_buckets]]
+binding     = "FILES"
+bucket_name = "studioos-files"
+
+[env.production.triggers]
+crons = ["* * * * *"]
 
 # ===========================================================================
 # Environment: preview / staging
