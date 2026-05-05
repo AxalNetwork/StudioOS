@@ -1,0 +1,100 @@
+Task: Add a "Import from LinkedIn" flow to the Refer & Earn page that
+complements the existing CSV import, then funnels imported contacts
+into the same `api.emailSendReferralInvites()` path that's already in
+production.
+
+IMPORTANT — read first, then implement:
+LinkedIn's public API does NOT expose a user's 1st-degree connections
+(that endpoint was deprecated in 2015). The only way to programmatically
+get a user's connections is via LinkedIn's self-service "Export your
+data" flow, which produces a Connections.csv with name + email columns.
+So this feature has TWO components:
+
+  (A) "Sign in with LinkedIn" — OAuth 2.0 login via the standard
+      r_liteprofile + r_emailaddress scopes. This authenticates the
+      user with their LinkedIn identity, prefills their name/email,
+      and gives us a verified LinkedIn profile to attach to their
+      referral activity. It does NOT pull connections.
+
+  (B) "Import LinkedIn Connections" — guided flow that:
+      1. Opens a modal that walks the user through:
+         linkedin.com/mypreferences/d/download-my-data → "Connections"
+         → request export → wait ~10 minutes → download the zip.
+      2. Lets the user upload the resulting Connections.csv (which
+         has columns: First Name, Last Name, Email Address, Company,
+         Position, Connected On).
+      3. Parses the CSV (the existing CSV parser at the bottom of
+         ReferEarnPage.jsx works — just map "Email Address" → email
+         and "First Name" + "Last Name" → name).
+      4. Hands the parsed list to the existing `imported` state and
+         the existing send-invites pipeline. No backend changes
+         needed for this part.
+
+Files to modify:
+  - frontend/src/pages/ReferEarnPage.jsx
+      Add an "Import from LinkedIn" button next to the existing
+      "Upload CSV" button (around line 347). It opens a small modal
+      with two tabs: "Sign in with LinkedIn" and "Upload Connections
+      Export". The first tab triggers the OAuth flow via the worker
+      route below. The second tab is the guided CSV walkthrough.
+
+  - cloudflare-worker/src/routes/auth.ts (or new linkedin.ts)
+      Add three endpoints:
+        GET  /api/linkedin/oauth/start
+             → returns { authorize_url } with state stored in KV
+        GET  /api/linkedin/oauth/callback?code=&state=
+             → exchanges code for access_token, fetches /v2/userinfo,
+             stores { linkedin_sub, email, name } on the user record
+             via the existing FastAPI /api/users/me endpoint, then
+             redirects back to /refer with ?linkedin=connected
+        POST /api/linkedin/disconnect
+             → clears LinkedIn fields on user
+
+  - cloudflare-worker/src/index.ts
+      Wire the new linkedin.ts router under /api/linkedin/*.
+
+  - backend/app/api/routes/users.py
+      Add fields linkedin_sub, linkedin_email, linkedin_name to the
+      User update schema and persistence so the worker callback can
+      attach them. Use the existing pii.py masking on retrieval.
+
+  - frontend/src/lib/api.js
+      Add: linkedinOAuthStart(), linkedinDisconnect(). The callback
+      is a redirect, no client method needed.
+
+Secrets required (Cloudflare Worker):
+  LINKEDIN_CLIENT_ID
+  LINKEDIN_CLIENT_SECRET
+  LINKEDIN_REDIRECT_URI  (e.g. https://studioos.guillaumelauzier.workers.dev/api/linkedin/oauth/callback)
+
+LinkedIn app config the user must set up at
+linkedin.com/developers/apps:
+  - Product: "Sign In with LinkedIn using OpenID Connect"
+  - OAuth 2.0 scopes: openid, profile, email
+  - Authorized redirect URL: matches LINKEDIN_REDIRECT_URI above
+
+DO NOT proceed without those secrets. If LINKEDIN_CLIENT_ID,
+LINKEDIN_CLIENT_SECRET, or LINKEDIN_REDIRECT_URI are missing from the
+Cloudflare Worker environment, STOP and ask me to provision them via
+`wrangler secret put` with the exact names listed above. Do NOT use
+placeholder values, do NOT commit secrets to wrangler.toml, and do
+NOT silently skip the OAuth path and ship only the CSV walkthrough —
+ask first.
+
+Constraints:
+- Reuse the existing CSV parser at the bottom of ReferEarnPage.jsx.
+- Reuse api.emailSendReferralInvites() — do not create a parallel
+  send path.
+- The 100-contact-per-send cap (referenced at line 167) must still
+  apply.
+- The OAuth state token must be HMAC-signed and stored in KV with a
+  10-minute TTL, matching the pattern used elsewhere in the worker.
+- Do not store the LinkedIn access token long-term; we only need
+  identity at sign-in time. Discard the token after the userinfo
+  fetch.
+- Add a one-line privacy note in the modal: "We only read your name
+  and email from LinkedIn. Your connections CSV is parsed in your
+  browser and never uploaded."
+- Verify by signing in as a founder, completing the OAuth round-trip
+  on the deployed Worker URL, then importing a real Connections.csv
+  and sending an invite to one row.
