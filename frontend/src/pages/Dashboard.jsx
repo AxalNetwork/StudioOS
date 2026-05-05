@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   BarChart3, Zap, Users, DollarSign, Target, TrendingUp, Sparkles, Bell,
   RefreshCw, Loader2, Layers, Briefcase, Store, ArrowRight, ChevronRight, Wallet, Activity,
-  Search, FileText, User as UserIcon
+  Search, FileText, User as UserIcon, BookOpen
 } from 'lucide-react';
 import { api } from '../lib/api';
 import SemanticSearch from '../components/SemanticSearch';
