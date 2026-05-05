@@ -147,20 +147,31 @@ async function consumeState(env: Env, raw: string | null | undefined): Promise<{
 linkedin.post('/oauth/start', async (c) => {
   if (!configured(c.env)) {
     return c.json({
-      error: 'LinkedIn OAuth is not configured on this deployment. Set LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, and LINKEDIN_REDIRECT_URI via wrangler secret put.',
+      detail: 'LinkedIn sign-in is not configured on this deployment yet. Please use the CSV import tab instead, or contact support.',
     }, 503);
   }
+  // requireAuth's "Unauthorized" must propagate so the global onError maps it
+  // to 401. Everything *after* it (DB / KV / crypto) is wrapped so a missing
+  // binding or transient infra hiccup returns a friendly 503 to the modal
+  // instead of a generic 500 ("Internal server error") that leaks into the UI.
   const user = await requireAuth(c);
-  await ensureColumns(c.env);
-  const state = await makeState(c.env, user.id);
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: c.env.LINKEDIN_CLIENT_ID!,
-    redirect_uri: c.env.LINKEDIN_REDIRECT_URI!,
-    scope: 'openid profile email',
-    state,
-  });
-  return c.json({ authorize_url: `${LINKEDIN_AUTHORIZE_URL}?${params.toString()}` });
+  try {
+    await ensureColumns(c.env);
+    const state = await makeState(c.env, user.id);
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: c.env.LINKEDIN_CLIENT_ID!,
+      redirect_uri: c.env.LINKEDIN_REDIRECT_URI!,
+      scope: 'openid profile email',
+      state,
+    });
+    return c.json({ authorize_url: `${LINKEDIN_AUTHORIZE_URL}?${params.toString()}` });
+  } catch (e: any) {
+    console.error('[LINKEDIN] oauth/start failed:', e?.message || e);
+    return c.json({
+      detail: "LinkedIn sign-in isn't available right now — please try again in a few minutes, or use the CSV import tab.",
+    }, 503);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -175,25 +186,37 @@ function redirectBack(env: Env, status: 'connected' | 'error', message?: string)
   return Response.redirect(`${base}/refer?${params.toString()}`, 302);
 }
 
+// Coarse error codes the frontend's /refer flash mapper understands. Keep in
+// sync with the FLASHES map in ReferEarnPage.jsx — never emit raw backend text
+// here, since the value rides in a URL query param and would otherwise leak
+// into the modal banner verbatim.
+type LinkedInCallbackCode =
+  | 'oauth_denied'
+  | 'not_configured'
+  | 'state_invalid'
+  | 'token_unavailable'
+  | 'identity_unavailable'
+  | 'save_failed';
+
 linkedin.get('/oauth/callback', async (c) => {
   if (!configured(c.env)) {
-    return redirectBack(c.env, 'error', 'LinkedIn OAuth not configured');
+    return redirectBack(c.env, 'error', 'not_configured' satisfies LinkedInCallbackCode);
   }
   const code = c.req.query('code');
   const state = c.req.query('state');
   const oauthError = c.req.query('error');
   if (oauthError) {
     console.warn('[LINKEDIN] callback OAuth error:', oauthError, c.req.query('error_description'));
-    return redirectBack(c.env, 'error', oauthError);
+    return redirectBack(c.env, 'error', 'oauth_denied' satisfies LinkedInCallbackCode);
   }
   if (!code || !state) {
-    return redirectBack(c.env, 'error', 'missing code or state');
+    return redirectBack(c.env, 'error', 'state_invalid' satisfies LinkedInCallbackCode);
   }
 
   const stateCheck = await consumeState(c.env, state);
   if (!stateCheck.ok) {
     console.warn('[LINKEDIN] callback state rejected:', stateCheck.reason);
-    return redirectBack(c.env, 'error', stateCheck.reason);
+    return redirectBack(c.env, 'error', 'state_invalid' satisfies LinkedInCallbackCode);
   }
   const userId = stateCheck.userId;
 
@@ -214,14 +237,14 @@ linkedin.get('/oauth/callback', async (c) => {
     if (!tokenRes.ok) {
       const txt = await tokenRes.text().catch(() => '');
       console.error('[LINKEDIN] token exchange failed:', tokenRes.status, txt.slice(0, 300));
-      return redirectBack(c.env, 'error', `token exchange ${tokenRes.status}`);
+      return redirectBack(c.env, 'error', 'token_unavailable' satisfies LinkedInCallbackCode);
     }
     const tokenJson: any = await tokenRes.json();
     accessToken = String(tokenJson?.access_token || '');
-    if (!accessToken) return redirectBack(c.env, 'error', 'no access_token in response');
+    if (!accessToken) return redirectBack(c.env, 'error', 'token_unavailable' satisfies LinkedInCallbackCode);
   } catch (e: any) {
     console.error('[LINKEDIN] token exchange threw:', e?.message || e);
-    return redirectBack(c.env, 'error', 'token exchange failed');
+    return redirectBack(c.env, 'error', 'token_unavailable' satisfies LinkedInCallbackCode);
   }
 
   // Fetch verified identity. /v2/userinfo (OIDC) returns { sub, email, name, ... }
@@ -233,16 +256,16 @@ linkedin.get('/oauth/callback', async (c) => {
     if (!uiRes.ok) {
       const txt = await uiRes.text().catch(() => '');
       console.error('[LINKEDIN] userinfo failed:', uiRes.status, txt.slice(0, 300));
-      return redirectBack(c.env, 'error', `userinfo ${uiRes.status}`);
+      return redirectBack(c.env, 'error', 'identity_unavailable' satisfies LinkedInCallbackCode);
     }
     const ui: any = await uiRes.json();
     sub = String(ui?.sub || '');
     email = String(ui?.email || '');
     name = String(ui?.name || [ui?.given_name, ui?.family_name].filter(Boolean).join(' ') || '');
-    if (!sub) return redirectBack(c.env, 'error', 'no sub in userinfo');
+    if (!sub) return redirectBack(c.env, 'error', 'identity_unavailable' satisfies LinkedInCallbackCode);
   } catch (e: any) {
     console.error('[LINKEDIN] userinfo threw:', e?.message || e);
-    return redirectBack(c.env, 'error', 'userinfo failed');
+    return redirectBack(c.env, 'error', 'identity_unavailable' satisfies LinkedInCallbackCode);
   } finally {
     // Discard the token — we never persist it.
     accessToken = '';
@@ -267,7 +290,7 @@ linkedin.get('/oauth/callback', async (c) => {
     await sql.end();
   } catch (e: any) {
     console.error('[LINKEDIN] persist failed:', e?.message || e);
-    return redirectBack(c.env, 'error', 'could not save LinkedIn identity');
+    return redirectBack(c.env, 'error', 'save_failed' satisfies LinkedInCallbackCode);
   }
 
   return redirectBack(c.env, 'connected');
@@ -278,15 +301,22 @@ linkedin.get('/oauth/callback', async (c) => {
 // ---------------------------------------------------------------------------
 linkedin.post('/disconnect', async (c) => {
   const user = await requireAuth(c);
-  await ensureColumns(c.env);
-  const sql = getSQL(c.env);
-  await sql`UPDATE users
-            SET linkedin_sub = NULL, linkedin_email = NULL, linkedin_name = NULL, linkedin_connected_at = NULL
-            WHERE id = ${user.id}`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id)
-            VALUES ('linkedin_disconnected', ${`User #${user.id} disconnected LinkedIn`}, ${user.email}, ${user.id})`;
-  await sql.end();
-  return c.json({ ok: true });
+  try {
+    await ensureColumns(c.env);
+    const sql = getSQL(c.env);
+    await sql`UPDATE users
+              SET linkedin_sub = NULL, linkedin_email = NULL, linkedin_name = NULL, linkedin_connected_at = NULL
+              WHERE id = ${user.id}`;
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+              VALUES ('linkedin_disconnected', ${`User #${user.id} disconnected LinkedIn`}, ${user.email}, ${user.id})`;
+    await sql.end();
+    return c.json({ ok: true });
+  } catch (e: any) {
+    console.error('[LINKEDIN] disconnect failed:', e?.message || e);
+    return c.json({
+      detail: "Couldn't disconnect LinkedIn right now — please try again in a few minutes.",
+    }, 503);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -297,19 +327,33 @@ linkedin.post('/disconnect', async (c) => {
 // ---------------------------------------------------------------------------
 linkedin.get('/status', async (c) => {
   const user = await requireAuth(c);
-  await ensureColumns(c.env);
-  const sql = getSQL(c.env);
-  const rows = await sql`SELECT linkedin_sub, linkedin_email, linkedin_name, linkedin_connected_at
-                         FROM users WHERE id = ${user.id}`;
-  await sql.end();
-  const r = rows[0] || {};
-  return c.json({
-    configured: configured(c.env),
-    connected: !!r.linkedin_sub,
-    linkedin_email: r.linkedin_email || null,
-    linkedin_name: r.linkedin_name || null,
-    connected_at: r.linkedin_connected_at || null,
-  });
+  // If the DB/columns aren't reachable, degrade to a "not connected" payload
+  // (with `configured` honestly reported) rather than 500-ing — the UI uses
+  // this on every page load and a 500 here would noisily flash banners.
+  try {
+    await ensureColumns(c.env);
+    const sql = getSQL(c.env);
+    const rows = await sql`SELECT linkedin_sub, linkedin_email, linkedin_name, linkedin_connected_at
+                           FROM users WHERE id = ${user.id}`;
+    await sql.end();
+    const r = rows[0] || {};
+    return c.json({
+      configured: configured(c.env),
+      connected: !!r.linkedin_sub,
+      linkedin_email: r.linkedin_email || null,
+      linkedin_name: r.linkedin_name || null,
+      connected_at: r.linkedin_connected_at || null,
+    });
+  } catch (e: any) {
+    console.error('[LINKEDIN] status failed:', e?.message || e);
+    return c.json({
+      configured: configured(c.env),
+      connected: false,
+      linkedin_email: null,
+      linkedin_name: null,
+      connected_at: null,
+    });
+  }
 });
 
 export default linkedin;

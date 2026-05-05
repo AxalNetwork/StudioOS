@@ -141,7 +141,20 @@ export default function ReferEarnPage() {
     } else if (flag === 'error') {
       setLinkedinModalOpen(true);
       setLinkedinTab('signin');
-      setLinkedinFlash(`LinkedIn sign-in failed: ${u.searchParams.get('linkedin_error') || 'unknown error'}`);
+      // Map worker-emitted coarse codes to fixed friendly strings. Never
+      // interpolate the raw query value — it could carry arbitrary backend
+      // text ("Internal server error", "token exchange 502", etc) and
+      // breaks the no-raw-leak idiom even though React escapes the markup.
+      const code = String(u.searchParams.get('linkedin_error') || '').toLowerCase();
+      const FLASHES = {
+        oauth_denied: 'LinkedIn sign-in was cancelled. You can try again, or use the CSV import tab.',
+        not_configured: "LinkedIn sign-in isn't available on this deployment right now. You can still use the CSV import tab.",
+        state_invalid: 'Your LinkedIn sign-in session expired before completing. Please try again.',
+        token_unavailable: "Couldn't verify with LinkedIn right now. Please try again in a few minutes, or use the CSV import tab.",
+        identity_unavailable: "Couldn't read your LinkedIn identity. Please try again, or use the CSV import tab.",
+        save_failed: "Signed in with LinkedIn, but couldn't save the connection. Please try again in a moment.",
+      };
+      setLinkedinFlash(FLASHES[code] || 'LinkedIn sign-in did not complete. Please try again, or use the CSV import tab.');
     }
     u.searchParams.delete('linkedin');
     u.searchParams.delete('linkedin_error');
@@ -259,7 +272,17 @@ export default function ReferEarnPage() {
       // and LinkedIn's auth page is full-screen anyway.
       window.location.href = authorize_url;
     } catch (e) {
-      setLinkedinFlash(e?.message || 'Could not start LinkedIn sign-in');
+      // Defensive classification — never paste raw e.message ("Internal server
+      // error", "Not found", etc) into the modal banner.
+      const status = e?.status;
+      const msg = (e?.message || '').toLowerCase();
+      if (status === 401 || status === 403 || msg.includes('unauthorized')) {
+        setLinkedinFlash('Your session expired. Please sign in again, then retry.');
+      } else if (status === 503 || status === 404 || msg.includes('not configured') || msg.includes('not available')) {
+        setLinkedinFlash("LinkedIn sign-in isn't available on this deployment right now. You can still use the CSV import tab below.");
+      } else {
+        setLinkedinFlash("Couldn't start LinkedIn sign-in right now. Please retry in a moment, or use the CSV import tab below.");
+      }
       setLinkedinBusy(false);
     }
   };
@@ -271,7 +294,17 @@ export default function ReferEarnPage() {
       setLinkedinStatus(s => ({ ...s, connected: false, linkedin_email: null, linkedin_name: null }));
       setLinkedinFlash('LinkedIn disconnected.');
     } catch (e) {
-      setLinkedinFlash(e?.message || 'Could not disconnect LinkedIn');
+      const status = e?.status;
+      const msg = (e?.message || '').toLowerCase();
+      if (status === 401 || status === 403 || msg.includes('unauthorized')) {
+        setLinkedinFlash('Your session expired. Please sign in again to disconnect LinkedIn.');
+      } else if (status === 404 || msg.includes('not found')) {
+        // Already disconnected on the server — reflect locally.
+        setLinkedinStatus(s => ({ ...s, connected: false, linkedin_email: null, linkedin_name: null }));
+        setLinkedinFlash('LinkedIn disconnected.');
+      } else {
+        setLinkedinFlash("Couldn't disconnect LinkedIn right now. Please retry in a moment.");
+      }
     } finally {
       setLinkedinBusy(false);
     }
