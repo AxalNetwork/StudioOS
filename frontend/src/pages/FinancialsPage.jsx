@@ -72,7 +72,16 @@ export default function FinancialsPage() {
           setProjectId(safeList[0].id);
         }
       } catch (e) {
-        setError(e.message);
+        if (cancelled) return;
+        // Defensive 404 — backend may return "Not found" when the user has no
+        // projects scope yet. Treat as the same "no projects" empty state
+        // rendered below; don't surface a raw red banner.
+        const msg = (e?.message || '').toLowerCase();
+        if (e?.status === 404 || msg.includes('not found')) {
+          setProjects([]);
+        } else {
+          setError(e.message || 'Failed to load projects.');
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -124,7 +133,14 @@ export default function FinancialsPage() {
       setModel(data);
       setAssumptions(data.assumptions);
     } catch (e) {
-      setError(e.message);
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg.includes('not found')) {
+        setModel(null);
+        setAssumptions(null);
+        setError(`Can't save: project #${projectId} is no longer available. Pick another project from the dropdown.`);
+      } else {
+        setError(e.message || 'Failed to save the financial model.');
+      }
     } finally {
       setSaving(false);
     }
