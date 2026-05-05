@@ -74,7 +74,14 @@ function BrowseTab({ user, isFounder }) {
         list = list.filter((o) => `${o.title} ${o.description} ${o.partner_name || ''}`.toLowerCase().includes(q));
       }
       setRows(list);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      // 404 = catalogue route missing on this deployment (stale worker).
+      // The empty-state card already covers "no offerings published yet" —
+      // don't double up with a raw red banner above it.
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') setRows([]);
+      else setError(e.message);
+    }
     finally { setLoading(false); }
   }
   useEffect(() => { load(); /* eslint-disable-line */ }, []);
@@ -223,7 +230,11 @@ function MineTab({ user }) {
     try {
       const r = await api.listPartnerOfferings(user.partner_id);
       setRows(r.offerings || []);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') setRows([]);
+      else setError(e.message);
+    }
     finally { setLoading(false); }
   }
   useEffect(() => { load(); /* eslint-disable-line */ }, []);
