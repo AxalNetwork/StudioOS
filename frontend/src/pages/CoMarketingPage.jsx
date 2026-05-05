@@ -159,7 +159,11 @@ function PartnerView() {
     try {
       const d = await api.listMyCoMarketingPitches();
       setPitches(d.items || []);
-    } catch (e) { setErr(e.message); } finally { setLoading(false); }
+    } catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') setPitches([]);
+      else setErr(e.message);
+    } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
 
@@ -309,7 +313,11 @@ function AdminView() {
     try {
       const d = await api.adminCoMarketingQueue(filter);
       setItems(d.items || []);
-    } catch (e) { setErr(e.message); } finally { setLoading(false); }
+    } catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') setItems([]);
+      else setErr(e.message);
+    } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, [filter]);
 
@@ -346,7 +354,11 @@ function PublishedFeed() {
   useEffect(() => {
     api.listPublishedCoMarketing()
       .then((d) => setItems(d.items || []))
-      .catch((e) => setErr(e.message));
+      .catch((e) => {
+        const msg = (e?.message || '').toLowerCase();
+        if (e?.status === 404 || msg === 'not found') setItems([]);
+        else setErr(e.message);
+      });
   }, []);
   if (err) return <div className="text-sm text-red-600">{err}</div>;
   if (items.length === 0) return <div className="text-sm text-gray-500">No published pieces yet.</div>;
