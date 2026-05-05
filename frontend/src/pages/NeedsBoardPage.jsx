@@ -571,7 +571,21 @@ function EngagementsTab({ user }) {
 
   async function load() {
     try { const r = await api.listEngagements(); setRows(r.engagements || []); }
-    catch (e) { setError(e.message); }
+    catch (e) {
+      // Defensive 404 — backend may return "Not found" if the engagements
+      // route isn't shipped on this deployment or the user has no scope.
+      // Treat as the existing empty state below ("No engagements yet…")
+      // instead of stacking a raw red banner above it.
+      const status = e?.status;
+      const msg = (e?.message || '').toLowerCase();
+      if (status === 404 || msg.includes('not found')) {
+        setRows([]);
+      } else if (status === 401 || status === 403) {
+        setError('Your session expired. Please sign in again to view engagements.');
+      } else {
+        setError("Couldn't load engagements right now. Please retry in a moment, or contact support if it persists.");
+      }
+    }
   }
   useEffect(() => { load(); }, []);
 
@@ -616,13 +630,37 @@ function EngagementDetailModal({ engagementId, user, isFounder, isPartner, onClo
 
   async function load() {
     setError(null);
-    try { setEng(await api.getEngagement(engagementId)); } catch (e) { setError(e.message); }
+    try { setEng(await api.getEngagement(engagementId)); }
+    catch (e) {
+      const status = e?.status;
+      const msg = (e?.message || '').toLowerCase();
+      if (status === 404 || msg.includes('not found')) {
+        setError('This engagement is no longer available. Close this dialog and refresh the list.');
+      } else if (status === 401 || status === 403) {
+        setError('Your session expired. Please sign in again to view this engagement.');
+      } else {
+        setError("Couldn't load this engagement right now. Please retry in a moment.");
+      }
+    }
   }
   useEffect(() => { load(); /* eslint-disable-line */ }, [engagementId]);
 
   async function action(fn) {
     setBusy(true); setError(null);
-    try { await fn(); await load(); } catch (e) { setError(e.message); }
+    try { await fn(); await load(); }
+    catch (e) {
+      const status = e?.status;
+      const msg = (e?.message || '').toLowerCase();
+      if (status === 404 || msg.includes('not found')) {
+        setError('This engagement is no longer available. Close this dialog and refresh the list.');
+      } else if (status === 401 || status === 403) {
+        setError('Your session expired. Please sign in again to perform this action.');
+      } else if (status === 409 || msg.includes('conflict') || msg.includes('already')) {
+        setError("This action conflicts with the engagement's current state. Refresh to see the latest status.");
+      } else {
+        setError("That action didn't complete. Please retry in a moment, or contact support if it persists.");
+      }
+    }
     finally { setBusy(false); }
   }
 
