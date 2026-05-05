@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Copy, Check, Users, DollarSign, Share2, ExternalLink, Network as NetworkIcon,
   MessageCircle, Mail, Upload, Edit3, X, AlertCircle, Save,
-  Send, Loader2,
+  Send, Loader2, Linkedin as LinkedinIcon, ShieldCheck, Info, FileDown,
 } from 'lucide-react';
 
 import QRCode from 'qrcode';
@@ -14,7 +14,7 @@ const Twitter = ({ size = 18 }) => (
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
   </svg>
 );
-const Linkedin = ({ size = 18 }) => (
+const LinkedinSvg = ({ size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
   </svg>
@@ -75,8 +75,18 @@ export default function ReferEarnPage() {
   const [inviteMessage, setInviteMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState(null); // { sent, failed:[] } | { error }
+  // LinkedIn import wizard. The modal has two tabs: OAuth sign-in (verifies
+  // the user's LinkedIn identity but does NOT pull connections — LinkedIn
+  // killed that API in 2015) and an in-browser parse of the user's own
+  // Connections.csv export. The CSV never leaves the browser.
+  const [linkedinModalOpen, setLinkedinModalOpen] = useState(false);
+  const [linkedinTab, setLinkedinTab] = useState('signin'); // 'signin' | 'csv'
+  const [linkedinStatus, setLinkedinStatus] = useState({ configured: false, connected: false });
+  const [linkedinBusy, setLinkedinBusy] = useState(false);
+  const [linkedinFlash, setLinkedinFlash] = useState(''); // success/error banner inside the modal
   const qrRef = useRef(null);
   const fileRef = useRef(null);
+  const linkedinFileRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -99,6 +109,44 @@ export default function ReferEarnPage() {
       QRCode.toCanvas(qrRef.current, data.register_link, { width: 180, margin: 2 });
     }
   }, [data]);
+
+  // Load LinkedIn status on mount. 404 means the deployment hasn't shipped
+  // /api/linkedin yet — treat as "not configured" rather than an error.
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await api.linkedinStatus();
+        setLinkedinStatus(s || { configured: false, connected: false });
+      } catch (e) {
+        if (e?.status === 404 || (e?.message || '').toLowerCase() === 'not found') {
+          setLinkedinStatus({ configured: false, connected: false });
+        }
+        // Other errors (e.g. 401) are silent — user just doesn't see status.
+      }
+    })();
+  }, []);
+
+  // Handle the OAuth round-trip flash. The worker callback redirects back
+  // to /refer?linkedin=connected (or =error&linkedin_error=...). Show the
+  // result, refresh status, and strip the params so a refresh doesn't replay.
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    const flag = u.searchParams.get('linkedin');
+    if (!flag) return;
+    if (flag === 'connected') {
+      setLinkedinModalOpen(true);
+      setLinkedinTab('csv');
+      setLinkedinFlash('LinkedIn connected. Now export your Connections.csv to import contacts.');
+      api.linkedinStatus().then(s => setLinkedinStatus(s || { configured: false, connected: true })).catch(() => {});
+    } else if (flag === 'error') {
+      setLinkedinModalOpen(true);
+      setLinkedinTab('signin');
+      setLinkedinFlash(`LinkedIn sign-in failed: ${u.searchParams.get('linkedin_error') || 'unknown error'}`);
+    }
+    u.searchParams.delete('linkedin');
+    u.searchParams.delete('linkedin_error');
+    window.history.replaceState({}, '', u.pathname + (u.searchParams.toString() ? `?${u.searchParams}` : '') + u.hash);
+  }, []);
 
   const copy = (text) => {
     navigator.clipboard.writeText(text);
@@ -201,6 +249,74 @@ export default function ReferEarnPage() {
       prev.size === imported.length ? new Set() : new Set(imported.map((_, i) => i))
     );
   };
+  // -------- LinkedIn handlers --------
+  const connectLinkedIn = async () => {
+    setLinkedinBusy(true);
+    setLinkedinFlash('');
+    try {
+      const { authorize_url } = await api.linkedinOAuthStart();
+      // Top-level navigation — popup-blockers eat window.open in some browsers,
+      // and LinkedIn's auth page is full-screen anyway.
+      window.location.href = authorize_url;
+    } catch (e) {
+      setLinkedinFlash(e?.message || 'Could not start LinkedIn sign-in');
+      setLinkedinBusy(false);
+    }
+  };
+  const disconnectLinkedIn = async () => {
+    setLinkedinBusy(true);
+    setLinkedinFlash('');
+    try {
+      await api.linkedinDisconnect();
+      setLinkedinStatus(s => ({ ...s, connected: false, linkedin_email: null, linkedin_name: null }));
+      setLinkedinFlash('LinkedIn disconnected.');
+    } catch (e) {
+      setLinkedinFlash(e?.message || 'Could not disconnect LinkedIn');
+    } finally {
+      setLinkedinBusy(false);
+    }
+  };
+  const handleLinkedInCsvUpload = async (e) => {
+    setLinkedinFlash('');
+    setImportError('');
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2_000_000) {
+      setLinkedinFlash('File too large (max 2 MB). LinkedIn exports above this size are unusual — please trim before re-uploading.');
+      return;
+    }
+    try {
+      const text = await file.text();
+      const rows = parseLinkedInCsv(text);
+      if (rows.length === 0) {
+        setLinkedinFlash('No emailed contacts found. LinkedIn only includes email for connections who chose to share theirs — you may need to invite them manually.');
+        return;
+      }
+      const skipped = rows.length > 100 ? rows.length - 100 : 0;
+      const personalized = rows.slice(0, 100).map(r => {
+        const params = new URLSearchParams({ ref: code });
+        if (r.email) params.set('invitee', r.email);
+        const personalizedLink = `${link.split('?')[0]}?${params.toString()}`;
+        return {
+          name: r.name || '',
+          email: r.email || '',
+          link: personalizedLink,
+          mailto: `mailto:${encodeURIComponent(r.email || '')}?subject=${encodeURIComponent(fillTemplate(templates.email_subject, personalizedLink, code))}&body=${encodeURIComponent(fillTemplate(templates.email_body, personalizedLink, code))}`,
+        };
+      });
+      setImported(personalized);
+      setSelected(new Set(personalized.map((_, i) => i)));
+      setSendResult(null);
+      setLinkedinModalOpen(false);
+      setLinkedinFlash('');
+      setImportError(skipped > 0 ? `Imported the first 100 contacts; ${skipped} more were skipped (per-send limit).` : '');
+    } catch (err) {
+      setLinkedinFlash('Could not parse LinkedIn CSV: ' + (err?.message || 'unknown'));
+    } finally {
+      if (linkedinFileRef.current) linkedinFileRef.current.value = '';
+    }
+  };
+
   const sendInvites = async () => {
     if (sending || selected.size === 0) return;
     setSending(true);
@@ -278,7 +394,7 @@ export default function ReferEarnPage() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
               <ShareButton href={shareLinks.twitter} icon={Twitter} label="X / Twitter" color="bg-black hover:bg-gray-800" />
-              <ShareButton href={shareLinks.linkedin} icon={Linkedin} label="LinkedIn" color="bg-[#0A66C2] hover:bg-[#0856a8]" />
+              <ShareButton href={shareLinks.linkedin} icon={LinkedinSvg} label="LinkedIn" color="bg-[#0A66C2] hover:bg-[#0856a8]" />
               <ShareButton href={shareLinks.telegram} icon={Send} label="Telegram" color="bg-[#229ED9] hover:bg-[#1d8abf]" />
               <ShareButton href={shareLinks.whatsapp} icon={MessageCircle} label="WhatsApp" color="bg-[#25D366] hover:bg-[#20bd5a]" />
               <ShareButton href={shareLinks.email} icon={Mail} label="Email" color="bg-violet-600 hover:bg-violet-700" />
@@ -340,6 +456,13 @@ export default function ReferEarnPage() {
           </div>
           <div className="flex items-center gap-2">
             <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleCsvUpload} />
+            <button
+              onClick={() => { setLinkedinModalOpen(true); setLinkedinTab(linkedinStatus.connected ? 'csv' : 'signin'); setLinkedinFlash(''); }}
+              className="bg-[#0A66C2] hover:bg-[#0856a8] text-white text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+              title="Sign in with LinkedIn and import your Connections export"
+            >
+              <LinkedinIcon size={12} /> Import from LinkedIn
+            </button>
             <button
               onClick={() => fileRef.current?.click()}
               className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5"
@@ -490,6 +613,163 @@ export default function ReferEarnPage() {
           </div>
         )}
       </div>
+
+      {linkedinModalOpen && (
+        <LinkedInImportModal
+          status={linkedinStatus}
+          tab={linkedinTab}
+          setTab={setLinkedinTab}
+          busy={linkedinBusy}
+          flash={linkedinFlash}
+          onClose={() => { setLinkedinModalOpen(false); setLinkedinFlash(''); }}
+          onConnect={connectLinkedIn}
+          onDisconnect={disconnectLinkedIn}
+          fileRef={linkedinFileRef}
+          onCsvUpload={handleLinkedInCsvUpload}
+        />
+      )}
+    </div>
+  );
+}
+
+function LinkedInImportModal({ status, tab, setTab, busy, flash, onClose, onConnect, onDisconnect, fileRef, onCsvUpload }) {
+  const tabBtn = (id, label) => (
+    <button
+      onClick={() => setTab(id)}
+      className={`px-4 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
+        tab === id
+          ? 'border-[#0A66C2] text-[#0A66C2]'
+          : 'border-transparent text-gray-500 hover:text-gray-700'
+      }`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl ring-1 ring-slate-200 w-full max-w-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-labelledby="linkedin-modal-title"
+      >
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-br from-[#eef5fb] to-white">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[#0A66C2] text-white flex items-center justify-center">
+              <LinkedinIcon size={20} />
+            </div>
+            <div>
+              <h2 id="linkedin-modal-title" className="text-base font-semibold text-gray-900">Import from LinkedIn</h2>
+              <p className="text-xs text-gray-600">Verify your identity and import your connections export.</p>
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-700">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="px-6 pt-3 border-b border-gray-200 flex gap-1">
+          {tabBtn('signin', '1. Sign in with LinkedIn')}
+          {tabBtn('csv', '2. Upload Connections.csv')}
+        </div>
+
+        {flash && (
+          <div className={`mx-6 mt-4 px-3 py-2 text-xs rounded-md flex items-start gap-2 ${
+            /fail|error|could not/i.test(flash)
+              ? 'bg-red-50 border border-red-200 text-red-700'
+              : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+          }`}>
+            {/fail|error|could not/i.test(flash) ? <AlertCircle size={12} className="mt-0.5 shrink-0" /> : <Check size={12} className="mt-0.5 shrink-0" />}
+            <span>{flash}</span>
+          </div>
+        )}
+
+        {tab === 'signin' && (
+          <div className="p-6 space-y-4">
+            {!status.configured && (
+              <div className="px-3 py-2 text-xs rounded-md bg-amber-50 border border-amber-200 text-amber-800 flex items-start gap-2">
+                <Info size={12} className="mt-0.5 shrink-0" />
+                <span>LinkedIn sign-in is not configured on this deployment. You can still use the CSV import tab.</span>
+              </div>
+            )}
+            {status.connected ? (
+              <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-emerald-900 mb-1">
+                  <ShieldCheck size={16} /> LinkedIn connected
+                </div>
+                <div className="text-xs text-emerald-800">
+                  {status.linkedin_name || '—'}{status.linkedin_email ? ` · ${status.linkedin_email}` : ''}
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <button
+                    onClick={() => setTab('csv')}
+                    className="bg-[#0A66C2] hover:bg-[#0856a8] text-white text-xs font-medium px-3 py-1.5 rounded-lg"
+                  >
+                    Continue → Upload Connections.csv
+                  </button>
+                  <button
+                    onClick={onDisconnect}
+                    disabled={busy}
+                    className="text-xs text-gray-500 hover:text-gray-700 px-2 disabled:opacity-50"
+                  >
+                    {busy ? 'Disconnecting…' : 'Disconnect'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-gray-700">
+                  Sign in with LinkedIn so we can verify your identity. We only read your <strong>name</strong> and <strong>email</strong> from LinkedIn — and we never store an access token.
+                </p>
+                <ul className="text-xs text-gray-600 space-y-1.5 list-disc pl-4">
+                  <li>Your LinkedIn password is never shared with us.</li>
+                  <li>LinkedIn does not expose your connections via API. Use the CSV tab to import them — the file is parsed in your browser and never uploaded.</li>
+                </ul>
+                <button
+                  onClick={onConnect}
+                  disabled={busy || !status.configured}
+                  className="w-full bg-[#0A66C2] hover:bg-[#0856a8] disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
+                >
+                  {busy ? <><Loader2 size={14} className="animate-spin" /> Redirecting to LinkedIn…</> : <><LinkedinIcon size={14} /> Sign in with LinkedIn</>}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {tab === 'csv' && (
+          <div className="p-6 space-y-4">
+            <div className="px-3 py-2 text-xs rounded-md bg-violet-50 border border-violet-200 text-violet-900 flex items-start gap-2">
+              <ShieldCheck size={12} className="mt-0.5 shrink-0" />
+              <span>Your Connections.csv is parsed entirely in your browser and never uploaded. Only the rows you select on the next screen are sent — and only the email/name fields, not the full export.</span>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+                <FileDown size={12} /> How to export your LinkedIn connections
+              </div>
+              <ol className="text-xs text-gray-600 space-y-1.5 list-decimal pl-4">
+                <li>Open <a href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noopener noreferrer" className="text-[#0A66C2] hover:underline">linkedin.com → Settings → Get a copy of your data</a>.</li>
+                <li>Pick <em>Want something in particular?</em> → check <strong>Connections</strong> → request archive.</li>
+                <li>LinkedIn emails you a ZIP within ~10 minutes. Open it and find <code className="bg-gray-100 px-1 rounded">Connections.csv</code>.</li>
+                <li>Upload that file below.</li>
+              </ol>
+              <p className="text-[11px] text-gray-500 mt-2">
+                Note: LinkedIn only includes a connection's email if they opted in to share it. Connections without an email are skipped.
+              </p>
+            </div>
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100">
+              <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onCsvUpload} />
+              <span className="text-[11px] text-gray-500">Max file size: 2 MB · First 100 rows imported.</span>
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="bg-[#0A66C2] hover:bg-[#0856a8] text-white text-xs font-medium px-4 py-2 rounded-lg flex items-center gap-1.5"
+              >
+                <Upload size={12} /> Choose Connections.csv
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -630,6 +910,87 @@ function parseCsv(text) {
       email,
       name: nameIdx >= 0 ? (cols[nameIdx] || '').trim() : '',
     });
+  }
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
+// LinkedIn-aware CSV parser. The "Connections.csv" file LinkedIn ships in
+// the data export starts with a "Notes:" preamble (3-5 lines of human-
+// readable text) BEFORE the actual header row. We scan for the first line
+// containing both "First Name" and "Email Address" and treat it as the
+// header, then parse the remainder with the same quoted-field logic.
+// ---------------------------------------------------------------------------
+function parseLinkedInCsv(text) {
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+  // Reuse the row splitter via parseCsv on the trimmed substring once we
+  // find the header line. Quote handling for the header search is naive
+  // (LinkedIn never quotes the header), so a substring-includes check
+  // is sufficient.
+  const allLines = text.split(/\r\n|\n|\r/);
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(allLines.length, 10); i++) {
+    const lc = allLines[i].toLowerCase();
+    if (lc.includes('first name') && lc.includes('email address')) {
+      headerIdx = i;
+      break;
+    }
+  }
+  // No LinkedIn-style header — fall back to the generic parser. This handles
+  // the case where the user uploaded a plain name,email CSV via this picker.
+  if (headerIdx === -1) return parseCsv(text);
+
+  const trimmed = allLines.slice(headerIdx).join('\n');
+  // Reuse the generic splitter, but we need First Name + Last Name + Email Address
+  // semantics, not name+email. Inline the parse here.
+  const lines = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (ch === '"' && trimmed[i + 1] === '"') { cur += '"'; i++; continue; }
+    if (ch === '"') { inQuotes = !inQuotes; continue; }
+    if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      if (ch === '\r' && trimmed[i + 1] === '\n') i++;
+      if (cur.length > 0) lines.push(cur);
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  if (cur.length > 0) lines.push(cur);
+  if (lines.length === 0) return [];
+
+  const splitRow = (line) => {
+    const out = [];
+    let f = '';
+    let q = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"' && line[i + 1] === '"') { f += '"'; i++; continue; }
+      if (ch === '"') { q = !q; continue; }
+      if (ch === ',' && !q) { out.push(f); f = ''; continue; }
+      f += ch;
+    }
+    out.push(f);
+    return out.map(s => s.trim());
+  };
+
+  const header = splitRow(lines[0]).map(h => h.toLowerCase());
+  const firstIdx = header.findIndex(h => h === 'first name');
+  const lastIdx = header.findIndex(h => h === 'last name');
+  const emailIdx = header.findIndex(h => h === 'email address' || h === 'email');
+  if (emailIdx === -1) return [];
+
+  const rows = [];
+  for (let li = 1; li < lines.length; li++) {
+    const cols = splitRow(lines[li]);
+    const email = (cols[emailIdx] || '').trim();
+    if (!email || !email.includes('@')) continue;
+    const first = firstIdx >= 0 ? (cols[firstIdx] || '').trim() : '';
+    const last = lastIdx >= 0 ? (cols[lastIdx] || '').trim() : '';
+    const name = [first, last].filter(Boolean).join(' ').trim();
+    rows.push({ email, name });
   }
   return rows;
 }

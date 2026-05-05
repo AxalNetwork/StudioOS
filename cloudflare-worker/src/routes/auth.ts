@@ -368,6 +368,11 @@ auth.get('/me', async (c) => {
     // they still cannot sign legal agreements (server-enforced in esign).
     // null means normal flow: full access requires kyc_status='approved'.
     access_level: (user as any).access_level || null,
+    // LinkedIn identity (Refer & Earn). Columns are added lazily by
+    // routes/linkedin.ts; null on rows that pre-date the migration.
+    linkedin_sub: (user as any).linkedin_sub || null,
+    linkedin_email: (user as any).linkedin_email || null,
+    linkedin_name: (user as any).linkedin_name || null,
   });
 });
 

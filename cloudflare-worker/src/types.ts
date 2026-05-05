@@ -21,6 +21,14 @@ export interface Env {
   GITHUB_REPO_NAME?: string;
   PERSONA_API_KEY?: string;
   SUMSUB_API_KEY?: string;
+  // LinkedIn — used by routes/linkedin.ts (Refer & Earn → "Sign in with
+  // LinkedIn" + Connections-CSV import wizard). Set via `wrangler secret put`.
+  // When any of the three is unset, /api/linkedin/oauth/start returns 503
+  // and the UI hides the OAuth tab while still allowing the CSV-export
+  // walkthrough to function.
+  LINKEDIN_CLIENT_ID?: string;
+  LINKEDIN_CLIENT_SECRET?: string;
+  LINKEDIN_REDIRECT_URI?: string;
   // Stripe — used by routes/billing.ts and routes/funds.ts. Set via
   // `wrangler secret put STRIPE_SECRET_KEY` etc. When unset, billing
   // falls back to a dev /dev-upgrade flow and Atlas calls are stubbed.

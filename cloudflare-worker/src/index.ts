@@ -62,6 +62,7 @@ import brand, { renderLandingHtml } from './routes/brand';
 import decks from './routes/decks';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
+import linkedinRoutes from './routes/linkedin';
 import { processQueueBatch } from './services/queueWorker';
 import { Jobs } from './models/jobs';
 import { queueConsumer } from './queue-consumer';
@@ -183,6 +184,7 @@ app.route('/api/settings', settings);
 app.route('/api/integrations', integrations);
 app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
+app.route('/api/linkedin', linkedinRoutes);
 app.route('/api/pipeline/votes', votesRoutes);
 // The frontend (and backend) cast endpoint is the singular `/vote/:deal_id`;
 // the plural `/votes/:deal_id` exists as a back-compat alias. Both go to

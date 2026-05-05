@@ -619,6 +619,14 @@ export const api = {
       body: JSON.stringify({ contacts, custom_message }),
     }),
 
+  // ---------- LinkedIn (Refer & Earn) ----------
+  // Sign-in with LinkedIn (OIDC) attaches a verified identity to the
+  // current user. The connections-CSV import is parsed in-browser and
+  // never hits the worker.
+  linkedinStatus: () => request('/linkedin/status'),
+  linkedinOAuthStart: () => request('/linkedin/oauth/start', { method: 'POST', body: JSON.stringify({}) }),
+  linkedinDisconnect: () => request('/linkedin/disconnect', { method: 'POST', body: JSON.stringify({}) }),
+
   // ---------- Settings (Epic 3) ----------
   getSettings: () => request('/settings'),
   updateSettings: (data) => request('/settings', { method: 'PATCH', body: JSON.stringify(data) }),

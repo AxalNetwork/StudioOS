@@ -134,6 +134,14 @@ class User(SQLModel, table=True):
     referrer_partner_id: Optional[int] = Field(default=None, foreign_key="partners.id", index=True)
     referrer_code_used: Optional[str] = None
     referral_attributed_at: Optional[datetime] = None
+    # LinkedIn identity attached via "Sign in with LinkedIn" on the Refer &
+    # Earn page. `linkedin_sub` is the OIDC subject claim — stable per
+    # LinkedIn account. Email/name are denormalized for convenience and may
+    # differ from the user's primary email. Cleared by /api/linkedin/disconnect.
+    linkedin_sub: Optional[str] = None
+    linkedin_email: Optional[str] = None
+    linkedin_name: Optional[str] = None
+    linkedin_connected_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
