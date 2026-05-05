@@ -80,7 +80,17 @@ function BrowseTab({ meta, user }) {
       Object.entries(filters).forEach(([k, v]) => { if (v !== '' && v !== false) params[k] = v; });
       const r = await api.listProviders(params);
       setProviders(r.providers || []);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      // A 404 here means the worker doesn't have the providers route on
+      // this deployment (stale worker). The empty-state card below already
+      // covers "no providers match" — don't double up with a raw red banner.
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') {
+        setProviders([]);
+      } else {
+        setError(e.message);
+      }
+    }
     finally { setLoading(false); }
   }
 
@@ -396,7 +406,13 @@ function InboxTab({ user }) {
 
   async function load() {
     try { const r = await api.listInquiries(); setInquiries(r.inquiries || []); }
-    catch (e) { setError(e.message); }
+    catch (e) {
+      // 404 = inquiries route not on this deployment; the empty-state below
+      // already covers it. Stay quiet, don't show a raw red banner.
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') setInquiries([]);
+      else setError(e.message);
+    }
   }
   useEffect(() => { load(); }, []);
 
