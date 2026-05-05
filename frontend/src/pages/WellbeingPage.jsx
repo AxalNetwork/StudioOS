@@ -232,7 +232,14 @@ function AdminAggregate() {
     try {
       setData(await api.wellbeingAggregate(d));
     } catch (e) {
-      setErr(e.message || 'Failed');
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') {
+        // Route missing on this deployment — render the "withheld" state
+        // rather than a raw red banner above it.
+        setData({ insufficient_data: true, cohort_size: 0, submissions: 0, window_days: d, min_cohort: 0, averages: {} });
+      } else {
+        setErr(e.message || 'Failed');
+      }
     }
   };
   useEffect(() => { load(days); /* eslint-disable-next-line */ }, [days]);
@@ -318,12 +325,21 @@ export default function WellbeingPage() {
   const load = async () => {
     setLoading(true);
     setErr(null);
+    // 404 = wellbeing route missing on this deployment (stale worker). The
+    // page already has empty/default UI for missing data — don't show a raw
+    // red banner above it.
+    const quiet404 = (fallback) => (e) => {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') return fallback;
+      throw e;
+    };
     try {
-      const [resPromise, histPromise] = [
-        api.wellbeingResources(),
-        canCheckIn ? api.wellbeingMyCheckins() : Promise.resolve({ checkins: [], submitted_this_week: false }),
-      ];
-      const [res, hist] = await Promise.all([resPromise, histPromise]);
+      const [res, hist] = await Promise.all([
+        api.wellbeingResources().catch(quiet404({ resources: [] })),
+        canCheckIn
+          ? api.wellbeingMyCheckins().catch(quiet404({ checkins: [], submitted_this_week: false }))
+          : Promise.resolve({ checkins: [], submitted_this_week: false }),
+      ]);
       setResources(res.resources || []);
       setHistory(hist);
     } catch (e) {

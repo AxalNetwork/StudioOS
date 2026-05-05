@@ -231,7 +231,16 @@ export default function TrustCenterPage() {
       // a real document_id immediately.
       await api.getRequiredNdas().catch(() => null);
       setSummary(await api.getTrustSummary());
-    } catch (e) { setErr(e.message); } finally { setLoading(false); }
+    } catch (e) {
+      // 404 = trust route missing on this deployment (stale worker). Render
+      // the page shell with empty NDAs rather than a full-page red error.
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') {
+        setSummary({ kyb: null, accreditation: null, ndas: [] });
+      } else {
+        setErr(e.message);
+      }
+    } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
 
