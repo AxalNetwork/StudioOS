@@ -43,7 +43,17 @@ export default function DiscoveryPage() {
           if (fromQuery) setSearchParams({}, { replace: true });
           setProjectId(safeList[0].id);
         }
-      } catch (e) { setError(e.message); }
+      } catch (e) {
+        // Defensive 404 — backend may return "Not found" when the user has
+        // no project scope yet. Treat as the same "no projects" empty state
+        // rendered below; don't surface a raw red banner.
+        const msg = (e?.message || '').toLowerCase();
+        if (e?.status === 404 || msg.includes('not found')) {
+          setProjects([]);
+        } else {
+          setError(e.message || 'Failed to load projects.');
+        }
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -90,7 +100,14 @@ export default function DiscoveryPage() {
       else await api.createInterview(projectId, payload);
       setEditing(null);
       await refresh();
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg.includes('not found')) {
+        setError(`Can't save: project #${projectId} or this interview is no longer available. Refresh and try again.`);
+      } else {
+        setError(e.message || 'Failed to save interview.');
+      }
+    }
   }
 
   async function handleDelete(id) {
@@ -98,7 +115,15 @@ export default function DiscoveryPage() {
     try {
       await api.deleteInterview(id);
       await refresh();
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg.includes('not found')) {
+        // Already gone — refresh to drop it from the list, no banner needed.
+        await refresh();
+      } else {
+        setError(e.message || 'Failed to delete interview.');
+      }
+    }
   }
 
   const stats = useMemo(() => {
