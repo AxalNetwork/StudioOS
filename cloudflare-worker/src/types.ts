@@ -15,6 +15,25 @@ export interface Env {
   GMAIL_CLIENT_ID?: string;
   GMAIL_CLIENT_SECRET?: string;
   GMAIL_REFRESH_TOKEN?: string;
+  // Calendar OAuth — per-user Google + Microsoft 365 calendar push-sync.
+  // Set via `wrangler secret put`. When the *_CLIENT_ID / *_CLIENT_SECRET
+  // pair for a provider is unset, routes/calendar.ts treats that provider
+  // as unavailable (status returns { configured: false }) the same way
+  // services/email.ts handles missing GMAIL_* keys — fail-open with a
+  // single console.warn, never throw.
+  // *_REDIRECT_URI must exactly match what's registered in the Google
+  // Cloud Console / Entra app registration, e.g.
+  //   https://studioos.guillaumelauzier.workers.dev/api/calendar/google/callback
+  //   https://studioos.guillaumelauzier.workers.dev/api/calendar/microsoft/callback
+  // MICROSOFT_TENANT_ID defaults to "common" when unset (multi-tenant +
+  // personal Outlook.com accounts).
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  GOOGLE_CALENDAR_REDIRECT_URI?: string;
+  MICROSOFT_CLIENT_ID?: string;
+  MICROSOFT_CLIENT_SECRET?: string;
+  MICROSOFT_TENANT_ID?: string;
+  MICROSOFT_CALENDAR_REDIRECT_URI?: string;
   OPENAI_API_KEY?: string;
   GITHUB_ACCESS_TOKEN?: string;
   GITHUB_REPO_OWNER?: string;
