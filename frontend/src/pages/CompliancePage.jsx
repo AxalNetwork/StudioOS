@@ -348,7 +348,16 @@ export default function CompliancePage() {
       setEvents(eventsRes.value.events || []);
       setSummary(eventsRes.value.summary || null);
     } else {
-      setError(eventsRes.reason?.message || 'Failed to load events');
+      // 404 = compliance route missing on this deployment (stale worker).
+      // Render the empty list rather than a raw red banner above it.
+      const reason = eventsRes.reason;
+      const msg = (reason?.message || '').toLowerCase();
+      if (reason?.status === 404 || msg === 'not found') {
+        setEvents([]);
+        setSummary(null);
+      } else {
+        setError(reason?.message || 'Failed to load events');
+      }
     }
     if (projectsRes.status === 'fulfilled') {
       const p = projectsRes.value;
