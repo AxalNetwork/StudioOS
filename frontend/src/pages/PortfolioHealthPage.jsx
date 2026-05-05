@@ -180,7 +180,12 @@ export default function PortfolioHealthPage() {
       });
       setData(r);
     } catch (e) {
-      setErr(e.message || 'Failed to load');
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') {
+        setData({ items: [], totals: { green: 0, yellow: 0, red: 0, intervention: 0 }, as_of: null });
+      } else {
+        setErr(e.message || 'Failed to load');
+      }
     } finally {
       setLoading(false);
     }
