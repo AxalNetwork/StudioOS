@@ -31,9 +31,11 @@ export default function PartnerInsightsPage() {
     // Each insights endpoint is independent — if the worker is missing one
     // (404), we still want to render the others. The empty-state cards
     // already cover "no data" so don't surface a raw red banner for 404s.
+    // `includes('not found')` (not strict ===) covers backends that prefix
+    // the path or other context onto the detail string.
     const quiet404 = (fallback) => (e) => {
       const msg = (e?.message || '').toLowerCase();
-      if (e?.status === 404 || msg === 'not found') return fallback;
+      if (e?.status === 404 || msg.includes('not found')) return fallback;
       throw e;
     };
     try {
@@ -44,18 +46,43 @@ export default function PartnerInsightsPage() {
         api.insightsNewsletterStatus().catch(() => ({ active: false })),
       ]);
       setHeat(h); setTrend(t); setFeed(f); setSub(s);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      // A non-404 from one of the insights endpoints reached the outer catch.
+      // Classify into fixed friendly strings — never leak raw e.message.
+      const status = e?.status;
+      if (status === 401 || status === 403) {
+        setError('Your session expired. Please sign in again to view insights.');
+      } else {
+        setError("Couldn't load demand insights right now. Please retry in a moment, or contact support if it persists.");
+      }
+    }
     finally { setLoading(false); }
   }
   useEffect(() => { loadAll(); /* eslint-disable-line */ }, [windowDays]);
 
   async function toggleSub() {
+    setError(null);
+    const wasActive = !!sub?.active;
     try {
-      const next = sub?.active
+      const next = wasActive
         ? await api.insightsNewsletterUnsubscribe()
         : await api.insightsNewsletterSubscribe();
       setSub(next);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      const status = e?.status;
+      const msg = (e?.message || '').toLowerCase();
+      if (status === 401 || status === 403) {
+        setError('Your session expired. Please sign in again to manage your digest subscription.');
+      } else if (status === 404 || msg.includes('not found')) {
+        setError("The weekly digest isn't available on this deployment yet. Please check back soon, or contact support.");
+      } else {
+        setError(
+          wasActive
+            ? "Couldn't unsubscribe right now. Please retry in a moment."
+            : "Couldn't subscribe to the weekly digest right now. Please retry in a moment."
+        );
+      }
+    }
   }
 
   return (
@@ -236,7 +263,19 @@ function PreviewModal({ onClose }) {
   const [body, setBody] = useState(null);
   const [error, setError] = useState(null);
   useEffect(() => {
-    api.insightsNewsletterPreview().then((r) => setBody(r.body_md)).catch((e) => setError(e.message));
+    api.insightsNewsletterPreview()
+      .then((r) => setBody(r.body_md))
+      .catch((e) => {
+        const status = e?.status;
+        const msg = (e?.message || '').toLowerCase();
+        if (status === 401 || status === 403) {
+          setError('Your session expired. Please sign in again to preview the digest.');
+        } else if (status === 404 || msg.includes('not found')) {
+          setError("The weekly digest isn't available on this deployment yet.");
+        } else {
+          setError("Couldn't generate a preview right now. Please retry in a moment.");
+        }
+      });
   }, []);
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
