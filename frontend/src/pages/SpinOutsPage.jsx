@@ -16,7 +16,12 @@ export default function SpinOutsPage() {
         const all = await api.listProjects();
         setProjects((all || []).filter(p => SPINOUT_STATUSES.includes((p.status || '').toLowerCase())));
       } catch (e) {
-        setErr(e.message || 'Failed to load projects');
+        const msg = (e?.message || '').toLowerCase();
+        if (e?.status === 404 || msg === 'not found') {
+          setProjects([]);
+        } else {
+          setErr(e.message || 'Failed to load projects');
+        }
       } finally { setLoading(false); }
     })();
   }, []);
