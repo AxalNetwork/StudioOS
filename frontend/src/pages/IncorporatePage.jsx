@@ -136,6 +136,19 @@ function GoalsStep({ answers, setAnswers }) {
 }
 
 function CompareStep({ jurisdictions, recommendedId, selectedId, setSelectedId }) {
+  if (!jurisdictions || jurisdictions.length === 0) {
+    // Bootstrap fetch returned 404 (or empty) for legalJurisdictions. Render
+    // a friendly empty state instead of letting the user step forward into
+    // an unfillable confirm screen.
+    return (
+      <div className="py-10 text-center">
+        <div className="text-base font-semibold text-gray-900 mb-1">Jurisdiction options aren't available right now</div>
+        <p className="text-sm text-gray-500 max-w-md mx-auto">
+          Please refresh in a moment, or contact support if this keeps happening. The wizard needs the jurisdiction list to recommend and prepare your founder document set.
+        </p>
+      </div>
+    );
+  }
   return (
     <div>
       <div className="text-sm text-gray-600 mb-4">
@@ -215,7 +228,21 @@ function CompareStep({ jurisdictions, recommendedId, selectedId, setSelectedId }
 }
 
 function ConfirmStep({ jurisdiction, projects, form, setForm }) {
-  if (!jurisdiction) return null;
+  if (!jurisdiction) {
+    // Defensive — Next button on step 1 is gated on selectedId + a populated
+    // jurisdictions list, so this branch should be unreachable. If we still
+    // get here (e.g. selected id was for a jurisdiction that's since been
+    // removed from the catalog), render a friendly empty state instead of
+    // a blank page.
+    return (
+      <div className="py-10 text-center">
+        <div className="text-base font-semibold text-gray-900 mb-1">No jurisdiction selected</div>
+        <p className="text-sm text-gray-500 max-w-md mx-auto">
+          Go back to the previous step and pick a jurisdiction. If the list looks empty, refresh the page in a moment.
+        </p>
+      </div>
+    );
+  }
   const isDeCorp = jurisdiction.atlas_supported;
   return (
     <div className="space-y-5">
@@ -385,17 +412,42 @@ export default function IncorporatePage() {
 
   useEffect(() => {
     let cancelled = false;
+    // Fetch jurisdictions and projects INDEPENDENTLY. A 404 on one used to
+    // blank both via Promise.all + shared catch, which surfaced a raw "Not
+    // found" banner over an otherwise renderable wizard (the original bug
+    // in the screenshot was triggered by listProjects() 404 for users with
+    // no project scope yet). Each fetch now has its own defensive 404
+    // handler so the other still populates and the wizard remains usable.
+    const isNotFound = (e) => {
+      const msg = (e?.message || '').toLowerCase();
+      return e?.status === 404 || msg.includes('not found');
+    };
     (async () => {
-      try {
-        const [j, p] = await Promise.all([api.legalJurisdictions(), api.listProjects()]);
-        if (cancelled) return;
-        setJurisdictions(j?.jurisdictions || []);
-        setProjects(p?.projects || p || []);
-      } catch (e) {
-        if (!cancelled) setErr(e.message || 'Failed to load incorporation options');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      const [jRes, pRes] = await Promise.allSettled([
+        api.legalJurisdictions(),
+        api.listProjects(),
+      ]);
+      if (cancelled) return;
+
+      if (jRes.status === 'fulfilled') {
+        setJurisdictions(jRes.value?.jurisdictions || []);
+      } else if (!isNotFound(jRes.reason)) {
+        setErr(jRes.reason?.message || 'Failed to load jurisdictions.');
+      } // 404 → leave jurisdictions empty; render handles the empty state.
+
+      if (pRes.status === 'fulfilled') {
+        const list = pRes.value;
+        setProjects(list?.projects || list || []);
+      } else if (!isNotFound(pRes.reason)) {
+        // Only surface a non-404 projects error if jurisdictions also failed
+        // (otherwise the user can still browse jurisdictions and a banner
+        // about projects would be confusing context).
+        if (jRes.status !== 'fulfilled') {
+          setErr(pRes.reason?.message || 'Failed to load projects.');
+        }
+      } // 404 → leave projects empty; submit step shows a clear reason.
+
+      setLoading(false);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -426,7 +478,15 @@ export default function IncorporatePage() {
       setResult(res);
       setStep(3);
     } catch (e) {
-      setErr(e.message || 'Submission failed');
+      const status = e?.status;
+      const msg = (e?.message || '').toLowerCase();
+      if (status === 404 || msg.includes('not found')) {
+        setErr("The selected project or jurisdiction is no longer available. Please refresh and try again.");
+      } else if (status === 401 || status === 403) {
+        setErr('Your session expired or you do not have access to this project. Please sign in again.');
+      } else {
+        setErr('Submission failed. Please retry in a moment, or contact support if it persists.');
+      }
     } finally {
       setBusy(false);
     }
@@ -494,7 +554,7 @@ export default function IncorporatePage() {
             {step < 2 ? (
               <button
                 onClick={() => { setErr(''); setStep((s) => s + 1); }}
-                disabled={(step === 0 && !goalsAnswered) || (step === 1 && !selectedId)}
+                disabled={(step === 0 && !goalsAnswered) || (step === 1 && (!selectedId || jurisdictions.length === 0))}
                 className="inline-flex items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-md disabled:opacity-50"
               >
                 Next <ArrowRight size={14} />
