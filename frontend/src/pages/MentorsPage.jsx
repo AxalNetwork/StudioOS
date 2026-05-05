@@ -77,7 +77,19 @@ function BookingForm({ slot, mentor, onClose, onBooked }) {
     try {
       const b = await api.bookMentorSlot(slot.id, { topic, questions });
       onBooked(b);
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+    } catch (e) {
+      const status = e?.status;
+      const msg = (e?.message || '').toLowerCase();
+      if (status === 404 || msg.includes('not found')) {
+        setErr('This slot is no longer available — please pick a different time.');
+      } else if (status === 409 || msg.includes('conflict') || msg.includes('already')) {
+        setErr('This slot was just booked by someone else. Please pick a different time.');
+      } else if (status === 401 || status === 403) {
+        setErr('Your session expired. Please sign in again to book.');
+      } else {
+        setErr('Booking failed. Please retry in a moment, or contact support if it persists.');
+      }
+    } finally { setBusy(false); }
   }
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -200,7 +212,19 @@ function ReviewModal({ booking, onClose, onSubmitted }) {
     try {
       await api.fileMentorReview(booking.id, { rating, comment });
       onSubmitted();
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+    } catch (e) {
+      const status = e?.status;
+      const msg = (e?.message || '').toLowerCase();
+      if (status === 404 || msg.includes('not found')) {
+        setErr('This booking is no longer available. Refresh the page and try again.');
+      } else if (status === 409 || msg.includes('already')) {
+        setErr("You've already reviewed this booking.");
+      } else if (status === 401 || status === 403) {
+        setErr('Your session expired. Please sign in again to file a review.');
+      } else {
+        setErr('Filing the review failed. Please retry in a moment, or contact support if it persists.');
+      }
+    } finally { setBusy(false); }
   }
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -255,7 +279,18 @@ function MyBookings({ refreshKey }) {
                   onClick={async () => {
                     if (!confirm('Cancel this booking?')) return;
                     try { await api.cancelMentorBooking(b.id, 'Cancelled by mentee'); location.reload(); }
-                    catch (e) { alert(e.message); }
+                    catch (e) {
+                      const status = e?.status;
+                      const msg = (e?.message || '').toLowerCase();
+                      if (status === 404 || msg.includes('not found')) {
+                        // Already gone — refresh to drop it from the list.
+                        location.reload();
+                      } else if (status === 401 || status === 403) {
+                        alert('Your session expired. Please sign in again to cancel this booking.');
+                      } else {
+                        alert('Cancellation failed. Please retry in a moment, or contact support if it persists.');
+                      }
+                    }
                   }}
                   className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded">
                   Cancel
@@ -294,7 +329,20 @@ export default function MentorsPage() {
       else opts.max_rate = Number(opts.max_rate);
       const r = await api.listMentors(opts);
       setItems(r.items || []);
-    } catch (e) { setErr(e.message); } finally { setLoading(false); }
+    } catch (e) {
+      // Defensive 404 — backend may return "Not found" if the mentors index
+      // is empty or the user has no scope. Treat as the empty state below
+      // ("No mentors match your filters yet.") instead of a raw red banner.
+      const status = e?.status;
+      const msg = (e?.message || '').toLowerCase();
+      if (status === 404 || msg.includes('not found')) {
+        setItems([]);
+      } else if (status === 401 || status === 403) {
+        setErr('Your session expired. Please sign in again to browse mentors.');
+      } else {
+        setErr("Couldn't load the mentor directory right now. Please retry in a moment, or contact support if it persists.");
+      }
+    } finally { setLoading(false); }
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
