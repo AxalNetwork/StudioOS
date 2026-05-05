@@ -1,7 +1,7 @@
 /**
  * Calendar routes — port of backend/app/api/routes/calendar.py.
  *
- * Mounted at /api/calendar. Eighteen endpoints across:
+ * Mounted at /api/calendar. Nineteen endpoints across:
  *   - unified events feed + ICS export
  *   - IC meetings CRUD + RSVP
  *   - founder check-ins CRUD
@@ -376,7 +376,7 @@ calendar.delete('/founder-checkins/:id', safe('ck_cancel', 'Could not cancel che
 // ===========================================================================
 function failureRedirect(env: Env, provider: string, reason?: string): Response {
   const base = env.APP_URL || '';
-  const url = `${base}/calendar?${provider}=failed${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`;
+  const url = `${base}/calendar?${provider}=error${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`;
   return Response.redirect(url, 302);
 }
 function successRedirect(env: Env, provider: string): Response {
@@ -393,9 +393,11 @@ calendar.get('/google/status', safe('g_status', 'Could not load Google status', 
   const row = (await sql`
     SELECT google_email, last_synced_at, scope FROM google_oauth_tokens WHERE user_id = ${user.id}
   ` as any[])[0];
+  const configured = googleOAuthAvailable(c.env);
   return c.json({
-    available: googleOAuthAvailable(c.env),
-    connected: !!row,
+    configured,
+    available: configured, // back-compat alias
+    connected: configured ? !!row : false,
     google_email: row?.google_email || null,
     last_synced_at: row?.last_synced_at || null,
     scope: row?.scope || null,
@@ -420,11 +422,11 @@ calendar.get('/google/callback', async (c) => {
     const code = url.searchParams.get('code');
     const stateRaw = url.searchParams.get('state');
     const error = url.searchParams.get('error');
-    if (error || !code || !stateRaw) return failureRedirect(c.env, 'google', error || 'missing_params');
+    if (error || !code || !stateRaw) return failureRedirect(c.env, 'google', error || 'invalid_state');
     const nonce = await verifyState(c.env, stateRaw);
-    if (!nonce) return failureRedirect(c.env, 'google', 'bad_state');
+    if (!nonce) return failureRedirect(c.env, 'google', 'invalid_state');
     const userId = await consumeState(c.env, nonce, 'google');
-    if (!userId) return failureRedirect(c.env, 'google', 'expired_state');
+    if (!userId) return failureRedirect(c.env, 'google', 'invalid_state');
 
     const tokens = await exchangeGoogleCode(c.env, code);
     const refreshToken = tokens?.refresh_token;
@@ -493,9 +495,11 @@ calendar.get('/microsoft/status', safe('m_status', 'Could not load Microsoft sta
   const row = (await sql`
     SELECT microsoft_email, last_synced_at, scope FROM microsoft_oauth_tokens WHERE user_id = ${user.id}
   ` as any[])[0];
+  const configured = microsoftOAuthAvailable(c.env);
   return c.json({
-    available: microsoftOAuthAvailable(c.env),
-    connected: !!row,
+    configured,
+    available: configured, // back-compat alias
+    connected: configured ? !!row : false,
     microsoft_email: row?.microsoft_email || null,
     last_synced_at: row?.last_synced_at || null,
     scope: row?.scope || null,
@@ -519,11 +523,11 @@ calendar.get('/microsoft/callback', async (c) => {
     const code = url.searchParams.get('code');
     const stateRaw = url.searchParams.get('state');
     const error = url.searchParams.get('error');
-    if (error || !code || !stateRaw) return failureRedirect(c.env, 'microsoft', error || 'missing_params');
+    if (error || !code || !stateRaw) return failureRedirect(c.env, 'microsoft', error || 'invalid_state');
     const nonce = await verifyState(c.env, stateRaw);
-    if (!nonce) return failureRedirect(c.env, 'microsoft', 'bad_state');
+    if (!nonce) return failureRedirect(c.env, 'microsoft', 'invalid_state');
     const userId = await consumeState(c.env, nonce, 'microsoft');
-    if (!userId) return failureRedirect(c.env, 'microsoft', 'expired_state');
+    if (!userId) return failureRedirect(c.env, 'microsoft', 'invalid_state');
 
     const tokens = await exchangeMicrosoftCode(c.env, code);
     const refreshToken = tokens?.refresh_token;

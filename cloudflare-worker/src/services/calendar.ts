@@ -214,7 +214,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin';
+  kind: 'ic_meeting' | 'founder_checkin' | 'mentor_booking' | 'partner_office_hour';
   source_id: number;
   source_uid: string;
   title: string;
@@ -317,15 +317,121 @@ async function checkinEvents(env: Env, userId: number, isAdmin: boolean,
   return out;
 }
 
+// Mentor + partner office-hour bookings live in tables that may not yet
+// exist in worker D1 (the FastAPI backend owns them). Wrap each query in
+// a try/catch so a missing table degrades to an empty list instead of a
+// 500. Any *other* error is rethrown so genuine bugs are still surfaced.
+function isMissingTableError(e: any): boolean {
+  const msg = String(e?.message || e || '').toLowerCase();
+  return msg.includes('no such table') || msg.includes('does not exist');
+}
+
+async function mentorBookingEvents(env: Env, userId: number, isAdmin: boolean,
+                                   fromIso: string, toIso: string): Promise<CalendarEvent[]> {
+  const sql = getSQL(env);
+  try {
+    // Visibility: requester, mentor (via users.mentor_id), or admin.
+    const me = (await sql`SELECT mentor_id FROM users WHERE id = ${userId}` as any[])[0];
+    const myMentorId = me?.mentor_id || null;
+    const rows = await sql`
+      SELECT b.* FROM mentor_bookings b
+      WHERE b.scheduled_start >= ${fromIso} AND b.scheduled_start <= ${toIso}
+        AND b.status IN ('requested', 'confirmed', 'completed')
+    ` as any[];
+    const out: CalendarEvent[] = [];
+    for (const b of rows) {
+      const isRequester = b.requester_user_id === userId;
+      const isMentor = !!(myMentorId && b.mentor_id === myMentorId);
+      if (!(isAdmin || isRequester || isMentor)) continue;
+      const mentor = (await sql`SELECT email, name FROM mentors WHERE id = ${b.mentor_id}` as any[])[0];
+      const requester = (await sql`SELECT email, name FROM users WHERE id = ${b.requester_user_id}` as any[])[0];
+      out.push({
+        id: `mentor_booking:${b.id}`,
+        kind: 'mentor_booking',
+        source_id: b.id,
+        source_uid: b.uid,
+        title: `Mentor session — ${b.topic || ''}`.trim(),
+        start_at: b.scheduled_start,
+        end_at: b.scheduled_end,
+        status: b.status,
+        location_kind: 'video',
+        location_uri: b.meeting_uri || null,
+        organizer_email: mentor?.email || null,
+        attendees: [
+          { email: mentor?.email || null, name: mentor?.name || null, role: 'mentor' },
+          { email: requester?.email || null, name: requester?.name || null, role: 'mentee' },
+        ],
+        notes: b.questions || null,
+        project_id: b.project_id || null,
+      });
+    }
+    return out;
+  } catch (e) {
+    if (isMissingTableError(e)) return [];
+    throw e;
+  }
+}
+
+async function partnerOfficeHourEvents(env: Env, userId: number, isAdmin: boolean,
+                                       fromIso: string, toIso: string): Promise<CalendarEvent[]> {
+  const sql = getSQL(env);
+  try {
+    const me = (await sql`SELECT partner_id FROM users WHERE id = ${userId}` as any[])[0];
+    const myPartnerId = me?.partner_id || null;
+    const rows = await sql`
+      SELECT b.* FROM partner_bookings b
+      WHERE b.scheduled_start >= ${fromIso} AND b.scheduled_start <= ${toIso}
+        AND b.status IN ('requested', 'confirmed', 'completed')
+    ` as any[];
+    const out: CalendarEvent[] = [];
+    for (const b of rows) {
+      const isRequester = b.requester_user_id === userId;
+      const isPartnerSide = !!(myPartnerId && b.partner_id === myPartnerId);
+      if (!(isAdmin || isRequester || isPartnerSide)) continue;
+      const partner = (await sql`SELECT email, name FROM partners WHERE id = ${b.partner_id}` as any[])[0];
+      const requester = (await sql`SELECT email, name FROM users WHERE id = ${b.requester_user_id}` as any[])[0];
+      out.push({
+        id: `partner_office_hour:${b.id}`,
+        kind: 'partner_office_hour',
+        source_id: b.id,
+        source_uid: b.uid,
+        title: `Partner office hours — ${b.topic || ''}`.trim(),
+        start_at: b.scheduled_start,
+        end_at: b.scheduled_end,
+        status: b.status,
+        location_kind: 'video',
+        location_uri: b.meeting_uri || null,
+        organizer_email: partner?.email || null,
+        attendees: [
+          { email: partner?.email || null, name: partner?.name || null, role: 'partner' },
+          { email: requester?.email || null, name: requester?.name || null, role: 'requester' },
+        ],
+        notes: b.questions || null,
+        project_id: b.project_id || null,
+      });
+    }
+    return out;
+  } catch (e) {
+    if (isMissingTableError(e)) return [];
+    throw e;
+  }
+}
+
 export async function fetchUserEvents(
   env: Env, userId: number, role: string, fromIso: string, toIso: string,
   kinds?: string[],
 ): Promise<CalendarEvent[]> {
   const isAdmin = role.toLowerCase() === 'admin';
-  const wanted = new Set(kinds && kinds.length ? kinds : ['ic_meeting', 'founder_checkin']);
+  const wanted = new Set(
+    kinds && kinds.length
+      ? kinds
+      : ['mentor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour'],
+  );
   const out: CalendarEvent[] = [];
+  if (wanted.has('mentor_booking')) out.push(...await mentorBookingEvents(env, userId, isAdmin, fromIso, toIso));
   if (wanted.has('ic_meeting')) out.push(...await icEvents(env, userId, isAdmin, fromIso, toIso));
   if (wanted.has('founder_checkin')) out.push(...await checkinEvents(env, userId, isAdmin, fromIso, toIso));
+  if (wanted.has('partner_office_hour')) out.push(...await partnerOfficeHourEvents(env, userId, isAdmin, fromIso, toIso));
   out.sort((a, b) => a.start_at.localeCompare(b.start_at));
   return out;
 }

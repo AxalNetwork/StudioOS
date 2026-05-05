@@ -85,13 +85,13 @@ export default function CalendarPage() {
     if (g === 'connected') {
       setSyncResult({ kind: 'success', text: 'Google Calendar connected.' });
       window.history.replaceState({}, '', window.location.pathname);
-    } else if (g === 'failed') {
+    } else if (g === 'error' || g === 'failed') {
       setSyncResult({ kind: 'error', text: `Google connection failed${qs.get('reason') ? ` (${qs.get('reason')})` : ''}.` });
       window.history.replaceState({}, '', window.location.pathname);
     } else if (m === 'connected') {
       setSyncResult({ kind: 'success', text: 'Outlook / Microsoft 365 calendar connected.' });
       window.history.replaceState({}, '', window.location.pathname);
-    } else if (m === 'failed') {
+    } else if (m === 'error' || m === 'failed') {
       setSyncResult({ kind: 'error', text: `Outlook connection failed${qs.get('reason') ? ` (${qs.get('reason')})` : ''}.` });
       window.history.replaceState({}, '', window.location.pathname);
     }
