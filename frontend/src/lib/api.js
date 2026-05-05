@@ -863,6 +863,12 @@ export const api = {
   googleCalDisconnect: () => request('/calendar/google', { method: 'DELETE' }),
   googleCalSync: () => request('/calendar/google/sync', { method: 'POST' }),
 
+  // Microsoft 365 / Outlook Calendar sync
+  microsoftCalStatus: () => request('/calendar/microsoft/status'),
+  microsoftCalConnect: () => request('/calendar/microsoft/connect', { method: 'POST' }),
+  microsoftCalDisconnect: () => request('/calendar/microsoft', { method: 'DELETE' }),
+  microsoftCalSync: () => request('/calendar/microsoft/sync', { method: 'POST' }),
+
   // Per-user Cal.com key (mentor-only)
   attachMyCalcomKey: (data) =>
     request('/calendar/me/calcom', { method: 'POST', body: JSON.stringify(data) }),

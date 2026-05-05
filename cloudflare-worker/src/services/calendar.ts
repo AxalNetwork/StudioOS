@@ -1,0 +1,590 @@
+/**
+ * Calendar service — port of backend/app/services/calendar_unified.py.
+ *
+ * Two responsibilities:
+ *   1. Aggregator — fetch the signed-in user's events across IC meetings and
+ *      founder check-ins (the only bookable surfaces present in worker D1).
+ *   2. OAuth + push-sync — Google Calendar v3 and Microsoft Graph v1.0.
+ *
+ * Both providers expose the same eight functions (status check, auth-URL,
+ * token exchange, refresh, userinfo, push event, delete event, sync user).
+ * They are kept as side-by-side pairs (no shared interface) so each
+ * provider's quirks stay legible.
+ */
+import type { Env } from '../types';
+import { getSQL } from '../db';
+
+// ===========================================================================
+// Google constants
+// ===========================================================================
+const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo';
+const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
+const GOOGLE_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'openid',
+];
+
+// ===========================================================================
+// Microsoft constants — Graph v1.0 + Azure AD v2 endpoints. Tenant defaults
+// to "common" so personal + work/school accounts both work.
+// ===========================================================================
+const MICROSOFT_AUTHORITY = 'https://login.microsoftonline.com';
+const MICROSOFT_GRAPH = 'https://graph.microsoft.com/v1.0';
+const MICROSOFT_SCOPES = [
+  'openid',
+  'profile',
+  'email',
+  'offline_access',
+  'Calendars.ReadWrite',
+  'User.Read',
+];
+
+function msTenant(env: Env): string {
+  return env.MICROSOFT_TENANT_ID || 'common';
+}
+function msAuthorize(env: Env): string {
+  return `${MICROSOFT_AUTHORITY}/${msTenant(env)}/oauth2/v2.0/authorize`;
+}
+function msToken(env: Env): string {
+  return `${MICROSOFT_AUTHORITY}/${msTenant(env)}/oauth2/v2.0/token`;
+}
+
+// ---------------------------------------------------------------------------
+// Availability checks. Provider is "available" only when every required
+// secret + a redirect URI are present.
+// ---------------------------------------------------------------------------
+export function googleOAuthAvailable(env: Env): boolean {
+  return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_CALENDAR_REDIRECT_URI);
+}
+export function microsoftOAuthAvailable(env: Env): boolean {
+  return !!(env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET && env.MICROSOFT_CALENDAR_REDIRECT_URI);
+}
+
+// ===========================================================================
+// Auth URL builders
+// ===========================================================================
+export function buildGoogleAuthUrl(env: Env, state: string): string {
+  const p = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID!,
+    redirect_uri: env.GOOGLE_CALENDAR_REDIRECT_URI!,
+    response_type: 'code',
+    scope: GOOGLE_SCOPES.join(' '),
+    access_type: 'offline',
+    prompt: 'consent',
+    state,
+    include_granted_scopes: 'true',
+  });
+  return `${GOOGLE_AUTH_URL}?${p.toString()}`;
+}
+
+export function buildMicrosoftAuthUrl(env: Env, state: string): string {
+  const p = new URLSearchParams({
+    client_id: env.MICROSOFT_CLIENT_ID!,
+    redirect_uri: env.MICROSOFT_CALENDAR_REDIRECT_URI!,
+    response_type: 'code',
+    response_mode: 'query',
+    scope: MICROSOFT_SCOPES.join(' '),
+    state,
+    prompt: 'consent',
+  });
+  return `${msAuthorize(env)}?${p.toString()}`;
+}
+
+// ===========================================================================
+// Token exchange / refresh — fetch with explicit timeout, fail with thrown
+// Error so callers can map to a HTTP status.
+// ===========================================================================
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 10_000): Promise<Response> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+export async function exchangeGoogleCode(env: Env, code: string): Promise<any> {
+  if (!googleOAuthAvailable(env)) throw new Error('google_oauth_unavailable');
+  const body = new URLSearchParams({
+    code,
+    client_id: env.GOOGLE_CLIENT_ID!,
+    client_secret: env.GOOGLE_CLIENT_SECRET!,
+    redirect_uri: env.GOOGLE_CALENDAR_REDIRECT_URI!,
+    grant_type: 'authorization_code',
+  });
+  const r = await fetchWithTimeout(GOOGLE_TOKEN_URL, {
+    method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  if (!r.ok) {
+    console.warn('[CAL] google token exchange', r.status);
+    throw new Error(`token_exchange_failed:${r.status}`);
+  }
+  return r.json();
+}
+
+export async function refreshGoogleAccessToken(env: Env, refreshToken: string): Promise<string> {
+  if (!googleOAuthAvailable(env)) throw new Error('google_oauth_unavailable');
+  const body = new URLSearchParams({
+    refresh_token: refreshToken,
+    client_id: env.GOOGLE_CLIENT_ID!,
+    client_secret: env.GOOGLE_CLIENT_SECRET!,
+    grant_type: 'refresh_token',
+  });
+  const r = await fetchWithTimeout(GOOGLE_TOKEN_URL, {
+    method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  if (!r.ok) {
+    console.warn('[CAL] google refresh', r.status);
+    throw new Error(`refresh_failed:${r.status}`);
+  }
+  return ((await r.json()) as any).access_token as string;
+}
+
+export async function fetchGoogleUserinfo(accessToken: string): Promise<any> {
+  try {
+    const r = await fetchWithTimeout(GOOGLE_USERINFO_URL, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (r.ok) return r.json();
+  } catch (e: any) {
+    console.warn('[CAL] google userinfo failed:', e?.message || e);
+  }
+  return {};
+}
+
+export async function exchangeMicrosoftCode(env: Env, code: string): Promise<any> {
+  if (!microsoftOAuthAvailable(env)) throw new Error('microsoft_oauth_unavailable');
+  const body = new URLSearchParams({
+    code,
+    client_id: env.MICROSOFT_CLIENT_ID!,
+    client_secret: env.MICROSOFT_CLIENT_SECRET!,
+    redirect_uri: env.MICROSOFT_CALENDAR_REDIRECT_URI!,
+    grant_type: 'authorization_code',
+    scope: MICROSOFT_SCOPES.join(' '),
+  });
+  const r = await fetchWithTimeout(msToken(env), {
+    method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  if (!r.ok) {
+    console.warn('[CAL] ms token exchange', r.status);
+    throw new Error(`token_exchange_failed:${r.status}`);
+  }
+  return r.json();
+}
+
+export async function refreshMicrosoftAccessToken(env: Env, refreshToken: string): Promise<string> {
+  if (!microsoftOAuthAvailable(env)) throw new Error('microsoft_oauth_unavailable');
+  const body = new URLSearchParams({
+    refresh_token: refreshToken,
+    client_id: env.MICROSOFT_CLIENT_ID!,
+    client_secret: env.MICROSOFT_CLIENT_SECRET!,
+    grant_type: 'refresh_token',
+    scope: MICROSOFT_SCOPES.join(' '),
+  });
+  const r = await fetchWithTimeout(msToken(env), {
+    method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  if (!r.ok) {
+    console.warn('[CAL] ms refresh', r.status);
+    throw new Error(`refresh_failed:${r.status}`);
+  }
+  return ((await r.json()) as any).access_token as string;
+}
+
+export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> {
+  try {
+    const r = await fetchWithTimeout(`${MICROSOFT_GRAPH}/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (r.ok) return r.json();
+  } catch (e: any) {
+    console.warn('[CAL] ms userinfo failed:', e?.message || e);
+  }
+  return {};
+}
+
+// ===========================================================================
+// Aggregator — IC meetings + founder check-ins. The worker D1 has no
+// mentor_bookings or partner_bookings tables, so those kinds are skipped
+// (the FastAPI version reads them when present).
+// ===========================================================================
+export interface CalendarEvent {
+  id: string;
+  kind: 'ic_meeting' | 'founder_checkin';
+  source_id: number;
+  source_uid: string;
+  title: string;
+  start_at: string;
+  end_at: string;
+  status: string;
+  location_kind: string | null;
+  location_uri: string | null;
+  organizer_email: string | null;
+  attendees: { email: string | null; name: string | null; role: string; rsvp?: string }[];
+  notes: string | null;
+  deal_id?: number | null;
+  project_id?: number | null;
+}
+
+function addMinutes(iso: string, mins: number): string {
+  return new Date(new Date(iso).getTime() + mins * 60_000).toISOString();
+}
+
+async function icEvents(env: Env, userId: number, isAdmin: boolean,
+                        fromIso: string, toIso: string): Promise<CalendarEvent[]> {
+  const sql = getSQL(env);
+  const rows = await sql`
+    SELECT m.* FROM ic_meetings m
+    WHERE m.start_at >= ${fromIso} AND m.start_at <= ${toIso}
+      AND m.status != 'cancelled'
+  ` as any[];
+  const out: CalendarEvent[] = [];
+  for (const m of rows) {
+    const attendeeRows = await sql`
+      SELECT a.user_id, a.rsvp, u.email, u.name
+      FROM ic_meeting_attendees a
+      LEFT JOIN users u ON u.id = a.user_id
+      WHERE a.meeting_id = ${m.id}
+    ` as any[];
+    const invited = new Set(attendeeRows.map(a => a.user_id));
+    if (!(isAdmin || m.organizer_user_id === userId || invited.has(userId))) continue;
+    const organizer = (await sql`SELECT email FROM users WHERE id = ${m.organizer_user_id}` as any[])[0];
+    out.push({
+      id: `ic_meeting:${m.id}`,
+      kind: 'ic_meeting',
+      source_id: m.id,
+      source_uid: m.uid,
+      title: m.title,
+      start_at: m.start_at,
+      end_at: addMinutes(m.start_at, m.duration_min),
+      status: m.status,
+      location_kind: m.location_kind,
+      location_uri: m.location_uri,
+      organizer_email: organizer?.email || null,
+      attendees: attendeeRows.map(a => ({
+        email: a.email || null, name: a.name || null, role: 'attendee', rsvp: a.rsvp,
+      })),
+      notes: m.agenda || null,
+      deal_id: m.deal_id,
+    });
+  }
+  return out;
+}
+
+async function checkinEvents(env: Env, userId: number, isAdmin: boolean,
+                             fromIso: string, toIso: string): Promise<CalendarEvent[]> {
+  const sql = getSQL(env);
+  const rows = isAdmin
+    ? await sql`
+        SELECT * FROM founder_checkins
+        WHERE start_at >= ${fromIso} AND start_at <= ${toIso} AND status != 'cancelled'
+      ` as any[]
+    : await sql`
+        SELECT * FROM founder_checkins
+        WHERE start_at >= ${fromIso} AND start_at <= ${toIso} AND status != 'cancelled'
+          AND (founder_user_id = ${userId} OR counterpart_user_id = ${userId})
+      ` as any[];
+  const out: CalendarEvent[] = [];
+  for (const c of rows) {
+    const founder = (await sql`SELECT email, name FROM users WHERE id = ${c.founder_user_id}` as any[])[0];
+    const counter = c.counterpart_user_id
+      ? (await sql`SELECT email, name FROM users WHERE id = ${c.counterpart_user_id}` as any[])[0]
+      : null;
+    const attendees: CalendarEvent['attendees'] = [];
+    if (founder) attendees.push({ email: founder.email, name: founder.name, role: 'founder' });
+    if (counter) attendees.push({ email: counter.email, name: counter.name, role: 'counterpart' });
+    out.push({
+      id: `founder_checkin:${c.id}`,
+      kind: 'founder_checkin',
+      source_id: c.id,
+      source_uid: c.uid,
+      title: c.title,
+      start_at: c.start_at,
+      end_at: addMinutes(c.start_at, c.duration_min),
+      status: c.status,
+      location_kind: c.location_kind,
+      location_uri: c.location_uri,
+      organizer_email: counter?.email || founder?.email || null,
+      attendees,
+      notes: c.notes || null,
+      project_id: c.project_id,
+    });
+  }
+  return out;
+}
+
+export async function fetchUserEvents(
+  env: Env, userId: number, role: string, fromIso: string, toIso: string,
+  kinds?: string[],
+): Promise<CalendarEvent[]> {
+  const isAdmin = role.toLowerCase() === 'admin';
+  const wanted = new Set(kinds && kinds.length ? kinds : ['ic_meeting', 'founder_checkin']);
+  const out: CalendarEvent[] = [];
+  if (wanted.has('ic_meeting')) out.push(...await icEvents(env, userId, isAdmin, fromIso, toIso));
+  if (wanted.has('founder_checkin')) out.push(...await checkinEvents(env, userId, isAdmin, fromIso, toIso));
+  out.sort((a, b) => a.start_at.localeCompare(b.start_at));
+  return out;
+}
+
+// ===========================================================================
+// ICS export — RFC 5545.
+// ===========================================================================
+function icsDt(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
+}
+function icsEscape(s: string | null | undefined): string {
+  if (!s) return '';
+  return s.replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
+}
+
+export function eventsToIcs(events: CalendarEvent[], calendarName = 'Axal StudioOS'): string {
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Axal StudioOS//EN',
+    `X-WR-CALNAME:${icsEscape(calendarName)}`,
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+  ];
+  const now = icsDt(new Date().toISOString());
+  for (const ev of events) {
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:${ev.kind}-${ev.source_uid}@axal.vc`);
+    lines.push(`DTSTAMP:${now}`);
+    lines.push(`DTSTART:${icsDt(ev.start_at)}`);
+    lines.push(`DTEND:${icsDt(ev.end_at)}`);
+    lines.push(`SUMMARY:${icsEscape(ev.title)}`);
+    if (ev.notes) lines.push(`DESCRIPTION:${icsEscape(ev.notes)}`);
+    if (ev.location_uri) lines.push(`LOCATION:${icsEscape(ev.location_uri)}`);
+    for (const a of ev.attendees) {
+      if (a.email) lines.push(`ATTENDEE;CN=${icsEscape(a.name || a.email)}:mailto:${a.email}`);
+    }
+    lines.push('END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n') + '\r\n';
+}
+
+// ===========================================================================
+// Push to Google Calendar primary
+// ===========================================================================
+function googlePayload(ev: CalendarEvent): any {
+  const body: any = {
+    summary: ev.title,
+    description: ev.notes || '',
+    start: { dateTime: ev.start_at, timeZone: 'UTC' },
+    end: { dateTime: ev.end_at, timeZone: 'UTC' },
+    source: { title: 'Axal StudioOS', url: 'https://axal.vc' },
+  };
+  if (ev.location_uri) body.location = ev.location_uri;
+  const att = ev.attendees
+    .filter(a => a.email && a.email !== ev.organizer_email)
+    .map(a => ({ email: a.email, displayName: a.name }));
+  if (att.length) body.attendees = att;
+  return body;
+}
+
+export async function pushEventToGoogle(
+  accessToken: string, ev: CalendarEvent, googleEventId: string | null,
+): Promise<string | null> {
+  const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+  const payload = JSON.stringify(googlePayload(ev));
+  try {
+    if (googleEventId) {
+      const r = await fetchWithTimeout(
+        `${GOOGLE_CALENDAR_API}/calendars/primary/events/${googleEventId}`,
+        { method: 'PATCH', headers, body: payload },
+      );
+      if (r.status === 404) {
+        // Remote was deleted — fall through to a fresh insert.
+      } else if (!r.ok) {
+        console.warn('[CAL] gcal patch', r.status);
+        return null;
+      } else {
+        return ((await r.json()) as any).id as string;
+      }
+    }
+    const r = await fetchWithTimeout(
+      `${GOOGLE_CALENDAR_API}/calendars/primary/events`,
+      { method: 'POST', headers, body: payload },
+    );
+    if (!r.ok) {
+      console.warn('[CAL] gcal insert', r.status);
+      return null;
+    }
+    return ((await r.json()) as any).id as string;
+  } catch (e: any) {
+    console.warn('[CAL] gcal push exception:', e?.message || e);
+    return null;
+  }
+}
+
+export async function deleteEventFromGoogle(accessToken: string, googleEventId: string): Promise<boolean> {
+  try {
+    const r = await fetchWithTimeout(
+      `${GOOGLE_CALENDAR_API}/calendars/primary/events/${googleEventId}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    return r.status === 200 || r.status === 204 || r.status === 404 || r.status === 410;
+  } catch (e: any) {
+    console.warn('[CAL] gcal delete exception:', e?.message || e);
+    return false;
+  }
+}
+
+// ===========================================================================
+// Push to Microsoft Graph /me/events
+// ===========================================================================
+function microsoftPayload(ev: CalendarEvent): any {
+  const body: any = {
+    subject: ev.title,
+    body: { contentType: 'text', content: ev.notes || '' },
+    start: { dateTime: ev.start_at, timeZone: 'UTC' },
+    end: { dateTime: ev.end_at, timeZone: 'UTC' },
+  };
+  if (ev.location_uri) body.location = { displayName: ev.location_uri };
+  const att = ev.attendees
+    .filter(a => a.email && a.email !== ev.organizer_email)
+    .map(a => ({
+      emailAddress: { address: a.email, name: a.name || a.email },
+      type: 'required',
+    }));
+  if (att.length) body.attendees = att;
+  return body;
+}
+
+export async function pushEventToMicrosoft(
+  accessToken: string, ev: CalendarEvent, eventId: string | null,
+): Promise<string | null> {
+  const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+  const payload = JSON.stringify(microsoftPayload(ev));
+  try {
+    if (eventId) {
+      const r = await fetchWithTimeout(
+        `${MICROSOFT_GRAPH}/me/events/${eventId}`,
+        { method: 'PATCH', headers, body: payload },
+      );
+      if (r.status === 404) {
+        // Fall through to fresh insert.
+      } else if (!r.ok) {
+        console.warn('[CAL] ms patch', r.status);
+        return null;
+      } else {
+        return ((await r.json()) as any).id as string;
+      }
+    }
+    const r = await fetchWithTimeout(
+      `${MICROSOFT_GRAPH}/me/events`,
+      { method: 'POST', headers, body: payload },
+    );
+    if (!r.ok) {
+      console.warn('[CAL] ms insert', r.status);
+      return null;
+    }
+    return ((await r.json()) as any).id as string;
+  } catch (e: any) {
+    console.warn('[CAL] ms push exception:', e?.message || e);
+    return null;
+  }
+}
+
+export async function deleteEventFromMicrosoft(accessToken: string, eventId: string): Promise<boolean> {
+  try {
+    const r = await fetchWithTimeout(
+      `${MICROSOFT_GRAPH}/me/events/${eventId}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    return r.status === 200 || r.status === 204 || r.status === 404 || r.status === 410;
+  } catch (e: any) {
+    console.warn('[CAL] ms delete exception:', e?.message || e);
+    return false;
+  }
+}
+
+// ===========================================================================
+// User → provider sync. Iterates the user's events in window, upserts each
+// via the provider's API, mirrors the result into calendar_sync_records.
+// ===========================================================================
+export interface SyncSummary {
+  pushed: number; updated: number; failed: number; skipped: number; total: number;
+}
+
+export async function syncUserToGoogle(
+  env: Env, userId: number, role: string, fromIso: string, toIso: string,
+): Promise<SyncSummary> {
+  const sql = getSQL(env);
+  const tokenRow = (await sql`
+    SELECT refresh_token FROM google_oauth_tokens WHERE user_id = ${userId}
+  ` as any[])[0];
+  if (!tokenRow) throw new Error('not_connected');
+  const accessToken = await refreshGoogleAccessToken(env, tokenRow.refresh_token);
+  return syncUserToProvider(env, userId, role, fromIso, toIso, 'google', accessToken);
+}
+
+export async function syncUserToMicrosoft(
+  env: Env, userId: number, role: string, fromIso: string, toIso: string,
+): Promise<SyncSummary> {
+  const sql = getSQL(env);
+  const tokenRow = (await sql`
+    SELECT refresh_token FROM microsoft_oauth_tokens WHERE user_id = ${userId}
+  ` as any[])[0];
+  if (!tokenRow) throw new Error('not_connected');
+  const accessToken = await refreshMicrosoftAccessToken(env, tokenRow.refresh_token);
+  return syncUserToProvider(env, userId, role, fromIso, toIso, 'microsoft', accessToken);
+}
+
+async function syncUserToProvider(
+  env: Env, userId: number, role: string, fromIso: string, toIso: string,
+  provider: 'google' | 'microsoft', accessToken: string,
+): Promise<SyncSummary> {
+  const sql = getSQL(env);
+  const events = await fetchUserEvents(env, userId, role, fromIso, toIso);
+  let pushed = 0, updated = 0, failed = 0;
+  for (const ev of events) {
+    const rec = (await sql`
+      SELECT external_event_id FROM calendar_sync_records
+      WHERE user_id = ${userId} AND provider = ${provider}
+        AND source_kind = ${ev.kind} AND source_id = ${ev.source_id}
+    ` as any[])[0];
+    const existing = rec?.external_event_id || null;
+    const newId = provider === 'google'
+      ? await pushEventToGoogle(accessToken, ev, existing)
+      : await pushEventToMicrosoft(accessToken, ev, existing);
+    if (!newId) { failed++; continue; }
+    const nowIso = new Date().toISOString();
+    if (rec) {
+      await sql`
+        UPDATE calendar_sync_records
+           SET external_event_id = ${newId}, last_synced_at = ${nowIso}
+         WHERE user_id = ${userId} AND provider = ${provider}
+           AND source_kind = ${ev.kind} AND source_id = ${ev.source_id}
+      `;
+      updated++;
+    } else {
+      try {
+        await sql`
+          INSERT INTO calendar_sync_records
+            (user_id, provider, source_kind, source_id, external_event_id, last_synced_at)
+          VALUES (${userId}, ${provider}, ${ev.kind}, ${ev.source_id}, ${newId}, ${nowIso})
+        `;
+        pushed++;
+      } catch {
+        // Concurrent insert — count as failed rather than silently update.
+        failed++;
+      }
+    }
+  }
+  const nowIso = new Date().toISOString();
+  const tokenTable = provider === 'google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens';
+  await sql.unsafe(
+    `UPDATE ${tokenTable} SET last_synced_at = ? WHERE user_id = ?`,
+    [nowIso, userId],
+  );
+  return { pushed, updated, failed, skipped: 0, total: events.length };
+}

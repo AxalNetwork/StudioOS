@@ -43,7 +43,9 @@ export default function CalendarPage() {
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
   const [google, setGoogle] = useState(null);
+  const [microsoft, setMicrosoft] = useState(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [msSyncBusy, setMsSyncBusy] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
   const [showIc, setShowIc] = useState(false);
   const [showCk, setShowCk] = useState(false);
@@ -70,17 +72,27 @@ export default function CalendarPage() {
   async function loadGoogle() {
     try { setGoogle(await api.googleCalStatus()); } catch (e) { setGoogle({ available: false, connected: false, error: e.message }); }
   }
+  async function loadMicrosoft() {
+    try { setMicrosoft(await api.microsoftCalStatus()); } catch (e) { setMicrosoft({ available: false, connected: false, error: e.message }); }
+  }
 
   useEffect(() => {
-    load(); loadGoogle();
+    load(); loadGoogle(); loadMicrosoft();
     // Surface OAuth callback result from query string.
     const qs = new URLSearchParams(window.location.search);
     const g = qs.get('google');
+    const m = qs.get('microsoft');
     if (g === 'connected') {
       setSyncResult({ kind: 'success', text: 'Google Calendar connected.' });
       window.history.replaceState({}, '', window.location.pathname);
     } else if (g === 'failed') {
       setSyncResult({ kind: 'error', text: `Google connection failed${qs.get('reason') ? ` (${qs.get('reason')})` : ''}.` });
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (m === 'connected') {
+      setSyncResult({ kind: 'success', text: 'Outlook / Microsoft 365 calendar connected.' });
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (m === 'failed') {
+      setSyncResult({ kind: 'error', text: `Outlook connection failed${qs.get('reason') ? ` (${qs.get('reason')})` : ''}.` });
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -126,6 +138,34 @@ export default function CalendarPage() {
       setSyncResult({ kind: 'error', text: e.message });
     }
     setSyncBusy(false);
+  }
+
+  async function connectMicrosoft() {
+    try {
+      const r = await api.microsoftCalConnect();
+      window.location.href = r.auth_url;
+    } catch (e) {
+      setSyncResult({ kind: 'error', text: e.message });
+    }
+  }
+
+  async function disconnectMicrosoft() {
+    if (!window.confirm('Disconnect Outlook? Already-pushed events stay on Outlook.')) return;
+    await api.microsoftCalDisconnect();
+    await loadMicrosoft();
+    setSyncResult({ kind: 'success', text: 'Outlook disconnected.' });
+  }
+
+  async function runMsSync() {
+    setMsSyncBusy(true); setSyncResult(null);
+    try {
+      const r = await api.microsoftCalSync();
+      setSyncResult({ kind: 'success', text: `Outlook: pushed ${r.pushed} new, updated ${r.updated}, ${r.failed} failed (of ${r.total}).` });
+      await loadMicrosoft();
+    } catch (e) {
+      setSyncResult({ kind: 'error', text: e.message });
+    }
+    setMsSyncBusy(false);
   }
 
   return (
@@ -195,6 +235,49 @@ export default function CalendarPage() {
             {syncResult.text}
           </div>
         )}
+      </section>
+
+      {/* Outlook / Microsoft 365 sync panel */}
+      <section className="border border-slate-200 rounded-lg bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-slate-900 flex items-center gap-2">
+              <LinkIcon className="w-4 h-4 text-sky-600" /> Outlook / Microsoft 365 sync
+            </h2>
+            {microsoft?.available === false && (
+              <p className="text-sm text-amber-700 mt-1">Server-side Microsoft OAuth credentials are not configured. Ask an admin to set <code>MICROSOFT_CLIENT_ID</code>/<code>MICROSOFT_CLIENT_SECRET</code>.</p>
+            )}
+            {microsoft?.available && !microsoft.connected && (
+              <p className="text-sm text-slate-600 mt-1">Connect your Microsoft 365 / Outlook account to mirror upcoming events to your personal calendar.</p>
+            )}
+            {microsoft?.connected && (
+              <p className="text-sm text-slate-700 mt-1">
+                Connected as <span className="font-medium">{microsoft.microsoft_email || 'your Microsoft account'}</span>
+                {microsoft.last_synced_at && <> · last sync {new Date(microsoft.last_synced_at).toLocaleString()}</>}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {microsoft?.connected ? (
+              <>
+                <button onClick={runMsSync} disabled={msSyncBusy}
+                        className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50">
+                  <RefreshCw className={`w-4 h-4 ${msSyncBusy ? 'animate-spin' : ''}`} />
+                  {msSyncBusy ? 'Syncing…' : 'Sync now'}
+                </button>
+                <button onClick={disconnectMicrosoft}
+                        className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 border border-rose-300 text-rose-700 rounded hover:bg-rose-50">
+                  Disconnect
+                </button>
+              </>
+            ) : (
+              <button onClick={connectMicrosoft} disabled={!microsoft?.available}
+                      className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50">
+                Connect Outlook
+              </button>
+            )}
+          </div>
+        </div>
       </section>
 
       {/* Quick add */}

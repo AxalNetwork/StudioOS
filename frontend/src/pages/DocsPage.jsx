@@ -426,6 +426,7 @@ export default function DocsPage() {
             <LI><Strong>Stripe Atlas</Strong> — incorporation handoff during Week 2</LI>
             <LI><Strong>Cooley GO</Strong> — legal template alignment with Cooley's library</LI>
             <LI><Strong>PitchBook</Strong> — market intelligence enrichment</LI>
+            <LI><Strong>Google Calendar & Outlook / Microsoft 365</Strong> — connect from <Strong>Calendar</Strong> to mirror IC meetings and founder check-ins to your personal calendar (per-user OAuth, refresh-token sync)</LI>
             <LI><Strong>Custom</Strong> — bring your own webhook + API key</LI>
           </UL>
           <P>Connect at <Strong>Integrations</Strong> (admin or partner role only). Secrets stored Fernet-encrypted; previews shown masked. Webhook signatures validated via HMAC-SHA256 (<Code>X-Axal-Signature</Code> header).</P>
