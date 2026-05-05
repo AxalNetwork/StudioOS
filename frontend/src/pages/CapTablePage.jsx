@@ -70,6 +70,11 @@ export default function CapTablePage() {
   const [inputs, setInputs] = useState(DEFAULT_INPUTS);
   const [result, setResult] = useState(null);
   const [errors, setErrors] = useState([]);
+  // apiError is for transport / auth / availability failures (404, 401, 5xx,
+  // network). It's surfaced in its OWN banner so it doesn't get rendered
+  // under the misleading "Validation errors" header — that header is reserved
+  // for real 422 input-validation feedback from the simulator.
+  const [apiError, setApiError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [scenarios, setScenarios] = useState([]);
   const [activeUid, setActiveUid] = useState(null);
@@ -87,22 +92,47 @@ export default function CapTablePage() {
   }
 
   async function runSim() {
-    setLoading(true); setErrors([]);
+    setLoading(true); setErrors([]); setApiError(null);
     try {
       const r = await api.simulateCapTable(inputs);
       setResult(r);
     } catch (e) {
-      try {
-        const parsed = JSON.parse(e.message.replace(/^.*?:\s*/, ''));
-        setErrors(parsed?.errors || [e.message]);
-      } catch { setErrors([e.message || 'Simulation failed']); }
+      // Distinguish transport/availability problems from real input-validation
+      // errors so the user doesn't see a misleading "Validation errors: Not
+      // found" banner when the simulator endpoint is just unreachable.
+      //
+      // Backend contract (backend/app/api/routes/captable.py): genuine
+      // validation failures arrive as HTTP 400 (or 422 if FastAPI's body
+      // parser rejects), with the structured payload on `e.data` thanks to
+      // the api.js request wrapper:
+      //   e.data = { code: 'invalid_inputs', errors: [...] }
+      // We rely on the presence of `e.data.errors` rather than parsing
+      // `e.message` (which is a human string, not JSON).
+      const status = e?.status;
+      const msg = (e?.message || '').toLowerCase();
+      const validationErrs = Array.isArray(e?.data?.errors) ? e.data.errors : null;
+      if (validationErrs && validationErrs.length > 0) {
+        setErrors(validationErrs);
+      } else if (status === 404 || msg.includes('not found')) {
+        setApiError("The cap-table simulator isn't reachable right now. Please retry in a moment, or contact support if it persists.");
+      } else if (status === 401 || status === 403) {
+        setApiError('Your session expired or you do not have access to the simulator. Please sign in again.');
+      } else if (status === 400 || status === 422) {
+        // 400/422 with no structured errors array — generic friendly hint.
+        // Don't surface raw `e.message` here: backend validation strings can
+        // include implementation detail (field paths, type names) that's not
+        // useful to a founder.
+        setErrors(['Some inputs are invalid. Please review the highlighted sections and try again.']);
+      } else {
+        setApiError('Simulation failed. Please retry in a moment, or contact support if it persists.');
+      }
       setResult(null);
     }
     setLoading(false);
   }
 
   async function saveScenario() {
-    setSavedFlash('');
+    setSavedFlash(''); setApiError(null);
     try {
       let s;
       if (activeUid) {
@@ -116,7 +146,18 @@ export default function CapTablePage() {
       setTimeout(() => setSavedFlash(''), 1500);
       loadScenarios();
     } catch (e) {
-      setErrors([e.message || 'Save failed']);
+      const status = e?.status;
+      const msg = (e?.message || '').toLowerCase();
+      if (status === 404 || msg.includes('not found')) {
+        // The scenario UID we were editing was deleted out from under us.
+        // Drop the activeUid so the next save creates a fresh scenario.
+        setActiveUid(null);
+        setApiError("This scenario is no longer available — saving will create a new one. Click Save again to keep your changes.");
+      } else if (status === 401 || status === 403) {
+        setApiError('Your session expired. Please sign in again to save scenarios.');
+      } else {
+        setApiError('Save failed. Please retry in a moment, or contact support if it persists.');
+      }
     }
   }
 
@@ -207,6 +248,12 @@ export default function CapTablePage() {
       </div>
 
       {savedFlash && <div className="mb-3 text-sm text-emerald-700">{savedFlash}</div>}
+      {apiError && (
+        <div className="mb-4 flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-lg px-4 py-3 text-sm text-rose-700">
+          <AlertCircle size={16} className="mt-0.5 shrink-0" />
+          <span>{apiError}</span>
+        </div>
+      )}
       {errors.length > 0 && (
         <div className="mb-4 bg-red-50 border border-red-200 rounded p-3 text-sm text-red-700">
           <div className="flex items-center gap-1 font-semibold mb-1"><AlertCircle size={14}/> Validation errors</div>
