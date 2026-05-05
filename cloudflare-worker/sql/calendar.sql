@@ -5,25 +5,11 @@
 --
 -- For local dev (in-memory D1) drop --remote.
 --
--- All seven tables are CREATE TABLE IF NOT EXISTS so this file is safe to
--- re-run. Mirrors the FastAPI SQLModel shapes in
--- backend/app/models/entities.py:1362-1455 (IcMeeting, IcMeetingAttendee,
--- FounderCheckin, GoogleOAuthToken, CalendarSyncRecord) and adds two new
--- tables — microsoft_oauth_tokens and oauth_state_tokens — that don't exist
--- in the FastAPI dev backend.
---
--- D1 is SQLite. Notes on the translation from SQLModel/SQLAlchemy:
---  * Datetimes are stored as ISO-8601 TEXT, matching every other Worker
---    schema in this directory (schema.sql etc.). The FastAPI side stores
---    naive UTC datetimes; the Worker should always write `new Date().toISOString()`.
---  * `calendar_sync_records.external_event_id` replaces FastAPI's
---    `google_event_id` because the column now serves both providers
---    (the per-row `provider` discriminator selects which calendar service
---    that id belongs to).
---  * `microsoft_oauth_tokens` mirrors `google_oauth_tokens` 1:1; we deliberately
---    do NOT add a separate `microsoft_sub` column. The FastAPI GoogleOAuthToken
---    has no `google_sub` either, so adding one for Microsoft only would break
---    the "mirror" symmetry the spec asks for.
+-- All seven tables use CREATE TABLE IF NOT EXISTS so this file is safe to re-run.
+-- Datetimes are stored as ISO-8601 TEXT, matching every other Worker schema.
+-- `calendar_sync_records.external_event_id` and `provider` columns are per the
+-- original task spec (multi-provider). Mirrors the FastAPI SQLModel shapes in
+-- backend/app/models/entities.py:1362-1455.
 
 PRAGMA foreign_keys = ON;
 
@@ -102,6 +88,7 @@ CREATE TABLE IF NOT EXISTS google_oauth_tokens (
   refresh_token   TEXT    NOT NULL,
   scope           TEXT    NOT NULL DEFAULT '',
   google_email    TEXT,
+  google_sub      TEXT,
   last_synced_at  TEXT,
   created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -117,6 +104,7 @@ CREATE TABLE IF NOT EXISTS microsoft_oauth_tokens (
   refresh_token   TEXT    NOT NULL,
   scope           TEXT    NOT NULL DEFAULT '',
   microsoft_email TEXT,
+  microsoft_sub   TEXT,
   last_synced_at  TEXT,
   created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
