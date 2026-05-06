@@ -51,11 +51,15 @@ export function AuthProvider({ children }) {
   }, []);
 
   const refresh = useCallback(async ({ force = false } = {}) => {
-    // Skip if no session at all — /api/auth/me would 401 and the
-    // global handler would bounce to /login mid-render.
-    const hasToken = (() => { try { return !!localStorage.getItem('token'); } catch { return false; } })();
-    const hasCookie = typeof document !== 'undefined' && document.cookie.includes('studioos_auth');
-    if (!hasToken && !hasCookie) return;
+    // Gate on cached `user` presence rather than token/cookie readability.
+    // T6 makes `studioos_auth` an httpOnly cookie (not visible to JS), so
+    // checking `document.cookie` would skip /me for every cookie-auth
+    // session. Pages that load *without* any cached user are either
+    // public (no /me needed) or the route guard will redirect to /login
+    // before this fires; if /me 401s anyway, api.request bounces to
+    // /login on its own.
+    const hasCachedUser = !!safeReadJSON('user');
+    if (!hasCachedUser) return;
 
     const now = Date.now();
     if (!force && now - lastFetchRef.current < THROTTLE_MS) return;
