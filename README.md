@@ -4,15 +4,17 @@
 
 Internal codename: Axal StudioOS. Operated by Axal Management, LLC.
 
+> **Architecture in one sentence:** Production API runs on a Cloudflare Worker (`cloudflare-worker/`), the React SPA ships to Cloudflare Pages (`frontend/`), D1 is the canonical user store, and the FastAPI in `backend/` exists only as a Replit dev convenience and is **never deployed**. Read [`CLAUDE.md`](./CLAUDE.md) before contributing.
+
 ## Repo layout
 
 | Path                | What it is                                                            |
 | ------------------- | --------------------------------------------------------------------- |
-| `frontend/`         | React 19 + Vite 6 + Tailwind 4 SPA (the dashboard)                    |
-| `backend/`          | **FastAPI** (Python) — the canonical API. Source of truth.            |
-| `cloudflare-worker/`| Edge proxy/cache (Hono on CF Workers) + Durable Objects for WebSockets|
-| `attached_assets/`  | Design specs, screenshots, methodology docs                           |
-| `docs/`             | Built frontend bundle (Vite output, served via GitHub Pages)          |
+| `frontend/`         | React 19 + Vite 6 + Tailwind 4 SPA — ships to Cloudflare Pages        |
+| `cloudflare-worker/`| **Production API** — Hono on Cloudflare Workers, D1, KV, R2, Queues, Vectorize, Durable Objects |
+| `backend/`          | FastAPI (Python) — **Replit-dev-only**, not deployed to production    |
+| `attached_assets/`  | Design specs, screenshots, methodology docs, legal templates          |
+| `docs/`             | Built frontend bundle (Vite output, also served via GitHub Pages)     |
 
 ## Local development on Replit
 
@@ -21,23 +23,13 @@ Two workflows are configured:
 - **Backend API** — `uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload`
 - **Start application** — `cd frontend && npm run dev` (Vite on port 5000, proxies `/api` → 8000)
 
-Required secret: `JWT_SECRET` (the backend fails fast at import time if unset).
+Required secret: `JWT_SECRET` (the dev backend fails fast at import time if unset).
 
 Optional secrets: `GITHUB_ACCESS_TOKEN`, `GMAIL_*`, `STRIPE_*`, `SUMSUB_*` — see `PRODUCTION.md`.
 
-## Architecture
-
-FastAPI is the canonical API. The Cloudflare Worker is a thin edge layer that:
-
-1. Proxies `/api/*` to the FastAPI origin (configured via `FASTAPI_ORIGIN` secret).
-2. Hosts WebSocket fan-out via Durable Objects (`PipelineRoom`, `OnboardingChat`).
-3. Drains background jobs via cron + Queues consumer.
-
-The legacy in-worker route handlers (`cloudflare-worker/src/routes/*.ts`) are kept for git history but are no longer mounted from `index.ts`. See `cloudflare-worker/src/routes/README.md`.
-
 ## Deploy
 
-See `PRODUCTION.md` for the production checklist, secrets, and post-deploy steps.
+See `PRODUCTION.md` for the production Cloudflare deploy checklist, secrets, and post-deploy steps. See [`CLAUDE.md`](./CLAUDE.md) for the architecture rules every PR must respect.
 
 ## License
 
