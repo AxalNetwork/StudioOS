@@ -30,10 +30,31 @@ export default function VerifyEmailPage() {
   // pair lets the user retry without going back to register.
   const setupRef = useRef(null);
 
+  // T22.2 — best-effort profile re-fetch. The verify endpoint no longer
+  // echoes email/name, so per spec the frontend re-derives profile data
+  // from /auth/me. The user typically isn't authenticated yet at this
+  // point in the flow (TOTP setup precedes first login), so /me will
+  // 401 — that's fine, we silently fall back to whatever userData we
+  // already have. If a session does exist (e.g. the user was already
+  // logged in on this device when the link arrived), /me wins and we
+  // refresh the displayed name/email from the canonical source.
+  const refreshProfileFromMe = async () => {
+    try {
+      const me = await api.getMe();
+      if (me && (me.email || me.name)) {
+        setUserData(prev => ({ ...(prev || {}), email: me.email || prev?.email, name: me.name || prev?.name }));
+      }
+    } catch {
+      /* unauthenticated pre-login — keep cached userData */
+    }
+  };
+
   const runSetupTotp = async (email, setupToken) => {
     const totp = await api.setupTotp({ email, token: setupToken });
     setTotpData(totp);
     setStatus('totp_setup');
+    // Pull canonical profile fields from /me after TOTP enrolment.
+    await refreshProfileFromMe();
   };
 
   const retrySetup = async () => {
@@ -68,6 +89,9 @@ export default function VerifyEmailPage() {
         confirmed = await api.confirmVerifyEmail({ token });
         setUserData({ email: confirmed.email, name: confirmed.name });
         setupRef.current = { email: confirmed.email, setup_token: confirmed.setup_token };
+        // Best-effort /me refresh after the verify step too — same
+        // unauth-tolerant fallback applies (see refreshProfileFromMe).
+        await refreshProfileFromMe();
       } catch (e) {
         setError(e.message || 'Verification failed.');
         setStatus('error');
