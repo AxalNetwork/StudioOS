@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { clampLimit, parseOffset } from '../util/pagination';
+import { hashEmail } from '../util/hashEmail';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAdmin, createJWT, hashToken } from '../auth';
@@ -179,13 +180,16 @@ admin.get('/users/:user_id/profile', async (c) => {
     } catch {}
   }
 
-  // Audit trail — admin viewed this profile.
+  // Audit trail — admin viewed this profile. Epic 11 — actor stores
+  // hashEmail(adminUser.email), never the plaintext, to keep PII out of
+  // activity_logs. user_id is the join key for support workflows.
   try {
+    const adminHash = await hashEmail(adminUser.email);
     await c.env.DB.prepare(
       `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
     ).bind('admin_viewed_profile',
-      `Admin ${adminUser.name} viewed full profile for ${userRow.name} (${userRow.email})`,
-      adminUser.email, adminUser.id).run();
+      `Admin ${adminUser.name} viewed full profile for ${userRow.name} (user_id=${userRow.id})`,
+      adminHash, adminUser.id).run();
   } catch {}
 
   return c.json({
@@ -247,19 +251,22 @@ admin.patch('/users/:user_id/access-level', async (c) => {
 
   const action = newLevel === 'limited' ? 'access_limited_granted' : 'access_limited_revoked';
   const details = newLevel === 'limited'
-    ? `Admin ${adminUser.name} granted limited access (browse-only, no signing) to ${target.name} (${target.email})`
-    : `Admin ${adminUser.name} revoked limited access from ${target.name} (${target.email})`;
+    ? `Admin ${adminUser.name} granted limited access (browse-only, no signing) to ${target.name} (user_id=${target.id})`
+    : `Admin ${adminUser.name} revoked limited access from ${target.name} (user_id=${target.id})`;
   try {
+    // Epic 11 — actors are email_hash, never the plaintext email.
+    const adminHash = await hashEmail(adminUser.email);
+    const targetHash = await hashEmail(target.email);
     await c.env.DB.prepare(
       `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
-    ).bind(action, details, adminUser.email, adminUser.id).run();
+    ).bind(action, details, adminHash, adminUser.id).run();
     // Also log on the target so it appears in their own activity timeline.
     const userMsg = newLevel === 'limited'
       ? 'You were granted limited platform access by Axal compliance. You can browse but cannot sign legal agreements until KYC is complete.'
       : 'Your limited platform access was revoked by Axal compliance.';
     await c.env.DB.prepare(
       `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
-    ).bind(action, userMsg, target.email, target.id).run();
+    ).bind(action, userMsg, targetHash, target.id).run();
   } catch {}
 
   return c.json({ access_level: newLevel, user_id: userId });
@@ -280,11 +287,12 @@ admin.post('/users/:user_id/notes', async (c) => {
   if ((r?.meta?.changes || 0) < 1) return c.json({ error: 'User not found' }, 404);
 
   try {
+    const adminHash = await hashEmail(adminUser.email);
     await c.env.DB.prepare(
       `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
     ).bind('admin_notes_updated',
       `Admin ${adminUser.name} updated internal notes (${notes.length} chars)`,
-      adminUser.email, adminUser.id).run();
+      adminHash, adminUser.id).run();
   } catch {}
 
   return c.json({ ok: true });
@@ -331,11 +339,16 @@ admin.post('/users/:user_id/resend-verification', async (c) => {
   }
 
   try {
+    // Epic 11 — actor is email_hash. Details references user_id and
+    // target email_hash rather than the plaintext email so admin-only
+    // log readers still see who-was-touched without storing the address.
+    const adminHash = await hashEmail(adminUser.email);
+    const targetHash = await hashEmail(target.email);
     await c.env.DB.prepare(
       `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
     ).bind('admin_resent_verification',
-      `Admin ${adminUser.name} re-sent verification email to ${target.email}${emailed ? '' : ' (email send failed — token still rotated)'}`,
-      adminUser.email, adminUser.id).run();
+      `Admin ${adminUser.name} re-sent verification email to user_id=${target.id} (email_hash=${targetHash})${emailed ? '' : ' (email send failed — token still rotated)'}`,
+      adminHash, adminUser.id).run();
   } catch {}
 
   return c.json({ ok: true, already_verified: false, emailed });
@@ -349,7 +362,9 @@ admin.post('/impersonate/:userId', async (c) => {
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
   const target = rows[0];
   const token = await createJWT(c.env, target.id, target.email, target.role, adminUser.id);
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('admin_impersonate', ${`Admin ${adminUser.name} impersonated user ${target.name} (${target.email})`}, ${adminUser.email}, ${adminUser.id})`;
+  // Epic 11 — actor is email_hash, details references user_id only.
+  const impAdminHash = await hashEmail(adminUser.email);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('admin_impersonate', ${`Admin ${adminUser.name} impersonated user ${target.name} (user_id=${target.id})`}, ${impAdminHash}, ${adminUser.id})`;
   await sql.end();
   return c.json({ token, user: { id: target.id, email: target.email, name: target.name, role: target.role } });
 });
@@ -396,8 +411,11 @@ admin.patch('/users/:userId/role', async (c) => {
   const oldRole = rows[0].role;
   await sql`UPDATE users SET role = ${role} WHERE id = ${userId}`;
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'partner', id: userId }); } catch {}
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('role_changed', ${`Admin ${adminUser.name} changed ${rows[0].name}'s role from ${oldRole} to ${role}`}, ${adminUser.email}, ${adminUser.id})`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('your_role_changed', ${`Your role was changed from ${oldRole} to ${role} by ${adminUser.name}`}, ${rows[0].email}, ${rows[0].id})`;
+  // Epic 11 — actor on both rows is email_hash, never the plaintext.
+  const roleAdminHash = await hashEmail(adminUser.email);
+  const roleTargetHash = await hashEmail(rows[0].email);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('role_changed', ${`Admin ${adminUser.name} changed ${rows[0].name}'s role from ${oldRole} to ${role}`}, ${roleAdminHash}, ${adminUser.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('your_role_changed', ${`Your role was changed from ${oldRole} to ${role} by ${adminUser.name}`}, ${roleTargetHash}, ${rows[0].id})`;
   await sql.end();
   return c.json({ message: `Role updated to ${role}`, user_id: userId, role });
 });
@@ -412,8 +430,11 @@ admin.patch('/users/:userId/toggle-active', async (c) => {
 
   const newActive = !rows[0].is_active;
   await sql`UPDATE users SET is_active = ${newActive} WHERE id = ${userId}`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_toggled', ${`Admin ${adminUser.name} ${newActive ? 'activated' : 'deactivated'} user ${rows[0].name}`}, ${adminUser.email}, ${adminUser.id})`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('account_status_changed', ${`Your account was ${newActive ? 'activated' : 'deactivated'} by an Axal admin`}, ${rows[0].email}, ${rows[0].id})`;
+  // Epic 11 — actor on both rows is email_hash, never the plaintext.
+  const tgAdminHash = await hashEmail(adminUser.email);
+  const tgTargetHash = await hashEmail(rows[0].email);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_toggled', ${`Admin ${adminUser.name} ${newActive ? 'activated' : 'deactivated'} user ${rows[0].name}`}, ${tgAdminHash}, ${adminUser.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('account_status_changed', ${`Your account was ${newActive ? 'activated' : 'deactivated'} by an Axal admin`}, ${tgTargetHash}, ${rows[0].id})`;
   await sql.end();
   return c.json({ message: `User ${newActive ? 'activated' : 'deactivated'}`, is_active: newActive });
 });

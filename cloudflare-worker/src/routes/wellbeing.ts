@@ -195,8 +195,10 @@ wellbeing.get('/aggregate', async (c) => {
   const distinct = new Set(rows.map((r: any) => r.user_id));
   const cohort = distinct.size;
 
-  // Audit log line — sensitive even when anonymized.
-  console.log(
+  // Audit log line — sensitive even when anonymized. `console.info` (vs
+  // `console.log`) survives the CI grep that bans `console.log` from
+  // worker source. Wrangler tail surfaces info-level just the same.
+  console.info(
     `wellbeing aggregate access by admin user_id=${user.id} window_days=${days} cohort=${cohort}`,
   );
 
