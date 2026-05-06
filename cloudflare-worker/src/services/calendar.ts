@@ -36,7 +36,10 @@ async function loadRefreshToken(
   if (decrypted) return { raw: decrypted, wasPlaintext: false };
   // decryptString returns null on any failure (wrong key, malformed,
   // legacy plaintext). Fall back to the raw value so existing connections
-  // keep working through the migration.
+  // keep working through the migration. We log a one-line warning so ops
+  // can tell apart "still migrating" from "secret rotated / misconfigured"
+  // — the latter shows up as a flood of fallbacks for already-migrated rows.
+  console.warn(`[CAL] refresh_token decrypt fallback table=${table} user=${userId} (legacy plaintext or wrong key)`);
   return { raw: stored, wasPlaintext: true };
 }
 
