@@ -25,6 +25,7 @@ import {
   fetchUserEvents, eventsToIcs,
   syncUserToGoogle, syncUserToMicrosoft,
 } from '../services/calendar';
+import { encryptString } from '../services/cryptoBox';
 
 const calendar = new Hono<{ Bindings: Env }>();
 
@@ -432,6 +433,7 @@ calendar.get('/google/callback', async (c) => {
     const refreshToken = tokens?.refresh_token;
     if (!refreshToken) return failureRedirect(c.env, 'google', 'no_refresh_token');
     const info = await fetchGoogleUserinfo(tokens.access_token || '');
+    const refreshEnc = await encryptString(c.env, refreshToken);
 
     const sql = getSQL(c.env);
     const nowIso = new Date().toISOString();
@@ -439,7 +441,7 @@ calendar.get('/google/callback', async (c) => {
     if (existing) {
       await sql`
         UPDATE google_oauth_tokens
-           SET refresh_token = ${refreshToken}, scope = ${tokens.scope || ''},
+           SET refresh_token = ${refreshEnc}, scope = ${tokens.scope || ''},
                google_email = ${info.email || null}, google_sub = ${info.id || null},
                updated_at = ${nowIso}
          WHERE user_id = ${userId}
@@ -449,7 +451,7 @@ calendar.get('/google/callback', async (c) => {
         INSERT INTO google_oauth_tokens
           (user_id, refresh_token, scope, google_email, google_sub)
         VALUES
-          (${userId}, ${refreshToken}, ${tokens.scope || ''},
+          (${userId}, ${refreshEnc}, ${tokens.scope || ''},
            ${info.email || null}, ${info.id || null})
       `;
     }
@@ -535,6 +537,7 @@ calendar.get('/microsoft/callback', async (c) => {
     const info = await fetchMicrosoftUserinfo(tokens.access_token || '');
     const email = info.mail || info.userPrincipalName || null;
     const subId = info.id || null;
+    const refreshEnc = await encryptString(c.env, refreshToken);
 
     const sql = getSQL(c.env);
     const nowIso = new Date().toISOString();
@@ -542,7 +545,7 @@ calendar.get('/microsoft/callback', async (c) => {
     if (existing) {
       await sql`
         UPDATE microsoft_oauth_tokens
-           SET refresh_token = ${refreshToken}, scope = ${tokens.scope || ''},
+           SET refresh_token = ${refreshEnc}, scope = ${tokens.scope || ''},
                microsoft_email = ${email}, microsoft_sub = ${subId},
                updated_at = ${nowIso}
          WHERE user_id = ${userId}
@@ -552,7 +555,7 @@ calendar.get('/microsoft/callback', async (c) => {
         INSERT INTO microsoft_oauth_tokens
           (user_id, refresh_token, scope, microsoft_email, microsoft_sub)
         VALUES
-          (${userId}, ${refreshToken}, ${tokens.scope || ''}, ${email}, ${subId})
+          (${userId}, ${refreshEnc}, ${tokens.scope || ''}, ${email}, ${subId})
       `;
     }
     return successRedirect(c.env, 'microsoft');

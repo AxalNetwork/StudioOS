@@ -13,6 +13,48 @@
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import { encryptString, decryptString } from './cryptoBox';
+
+/**
+ * Refresh tokens were originally written in plaintext and migrated to
+ * AES-GCM via cryptoBox. Reads first attempt decryption; if that fails
+ * (legacy plaintext row, or any malformed blob), the value is returned
+ * verbatim. After a successful sync the caller re-encrypts the row so
+ * each user transparently rolls forward.
+ */
+async function loadRefreshToken(
+  env: Env, table: 'google_oauth_tokens' | 'microsoft_oauth_tokens', userId: number,
+): Promise<{ raw: string; wasPlaintext: boolean } | null> {
+  const sql = getSQL(env);
+  const rows = await sql.unsafe(
+    `SELECT refresh_token FROM ${table} WHERE user_id = ?`, [userId],
+  ) as any[];
+  const row = rows[0];
+  if (!row?.refresh_token) return null;
+  const stored: string = row.refresh_token;
+  const decrypted = await decryptString(env, stored);
+  if (decrypted) return { raw: decrypted, wasPlaintext: false };
+  // decryptString returns null on any failure (wrong key, malformed,
+  // legacy plaintext). Fall back to the raw value so existing connections
+  // keep working through the migration.
+  return { raw: stored, wasPlaintext: true };
+}
+
+async function reencryptRefreshToken(
+  env: Env, table: 'google_oauth_tokens' | 'microsoft_oauth_tokens',
+  userId: number, plaintext: string,
+): Promise<void> {
+  try {
+    const enc = await encryptString(env, plaintext);
+    const sql = getSQL(env);
+    await sql.unsafe(
+      `UPDATE ${table} SET refresh_token = ? WHERE user_id = ?`,
+      [enc, userId],
+    );
+  } catch (e: any) {
+    console.warn('[CAL] reencrypt failed:', e?.message || e);
+  }
+}
 
 // ===========================================================================
 // Google constants
@@ -624,24 +666,20 @@ export interface SyncSummary {
 export async function syncUserToGoogle(
   env: Env, userId: number, role: string, fromIso: string, toIso: string,
 ): Promise<SyncSummary> {
-  const sql = getSQL(env);
-  const tokenRow = (await sql`
-    SELECT refresh_token FROM google_oauth_tokens WHERE user_id = ${userId}
-  ` as any[])[0];
-  if (!tokenRow) throw new Error('not_connected');
-  const accessToken = await refreshGoogleAccessToken(env, tokenRow.refresh_token);
+  const tok = await loadRefreshToken(env, 'google_oauth_tokens', userId);
+  if (!tok) throw new Error('not_connected');
+  const accessToken = await refreshGoogleAccessToken(env, tok.raw);
+  if (tok.wasPlaintext) await reencryptRefreshToken(env, 'google_oauth_tokens', userId, tok.raw);
   return syncUserToProvider(env, userId, role, fromIso, toIso, 'google', accessToken);
 }
 
 export async function syncUserToMicrosoft(
   env: Env, userId: number, role: string, fromIso: string, toIso: string,
 ): Promise<SyncSummary> {
-  const sql = getSQL(env);
-  const tokenRow = (await sql`
-    SELECT refresh_token FROM microsoft_oauth_tokens WHERE user_id = ${userId}
-  ` as any[])[0];
-  if (!tokenRow) throw new Error('not_connected');
-  const accessToken = await refreshMicrosoftAccessToken(env, tokenRow.refresh_token);
+  const tok = await loadRefreshToken(env, 'microsoft_oauth_tokens', userId);
+  if (!tok) throw new Error('not_connected');
+  const accessToken = await refreshMicrosoftAccessToken(env, tok.raw);
+  if (tok.wasPlaintext) await reencryptRefreshToken(env, 'microsoft_oauth_tokens', userId, tok.raw);
   return syncUserToProvider(env, userId, role, fromIso, toIso, 'microsoft', accessToken);
 }
 
