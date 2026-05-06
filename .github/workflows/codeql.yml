@@ -1,0 +1,46 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly Sunday 03:42 UTC — catches advisories that land between PRs
+    # without bursting CI minutes.
+    - cron: '42 3 * * 0'
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+# Requires GitHub Advanced Security on the repo (confirmed enabled by repo
+# owner). Analyses both the worker (TS) and the FastAPI dev backend (Python)
+# even though FastAPI is not deployed — Python supply-chain issues still hit
+# Replit dev sessions.
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended,security-and-quality
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'

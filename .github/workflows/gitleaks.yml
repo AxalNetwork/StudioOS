@@ -1,0 +1,31 @@
+name: gitleaks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Catches accidental secret commits before they hit production. Runs on every
+# PR + push to main so we never have a window where main contains a leaked
+# credential.
+jobs:
+  scan:
+    name: scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so gitleaks can scan any commit that touched the PR.
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Path to repo's gitleaks config (inherits the upstream default
+          # ruleset and adds project-specific allowlists).
+          config-path: .gitleaks.toml

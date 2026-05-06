@@ -9,9 +9,9 @@ The user prefers clear and concise communication. They value iterative developme
 ## System Architecture
 
 ### Core Technologies
-- **Frontend**: React 19, Vite 6, Tailwind CSS 4.
-- **Backend**: FastAPI (Python) with SQLModel/SQLAlchemy, using SQLite for local development and PostgreSQL for production.
-- **Production API**: Cloudflare Worker.
+- **Frontend**: React 19, Vite 6, Tailwind CSS 4 — ships to Cloudflare Pages.
+- **Production API**: **Cloudflare Worker** (Hono on Workers, TypeScript) at `axal.vc`. Source: `cloudflare-worker/src/index.ts` + `cloudflare-worker/src/routes/*.ts`. Canonical user store is **Cloudflare D1** (`studioos-db`).
+- **Replit-dev-only backend**: FastAPI (Python) in `backend/`. Used for local iteration speed only — **NEVER deployed**. Workers do not run Python. The dev backend uses a separate SQLite file (`backend/app.db`) that is not synced with D1. See `CLAUDE.md` for the full architecture rules.
 
 ### Key Features
 - **AI Scoring Engine**: Evaluates startup potential.

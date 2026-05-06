@@ -49,6 +49,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # T0 — Loud startup banner so nobody confuses this with production.
+    logger.warning(
+        "=" * 72 + "\n"
+        "  StudioOS FastAPI — REPLIT-DEV-ONLY backend\n"
+        "  Production API is the Cloudflare Worker at https://axal.vc\n"
+        "  This process is NEVER deployed. See CLAUDE.md for architecture.\n"
+        + "=" * 72
+    )
     logger.info("StudioOS starting up — initializing database")
     # Phase 0.2 — capture the main asyncio event loop so sync route handlers
     # (tickets/deals/capital) can schedule WS broadcasts via the notification
@@ -305,6 +313,13 @@ async def security_and_observability(request: Request, call_next):
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+    # T0 — Architecture truth. This FastAPI process is Replit-dev-only and is
+    # NEVER deployed to production. Production lives on the Cloudflare Worker
+    # at axal.vc (see CLAUDE.md). The header below makes that visible to any
+    # client/dev tool / curl debugger so we never confuse a dev response with
+    # production behaviour.
+    response.headers.setdefault("X-Backend-Mode", "replit-dev-only")
+    response.headers.setdefault("X-Canonical-Backend", "cloudflare-worker:axal.vc")
     # Content Security Policy — Zero Trust posture. Tight default-src,
     # nonce-required for inline JS, frames denied. Vite/React inline styles
     # are needed for component libraries, hence 'unsafe-inline' for

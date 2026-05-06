@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "test:drift": "node scripts/check-api-drift.mjs",
     "build": "cd frontend && npm run build",
     "deploy": "wrangler deploy --env production",
     "deploy:preview": "wrangler deploy --env preview",

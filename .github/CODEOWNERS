@@ -1,0 +1,28 @@
+# CODEOWNERS — who gets auto-requested for review.
+#
+# NOTE: We use the repository owner (@guillaumelauzier) as the default reviewer
+# because the @AxalNetwork/security GitHub team has not been created yet.
+# Once that team exists, swap the production-touching paths over to it:
+#   - cloudflare-worker/  → @AxalNetwork/security  (security-sensitive prod)
+#   - .github/workflows/  → @AxalNetwork/security  (CI gates)
+#   - wrangler.toml       → @AxalNetwork/security  (deploy contract)
+
+# Default — anything not matched below.
+*                                     @guillaumelauzier
+
+# Production worker (security-critical — every change ships to axal.vc).
+/cloudflare-worker/                   @guillaumelauzier
+/wrangler.toml                        @guillaumelauzier
+
+# CI + secrets policy.
+/.github/                             @guillaumelauzier
+/.gitleaks.toml                       @guillaumelauzier
+
+# Architecture truth doc — protected so accidental "fixes" don't reintroduce
+# the FastAPI-is-canonical lie that audits keep flagging.
+/CLAUDE.md                            @guillaumelauzier
+/PRODUCTION.md                        @guillaumelauzier
+/README.md                            @guillaumelauzier
+
+# Frontend SPA.
+/frontend/src/lib/api.js              @guillaumelauzier

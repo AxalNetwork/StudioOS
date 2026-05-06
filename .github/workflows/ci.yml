@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-flight runs on a branch when a new commit arrives. Saves CI
+# minutes on rapid pushes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Frontend: typecheck + build. The build is the contract — if Vite can't
+  # produce docs/, the deploy is broken regardless of unit tests.
+  # -------------------------------------------------------------------------
+  frontend:
+    name: frontend (build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  # -------------------------------------------------------------------------
+  # Worker: typecheck the production worker so a broken worker tree blocks
+  # merge before it ever reaches `wrangler deploy`.
+  # -------------------------------------------------------------------------
+  worker:
+    name: worker (typecheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: cloudflare-worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: cloudflare-worker/package-lock.json
+      - run: npm ci
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+  # -------------------------------------------------------------------------
+  # API ↔ Worker drift smoke test (T1). Static analysis: every /api/* path
+  # called from frontend/src/lib/api.js MUST be mounted on the production
+  # worker, OR be allowlisted with a tracking task id.
+  # -------------------------------------------------------------------------
+  drift:
+    name: api ↔ worker drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run drift checker
+        run: node scripts/check-api-drift.mjs
+
+  # -------------------------------------------------------------------------
+  # FastAPI dev backend: import + smoke. Catches obvious Python breakage in
+  # the dev environment so Replit sessions don't start broken. We do NOT
+  # treat dev failure as a deploy gate (FastAPI is not deployed) but we DO
+  # want to know early.
+  # -------------------------------------------------------------------------
+  dev-backend:
+    name: dev backend (import smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install minimum runtime
+        run: |
+          python -m pip install --upgrade pip
+          # Dev-only requirements pinned in repo. Ignore failures here only
+          # if the project hasn't published a requirements file yet.
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
+      - name: Import smoke
+        env:
+          JWT_SECRET: ci-only-not-a-real-secret-0123456789abcdef0123456789abcdef
+        run: |
+          python -c "import importlib; importlib.import_module('backend.app.main'); print('ok')"

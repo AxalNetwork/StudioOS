@@ -1,0 +1,82 @@
+version: 2
+
+# Dependabot scope:
+#  - npm (root) — wrangler + a few legacy deps
+#  - npm (frontend) — React/Vite/Tailwind SPA
+#  - npm (cloudflare-worker) — Hono + Workers types (PRODUCTION dep tree)
+#  - pip (root) — FastAPI dev backend
+#  - github-actions — keep CI actions current
+#
+# Strategy: weekly cadence (low PR noise), grouped by ecosystem so security
+# patches don't get drowned out by minor bumps. Production deps (frontend +
+# worker) get higher PR limits than dev-only.
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ['*']
+    labels: ['deps', 'ci']
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      root-npm:
+        patterns: ['*']
+        update-types: ['minor', 'patch']
+    labels: ['deps']
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      react:
+        patterns: ['react', 'react-dom', 'react-router-dom']
+      tailwind:
+        patterns: ['tailwindcss', '@tailwindcss/*']
+      build:
+        patterns: ['vite', '@vitejs/*', 'autoprefixer']
+      runtime:
+        patterns: ['*']
+        exclude-patterns: ['react*', 'tailwindcss*', '@tailwindcss/*', 'vite*', '@vitejs/*']
+        update-types: ['minor', 'patch']
+    labels: ['deps', 'frontend']
+
+  - package-ecosystem: npm
+    directory: /cloudflare-worker
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      worker:
+        patterns: ['hono', '@hono/*', '@cloudflare/*', 'wrangler']
+      runtime:
+        patterns: ['*']
+        exclude-patterns: ['hono', '@hono/*', '@cloudflare/*', 'wrangler']
+        update-types: ['minor', 'patch']
+    labels: ['deps', 'worker', 'production']
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      python:
+        patterns: ['*']
+        update-types: ['minor', 'patch']
+    labels: ['deps', 'dev-backend']

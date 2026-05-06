@@ -1,0 +1,34 @@
+# Gitleaks config for AxalNetwork/StudioOS.
+# Inherits the upstream default ruleset (covers AWS, GCP, Stripe, JWT,
+# private keys, generic high-entropy, etc.) and layers project-specific
+# allowlists on top.
+#
+# Only ALLOWLIST things that are demonstrably non-secret:
+#   - example values in .env.example / .env.sample
+#   - test fixtures with obviously synthetic IDs
+#   - documentation that names a secret variable but does not contain its value
+#
+# NEVER allowlist:
+#   - real API keys, even revoked ones
+#   - production-shaped UUIDs that could be valid resource IDs
+#   - JWT_SECRET / database URL contents
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Project-wide allowlist for known false positives"
+paths = [
+  '''(?i).*\.env\.example$''',
+  '''(?i).*\.env\.sample$''',
+  '''(?i)attached_assets/.*''',         # Vendor PDFs / static design specs
+  '''(?i)docs/.*''',                    # Built frontend bundle (already public)
+  '''(?i)package-lock\.json$''',
+  '''(?i).*\.lock$''',
+]
+regexes = [
+  # Tailwind / Vite generated content hashes that look like secrets but aren't.
+  '''[a-f0-9]{8}\.(js|css|woff2?)''',
+  # Known synthetic test JWTs (signed with the literal "test" key).
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+''',
+]
