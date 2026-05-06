@@ -139,12 +139,16 @@ scoring.post('/score', async (c) => {
           : Date.parse(String(last.created_at).replace(' ', 'T') + 'Z') + OFFICIAL_COOLDOWN_MS;
         if (Number.isFinite(lockUntilMs) && Date.now() < lockUntilMs) {
           await sql.end();
+          // T8 — return 409 (Conflict) to match the post-insert UNIQUE-index
+          // race response below. Both paths represent "an official score for
+          // this project already exists this week"; using one contract keeps
+          // the client-side handler simple regardless of which guard fired.
           return c.json({
             error: `Official scoring is locked. Next official run available at ${new Date(lockUntilMs).toISOString()}. Use Practice mode to iterate in the meantime.`,
             code: 'official_cooldown',
             locked_until: new Date(lockUntilMs).toISOString(),
             previous_snapshot_id: last.id,
-          }, 429);
+          }, 409);
         }
         cooldownInfo.previous_id = last.id;
       }
