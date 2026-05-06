@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { useToast } from '../components/useToast';
 import {
   User, Globe, Mail, ShieldCheck, Bell, Lock, Briefcase, Users,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
@@ -128,7 +129,8 @@ export default function SettingsPage() {
       navigate(want, { replace: true });
     }
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [toast, setToast] = useState(null);
+  // T19 — useToast handles cleanup on unmount; replaces inline `window.setTimeout(setToast, 4500)`.
+  const { toast, showToast: setToastSafe } = useToast(4500);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,10 +147,7 @@ export default function SettingsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const flash = (message, kind = 'success') => {
-    setToast({ message, kind });
-    window.setTimeout(() => setToast(null), 4500);
-  };
+  const flash = (message, kind = 'success') => setToastSafe({ message, kind });
 
   const patch = async (delta) => {
     try {

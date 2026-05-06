@@ -4,6 +4,7 @@ import {
   TrendingUp, Users, DollarSign, Percent, Sparkles, Trash2, Upload,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useToast } from '../components/useToast';
 
 // Task #46 — Exit waterfall page (modernized).
 // Inputs: exit value, carry, hurdle, years, GP catch-up.
@@ -103,7 +104,8 @@ export default function WaterfallPage() {
   const [err, setErr] = useState('');
   const [scenarios, setScenarios] = useState([]);
   const [saveName, setSaveName] = useState('');
-  const [savedMsg, setSavedMsg] = useState('');
+  // T19 — useToast handles cleanup on unmount; replaces inline setTimeout(setSavedMsg, 2500).
+  const { toast: savedMsg, showToast: setSavedMsg } = useToast(2500);
 
   // Load funds. 404 means the worker doesn't have the capital routes on this
   // deployment — render an empty fund list rather than a raw red banner.
@@ -178,7 +180,6 @@ export default function WaterfallPage() {
       const sc = await api.fundSimScenariosList(fundId, 'waterfall');
       setScenarios(sc.items || []);
       setSavedMsg('Scenario saved.');
-      setTimeout(() => setSavedMsg(''), 2500);
     } catch (e) {
       setErr(e?.message || 'Save scenario failed');
     } finally {

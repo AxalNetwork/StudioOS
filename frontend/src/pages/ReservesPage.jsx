@@ -4,6 +4,7 @@ import {
   DollarSign, Percent, PiggyBank, Sparkles, Trash2, Upload, Building2,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useToast } from '../components/useToast';
 
 // Task #46 — Reserve allocation page (modernized).
 // Drag-style numeric inputs across portfolio companies with a live
@@ -92,7 +93,8 @@ export default function ReservesPage() {
   const [scenarios, setScenarios] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [savedMsg, setSavedMsg] = useState('');
+  // T19 — useToast handles cleanup on unmount; replaces inline setTimeout(setSavedMsg, 2500).
+  const { toast: savedMsg, showToast: setSavedMsg } = useToast(2500);
   const [saveName, setSaveName] = useState('');
 
   // Load fund list once. 404 means the worker doesn't have the capital
@@ -184,7 +186,6 @@ export default function ReservesPage() {
       })));
       await loadReserves(fundId);
       setSavedMsg('Reserves saved.');
-      setTimeout(() => setSavedMsg(''), 2500);
     } catch (e) {
       setErr(e?.message || 'Save failed');
     } finally {
@@ -218,7 +219,6 @@ export default function ReservesPage() {
       const sc = await api.fundSimScenariosList(fundId, 'reserves');
       setScenarios(sc.items || []);
       setSavedMsg('Scenario saved.');
-      setTimeout(() => setSavedMsg(''), 2500);
     } catch (e) {
       setErr(e?.message || 'Save scenario failed');
     } finally {
