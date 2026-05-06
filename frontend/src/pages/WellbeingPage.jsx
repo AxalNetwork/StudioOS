@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { safeReadJSON } from '../lib/storage';
 import { Heart, Lock, Phone, Users, BookOpen, MessageCircle, ExternalLink, AlertTriangle, BarChart3 } from 'lucide-react';
 import { api } from '../lib/api';
 
@@ -19,7 +20,7 @@ const CATEGORY_META = {
 };
 
 function readUser() {
-  try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+  return safeReadJSON('user', {});
 }
 
 function Scale({ value, onChange, lowLabel, highLabel, invert }) {

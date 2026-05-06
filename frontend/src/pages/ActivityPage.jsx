@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { safeReadJSON } from '../lib/storage';
 import { Activity, GitBranch, CheckCircle, AlertCircle, Loader2, Lock, Hash } from 'lucide-react';
 import { api } from '../lib/api';
 
@@ -44,7 +45,7 @@ export default function ActivityPage() {
   const [syncResult, setSyncResult] = useState(null);
 
   const me = (() => {
-    try { return JSON.parse(localStorage.getItem('user') || '{}'); }
+    try { return safeReadJSON('user', {}); }
     catch { return {}; }
   })();
 

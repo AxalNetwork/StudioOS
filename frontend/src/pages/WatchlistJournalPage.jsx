@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { safeReadJSON } from '../lib/storage';
 import {
   Bookmark, BookOpen, Compass, Plus, Trash2, RefreshCw, X, Award, AlertTriangle,
   ArrowUpRight, CheckCircle2,
@@ -664,7 +665,7 @@ function AntiPortfolioTab({ canSeeAll }) {
 export default function WatchlistJournalPage() {
   const [tab, setTab] = useState('watchlist');
   const role = (() => {
-    try { return JSON.parse(localStorage.getItem('user') || '{}').role || ''; }
+    try { return safeReadJSON('user', {}).role || ''; }
     catch { return ''; }
   })();
   const canSeeAll = role === 'admin';

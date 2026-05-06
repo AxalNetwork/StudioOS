@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { safeReadJSON } from '../lib/storage';
 import { api } from '../lib/api';
 import { Ticket, Plus, ChevronDown, X, RefreshCw, MessageSquare, Clock, ArrowLeft } from 'lucide-react';
 // `RefreshCw` is still used by the in-detail "Refresh" button (TicketDetail).
@@ -152,7 +153,7 @@ export default function TicketsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = safeReadJSON('user', {});
   const isAdmin = user.role === 'admin';
 
   const load = useCallback(() => {

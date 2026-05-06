@@ -187,6 +187,11 @@ GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
 ENVIRONMENT       = "production"
 USE_CF_QUEUE      = "true"
+# T22.4 — leave EXTRA_DEV_ORIGINS UNSET in production. The CORS allowlist
+# in cloudflare-worker/src/index.ts only adds origins from this var when
+# present; an empty value here ensures the workers.dev sandbox URL never
+# leaks into the prod allowlist. Set it on the preview env instead.
+EXTRA_DEV_ORIGINS = ""
 
 [[env.production.d1_databases]]
 binding       = "DB"

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { safeReadJSON } from '../lib/storage';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Upload, AlertTriangle, CheckCircle2, Clock, XCircle, Loader2, Search, ChevronDown, X } from 'lucide-react';
 import { api } from '../lib/api';
@@ -68,7 +69,7 @@ export default function KYCPage() {
       setStatus(s);
       try {
         const me = await api.getMe();
-        const stored = JSON.parse(localStorage.getItem('user') || '{}');
+        const stored = safeReadJSON('user', {});
         localStorage.setItem('user', JSON.stringify({ ...stored, ...me }));
       } catch {}
     } catch (e) {
@@ -139,7 +140,7 @@ export default function KYCPage() {
 
       {s === 'pending' && (
         <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-700">
-          Your submission is in queue. An Axal compliance reviewer typically approves within 1 business day. You will receive an email update at <strong>{JSON.parse(localStorage.getItem('user') || '{}').email}</strong>.
+          Your submission is in queue. An Axal compliance reviewer typically approves within 1 business day. You will receive an email update at <strong>{safeReadJSON('user', {}).email}</strong>.
         </div>
       )}
 

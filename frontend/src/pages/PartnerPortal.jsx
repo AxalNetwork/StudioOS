@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { reportError } from '../lib/log';
 import { api } from '../lib/api';
 import { Handshake, DollarSign, CheckCircle, Clock, TrendingUp, PieChart, Users } from 'lucide-react';
 
@@ -39,7 +40,7 @@ export default function PartnerPortal() {
       setInvestors(inv);
       setPortfolio(port);
     } catch (e) {
-      console.error(e);
+      reportError('PartnerPortal:loadData', e);
     } finally {
       setLoading(false);
     }
@@ -50,7 +51,7 @@ export default function PartnerPortal() {
       await api.payCapitalCall(callId);
       loadData();
     } catch (e) {
-      console.error(e);
+      reportError('PartnerPortal:acceptCall', e);
     }
   };
 
@@ -59,7 +60,7 @@ export default function PartnerPortal() {
       const detail = await api.getInvestor(id);
       setSelectedLP(detail);
     } catch (e) {
-      console.error(e);
+      reportError('PartnerPortal:selectLP', e);
     }
   };
 

@@ -50,13 +50,16 @@ secrets, and the post-deploy checklist.
 
 ```bash
 wrangler secret put JWT_SECRET           # used for auth + Durable Object WS handshake
-wrangler deploy                          # deploys top-level config (has all bindings)
+npm run deploy                           # = wrangler deploy --env production
 ```
 
-> ⚠️ Do **not** run `wrangler deploy --env production`. The `[env.production]`
-> block in `wrangler.toml` does not redeclare bindings, so deploying that
-> environment strips the D1, KV, R2, Queue, AI, and Durable Object bindings
-> from the live worker. The top-level config is the one you want.
+> ✅ **Verified 2026-05-06:** `--env production` IS the correct deploy command.
+> The `[env.production.*]` block in `wrangler.toml` (lines 181–239) redeclares
+> every binding (D1, KV `TOKENS`/`RATE_LIMITS`, R2 `studioos-files`, Queue
+> `studioos-job-queue`, AI, Durable Objects), so the live worker has all bindings
+> intact — confirmed by `GET /accounts/.../workers/scripts/studioos/bindings`.
+> An earlier note in this file warned against `--env production` because the env
+> block historically didn't redeclare bindings; that's no longer true.
 
 ### Frontend
 

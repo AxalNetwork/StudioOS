@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { safeReadJSON } from '../lib/storage';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Shield, Smartphone, Copy, Check, Mail, RefreshCw, Send, Sparkles, ChevronDown, ChevronRight, HelpCircle } from 'lucide-react';
 import QRCode from 'qrcode';
@@ -35,7 +36,7 @@ export default function RegisterPage() {
       try { localStorage.setItem('gvpn:intent', JSON.stringify({ lane: l, ts: Date.now() })); } catch {}
     } else {
       try {
-        const saved = JSON.parse(localStorage.getItem('gvpn:intent') || 'null');
+        const saved = safeReadJSON('gvpn:intent', null);
         if (saved?.lane) setLane(saved.lane);
       } catch {}
     }

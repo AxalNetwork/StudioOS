@@ -130,6 +130,8 @@ async function aiBrand(env: Env, description: string, sector: string | null): Pr
   if (!key) return null;
   try {
     const prompt = `You are helping a startup founder pick a brand. Sector: ${sector || 'unspecified'}.\nIdea: ${description.trim()}\n\nReturn ONLY valid JSON of the form: {"suggestions": [{"name":..., "tagline":..., "logo_prompt":...}, ...]}\nRules: 5 suggestions, name 1-3 words, tagline <=8 words, logo_prompt is a short image prompt suitable for DALL-E.`;
+    // T7 — 30s timeout; without this a hung OpenAI call can pin a Worker
+    // isolate up to its 30s CPU cap with no error path.
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
@@ -143,6 +145,7 @@ async function aiBrand(env: Env, description: string, sector: string | null): Pr
         max_tokens: 500,
         response_format: { type: 'json_object' },
       }),
+      signal: AbortSignal.timeout(30_000),
     });
     if (!r.ok) return null;
     const j: any = await r.json();
@@ -158,10 +161,12 @@ async function aiLogo(env: Env, prompt: string): Promise<string | null> {
   const key = (env as any).OPENAI_API_KEY;
   if (!key) return null;
   try {
+    // T7 — 60s timeout (image gen is slower than chat).
     const r = await fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size: '1024x1024' }),
+      signal: AbortSignal.timeout(60_000),
     });
     if (!r.ok) return null;
     const j: any = await r.json();

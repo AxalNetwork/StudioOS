@@ -7,6 +7,7 @@
  * the user's personal calendar via OAuth refresh-token sync.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { safeReadJSON } from '../lib/storage';
 import { Calendar, Download, RefreshCw, Link as LinkIcon, X, Plus, CheckCircle2, Clock, Users as UsersIcon } from 'lucide-react';
 import { api } from '../lib/api';
 
@@ -57,7 +58,7 @@ export default function CalendarPage() {
     } catch { return 'founder'; }
   })();
   const me = (() => {
-    try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+    return safeReadJSON('user', {});
   })();
 
   async function load() {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
+import { safeReadJSON } from './lib/storage';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
@@ -610,7 +611,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
         if (cancelled) return;
         setKycStatus(me.kyc_status || 'not_started');
         setAccessLevel(me.access_level || null);
-        const stored = JSON.parse(localStorage.getItem('user') || '{}');
+        const stored = safeReadJSON('user', {});
         if (stored.kyc_status !== me.kyc_status || stored.access_level !== me.access_level) {
           localStorage.setItem('user', JSON.stringify({
             ...stored,
@@ -727,15 +728,9 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
 }
 
 export default function App() {
-  const [user, setUser] = useState(() => {
-    const stored = localStorage.getItem('user');
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [user, setUser] = useState(() => safeReadJSON('user'));
 
-  const [realUser, setRealUser] = useState(() => {
-    const stored = localStorage.getItem('realUser');
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [realUser, setRealUser] = useState(() => safeReadJSON('realUser'));
 
   const [viewMode, setViewMode] = useState(() => {
     return localStorage.getItem('viewMode') || 'admin';
@@ -752,7 +747,7 @@ export default function App() {
   };
 
   const handleImpersonate = (token, impersonatedUser) => {
-    const currentUser = JSON.parse(localStorage.getItem('user'));
+    const currentUser = safeReadJSON('user');
     const currentToken = localStorage.getItem('token');
     localStorage.setItem('realUser', JSON.stringify(currentUser));
     localStorage.setItem('realToken', currentToken);
@@ -768,7 +763,7 @@ export default function App() {
 
   const exitImpersonation = () => {
     const origToken = localStorage.getItem('realToken');
-    const origUser = JSON.parse(localStorage.getItem('realUser'));
+    const origUser = safeReadJSON('realUser');
     localStorage.setItem('token', origToken);
     localStorage.setItem('user', JSON.stringify(origUser));
     localStorage.removeItem('realUser');
@@ -795,8 +790,7 @@ export default function App() {
 
   useEffect(() => {
     const handleStorage = () => {
-      const stored = localStorage.getItem('user');
-      setUser(stored ? JSON.parse(stored) : null);
+      setUser(safeReadJSON('user'));
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);

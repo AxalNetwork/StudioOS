@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { safeReadJSON } from '../lib/storage';
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Check, AlertCircle, FileText, Shield, Clock, Eraser, X } from 'lucide-react';
@@ -26,7 +27,7 @@ export default function ESignPage() {
   let signerAccessLevel = null;
   let signerKycStatus = null;
   try {
-    const stored = JSON.parse(localStorage.getItem('user') || '{}');
+    const stored = safeReadJSON('user', {});
     signerAccessLevel = stored?.access_level || null;
     signerKycStatus = stored?.kyc_status || null;
   } catch {}

@@ -149,6 +149,8 @@ Use exactly these slide titles in order: ${JSON.stringify(SLIDE_TITLES)}.
 \`body\` is a 1-2 sentence narrative paragraph (markdown allowed). \`bullets\` is 2-4 punchy bullets (≤18 words each).
 Use the scoring numbers in the Traction and Market slides where helpful.
 Startup data: ${JSON.stringify(ctx)}`;
+    // T7 — 45s timeout (longer than brand.ts because pitch decks are bigger
+    // outputs; still well under the 60s subrequest cap).
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
@@ -161,6 +163,7 @@ Startup data: ${JSON.stringify(ctx)}`;
         temperature: 0.5, max_tokens: 1800,
         response_format: { type: 'json_object' },
       }),
+      signal: AbortSignal.timeout(45_000),
     });
     if (!r.ok) return null;
     const j: any = await r.json();

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { reportError } from '../lib/log';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, ScrollText, Scale, Briefcase, ShieldCheck, ArrowRight, ArrowLeft,
@@ -118,7 +119,7 @@ export default function CofounderAgreementPage() {
         setProjectId(String(list[0].id));
         if (!companyName) setCompanyName(list[0].name || '');
       }
-    }).catch((e) => { console.warn('projects load failed', e); });
+    }).catch((e) => { reportError('CofounderAgreementPage:loadProjects', e); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

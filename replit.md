@@ -1,75 +1,68 @@
 # Axal StudioOS
+An API-first Venture Studio Operating System designed to manage the entire startup project lifecycle from intake to portfolio monitoring.
 
-## Overview
-Axal StudioOS is an API-first Venture Studio Operating System designed as a "30-Day Spin-Out Engine" for venture capital firms and startup incubators. Its core purpose is to manage the entire startup project lifecycle, including intake, AI-driven scoring, legal formation (spin-outs), fundraising, and continuous portfolio monitoring. The platform aims to streamline venture launches and management, providing tools for legal, financial, and operational oversight.
+## Run & Operate
+- **Run (dev)**: `npm run dev` (frontend) and `python backend/main.py` (dev backend).
+- **Build**: `npm run build`
+- **Deploy (production)**: `npm run deploy` (deploys Cloudflare Worker)
+- **Typecheck**: `npm run typecheck`
+- **Codegen**: _Populate as you build_
+- **DB Push**: _Populate as you build_
+- **Required Env Vars**: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_CLAIM_EMAIL` (for web push notifications).
 
-## User Preferences
+## Stack
+- **Frontend**: React 19, Vite 6, Tailwind CSS 4
+- **Production API**: Cloudflare Worker (Hono on Workers, TypeScript)
+- **Dev Backend**: FastAPI (Python)
+- **ORM**: _Populate as you build_
+- **Validation**: _Populate as you build_
+- **Build Tool**: Vite
+
+## Where things live
+- `frontend/`: React frontend.
+- `cloudflare-worker/`: Production API source code.
+  - `cloudflare-worker/src/index.ts`: Main Worker entry point.
+  - `cloudflare-worker/src/routes/*.ts`: API routes.
+- `backend/`: FastAPI development backend (never deployed).
+  - `backend/app.db`: SQLite database for dev backend.
+- `scripts/check-api-drift.mjs`: Script to check API ↔ Worker drift.
+- **DB Schema**: `cloudflare-worker/src/schema.sql` (for D1) and `backend/app.db` (SQLite for dev).
+- **API Contracts**: Defined implicitly by Cloudflare Worker routes and FastAPI routes.
+- **Theme Files**: `frontend/tailwind.config.js`
+
+## Architecture decisions
+- Production API is a Cloudflare Worker for performance and scalability, while FastAPI provides a faster local development loop.
+- Strict separation of production (Cloudflare D1) and development (SQLite) databases.
+- Frontend logging and storage handled via `safeReadJSON`/`safeWriteJSON` and `reportError` for robust error handling and data integrity.
+- API ↔ Worker drift is prevented by a CI script, ensuring consistency between frontend and backend contracts.
+- Rate limiting is implemented per bucket, and strict CSP headers are enforced for security.
+
+## Product
+- AI-driven startup scoring engine.
+- Legal entity formation (Spin-out Wizard, Incorporation Flow, Co-Founder Agreement).
+- Fundraising tools (Cap-Table Simulator, Fund Management, Reserve Allocation, Exit Waterfall Simulator).
+- Portfolio monitoring (Portfolio Health Score, Predictive Failure, Watchlist + Decision Journal).
+- Compliance management (Compliance Calendar, 83(b) Tracker).
+- Founder support (Wellbeing check-ins, Mentor Matching, Office Hours, Co-founder Matching).
+- Partner engagement (Partner Office Hours, Co-Marketing, Public Partner Directory).
+- Financial modeling (Financial Model Builder).
+- Mobile PWA with offline capabilities and push notifications.
+
+## User preferences
 The user prefers clear and concise communication. They value iterative development and expect the agent to ask for confirmation before implementing major architectural changes or significant code refactoring. The user also requests that the agent prioritizes security best practices and robust error handling in all implementations.
 
-## System Architecture
+## Gotchas
+- The FastAPI backend is *only* for local development and is never deployed. Do not attempt to deploy it to Cloudflare.
+- API ↔ Worker drift is a common issue; always run `npm run test:drift` or ensure CI passes before merging.
+- Admin role changes require direct SQL modifications, as there is no UI for this.
+- KYC is optional until critical legal documents require it, but ensure the system handles its eventual enforcement.
 
-### Core Technologies
-- **Frontend**: React 19, Vite 6, Tailwind CSS 4 — ships to Cloudflare Pages.
-- **Production API**: **Cloudflare Worker** (Hono on Workers, TypeScript) at `axal.vc`. Source: `cloudflare-worker/src/index.ts` + `cloudflare-worker/src/routes/*.ts`. Canonical user store is **Cloudflare D1** (`studioos-db`).
-- **Replit-dev-only backend**: FastAPI (Python) in `backend/`. Used for local iteration speed only — **NEVER deployed**. Workers do not run Python. The dev backend uses a separate SQLite file (`backend/app.db`) that is not synced with D1. See `CLAUDE.md` for the full architecture rules.
-
-### Key Features
-- **AI Scoring Engine**: Evaluates startup potential.
-- **Spin-out Wizard**: Guides legal entity formation.
-- **Real-time Pipeline**: Supports WebSocket for live updates.
-- **Legal & Compliance**: KYC and document management with sign-gate enforcement.
-- **Network & Referrals**: Partner and referral system, including a service provider marketplace.
-- **Service Catalogue & Engagement Lifecycle**: Manages productized offerings and engagement states, with Stripe Connect for invoicing (simulated mode available).
-- **Public Partner Directory**: Auth-free directory with algorithmic ranking.
-- **Fund Management**: Tools for fund and LP tracking.
-- **Admin Controls**: Granular user access and session management with MFA.
-- **Settings Management**: User profiles, notifications, and account settings.
-- **Financial Model Builder**: For financial projections, runway, and breakeven.
-- **Progress Tracking**: Modules for customer discovery, roadmap (OKRs with Kanban), and metrics snapshots.
-- **Demand Insights**: Aggregates founder needs into heatmaps and trends.
-- **Cap-Table Simulator**: Models SAFE notes, priced rounds, and exit waterfalls, providing share ledgers and founder dilution analysis with CSV export.
-- **Mentor Matching + Office Hours**: Features a `mentor` user role, mentor profiles, booking system, and two-sided review process, with optional Cal.com integration.
-- **Unified Calendar Layer**: Aggregates mentor sessions, IC meetings, and founder check-ins, offering Google Calendar sync and ICS export.
-- **Co-founder Matching**: Facilitates connections based on mutual interest with auto-NDA generation and signing.
-- **Mobile PWA**: Installable web app with manifest + service worker, offline cache for the app shell, Academy lessons, and the user's own project data, plus an install banner (Android/iOS) and a per-device "Enable push" toggle wired through the notification center via VAPID web push.
-- **Watchlist + Decision Journal**: A capital-side due diligence instrument for tracking projects, recording investment decisions, and rolling up an "anti-portfolio" to identify missed opportunities.
-- **Portfolio Health Score + Predictive Failure**: Provides daily health snapshots for portfolio companies, calculating a score and badge based on runway, growth, churn, and sentiment, with intervention alerts.
-- **Trust Layer Hardening**: Includes KYB (Know Your Business) via Sumsub (or mock), investor accreditation verification, and per-role NDA acceptance with legal proof.
-- **Founder Risk Profile**: Auto-pulls founder background data (or synthesizes it) to generate a risk score and breakdown for due diligence.
-- **Reference Check Workflow**: Manages scheduling, consent, recording, transcription (Whisper), and summarization (Llama/GPT-4o-mini) of reference calls, integrated with the Deals pipeline.
-- **Jurisdiction Wizard + Incorporation Flow**: `/incorporate` decision tree across Delaware C-Corp, Delaware LLC, UK Ltd, Singapore Pte Ltd, and Estonia OÜ (e-Residency) with per-jurisdiction explainers (cost, time-to-form, fundraising-friendliness, taxes). Delaware C-Corp routes to Stripe Atlas with the company name pre-filled; other jurisdictions generate the right founder document set from legal templates and surface in `/legal`. Backed by `GET /api/legal/jurisdictions` and `POST /api/legal/incorporate/wizard`.
-- **Reserve Allocation + Exit Waterfall Simulator** (Task #46): Two simulator surfaces under `/portfolio/reserves` and `/portfolio/waterfall` for admin + investor roles. Backend lives at `/api/fund-sim/*` (router `fund_simulator.py`), engines in `services/fund_simulator.py`. (1) **Reserves:** drag follow-on $ across active portfolio companies (status in `active|tier_1|tier_2|spinout`), live recompute of fund deployment %, reserve ratio, projected MOIC + gross IRR. Per-company rows persist in `fund_reserve_allocations` (one row per fund/project, enforced by `UNIQUE(fund_id, project_id)`) — bulk PUT zeros out rows the caller drops, keeping the table in lockstep with the UI. (2) **Waterfall:** model an exit at $X using a European whole-of-fund waterfall — return of capital → preferred return (hurdle compounded over years held) → 100% GP catch-up → carry split (default 80/20). Per-LP table is pro-rated by commitment share from the existing `limited_partners` roster. (3) **Save scenarios:** both surfaces persist named runs to `fund_scenarios` (kind: `reserves|waterfall`, full inputs + cached result snapshot in JSON). Investors only see their own scenarios; admins see all. New tables created idempotently via `ensure_task46_tables()` migration registered after Task #54 in lifespan. Frontend: `ReservesPage.jsx` (sliders + numeric inputs + drag handles per company, live IRR card, scenario library) and `WaterfallPage.jsx` (exit value slider + carry/hurdle/years knobs, tranche table, per-LP allocation, scenario library). Sidebar entries added under "Capital & Liquidity" for both admin + investor roles. Out of scope per the brief: multi-fund consolidation, American/deal-by-deal carry, GP commit, recycling.
-- **Partner Office Hours + Co-Marketing** (Task #54): Three-pronged partner engagement layer. (1) Partner-side bookable office hours mirror the Task #35 mentor scheduler under `/api/partner-office-hours` — partners publish slots (capacity, video/phone/in-person), founders/investors book them, and the booking flow runs requested → confirmed → completed (with cancel + no-show transitions). Bookings ingest into the unified Task #56 calendar feed as a new `partner_office_hour` source kind in `services/calendar_unified.py` so they appear alongside mentor bookings, IC meetings, and founder check-ins. (2) Co-marketing pitch + admin approval at `/api/comarketing` — partners submit a webinar/blog/podcast/event/newsletter proposal, admin reviews in `/comarketing` queue (approve / reject / mark published with notes), partners can edit while `proposed` and withdraw any time before publication. (3) Attribution: every approved pitch mints a stable `attribution_code` (12-char URL-safe) reused across re-publishes; `POST /api/comarketing/track` records visit/signup/lead/conversion events tagged via `?utm_comark=<code>`, persisted in `comarketing_attributions` with referrer + landing path, and rolled up into per-pitch counts in the partner dashboard. Four new tables (`partner_office_hour_slots`, `partner_bookings`, `comarketing_pitches`, `comarketing_attributions`) created idempotently via `ensure_task54_tables()` migration. Frontend pages `PartnerOfficeHoursPage` (partner-only) and `CoMarketingPage` (role-aware: partner sees "My pitches", admin sees "Review queue", everyone sees "Published"). Sidebar entries added for partner + admin. Live streaming itself is out of scope — the platform tracks the demand funnel, partners run the actual broadcast.
-- **Founder Wellbeing** (Task #40): `/wellbeing` exposes an optional weekly 5-question pulse (stress, sleep, support, decisions, energy on a 1-5 scale + free-text notes) plus a curated resource directory (hotlines, therapy, peer groups, coaching, reading). Privacy-first: every answer column is Fernet-encrypted at rest via `services.crypto_box` (`stress_enc/sleep_enc/...`). Per-row check-ins are visible ONLY to the authoring founder; admins see anonymized 30-day aggregates (mean per question + cohort size) and only above a minimum cohort of 3 unique founders so a single response can't be re-identified; investors are explicitly blocked from both rows AND aggregates. New `wellbeing_checkins` and `wellbeing_resources` tables (migration `ensure_wellbeing_tables` registered in `main.py`) with `UNIQUE(user_id, week_anchor)` so re-submitting in the same ISO week overwrites instead of duplicating. `GET /api/wellbeing/resources` lazily seeds a static-first directory (988, Samaritans, Reboot.io, BetterHelp, Open Path, etc.) on first read; admin-only `POST/DELETE /resources` for curation. Sidebar entries added for admin (after Trust Center) and founder (own "Wellbeing" section). Out of scope per the brief: tele-therapy bookings.
-- **Compliance Calendar** (Task #32): `/compliance` lists every recurring obligation per project (annual report, franchise tax, registered agent renewal, board meetings) with a colored countdown pill, mark-complete + auto-rollforward (recurring events seed their next occurrence on completion), manual add, and per-project filter. Auto-populated from `/incorporate/wizard` via `seed_standard_events_for_jurisdiction()` — DE C-Corp/LLC, UK Ltd, SG Pte, EE OÜ each ship a tailored event catalogue. Idempotent unique index on `(project_id, event_type, due_date)` so re-running the wizard is a no-op. New `compliance_events` table + `ensure_compliance_events_table` migration registered in `main.py`. Endpoints (`GET/POST/PATCH/DELETE /api/compliance/events`) reuse the same IDOR-safe access pattern (admin/partner/investor read; admin/partner/owning-founder write; investors blocked from writes). New `services.compliance_reminders` daily loop wakes hourly, fires once per UTC date via the Phase 0.2 `notify()` publisher (in-app + email) at T-30 / 14 / 7 / 1 days; reminders dedup via `reminders_sent_json`. Out of scope: filing on behalf of the founder.
-- **Co-Founder Agreement + 83(b) Tracker** (Task #31): `/incorporate/cofounder-agreement` 5-step wizard (founders/equity → vesting & cliff → IP assignment → decision rights & exit/buyout → review) generates a Co-Founder Agreement document via the legal template engine (`POST /api/legal/cofounder-agreement`, validates ≥2 founders and equity ≤100%). `/incorporate/83b` lists per-founder 83(b) trackers with a 30-day countdown, IRS-mailing checklist, and certified-mail receipt upload (`/api/legal/83b/trackers` GET/POST/PATCH + `/{id}/receipt` multipart upload). Tracker creation auto-generates the 83(b) election doc, computes `deadline = grant_date + 30 days`, fires a `notify()` ping (in-app + email), and is idempotent on `(project, user, grant_date)`. All write paths are gated by `_check_project_write_access` (admin/partner OR the project's own founder; investors blocked) — same IDOR-safe pattern as Task #30. E-sign flow remains out of scope.
-
-### Architectural Decisions
-- Cloudflare Worker is the primary production API, FastAPI for local development.
-- Rate limiting is implemented per bucket.
-- Strict data integrity measures and CSP headers are enforced.
-- GitHub auto-tickets are tagged.
-- Admin user access is controlled by `access_level`.
-- KYC is optional for founders until critical legal documents require it.
-- Admin role changes require direct SQL modifications.
-- Robust session management with `jti` and `jwt_min_iat`.
-- Data for insights is aggregated in-memory for SQL portability.
-- Weekly digest loops are idempotent and asynchronous.
-
-## External Dependencies
-- **JWT**: For authentication.
-- **Google OAuth**: For user authentication and calendar integration.
-- **GitHub**: For auto-tickets.
-- **PostgreSQL**: Production database.
-- **Cloudflare R2**: For headshot storage.
-- **Cloudflare D1**: Production database for Cloudflare Worker.
-- **pyotp & qrcode**: For TOTP generation.
-- **SMTP Service**: For email notifications.
-- **openpyxl**: For Excel exports.
-- **Stripe Connect**: For payment processing and invoicing (simulated or live).
-- **Cal.com**: Optional integration for mentor scheduling.
-- **Sumsub**: For KYB verification (or mock service).
-- **Whisper (or equivalent)**: For audio transcription.
-- **Llama (or equivalent OpenAI-compatible API)**: For text summarization.
-- **PitchBook**: For founder background data integration.
-- **pywebpush + VAPID**: For browser push notification delivery (FCM / Mozilla / Apple push services). VAPID keys read from `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_CLAIM_EMAIL` env vars; an ephemeral keypair is minted in dev when they are unset.
+## Pointers
+- **Cloudflare Workers Docs**: [https://developers.cloudflare.com/workers/](https://developers.cloudflare.com/workers/)
+- **Hono Docs**: [https://hono.dev/](https://hono.dev/)
+- **React Docs**: [https://react.dev/](https://react.dev/)
+- **Tailwind CSS Docs**: [https://tailwindcss.com/docs](https://tailwindcss.com/docs)
+- **Vite Docs**: [https://vitejs.dev/](https://vitejs.dev/)
+- **FastAPI Docs**: [https://fastapi.tiangolo.com/](https://fastapi.tiangolo.com/)
+- **Cloudflare D1 Docs**: [https://developers.cloudflare.com/d1/](https://developers.cloudflare.com/d1/)
+- **`CLAUDE.md`**: For full architecture rules and detailed context (if available).

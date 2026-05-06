@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
-import { MARKET_PULSE, STUDIO_BENCHMARKS } from './market-intel';
+import { MARKET_PULSE, STUDIO_BENCHMARKS } from './market_intel';
 
 const privateData = new Hono<{ Bindings: Env }>();
 

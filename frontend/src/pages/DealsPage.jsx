@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import { reportError } from '../lib/log';
+import { safeReadJSON } from '../lib/storage';
 import { api } from '../lib/api';
 import { ArrowRight, ChevronDown, ChevronRight, Filter } from 'lucide-react';
 import ReferenceChecksPanel from '../components/ReferenceChecksPanel';
 import FounderRiskBadge from '../components/FounderRiskBadge';
 
 function getCurrentRole() {
-  try { return JSON.parse(localStorage.getItem('user') || '{}').role || null; }
+  try { return safeReadJSON('user', {}).role || null; }
   catch { return null; }
 }
 
@@ -38,7 +40,7 @@ export default function DealsPage() {
       const d = await api.listDeals();
       setDeals(d);
     } catch (e) {
-      console.error(e);
+      reportError('DealsPage:loadDeals', e);
     }
     setLoading(false);
   };
@@ -48,7 +50,7 @@ export default function DealsPage() {
       await api.updateDeal(dealId, { status });
       loadDeals();
     } catch (e) {
-      console.error(e);
+      reportError('DealsPage:updateDeal', e);
     }
   };
 

@@ -33,11 +33,11 @@ import capital from './routes/capital';
 import tickets from './routes/tickets';
 import deals from './routes/deals';
 import users from './routes/users';
-import marketIntel from './routes/market-intel';
+import marketIntel from './routes/market_intel';
 import advisory from './routes/advisory';
 import activity from './routes/activity';
 import admin from './routes/admin';
-import adminContracts from './routes/admin-contracts';
+import adminContracts from './routes/admin_contracts';
 import privateData from './routes/private-data';
 import monitoring from './routes/monitoring';
 import infra from './routes/infra';
@@ -78,12 +78,20 @@ const app = new Hono<{ Bindings: Env }>();
 // workers.dev sandbox + localhost so local SPA -> remote-worker iteration
 // still works. The `origin` callback runs per-request and reads
 // `env.ENVIRONMENT` so a single deploy serves both modes correctly.
+// T22.4 — CORS allowlist. Production origins are hardcoded (axal.vc apex +
+// www); the dev allowlist now comes from `env.EXTRA_DEV_ORIGINS` (comma
+// separated) so the workers.dev sandbox URL is NEVER hardcoded into a
+// production deploy. Production env should leave EXTRA_DEV_ORIGINS unset.
 const PROD_ORIGINS = ['https://axal.vc', 'https://www.axal.vc'];
-const DEV_EXTRA_ORIGINS = [
-  'https://studioos.guillaumelauzier.workers.dev',
-  'http://localhost:5000',
-  'http://localhost:5173',
-];
+const DEV_LOCALHOSTS = ['http://localhost:5000', 'http://localhost:5173'];
+
+function parseExtraDevOrigins(env: unknown): string[] {
+  const raw = ((env as { EXTRA_DEV_ORIGINS?: string })?.EXTRA_DEV_ORIGINS) || '';
+  return String(raw)
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && /^https?:\/\//.test(s));
+}
 
 app.use(
   '*',
@@ -91,7 +99,10 @@ app.use(
     origin: (origin, c) => {
       const envName = (((c.env as unknown as { ENVIRONMENT?: string })?.ENVIRONMENT) || '').toLowerCase();
       const isProd = envName === 'production' || envName === 'prod';
-      const allowed = isProd ? PROD_ORIGINS : [...PROD_ORIGINS, ...DEV_EXTRA_ORIGINS];
+      const extraDev = parseExtraDevOrigins(c.env);
+      const allowed = isProd
+        ? [...PROD_ORIGINS, ...extraDev]   // prod respects EXTRA_DEV_ORIGINS only if explicitly set on prod env (should be empty)
+        : [...PROD_ORIGINS, ...DEV_LOCALHOSTS, ...extraDev];
       // Hono's cors() returns null/undefined to refuse the origin (no
       // Access-Control-Allow-Origin header emitted). The browser then
       // blocks the request — exactly the behaviour we want for an unknown

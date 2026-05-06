@@ -226,9 +226,23 @@ export default function BrandBuilderPage() {
                   <Loader2 className="animate-spin text-violet-500" />
                 ) : draft.logo_url ? (
                   <img src={draft.logo_url} alt="logo" className="w-full h-full object-cover" />
-                ) : (
-                  <div dangerouslySetInnerHTML={{ __html: draft.logo_svg || '' }} />
-                )}
+                ) : draft.logo_svg ? (
+                  // T2 — Render the user-supplied SVG as an <img> data: URL
+                  // instead of dangerouslySetInnerHTML. The server already
+                  // sanitises (cloudflare-worker/src/routes/brand.ts:75
+                  // sanitizeSvg); rendering via <img> is defense-in-depth —
+                  // <img> blocks script execution inside the SVG document.
+                  //
+                  // We use `data:...;utf8,` + encodeURIComponent rather than
+                  // base64 to avoid the deprecated `unescape()` call. utf8
+                  // data URLs are well-supported across modern browsers and
+                  // sidestep the surrogate-pair edge cases of btoa().
+                  <img
+                    src={`data:image/svg+xml;utf8,${encodeURIComponent(draft.logo_svg)}`}
+                    alt="logo preview"
+                    className="w-full h-full object-contain"
+                  />
+                ) : null}
               </div>
               <button
                 onClick={regenerateLogo} disabled={logoBusy}

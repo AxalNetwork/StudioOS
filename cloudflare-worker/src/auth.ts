@@ -97,8 +97,12 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
         ).bind(tokenJti, payload.user_id).first<{ revoked_at: string | null }>();
         if (!sess || sess.revoked_at) return null;
         try {
+          // T22.6 — Coalesce last_seen_at writes. Only update if the row's
+          // existing value is >5 min old. Prevents a write per request on a
+          // hot session (which serialises through D1 and inflates write QPS).
           await c.env.DB.prepare(
-            "UPDATE user_sessions SET last_seen_at = datetime('now') WHERE jti = ?"
+            "UPDATE user_sessions SET last_seen_at = datetime('now') " +
+              "WHERE jti = ? AND (last_seen_at IS NULL OR last_seen_at < datetime('now','-5 minutes'))"
           ).bind(tokenJti).run();
         } catch {}
       } catch {

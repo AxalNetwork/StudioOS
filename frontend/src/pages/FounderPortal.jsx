@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { reportError } from '../lib/log';
+import { safeReadJSON } from '../lib/storage';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Rocket, CheckCircle, XCircle, AlertTriangle, ArrowRight, ChevronDown, ShieldCheck } from 'lucide-react';
@@ -14,7 +16,7 @@ function FounderKycBanner() {
 
   useEffect(() => {
     let cancelled = false;
-    const stored = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; } })();
+    const stored = safeReadJSON('user', {});
     // Skip when an admin is impersonating a founder. App.jsx overwrites
     // localStorage `user` with the impersonated founder (and stashes the
     // real admin under `realUser`), so role alone isn't enough — the
@@ -112,7 +114,7 @@ export default function FounderPortal() {
       setResult(res);
       setStep(3);
     } catch (e) {
-      console.error(e);
+      reportError('FounderPortal:submit', e);
     }
     setLoading(false);
   };

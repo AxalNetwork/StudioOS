@@ -279,8 +279,11 @@ settings.post('/headshot', async (c) => {
   if (!dataUri || typeof dataUri !== 'string' || !dataUri.startsWith('data:image/')) {
     return c.json({ error: 'data_uri must be a data:image/* URI' }, 400);
   }
-  // ~3MB ceiling on the encoded payload.
-  if (dataUri.length > 4_500_000) return c.json({ error: 'Image too large (max ~3MB)' }, 413);
+  // T22.5 — Single 14 MB encoded cap (≈10 MB raw after base64 decode);
+  // the legacy ~3 MB pre-check was removed so this gate is the only one.
+  if (dataUri.length > 14 * 1024 * 1024) {
+    return c.json({ error: 'Image too large. Max 10 MB.' }, 413);
+  }
 
   if (!c.env.FILES) {
     return c.json({ error: 'Headshot storage not configured in this environment' }, 503);

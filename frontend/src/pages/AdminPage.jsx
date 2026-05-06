@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { reportError } from '../lib/log';
 import { api } from '../lib/api';
 import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, Clock, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2 } from 'lucide-react';
 import { PERSONAS as PERSONA_TAXONOMY } from '../lib/personas';
@@ -91,7 +92,7 @@ export default function AdminPage({ onImpersonate }) {
       setUsers(u);
       setProfiles(p);
     } catch (e) {
-      console.error('Failed to load admin data:', e);
+      reportError('AdminPage:loadAdminData', e);
     } finally { setLoading(false); }
   };
 
@@ -100,7 +101,7 @@ export default function AdminPage({ onImpersonate }) {
       const q = await api.kycAdminQueue(status);
       setKycQueue(q);
     } catch (e) {
-      console.error('Failed to load KYC queue:', e);
+      reportError('AdminPage:loadKycQueue', e);
       setKycQueue([]);
     }
   };
@@ -1297,7 +1298,7 @@ export function ContractsPanel() {
       setItems(list?.items || []);
       if (tpls) setTemplates(tpls);
     } catch (e) {
-      console.error('Failed to load contracts:', e);
+      reportError('AdminPage:loadContracts', e);
     } finally { setLoading(false); }
   };
 

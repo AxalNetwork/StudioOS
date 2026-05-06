@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { safeReadJSON } from '../lib/storage';
 import { Building2, Plus, Save, X, Search, UserPlus, Trash2, Loader2, Globe, Users, ChevronRight } from 'lucide-react';
 
 import { api } from '../lib/api';
@@ -193,7 +194,7 @@ function CompanyDirectory({ onOpen }) {
   // (returns 403 for everyone else). Mirror that here so non-admins don't see
   // a control that is guaranteed to error.
   const isAdmin = (() => {
-    try { return JSON.parse(localStorage.getItem('user') || '{}').role === 'admin'; }
+    try { return safeReadJSON('user', {}).role === 'admin'; }
     catch { return false; }
   })();
 

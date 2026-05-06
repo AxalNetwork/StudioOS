@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { reportError } from '../lib/log';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import {
@@ -146,7 +147,7 @@ export default function PitchDeckPage() {
     try {
       await downloadDeckPdf(deck);
     } catch (e) {
-      console.error(e);
+      reportError('PitchDeckPage:exportPdf', e);
       setError(e?.message || 'PDF export failed');
     }
     finally { setExporting(false); }
