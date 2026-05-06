@@ -775,7 +775,19 @@ export default function App() {
     navigate('/admin');
   };
 
-  const logout = () => {
+  const logout = async () => {
+    // T6 — call the server first so the httpOnly auth cookie is cleared and
+    // the user_sessions row is revoked. Failures are non-fatal: the local
+    // cleanup below still runs, so the user is always signed out client-side
+    // even if the network call dies. Awaiting up to ~5s avoids the race
+    // where the redirect below cancels an in-flight POST and leaves the
+    // cookie set on the browser.
+    try {
+      await Promise.race([
+        api.logout(),
+        new Promise((resolve) => setTimeout(resolve, 5000)),
+      ]);
+    } catch (e) { /* logout must never block the UI sign-out */ }
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('realUser');

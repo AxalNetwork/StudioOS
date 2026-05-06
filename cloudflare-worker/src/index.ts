@@ -89,6 +89,7 @@ import { queueConsumer } from './queue-consumer';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
+import { csrfMiddleware } from './middleware/csrf';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -130,7 +131,11 @@ app.use(
     },
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
+    // T6 — `X-CSRF-Token` is the double-submit header the frontend sends
+    // alongside the `studioos_csrf` cookie on cookie-authenticated mutating
+    // requests. Without it in the allowlist, the browser preflight blocks
+    // every POST/PUT/PATCH/DELETE from the SPA in production.
+    allowHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
   }),
 );
 
@@ -142,6 +147,10 @@ app.use('*', securityHeadersMiddleware());
 // handlers don't re-query the DB. Both are no-ops outside `/api/*`.
 app.use('/api/*', rateLimitMiddleware());
 app.use('/api/*', observabilityMiddleware());
+// T6 — CSRF double-submit on mutating verbs for cookie-auth requests. Bearer
+// auth (impersonation, websockets, signed-download URLs) is exempt by design
+// — see middleware/csrf.ts for the full predicate.
+app.use('/api/*', csrfMiddleware());
 
 // Quick health probe used by uptime monitors.
 app.get('/api/health', (c) =>

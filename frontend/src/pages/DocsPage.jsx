@@ -372,7 +372,8 @@ export default function DocsPage() {
             <LI><Strong>TOTP-only</Strong> (no passwords). Your authenticator app is your password.</LI>
             <LI>Verification tokens SHA-256-hashed at rest with 24-hour expiry.</LI>
             <LI>Resend-verification rate-limited to 3/hour per email.</LI>
-            <LI>JWT session tokens (24-hour expiry) signed with <Code>JWT_SECRET</Code>.</LI>
+            <LI>JWT session tokens (24-hour expiry) signed with <Code>JWT_SECRET</Code>, delivered as an <Strong>httpOnly</Strong> cookie (<Code>studioos_auth</Code>) so XSS cannot exfiltrate them.</LI>
+            <LI>CSRF protection via the double-submit cookie pattern (<Code>studioos_csrf</Code> cookie + <Code>X-CSRF-Token</Code> header) on every mutating request.</LI>
             <LI>Cloudflare Turnstile bot protection on registration.</LI>
           </UL>
 
