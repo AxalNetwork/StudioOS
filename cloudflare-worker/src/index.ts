@@ -281,7 +281,7 @@ app.onError((err: any, c) => {
 
 // JWT_SECRET strength check runs at the very top of every request handler.
 // In prod a weak/missing secret aborts the request with a generic 503.
-import { assertJwtSecretStrength } from './auth';
+import { assertJwtSecretStrength, assertScoringHmacSecret } from './auth';
 
 // Phase 0.1 — D1 schema migration for the partner→investor split.
 // Lazy, idempotent, runs at most once per worker isolate. We piggy-back on the
@@ -376,8 +376,12 @@ export default {
   fetch: async (request: Request, env: Env, ctx: ExecutionContext) => {
     try {
       assertJwtSecretStrength(env);
+      // T9 — SCORING_HMAC_SECRET is hard-required in production so the
+      // score-integrity key cannot silently collide with JWT_SECRET. Dev
+      // logs a one-shot warning instead of throwing.
+      assertScoringHmacSecret(env);
     } catch (err) {
-      console.error('[boot] JWT_SECRET assertion failed:', (err as Error).message);
+      console.error('[boot] secret assertion failed:', (err as Error).message);
       return new Response(
         JSON.stringify({ ok: false, error: { code: 503, type: 'config_error', message: 'Service misconfigured' } }),
         { status: 503, headers: { 'content-type': 'application/json' } },

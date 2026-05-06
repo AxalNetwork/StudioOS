@@ -28,6 +28,52 @@ export function assertJwtSecretStrength(env: Env): void {
   }
 }
 
+/**
+ * T9 — SCORING_HMAC_SECRET enforcement.
+ *
+ * The Epic-5 score-integrity HMAC silently falls back to JWT_SECRET when
+ * SCORING_HMAC_SECRET is unset (see services/scoreIntegrity.ts:hmacKey).
+ * That fallback is fine for local dev convenience but in production it
+ * collides the score-signing key with the auth-signing key — a JWT_SECRET
+ * leak would also forge signed scores. Refuse to boot in production unless
+ * an explicit SCORING_HMAC_SECRET (≥32 bytes) is provisioned. Dev/preview
+ * still tolerate the fallback but log a one-shot warning so the operator
+ * sees it during smoke tests.
+ *
+ * Provision via:
+ *   openssl rand -hex 32 | npx wrangler secret put SCORING_HMAC_SECRET --env=production
+ */
+let _scoringSecretWarned = false;
+export function assertScoringHmacSecret(env: Env): void {
+  const envName = ((env as any).STUDIOOS_ENV || (env as any).ENVIRONMENT || 'dev').toLowerCase();
+  const isProd = envName === 'production' || envName === 'prod';
+  const explicit = (env as any).SCORING_HMAC_SECRET || '';
+  if (isProd) {
+    const len = explicit ? new TextEncoder().encode(explicit).byteLength : 0;
+    if (!explicit) {
+      throw new Error(
+        'SCORING_HMAC_SECRET is required in production. Provision via ' +
+        '`npx wrangler secret put SCORING_HMAC_SECRET --env=production` ' +
+        '(generate with `openssl rand -hex 32`).',
+      );
+    }
+    if (len < 32) {
+      throw new Error(
+        `SCORING_HMAC_SECRET must be at least 32 bytes in production; got ${len} bytes.`,
+      );
+    }
+    return;
+  }
+  if (!explicit && !_scoringSecretWarned) {
+    _scoringSecretWarned = true;
+    console.warn(
+      '[boot] SCORING_HMAC_SECRET is unset — falling back to JWT_SECRET for ' +
+      'Epic-5 score signing. This is allowed in dev/preview only; production ' +
+      'boot will refuse to start without it.',
+    );
+  }
+}
+
 function getSecretKey(env: Env) {
   // Defense in depth: also check here in case a caller bypassed the
   // top-level guard. The `assert` helper is the canonical entry point.
