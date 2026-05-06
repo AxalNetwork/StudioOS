@@ -2,6 +2,36 @@ import React, { useEffect, useState } from 'react';
 import { safeReadJSON } from '../lib/storage';
 import { Activity, GitBranch, CheckCircle, AlertCircle, Loader2, Lock, Hash } from 'lucide-react';
 import { api } from '../lib/api';
+import VirtualList from '../components/VirtualList';
+
+// T24 — measured from the existing px-4 py-3 row with action label + 1 line
+// of details. Slight overflow on rows with very long details is acceptable
+// (line-clamp not currently applied — preserved from the non-virtualized
+// branch).
+const ACTIVITY_ROW_HEIGHT = 64;
+
+function ActivityRow({ log }) {
+  return (
+    <div className="px-4 py-3 hover:bg-gray-50 transition-colors h-full">
+      <div className="flex items-center gap-3">
+        <div className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+              actionColors[log.action] || 'text-gray-700 bg-gray-100'
+            }`}>
+              {ACTION_LABELS[log.action] || log.action?.replace(/_/g, ' ')}
+            </span>
+          </div>
+          {log.details && <p className="text-xs text-gray-600 mt-0.5 truncate">{log.details}</p>}
+        </div>
+        <div className="text-[10px] text-gray-600 whitespace-nowrap">
+          {log.created_at ? new Date(log.created_at).toLocaleString() : ''}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const ACTION_LABELS = {
   user_registered: 'Account created',
@@ -176,28 +206,42 @@ export default function ActivityPage() {
                 </p>
               </div>
             ) : (
-              <div className="divide-y divide-gray-100">
-                {logs.map((log) => (
-                  <div key={log.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                            actionColors[log.action] || 'text-gray-700 bg-gray-100'
-                          }`}>
-                            {ACTION_LABELS[log.action] || log.action?.replace(/_/g, ' ')}
-                          </span>
-                        </div>
-                        {log.details && <p className="text-xs text-gray-600 mt-0.5">{log.details}</p>}
-                      </div>
-                      <div className="text-[10px] text-gray-600 whitespace-nowrap">
-                        {log.created_at ? new Date(log.created_at).toLocaleString() : ''}
-                      </div>
-                    </div>
+              <VirtualList
+                items={logs}
+                itemHeight={ACTIVITY_ROW_HEIGHT}
+                height={600}
+                ariaLabel={`Activity event stream, ${logs.length} events`}
+                virtualRow={(log, _index, style, ariaAttributes) => (
+                  <div style={style} {...ariaAttributes} className="border-b border-gray-100">
+                    <ActivityRow log={log} />
                   </div>
-                ))}
-              </div>
+                )}
+              >
+                {(items) => (
+                  <div className="divide-y divide-gray-100">
+                    {items.map((log) => (
+                      <div key={log.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                                actionColors[log.action] || 'text-gray-700 bg-gray-100'
+                              }`}>
+                                {ACTION_LABELS[log.action] || log.action?.replace(/_/g, ' ')}
+                              </span>
+                            </div>
+                            {log.details && <p className="text-xs text-gray-600 mt-0.5">{log.details}</p>}
+                          </div>
+                          <div className="text-[10px] text-gray-600 whitespace-nowrap">
+                            {log.created_at ? new Date(log.created_at).toLocaleString() : ''}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </VirtualList>
             )}
           </div>
         </>

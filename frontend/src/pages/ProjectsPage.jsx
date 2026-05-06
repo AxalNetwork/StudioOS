@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom';
 import { Plus, Search, ChevronDown, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { StatusBadge, WeekBadge } from './Dashboard';
+import VirtualList from '../components/VirtualList';
+
+// T24 — Single line per row with py-3.
+const PROJECT_ROW_HEIGHT = 52;
+const PROJECT_GRID = 'minmax(0, 2fr) minmax(0, 1fr) 110px 120px minmax(0, 1fr)';
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState([]);
@@ -79,34 +84,59 @@ export default function ProjectsPage() {
         <div className="text-gray-600 text-center py-10 text-sm">Loading...</div>
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
-                <th className="text-left px-5 py-3">Name</th>
-                <th className="text-left px-5 py-3 hidden md:table-cell">Sector</th>
-                <th className="text-left px-5 py-3">Status</th>
-                <th className="text-left px-5 py-3 hidden md:table-cell">Week</th>
-                <th className="text-left px-5 py-3 hidden md:table-cell">Stage</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800">
-              {filtered.map(p => (
-                <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-5 py-3">
-                    <Link to={`/projects/${p.id}`} className="text-gray-900 hover:text-violet-600 font-medium">{p.name}</Link>
-                    <div className="text-xs text-gray-500 md:hidden">{p.sector}</div>
-                  </td>
-                  <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.sector || '—'}</td>
-                  <td className="px-5 py-3"><StatusBadge status={p.status} /></td>
-                  <td className="px-5 py-3 hidden md:table-cell"><WeekBadge week={p.playbook_week} /></td>
-                  <td className="px-5 py-3 hidden md:table-cell text-gray-600 capitalize">{p.stage}</td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={5} className="px-5 py-8 text-center text-gray-500">No projects found</td></tr>
+          {filtered.length === 0 ? (
+            <div className="px-5 py-8 text-center text-gray-500 text-sm">No projects found</div>
+          ) : (
+            <VirtualList
+              items={filtered}
+              itemHeight={PROJECT_ROW_HEIGHT}
+              height={600}
+              ariaLabel={`Projects list, ${filtered.length} projects`}
+              virtualRow={(p, _i, style, ariaAttributes) => (
+                <div style={style} {...ariaAttributes}
+                     className="hover:bg-gray-50/50 transition-colors border-b border-gray-800 text-sm">
+                  <div style={{ display: 'grid', gridTemplateColumns: PROJECT_GRID, alignItems: 'center', height: '100%' }}>
+                    <div className="px-5 py-3 min-w-0">
+                      <Link to={`/projects/${p.id}`} className="text-gray-900 hover:text-violet-600 font-medium truncate block">{p.name}</Link>
+                      <div className="text-xs text-gray-500 md:hidden truncate">{p.sector}</div>
+                    </div>
+                    <div className="px-5 py-3 hidden md:block text-gray-600 truncate">{p.sector || '—'}</div>
+                    <div className="px-5 py-3"><StatusBadge status={p.status} /></div>
+                    <div className="px-5 py-3 hidden md:block"><WeekBadge week={p.playbook_week} /></div>
+                    <div className="px-5 py-3 hidden md:block text-gray-600 capitalize truncate">{p.stage}</div>
+                  </div>
+                </div>
               )}
-            </tbody>
-          </table>
+            >
+              {(items) => (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
+                      <th className="text-left px-5 py-3">Name</th>
+                      <th className="text-left px-5 py-3 hidden md:table-cell">Sector</th>
+                      <th className="text-left px-5 py-3">Status</th>
+                      <th className="text-left px-5 py-3 hidden md:table-cell">Week</th>
+                      <th className="text-left px-5 py-3 hidden md:table-cell">Stage</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-800">
+                    {items.map(p => (
+                      <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-5 py-3">
+                          <Link to={`/projects/${p.id}`} className="text-gray-900 hover:text-violet-600 font-medium">{p.name}</Link>
+                          <div className="text-xs text-gray-500 md:hidden">{p.sector}</div>
+                        </td>
+                        <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.sector || '—'}</td>
+                        <td className="px-5 py-3"><StatusBadge status={p.status} /></td>
+                        <td className="px-5 py-3 hidden md:table-cell"><WeekBadge week={p.playbook_week} /></td>
+                        <td className="px-5 py-3 hidden md:table-cell text-gray-600 capitalize">{p.stage}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </VirtualList>
+          )}
         </div>
       )}
     </div>

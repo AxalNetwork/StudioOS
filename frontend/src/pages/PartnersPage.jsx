@@ -2,6 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Users, Plus, Search, Copy, ChevronRight } from 'lucide-react';
 import { UserDetailModal } from './AdminPage';
+import VirtualList from '../components/VirtualList';
+
+// T24 — measured from the existing <tr> with name + email-below + py-3.
+// The virtualized branch (>=300 rows) renders div rows whose grid columns
+// approximately match the table's natural column widths.
+const PARTNER_ROW_HEIGHT = 64;
+const PARTNER_GRID = 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 90px';
 
 export default function PartnersPage() {
   const [partners, setPartners] = useState([]);
@@ -101,39 +108,72 @@ export default function PartnersPage() {
         {loading ? (
           <div className="p-8 text-center text-gray-600 text-sm">Loading...</div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
-                <th className="text-left px-5 py-3">Partner</th>
-                <th className="text-left px-5 py-3 hidden md:table-cell">Company</th>
-                <th className="text-left px-5 py-3 hidden md:table-cell">Specialization</th>
-                <th className="text-left px-5 py-3">Referral Code</th>
-                <th className="text-left px-5 py-3">Referrals</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {partners.map(p => (
-                <tr key={p.id} onClick={() => setOpenPartner(p)}
-                    className="hover:bg-violet-50/40 cursor-pointer group">
-                  <td className="px-5 py-3 text-gray-900">
+          <VirtualList
+            items={partners}
+            itemHeight={PARTNER_ROW_HEIGHT}
+            height={600}
+            ariaLabel={`Partners list, ${partners.length} partners`}
+            virtualRow={(p, _i, style, ariaAttributes) => (
+              <div style={style} {...ariaAttributes}
+                   onClick={() => setOpenPartner(p)}
+                   className="hover:bg-violet-50/40 cursor-pointer group border-b border-gray-200 text-sm"
+                   >
+                <div style={{ display: 'grid', gridTemplateColumns: PARTNER_GRID, alignItems: 'center', height: '100%' }}>
+                  <div className="px-5 py-3 text-gray-900 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-medium">{p.name}</span>
-                      <ChevronRight size={12} className="text-gray-300 group-hover:text-violet-600 transition-colors" />
+                      <span className="font-medium truncate">{p.name}</span>
+                      <ChevronRight size={12} className="text-gray-300 group-hover:text-violet-600 transition-colors shrink-0" />
                     </div>
-                    <div className="text-[11px] text-gray-500 mt-0.5">{p.email || p.user_email || '—'}</div>
-                  </td>
-                  <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.company || '—'}</td>
-                  <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.specialization || '—'}</td>
-                  <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="text-[11px] text-gray-500 mt-0.5 truncate">{p.email || p.user_email || '—'}</div>
+                  </div>
+                  <div className="px-5 py-3 hidden md:block text-gray-600 truncate">{p.company || '—'}</div>
+                  <div className="px-5 py-3 hidden md:block text-gray-600 truncate">{p.specialization || '—'}</div>
+                  <div className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => copyCode(p.referral_code)} className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-700 font-mono">
                       {p.referral_code} <Copy size={10} />
                     </button>
-                  </td>
-                  <td className="px-5 py-3 text-gray-900 font-medium">{p.referrals_count}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                  <div className="px-5 py-3 text-gray-900 font-medium">{p.referrals_count}</div>
+                </div>
+              </div>
+            )}
+          >
+            {(items) => (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
+                    <th className="text-left px-5 py-3">Partner</th>
+                    <th className="text-left px-5 py-3 hidden md:table-cell">Company</th>
+                    <th className="text-left px-5 py-3 hidden md:table-cell">Specialization</th>
+                    <th className="text-left px-5 py-3">Referral Code</th>
+                    <th className="text-left px-5 py-3">Referrals</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {items.map(p => (
+                    <tr key={p.id} onClick={() => setOpenPartner(p)}
+                        className="hover:bg-violet-50/40 cursor-pointer group">
+                      <td className="px-5 py-3 text-gray-900">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium">{p.name}</span>
+                          <ChevronRight size={12} className="text-gray-300 group-hover:text-violet-600 transition-colors" />
+                        </div>
+                        <div className="text-[11px] text-gray-500 mt-0.5">{p.email || p.user_email || '—'}</div>
+                      </td>
+                      <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.company || '—'}</td>
+                      <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.specialization || '—'}</td>
+                      <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => copyCode(p.referral_code)} className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-700 font-mono">
+                          {p.referral_code} <Copy size={10} />
+                        </button>
+                      </td>
+                      <td className="px-5 py-3 text-gray-900 font-medium">{p.referrals_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </VirtualList>
         )}
       </div>
       {openPartner && openPartner.user_id && (

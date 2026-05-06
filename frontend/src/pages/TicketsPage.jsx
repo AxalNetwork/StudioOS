@@ -2,6 +2,10 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { safeReadJSON } from '../lib/storage';
 import { api } from '../lib/api';
 import { Ticket, Plus, ChevronDown, X, RefreshCw, MessageSquare, Clock, ArrowLeft } from 'lucide-react';
+import VirtualList from '../components/VirtualList';
+
+// T24 — Title + 1-line description + py-3.
+const TICKET_ROW_HEIGHT = 64;
 // `RefreshCw` is still used by the in-detail "Refresh" button (TicketDetail).
 
 function ModernSelect({ value, onChange, children, ...props }) {
@@ -275,38 +279,74 @@ export default function TicketsPage() {
             {isAdmin ? 'No tickets submitted yet' : 'You have no tickets yet. Click "New Ticket" to submit one.'}
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
-                <th className="text-left px-5 py-3">Title</th>
-                {isAdmin && <th className="text-left px-5 py-3 hidden md:table-cell">Submitted By</th>}
-                <th className="text-left px-5 py-3">Priority</th>
-                <th className="text-left px-5 py-3">Status</th>
-                <th className="text-left px-5 py-3 hidden lg:table-cell">Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {tickets.map(t => (
-                <tr key={t.id} className="hover:bg-violet-50 cursor-pointer transition-colors"
-                    onClick={() => setSelectedTicketId(t.id)}>
-                  <td className="px-5 py-3">
-                    <div className="text-gray-900 hover:text-violet-600 transition-colors">{t.title}</div>
-                    {t.description && <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{t.description}</div>}
-                  </td>
-                  {isAdmin && <td className="px-5 py-3 hidden md:table-cell text-gray-600">{t.submitted_by || '—'}</td>}
-                  <td className="px-5 py-3">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${priorityColors[t.priority]}`}>{t.priority}</span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[t.status]}`}>{t.status?.replace('_', ' ')}</span>
-                  </td>
-                  <td className="px-5 py-3 hidden lg:table-cell text-xs text-gray-500">
-                    {t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <VirtualList
+            items={tickets}
+            itemHeight={TICKET_ROW_HEIGHT}
+            height={600}
+            ariaLabel={`Tickets list, ${tickets.length} tickets`}
+            virtualRow={(t, _i, style, ariaAttributes) => {
+              const cols = isAdmin
+                ? 'minmax(0, 2fr) minmax(0, 1fr) 100px 110px 110px'
+                : 'minmax(0, 2fr) 100px 110px 110px';
+              return (
+                <div style={style} {...ariaAttributes}
+                     onClick={() => setSelectedTicketId(t.id)}
+                     className="hover:bg-violet-50 cursor-pointer transition-colors border-b border-gray-100 text-sm">
+                  <div style={{ display: 'grid', gridTemplateColumns: cols, alignItems: 'center', height: '100%' }}>
+                    <div className="px-5 py-3 min-w-0">
+                      <div className="text-gray-900 hover:text-violet-600 transition-colors truncate">{t.title}</div>
+                      {t.description && <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{t.description}</div>}
+                    </div>
+                    {isAdmin && <div className="px-5 py-3 hidden md:block text-gray-600 truncate">{t.submitted_by || '—'}</div>}
+                    <div className="px-5 py-3">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${priorityColors[t.priority]}`}>{t.priority}</span>
+                    </div>
+                    <div className="px-5 py-3">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[t.status]}`}>{t.status?.replace('_', ' ')}</span>
+                    </div>
+                    <div className="px-5 py-3 hidden lg:block text-xs text-gray-500">
+                      {t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}
+                    </div>
+                  </div>
+                </div>
+              );
+            }}
+          >
+            {(items) => (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
+                    <th className="text-left px-5 py-3">Title</th>
+                    {isAdmin && <th className="text-left px-5 py-3 hidden md:table-cell">Submitted By</th>}
+                    <th className="text-left px-5 py-3">Priority</th>
+                    <th className="text-left px-5 py-3">Status</th>
+                    <th className="text-left px-5 py-3 hidden lg:table-cell">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {items.map(t => (
+                    <tr key={t.id} className="hover:bg-violet-50 cursor-pointer transition-colors"
+                        onClick={() => setSelectedTicketId(t.id)}>
+                      <td className="px-5 py-3">
+                        <div className="text-gray-900 hover:text-violet-600 transition-colors">{t.title}</div>
+                        {t.description && <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{t.description}</div>}
+                      </td>
+                      {isAdmin && <td className="px-5 py-3 hidden md:table-cell text-gray-600">{t.submitted_by || '—'}</td>}
+                      <td className="px-5 py-3">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${priorityColors[t.priority]}`}>{t.priority}</span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[t.status]}`}>{t.status?.replace('_', ' ')}</span>
+                      </td>
+                      <td className="px-5 py-3 hidden lg:table-cell text-xs text-gray-500">
+                        {t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </VirtualList>
         )}
       </div>
     </div>
