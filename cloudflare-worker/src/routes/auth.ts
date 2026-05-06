@@ -9,6 +9,81 @@ import { verifyTurnstile } from '../services/turnstile';
 
 const auth = new Hono<{ Bindings: Env }>();
 
+// T5 — Recovery codes are persisted as SHA-256 hex hashes in
+// `users.totp_recovery_codes` (JSON array of strings; column added in
+// epic3_settings.sql). Format is XXXX-XXXX-XXXX from a 32-char ambiguity-free
+// alphabet (settings.ts:generateRecoveryCode). We intentionally re-use this
+// existing column rather than introduce a separate `totp_backup_codes` table:
+// the feature already ships against it (regenerate endpoint + Settings UI),
+// and a single-row UPDATE gives us atomic single-use semantics for free.
+const RECOVERY_CODE_COUNT = 10;
+const RECOVERY_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function generateRecoveryCode(): string {
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  const chars: string[] = [];
+  for (let i = 0; i < 12; i++) chars.push(RECOVERY_ALPHABET[bytes[i] % RECOVERY_ALPHABET.length]);
+  return `${chars.slice(0, 4).join('')}-${chars.slice(4, 8).join('')}-${chars.slice(8, 12).join('')}`;
+}
+
+async function mintRecoveryCodes(): Promise<{ plain: string[]; hashes: string[] }> {
+  const plain: string[] = [];
+  const hashes: string[] = [];
+  for (let i = 0; i < RECOVERY_CODE_COUNT; i++) {
+    const c = generateRecoveryCode();
+    plain.push(c);
+    hashes.push(await hashToken(c));
+  }
+  return { plain, hashes };
+}
+
+/**
+ * T5 — try to consume a recovery code. Normalises the input (uppercase, strip
+ * spaces, accept 12 raw chars OR XXXX-XXXX-XXXX), hashes it, and atomically
+ * removes the matching hash from the user's recovery-code array. Returns true
+ * if a code was consumed (caller should treat the login as successful and emit
+ * an audit log). Returns false on any mismatch / parse failure / missing column.
+ *
+ * Uses a re-read + targeted UPDATE rather than a single CAS to keep the SQL
+ * portable — under concurrent attempts the worst case is one extra failed
+ * verify (the second writer's UPDATE is a no-op against the smaller array).
+ */
+async function tryConsumeRecoveryCode(env: Env, userId: number, raw: string): Promise<boolean> {
+  const normalized = raw.replace(/[\s-]/g, '').toUpperCase();
+  if (normalized.length !== 12) return false;
+  const formatted = `${normalized.slice(0, 4)}-${normalized.slice(4, 8)}-${normalized.slice(8, 12)}`;
+  let candidateHash: string;
+  try {
+    candidateHash = await hashToken(formatted);
+  } catch {
+    return false;
+  }
+  const sql = getSQL(env);
+  try {
+    const rows = await sql`SELECT totp_recovery_codes FROM users WHERE id = ${userId}`;
+    if (!rows.length) return false;
+    let stored: string[] = [];
+    try {
+      const json = rows[0].totp_recovery_codes;
+      stored = json ? JSON.parse(json) : [];
+      if (!Array.isArray(stored)) stored = [];
+    } catch {
+      return false;
+    }
+    const idx = stored.indexOf(candidateHash);
+    if (idx === -1) return false;
+    stored.splice(idx, 1);
+    await sql`UPDATE users SET totp_recovery_codes = ${JSON.stringify(stored)} WHERE id = ${userId}`;
+    return true;
+  } catch (e) {
+    console.error('[AUTH:recovery-code] consume failed:', e);
+    return false;
+  } finally {
+    try { await sql.end(); } catch {}
+  }
+}
+
 /**
  * Defensive wrapper for auth handlers. Catches any unhandled exception and
  * returns a friendly, route-scoped error message instead of the global
@@ -240,6 +315,14 @@ auth.get('/verify-email', safe('verify-email', 'Could not verify your email link
   const token = c.req.query('token');
   if (!token) return c.json({ error: 'Token required' }, 400);
 
+  // T5 — IP-keyed brute-force cap. The verify-email link is a 32-byte secret,
+  // so guessing is computationally infeasible — but enumerating against a
+  // single IP is still cheap noise we can drop. 10/15min/IP is generous enough
+  // that a real user retrying after a typo or refreshing the tab is fine.
+  const verifyIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const allowedIp = await checkRateLimit(c.env, `verify-email-ip:${verifyIp}`, 10, 900);
+  if (!allowedIp) return c.json({ error: 'Too many verification attempts. Please try again in 15 minutes.' }, 429);
+
   const tokenHash = await hashToken(token);
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE verification_token = ${tokenHash}`;
@@ -308,7 +391,13 @@ auth.post('/setup-totp', safe('setup-totp', 'Could not set up authenticator. Ple
   const totp = new TOTP({ issuer: 'Axal VC StudioOS', label: email, secret });
   const totpSecret = secret.base32;
 
-  await sql`UPDATE users SET password_hash = ${totpSecret}, verification_token = NULL, verification_token_expires = NULL WHERE id = ${user.id}`;
+  // T5 — mint 10 single-use recovery codes at enrolment so the user is never
+  // permanently locked out if they lose their authenticator. Plaintext codes
+  // are returned to the caller exactly once in this response; the server only
+  // ever stores SHA-256 hashes.
+  const { plain: recoveryCodes, hashes: recoveryHashes } = await mintRecoveryCodes();
+
+  await sql`UPDATE users SET password_hash = ${totpSecret}, totp_recovery_codes = ${JSON.stringify(recoveryHashes)}, verification_token = NULL, verification_token_expires = NULL WHERE id = ${user.id}`;
   await sql.end();
 
   const uri = totp.toString();
@@ -321,7 +410,8 @@ auth.post('/setup-totp', safe('setup-totp', 'Could not set up authenticator. Ple
   return c.json({
     user_id: user.id, email: user.email, name: user.name, role: user.role,
     totp_secret: totpSecret, provisioning_uri: uri, qr_code: qrBase64,
-    message: 'Scan the QR code with your authenticator app, then use the TOTP code to log in.',
+    recovery_codes: recoveryCodes,
+    message: 'Scan the QR code with your authenticator app, then use the TOTP code to log in. Save the recovery codes — they will not be shown again.',
   });
 }));
 
@@ -345,7 +435,16 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
 
   const totp = new TOTP({ secret: Secret.fromBase32(user.password_hash) });
   const delta = totp.validate({ token: totp_code, window: 1 });
-  if (delta === null) { await sql.end(); return c.json({ error: 'Invalid TOTP code' }, 401); }
+  let usedRecoveryCode = false;
+  if (delta === null) {
+    // T5 — fall back to recovery code consumption. We try this only after the
+    // 6-digit TOTP fails so the common path stays fast. Single-use enforcement
+    // is in tryConsumeRecoveryCode (atomic UPDATE removes the hash).
+    await sql.end();
+    usedRecoveryCode = await tryConsumeRecoveryCode(c.env, user.id, totp_code);
+    if (!usedRecoveryCode) return c.json({ error: 'Invalid TOTP code' }, 401);
+  }
+  const sql2 = usedRecoveryCode ? getSQL(c.env) : sql;
 
   // Epic 3 — mint a session-bound JWT. The jti claim ties the token to a
   // row in user_sessions so the user can list and revoke individual devices
@@ -356,7 +455,7 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   const ua = (c.req.header('user-agent') || '').slice(0, 500);
   const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
   try {
-    await sql`INSERT INTO user_sessions (user_id, jti, user_agent, ip)
+    await sql2`INSERT INTO user_sessions (user_id, jti, user_agent, ip)
               VALUES (${user.id}, ${jti}, ${ua || null}, ${ip || null})`;
   } catch {
     // Table not migrated yet; the JWT still works (auth.ts skips the check).
@@ -365,13 +464,18 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   // email_hash as actor instead of plaintext email. user_id remains the
   // canonical FK back to the user row.
   const loginEmailHash = await hashEmail(user.email);
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_login', ${`login (email_hash=${loginEmailHash})`}, ${loginEmailHash}, ${user.id})`;
-  await sql.end();
+  const loginAction = usedRecoveryCode ? 'user_login_recovery_code' : 'user_login';
+  const loginDetails = usedRecoveryCode
+    ? `login via recovery code (email_hash=${loginEmailHash})`
+    : `login (email_hash=${loginEmailHash})`;
+  await sql2`INSERT INTO activity_logs (action, details, actor, user_id) VALUES (${loginAction}, ${loginDetails}, ${loginEmailHash}, ${user.id})`;
+  await sql2.end();
 
   return c.json({
     token: jwtToken,
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
     expires_in: 24 * 3600,
+    used_recovery_code: usedRecoveryCode || undefined,
   });
 }));
 

@@ -26,8 +26,7 @@ CREATE TRIGGER IF NOT EXISTS lp_investors_block_insert
 BEFORE INSERT ON lp_investors
 BEGIN
     SELECT RAISE(ABORT,
-        'lp_investors is sealed (Epic 11). Use limited_partners + vc_funds instead. '
-        'See backend/app/models/entities.py:LPInvestor docstring for context.'
+        'lp_investors is sealed (Epic 11). Use limited_partners + vc_funds instead. See backend/app/models/entities.py:LPInvestor docstring for context.'
     );
 END;
 

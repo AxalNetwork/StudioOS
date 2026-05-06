@@ -16,6 +16,8 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedRecovery, setCopiedRecovery] = useState(false);
+  const [recoveryAck, setRecoveryAck] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [turnstileToken, setTurnstileToken] = useState('');
   const [emailWarning, setEmailWarning] = useState(false);
@@ -243,6 +245,30 @@ export default function RegisterPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  // T5 — recovery codes shown ONCE on TOTP enrol. The user must explicitly
+  // acknowledge they've saved them before "Verify" is enabled. Plaintext is
+  // never persisted client-side — closing or refreshing the page loses it.
+  const copyRecoveryCodes = () => {
+    const codes = totpData?.recovery_codes;
+    if (!codes || !codes.length) return;
+    navigator.clipboard.writeText(codes.join('\n'));
+    setCopiedRecovery(true);
+    setTimeout(() => setCopiedRecovery(false), 2000);
+  };
+
+  const downloadRecoveryCodes = () => {
+    const codes = totpData?.recovery_codes;
+    if (!codes || !codes.length) return;
+    const txt = `Axal — TOTP recovery codes (${form.email})\nGenerated ${new Date().toISOString()}\n\n${codes.join('\n')}\n\nEach code can be used exactly once if you lose access to your authenticator app.\nDo not share these. Store somewhere safe (password manager, sealed envelope, etc.).\n`;
+    const blob = new Blob([txt], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `axal-recovery-codes.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -570,6 +596,44 @@ export default function RegisterPage() {
                 </div>
               </details>
 
+              {/* T5 — one-time recovery codes. Required acknowledgement gate
+                  on the verify button: users must tick "I've saved these"
+                  before they can finish enrolment. */}
+              {Array.isArray(totpData.recovery_codes) && totpData.recovery_codes.length > 0 && (
+                <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4">
+                  <div className="flex items-start gap-2 mb-2">
+                    <Shield size={16} className="text-amber-700 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-xs font-semibold text-amber-900">Save your recovery codes</div>
+                      <p className="text-[11px] text-amber-800 leading-relaxed mt-0.5">
+                        Each code lets you sign in once if you lose access to your authenticator. They will not be shown again — store them in a password manager or print them now.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 font-mono text-[11px] mb-2 mt-2">
+                    {totpData.recovery_codes.map((c, i) => (
+                      <div key={i} className="bg-white border border-amber-200 rounded px-2 py-1 select-all text-gray-900 tracking-wider">{c}</div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2 mb-2">
+                    <button type="button" onClick={copyRecoveryCodes}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs text-amber-900 bg-white border border-amber-300 hover:border-amber-400 rounded-md px-2.5 py-1.5 transition-colors">
+                      {copiedRecovery ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                      <span>{copiedRecovery ? 'Copied!' : 'Copy all'}</span>
+                    </button>
+                    <button type="button" onClick={downloadRecoveryCodes}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs text-amber-900 bg-white border border-amber-300 hover:border-amber-400 rounded-md px-2.5 py-1.5 transition-colors">
+                      Download .txt
+                    </button>
+                  </div>
+                  <label className="flex items-start gap-2 text-[11px] text-amber-900 cursor-pointer select-none">
+                    <input type="checkbox" checked={recoveryAck} onChange={e => setRecoveryAck(e.target.checked)}
+                      className="mt-0.5 w-3.5 h-3.5 text-violet-600 border-amber-400 rounded focus:ring-violet-500" />
+                    <span>I have saved these recovery codes somewhere safe.</span>
+                  </label>
+                </div>
+              )}
+
               <div className="space-y-4">
                 <div>
                   <label className="text-xs text-gray-600 block mb-1">Enter 6-digit code from authenticator</label>
@@ -577,7 +641,8 @@ export default function RegisterPage() {
                     placeholder="000000" maxLength={6}
                     className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-900 text-center text-2xl tracking-[0.5em] font-mono placeholder-gray-400 focus:border-violet-500 focus:outline-none" />
                 </div>
-                <button onClick={verify} disabled={loading || verifyCode.length !== 6}
+                <button onClick={verify}
+                  disabled={loading || verifyCode.length !== 6 || (Array.isArray(totpData.recovery_codes) && totpData.recovery_codes.length > 0 && !recoveryAck)}
                   className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors">
                   <Shield size={14} /> {loading ? 'Verifying...' : 'Verify & Enter Dashboard'}
                 </button>
