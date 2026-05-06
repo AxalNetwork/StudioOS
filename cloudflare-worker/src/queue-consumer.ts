@@ -136,6 +136,15 @@ export async function queueConsumer(
     // AI budget gate.
     if (!(await reserveAiBudget(env, body.job_type))) {
       console.info(`[queue-consumer] ai budget exhausted, deferring job_type=${body.job_type}`);
+      // CRITICAL: release the idempotency claim BEFORE retry. The claim was
+      // taken above for race-free dedup of *executions*, but a defer is not
+      // an execution — leaving the row in place would cause the redelivery
+      // 60s later to be silently ack-skipped as a "duplicate" and the job
+      // would never run. Mirror the failure-path release.
+      try {
+        await env.DB.prepare(`DELETE FROM job_idempotency WHERE idempotency_key = ?`)
+          .bind(body.idempotency_key).run();
+      } catch {/* best-effort */}
       message.retry({ delaySeconds: 60 });
       await meter(env, body.job_type, 'deferred', Date.now() - t0);
       continue;
