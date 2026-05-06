@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import { kvGetJSON, kvPutJSON, kvDelete, createL1 } from '../kv';
+import { clampDays } from '../util/pagination';
 
 const dashboard = new Hono<{ Bindings: Env }>();
 
@@ -31,6 +32,10 @@ async function safeQuery<T>(label: string, fn: () => Promise<T>, fallback: T): P
 dashboard.get('/', async (c) => {
   const user = await requireAuth(c);
   const fresh = c.req.query('fresh') === '1';
+  // T17 — `?days=N` window (default 30, max 365) sizes the earnings series
+  // and the recent-notifications query. Older callers without the param
+  // get the historical default behavior.
+  const days = clampDays(c.req.query('days'), 30, 365);
   const now = Date.now();
 
   // L1 — per-isolate
@@ -120,7 +125,7 @@ dashboard.get('/', async (c) => {
       [] as any[]),
     safeQuery('earningsSeries', () => sql`
       SELECT DATE(created_at) as day, SUM(amount_cents) as cents
-      FROM commissions WHERE user_id = ${user.id} AND created_at >= datetime('now', '-30 days')
+      FROM commissions WHERE user_id = ${user.id} AND created_at >= datetime('now', ${`-${days} days`})
       GROUP BY DATE(created_at) ORDER BY day
     `, [] as any[]),
     safeQuery('myTasks', () => sql`
@@ -165,12 +170,12 @@ dashboard.get('/', async (c) => {
     try { await c.env.DB.prepare(`INSERT INTO shared_services_log (workflow_id, action_type, details, performed_by) VALUES (NULL, 'dashboard_view_admin', '{}', ?)`).bind(user.id).run(); } catch {}
   }
 
-  // Build a 30-day series with zeros filled
+  // Build the day-series with zeros filled for the requested ?days window.
   const seriesMap = new Map<string, number>();
   for (const row of (earningsSeries as any[])) seriesMap.set(row.day, parseInt(row.cents) || 0);
   const today = new Date();
   const series: { day: string; cents: number }[] = [];
-  for (let i = 29; i >= 0; i--) {
+  for (let i = days - 1; i >= 0; i--) {
     const d = new Date(today); d.setDate(d.getDate() - i);
     const key = d.toISOString().slice(0, 10);
     series.push({ day: key, cents: seriesMap.get(key) || 0 });
@@ -197,7 +202,10 @@ dashboard.get('/', async (c) => {
       ai_recommendations: recommendedSyndicates,
     },
     performance_analytics: {
+      // Field name is historical (was hardcoded 30d). The actual length now
+      // reflects the requested ?days window — see `window_days` below.
       earnings_series_30d: series,
+      window_days: days,
       chain_counts: chains,
       network_reach: networkReach,
       top_referrers: topReferrers,

@@ -6,6 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 import { api } from '../lib/api';
+import { useEscapeClose } from '../components/useEscapeClose';
 
 const fmt = (cents) => {
   const v = Number(cents || 0) / 100;
@@ -32,6 +33,7 @@ function MatchesPanel({ listingId, onClose, currentUser }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [executing, setExecuting] = useState(null);
+  useEscapeClose(() => onClose());
 
   const load = async () => {
     try { const r = await api.liquidityListingMatches(listingId); setMatches(r.items || []); }
@@ -122,6 +124,7 @@ function ListWizard({ onClose }) {
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  useEscapeClose(() => onClose());
 
   const submit = async (e) => {
     e.preventDefault();

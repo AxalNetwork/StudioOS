@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { clampLimit, parseOffset } from '../util/pagination';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAdmin, createJWT, hashToken } from '../auth';
@@ -31,12 +32,19 @@ admin.get('/users', async (c) => {
   // shape before we SELECT them — older databases predate these adds.
   await ensureProfileColumns(c.env);
   const sql = getSQL(c.env);
+  // T17 — pagination. Default 100 (existing UX), max 200. The previous
+  // implementation returned EVERY user with no limit — fine for a 50-user
+  // workspace but a foot-gun once the directory grows.
+  const limit = clampLimit(c.req.query('limit'), 100, 200);
+  const offset = parseOffset(c.req.query('offset'));
   // Include `kyc_status` and `access_level` so the admin user table can
   // show who's been verified, who has a manual full-access grant, and who
   // has limited (browse-only, can't sign legal docs) access. The UI uses
   // these to decide which "Grant" buttons to render.
-  const rows = await sql`SELECT id, uid, email, name, role, is_active, email_verified, kyc_status, access_level, created_at FROM users ORDER BY created_at DESC`;
+  const rows = await sql`SELECT id, uid, email, name, role, is_active, email_verified, kyc_status, access_level, created_at FROM users ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
   await sql.end();
+  // Back-compat: existing frontend reads this as a flat array. Keep that
+  // shape; a new ?envelope=1 mode can be added later without breaking the UI.
   return c.json(rows);
 });
 

@@ -2,25 +2,20 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { clampLimit, parseOffset } from '../util/pagination';
 
 const activity = new Hono<{ Bindings: Env }>();
 
-// Backfill user_id on legacy rows where actor matches the user's email.
-// Idempotent and safe — runs once per request.
-async function backfillUserId(sql: any, userId: number, email: string) {
-  try {
-    await sql`UPDATE activity_logs SET user_id = ${userId}
-              WHERE user_id IS NULL AND LOWER(actor) = LOWER(${email})`;
-  } catch {}
-}
+// T16 — backfillUserId() used to run a full UPDATE on every request to map
+// legacy activity_logs.actor (email) → user_id. The one-time SQL migration
+// at sql/backfill_activity_user_ids.sql replaces it. Apply once via
+// `wrangler d1 execute … --remote`; new INSERTs already set user_id directly.
 
 activity.get('/', async (c) => {
   const user = await requireAuth(c);
-  const limit = parseInt(c.req.query('limit') || '100');
-  const offset = parseInt(c.req.query('offset') || '0');
+  const limit = clampLimit(c.req.query('limit'));
+  const offset = parseOffset(c.req.query('offset'));
   const sql = getSQL(c.env);
-
-  await backfillUserId(sql, user.id, user.email);
 
   // STRICT per-user privacy — even admins only see their OWN activity here.
   const countResult = await sql`
@@ -34,14 +29,22 @@ activity.get('/', async (c) => {
     LIMIT ${limit} OFFSET ${offset}
   `;
   await sql.end();
-  return c.json({ logs: rows, total: parseInt(countResult[0].total), limit, offset, user_id: user.id });
+  // T17 — Standard pagination envelope. `logs` retained for backwards
+  // compatibility with existing ActivityPage; `items` is the new canonical
+  // field that future callers should use.
+  return c.json({
+    items: rows,
+    logs: rows,
+    total: parseInt(countResult[0].total),
+    limit,
+    offset,
+    user_id: user.id,
+  });
 });
 
 activity.get('/summary', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
-
-  await backfillUserId(sql, user.id, user.email);
 
   const total = await sql`
     SELECT COUNT(*) as count FROM activity_logs
@@ -84,11 +87,14 @@ activity.post('/sync-github', async (c) => {
   }
 
   const sql = getSQL(env);
-  await backfillUserId(sql, user.id, user.email);
+  // T17 — was an unbounded SELECT *; cap at 5000 most-recent rows so a
+  // long-tenured user's sync can't OOM the worker isolate or generate a
+  // multi-MB GitHub commit.
   const rows = await sql`
     SELECT id, action, details, actor, created_at FROM activity_logs
     WHERE user_id = ${user.id} OR LOWER(actor) = LOWER(${user.email})
     ORDER BY created_at DESC
+    LIMIT 5000
   `;
   await sql.end();
 
@@ -115,6 +121,7 @@ activity.post('/sync-github', async (c) => {
     `- **Total events:** ${rows.length}`,
     ``,
     `> This file is generated automatically by Axal VC StudioOS and contains only this user's own activity.`,
+    `> Capped at 5000 most-recent events.`,
     ``,
     `| When | Action | Details |`,
     `| --- | --- | --- |`,

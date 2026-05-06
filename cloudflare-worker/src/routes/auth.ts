@@ -39,6 +39,22 @@ async function readJson(c: any): Promise<{ ok: boolean; body: any; res: any }> {
   }
 }
 
+// T22.1 — One-way SHA-256 hash of an email, truncated to 16 hex chars
+// (64 bits — enough collision-resistance for activity log correlation
+// while keeping the row narrow). Lowercased + trimmed so the same email
+// hashes consistently regardless of casing.
+async function hashEmail(email: string): Promise<string> {
+  const enc = new TextEncoder();
+  const buf = await crypto.subtle.digest(
+    'SHA-256',
+    enc.encode(String(email || '').toLowerCase().trim()),
+  );
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 16);
+}
+
 async function checkRateLimit(env: Env, key: string, max: number, windowSec: number): Promise<boolean> {
   // Fail-open on any KV error (incl. daily-write-limit exceeded on the free
   // plan). Auth/registration must keep working; a small over-allowance during
@@ -105,9 +121,7 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
     // the failed submitter never authenticated and we have no consent /
     // legitimate-interest basis to retain their plain email indefinitely.
     try {
-      const enc = new TextEncoder();
-      const emailHashBuf = await crypto.subtle.digest('SHA-256', enc.encode(String(email).toLowerCase().trim()));
-      const emailHash = Array.from(new Uint8Array(emailHashBuf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+      const emailHash = await hashEmail(email);
       // /24 for IPv4, /48 for IPv6 — coarse enough for abuse clustering, fine
       // enough to drop unique-host info.
       let ipBucket = 'unknown';
@@ -148,7 +162,12 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   }
 
   const [user] = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${name}, ${role || 'partner'}, false) RETURNING *`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`User ${name} (${email}) registered as ${role || 'partner'} — pending email verification`}, ${email}, ${user.id})`;
+  // T22.1 — PII redaction: details no longer carries the plaintext name +
+  // email; actor stores an email_hash instead of the email itself. The
+  // user_id FK is the canonical link back to the account row when joins
+  // are needed for support/analytics.
+  const regEmailHash = await hashEmail(email);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`registered as ${role || 'partner'} — pending email verification (email_hash=${regEmailHash})`}, ${regEmailHash}, ${user.id})`;
   await sql.end();
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: role === 'investor' ? 'investor' : 'partner', id: user.id }); } catch {}
 
@@ -157,8 +176,10 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
       const { attachReferral } = await import('./network');
       const linked = await attachReferral(c.env, user.id, String(ref_code).toUpperCase());
       if (linked) {
+        // T22.1 — actor uses email_hash, never the plaintext email.
         const sql2 = getSQL(c.env);
-        await sql2`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('referral_attached', ${`Joined via referral code ${ref_code}`}, ${email}, ${user.id})`;
+        const refEmailHash = await hashEmail(email);
+        await sql2`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('referral_attached', ${`Joined via referral code ${ref_code}`}, ${refEmailHash}, ${user.id})`;
         await sql2.end();
       }
     } catch (e) { console.error('attachReferral failed:', e); }
@@ -265,7 +286,9 @@ auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confi
   const setupExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
   await sql`UPDATE users SET email_verified = true, verification_token = ${setupHash}, verification_token_expires = ${setupExpires} WHERE id = ${user.id}`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('email_verified', ${`User ${user.name} (${user.email}) verified their email`}, ${user.email}, ${user.id})`;
+  // T22.1 — PII redaction: drop name/email from details; actor stores hash.
+  const verifEmailHash = await hashEmail(user.email);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('email_verified', ${`email verified (email_hash=${verifEmailHash})`}, ${verifEmailHash}, ${user.id})`;
   await sql.end();
 
   return c.json({ verified: true, email: user.email, name: user.name, setup_token: setupToken });
@@ -348,7 +371,11 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   } catch {
     // Table not migrated yet; the JWT still works (auth.ts skips the check).
   }
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_login', ${`User ${user.name} logged in`}, ${user.email}, ${user.id})`;
+  // T22.1 — PII redaction on login: drop user.name from details, store
+  // email_hash as actor instead of plaintext email. user_id remains the
+  // canonical FK back to the user row.
+  const loginEmailHash = await hashEmail(user.email);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_login', ${`login (email_hash=${loginEmailHash})`}, ${loginEmailHash}, ${user.id})`;
   await sql.end();
 
   return c.json({

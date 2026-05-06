@@ -6,6 +6,7 @@ import {
   Play, Package, Star, Receipt, XCircle, ExternalLink,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useEscapeClose } from '../components/useEscapeClose';
 
 const CATEGORIES = ['legal', 'accounting', 'design', 'recruiting', 'fractional_cfo', 'gtm', 'engineering', 'marketing'];
 const CAT_LABEL = {
@@ -103,7 +104,10 @@ function BrowseTab({ user }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center gap-2">
+      {/* T21 — wrapped in <form> so pressing Enter in the search input
+          triggers Apply instead of being swallowed. */}
+      <form onSubmit={(e) => { e.preventDefault(); load(); }}
+        className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center gap-2">
         <Filter size={14} className="text-gray-500" />
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
@@ -114,8 +118,8 @@ function BrowseTab({ user }) {
           <option value="">All categories</option>
           {CATEGORIES.map((c) => <option key={c} value={c}>{CAT_LABEL[c]}</option>)}
         </select>
-        <button onClick={load} className="ml-auto bg-violet-600 hover:bg-violet-700 text-white rounded-md px-4 py-1.5 text-sm font-medium">Apply</button>
-      </div>
+        <button type="submit" className="ml-auto bg-violet-600 hover:bg-violet-700 text-white rounded-md px-4 py-1.5 text-sm font-medium">Apply</button>
+      </form>
 
       {error && <ErrorBox message={error} />}
       {loading && <div className="text-sm text-gray-500">Loading…</div>}
@@ -207,6 +211,7 @@ function MyNeedsTab({ user }) {
 }
 
 function NeedFormModal({ user, need, onClose, onSaved }) {
+  useEscapeClose(onClose);
   const isEdit = !!need;
   const [projects, setProjects] = useState([]);
   const [draft, setDraft] = useState({
@@ -306,6 +311,7 @@ function NeedFormModal({ user, need, onClose, onSaved }) {
 // Need detail modal — RFP, quotes, accept/reject flow
 // ---------------------------------------------------------------------------
 function NeedDetailModal({ needId, user, onClose, onEdit }) {
+  useEscapeClose(onClose);
   const [need, setNeed] = useState(null);
   const [quotes, setQuotes] = useState([]);
   const [error, setError] = useState(null);

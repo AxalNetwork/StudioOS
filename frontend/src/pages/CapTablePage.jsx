@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
+import { useToast } from '../components/useToast';
 import {
   PieChart as PieIcon, Trash2, Plus, Save, Download, RefreshCw, FileText, AlertCircle,
 } from 'lucide-react';
@@ -79,7 +80,9 @@ export default function CapTablePage() {
   const [scenarios, setScenarios] = useState([]);
   const [activeUid, setActiveUid] = useState(null);
   const [scenarioName, setScenarioName] = useState('Untitled scenario');
-  const [savedFlash, setSavedFlash] = useState('');
+  // T19 — toast hook auto-clears on unmount. Replaces the inline
+  // `setTimeout(() => setSavedFlash(''), 1500)` that leaked on quick navigation.
+  const { toast: savedFlash, showToast: setSavedFlash } = useToast(1500);
 
   useEffect(() => { loadScenarios(); }, []);
   useEffect(() => { runSim(); /* eslint-disable-next-line */ }, []);
@@ -143,7 +146,6 @@ export default function CapTablePage() {
       }
       setResult(s.result || result);
       setSavedFlash('Saved');
-      setTimeout(() => setSavedFlash(''), 1500);
       loadScenarios();
     } catch (e) {
       const status = e?.status;

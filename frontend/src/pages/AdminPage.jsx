@@ -3,6 +3,8 @@ import { reportError } from '../lib/log';
 import { api } from '../lib/api';
 import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, Clock, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2 } from 'lucide-react';
 import { PERSONAS as PERSONA_TAXONOMY } from '../lib/personas';
+import { useToast } from '../components/useToast';
+import { useEscapeClose } from '../components/useEscapeClose';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 const ROLE_BADGES = {
@@ -625,12 +627,14 @@ export default function AdminPage({ onImpersonate }) {
 }
 
 export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive }) {
+  useEscapeClose(onClose);
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('profile');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [resending, setResending] = useState(false);
-  const [toast, setToast] = useState(null);
+  // T19 — toast lifecycle now handled by useToast (cleans up on unmount).
+  const { toast, showToast: setToastSafe } = useToast(3000);
   const [err, setErr] = useState('');
 
   useEffect(() => {
@@ -648,10 +652,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
     return () => { alive = false; };
   }, [userRow.id]);
 
-  const flash = (kind, msg) => {
-    setToast({ kind, msg });
-    setTimeout(() => setToast(null), 3000);
-  };
+  const flash = (kind, msg) => setToastSafe({ kind, msg });
 
   const saveNotes = async () => {
     setSaving(true);
@@ -974,6 +975,7 @@ function Stat({ label, value }) {
 }
 
 function ProfileReviewModal({ profile, onClose, onSaved }) {
+  useEscapeClose(onClose);
   const [agreement, setAgreement] = useState(profile.agreement_type || '');
   const [notes, setNotes] = useState(profile.admin_notes || '');
   const [saving, setSaving] = useState(false);
@@ -1601,11 +1603,14 @@ function PersonasPanel() {
         <Sparkles size={16} className="text-gray-600" />
         <h3 className="text-sm font-semibold text-gray-900">User Personas</h3>
         <div className="ml-auto flex items-center gap-2">
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search name or email"
-            className="text-xs px-2.5 py-1.5 border border-gray-200 rounded-md w-56 focus:outline-none focus:border-violet-400" />
-          <button onClick={load} className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 flex items-center gap-1">
-            <RefreshCw size={12} /> Refresh
-          </button>
+          {/* T21 — Enter in the search input now triggers a Refresh. */}
+          <form onSubmit={(e) => { e.preventDefault(); load(); }} className="flex items-center gap-2">
+            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search name or email"
+              className="text-xs px-2.5 py-1.5 border border-gray-200 rounded-md w-56 focus:outline-none focus:border-violet-400" />
+            <button type="submit" className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 flex items-center gap-1">
+              <RefreshCw size={12} /> Refresh
+            </button>
+          </form>
         </div>
       </div>
       {loading ? (

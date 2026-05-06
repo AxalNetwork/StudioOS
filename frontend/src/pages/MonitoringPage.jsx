@@ -3,6 +3,7 @@ import InfrastructureTab from './InfrastructureTab';
 import { Activity, AlertTriangle, RefreshCw, Sparkles, ShieldAlert, Zap, Server, Clock, TrendingUp, ChevronDown, X, User as UserIcon, Hash, Copy, Check } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from 'recharts';
 import { api } from '../lib/api';
+import { useEscapeClose } from '../components/useEscapeClose';
 
 const POLL_MS = 15000;
 
@@ -82,6 +83,7 @@ function ChartPanel({ title, data, dataKey = 'count', color = '#7c3aed', type = 
 // ---------------------------------------------------------------------------
 function ErrorDetailModal({ error, allErrors, onClose }) {
   const [copied, setCopied] = useState(false);
+  useEscapeClose(onClose);
   if (!error) return null;
 
   const ts = error.created_at ? new Date(error.created_at + (error.created_at.endsWith('Z') ? '' : 'Z')) : null;

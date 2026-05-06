@@ -56,6 +56,11 @@ The user prefers clear and concise communication. They value iterative developme
 - API ↔ Worker drift is a common issue; always run `npm run test:drift` or ensure CI passes before merging.
 - Admin role changes require direct SQL modifications, as there is no UI for this.
 - KYC is optional until critical legal documents require it, but ensure the system handles its eventual enforcement.
+- After a deploy, apply pending one-time migrations: `wrangler d1 execute studioos-db --file=cloudflare-worker/sql/<file>.sql --remote`. Pending: `backfill_activity_user_ids.sql`, `perf_indexes.sql`.
+- `activity_logs.actor` now stores a 16-hex `email_hash` (SHA-256 truncated) for register / referral / verify / login events — never the plaintext email. Use `user_id` for joins instead.
+- Paginated reads (`/api/activity`, `/api/admin/users`, `/api/marketplace/syndication`, `/api/dashboard?days=N`) are clamped via `cloudflare-worker/src/util/pagination.ts` (limit defaults vary; max 200 / 50 / 365 days).
+- Frontend toasts must use `useToast` (auto-clears on unmount) — raw `setTimeout(setToast, …)` leaks state updates into unmounted components.
+- Modals must call `useEscapeClose(onClose)` for keyboard dismissal; bind once near the top of the component.
 
 ## Pointers
 - **Cloudflare Workers Docs**: [https://developers.cloudflare.com/workers/](https://developers.cloudflare.com/workers/)

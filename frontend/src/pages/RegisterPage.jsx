@@ -110,10 +110,17 @@ export default function RegisterPage() {
   useEffect(() => {
     if (!TURNSTILE_SITE_KEY || !turnstileRef.current || step !== 1) return;
     if (typeof window.turnstile === 'undefined') {
+      // T19 — Cap the polling at 50 attempts (~10s). Without this bound the
+      // loop runs forever if the Turnstile script never loads (network
+      // block, ad blocker, offline) — leaking an interval per mount.
+      let attempts = 0;
       const interval = setInterval(() => {
+        attempts += 1;
         if (typeof window.turnstile !== 'undefined' && turnstileRef.current) {
           clearInterval(interval);
           renderTurnstile();
+        } else if (attempts >= 50) {
+          clearInterval(interval);
         }
       }, 200);
       return () => clearInterval(interval);

@@ -16,6 +16,7 @@ import { Jobs } from '../models/jobs';
 import { enqueueJob } from '../services/queue';
 import { Distributions } from '../models/distributions';
 import { logActivity } from './partnernet';
+import { clampLimit } from '../util/pagination';
 
 const funds = new Hono<{ Bindings: Env }>();
 
@@ -79,23 +80,26 @@ funds.get('/lp-portal', async (c) => {
 funds.get('/syndication', async (c) => {
   // Lightweight co-invest opportunities: open marketplace listings + pending capital calls.
   await requireAuth(c);
+  // T17 — clamp ?limit=N (default 20, max 50) for both lists.
+  const limit = clampLimit(c.req.query('limit'), 20, 50);
   const listings = await c.env.DB.prepare(
     `SELECT l.id AS listing_id, l.subsidiary_id, l.shares, l.asking_price_cents, l.ai_valuation_cents,
             s.subsidiary_name
        FROM secondary_listings l
        JOIN subsidiaries s ON s.id = l.subsidiary_id
       WHERE l.status = 'open' AND l.shares > 0
-      ORDER BY l.created_at DESC LIMIT 50`
-  ).all().catch(() => ({ results: [] }));
+      ORDER BY l.created_at DESC LIMIT ?`
+  ).bind(limit).all().catch(() => ({ results: [] }));
   const pendingCalls = await c.env.DB.prepare(
     `SELECT id, fund_id, payload, created_at FROM queue_jobs
       WHERE job_type IN ('capital_call', 'capital_call_notice') AND status IN ('pending','processing')
-      ORDER BY created_at DESC LIMIT 20`
-  ).all().catch(() => ({ results: [] }));
+      ORDER BY created_at DESC LIMIT ?`
+  ).bind(limit).all().catch(() => ({ results: [] }));
   return c.json({
     ok: true,
     co_invest_listings: listings.results || [],
     pending_capital_calls: pendingCalls.results || [],
+    limit,
   });
 });
 

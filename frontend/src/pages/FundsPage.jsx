@@ -7,6 +7,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line,
 } from 'recharts';
 import { api } from '../lib/api';
+import { useEscapeClose } from '../components/useEscapeClose';
 
 const fmtCents = (cents) => {
   const v = Number(cents || 0) / 100;
@@ -37,6 +38,7 @@ function StatusPill({ status }) {
 }
 
 function CreateFundModal({ onClose }) {
+  useEscapeClose(() => onClose());
   const [name, setName] = useState('');
   const [vintage, setVintage] = useState(new Date().getFullYear());
   const [sizeM, setSizeM] = useState('');
@@ -104,6 +106,7 @@ function Field({ label, value, onChange, required, type = 'text', step, placehol
 }
 
 function CapitalCallModal({ fund, onClose }) {
+  useEscapeClose(() => onClose());
   const [amountM, setAmountM] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -141,6 +144,7 @@ function CapitalCallModal({ fund, onClose }) {
 }
 
 function DistributionModal({ fund, onClose }) {
+  useEscapeClose(() => onClose());
   const [proceedsM, setProceedsM] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -190,6 +194,7 @@ function DistributionModal({ fund, onClose }) {
 }
 
 function LPADrawer({ fundId, onClose }) {
+  useEscapeClose(onClose);
   const [doc, setDoc] = useState(null);
   const [err, setErr] = useState('');
   useEffect(() => {

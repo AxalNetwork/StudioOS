@@ -75,12 +75,13 @@ export default function PartnersPage() {
         <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
           <Search size={14} className="text-violet-600" /> Partner Matchmaking
         </h3>
-        <div className="flex gap-3">
+        {/* T21 — Enter inside the input now submits the form. */}
+        <form onSubmit={(e) => { e.preventDefault(); runMatch(); }} className="flex gap-3">
           <input type="text" placeholder="Sector (e.g. AI, Blockchain)..." value={matchSector}
             onChange={e => setMatchSector(e.target.value)}
             className="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900" />
-          <button onClick={runMatch} className="px-4 py-2 bg-violet-600 rounded-lg text-sm text-white">Find Matches</button>
-        </div>
+          <button type="submit" className="px-4 py-2 bg-violet-600 rounded-lg text-sm text-white">Find Matches</button>
+        </form>
         {matches && (
           <div className="mt-3 text-sm text-gray-600">
             Found <span className="text-gray-900 font-medium">{matches.count}</span> matching partner(s)

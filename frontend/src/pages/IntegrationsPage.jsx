@@ -4,6 +4,8 @@ import {
   ExternalLink, Webhook, Database, Scale, Building2, Shield,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useToast } from '../components/useToast';
+import { useEscapeClose } from '../components/useEscapeClose';
 
 const TYPE_ICONS = {
   crm: Building2,
@@ -28,7 +30,9 @@ export default function IntegrationsPage() {
   const [logsFor, setLogsFor] = useState(null);       // integration object
   const [logs, setLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
-  const [toast, setToast] = useState('');
+  // T19 — useToast hook handles cleanup on unmount, replacing the previous
+  // inline `setTimeout(() => setToast(''), 2500)` that leaked.
+  const { toast, showToast } = useToast(2500);
 
   const refresh = async () => {
     try {
@@ -44,11 +48,6 @@ export default function IntegrationsPage() {
   };
 
   useEffect(() => { refresh(); }, []);
-
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 2500);
-  };
 
   const onConnect = async (form) => {
     setBusy(true);
@@ -237,6 +236,7 @@ export default function IntegrationsPage() {
 }
 
 function ConnectModal({ provider, existing, onClose, onSubmit, busy }) {
+  useEscapeClose(onClose);
   const [apiKey, setApiKey] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [displayName, setDisplayName] = useState(existing?.display_name || provider.display_name);
@@ -303,6 +303,7 @@ function ConnectModal({ provider, existing, onClose, onSubmit, busy }) {
 }
 
 function LogsModal({ integration, logs, loading, onClose }) {
+  useEscapeClose(onClose);
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col">
