@@ -42,7 +42,7 @@ openpyxl==3.1.5
 pillow==12.2.0
 propcache==0.4.1
 proto-plus==1.27.2
-protobuf==4.25.9
+protobuf==7.34.1
 psycopg2-binary==2.9.12
 py-vapid==1.9.4
 pyasn1==0.6.3
