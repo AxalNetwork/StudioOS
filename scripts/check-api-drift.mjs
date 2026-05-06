@@ -62,10 +62,6 @@ const KNOWN_DRIFT_ALLOWLIST = new Set([
   '/captable/waterfall',
   // T14 — references audio recording / transcribe / summarize stubbed (501)
   '/references/transcripts',
-  // T15 — fund simulator port pending
-  '/fund-sim/reserves',
-  '/fund-sim/waterfall',
-  '/fund-sim/scenarios',
 ]);
 
 // ---------------------------------------------------------------------------

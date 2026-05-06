@@ -81,6 +81,8 @@ import comarketingRoutes from './routes/comarketing';
 import companyRoutes from './routes/company';
 import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 import insightsRoutes from './routes/insights';
+// T3 — Reserve allocation + waterfall simulator (Task #46 port).
+import fundSimulatorRoutes from './routes/fund_simulator';
 import { processQueueBatch } from './services/queueWorker';
 import { Jobs } from './models/jobs';
 import { queueConsumer } from './queue-consumer';
@@ -240,6 +242,8 @@ app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);
 app.route('/api/engagements', engagementsRouter);
 app.route('/api/insights', insightsRoutes);
+// T3 — Reserve allocation + waterfall simulator (admin/investor only).
+app.route('/api/fund-sim', fundSimulatorRoutes);
 app.route('/api/pipeline/votes', votesRoutes);
 // The frontend (and backend) cast endpoint is the singular `/vote/:deal_id`;
 // the plural `/votes/:deal_id` exists as a back-compat alias. Both go to
