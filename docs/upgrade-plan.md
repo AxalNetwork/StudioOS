@@ -1,10 +1,14 @@
 # Major-Version Dependency Upgrade Plan
 
-**Owner**: Repo maintainers (AxalNetwork/StudioOS)
+**Owner**: @AxalNetwork repo maintainers — primary: whoever picks up follow-up Tasks #6 (lucide) and #7 (vite). Escalation: repo admin team.
 **Created**: 2026-05-06 (project Task #5)
-**Target window**: next dedicated maintenance sprint after current product backlog clears (estimate: 2026-Q3 — pick a calendar week, not a fire-drill)
+**Target window**: **week of 2026-07-13** (start of 2026-Q3, first full week after US Independence Day). Both deferred PRs to be merged or explicitly re-deferred (with new written rationale) by **2026-07-17**. This is a hard date, not an estimate; if the window slips, file a new dated entry below explaining why and pick a new specific week.
 
-This document tracks the major-version Dependabot PRs that were intentionally held out of the routine weekly sweep, plus a retrospective record of the four majors that auto-merged cleanly during the Task #5 window.
+## Scope reconciliation (read this first)
+
+Project Task #5 originally listed **five** major-version PRs to defer: #6 (react), #11 (jose), #13 (typescript), #16 (recharts), #15 (lucide-react), and #12 (build/vite). Between Task #4 wrapping and Task #5 starting, **four of those PRs (#6, #11, #13, #16) were auto-merged into `main` by Dependabot** with all CI checks green. Reverting four already-merged, currently-passing major upgrades was rejected as actively harmful: the worker `tsc --noEmit` and frontend `vite build` both pass, both `npm audit --omit=dev --audit-level=critical` runs report 0 vulnerabilities, and the deployed prod worker is unaffected (worker bumps are typecheck-only until next `wrangler deploy`).
+
+**Effective Task #5 scope is therefore the two PRs that are still open: #15 and #12.** This doc records that reconciliation explicitly so the next session does not re-litigate it.
 
 ---
 
