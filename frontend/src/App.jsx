@@ -1,6 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
@@ -727,8 +728,14 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
   return children;
 }
 
-export default function App() {
-  const [user, setUser] = useState(() => safeReadJSON('user'));
+function AppInner() {
+  // T20 — `user` is now sourced from AuthContext (re-synced on every route
+  // change, throttled to once per 5 min). The legacy component-level
+  // useState was removed: anything that mutates the session (login,
+  // impersonate, exit-impersonate, KYC submit) writes through
+  // `setUser`/`refresh()` so context, localStorage, and the cross-tab
+  // `storage` listener all stay in lock-step.
+  const { user, setUser, refresh } = useAuth();
 
   const [realUser, setRealUser] = useState(() => safeReadJSON('realUser'));
 
@@ -754,18 +761,19 @@ export default function App() {
     setRealUser(currentUser);
 
     localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify(impersonatedUser));
     setUser(impersonatedUser);
     setViewMode(impersonatedUser.role);
     localStorage.setItem('viewMode', impersonatedUser.role);
     navigate(ROLE_DEFAULT_PATH[impersonatedUser.role] || '/dashboard');
+    // T20 — bypass the 5-min /me throttle so the impersonated session is
+    // immediately reconciled against the server (KYC, access_level, etc.).
+    refresh({ force: true });
   };
 
   const exitImpersonation = () => {
     const origToken = localStorage.getItem('realToken');
     const origUser = safeReadJSON('realUser');
     localStorage.setItem('token', origToken);
-    localStorage.setItem('user', JSON.stringify(origUser));
     localStorage.removeItem('realUser');
     localStorage.removeItem('realToken');
     setUser(origUser);
@@ -773,6 +781,9 @@ export default function App() {
     setViewMode('admin');
     localStorage.setItem('viewMode', 'admin');
     navigate('/admin');
+    // T20 — restore the real admin's freshest profile immediately rather
+    // than wait for the next throttled re-sync.
+    refresh({ force: true });
   };
 
   const logout = async () => {
@@ -800,9 +811,12 @@ export default function App() {
     window.location.href = '/';
   };
 
+  // T20 — cross-tab `user` sync now lives inside AuthProvider; the
+  // realUser mirror still lives here because it's only relevant to the
+  // admin impersonation flow handled in this component.
   useEffect(() => {
-    const handleStorage = () => {
-      setUser(safeReadJSON('user'));
+    const handleStorage = (e) => {
+      if (e.key === 'realUser') setRealUser(safeReadJSON('realUser'));
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
@@ -921,5 +935,16 @@ export default function App() {
       <Route path="/academy/:slug" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
       <Route path="/academy" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
     </Routes>
+  );
+}
+
+export default function App() {
+  // T20 — AuthProvider must be inside <BrowserRouter> (it uses
+  // useLocation to throttle /me re-syncs to one per route change).
+  // main.jsx already wraps <App /> in BrowserRouter.
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
   );
 }
