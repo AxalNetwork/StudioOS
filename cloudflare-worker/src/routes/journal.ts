@@ -75,8 +75,8 @@ r.post('/', async (c) => {
 });
 
 async function loadOwn(c: Context<{ Bindings: Env }>, uid: string): Promise<{ row: Row | null; forbidden: boolean }> {
-  const user: User = c.get('_user') || (await requireAuth(c));
-  c.set('_user', user);
+  const user: User = (c.get as any)('_user') || (await requireAuth(c));
+  (c.set as any)('_user', user);
   const j = await c.env.DB.prepare('SELECT * FROM decision_journal_entries WHERE uid = ?').bind(uid).first<Row>();
   if (!j) return { row: null, forbidden: false };
   if (j.owner_user_id !== user.id && !isAdmin(user)) return { row: j, forbidden: true };
