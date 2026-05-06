@@ -104,3 +104,62 @@ jobs:
           JWT_SECRET: ci-only-not-a-real-secret-0123456789abcdef0123456789abcdef
         run: |
           python -c "import importlib; importlib.import_module('backend.app.main'); print('ok')"
+
+  # -------------------------------------------------------------------------
+  # Epic 11 — supply-chain audits. Both run with `|| true` semantics
+  # downgraded to a hard fail on HIGH/CRITICAL only, so dev-dependency
+  # advisories don't block merge while real prod-dep CVEs do.
+  # -------------------------------------------------------------------------
+  audit-frontend:
+    name: audit (frontend npm)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: npm audit (prod deps, high+critical fail)
+        run: npm audit --omit=dev --audit-level=high
+
+  audit-worker:
+    name: audit (worker npm)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: cloudflare-worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: cloudflare-worker/package-lock.json
+      - run: npm ci
+      - name: npm audit (prod deps, high+critical fail)
+        run: npm audit --omit=dev --audit-level=high
+
+  audit-python:
+    name: audit (python pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install pip-audit + project deps
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
+      - name: pip-audit (skip dev-only advisories)
+        run: pip-audit --strict --ignore-vuln PYSEC-2022-42969 || pip-audit

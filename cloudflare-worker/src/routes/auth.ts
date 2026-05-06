@@ -39,21 +39,11 @@ async function readJson(c: any): Promise<{ ok: boolean; body: any; res: any }> {
   }
 }
 
-// T22.1 — One-way SHA-256 hash of an email, truncated to 16 hex chars
-// (64 bits — enough collision-resistance for activity log correlation
-// while keeping the row narrow). Lowercased + trimmed so the same email
-// hashes consistently regardless of casing.
-async function hashEmail(email: string): Promise<string> {
-  const enc = new TextEncoder();
-  const buf = await crypto.subtle.digest(
-    'SHA-256',
-    enc.encode(String(email || '').toLowerCase().trim()),
-  );
-  return Array.from(new Uint8Array(buf))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
-    .slice(0, 16);
-}
+// T22.1 — hashEmail moved to ../util/hashEmail so admin.ts and other
+// routes can reuse it without re-declaring the digest logic. Re-imported
+// here so existing call sites (register/verify/login/referral) keep
+// working unchanged.
+import { hashEmail } from '../util/hashEmail';
 
 async function checkRateLimit(env: Env, key: string, max: number, windowSec: number): Promise<boolean> {
   // Fail-open on any KV error (incl. daily-write-limit exceeded on the free
