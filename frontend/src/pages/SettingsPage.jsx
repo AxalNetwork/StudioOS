@@ -581,7 +581,7 @@ function AuthSection({ data, flash }) {
                 : <span className="text-amber-700">You don't have any recovery codes yet — generate a set and store them somewhere safe.</span>}
             </div>
             {data.totp_configured ? (
-              <Field label="Enter your current 6-digit TOTP code to generate 8 new recovery codes">
+              <Field label="Enter your current 6-digit TOTP code to generate 10 new recovery codes">
                 <div className="flex gap-2">
                   <input value={recoveryCode}
                     onChange={e => setRecoveryCode(e.target.value.replace(/\D/g, '').slice(0, 6))}

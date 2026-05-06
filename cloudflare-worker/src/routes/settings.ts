@@ -642,9 +642,12 @@ settings.post('/totp/recovery-codes/regenerate', async (c) => {
     await sql.end();
     return c.json({ error: 'Invalid current TOTP code' }, 401);
   }
+  // T5 — 10 codes (was 8) to match the audit-plan spec and the Settings UI
+  // copy ("X of 10 remaining"). Single-use semantics are enforced on the
+  // login path (auth.ts:tryConsumeRecoveryCode).
   const plain: string[] = [];
   const hashes: string[] = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     const c1 = generateRecoveryCode();
     plain.push(c1);
     hashes.push(await hashToken(c1));
