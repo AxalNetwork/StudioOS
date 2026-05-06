@@ -57,26 +57,11 @@ const KNOWN_DRIFT_ALLOWLIST = new Set([
   '/wellbeing/resources',
   '/wellbeing/aggregates',
   '/compliance/events',
-  // T13 — captable / cofounder / mentors / partner-office-hours port pending
+  // T13 — captable port pending (mentors/partner-office-hours/cofounder shipped)
   '/captable/scenarios',
   '/captable/waterfall',
-  '/cofounder/profiles',
-  '/cofounder/matches',
-  '/mentors/profiles',
-  '/mentors/bookings',
-  '/mentors/reviews',
-  '/partner-office-hours/slots',
-  '/partner-office-hours/bookings',
-  // T14 — watchlist / journal / references port pending
-  '/watchlist',
-  '/watchlist/anti-portfolio',
-  '/journal',
-  '/references/scheduling',
+  // T14 — references audio recording / transcribe / summarize stubbed (501)
   '/references/transcripts',
-  // T15 — comarketing port pending
-  '/comarketing/pitches',
-  '/comarketing/track',
-  '/comarketing/attributions',
   // T15 — fund simulator port pending
   '/fund-sim/reserves',
   '/fund-sim/waterfall',

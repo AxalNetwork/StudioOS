@@ -69,6 +69,18 @@ import wellbeingRoutes from './routes/wellbeing';
 import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
 import cofounderRoutes from './routes/cofounder';
+// T13/T14/T15 — port of FastAPI mentors/partner_office_hours/watchlist/journal/
+// portfolio_health/references/comarketing/company/needs/insights routers.
+import mentorsRoutes from './routes/mentors';
+import partnerOfficeHoursRoutes from './routes/partner_office_hours';
+import watchlistRoutes from './routes/watchlist';
+import journalRoutes from './routes/journal';
+import portfolioRoutes from './routes/portfolio';
+import referencesRoutes from './routes/references';
+import comarketingRoutes from './routes/comarketing';
+import companyRoutes from './routes/company';
+import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
+import insightsRoutes from './routes/insights';
 import { processQueueBatch } from './services/queueWorker';
 import { Jobs } from './models/jobs';
 import { queueConsumer } from './queue-consumer';
@@ -210,6 +222,24 @@ app.route('/api/wellbeing', wellbeingRoutes);
 app.route('/api/compliance', complianceRoutes);
 app.route('/api/captable', captableRoutes);
 app.route('/api/cofounder', cofounderRoutes);
+// T13 — Mentors + Partner Office Hours.
+app.route('/api/mentors', mentorsRoutes);
+app.route('/api/partner-office-hours', partnerOfficeHoursRoutes);
+// T14 — Watchlist (incl. /api/antiportfolio), Decision Journal, Portfolio Health,
+// Reference Checks. watchlistRoutes mounts both /watchlist and /antiportfolio so
+// it sits at the /api root.
+app.route('/api', watchlistRoutes);
+app.route('/api/journal', journalRoutes);
+app.route('/api/portfolio', portfolioRoutes);
+app.route('/api/references', referencesRoutes);
+// T15 — Co-marketing, Company Profiles, Founder Needs / Quotes / Engagements,
+// Insights. companyRoutes mounts /company/* + /companies (root /api).
+app.route('/api/comarketing', comarketingRoutes);
+app.route('/api', companyRoutes);
+app.route('/api/needs', needsRoutes);
+app.route('/api/quotes', quotesRouter);
+app.route('/api/engagements', engagementsRouter);
+app.route('/api/insights', insightsRoutes);
 app.route('/api/pipeline/votes', votesRoutes);
 // The frontend (and backend) cast endpoint is the singular `/vote/:deal_id`;
 // the plural `/votes/:deal_id` exists as a back-compat alias. Both go to
