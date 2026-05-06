@@ -12,6 +12,10 @@ permissions:
 # Catches accidental secret commits before they hit production. Runs on every
 # PR + push to main so we never have a window where main contains a leaked
 # credential.
+#
+# NOTE: We invoke the gitleaks CLI directly instead of `gitleaks/gitleaks-action`.
+# As of 2024 the Action requires a paid `GITLEAKS_LICENSE` secret for org
+# repos. The CLI is unchanged and remains free + open-source.
 jobs:
   scan:
     name: scan
@@ -22,10 +26,21 @@ jobs:
         with:
           # Full history so gitleaks can scan any commit that touched the PR.
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          # Path to repo's gitleaks config (inherits the upstream default
-          # ruleset and adds project-specific allowlists).
-          config-path: .gitleaks.toml
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION=8.21.2
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+      - name: Run gitleaks
+        run: |
+          # Scan the full git history. Uses the project-specific config which
+          # extends the upstream default ruleset and adds project allowlists.
+          gitleaks detect \
+            --config=.gitleaks.toml \
+            --source=. \
+            --redact \
+            --verbose \
+            --no-banner \
+            --exit-code=1

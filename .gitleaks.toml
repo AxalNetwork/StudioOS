@@ -25,10 +25,30 @@ paths = [
   '''(?i)docs/.*''',                    # Built frontend bundle (already public)
   '''(?i)package-lock\.json$''',
   '''(?i).*\.lock$''',
+  # Wrangler build cache — output of `wrangler dev`, contains bundled
+  # third-party JS that often trips heuristic regex (e.g. `Symbol2.keyFor`).
+  # This directory should ideally be gitignored entirely.
+  '''(?i)cloudflare-worker/\.wrangler/.*''',
 ]
 regexes = [
   # Tailwind / Vite generated content hashes that look like secrets but aren't.
   '''[a-f0-9]{8}\.(js|css|woff2?)''',
   # Known synthetic test JWTs (signed with the literal "test" key).
   '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+''',
+  # Bundler-emitted Symbol.keyFor reference — false positive on generic-api-key.
+  '''(?i)Symbol2?\.keyFor''',
+]
+# Historical leak commits already exposed in public git history. Listed here
+# so CI doesn't fail forever on findings nobody can change without rewriting
+# history. ACTIONS REQUIRED OUTSIDE THIS FILE:
+#   - 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 (commit c45afb1) → REVOKE on
+#     github.com → Settings → Developer settings → Personal access tokens.
+#   - JWT_SECRET values in commits 64fed2c / 885de6e / af864bf → ROTATE the
+#     current secret and move it from `.replit` into Replit Secrets so it
+#     stops being committed going forward.
+commits = [
+  "c45afb10f2e4f67b02fe3100537dff7a7a588f17",  # historical: github oauth token in .replit
+  "64fed2c558712e208050a118677206e7439ccfbf",  # historical: older JWT_SECRET in .replit
+  "885de6ec5c9df186596d6a268a4fde25e7f0a606",  # historical: JWT_SECRET in .replit
+  "af864bff081f71db498680fac75eb667f4f5a73f",  # historical: JWT_SECRET in .replit
 ]
