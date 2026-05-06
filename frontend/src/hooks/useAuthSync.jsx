@@ -68,7 +68,6 @@ export function AuthProvider({ children }) {
     // same React tick) so we don't fire a flood of /me requests.
     if (inFlightRef.current) return inFlightRef.current;
 
-    lastFetchRef.current = now;
     setLoading(true);
     const p = (async () => {
       try {
@@ -77,9 +76,14 @@ export function AuthProvider({ children }) {
         const merged = { ...stored, ...me };
         try { localStorage.setItem('user', JSON.stringify(merged)); } catch { /* ignore */ }
         setUserState(merged);
+        // Only stamp the throttle on a successful round-trip — if /me
+        // failed transiently we want the next navigation to retry
+        // instead of being silenced for the full 5-minute window.
+        lastFetchRef.current = Date.now();
       } catch {
         // 401 is already handled by api.request (redirects to /login).
-        // Other errors are transient — keep the cached user.
+        // Other errors are transient — keep the cached user and let the
+        // next navigation re-attempt the sync.
       } finally {
         setLoading(false);
         inFlightRef.current = null;
