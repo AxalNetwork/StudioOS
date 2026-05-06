@@ -67,14 +67,17 @@ export default function ScoringPage() {
       const res = await api.scoreStartup(data);
       setResult(res);
     } catch (e) {
-      // The 7-day cooldown surfaces as a 429 with `code: official_cooldown`
-      // and a structured `locked_until` ISO timestamp. Render a live
+      // The 7-day cooldown surfaces as a 409 (post-T8: aligned with the
+      // post-insert UNIQUE-index race response) with `code: official_cooldown`
+      // and a structured `locked_until` ISO timestamp. Legacy 429 from older
+      // workers is still tolerated for graceful rollout. Render a live
       // countdown (CooldownBanner) instead of just echoing the raw message.
       const msg = e?.message || 'Failed to score';
       const data = e?.data || {};
       const isCooldown = data?.code === 'official_cooldown'
+        || e?.status === 409
         || e?.status === 429
-        || /locked|cooldown/i.test(msg);
+        || /locked|cooldown|already scored/i.test(msg);
       if (isCooldown) {
         setCooldownInfo({ message: msg, locked_until: data?.locked_until || null });
       } else {
