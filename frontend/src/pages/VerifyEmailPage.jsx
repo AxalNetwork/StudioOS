@@ -13,12 +13,41 @@ export default function VerifyEmailPage() {
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // userData carries { email, name } — populated from the confirm-verify-email
+  // response (NOT from the initial check), since T22.2 narrowed the GET
+  // /verify-email endpoint to `{ valid: true }` to avoid leaking PII to
+  // anyone replaying the link.
   const [userData, setUserData] = useState(null);
   const [totpData, setTotpData] = useState(null);
   const [copied, setCopied] = useState(false);
   // Which "I can't scan the QR" app card is expanded. null = all collapsed.
   const [manualOpen, setManualOpen] = useState(null);
   const canvasRef = useRef(null);
+  // Stash the {email, setup_token} pair from the confirm step so a
+  // transient failure on step 3 (setupTotp) doesn't strand the user with
+  // email_verified=true + no password_hash. The setup_token is one-shot
+  // but still valid until consumed — re-running setupTotp with the same
+  // pair lets the user retry without going back to register.
+  const setupRef = useRef(null);
+
+  const runSetupTotp = async (email, setupToken) => {
+    const totp = await api.setupTotp({ email, token: setupToken });
+    setTotpData(totp);
+    setStatus('totp_setup');
+  };
+
+  const retrySetup = async () => {
+    if (!setupRef.current) return;
+    setLoading(true);
+    setError('');
+    try {
+      await runSetupTotp(setupRef.current.email, setupRef.current.setup_token);
+    } catch (e) {
+      setError(e.message || 'Could not finish authenticator setup. Please try again.');
+      setStatus('setup_error');
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
     const token = searchParams.get('token');
@@ -29,14 +58,30 @@ export default function VerifyEmailPage() {
     }
 
     const verify = async () => {
+      // Step 1+2: validate the link, then flip email_verified and mint a
+      // one-shot setup token. Failures here invalidate the original link,
+      // so the user must register / request a new link.
+      let confirmed;
       try {
-        const res = await api.verifyEmail(token);
-        setUserData(res.user);
-        setTotpData(res.totp);
-        setStatus('totp_setup');
+        // GET response is just `{ valid: true }` per T22.2.
+        await api.checkVerifyEmail(token);
+        confirmed = await api.confirmVerifyEmail({ token });
+        setUserData({ email: confirmed.email, name: confirmed.name });
+        setupRef.current = { email: confirmed.email, setup_token: confirmed.setup_token };
       } catch (e) {
         setError(e.message || 'Verification failed.');
         setStatus('error');
+        return;
+      }
+
+      // Step 3: TOTP provisioning. The setup_token is one-shot but still
+      // valid against the user row until consumed — a transient failure
+      // here is recoverable via the "Try again" button (retrySetup).
+      try {
+        await runSetupTotp(confirmed.email, confirmed.setup_token);
+      } catch (e) {
+        setError(e.message || 'Could not finish authenticator setup. Please try again.');
+        setStatus('setup_error');
       }
     };
 
@@ -55,13 +100,16 @@ export default function VerifyEmailPage() {
   }, [totpData]);
 
   const confirmVerification = async () => {
+    // TOTP enrolment already completed inside the verify effect above —
+    // this button just routes the user to the sign-in page. We keep the
+    // setLoading/error scaffolding so any future async confirmation step
+    // (e.g. acknowledging recovery codes server-side) slots in cleanly.
     setLoading(true);
     setError('');
     try {
-      await api.confirmVerification(userData.email);
       navigate('/login');
     } catch (e) {
-      setError(e.message || 'Unable to confirm verification.');
+      setError(e.message || 'Unable to continue.');
     }
     setLoading(false);
   };
@@ -92,6 +140,31 @@ export default function VerifyEmailPage() {
               <Link to="/register" className="block w-full bg-violet-600 hover:bg-violet-700 rounded-lg py-2.5 text-sm font-medium text-white text-center transition-colors">
                 Register Again
               </Link>
+              <Link to="/login" className="block w-full text-sm text-gray-500 hover:text-gray-700 py-1 text-center transition-colors">
+                Back to Sign In
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {status === 'setup_error' && (
+          <div className="text-center py-4">
+            <div className="flex items-center justify-center w-16 h-16 bg-amber-100 rounded-full mx-auto mb-4">
+              <XCircle size={32} className="text-amber-600" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Authenticator setup didn't finish</h2>
+            <p className="text-sm text-gray-600 mb-2">
+              Your email is verified, but we couldn't provision your authenticator app.
+            </p>
+            <p className="text-xs text-gray-500 mb-6">{error}</p>
+            <div className="space-y-3">
+              <button
+                onClick={retrySetup}
+                disabled={loading}
+                className="block w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white text-center transition-colors"
+              >
+                {loading ? 'Trying again…' : 'Try again'}
+              </button>
               <Link to="/login" className="block w-full text-sm text-gray-500 hover:text-gray-700 py-1 text-center transition-colors">
                 Back to Sign In
               </Link>

@@ -334,7 +334,13 @@ auth.get('/verify-email', safe('verify-email', 'Could not verify your email link
     return c.json({ error: 'Verification link has expired. Please request a new one.' }, 400);
   }
 
-  return c.json({ valid: true, email: user.email, name: user.name });
+  // T22.2 — narrow response to `{ valid: true }`. Previously echoed
+  // user.email + user.name, which leaked PII to anyone replaying the
+  // verification token (and to log scrapers capturing the response body).
+  // The frontend re-derives email/name via the subsequent
+  // POST /confirm-verify-email step, which already requires presenting
+  // the same token.
+  return c.json({ valid: true });
 }));
 
 auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confirm your email. Please try the verification link again or request a new one.', async (c) => {
