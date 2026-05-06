@@ -3,8 +3,11 @@ export interface Env {
   TOKENS: KVNamespace;
   RATE_LIMITS: KVNamespace;
   JWT_SECRET: string;
-  // Optional dedicated HMAC key for Epic 5 score signing. Falls back to JWT_SECRET
-  // when unset so operators don't have a second secret to rotate by default.
+  // Dedicated HMAC key for Epic 5 score signing. REQUIRED in production
+  // (T9): boot fails fast if missing or <32 bytes. In dev/preview it MAY
+  // be omitted, in which case the worker falls back to JWT_SECRET and
+  // logs a one-shot startup warning. See `assertScoringHmacSecret` in
+  // `auth.ts` for enforcement.
   SCORING_HMAC_SECRET?: string;
   STUDIOOS_ENV?: string;
   // Set by wrangler.toml in production deploys (`ENVIRONMENT = "production"`).
