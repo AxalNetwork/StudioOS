@@ -19,8 +19,8 @@
  * SCOPE / LIMITATION (Phase 1):
  * This is a PREFIX-level checker. It catches "frontend calls /api/foo when no
  * /api/foo router is mounted" (the gross drift class). It does NOT catch
- * sub-route drift like "/api/calendar IS mounted but /api/calendar/unified
- * isn't actually defined inside calendar.ts". Sub-route enumeration requires
+ * sub-route drift like "/api/foo IS mounted but /api/foo/bar
+ * isn't actually defined inside foo.ts". Sub-route enumeration requires
  * crawling each cloudflare-worker/src/routes/*.ts and is added in T11–T15
  * when those routers are ported from FastAPI.
  *
@@ -45,10 +45,8 @@ const WORKER_FILE = resolve(ROOT, 'cloudflare-worker/src/index.ts');
 // CLEAN when only these are missing — but flags any NEW drift loudly.
 // ---------------------------------------------------------------------------
 const KNOWN_DRIFT_ALLOWLIST = new Set([
-  // T11 — calendar / financials port pending
-  '/calendar/unified',
-  '/calendar/sync/google',
-  '/calendar/export/ics',
+  // T10 — calendar (incl. Google + Microsoft sync) shipped on worker.
+  // T11 — financials port pending
   '/financials/model',
   '/financials/runway',
   '/financials/breakeven',
