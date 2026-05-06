@@ -119,8 +119,13 @@ scoring.post('/score', async (c) => {
   // Official cooldown: 1 per 7d per project. Sandbox bypasses; admin override
   // is /scoring/score?force=1 for cases where genuine intake data changed.
   let cooldownInfo: { locked_until: string | null; previous_id: number | null } = { locked_until: null, previous_id: null };
+  // Hoisted out of the `if (!effectiveSandbox)` block because the official_week
+  // computation below needs it: when an admin force-overrides, we must NULL
+  // out official_week on the new row so the partial UNIQUE INDEX doesn't
+  // reject it (the index is the atomic guard for normal writes; force is the
+  // documented escape hatch).
+  const force = !effectiveSandbox && c.req.query('force') === '1' && user.role === 'admin';
   if (!effectiveSandbox) {
-    const force = c.req.query('force') === '1' && user.role === 'admin';
     if (!force) {
       const recent = await sql`
         SELECT id, created_at, locked_until FROM score_snapshots
@@ -155,12 +160,14 @@ scoring.post('/score', async (c) => {
 
   // T8 — compute `official_week` server-side using the SAME SQLite clock the
   // partial unique index `uq_score_official_week (project_id, official_week)
-  // WHERE is_sandbox = 0` was built against. Two concurrent inserts for the
-  // same (project_id, week) hit the constraint atomically — the loser gets a
-  // D1 UNIQUE error which we convert below to a 409 "already scored this
-  // week". Sandbox rows stay NULL so the partial index ignores them.
+  // WHERE is_sandbox = 0 AND official_week IS NOT NULL` was built against.
+  // Two concurrent inserts for the same (project_id, week) hit the
+  // constraint atomically — the loser gets a D1 UNIQUE error which we
+  // convert below to a 409 "already scored this week". Sandbox rows AND
+  // admin force=1 overrides stay NULL so the partial index ignores them
+  // (force is the documented escape hatch for re-running after intake fixes).
   let officialWeek: string | null = null;
-  if (!effectiveSandbox) {
+  if (!effectiveSandbox && !force) {
     const wk = await sql`SELECT strftime('%Y-%W', 'now') AS w`;
     officialWeek = (wk?.[0]?.w as string) ?? null;
   }
