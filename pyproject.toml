@@ -16,6 +16,7 @@ dependencies = [
     "pyotp>=2.9.0",
     "pywebpush>=2.0.0",
     "python-dotenv>=1.2.2",
+    "protobuf>=7.34.1,<8",
     "qrcode>=8.2",
     "sqlmodel>=0.0.37",
     "uvicorn>=0.42.0",
