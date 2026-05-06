@@ -21,7 +21,7 @@
     "@replit/connectors-sdk": "^0.4.0",
     "@tailwindcss/vite": "^4.2.4",
     "@vitejs/plugin-react": "^6.0.1",
-    "autoprefixer": "^10.4.27",
+    "autoprefixer": "^10.5.0",
     "lucide-react": "^1.14.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.6",
@@ -33,6 +33,6 @@
     "vite": "^8.0.10"
   },
   "devDependencies": {
-    "wrangler": "~4.86.0"
+    "wrangler": "~4.88.0"
   }
 }
