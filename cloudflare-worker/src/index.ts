@@ -117,7 +117,7 @@ app.use(
   '*',
   cors({
     origin: (origin, c) => {
-      const envName = (((c.env as unknown as { ENVIRONMENT?: string })?.ENVIRONMENT) || '').toLowerCase();
+      const envName = (c.env.ENVIRONMENT || '').toLowerCase();
       const isProd = envName === 'production' || envName === 'prod';
       const extraDev = parseExtraDevOrigins(c.env);
       const allowed = isProd

@@ -18,7 +18,7 @@ export function assertJwtSecretStrength(env: Env): void {
   // Accept either STUDIOOS_ENV (FastAPI convention) or ENVIRONMENT (the var
   // wrangler.toml actually sets in production). Otherwise the strength check
   // silently no-ops in prod, which defeats the whole guard.
-  const envName = ((env as any).STUDIOOS_ENV || (env as any).ENVIRONMENT || 'dev').toLowerCase();
+  const envName = (env.STUDIOOS_ENV || env.ENVIRONMENT || 'dev').toLowerCase();
   if (envName !== 'production' && envName !== 'prod' && envName !== 'staging') return;
   const secret = env.JWT_SECRET || '';
   if (!secret) throw new Error(`JWT_SECRET must be set in ${envName}`);
@@ -45,9 +45,9 @@ export function assertJwtSecretStrength(env: Env): void {
  */
 let _scoringSecretWarned = false;
 export function assertScoringHmacSecret(env: Env): void {
-  const envName = ((env as any).STUDIOOS_ENV || (env as any).ENVIRONMENT || 'dev').toLowerCase();
+  const envName = (env.STUDIOOS_ENV || env.ENVIRONMENT || 'dev').toLowerCase();
   const isProd = envName === 'production' || envName === 'prod';
-  const explicit = (env as any).SCORING_HMAC_SECRET || '';
+  const explicit = env.SCORING_HMAC_SECRET || '';
   if (isProd) {
     const len = explicit ? new TextEncoder().encode(explicit).byteLength : 0;
     if (!explicit) {

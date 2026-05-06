@@ -7,6 +7,10 @@ export interface Env {
   // when unset so operators don't have a second secret to rotate by default.
   SCORING_HMAC_SECRET?: string;
   STUDIOOS_ENV?: string;
+  // Set by wrangler.toml in production deploys (`ENVIRONMENT = "production"`).
+  // Used by the boot guards in auth.ts to decide whether to throw on missing
+  // secrets vs warn-and-fallback.
+  ENVIRONMENT?: string;
   // Audit #4: edge proxy → FastAPI origin (e.g. https://api.axal.vc).
   // Required by `index.ts` proxy handler. The worker returns 503 if missing.
   FASTAPI_ORIGIN?: string;
