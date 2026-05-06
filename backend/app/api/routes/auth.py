@@ -410,11 +410,12 @@ def check_verify_email(token: str = Query(...), session: Session = Depends(get_s
     if user.verification_token_expires and datetime.utcnow() > user.verification_token_expires:
         raise HTTPException(status_code=400, detail="Verification link has expired. Please request a new one.")
 
-    return {
-        "valid": True,
-        "email": user.email,
-        "name": user.name,
-    }
+    # T22.2 — narrowed to `{ valid: true }` to match the worker. Previously
+    # echoed user.email + user.name, which leaked PII to anyone replaying the
+    # verification token (or to log scrapers capturing the response body).
+    # The frontend re-derives email/name via POST /confirm-verify-email,
+    # which already requires presenting the same token.
+    return {"valid": True}
 
 
 @router.post("/confirm-verify-email")
