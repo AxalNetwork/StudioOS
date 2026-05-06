@@ -2,16 +2,198 @@
  * T12 — Compliance calendar (port of backend/app/api/routes/compliance.py).
  *
  * Mounted at /api/compliance. The auto-seeder
- * `seed_standard_events_for_jurisdiction` (called from /incorporate/wizard
- * in FastAPI) is NOT yet wired into the worker's legal route — when T18
- * incorporation is revisited it should call into the catalogue exported
- * from this file.
+ * `seedStandardEventsForJurisdiction` is exported below and is now
+ * called by `legal.ts` `/incorporate/wizard` immediately after the
+ * entity is created (faithful port of the FastAPI `legal.py` flow).
+ * The UNIQUE(project_id, event_type, due_date) constraint on
+ * compliance_events makes the seed idempotent — re-incorporating
+ * the same jurisdiction is a safe no-op.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 
 const compliance = new Hono<{ Bindings: Env }>();
+
+// ---------------------------------------------------------------------------
+// Standard recurring events per jurisdiction — direct port of
+// backend/app/api/routes/compliance.py:STANDARD_EVENTS.
+// `due_month`+`due_day` → fixed-calendar deadline (next occurrence).
+// `offset_days`         → relative to incorporation date.
+// ---------------------------------------------------------------------------
+type StandardEventSpec = {
+  event_type: string;
+  title: string;
+  description?: string;
+  due_month?: number;
+  due_day?: number;
+  offset_days?: number;
+  recurrence: 'annual' | 'quarterly' | 'monthly' | 'one_time';
+};
+
+export const STANDARD_EVENTS: Record<string, StandardEventSpec[]> = {
+  us_de_ccorp: [
+    { event_type: 'franchise_tax', title: 'Delaware franchise tax + annual report',
+      description: 'File the annual report and pay franchise tax via the Delaware Division of Corporations. Min ~$450/yr for early-stage; due March 1.',
+      due_month: 3, due_day: 1, recurrence: 'annual' },
+    { event_type: 'registered_agent', title: 'Registered agent renewal',
+      description: 'Renew your Delaware registered agent (~$100/yr).',
+      offset_days: 365, recurrence: 'annual' },
+    { event_type: 'board_meeting', title: 'Quarterly board meeting',
+      description: 'Hold a quarterly board meeting and record minutes. Required for proper corporate hygiene under DGCL.',
+      offset_days: 90, recurrence: 'quarterly' },
+    { event_type: 'annual_report', title: 'Federal corporate tax (Form 1120)',
+      description: 'File IRS Form 1120 by April 15 (or extension to October 15).',
+      due_month: 4, due_day: 15, recurrence: 'annual' },
+  ],
+  us_de_llc: [
+    { event_type: 'franchise_tax', title: 'Delaware LLC annual tax',
+      description: 'Flat $300/yr Delaware LLC tax — due June 1.',
+      due_month: 6, due_day: 1, recurrence: 'annual' },
+    { event_type: 'registered_agent', title: 'Registered agent renewal',
+      description: 'Renew your Delaware registered agent.',
+      offset_days: 365, recurrence: 'annual' },
+  ],
+  uk_ltd: [
+    { event_type: 'annual_report', title: 'Confirmation statement (Companies House)',
+      description: 'File the annual confirmation statement (£34 online).',
+      offset_days: 365, recurrence: 'annual' },
+    { event_type: 'annual_report', title: 'Annual accounts',
+      description: 'File annual accounts with Companies House (due 9 months after year end).',
+      offset_days: 365 + 270, recurrence: 'annual' },
+    { event_type: 'franchise_tax', title: 'Corporation tax (CT600)',
+      description: 'File CT600 with HMRC within 12 months of year end.',
+      offset_days: 365, recurrence: 'annual' },
+  ],
+  sg_pte: [
+    { event_type: 'annual_report', title: 'ACRA annual return',
+      description: 'Hold AGM and file annual return with ACRA.',
+      offset_days: 365, recurrence: 'annual' },
+    { event_type: 'franchise_tax', title: 'IRAS Form C-S / C',
+      description: 'File estimated chargeable income (ECI) and Form C-S/C with IRAS.',
+      due_month: 11, due_day: 30, recurrence: 'annual' },
+    { event_type: 'registered_agent', title: 'Company secretary engagement',
+      description: 'Renew company secretary + nominee director services.',
+      offset_days: 365, recurrence: 'annual' },
+  ],
+  ee_oy: [
+    { event_type: 'annual_report', title: 'Estonian Business Register annual report',
+      description: 'Submit annual accounts within 6 months of year end.',
+      offset_days: 365, recurrence: 'annual' },
+    { event_type: 'registered_agent', title: 'Contact person + e-Residency renewal',
+      description: 'Renew contact-person service and e-Residency card if expiring.',
+      offset_days: 365, recurrence: 'annual' },
+  ],
+};
+
+/**
+ * Compute next occurrence of a fixed-calendar deadline (e.g. March 1).
+ * Returns this year's date if still upcoming, otherwise next year.
+ * Day clamps to 28 on invalid (Feb 30 etc).
+ */
+function nextOccurrence(today: Date, dueMonth: number, dueDay: number): string {
+  const tryBuild = (year: number, day: number) => {
+    const d = new Date(Date.UTC(year, dueMonth - 1, day));
+    // Reject day-overflow (e.g. Feb 30 → Mar 2): rebuild clamped to 28.
+    if (d.getUTCMonth() !== dueMonth - 1) {
+      return new Date(Date.UTC(year, dueMonth - 1, 28));
+    }
+    return d;
+  };
+  const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  let candidate = tryBuild(today.getUTCFullYear(), dueDay);
+  if (candidate.getTime() < todayUTC.getTime()) {
+    candidate = tryBuild(today.getUTCFullYear() + 1, dueDay);
+  }
+  return candidate.toISOString().slice(0, 10);
+}
+
+/**
+ * T12 — Idempotent seeder for the standard recurring compliance events of
+ * a freshly-incorporated entity. Mirrors
+ * `backend/app/api/routes/compliance.py:seed_standard_events_for_jurisdiction`.
+ *
+ * Called by `legal.ts` `/incorporate/wizard` AFTER the entity row is
+ * created. Failures here MUST NOT block incorporation — callers wrap in
+ * try/catch and swallow.
+ *
+ * Idempotent because compliance_events has UNIQUE(project_id, event_type,
+ * due_date); the `INSERT OR IGNORE` makes re-runs a no-op.
+ *
+ * Returns the rows that were actually inserted (not the existing ones —
+ * matches the FastAPI behaviour of returning only the freshly-created
+ * events).
+ */
+export async function seedStandardEventsForJurisdiction(
+  env: Env,
+  opts: {
+    projectId: number;
+    entityId: number | null;
+    jurisdictionId: string;
+    jurisdictionLabel: string;
+    userId: number | null;
+    incorporationDate?: string | null;  // ISO 'YYYY-MM-DD'
+  },
+): Promise<Array<{ id: number; event_type: string; title: string; due_date: string }>> {
+  const catalogue = STANDARD_EVENTS[opts.jurisdictionId];
+  if (!catalogue || !catalogue.length) return [];
+
+  const today = opts.incorporationDate
+    ? new Date(`${opts.incorporationDate}T00:00:00Z`)
+    : new Date();
+
+  const created: Array<{ id: number; event_type: string; title: string; due_date: string }> = [];
+  for (const spec of catalogue) {
+    // Per-event try/catch — matches FastAPI's partial-success behaviour
+    // where one bad spec must NOT abort the rest of the catalogue. Without
+    // this, a single failing INSERT would propagate up and the outer
+    // try/catch in legal.ts would discard every other event in the run.
+    try {
+      let due: string;
+      if (spec.due_month != null && spec.due_day != null) {
+        due = nextOccurrence(today, spec.due_month, spec.due_day);
+      } else {
+        const offset = spec.offset_days ?? 365;
+        const d = new Date(today.getTime() + offset * 86_400_000);
+        due = d.toISOString().slice(0, 10);
+      }
+
+      // INSERT OR IGNORE so a UNIQUE collision (already seeded) is a no-op.
+      const result = await env.DB.prepare(
+        `INSERT OR IGNORE INTO compliance_events
+           (project_id, entity_id, jurisdiction, event_type, title, description,
+            due_date, recurrence, source, created_by_user_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'auto', ?)`,
+      ).bind(
+        opts.projectId,
+        opts.entityId,
+        opts.jurisdictionLabel,
+        spec.event_type,
+        spec.title,
+        spec.description ?? null,
+        due,
+        spec.recurrence,
+        opts.userId,
+      ).run();
+
+      // Only push to `created` if the INSERT actually wrote a row. D1's
+      // `meta.changes` is 1 on insert, 0 on IGNORE.
+      if ((result as any)?.meta?.changes >= 1) {
+        const row = await env.DB.prepare(
+          `SELECT id, event_type, title, due_date FROM compliance_events
+            WHERE project_id = ? AND event_type = ? AND due_date = ?`,
+        ).bind(opts.projectId, spec.event_type, due).first<{ id: number; event_type: string; title: string; due_date: string }>();
+        if (row) created.push(row);
+      }
+    } catch (e) {
+      console.warn(
+        `seedStandardEvents: skipped ${spec.event_type} for project=${opts.projectId}:`,
+        (e as Error)?.message,
+      );
+    }
+  }
+  return created;
+}
 
 type EventRow = {
   id: number; uid: string; project_id: number; entity_id: number | null;

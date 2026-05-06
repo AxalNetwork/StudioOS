@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireAdmin } from '../auth';
+import { hashEmail } from '../util/hashEmail';
 
 const network = new Hono<{ Bindings: Env }>();
 
@@ -144,7 +145,7 @@ export async function fireCommissionEvent(
     const referrerRow = await sql`SELECT email, id FROM users WHERE id = ${referral.referrer_id}`;
     if (referrerRow.length) {
       const dollars = (amountCents / 100).toFixed(2);
-      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('commission_earned', ${`You earned $${dollars} commission (${rule.description})`}, ${referrerRow[0].email}, ${referrerRow[0].id})`;
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('commission_earned', ${`You earned $${dollars} commission (${rule.description})`}, ${await hashEmail(referrerRow[0].email)}, ${referrerRow[0].id})`;
     }
     // Fire L2/L3 compounding bonuses (idempotent via UNIQUE index on commissions(user_id, source_type, source_id))
     try {
@@ -311,7 +312,7 @@ network.post('/payout/request', async (c) => {
     }
     const payout = insertedRows[0];
 
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_requested', ${`Payout requested: $${(amt / 100).toFixed(2)} via ${payout_method}`}, ${user.email}, ${user.id})`;
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_requested', ${`Payout requested: $${(amt / 100).toFixed(2)} via ${payout_method}`}, ${await hashEmail(user.email)}, ${user.id})`;
     return c.json(payout);
   } finally { await sql.end(); }
 });
@@ -331,13 +332,13 @@ network.patch('/admin/payouts/:id/process', async (c) => {
 
     if (action === 'process') {
       await sql`UPDATE payouts SET status = 'processing', processed_by = ${adminUser.id} WHERE id = ${id}`;
-      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_processing', ${`Your payout of $${(p.amount_cents / 100).toFixed(2)} is being processed.`}, ${p.email}, ${p.user_id})`;
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_processing', ${`Your payout of $${(p.amount_cents / 100).toFixed(2)} is being processed.`}, ${await hashEmail(p.email)}, ${p.user_id})`;
       return c.json({ status: 'processing' });
     }
     if (action === 'complete') {
       // Real Stripe Connect would happen here if STRIPE_SECRET_KEY is set; skipping actual API call.
       await sql`UPDATE payouts SET status = 'completed', processed_by = ${adminUser.id}, completed_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_completed', ${`Your payout of $${(p.amount_cents / 100).toFixed(2)} was completed via ${p.payout_method}.`}, ${p.email}, ${p.user_id})`;
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_completed', ${`Your payout of $${(p.amount_cents / 100).toFixed(2)} was completed via ${p.payout_method}.`}, ${await hashEmail(p.email)}, ${p.user_id})`;
       return c.json({ status: 'completed' });
     }
     if (action === 'fail') {
@@ -345,7 +346,7 @@ network.patch('/admin/payouts/:id/process', async (c) => {
       await sql`UPDATE payouts SET status = 'failed', failure_reason = ${reason}, processed_by = ${adminUser.id} WHERE id = ${id}`;
       // Refund: reset associated commissions back to 'accrued'. Best-effort — match by user_id and amount of commissions paid in same window.
       // For audit clarity, also log.
-      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_failed', ${`Your payout of $${(p.amount_cents / 100).toFixed(2)} failed: ${reason}`}, ${p.email}, ${p.user_id})`;
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_failed', ${`Your payout of $${(p.amount_cents / 100).toFixed(2)} failed: ${reason}`}, ${await hashEmail(p.email)}, ${p.user_id})`;
       return c.json({ status: 'failed' });
     }
   } finally { await sql.end(); }

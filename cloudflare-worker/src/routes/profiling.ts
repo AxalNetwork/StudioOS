@@ -4,6 +4,7 @@ import { getSQL } from '../db';
 import { requireAdmin } from '../auth';
 import { notifyOnboardingChat } from '../services/realtime';
 import { createAndSendEnvelope } from './esign';
+import { hashEmail } from '../util/hashEmail';
 
 const profiling = new Hono<{ Bindings: Env }>();
 
@@ -278,7 +279,7 @@ ${transcript}`;
   }
 
   const personaLabel = founderTrack ? `${persona} / ${founderTrack}` : (persona || 'unknown');
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_captured', ${`Profile captured — ${personaLabel} — pending admin verification`}, ${email}, ${user.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_captured', ${`Profile captured — ${personaLabel} — pending admin verification`}, ${await hashEmail(email)}, ${user.id})`;
   await sql.end();
 
   return c.json({ saved: true, persona, founder_track: founderTrack, summary: extracted?.summary || null });
@@ -339,9 +340,9 @@ profiling.post('/admin/:email/verify', async (c) => {
   // Log on the admin's record AND on the target user's record so the target sees it in their private feed.
   const targetUsers = await sql`SELECT id FROM users WHERE email = ${email}`;
   const targetUserId = targetUsers[0]?.id || null;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_verified', ${`Admin ${adminUser.name} marked ${email} as ${newStatus}${agreement_type ? ` — agreement: ${agreement_type}` : ''}`}, ${adminUser.email}, ${adminUser.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_verified', ${`Admin ${adminUser.name} marked user_id=${targetUserId} as ${newStatus}${agreement_type ? ` — agreement: ${agreement_type}` : ''}`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
   if (targetUserId) {
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_reviewed_by_admin', ${`Your profile was ${newStatus} by an Axal admin${agreement_type ? ` — proposed Closing Binder: ${agreement_type}` : ''}`}, ${email}, ${targetUserId})`;
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_reviewed_by_admin', ${`Your profile was ${newStatus} by an Axal admin${agreement_type ? ` — proposed Closing Binder: ${agreement_type}` : ''}`}, ${await hashEmail(email)}, ${targetUserId})`;
   }
   await sql.end();
 

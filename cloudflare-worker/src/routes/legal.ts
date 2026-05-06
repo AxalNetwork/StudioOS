@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireRole, requireApprovedKyc, canAccessFounderResource } from '../auth';
+import { seedStandardEventsForJurisdiction } from './compliance';
 
 const legal = new Hono<{ Bindings: Env }>();
 
@@ -211,6 +212,26 @@ legal.post('/incorporate/wizard', async (c) => {
   }
 
   await sql.end();
+
+  // T12 — Auto-seed the standard recurring compliance events for this
+  // jurisdiction. Faithful port of the FastAPI flow in
+  // `backend/app/api/routes/legal.py:1917` which calls
+  // `seed_standard_events_for_jurisdiction`. Wrapped in try/catch because
+  // a calendar problem must NEVER block the incorporation response.
+  let seededCompliance: Array<{ id: number; event_type: string; title: string; due_date: string }> = [];
+  try {
+    seededCompliance = await seedStandardEventsForJurisdiction(c.env, {
+      projectId: project.id,
+      entityId: entityRow.id,
+      jurisdictionId: j.id,
+      jurisdictionLabel: j.label,
+      userId: user.id,
+      incorporationDate: entityRow.incorporation_date || null,
+    });
+  } catch (e) {
+    console.warn('incorporate_wizard: compliance seed failed:', (e as Error)?.message);
+  }
+
   return c.json({
     ok: true,
     jurisdiction: j,
@@ -222,6 +243,7 @@ legal.post('/incorporate/wizard', async (c) => {
       reused: reusedEntity,
     },
     documents: generated,
+    seeded_compliance: seededCompliance,
     handoff,
   });
 });

@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireAdmin } from '../auth';
 import { putKycDocumentFromDataUri, getKycDocument, deleteKycDocument } from '../services/r2';
+import { hashEmail } from '../util/hashEmail';
 
 const kyc = new Hono<{ Bindings: Env }>();
 
@@ -191,7 +192,7 @@ kyc.post('/submit', async (c) => {
 
   try {
     await sql`UPDATE users SET kyc_status = ${newStatus}, kyc_data = ${JSON.stringify(kycPayload)}, kyc_provider = ${providerName}, kyc_submitted_at = CURRENT_TIMESTAMP, kyc_rejection_reason = ${rejectionReason} WHERE id = ${user.id}`;
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_submitted', ${`KYC verification submitted via ${providerName} (auto-result: ${providerResult.result})`}, ${user.email}, ${user.id})`;
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_submitted', ${`KYC verification submitted via ${providerName} (auto-result: ${providerResult.result})`}, ${await hashEmail(user.email)}, ${user.id})`;
   } catch (e) {
     // Compensating delete: roll back the R2 upload if DB write failed,
     // otherwise we'd orphan PII.
@@ -282,7 +283,7 @@ kyc.get('/admin/:userId/document', async (c) => {
       await sql.end();
       return c.json({ error: 'Stored document has disallowed content type' }, 415);
     }
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_document_access', ${`Admin ${adminUser.email} viewed KYC document for user ${target.email} (legacy D1 storage)`}, ${adminUser.email}, ${adminUser.id})`;
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_document_access', ${`Admin viewed KYC document for user_id=${target.id} (legacy D1 storage)`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
     await sql.end();
     const bin = atob(legacyB64.slice(commaIdx + 1));
     const bytes = new Uint8Array(bin.length);
@@ -300,7 +301,7 @@ kyc.get('/admin/:userId/document', async (c) => {
     return c.json({ error: 'Stored document has disallowed content type' }, 415);
   }
 
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_document_access', ${`Admin ${adminUser.email} viewed KYC document for user ${target.email} (${fileKey})`}, ${adminUser.email}, ${adminUser.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_document_access', ${`Admin viewed KYC document for user_id=${target.id} (${fileKey})`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
   await sql.end();
 
   return new Response(obj.body, {
@@ -330,10 +331,10 @@ kyc.patch('/admin/:userId/approve', async (c) => {
   await sql`UPDATE users SET kyc_status = 'approved', kyc_reviewed_at = CURRENT_TIMESTAMP, kyc_reviewed_by = ${adminUser.id}, kyc_rejection_reason = NULL WHERE id = ${userId}`;
   const adminAction = isBypass ? 'kyc_bypass_granted' : 'kyc_approved_by_admin';
   const adminDetails = isBypass
-    ? `Admin ${adminUser.name} granted full access (KYC bypass) to ${target.name} (${target.email}) — no submission on file`
-    : `Admin ${adminUser.name} approved KYC for ${target.name} (${target.email})`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES (${adminAction}, ${adminDetails}, ${adminUser.email}, ${adminUser.id})`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_approved', ${`Your KYC verification was approved by Axal compliance.`}, ${target.email}, ${target.id})`;
+    ? `Admin ${adminUser.name} granted full access (KYC bypass) to ${target.name} (user_id=${target.id}) — no submission on file`
+    : `Admin ${adminUser.name} approved KYC for ${target.name} (user_id=${target.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES (${adminAction}, ${adminDetails}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_approved', ${`Your KYC verification was approved by Axal compliance.`}, ${await hashEmail(target.email)}, ${target.id})`;
   await sql.end();
 
   // Fire commission event for the referrer (if any)
@@ -366,8 +367,8 @@ kyc.patch('/admin/:userId/reject', async (c) => {
   }
 
   await sql`UPDATE users SET kyc_status = 'rejected', kyc_reviewed_at = CURRENT_TIMESTAMP, kyc_reviewed_by = ${adminUser.id}, kyc_rejection_reason = ${reason} WHERE id = ${userId}`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_rejected_by_admin', ${`Admin ${adminUser.name} rejected KYC for ${target.name} — reason: ${reason} (document purged: ${!!rejectFileKey})`}, ${adminUser.email}, ${adminUser.id})`;
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_rejected', ${`Your KYC submission was rejected by Axal compliance. Reason: ${reason}. You may resubmit.`}, ${target.email}, ${target.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_rejected_by_admin', ${`Admin ${adminUser.name} rejected KYC for ${target.name} — reason: ${reason} (document purged: ${!!rejectFileKey})`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_rejected', ${`Your KYC submission was rejected by Axal compliance. Reason: ${reason}. You may resubmit.`}, ${await hashEmail(target.email)}, ${target.id})`;
   await sql.end();
   return c.json({ kyc_status: 'rejected', user_id: userId, reason });
 });

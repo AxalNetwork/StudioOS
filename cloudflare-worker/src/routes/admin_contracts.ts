@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAdmin } from '../auth';
+import { hashEmail } from '../util/hashEmail';
 
 const adminContracts = new Hono<{ Bindings: Env }>();
 
@@ -250,7 +251,7 @@ adminContracts.post('/:uid/resend', async (c) => {
       return c.json({ error: 'Cannot resend a signed contract' }, 400);
     }
     await sql`UPDATE documents SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE uid = ${uid}`;
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_resent', ${`Admin ${adminUser.name} resent contract '${d.title}'`}, ${adminUser.email}, ${adminUser.id})`;
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_resent', ${`Admin ${adminUser.name} resent contract '${d.title}'`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
     const updated: any[] = await sql`SELECT * FROM documents WHERE uid = ${uid} LIMIT 1`;
     return c.json({ ok: true, contract: enrichRow(updated[0], null, null) });
   } finally {
@@ -271,7 +272,7 @@ adminContracts.post('/:uid/void', async (c) => {
       return c.json({ error: 'Cannot void a signed contract' }, 400);
     }
     await sql`UPDATE documents SET status = 'void', updated_at = CURRENT_TIMESTAMP WHERE uid = ${uid}`;
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_voided', ${`Admin ${adminUser.name} voided contract '${d.title}'`}, ${adminUser.email}, ${adminUser.id})`;
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_voided', ${`Admin ${adminUser.name} voided contract '${d.title}'`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
     const updated: any[] = await sql`SELECT * FROM documents WHERE uid = ${uid} LIMIT 1`;
     return c.json({ ok: true, contract: enrichRow(updated[0], null, null) });
   } finally {
