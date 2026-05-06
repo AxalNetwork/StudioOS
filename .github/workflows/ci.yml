@@ -102,6 +102,7 @@ jobs:
       - name: Import smoke
         env:
           JWT_SECRET: ci-only-not-a-real-secret-0123456789abcdef0123456789abcdef
+          DATABASE_URL: sqlite:///./ci-smoke.db
         run: |
           python -c "import importlib; importlib.import_module('backend.app.main'); print('ok')"
 
