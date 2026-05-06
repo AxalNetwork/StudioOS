@@ -64,6 +64,11 @@ import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
 import calendarRoutes from './routes/calendar';
+import financialsRoutes from './routes/financials';
+import wellbeingRoutes from './routes/wellbeing';
+import complianceRoutes from './routes/compliance';
+import captableRoutes from './routes/captable';
+import cofounderRoutes from './routes/cofounder';
 import { processQueueBatch } from './services/queueWorker';
 import { Jobs } from './models/jobs';
 import { queueConsumer } from './queue-consumer';
@@ -198,6 +203,13 @@ app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/linkedin', linkedinRoutes);
 app.route('/api/calendar', calendarRoutes);
+// T11 — Financial Model Builder + Founder Wellbeing (ported from FastAPI).
+app.route('/api/financials', financialsRoutes);
+app.route('/api/wellbeing', wellbeingRoutes);
+// T12 — Compliance calendar + Cap-table simulator + Co-founder matching.
+app.route('/api/compliance', complianceRoutes);
+app.route('/api/captable', captableRoutes);
+app.route('/api/cofounder', cofounderRoutes);
 app.route('/api/pipeline/votes', votesRoutes);
 // The frontend (and backend) cast endpoint is the singular `/vote/:deal_id`;
 // the plural `/votes/:deal_id` exists as a back-compat alias. Both go to

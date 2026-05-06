@@ -56,7 +56,12 @@ The user prefers clear and concise communication. They value iterative developme
 - API ↔ Worker drift is a common issue; always run `npm run test:drift` or ensure CI passes before merging.
 - Admin role changes require direct SQL modifications, as there is no UI for this.
 - KYC is optional until critical legal documents require it, but ensure the system handles its eventual enforcement.
-- After a deploy, apply pending one-time migrations: `wrangler d1 execute studioos-db --file=cloudflare-worker/sql/<file>.sql --remote`. Pending: `backfill_activity_user_ids.sql`, `perf_indexes.sql`.
+- After a deploy, apply pending one-time migrations: `wrangler d1 execute studioos-db --file=cloudflare-worker/sql/<file>.sql --remote`. Pending: `backfill_activity_user_ids.sql`, `perf_indexes.sql`, `financials_wellbeing.sql` (T11), `compliance_captable_cofounder.sql` (T12 — adds `compliance_events`, `cap_table_scenarios`, `cofounder_profiles`, `cofounder_interests`, `cofounder_connections`).
+- T12 cofounder NDA reuses the existing `documents` table (status enum: draft|generated|sent|signed). Worker schema lacks `signed_ip` — the connection row stores it instead (`nda_signed_ip_a/b`).
+- T12 captable engine is a faithful TS port of `backend/app/services/captable.py`; CSV export served as `text/csv` with `Content-Disposition: attachment; filename="captable-<name>.csv"`.
+- T12 incorporation auto-seed of compliance events (FastAPI `seed_standard_events_for_jurisdiction`) is NOT yet wired into the worker's `legal.ts`. Manual creation via `POST /api/compliance/events` works; auto-seeder is a follow-up.
+- T11 wellbeing data uses AES-GCM (WebCrypto) keyed off `AXAL_ENCRYPTION_SECRET || JWT_SECRET` — ciphertext is NOT interchangeable with the FastAPI Fernet rows, by design (D1 and SQLite are separate stores). Helper: `cloudflare-worker/src/services/cryptoBox.ts`.
+- T11 `/api/financials/:id/export.xlsx` returns `text/csv` (worker has no XLSX lib); the frontend download helper auto-renames via `Content-Disposition` filename, so no client change needed.
 - `activity_logs.actor` now stores a 16-hex `email_hash` (SHA-256 truncated) for register / referral / verify / login events — never the plaintext email. Use `user_id` for joins instead.
 - Paginated reads (`/api/activity`, `/api/admin/users`, `/api/marketplace/syndication`, `/api/dashboard?days=N`) are clamped via `cloudflare-worker/src/util/pagination.ts` (limit defaults vary; max 200 / 50 / 365 days).
 - Frontend toasts must use `useToast` (auto-clears on unmount) — raw `setTimeout(setToast, …)` leaks state updates into unmounted components.
