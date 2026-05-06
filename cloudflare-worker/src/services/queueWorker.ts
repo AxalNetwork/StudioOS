@@ -30,7 +30,29 @@ export async function handleJob(env: Env, job: QueueJob): Promise<void> {
 }
 
 async function handle(env: Env, job: QueueJob): Promise<void> {
-  const payload = job.payload ? JSON.parse(job.payload) : {};
+  // T8 — payload is opaque JSON. A malformed string (corrupted D1 row,
+  // hand-crafted enqueue from /api/infra/enqueue, future schema migration
+  // with an old in-flight job, etc.) must NOT throw and trigger a retry
+  // loop — the parse will fail identically forever. Log to error_logs and
+  // ack-equivalent (return cleanly so the caller marks the job completed
+  // / acks the CF message).
+  let payload: any = {};
+  if (job.payload) {
+    try {
+      payload = JSON.parse(job.payload);
+    } catch (e: any) {
+      console.error(`[queueWorker] payload parse failed job=${job.job_type} id=${job.id}: ${e?.message || e}`);
+      try {
+        await env.DB.prepare(
+          `INSERT INTO error_logs (level, source, message, details) VALUES ('ERROR','queueWorker.handle',?,?)`,
+        ).bind(
+          `Invalid JSON payload for ${job.job_type} job ${job.id}`,
+          JSON.stringify({ job_id: job.id, job_type: job.job_type, parse_error: String(e?.message || e), payload_prefix: String(job.payload).slice(0, 200) }),
+        ).run();
+      } catch {/* best-effort */}
+      return; // ack-skip — re-running won't help.
+    }
+  }
   switch (job.job_type) {
     case 'ai_scoring': {
       const result = await aiScoreDeal(env, payload);

@@ -154,10 +154,23 @@ infra.post('/process', async (c) => {
 // POST /api/infra/enqueue — admin can manually enqueue any job (for testing/ops)
 infra.post('/enqueue', async (c) => {
   await requireAdmin(c);
-  const body = await c.req.json<{ job_type: JobType; payload?: any; max_retries?: number }>();
+  const body = await c.req.json<{ job_type: JobType; payload?: any; max_retries?: number; idempotency_key?: string }>();
   if (!body?.job_type) return c.json({ error: 'job_type required' }, 400);
-  const result = await enqueueJob(c.env, body.job_type, body.payload ?? {}, { max_retries: body.max_retries });
-  return c.json({ ok: true, job: result.job, transport: result.transport });
+  // T8 — manual enqueues MUST carry an explicit idempotency_key so an
+  // operator who fat-fingers two POSTs gets dedup'd at the SQL layer
+  // instead of double-running side-effecting jobs (capital_call,
+  // returns_distribution, lpa_generation, …). Internal callers of
+  // `enqueueJob()` still default to crypto.randomUUID(); only this admin
+  // surface enforces the contract.
+  const idempotency_key = typeof body.idempotency_key === 'string' ? body.idempotency_key.trim() : '';
+  if (!idempotency_key) {
+    return c.json({ error: 'idempotency_key required (non-empty string)' }, 400);
+  }
+  const result = await enqueueJob(c.env, body.job_type, body.payload ?? {}, {
+    max_retries: body.max_retries,
+    idempotency_key,
+  });
+  return c.json({ ok: true, job: result.job, transport: result.transport, idempotency_key: result.idempotency_key });
 });
 
 // POST /api/infra/cleanup — purge old completed/failed jobs (>7 days) and old DLQ (>30 days)

@@ -153,6 +153,18 @@ scoring.post('/score', async (c) => {
     ? null
     : new Date(Date.now() + OFFICIAL_COOLDOWN_MS).toISOString().replace('T', ' ').slice(0, 19);
 
+  // T8 — compute `official_week` server-side using the SAME SQLite clock the
+  // partial unique index `uq_score_official_week (project_id, official_week)
+  // WHERE is_sandbox = 0` was built against. Two concurrent inserts for the
+  // same (project_id, week) hit the constraint atomically — the loser gets a
+  // D1 UNIQUE error which we convert below to a 409 "already scored this
+  // week". Sandbox rows stay NULL so the partial index ignores them.
+  let officialWeek: string | null = null;
+  if (!effectiveSandbox) {
+    const wk = await sql`SELECT strftime('%Y-%W', 'now') AS w`;
+    officialWeek = (wk?.[0]?.w as string) ?? null;
+  }
+
   // CRITICAL: anomaly detection MUST run BEFORE the INSERT. detectAnomalies
   // queries `score_snapshots ORDER BY id DESC LIMIT 1` for the same project
   // — running it post-insert would self-compare against the row we just
@@ -168,33 +180,55 @@ scoring.post('/score', async (c) => {
     !effectiveSandbox && flags.length > 0 ? 'flagged' : 'auto_approved';
   const flagsJson = flags.length > 0 ? JSON.stringify(flags) : null;
 
-  const [snapshot] = await sql`
-    INSERT INTO score_snapshots (
-      project_id, total_score, tier,
-      market_size, market_urgency, market_trend, market_total,
-      team_expertise, team_execution, team_network, team_total,
-      product_mvp_time, product_complexity, product_dependency, product_total,
-      capital_cost_mvp, capital_time_revenue, capital_burn_traction, capital_total,
-      fit_alignment, fit_synergy, fit_total,
-      distribution_channels, distribution_virality, distribution_total,
-      ai_adjustment, scored_by,
-      is_sandbox, integrity_version, inputs_json, qualitative_text, locked_until,
-      anomaly_flags, admin_review_status
-    ) VALUES (
-      ${projectId}, ${result.total_score}, ${result.tier},
-      ${b.market.size}, ${b.market.urgency}, ${b.market.trend}, ${b.market.total},
-      ${b.team.expertise}, ${b.team.execution}, ${b.team.network}, ${b.team.total},
-      ${b.product.mvp_time}, ${b.product.complexity}, ${b.product.dependency}, ${b.product.total},
-      ${b.capital.cost_mvp}, ${b.capital.time_revenue}, ${b.capital.burn_traction}, ${b.capital.total},
-      ${b.fit.alignment}, ${b.fit.synergy}, ${b.fit.total},
-      ${b.distribution.channels}, ${b.distribution.virality}, ${b.distribution.total},
-      ${result.ai_adjustment}, ${user.role || 'system'},
-      ${effectiveSandbox ? 1 : 0}, ${INTEGRITY_VERSION},
-      ${inputsJson}, ${qualitativeText || null}, ${lockedUntil},
-      ${flagsJson}, ${reviewStatus}
-    )
-    RETURNING id, created_at
-  `;
+  let snapshot: { id: number; created_at: string };
+  try {
+    const rows = await sql`
+      INSERT INTO score_snapshots (
+        project_id, total_score, tier,
+        market_size, market_urgency, market_trend, market_total,
+        team_expertise, team_execution, team_network, team_total,
+        product_mvp_time, product_complexity, product_dependency, product_total,
+        capital_cost_mvp, capital_time_revenue, capital_burn_traction, capital_total,
+        fit_alignment, fit_synergy, fit_total,
+        distribution_channels, distribution_virality, distribution_total,
+        ai_adjustment, scored_by,
+        is_sandbox, integrity_version, inputs_json, qualitative_text, locked_until,
+        anomaly_flags, admin_review_status, official_week
+      ) VALUES (
+        ${projectId}, ${result.total_score}, ${result.tier},
+        ${b.market.size}, ${b.market.urgency}, ${b.market.trend}, ${b.market.total},
+        ${b.team.expertise}, ${b.team.execution}, ${b.team.network}, ${b.team.total},
+        ${b.product.mvp_time}, ${b.product.complexity}, ${b.product.dependency}, ${b.product.total},
+        ${b.capital.cost_mvp}, ${b.capital.time_revenue}, ${b.capital.burn_traction}, ${b.capital.total},
+        ${b.fit.alignment}, ${b.fit.synergy}, ${b.fit.total},
+        ${b.distribution.channels}, ${b.distribution.virality}, ${b.distribution.total},
+        ${result.ai_adjustment}, ${user.role || 'system'},
+        ${effectiveSandbox ? 1 : 0}, ${INTEGRITY_VERSION},
+        ${inputsJson}, ${qualitativeText || null}, ${lockedUntil},
+        ${flagsJson}, ${reviewStatus}, ${officialWeek}
+      )
+      RETURNING id, created_at
+    `;
+    snapshot = rows[0];
+  } catch (e: any) {
+    // T8 — atomic loser of a concurrent (project_id, official_week) race.
+    // The partial unique index `uq_score_official_week` raises this whenever
+    // a second official scoring INSERT lands in the same week. We convert
+    // it into the same 409 the cooldown read-then-write check would have
+    // produced so client behaviour is identical regardless of which guard
+    // fires first.
+    const msg = String(e?.message || '');
+    if (/UNIQUE constraint failed/i.test(msg) && /official_week/i.test(msg)) {
+      await sql.end();
+      return c.json({
+        error: 'Already scored this week.',
+        code: 'official_cooldown',
+        official_week: officialWeek,
+      }, 409);
+    }
+    await sql.end();
+    throw e;
+  }
 
   // Sign + persist. Two-step because the canonical message includes the
   // row's own created_at; the read filter treats missing-hash as not-yet-
