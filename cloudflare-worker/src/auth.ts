@@ -66,11 +66,36 @@ export async function decodeJWT(env: Env, token: string): Promise<JWTPayload> {
   return payload as unknown as JWTPayload;
 }
 
-export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<User | null> {
+/**
+ * T6 — Read the JWT from either `Authorization: Bearer ...` (legacy / Bearer
+ * flow used by impersonation, websocket subprotocols and signed-download
+ * URLs) OR the `studioos_auth` httpOnly cookie (cookie flow used by
+ * api.js → /api/* calls). Bearer takes precedence so that an admin who is
+ * impersonating a user (Bearer token in localStorage) overrides their own
+ * still-valid cookie session in the background.
+ */
+function extractJwt(c: Context<{ Bindings: Env }>): string | null {
   const authHeader = c.req.header('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7);
+  }
+  const cookieHeader = c.req.header('Cookie') || '';
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(';')) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    if (trimmed.slice(0, eq) === 'studioos_auth') {
+      return trimmed.slice(eq + 1) || null;
+    }
+  }
+  return null;
+}
 
-  const token = authHeader.split(' ')[1];
+export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<User | null> {
+  const token = extractJwt(c);
+  if (!token) return null;
   try {
     const payload = await decodeJWT(c.env, token);
     const sql = getSQL(c.env);
@@ -179,6 +204,36 @@ export async function hashToken(token: string): Promise<string> {
   const data = encoder.encode(token);
   const hash = await crypto.subtle.digest('SHA-256', data);
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * T6 — cookie helpers for the httpOnly auth migration.
+ *
+ * `studioos_auth` carries the JWT and is HttpOnly so XSS can't read it.
+ * `studioos_csrf` is a separate, JS-readable random token for the
+ * double-submit CSRF check (see middleware/csrf.ts). SameSite=Lax keeps
+ * top-level navigations working (email verification links, OAuth returns)
+ * while still blocking cross-site form POST attacks. Secure means it's only
+ * ever sent over HTTPS — fine in production (axal.vc is HTTPS-only); the
+ * dev backend (FastAPI on localhost) doesn't issue or check these cookies.
+ */
+const AUTH_COOKIE_TTL = JWT_EXPIRY_HOURS * 3600;
+
+export function generateCsrfToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function setAuthCookies(c: Context<{ Bindings: Env }>, jwt: string, csrf: string): void {
+  const common = `Secure; SameSite=Lax; Path=/; Max-Age=${AUTH_COOKIE_TTL}`;
+  c.header('Set-Cookie', `studioos_auth=${jwt}; HttpOnly; ${common}`, { append: true });
+  c.header('Set-Cookie', `studioos_csrf=${csrf}; ${common}`, { append: true });
+}
+
+export function clearAuthCookies(c: Context<{ Bindings: Env }>): void {
+  c.header('Set-Cookie', 'studioos_auth=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0', { append: true });
+  c.header('Set-Cookie', 'studioos_csrf=; Secure; SameSite=Lax; Path=/; Max-Age=0', { append: true });
 }
 
 export function generateToken(): string {

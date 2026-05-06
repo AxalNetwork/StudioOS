@@ -3,7 +3,7 @@ import { TOTP, Secret } from 'otpauth';
 import * as QRCode from 'qrcode';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { createJWT, hashToken, generateToken, requireAuth } from '../auth';
+import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken } from '../auth';
 import { sendVerificationEmail } from '../services/email';
 import { verifyTurnstile } from '../services/turnstile';
 
@@ -471,12 +471,62 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   await sql2`INSERT INTO activity_logs (action, details, actor, user_id) VALUES (${loginAction}, ${loginDetails}, ${loginEmailHash}, ${user.id})`;
   await sql2.end();
 
+  // T6 — issue httpOnly auth cookie + readable CSRF cookie alongside the
+  // JSON token. Frontend `api.js` will pick up the cookie automatically
+  // (credentials: 'include'); legacy direct-fetch callers (websocket
+  // subprotocol, signed-download URLs, impersonation flow) keep using the
+  // JSON `token` field via localStorage until they migrate. Both auth
+  // paths end at the same JWT, so the worker accepts whichever arrives.
+  const csrfToken = generateCsrfToken();
+  setAuthCookies(c, jwtToken, csrfToken);
+
   return c.json({
     token: jwtToken,
+    csrf_token: csrfToken,
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
     expires_in: 24 * 3600,
     used_recovery_code: usedRecoveryCode || undefined,
   });
+}));
+
+// T6 — server-side logout. Clears the cookie pair AND revokes the current
+// session row in user_sessions (so a stolen Bearer copy of the same JWT can
+// no longer be used either). Tolerant of unauth'd calls — logout should
+// always succeed from the user's POV, even if the cookie is already gone.
+auth.post('/logout', safe('logout', 'Logout failed.', async (c) => {
+  // Best-effort session revocation. We don't await requireAuth() because
+  // that would 401 a session whose cookie expired client-side — and the
+  // user still wants the cookie cleared in that case.
+  try {
+    const authHeader = c.req.header('Authorization');
+    let token: string | null = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.slice(7);
+    } else {
+      const cookieHeader = c.req.header('Cookie') || '';
+      for (const part of cookieHeader.split(';')) {
+        const t = part.trim();
+        if (t.startsWith('studioos_auth=')) { token = t.slice('studioos_auth='.length); break; }
+      }
+    }
+    if (token) {
+      const { decodeJWT } = await import('../auth');
+      try {
+        const payload = await decodeJWT(c.env, token);
+        if (payload?.jti) {
+          try {
+            await c.env.DB.prepare(
+              "UPDATE user_sessions SET revoked_at = datetime('now') WHERE jti = ? AND user_id = ? AND revoked_at IS NULL"
+            ).bind(payload.jti, payload.user_id).run();
+          } catch {}
+        }
+      } catch {}
+    }
+  } catch (e) {
+    console.error('[AUTH:logout] session revoke failed (non-fatal):', e);
+  }
+  clearAuthCookies(c);
+  return c.json({ ok: true });
 }));
 
 auth.get('/me', async (c) => {

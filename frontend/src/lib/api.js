@@ -5,16 +5,46 @@ function getAuthHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// T6 — read the JS-readable CSRF cookie and mirror it into the X-CSRF-Token
+// header on mutating requests. The double-submit pattern proves the request
+// originated from same-origin JS (a cross-site attacker on another origin
+// cannot read the cookie). Returns {} when the cookie is absent — e.g. in
+// dev (FastAPI doesn't set it) or before the user has logged in. The worker
+// only enforces CSRF when an auth cookie is also present, so a missing
+// header is harmless on Bearer-auth or unauth'd calls.
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+function getCsrfHeader(method) {
+  if (!method || !MUTATING_METHODS.has(method.toUpperCase())) return {};
+  if (typeof document === 'undefined') return {};
+  const cookie = document.cookie || '';
+  for (const part of cookie.split(';')) {
+    const trimmed = part.trim();
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    if (trimmed.slice(0, eq) === 'studioos_csrf') {
+      return { 'X-CSRF-Token': trimmed.slice(eq + 1) };
+    }
+  }
+  return {};
+}
+
 async function request(path, options = {}) {
   try {
     // FormData uploads must NOT carry an explicit Content-Type — the browser
     // sets it (with the multipart boundary). Setting application/json here
     // would corrupt the request body.
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    const csrfHeader = getCsrfHeader(options.method);
     const baseHeaders = isFormData
-      ? { ...getAuthHeaders(), ...options.headers }
-      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...options.headers };
+      ? { ...getAuthHeaders(), ...csrfHeader, ...options.headers }
+      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...options.headers };
     const res = await fetch(`${BASE}${path}`, {
+      // T6 — `credentials: 'include'` makes the browser attach the
+      // `studioos_auth` httpOnly cookie set by /api/auth/login. Same-origin
+      // requests would send it anyway with `same-origin`, but `include` is
+      // safer for any future cross-origin SPA host (e.g. previews) and is
+      // the explicit default for cookie-auth APIs.
+      credentials: 'include',
       headers: baseHeaders,
       ...options,
     });
@@ -60,6 +90,10 @@ async function request(path, options = {}) {
 export const api = {
   register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
   login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+  // T6 — server-side logout: clears the httpOnly auth + CSRF cookies and
+  // revokes the current user_sessions row. App.jsx calls this before wiping
+  // localStorage so a stolen Bearer copy of the JWT can no longer be used.
+  logout: () => request('/auth/logout', { method: 'POST' }),
   verifyTotp: (data) => request('/auth/verify-totp', { method: 'POST', body: JSON.stringify(data) }),
   checkVerifyEmail: (token) => request(`/auth/verify-email?token=${encodeURIComponent(token)}`),
   confirmVerifyEmail: (data) => request('/auth/confirm-verify-email', { method: 'POST', body: JSON.stringify(data) }),
@@ -197,6 +231,9 @@ export const api = {
   downloadFinancialModelXlsx: async (projectId) => {
     const token = localStorage.getItem('token');
     const res = await fetch(`/api/financials/${projectId}/export.xlsx`, {
+      // T6 — credentials:'include' so the cookie auth path also works for
+      // users who no longer have a Bearer token in localStorage.
+      credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) {
