@@ -196,3 +196,17 @@ sqlalchemy
 sqlmodel
 stripe
 uvicorn
+alembic
+fastapi
+google-api-python-client
+google-auth
+google-auth-oauthlib
+httpx
+pydantic
+pyjwt
+pyotp
+python-dotenv
+pywebpush
+qrcode
+sqlmodel
+uvicorn
