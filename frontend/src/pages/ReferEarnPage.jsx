@@ -3,8 +3,11 @@ import { Link } from 'react-router-dom';
 import {
   Copy, Check, Users, DollarSign, Share2, ExternalLink, Network as NetworkIcon,
   MessageCircle, Mail, Upload, Edit3, X, AlertCircle, Save,
-  Send, Loader2, Linkedin as LinkedinIcon, ShieldCheck, Info, FileDown,
+  Send, Loader2, ShieldCheck, Info, FileDown,
 } from 'lucide-react';
+
+// lucide-react v1 dropped brand icons; reuse the inline LinkedinSvg below.
+const LinkedinIcon = (props) => <LinkedinSvg {...props} />;
 
 import QRCode from 'qrcode';
 import { api } from '../lib/api';

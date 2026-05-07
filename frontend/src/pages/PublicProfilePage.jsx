@@ -1,10 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Globe, Linkedin, Twitter, Github, ShieldCheck, Sparkles,
+  ArrowLeft, Globe, ShieldCheck, Sparkles,
   Briefcase, Target, Star, Users, DollarSign,
 } from 'lucide-react';
 import { api } from '../lib/api';
+
+// Brand icons were removed in lucide-react v1; inline minimal SVGs instead.
+const Linkedin = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9h4v12H3zM10 9h3.8v1.71h.05c.53-.95 1.83-1.95 3.77-1.95C21.4 8.76 22 11.06 22 14.06V21h-4v-6.2c0-1.48-.03-3.39-2.07-3.39-2.07 0-2.39 1.62-2.39 3.29V21h-4z"/>
+  </svg>
+);
+const Twitter = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M18.244 2H21l-6.52 7.45L22 22h-6.79l-4.78-6.26L4.8 22H2.04l6.97-7.97L2 2h6.91l4.32 5.71L18.244 2zm-2.38 18h1.88L7.22 4H5.27l10.6 16z"/>
+  </svg>
+);
+const Github = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.69 1.25 3.35.96.1-.74.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18.91-.25 1.89-.38 2.86-.38.97 0 1.95.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.7 5.41-5.27 5.7.41.36.78 1.07.78 2.16 0 1.56-.01 2.81-.01 3.19 0 .31.21.68.8.56C20.21 21.39 23.5 17.08 23.5 12 23.5 5.73 18.27.5 12 .5z"/>
+  </svg>
+);
 
 // Per-role badge colour. Keeps the surface visually distinct so a
 // visitor instantly knows whether they're on a founder, investor, or
