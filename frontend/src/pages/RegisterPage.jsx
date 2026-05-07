@@ -50,23 +50,23 @@ export default function RegisterPage() {
     partner: {
       title: 'Join the Partner Network',
       desc: "Get matched with deals before they go public. We use TOTP for secure, passwordless authentication.",
-      chatGreeting: "Welcome to the GVPN Partner Network. To match you with the right deal flow, tell me what you bring — sector expertise, capital, distribution, technical, legal, or operational?",
+      chatGreeting: "Welcome to Axal VC, the global venture partner network. To match you with the right deal flow, tell me what you bring — sector expertise, capital, distribution, technical, legal, or operational?",
     },
     lp: {
       title: 'Open your LP Account',
       desc: 'Track commitments, calls, and distributions. We use TOTP for secure, passwordless authentication.',
-      chatGreeting: "Welcome to GVPN's Capital Lane. To set up your LP profile, tell me about your fund or family office: vintage focus, ticket size, sectors, and any restrictions.",
+      chatGreeting: "Welcome to Axal VC, the global venture partner network. To set up your LP profile, tell me about your fund or family office: vintage focus, ticket size, sectors, and any restrictions.",
     },
     founder: {
       title: 'Submit your pitch',
       desc: "We'll score your venture within 72 hours. We use TOTP for secure, passwordless authentication.",
-      chatGreeting: "Welcome to GVPN. To run our 100-point scoring on your venture, tell me about it: problem, team, traction, and the next 12 months. If you're applying to Spin-Out Lab, mention that too.",
+      chatGreeting: "Welcome to Axal VC, the global venture partner network. To run our 100-point scoring on your venture, tell me about it: problem, team, traction, and the next 12 months. If you're applying to Spin-Out Lab, mention that too.",
     },
   };
   const activeLane = lane && laneCopy[lane] ? laneCopy[lane] : null;
 
   // Chatbot state (step 2) — greeting reflects lane intent when known.
-  const DEFAULT_GREETING = "Welcome to the Global Venture Partner Network. Are you joining as an Investor (LP / Syndicate / Co-Investor), a Founder, an Operator/Advisor, a Legal or Technical Partner, or a Liquidity Provider?";
+  const DEFAULT_GREETING = "Welcome to Axal VC, the global venture partner network. Are you joining as an Investor (LP / Syndicate / Co-Investor), a Founder, an Operator/Advisor, a Legal or Technical Partner, or a Liquidity Provider?";
   const [chatMessages, setChatMessages] = useState([
     { role: 'assistant', content: DEFAULT_GREETING },
   ]);
