@@ -13,13 +13,13 @@ import { ShieldCheck, Lock, Upload, FileText, CheckCircle2, AlertCircle, Loader2
 import { api } from '../lib/api';
 
 const STATUS_PILL = {
-  verified: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
-  signed: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
-  self_attested: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
-  pending: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
-  unverified: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/40',
-  not_started: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/40',
-  rejected: 'bg-red-500/15 text-red-300 border-red-500/40',
+  verified: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+  signed: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+  self_attested: 'bg-amber-100 text-amber-700 border-amber-300',
+  pending: 'bg-amber-100 text-amber-700 border-amber-300',
+  unverified: 'bg-slate-100 text-slate-700 border-slate-300',
+  not_started: 'bg-slate-100 text-slate-700 border-slate-300',
+  rejected: 'bg-red-100 text-red-700 border-red-300',
 };
 
 function StatusPill({ status }) {
@@ -29,12 +29,12 @@ function StatusPill({ status }) {
 
 function Section({ icon: Icon, title, subtitle, children }) {
   return (
-    <section className="bg-zinc-900/60 border border-zinc-800 rounded-lg p-6 mb-6">
+    <section className="bg-white border border-slate-200 rounded-lg p-6 mb-6 shadow-sm">
       <div className="flex items-start gap-3 mb-4">
-        <Icon className="w-6 h-6 text-emerald-400 mt-0.5" />
+        <Icon className="w-6 h-6 text-emerald-600 mt-0.5" />
         <div>
-          <h2 className="text-lg font-semibold text-zinc-100">{title}</h2>
-          {subtitle && <p className="text-sm text-zinc-400">{subtitle}</p>}
+          <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+          {subtitle && <p className="text-sm text-slate-600">{subtitle}</p>}
         </div>
       </div>
       {children}
@@ -72,34 +72,34 @@ function KybCard({ kyb, onChanged }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-zinc-400">Status:</span>
+          <span className="text-slate-600">Status:</span>
           <StatusPill status={kyb?.status || 'unverified'} />
-          {kyb?.provider && <span className="text-xs text-zinc-500">via {kyb.provider}</span>}
-          {kyb?.sumsub_available === false && <span className="text-xs text-zinc-500">(Sumsub not configured — using deterministic mock)</span>}
+          {kyb?.provider && <span className="text-xs text-slate-500">via {kyb.provider}</span>}
+          {kyb?.sumsub_available === false && <span className="text-xs text-slate-500">(Sumsub not configured — using deterministic mock)</span>}
         </div>
-        {verified && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+        {verified && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
       </div>
       {!verified && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-          <input className="bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100" placeholder="Legal entity name" value={legalName} onChange={e => setLegalName(e.target.value)} />
-          <input className="bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100" placeholder="Business ID (EIN / VAT)" value={businessId} onChange={e => setBusinessId(e.target.value)} />
-          <input className="bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100" placeholder="Country (ISO-2)" value={country} onChange={e => setCountry(e.target.value)} maxLength={3} />
+          <input className="bg-white border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 placeholder-slate-400" placeholder="Legal entity name" value={legalName} onChange={e => setLegalName(e.target.value)} />
+          <input className="bg-white border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 placeholder-slate-400" placeholder="Business ID (EIN / VAT)" value={businessId} onChange={e => setBusinessId(e.target.value)} />
+          <input className="bg-white border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 placeholder-slate-400" placeholder="Country (ISO-2)" value={country} onChange={e => setCountry(e.target.value)} maxLength={3} />
         </div>
       )}
       {!verified && (
         <div className="flex gap-2">
-          <button disabled={busy || !legalName || !businessId} onClick={start} className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 text-white text-sm px-3 py-1.5 rounded inline-flex items-center gap-1.5">
+          <button disabled={busy || !legalName || !businessId} onClick={start} className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white text-sm px-3 py-1.5 rounded inline-flex items-center gap-1.5">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}Start KYB
           </button>
           {kyb?.provider === 'mock' && (
-            <button disabled={busy || !legalName || !businessId} onClick={submit} className="bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 text-white text-sm px-3 py-1.5 rounded">
+            <button disabled={busy || !legalName || !businessId} onClick={submit} className="bg-slate-700 hover:bg-slate-600 disabled:bg-slate-300 text-white text-sm px-3 py-1.5 rounded">
               Submit verification
             </button>
           )}
         </div>
       )}
-      {info && <p className="text-emerald-400 text-sm mt-3">{info}</p>}
-      {err && <p className="text-red-400 text-sm mt-3">{err}</p>}
+      {info && <p className="text-emerald-700 text-sm mt-3">{info}</p>}
+      {err && <p className="text-red-600 text-sm mt-3">{err}</p>}
     </div>
   );
 }
@@ -125,12 +125,12 @@ function AccreditationCard({ accred, onChanged }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-zinc-400">Status:</span>
+          <span className="text-slate-600">Status:</span>
           <StatusPill status={accred?.status || 'unverified'} />
-          {accred?.basis && <span className="text-xs text-zinc-500">basis: {accred.basis}</span>}
+          {accred?.basis && <span className="text-xs text-slate-500">basis: {accred.basis}</span>}
         </div>
         {accred?.verified && (
-          <span className="inline-flex items-center gap-1 px-2 py-1 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 text-xs font-medium">
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded border border-emerald-300 bg-emerald-100 text-emerald-700 text-xs font-medium">
             <ShieldCheck className="w-3.5 h-3.5" /> Verified Investor
           </span>
         )}
@@ -138,21 +138,21 @@ function AccreditationCard({ accred, onChanged }) {
       {!accred?.verified && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-            <select value={basis} onChange={e => setBasis(e.target.value)} className="bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100">
+            <select value={basis} onChange={e => setBasis(e.target.value)} className="bg-white border border-slate-300 rounded px-3 py-2 text-sm text-slate-900">
               <option value="income">Income</option>
               <option value="net_worth">Net worth</option>
               <option value="entity">Entity</option>
               <option value="knowledgeable_employee">Knowledgeable employee</option>
             </select>
-            <input type="file" onChange={e => setFile(e.target.files?.[0] || null)} accept="application/pdf,image/*" className="md:col-span-2 text-sm text-zinc-300" />
+            <input type="file" onChange={e => setFile(e.target.files?.[0] || null)} accept="application/pdf,image/*" className="md:col-span-2 text-sm text-slate-700" />
           </div>
-          <button disabled={busy || !file} onClick={upload} className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 text-white text-sm px-3 py-1.5 rounded inline-flex items-center gap-1.5">
+          <button disabled={busy || !file} onClick={upload} className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white text-sm px-3 py-1.5 rounded inline-flex items-center gap-1.5">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}Upload evidence
           </button>
         </>
       )}
-      {info && <p className="text-emerald-400 text-sm mt-3">{info}</p>}
-      {err && <p className="text-red-400 text-sm mt-3">{err}</p>}
+      {info && <p className="text-emerald-700 text-sm mt-3">{info}</p>}
+      {err && <p className="text-red-600 text-sm mt-3">{err}</p>}
     </div>
   );
 }
@@ -174,16 +174,16 @@ function NdaCard({ items, onChanged }) {
     catch (e) { setErr(e.message); } finally { setBusy(false); }
   }
 
-  if (!items?.length) return <p className="text-sm text-zinc-400">No NDAs are required for your role.</p>;
+  if (!items?.length) return <p className="text-sm text-slate-600">No NDAs are required for your role.</p>;
   return (
     <div className="space-y-2">
       {items.map(it => (
-        <div key={it.role} className="flex items-center justify-between bg-zinc-950/60 border border-zinc-800 rounded px-3 py-2">
+        <div key={it.role} className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded px-3 py-2">
           <div className="flex items-center gap-3">
-            <FileText className="w-4 h-4 text-zinc-400" />
+            <FileText className="w-4 h-4 text-slate-500" />
             <div>
-              <div className="text-sm text-zinc-100">{it.title}</div>
-              <div className="text-xs text-zinc-500">role: {it.role}{it.signed_at ? ` · signed ${new Date(it.signed_at).toLocaleDateString()}` : ''}</div>
+              <div className="text-sm text-slate-900">{it.title}</div>
+              <div className="text-xs text-slate-500">role: {it.role}{it.signed_at ? ` · signed ${new Date(it.signed_at).toLocaleDateString()}` : ''}</div>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -195,19 +195,19 @@ function NdaCard({ items, onChanged }) {
         </div>
       ))}
       {openRole && preview && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col">
-            <div className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
-              <h3 className="text-zinc-100 font-semibold">{preview.title}</h3>
-              <button onClick={() => { setOpenRole(null); setPreview(null); }} className="text-zinc-400 hover:text-zinc-200 text-sm">Close</button>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col shadow-xl">
+            <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-slate-900 font-semibold">{preview.title}</h3>
+              <button onClick={() => { setOpenRole(null); setPreview(null); }} className="text-slate-500 hover:text-slate-800 text-sm">Close</button>
             </div>
-            <pre className="flex-1 overflow-auto px-5 py-4 text-xs text-zinc-300 whitespace-pre-wrap font-mono">{preview.body}</pre>
-            <div className="px-5 py-3 border-t border-zinc-800 space-y-2">
-              <input className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100" placeholder="Type your full legal name to sign" value={name} onChange={e => setName(e.target.value)} />
-              {err && <p className="text-red-400 text-xs">{err}</p>}
+            <pre className="flex-1 overflow-auto px-5 py-4 text-xs text-slate-700 whitespace-pre-wrap font-mono">{preview.body}</pre>
+            <div className="px-5 py-3 border-t border-slate-200 space-y-2">
+              <input className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 placeholder-slate-400" placeholder="Type your full legal name to sign" value={name} onChange={e => setName(e.target.value)} />
+              {err && <p className="text-red-600 text-xs">{err}</p>}
               <div className="flex justify-end gap-2">
-                <button onClick={() => { setOpenRole(null); setPreview(null); }} className="text-sm text-zinc-300 px-3 py-1.5 rounded hover:bg-zinc-800">Cancel</button>
-                <button disabled={busy || !name.trim()} onClick={sign} className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 text-white text-sm px-3 py-1.5 rounded inline-flex items-center gap-1.5">
+                <button onClick={() => { setOpenRole(null); setPreview(null); }} className="text-sm text-slate-700 px-3 py-1.5 rounded hover:bg-slate-100">Cancel</button>
+                <button disabled={busy || !name.trim()} onClick={sign} className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white text-sm px-3 py-1.5 rounded inline-flex items-center gap-1.5">
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}I accept and sign
                 </button>
               </div>
@@ -244,14 +244,14 @@ export default function TrustCenterPage() {
   }
   useEffect(() => { load(); }, []);
 
-  if (loading) return <div className="p-8 text-zinc-400">Loading trust center…</div>;
-  if (err) return <div className="p-8 text-red-400 flex items-center gap-2"><AlertCircle className="w-5 h-5" />{err}</div>;
+  if (loading) return <div className="p-8 text-slate-600">Loading trust center…</div>;
+  if (err) return <div className="p-8 text-red-600 flex items-center gap-2"><AlertCircle className="w-5 h-5" />{err}</div>;
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-zinc-100 flex items-center gap-2"><ShieldCheck className="w-7 h-7 text-emerald-400" /> Trust Center</h1>
-        <p className="text-sm text-zinc-400 mt-1">KYB, accreditation, and per-role NDAs in one place.</p>
+        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><ShieldCheck className="w-7 h-7 text-emerald-600" /> Trust Center</h1>
+        <p className="text-sm text-slate-600 mt-1">KYB, accreditation, and per-role NDAs in one place.</p>
       </div>
 
       {summary?.kyb && (
