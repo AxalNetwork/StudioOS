@@ -293,37 +293,38 @@ export default function DocsLayout() {
         )}
       </aside>
 
-      {/* Mobile: collapsed top search bar (rail hidden on small screens). */}
-      <div className="lg:hidden -mx-4 -mt-4 mb-4 bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-2">
-        <div className="relative">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search docs…"
-            className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400"
-          />
-        </div>
-        {trimmedQuery && searchResults.length > 0 && (
-          <ul className="mt-2 max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-sm">
-            {searchResults.slice(0, 8).map(r => (
-              <li key={r.anchor}>
-                <button
-                  onClick={() => goToAnchor(r.anchor)}
-                  className="w-full text-left px-3 py-2 hover:bg-gray-50"
-                >
-                  <div className="text-xs font-medium text-gray-900">{highlight(r.subsectionTitle, trimmedQuery)}</div>
-                  <div className="text-[10px] text-gray-500">{r.sectionTitle}</div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
       {/* Main content */}
-      <div ref={contentRef} className="flex-1 overflow-y-auto pt-12 lg:pt-0">
+      <div ref={contentRef} className="flex-1 min-w-0 overflow-y-auto">
+        {/* Mobile: collapsed top search bar (rail hidden on small screens).
+            Lives INSIDE the main column so it doesn't become its own flex
+            child and squeeze the content into a sliver. */}
+        <div className="lg:hidden sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-2">
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search docs…"
+              className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400"
+            />
+          </div>
+          {trimmedQuery && searchResults.length > 0 && (
+            <ul className="mt-2 max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-sm">
+              {searchResults.slice(0, 8).map(r => (
+                <li key={r.anchor}>
+                  <button
+                    onClick={() => goToAnchor(r.anchor)}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-50"
+                  >
+                    <div className="text-xs font-medium text-gray-900">{highlight(r.subsectionTitle, trimmedQuery)}</div>
+                    <div className="text-[10px] text-gray-500">{r.sectionTitle}</div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <div className="max-w-3xl mx-auto px-6 py-8">
           <header className="mb-8">
             <div className="flex items-center gap-2 text-violet-600 text-xs font-semibold uppercase tracking-widest mb-2">
