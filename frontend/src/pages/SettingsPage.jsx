@@ -146,6 +146,16 @@ export default function SettingsPage() {
   // T19 — useToast handles cleanup on unmount; replaces inline `window.setTimeout(setToast, 4500)`.
   const { toast, showToast: setToastSafe } = useToast(4500);
 
+  // After settings load, if `active` was deep-linked to a tab the user's
+  // role isn't allowed to see, bounce them back to Profile (which also
+  // rewrites the URL via the URL-sync effect above).
+  useEffect(() => {
+    if (!data) return;
+    const r = (data.role || '').toLowerCase();
+    const allowed = new Set(SECTIONS.filter(s => !s.roles || s.roles.includes(r)).map(s => s.id));
+    if (!allowed.has(active)) setActive('profile');
+  }, [data, active]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -185,14 +195,9 @@ export default function SettingsPage() {
   const sections = SECTIONS.filter(s => !s.roles || s.roles.includes(role));
   // Render-time gate: a non-admin who deep-links to /settings/developer must
   // not get the Developer UI rendered just because the URL parsed `active`
-  // before role was known. Mirror the nav filter on the content side and
-  // bounce `active` (which also rewrites the URL via the effect above).
+  // before role was known. Mirror the nav filter on the content side.
   const allowedIds = new Set(sections.map(s => s.id));
   const safeActive = allowedIds.has(active) ? active : 'profile';
-  if (safeActive !== active) {
-    // Defer the state update to after render so we don't violate React rules.
-    queueMicrotask(() => setActive('profile'));
-  }
 
   return (
     <div className="max-w-5xl">
