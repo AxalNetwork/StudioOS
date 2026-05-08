@@ -1,0 +1,37 @@
+#10 - Spin-Out Lab — schema + worker API
+What & Why
+The Spin-Out Lab is a 4-week guided sprint for founders who don't yet have a company incorporated. This task lays the foundation: D1 schema, the /api/spinout-lab/* worker routes, and the spinoutLab client wrapper. Every other Spin-Out Lab task depends on this one.
+
+Done looks like
+A new D1 migration file adds three columns on users (spinout_lab_active INTEGER DEFAULT 0, spinout_lab_week INTEGER DEFAULT 1, spinout_lab_started_at DATETIME) and a spinout_lab_milestones table with UNIQUE(user_id, milestone_key).
+The migration is also reflected in the canonical cloudflare-worker/sql/schema.sql so fresh dev DBs match prod.
+A new worker route module exposes:
+GET /api/spinout-lab/state → { active, week, days_remaining, started_at, milestones: [{key, week, completed_at}], unlocked_features: [...] }
+POST /api/spinout-lab/start → activates the lab for the caller, sets week=1 and started_at=now, idempotent
+POST /api/spinout-lab/milestone (body { milestone_key }) → marks the milestone done for the caller, then auto-advances spinout_lab_week whenever every milestone for the current week has been completed (cap at week 4)
+POST /api/spinout-lab/exit → sets users.spinout_lab_active = 0 and users.is_incorporated = 1 (column already exists on users)
+A canonical MILESTONES map in the route module defines, per week, the milestone keys that count toward advancement and the unlocked feature list. Both the auto-advance logic and the /state unlocked_features derive from this single source.
+All four routes are JWT-auth-gated using the existing worker auth middleware; no admin-only escape hatches.
+frontend/src/lib/api.js exposes a spinoutLab namespace with state(), start(), complete(milestone_key), exit(). Each method calls the worker route via the existing fetch helper used by the rest of the file.
+Worker tsc --noEmit is clean and npm run build (frontend) is clean.
+A short integration smoke test in cloudflare-worker/test/ exercises start → milestone → auto-advance → exit using the same node:test + tsc.transpileModule pattern already in cloudflare-worker/test/projects.test.mjs. (No new test deps.)
+The "After a deploy, apply pending one-time migrations" gotcha in replit.md lists the new SQL file as a pending migration.
+Out of scope
+Any UI (sidebar, dashboard, onboarding hook, milestone hooks in other pages) — those are separate tasks.
+Dev-backend (FastAPI) parity — the Lab is worker-only.
+Push notifications or email reminders for milestones.
+Steps
+Schema migration — Add a new SQL file under cloudflare-worker/sql/ with the ALTERs and CREATE TABLE. Update cloudflare-worker/sql/schema.sql to mirror the same definitions for fresh installs. Add the new file to the pending-migration note in replit.md.
+Milestone catalog — Define the per-week milestone keys + unlocked feature lists once, in the new route module. Spec: Week 1 advances when project_created AND customer_interview_logged (count ≥ 3) are present (model "≥3 interviews" by inserting up to 3 rows with keys customer_interview_logged_1/2/3); Week 2 advances when okrs_created, brand_basics_filled, pitch_deck_drafted are all present; Week 3 advances when scoring_run_completed AND (mentor_meeting_booked OR cofounder_request_sent) are present; Week 4 advances when incorporation_completed is present, which also flips the lab off.
+Worker routes — Create cloudflare-worker/src/routes/spinout_lab.ts with the four handlers, register it in cloudflare-worker/src/index.ts next to the other route modules. The exit route must wrap state mutations so a partial failure doesn't half-incorporate the user.
+Client wrapper — Add the spinoutLab namespace to frontend/src/lib/api.js matching the rest of that file's style (no new deps, no axios).
+Smoke test — Add cloudflare-worker/test/spinout_lab.test.mjs that imports the route handlers via the same transpile-from-source trick as projects.test.mjs and walks the happy path. Verify with node --test cloudflare-worker/test/spinout_lab.test.mjs.
+Verify — Run worker npx tsc --noEmit, frontend npm run build, and the new test. Commit.
+Relevant files
+cloudflare-worker/sql/schema.sql
+cloudflare-worker/src/index.ts
+cloudflare-worker/src/routes/projects.ts
+cloudflare-worker/src/auth.ts
+cloudflare-worker/test/projects.test.mjs
+frontend/src/lib/api.js
+replit.md
