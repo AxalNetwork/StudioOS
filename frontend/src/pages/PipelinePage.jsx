@@ -212,12 +212,12 @@ export default function PipelinePage() {
       )}
 
       {loading ? <Loading text="Loading pipeline…" /> : (
-        <div className="overflow-x-auto pb-4">
-          <div className="flex gap-3 min-w-max">
+        <div className="sm:overflow-x-auto pb-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:min-w-max">
             {STAGES.map(stage => {
               const isOver = dragOverStage === stage.id && dragId != null;
               return (
-                <div key={stage.id} className="w-72 flex-shrink-0">
+                <div key={stage.id} className="w-full sm:w-72 sm:flex-shrink-0">
                   <div className={`px-3 py-2 rounded-t-lg ${stage.color} font-semibold text-sm flex items-center justify-between border ${stage.border} border-b-0`}>
                     <span>{stage.label}</span>
                     <span className="bg-white/70 text-xs px-2 py-0.5 rounded-full">{grouped[stage.id].length}</span>
