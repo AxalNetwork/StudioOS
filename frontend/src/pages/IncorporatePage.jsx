@@ -5,6 +5,8 @@ import {
   AlertTriangle, ExternalLink, FileText, Sparkles, Scale, DollarSign, Clock,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import { markMilestone } from '../lib/spinoutLabHooks';
 
 // Task #30 — Jurisdiction wizard + incorporation flow.
 //
@@ -391,6 +393,7 @@ function DoneStep({ result, navigate }) {
 
 export default function IncorporatePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [jurisdictions, setJurisdictions] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -477,6 +480,8 @@ export default function IncorporatePage() {
       });
       setResult(res);
       setStep(3);
+      // Spin-Out Lab — Week 4 final milestone (auto-exits the Lab).
+      await markMilestone(user, 'incorporation_completed');
     } catch (e) {
       const status = e?.status;
       const msg = (e?.message || '').toLowerCase();

@@ -16,6 +16,8 @@ import {
   CheckCircle2, Clock, X, Plus, RefreshCw, AlertCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import { markMilestone } from '../lib/spinoutLabHooks';
 
 const COMMITMENT_LABEL = {
   full_time: 'Full-time',
@@ -293,6 +295,7 @@ function BrowseCard({ card, onInterest }) {
 }
 
 function InterestModal({ card, onClose, onSent }) {
+  const { user } = useAuth();
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -311,6 +314,8 @@ function InterestModal({ card, onClose, onSent }) {
       } else {
         alert('Interest sent. You\'ll see them in Connections once they reciprocate.');
       }
+      // Spin-Out Lab — Week 3 milestone for first cofounder request sent.
+      await markMilestone(user, 'cofounder_request_sent');
       onSent();
     } catch (e) { setErr(e.message); }
     setBusy(false);

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { Plus, Search, ChevronDown, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
+import { useAuth } from '../hooks/useAuthSync';
+import { markMilestone } from '../lib/spinoutLabHooks';
 import { StatusBadge, WeekBadge } from './Dashboard';
 import VirtualList from '../components/VirtualList';
 
@@ -11,6 +13,7 @@ const PROJECT_ROW_HEIGHT = 52;
 const PROJECT_GRID = 'minmax(0, 2fr) minmax(0, 1fr) 110px 120px minmax(0, 1fr)';
 
 export default function ProjectsPage() {
+  const { user } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -18,7 +21,7 @@ export default function ProjectsPage() {
   const [form, setForm] = useState({ name: '', description: '', sector: '', founder_email: '', founder_name: '', problem_statement: '', solution: '' });
   // Founder/investor users always submit projects under their own identity —
   // hide the founder name/email inputs (worker forces founder_id from JWT).
-  const currentUser = safeReadJSON('user', null);
+  const currentUser = user || safeReadJSON('user', null);
   const canPickFounder = currentUser?.role === 'admin' || currentUser?.role === 'partner';
 
   const load = () => {
@@ -34,6 +37,7 @@ export default function ProjectsPage() {
       setShowForm(false);
       setForm({ name: '', description: '', sector: '', founder_email: '', founder_name: '', problem_statement: '', solution: '' });
       load();
+      await markMilestone(currentUser, 'project_created');
     } catch (e) { alert(e.message); }
   };
 

@@ -7,6 +7,8 @@
 import { useEffect, useState } from 'react';
 import { Search, Star, Calendar, Clock, Video, X, Send, MessageCircle, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import { markMilestone } from '../lib/spinoutLabHooks';
 
 function StarRow({ rating, onChange }) {
   const stars = [1, 2, 3, 4, 5];
@@ -67,6 +69,7 @@ function MentorCard({ mentor, onOpen }) {
 }
 
 function BookingForm({ slot, mentor, onClose, onBooked }) {
+  const { user } = useAuth();
   const [topic, setTopic] = useState('');
   const [questions, setQuestions] = useState('');
   const [busy, setBusy] = useState(false);
@@ -77,6 +80,8 @@ function BookingForm({ slot, mentor, onClose, onBooked }) {
     try {
       const b = await api.bookMentorSlot(slot.id, { topic, questions });
       onBooked(b);
+      // Spin-Out Lab — Week 3 milestone for first mentor booking.
+      await markMilestone(user, 'mentor_meeting_booked');
     } catch (e) {
       const status = e?.status;
       const msg = (e?.message || '').toLowerCase();

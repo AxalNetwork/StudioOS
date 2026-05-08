@@ -2,11 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import { markMilestone } from '../lib/spinoutLabHooks';
 
 // Task #24 — Brand & landing page generator.
 // Single-page wizard: pick project → AI suggestions → choose name/logo →
 // edit landing copy → publish → share + view waitlist signups.
 export default function BrandBuilderPage() {
+  const { user } = useAuth();
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState(null);
   const [project, setProject] = useState(null);
@@ -112,6 +115,10 @@ export default function BrandBuilderPage() {
     try {
       const lp = await api.brandSaveLanding(projectId, draft);
       setLanding(lp);
+      // Spin-Out Lab — Week 2 brand basics: name + tagline + primary colour.
+      if (draft.name.trim() && (draft.tagline || '').trim() && draft.theme_color) {
+        await markMilestone(user, 'brand_basics_filled');
+      }
     } catch (e) { setError(e?.message || 'Save failed'); }
     finally { setBusy(false); }
   };

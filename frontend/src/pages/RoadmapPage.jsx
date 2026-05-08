@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Trash2, AlertCircle, Save, X, Target, ArrowRight, FolderPlus } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import { markMilestone } from '../lib/spinoutLabHooks';
 
 const COLUMNS = [
   { key: 'now', label: 'Now', tone: 'border-violet-300 bg-violet-50' },
@@ -21,6 +23,7 @@ function emptyOkr() {
 }
 
 export default function RoadmapPage() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState(null);
@@ -84,10 +87,17 @@ export default function RoadmapPage() {
         })),
         sort_order: editing.sort_order || 0,
       };
+      const isCreate = !editing.id;
       if (editing.id) await api.updateOkr(editing.id, payload);
       else await api.createOkr(projectId, payload);
       setEditing(null);
       await refresh();
+      // Spin-Out Lab — fire `okrs_created` once the user has at least 3
+      // OKRs on this project. Worker dedups, so re-firing on later creates
+      // is harmless. okrs.length here is pre-refresh; +1 covers the create.
+      if (isCreate && okrs.length + 1 >= 3) {
+        await markMilestone(user, 'okrs_created');
+      }
     } catch (e) { setError(e.message); }
   }
 

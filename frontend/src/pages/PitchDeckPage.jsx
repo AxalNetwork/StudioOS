@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
+import { useAuth } from '../hooks/useAuthSync';
+import { markMilestone } from '../lib/spinoutLabHooks';
 
 // Task #25 — Pitch deck builder.
 // Project picker → generate 10 slides (project + scoring data) → per-slide
@@ -16,6 +18,7 @@ import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 // creates a new version each save (full version history with restore).
 // Share button mints a ONE-TIME signed URL. Export uses @react-pdf/renderer.
 export default function PitchDeckPage() {
+  const { user } = useAuth();
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState(null);
   const [versions, setVersions] = useState([]);
@@ -72,6 +75,9 @@ export default function PitchDeckPage() {
       setDeck(fresh); setActiveIdx(0);
       const r = await api.deckListVersions(projectId);
       setVersions(r?.versions || []);
+      // Spin-Out Lab — first generated deck counts as the milestone.
+      // Worker dedups subsequent regenerates.
+      await markMilestone(user, 'pitch_deck_drafted');
     } catch (e) { setError(e?.message || 'Generate failed'); }
     finally { setBusy(false); }
   };

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Target, ChevronDown, ChevronUp, Play, FileText, ShieldCheck, AlertTriangle, Lock, HelpCircle } from 'lucide-react';
+import { useAuth } from '../hooks/useAuthSync';
+import { markMilestone } from '../lib/spinoutLabHooks';
 
 function ModernSelect({ value, onChange, children, ...props }) {
   return (
@@ -41,6 +43,7 @@ function ScoreBar({ label, value, max, color = 'violet' }) {
 }
 
 export default function ScoringPage() {
+  const { user } = useAuth();
   const [queue, setQueue] = useState([]);
   const [form, setForm] = useState(defaultForm);
   const [result, setResult] = useState(null);
@@ -66,6 +69,9 @@ export default function ScoringPage() {
       data.is_sandbox = practiceMode;
       const res = await api.scoreStartup(data);
       setResult(res);
+      // Spin-Out Lab — Week 3 milestone fires on any successful run
+      // (sandbox or official), since the user has experienced the engine.
+      await markMilestone(user, 'scoring_run_completed');
     } catch (e) {
       // The 7-day cooldown surfaces as a 409 (post-T8: aligned with the
       // post-insert UNIQUE-index race response) with `code: official_cooldown`

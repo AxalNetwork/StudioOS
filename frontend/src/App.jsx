@@ -78,6 +78,7 @@ import BrandBuilderPage from './pages/BrandBuilderPage';
 import PitchDeckPage from './pages/PitchDeckPage';
 import FinancialsPage from './pages/FinancialsPage';
 import DiscoveryPage from './pages/DiscoveryPage';
+import CustomerDiscoveryPage from './pages/CustomerDiscoveryPage';
 import RoadmapPage from './pages/RoadmapPage';
 import MetricsPage from './pages/MetricsPage';
 import CapTablePage from './pages/CapTablePage';
@@ -869,6 +870,7 @@ function AppInner() {
       <Route path="/build/deck" element={guard(['admin', 'founder'], <PitchDeckPage />)} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], <FinancialsPage />)} />
       <Route path="/build/discovery" element={guard(['admin', 'founder', 'partner', 'investor'], <DiscoveryPage />)} />
+      <Route path="/customer-discovery" element={guard(['admin', 'founder'], <CustomerDiscoveryPage />)} />
       <Route path="/build/roadmap" element={guard(['admin', 'founder', 'partner', 'investor'], <RoadmapPage />)} />
       <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], <MetricsPage />)} />
       <Route path="/build/captable" element={guard(['admin', 'founder', 'partner', 'investor'], <CapTablePage />)} />
