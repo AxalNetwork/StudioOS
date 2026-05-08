@@ -5,8 +5,10 @@ import { useToast } from '../components/useToast';
 import {
   User, Globe, Mail, ShieldCheck, Bell, Lock, Briefcase, Users,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
-  Plus, X, KeyRound,
+  Plus, X, KeyRound, Palette, Plug, CreditCard, Code, UserCog,
+  Sun, Moon, Monitor,
 } from 'lucide-react';
+import { useSettings } from '../contexts/SettingsContext';
 
 // ---------- Reference data --------------------------------------------------
 
@@ -84,14 +86,18 @@ const PARTNER_NOTIFICATION_EVENTS = [
   { key: 'partner_kyc_block', label: 'A founder you backed is blocked on KYC' },
 ];
 
+// Task #1 — Settings expansion (tabbed). Nine tabs per the audit-plan brief.
+// `roles` controls visibility per signed-in role; absence = visible to all.
 const SECTIONS = [
   { id: 'profile', label: 'Profile', icon: User },
-  { id: 'jurisdictions', label: 'Jurisdictions', icon: Globe },
-  { id: 'email', label: 'Email', icon: Mail },
-  { id: 'auth', label: 'Authentication', icon: ShieldCheck },
+  { id: 'account', label: 'Account', icon: UserCog },
+  { id: 'security', label: 'Security', icon: ShieldCheck },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'privacy', label: 'Privacy', icon: Lock },
-  { id: 'role', label: 'Role preferences', icon: Briefcase },
+  { id: 'integrations', label: 'Integrations', icon: Plug },
+  { id: 'billing', label: 'Billing', icon: CreditCard, roles: ['founder'] },
+  { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'developer', label: 'Developer', icon: Code, roles: ['admin'] },
 ];
 
 // ---------- Page ------------------------------------------------------------
@@ -102,10 +108,18 @@ const SECTIONS = [
 const PATH_TO_SECTION = {
   notifications: 'notifications',
   profile: 'profile',
-  jurisdictions: 'jurisdictions',
-  auth: 'auth',
+  account: 'account',
+  security: 'security',
   privacy: 'privacy',
-  role: 'role',
+  integrations: 'integrations',
+  billing: 'billing',
+  appearance: 'appearance',
+  developer: 'developer',
+  // Back-compat: old deep links still resolve to a sensible new tab.
+  jurisdictions: 'profile',
+  email: 'account',
+  auth: 'security',
+  role: 'profile',
 };
 
 export default function SettingsPage() {
@@ -167,7 +181,8 @@ export default function SettingsPage() {
   );
   if (!data) return null;
 
-  const sections = SECTIONS.filter(s => s.id !== 'role' || data.role !== 'admin');
+  const role = (data.role || '').toLowerCase();
+  const sections = SECTIONS.filter(s => !s.roles || s.roles.includes(role));
 
   return (
     <div className="max-w-5xl">
@@ -200,13 +215,37 @@ export default function SettingsPage() {
         </nav>
 
         <div className="space-y-6">
-          {active === 'profile' && <ProfileSection data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />}
-          {active === 'jurisdictions' && <JurisdictionsSection data={data} patch={patch} />}
-          {active === 'email' && <EmailSection data={data} flash={flash} reload={() => api.getSettings().then(setData)} />}
-          {active === 'auth' && <AuthSection data={data} flash={flash} />}
-          {active === 'notifications' && <NotificationsSection data={data} patch={patch} />}
-          {active === 'privacy' && <PrivacySection data={data} patch={patch} flash={flash} reload={() => api.getSettings().then(setData)} />}
-          {active === 'role' && <RolePreferencesSection data={data} patch={patch} />}
+          {active === 'profile' && (
+            <>
+              <ProfileSection data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
+              <ProfileExtrasCard flash={flash} />
+              <JurisdictionsSection data={data} patch={patch} />
+              <RolePreferencesSection data={data} patch={patch} />
+            </>
+          )}
+          {active === 'account' && (
+            <>
+              <EmailSection data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
+              <AccountDeletionCard data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
+            </>
+          )}
+          {active === 'security' && <AuthSection data={data} flash={flash} />}
+          {active === 'notifications' && (
+            <>
+              <NotificationsSection data={data} patch={patch} />
+              <DigestQuietHoursCard flash={flash} />
+            </>
+          )}
+          {active === 'privacy' && (
+            <>
+              <PrivacyCoreCard flash={flash} />
+              <PrivacySection data={data} patch={patch} flash={flash} reload={() => api.getSettings().then(setData)} hideAccountDelete />
+            </>
+          )}
+          {active === 'integrations' && <IntegrationsTab flash={flash} />}
+          {active === 'billing' && <BillingTab data={data} />}
+          {active === 'appearance' && <AppearanceTab flash={flash} />}
+          {active === 'developer' && <DeveloperTab flash={flash} />}
         </div>
       </div>
     </div>
@@ -764,7 +803,7 @@ const PUBLIC_PROFILE_DEFAULTS = {
   mentor:   { name: true, bio: true, headshot: true, socials: false },
 };
 
-function PrivacySection({ data, patch, flash, reload }) {
+function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
   const role = (data.role || 'founder').toLowerCase();
   const defaults = PUBLIC_PROFILE_DEFAULTS[role] || PUBLIC_PROFILE_DEFAULTS.admin;
   const saved = data.privacy_prefs?.public_profile || {};
@@ -872,26 +911,28 @@ function PrivacySection({ data, patch, flash, reload }) {
         </p>
       </Card>
 
-      <Card title="Your data" description="Download everything we know about you, or request deletion.">
-        <div className="flex flex-wrap gap-3">
-          <button onClick={exportData} disabled={exporting}
-            className="px-4 py-2 border border-gray-300 hover:border-gray-400 text-gray-800 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
-            <Download size={14} /> {exporting ? 'Preparing…' : 'Download my data'}
-          </button>
-          {data.deletion_requested_at ? (
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-amber-700">Deletion requested {new Date(data.deletion_requested_at).toLocaleDateString()}</span>
-              <button onClick={cancelDelete} disabled={deleting}
-                className="px-3 py-2 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel request</button>
-            </div>
-          ) : (
-            <button onClick={requestDelete} disabled={deleting}
-              className="px-4 py-2 border border-red-200 hover:border-red-400 text-red-700 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
-              <Trash2 size={14} /> Request account deletion
+      {!hideAccountDelete && (
+        <Card title="Your data" description="Download everything we know about you, or request deletion.">
+          <div className="flex flex-wrap gap-3">
+            <button onClick={exportData} disabled={exporting}
+              className="px-4 py-2 border border-gray-300 hover:border-gray-400 text-gray-800 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
+              <Download size={14} /> {exporting ? 'Preparing…' : 'Download my data'}
             </button>
-          )}
-        </div>
-      </Card>
+            {data.deletion_requested_at ? (
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-amber-700">Deletion requested {new Date(data.deletion_requested_at).toLocaleDateString()}</span>
+                <button onClick={cancelDelete} disabled={deleting}
+                  className="px-3 py-2 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel request</button>
+              </div>
+            ) : (
+              <button onClick={requestDelete} disabled={deleting}
+                className="px-4 py-2 border border-red-200 hover:border-red-400 text-red-700 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
+                <Trash2 size={14} /> Request account deletion
+              </button>
+            )}
+          </div>
+        </Card>
+      )}
     </>
   );
 }
@@ -1215,5 +1256,623 @@ function PartnerPrefs({ data, patch }) {
         )}
       </div>
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Task #1 — Settings expansion (tabbed). New tab components below back the
+// /api/settings/{profile,privacy,notifications,appearance,integrations,developer}
+// sub-routes against the user_settings table (002_user_settings.sql).
+// Each tab fetches its own slice on mount and saves on blur/change.
+// ---------------------------------------------------------------------------
+
+const COMMON_TIMEZONES = [
+  'UTC', 'America/Los_Angeles', 'America/Denver', 'America/Chicago',
+  'America/New_York', 'America/Toronto', 'America/Sao_Paulo',
+  'Europe/London', 'Europe/Dublin', 'Europe/Paris', 'Europe/Berlin',
+  'Europe/Amsterdam', 'Europe/Stockholm', 'Europe/Zurich', 'Europe/Madrid',
+  'Africa/Johannesburg', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Singapore',
+  'Asia/Hong_Kong', 'Asia/Tokyo', 'Asia/Seoul', 'Australia/Sydney',
+];
+
+function ProfileExtrasCard({ flash }) {
+  const [row, setRow] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getProfileSettings()
+      .then(r => { if (!cancelled) setRow(r); })
+      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load profile settings'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const save = async (delta) => {
+    if (!row) return;
+    const next = { ...row, ...delta };
+    setRow(next);
+    setBusy(true);
+    try {
+      const res = await api.updateProfileSettings(delta);
+      setRow({ ...next, ...res });
+      flash('Saved');
+    } catch (e) {
+      flash(e.message || 'Failed to save', 'error');
+      // Reload from server to undo optimistic update on failure.
+      try { setRow(await api.getProfileSettings()); } catch { /* ignore */ }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (err) return <Card title="Profile details"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!row) return <Card title="Profile details"><div className="text-sm text-gray-500">Loading…</div></Card>;
+
+  const tz = row.timezone || 'UTC';
+  const tzOptions = COMMON_TIMEZONES.includes(tz) ? COMMON_TIMEZONES : [tz, ...COMMON_TIMEZONES];
+
+  return (
+    <Card title="Profile details" description="Locale, timezone, pronouns, and your public profile URL.">
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="Timezone" hint="Used for digests and quiet hours.">
+          <select value={tz} onChange={e => save({ timezone: e.target.value })} disabled={busy} className={inputCls}>
+            {tzOptions.map(z => <option key={z} value={z}>{z}</option>)}
+          </select>
+        </Field>
+        <Field label="Locale">
+          <select value={row.locale || 'en'} onChange={e => save({ locale: e.target.value })} disabled={busy} className={inputCls}>
+            <option value="en">English</option>
+            <option value="fr">Français</option>
+            <option value="es">Español</option>
+            <option value="pt">Português</option>
+          </select>
+        </Field>
+        <Field label="Pronouns" hint="Optional. Up to 32 characters.">
+          <input value={row.pronouns || ''} maxLength={32}
+            onChange={e => setRow({ ...row, pronouns: e.target.value })}
+            onBlur={() => save({ pronouns: row.pronouns || null })}
+            placeholder="they/them" className={inputCls} />
+        </Field>
+        <Field label="Public profile slug"
+          hint="2–40 lowercase letters, numbers, or hyphens. Becomes /u/<slug>.">
+          <input value={row.profile_slug || ''} maxLength={40}
+            onChange={e => setRow({ ...row, profile_slug: e.target.value.toLowerCase() })}
+            onBlur={() => save({ profile_slug: row.profile_slug || null })}
+            placeholder="jane-doe" className={inputCls} />
+        </Field>
+      </div>
+    </Card>
+  );
+}
+
+function AccountDeletionCard({ data, flash, reload }) {
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const exportData = async () => {
+    setExporting(true);
+    try {
+      const blob = await api.exportMyData();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `axal-data-export-${data.uid || data.id}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      flash('Export downloaded');
+    } catch (e) {
+      flash(e.message || 'Export failed', 'error');
+    } finally { setExporting(false); }
+  };
+
+  const requestDelete = async () => {
+    if (!window.confirm('Submit an account deletion request? Hard delete after a 30-day grace period; our team will reach out within 7 days to confirm.')) return;
+    setDeleting(true);
+    try {
+      const res = await api.requestAccountDeletion();
+      flash(res.message || 'Deletion request submitted');
+      reload();
+    } catch (e) { flash(e.message || 'Failed to submit request', 'error'); }
+    finally { setDeleting(false); }
+  };
+
+  const cancelDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.cancelAccountDeletion();
+      flash('Deletion request cancelled');
+      reload();
+    } catch (e) { flash(e.message || 'Failed to cancel', 'error'); }
+    finally { setDeleting(false); }
+  };
+
+  return (
+    <Card title="Account & data" description="Export your data, or request account deletion (30-day grace period before hard delete).">
+      <div className="flex flex-wrap gap-3">
+        <button onClick={exportData} disabled={exporting}
+          className="px-4 py-2 border border-gray-300 hover:border-gray-400 text-gray-800 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
+          <Download size={14} /> {exporting ? 'Preparing…' : 'Download my data (JSON)'}
+        </button>
+        {data.deletion_requested_at ? (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-amber-700">Deletion requested {new Date(data.deletion_requested_at).toLocaleDateString()}</span>
+            <button onClick={cancelDelete} disabled={deleting}
+              className="px-3 py-2 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel request</button>
+          </div>
+        ) : (
+          <button onClick={requestDelete} disabled={deleting}
+            className="px-4 py-2 border border-red-200 hover:border-red-400 text-red-700 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
+            <Trash2 size={14} /> Request account deletion
+          </button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+const NOTIF_CATEGORY_KEYS = [
+  { key: 'mentions', label: 'Mentions & comments' },
+  { key: 'deals', label: 'Deal flow & pipeline' },
+  { key: 'calendar', label: 'Calendar & meetings' },
+  { key: 'scoring', label: 'Scoring & matches' },
+  { key: 'billing', label: 'Billing & invoices' },
+];
+
+function DigestQuietHoursCard({ flash }) {
+  const [row, setRow] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getNotificationSettings()
+      .then(r => { if (!cancelled) setRow(r); })
+      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load notification settings'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const save = async (delta) => {
+    if (!row) return;
+    const next = { ...row, ...delta };
+    setRow(next);
+    setBusy(true);
+    try {
+      const res = await api.updateNotificationSettings(delta);
+      setRow({ ...next, ...res });
+      flash('Saved');
+    } catch (e) {
+      flash(e.message || 'Failed to save', 'error');
+      try { setRow(await api.getNotificationSettings()); } catch { /* ignore */ }
+    } finally { setBusy(false); }
+  };
+
+  if (err) return <Card title="Digest & quiet hours"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!row) return <Card title="Digest & quiet hours"><div className="text-sm text-gray-500">Loading…</div></Card>;
+
+  const email = row.notif_categories_email || {};
+  const inapp = row.notif_categories_inapp || {};
+  const setCategory = (channel, key, value) => {
+    if (channel === 'email') save({ notif_categories_email: { ...email, [key]: value } });
+    else save({ notif_categories_inapp: { ...inapp, [key]: value } });
+  };
+
+  return (
+    <>
+      <Card title="Digest & categories"
+        description="Roll-up email cadence, plus per-category overrides. Quiet hours below silence push notifications during your stated window.">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Digest frequency">
+            <select value={row.digest_frequency || 'weekly'}
+              onChange={e => save({ digest_frequency: e.target.value })} disabled={busy} className={inputCls}>
+              <option value="off">Off</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </Field>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider">
+                <th className="text-left px-2 py-2 font-medium">Category</th>
+                <th className="text-center px-2 py-2 font-medium">Email</th>
+                <th className="text-center px-2 py-2 font-medium">In-app</th>
+              </tr>
+            </thead>
+            <tbody>
+              {NOTIF_CATEGORY_KEYS.map(c => (
+                <tr key={c.key} className="border-b border-gray-100">
+                  <td className="px-2 py-2 text-gray-800">{c.label}</td>
+                  <td className="text-center px-2 py-2">
+                    <input type="checkbox" checked={!!email[c.key]} disabled={busy}
+                      onChange={e => setCategory('email', c.key, e.target.checked)}
+                      className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500" />
+                  </td>
+                  <td className="text-center px-2 py-2">
+                    <input type="checkbox" checked={!!inapp[c.key]} disabled={busy}
+                      onChange={e => setCategory('inapp', c.key, e.target.checked)}
+                      className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card title="Quiet hours"
+        description="Push and real-time alerts are skipped during this window (digest emails still send). Use HH:MM 24-hour format. Leave both blank to disable.">
+        <div className="grid sm:grid-cols-3 gap-3">
+          <Field label="Start (HH:MM)">
+            <input type="time" value={row.quiet_hours_start || ''}
+              onChange={e => setRow({ ...row, quiet_hours_start: e.target.value })}
+              onBlur={() => save({ quiet_hours_start: row.quiet_hours_start || null })}
+              className={inputCls} />
+          </Field>
+          <Field label="End (HH:MM)">
+            <input type="time" value={row.quiet_hours_end || ''}
+              onChange={e => setRow({ ...row, quiet_hours_end: e.target.value })}
+              onBlur={() => save({ quiet_hours_end: row.quiet_hours_end || null })}
+              className={inputCls} />
+          </Field>
+          <Field label="Timezone">
+            <input value={row.quiet_hours_tz || ''}
+              onChange={e => setRow({ ...row, quiet_hours_tz: e.target.value })}
+              onBlur={() => save({ quiet_hours_tz: row.quiet_hours_tz || null })}
+              placeholder="UTC" className={inputCls} />
+          </Field>
+        </div>
+      </Card>
+    </>
+  );
+}
+
+function PrivacyCoreCard({ flash }) {
+  const [row, setRow] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getPrivacySettings()
+      .then(r => { if (!cancelled) setRow(r); })
+      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load privacy settings'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const save = async (delta) => {
+    if (!row) return;
+    const next = { ...row, ...delta };
+    setRow(next);
+    setBusy(true);
+    try {
+      const res = await api.updatePrivacySettings(delta);
+      setRow({ ...next, ...res });
+      flash('Saved');
+    } catch (e) {
+      flash(e.message || 'Failed to save', 'error');
+      try { setRow(await api.getPrivacySettings()); } catch { /* ignore */ }
+    } finally { setBusy(false); }
+  };
+
+  if (err) return <Card title="Visibility"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!row) return <Card title="Visibility"><div className="text-sm text-gray-500">Loading…</div></Card>;
+
+  return (
+    <Card title="Visibility & discovery"
+      description="Who can find you across the platform. Public Directory listings honour these toggles in real time.">
+      <div className="space-y-3">
+        <Field label="Profile visibility">
+          <select value={row.visibility || 'network'} onChange={e => save({ visibility: e.target.value })} disabled={busy} className={inputCls}>
+            <option value="public">Public — anyone with the link</option>
+            <option value="network">Network only — Axal members</option>
+            <option value="private">Private — admins only</option>
+          </select>
+        </Field>
+        <label className="flex items-center gap-3 text-sm text-gray-800">
+          <input type="checkbox" checked={!!row.show_in_directory} disabled={busy}
+            onChange={e => save({ show_in_directory: e.target.checked })}
+            className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500" />
+          Show me in the Public Directory
+        </label>
+        <label className="flex items-center gap-3 text-sm text-gray-800">
+          <input type="checkbox" checked={!!row.discoverable} disabled={busy}
+            onChange={e => save({ discoverable: e.target.checked })}
+            className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500" />
+          Allow mentors and founders to discover me for matching
+        </label>
+      </div>
+    </Card>
+  );
+}
+
+const PROVIDER_LABELS = {
+  linkedin: 'LinkedIn',
+  google: 'Google (Calendar & Mail)',
+  outlook: 'Microsoft 365 / Outlook',
+  slack: 'Slack',
+};
+
+function IntegrationsTab({ flash }) {
+  const [row, setRow] = useState(null);
+  const [err, setErr] = useState(null);
+  const [busyProvider, setBusyProvider] = useState(null);
+
+  const load = async () => {
+    try {
+      const r = await api.getIntegrationSettings();
+      setRow(r);
+    } catch (e) {
+      setErr(e.message || 'Failed to load integrations');
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const disconnect = async (provider, url) => {
+    if (!url) return;
+    if (!window.confirm(`Disconnect ${PROVIDER_LABELS[provider] || provider}?`)) return;
+    setBusyProvider(provider);
+    try {
+      // Disconnect endpoints live outside /settings; call them via fetch with cookie auth.
+      const res = await fetch(url, { method: 'POST', credentials: 'include' });
+      if (!res.ok) throw new Error(`Disconnect failed (${res.status})`);
+      flash(`${PROVIDER_LABELS[provider] || provider} disconnected`);
+      await load();
+    } catch (e) {
+      flash(e.message || 'Disconnect failed', 'error');
+    } finally {
+      setBusyProvider(null);
+    }
+  };
+
+  if (err) return <Card title="Integrations"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!row) return <Card title="Integrations"><div className="text-sm text-gray-500">Loading…</div></Card>;
+
+  return (
+    <>
+      <Card title="Connected accounts"
+        description="OAuth links to third-party services. Disconnecting revokes the stored refresh token; the provider may still show Axal as authorized until you remove it from their account settings.">
+        <div className="divide-y divide-gray-100">
+          {(row.accounts || []).map(acct => (
+            <div key={acct.provider} className="flex items-center justify-between py-3">
+              <div>
+                <div className="text-sm font-medium text-gray-900">{PROVIDER_LABELS[acct.provider] || acct.provider}</div>
+                <div className={`text-xs ${acct.connected ? 'text-emerald-700' : 'text-gray-500'}`}>
+                  {acct.connected ? 'Connected' : 'Not connected'}
+                </div>
+              </div>
+              {acct.connected && acct.disconnect_url ? (
+                <button onClick={() => disconnect(acct.provider, acct.disconnect_url)}
+                  disabled={busyProvider === acct.provider}
+                  className="text-xs text-red-600 hover:text-red-800 disabled:text-gray-400">
+                  {busyProvider === acct.provider ? 'Disconnecting…' : 'Disconnect'}
+                </button>
+              ) : !acct.connected ? (
+                <span className="text-xs text-gray-400">
+                  {acct.provider === 'slack' ? 'Coming soon' : 'Connect from the relevant page'}
+                </span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </Card>
+      {row.api_keys_enabled && (
+        <Card title="API keys"
+          description="Personal access tokens for programmatic access. Each key is shown exactly once.">
+          <div className="text-sm text-gray-500">No keys yet.</div>
+        </Card>
+      )}
+    </>
+  );
+}
+
+function BillingTab({ data }) {
+  const tier = data?.tier || data?.subscription_tier || 'free';
+  return (
+    <Card title="Billing"
+      description="Subscription tier, payment method, and invoices. Full self-serve management is shipping with the Tiers track.">
+      <div className="space-y-3 text-sm">
+        <div className="flex items-center justify-between border border-gray-200 rounded-lg p-4">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-gray-500">Current tier</div>
+            <div className="text-lg font-semibold text-gray-900 capitalize">{tier}</div>
+          </div>
+          <a href="/founder?tab=billing"
+            className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">
+            Manage plan
+          </a>
+        </div>
+        <div className="text-xs text-gray-500">
+          Need an invoice or to update your payment method? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function AppearanceTab({ flash }) {
+  const { appearance, effectiveTheme, setAppearance, loading } = useSettings();
+  const [busy, setBusy] = useState(false);
+
+  const set = async (delta) => {
+    setBusy(true);
+    try {
+      await setAppearance(delta);
+      flash('Saved');
+    } catch (e) {
+      flash(e.message || 'Failed to save', 'error');
+    } finally { setBusy(false); }
+  };
+
+  if (loading) return <Card title="Appearance"><div className="text-sm text-gray-500">Loading…</div></Card>;
+
+  const themes = [
+    { value: 'light', label: 'Light', icon: Sun },
+    { value: 'dark', label: 'Dark', icon: Moon },
+    { value: 'system', label: 'System', icon: Monitor },
+  ];
+
+  return (
+    <>
+      <Card title="Theme"
+        description={`Light, dark, or follow your operating system. Currently rendering as ${effectiveTheme}.`}>
+        <div className="grid grid-cols-3 gap-2">
+          {themes.map(t => {
+            const active = appearance.theme === t.value;
+            const Icon = t.icon;
+            return (
+              <button key={t.value} disabled={busy} onClick={() => set({ theme: t.value })}
+                className={`flex flex-col items-center gap-2 px-4 py-4 rounded-lg border text-sm transition-colors ${
+                  active ? 'border-violet-600 bg-violet-50 text-violet-700' : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                }`}>
+                <Icon size={20} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card title="Density" description="Tighter spacing reclaims vertical real-estate on dashboards.">
+        <div className="grid grid-cols-2 gap-2">
+          {['comfy', 'compact'].map(d => {
+            const active = appearance.density === d;
+            return (
+              <button key={d} disabled={busy} onClick={() => set({ density: d })}
+                className={`px-4 py-3 rounded-lg border text-sm capitalize transition-colors ${
+                  active ? 'border-violet-600 bg-violet-50 text-violet-700' : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                }`}>{d}</button>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card title="Sidebar default" description="Whether the sidebar starts expanded or collapsed on each visit.">
+        <div className="grid grid-cols-2 gap-2">
+          {['expanded', 'collapsed'].map(s => {
+            const active = appearance.sidebar_default === s;
+            return (
+              <button key={s} disabled={busy} onClick={() => set({ sidebar_default: s })}
+                className={`px-4 py-3 rounded-lg border text-sm capitalize transition-colors ${
+                  active ? 'border-violet-600 bg-violet-50 text-violet-700' : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                }`}>{s}</button>
+            );
+          })}
+        </div>
+      </Card>
+    </>
+  );
+}
+
+function DeveloperTab({ flash }) {
+  const [row, setRow] = useState(null);
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [newFlag, setNewFlag] = useState('');
+  const [resyncing, setResyncing] = useState(false);
+
+  const load = async () => {
+    try { setRow(await api.getDeveloperSettings()); }
+    catch (e) { setErr(e.message || 'Failed to load developer settings'); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const setFlags = async (flags) => {
+    setBusy(true);
+    try {
+      const res = await api.updateDeveloperSettings({ feature_flags: flags });
+      setRow({ ...row, feature_flags: res.feature_flags || flags });
+      flash('Saved');
+    } catch (e) {
+      flash(e.message || 'Failed to save', 'error');
+    } finally { setBusy(false); }
+  };
+
+  const toggleFlag = (key, value) => {
+    const next = { ...(row.feature_flags || {}), [key]: value };
+    setFlags(next);
+  };
+  const addFlag = () => {
+    const k = newFlag.trim();
+    if (!k) return;
+    if (!/^[a-z0-9_]{1,64}$/i.test(k)) {
+      flash('Flag names must be 1–64 alphanumeric or underscore characters', 'error');
+      return;
+    }
+    setNewFlag('');
+    setFlags({ ...(row.feature_flags || {}), [k]: true });
+  };
+  const removeFlag = (key) => {
+    const next = { ...(row.feature_flags || {}) };
+    delete next[key];
+    setFlags(next);
+  };
+
+  const resync = async () => {
+    setResyncing(true);
+    try {
+      const res = await api.resyncDeveloperIndices();
+      flash(res.message || 'Re-sync queued');
+    } catch (e) {
+      flash(e.message || 'Re-sync failed', 'error');
+    } finally { setResyncing(false); }
+  };
+
+  if (err) return <Card title="Developer"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!row) return <Card title="Developer"><div className="text-sm text-gray-500">Loading…</div></Card>;
+
+  const flags = row.feature_flags || {};
+  const flagKeys = Object.keys(flags).sort();
+
+  return (
+    <>
+      <Card title="Feature flags" description="Per-account toggles. Use sparingly — most product flags belong in the worker bindings.">
+        {flagKeys.length === 0 ? (
+          <div className="text-sm text-gray-500 mb-3">No flags set.</div>
+        ) : (
+          <div className="divide-y divide-gray-100 mb-3">
+            {flagKeys.map(k => (
+              <div key={k} className="flex items-center justify-between py-2">
+                <div className="font-mono text-sm text-gray-800">{k}</div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-xs text-gray-600">
+                    <input type="checkbox" checked={!!flags[k]} disabled={busy}
+                      onChange={e => toggleFlag(k, e.target.checked)}
+                      className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500" />
+                    {flags[k] ? 'On' : 'Off'}
+                  </label>
+                  <button onClick={() => removeFlag(k)} disabled={busy}
+                    className="text-xs text-red-600 hover:text-red-800 disabled:text-gray-400">
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input value={newFlag} onChange={e => setNewFlag(e.target.value)}
+            placeholder="new_flag_key" className={inputCls} maxLength={64} />
+          <button onClick={addFlag} disabled={busy || !newFlag.trim()}
+            className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium whitespace-nowrap flex items-center gap-1">
+            <Plus size={14} /> Add
+          </button>
+        </div>
+      </Card>
+
+      <Card title="Search indices" description="Force re-sync of derived caches and search indices for your account.">
+        <button onClick={resync} disabled={resyncing}
+          className="px-4 py-2 border border-gray-300 hover:border-gray-400 text-gray-800 rounded-lg text-sm disabled:opacity-50">
+          {resyncing ? 'Queueing…' : 'Re-sync indices'}
+        </button>
+      </Card>
+
+      <Card title="Raw user object" description="Read-only view of the user row backing this session.">
+        <pre className="bg-gray-900 text-gray-100 text-xs rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all">
+{JSON.stringify(row.raw_user, null, 2)}
+        </pre>
+      </Card>
+    </>
   );
 }
