@@ -1,240 +1,375 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowRight, Check, Rocket } from 'lucide-react';
-import PublicNav from '../components/PublicNav';
-import PublicFooter from '../components/PublicFooter';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { Check, Loader2, Rocket, Sparkles, ArrowRight } from 'lucide-react';
+import { spinoutLab } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import { reportError } from '../lib/log';
+import SpinoutLabMarketingPage from './SpinoutLabMarketingPage';
 
-const APPLY_HREF = '/register?lane=founder&product=spinout-lab';
+// Spin-Out Lab — authenticated dashboard.
+//   - Unauthenticated visitors still see the public marketing page so the
+//     /spinout-lab landing route works for cold traffic.
+//   - Authenticated users with `spinout_lab_active === 1` see the 4-week
+//     dashboard (progress bar, day counter, milestone checklist, per-week
+//     feature explainers).
+//   - Authenticated users without an active lab are bounced to '/'.
+//   - When the lab flips off (Week 4 finished, server set
+//     spinout_lab_active = 0 and is_incorporated = 1), we show the
+//     "You're incorporated" success state with the exit CTA.
 
-const PLAYBOOK = [
-  {
-    n: 1,
-    title: 'Diligence & scoring',
-    bullets: [
-      '100-point scoring across Market 25 / Team 20 / Product 15 / Capital 15 / Strategic Fit 15 / Distribution 10',
-      'AI deal memo generated and reviewed by an Axal partner',
-      'Reference + background checks; KYC initiated',
-    ],
+const WEEK_TITLES = {
+  1: 'Week 1 — Discover',
+  2: 'Week 2 — Build',
+  3: 'Week 3 — Validate',
+  4: 'Week 4 — Incorporate',
+};
+
+const MILESTONE_LABELS = {
+  project_created: 'Create your first project',
+  customer_interview_logged_1: 'Log customer interview #1',
+  customer_interview_logged_2: 'Log customer interview #2',
+  customer_interview_logged_3: 'Log customer interview #3',
+  okrs_created: 'Set your quarter OKRs',
+  brand_basics_filled: 'Fill in brand basics (name, tagline, colours)',
+  pitch_deck_drafted: 'Draft your pitch deck',
+  scoring_run_completed: 'Run the AI scoring engine',
+  mentor_meeting_booked: 'Book a mentor meeting',
+  cofounder_request_sent: 'Send a co-founder request',
+  incorporation_completed: 'Complete incorporation',
+};
+
+// Per-week milestone catalogue must mirror cloudflare-worker/src/routes/spinout_lab.ts.
+// Worker is the source of truth for advancement; this list only drives UI.
+const WEEK_MILESTONES = {
+  1: ['project_created', 'customer_interview_logged_1', 'customer_interview_logged_2', 'customer_interview_logged_3'],
+  2: ['okrs_created', 'brand_basics_filled', 'pitch_deck_drafted'],
+  3: ['scoring_run_completed', 'mentor_meeting_booked', 'cofounder_request_sent'],
+  4: ['incorporation_completed'],
+};
+
+// Per-feature explainer copy. Keys match the strings in
+// `unlocked_features` returned by /api/spinout-lab/state.
+const FEATURE_EXPLAINERS = {
+  'spinout-lab': {
+    label: 'Spin-Out Lab dashboard',
+    blurb: "Your home base for the 4-week sprint — track milestones, days remaining, and what unlocks next.",
   },
-  {
-    n: 2,
-    title: 'Legal formation',
-    bullets: [
-      'Delaware C-Corp incorporation via Stripe Atlas / Cooley GO integrations',
-      'IP assignment + employment templates issued from the legal engine',
-      'Cap table initialized; founder vesting installed',
-    ],
+  projects: {
+    label: 'Projects',
+    blurb: 'Spin up your venture record. The whole platform hangs off this one project for the rest of the sprint.',
   },
-  {
-    n: 3,
-    title: 'Capital match',
-    bullets: [
-      'LP introductions routed through the Capital Lane',
-      'SAFE generation and partner co-invest commitments',
-      'Investor data room published from the diligence pack',
-    ],
+  'customer-discovery': {
+    label: 'Customer Discovery',
+    blurb: 'Log interviews, hypotheses, and pains. Three logged interviews unlocks the next week.',
   },
-  {
-    n: 4,
-    title: 'Public launch',
-    bullets: [
-      'First capital call cleared into the operating account',
-      'Founder portal handoff: legal vault, advisor network, OKRs',
-      'Inclusion in monthly partner-network update',
-    ],
+  'market-intelligence': {
+    label: 'Market Intelligence',
+    blurb: 'Live macro indicators, private rounds, and studio benchmarks to pressure-test your market.',
   },
-];
+  roadmap: {
+    label: 'Roadmap',
+    blurb: 'Set quarterly OKRs and key results so the next two weeks have something concrete to deliver against.',
+  },
+  'brand-builder': {
+    label: 'Brand Builder',
+    blurb: 'Name, tagline, palette, and a one-page landing. Enough to start opening doors.',
+  },
+  'pitch-deck': {
+    label: 'Pitch Deck',
+    blurb: 'Generate a working seed deck from your project + market intel; iterate before mentors see it.',
+  },
+  'cofounder-match': {
+    label: 'Co-founder Match',
+    blurb: 'Search the cofounder pool and send your first intro requests — single-founder companies fundraise harder.',
+  },
+  mentors: {
+    label: 'Mentors',
+    blurb: 'Browse the mentor directory and request your first session.',
+  },
+  'office-hours': {
+    label: 'Office Hours',
+    blurb: 'Book recurring office hours with mentors and partners across the network.',
+  },
+  scoring: {
+    label: 'AI Scoring',
+    blurb: 'Run the 100-point scoring engine on your project. Tier 1 (≥85) unlocks the cohort offer.',
+  },
+  incorporate: {
+    label: 'Incorporate',
+    blurb: 'Stripe Atlas / Cooley GO incorporation flow. Picks state, files docs, registers EIN.',
+  },
+  captable: {
+    label: 'Cap Table',
+    blurb: 'Initialize founder vesting and seed the cap-table simulator with your real numbers.',
+  },
+  'section-83b': {
+    label: 'Section 83(b) Tracker',
+    blurb: '30-day filing deadline tracker so vesting starts clean. Upload your IRS receipt when it arrives.',
+  },
+  'cofounder-agreement': {
+    label: 'Co-founder Agreement',
+    blurb: 'Draft the IP / vesting / decision-rights agreement before equity gets messy.',
+  },
+  capital: {
+    label: 'Capital',
+    blurb: 'LP introductions, SAFE generation, and partner co-invest commitments.',
+  },
+  compliance: {
+    label: 'Compliance Calendar',
+    blurb: 'Standard post-incorporation events seeded for your jurisdiction (annual report, franchise tax, etc.).',
+  },
+  kyc: {
+    label: 'Identity Verification',
+    blurb: 'KYC required before signing binding incorporation / SAFE documents.',
+  },
+};
 
-const SCORE_BREAKDOWN = [
-  { label: 'Market', weight: 25, bar: 'bg-violet-600' },
-  { label: 'Team', weight: 20, bar: 'bg-violet-500' },
-  { label: 'Product', weight: 15, bar: 'bg-purple-500' },
-  { label: 'Capital', weight: 15, bar: 'bg-purple-600' },
-  { label: 'Strategic Fit', weight: 15, bar: 'bg-indigo-500' },
-  { label: 'Distribution', weight: 10, bar: 'bg-indigo-600' },
-];
-
-const DELIVERABLES = [
-  'Delaware C-Corp registered & EIN issued',
-  'Founder + employee SAFE / equity templates',
-  'AI-generated deal memo (PDF + portal copy)',
-  'Capital intro list with warm partner routing',
-  'Founder portal: legal, capital, advisory, monitoring',
-];
-
-const TIERS = [
-  { tier: 'Tier 1', score: '≥ 85', desc: 'Immediate cohort offer.' },
-  { tier: 'Tier 2', score: '≥ 70', desc: 'Conditional — 1–2 milestones, then re-score.' },
-  { tier: 'Tier 3', score: '< 70', desc: 'Declined for this cohort. Reapply with traction.' },
-];
-
-const FAQ = [
-  { q: 'How big is each cohort?', a: '6–10 founders per sprint. ~12 sprints/year.' },
-  { q: 'Is there a fee?', a: 'No upfront fee. Spin-Out Lab takes a standard founder-friendly equity stake at incorporation, disclosed in the term sheet.' },
-  { q: 'How much equity does Spin-Out Lab take?', a: 'Negotiated per deal but anchored at studio-standard ranges. Disclosed before you sign.' },
-  { q: 'What about my timezone?', a: 'Async-first. The capital match week requires a few synchronous LP calls.' },
-  { q: 'Do you lead follow-on rounds?', a: 'Axal partners frequently lead the seed round; we facilitate but do not require it.' },
-];
-
-export default function SpinoutLabPage() {
+function ProgressBar({ week }) {
+  const weeks = [1, 2, 3, 4];
   return (
-    <div className="min-h-screen bg-white text-gray-900">
-      <PublicNav />
-
-      {/* HERO */}
-      <section className="pt-32 pb-16 px-6">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-violet-100 border border-violet-300 rounded-full text-xs text-violet-700 mb-6">
-            <Rocket size={12} /> Niche product · Axal VC · Global Venture Partner Network
-          </div>
-          <h1
-            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-            className="text-4xl md:text-6xl font-bold leading-tight tracking-tight text-gray-900 mb-5"
-          >
-            Spin-Out Lab — <span className="text-violet-600">30 days</span> from idea to funded.
-          </h1>
-          <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            A niche product inside the Global Venture Partner Network. Cohort-based, finite, and
-            powered by the same engine that runs the rest of the platform.
-          </p>
-          <div className="mt-8">
-            <Link
-              to={APPLY_HREF}
-              className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/30"
-            >
-              Apply for next cohort <ArrowRight size={16} />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* PLAYBOOK */}
-      <section className="py-20 px-6 bg-gray-50">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-3 text-gray-900">The 4-week playbook.</h2>
-            <p className="text-gray-600 max-w-xl mx-auto">
-              Same engine as the rest of the platform — just compressed.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {PLAYBOOK.map((w) => (
-              <div key={w.n} className="bg-white border border-gray-200 rounded-2xl p-6 hover:border-violet-300 hover:shadow-lg transition-all">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-9 h-9 rounded-full bg-violet-600 text-white text-sm font-bold flex items-center justify-center">
-                    {w.n}
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900">Week {w.n} — {w.title}</h3>
-                </div>
-                <ul className="space-y-2">
-                  {w.bullets.map((b, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700 leading-relaxed">
-                      <Check size={14} className="text-violet-600 mt-0.5 shrink-0" />
-                      <span>{b}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* SCORING */}
-      <section className="py-20 px-6">
-        <div className="max-w-4xl mx-auto bg-violet-50/40 border-2 border-violet-200 rounded-3xl p-8 md:p-12">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3 text-center">
-            How we score — <span className="text-violet-600">100 points</span>.
-          </h2>
-          <p className="text-gray-600 text-center max-w-xl mx-auto mb-8">
-            One algorithm. Same weights for every founder.
-          </p>
-          <div className="flex w-full h-12 rounded-lg overflow-hidden border border-violet-200">
-            {SCORE_BREAKDOWN.map((s) => (
+    <div>
+      <div className="flex items-center gap-2">
+        {weeks.map((w, i) => {
+          const done = w < week;
+          const active = w === week;
+          return (
+            <React.Fragment key={w}>
               <div
-                key={s.label}
-                className={`${s.bar} flex items-center justify-center text-xs font-semibold text-white`}
-                style={{ width: `${s.weight}%` }}
-                title={`${s.label}: ${s.weight}`}
+                className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold border ${
+                  done
+                    ? 'bg-emerald-500 text-white border-emerald-500'
+                    : active
+                    ? 'bg-violet-600 text-white border-violet-600 ring-4 ring-violet-100'
+                    : 'bg-white text-gray-500 border-gray-300'
+                }`}
               >
-                {s.weight}
+                {done ? <Check size={14} /> : w}
               </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-6">
-            {SCORE_BREAKDOWN.map((s) => (
-              <div key={s.label} className="flex items-center gap-2 text-sm text-gray-700">
-                <span className={`w-3 h-3 rounded-sm ${s.bar}`} />
-                <span>{s.label} <span className="text-gray-500">({s.weight})</span></span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* DELIVERABLES + TIERS */}
-      <section className="py-20 px-6 bg-gray-50">
-        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-6">
-          <div className="bg-white border border-gray-200 rounded-2xl p-6">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">What you get</h3>
-            <ul className="space-y-3">
-              {DELIVERABLES.map((d, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                  <Check size={14} className="text-violet-600 mt-0.5 shrink-0" />
-                  <span>{d}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-2xl p-6">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">What we look for</h3>
-            <ul className="space-y-3">
-              {TIERS.map((t) => (
-                <li key={t.tier} className="flex items-start gap-3">
-                  <span className="text-xs uppercase tracking-wider text-violet-700 font-semibold w-16 shrink-0 mt-0.5">
-                    {t.tier}
-                  </span>
-                  <div>
-                    <div className="text-sm text-gray-900 font-semibold">{t.score}</div>
-                    <div className="text-xs text-gray-600">{t.desc}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="py-20 px-6">
-        <div className="max-w-3xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-10 text-center">FAQ.</h2>
-          <div className="space-y-3">
-            {FAQ.map((f, i) => (
-              <details
-                key={i}
-                className="group bg-gray-50 border border-gray-200 rounded-xl p-5 open:border-violet-300 open:bg-violet-50/40"
-              >
-                <summary className="cursor-pointer text-sm font-semibold text-gray-900 list-none flex items-center justify-between">
-                  {f.q}
-                  <span className="text-violet-600 text-xs group-open:rotate-180 transition-transform">▾</span>
-                </summary>
-                <p className="text-sm text-gray-700 leading-relaxed mt-3">{f.a}</p>
-              </details>
-            ))}
-          </div>
-          <div className="mt-12 text-center">
-            <Link
-              to={APPLY_HREF}
-              className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/30"
-            >
-              Apply for next cohort <ArrowRight size={16} />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <PublicFooter />
+              {i < weeks.length - 1 && (
+                <div className={`flex-1 h-1 rounded ${w < week ? 'bg-emerald-500' : 'bg-gray-200'}`} />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex justify-between text-[11px] uppercase tracking-wider text-gray-500">
+        <span>Discover</span>
+        <span>Build</span>
+        <span>Validate</span>
+        <span>Incorporate</span>
+      </div>
     </div>
   );
+}
+
+function ExitSuccess({ onContinue, busy }) {
+  return (
+    <div className="max-w-2xl mx-auto bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center">
+      <div className="mx-auto w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center mb-4">
+        <Check size={22} />
+      </div>
+      <h1 className="text-2xl font-bold text-emerald-900 mb-2">You're incorporated.</h1>
+      <p className="text-sm text-emerald-800 mb-6">
+        Spin-Out Lab is complete. Every founder feature is now unlocked — your
+        sidebar will swap to the full set when you continue.
+      </p>
+      <button
+        onClick={onContinue}
+        disabled={busy}
+        className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 rounded-lg"
+      >
+        {busy ? <Loader2 className="animate-spin" size={14} /> : <ArrowRight size={14} />}
+        Continue to dashboard
+      </button>
+    </div>
+  );
+}
+
+function Dashboard({ state, onComplete, completing, completeError }) {
+  const week = Math.max(1, Math.min(4, state.week || 1));
+  const completedKeys = new Set((state.milestones || []).map((m) => m.key));
+  const weekKeys = WEEK_MILESTONES[week] || [];
+  const startedAt = state.started_at;
+  const dayNumber = startedAt
+    ? Math.min(28, Math.max(1, 28 - (state.days_remaining ?? 28) + 1))
+    : 1;
+  const features = (state.unlocked_features || []).filter((f) => FEATURE_EXPLAINERS[f]);
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-10 space-y-8">
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-violet-100 border border-violet-200 rounded-full text-[11px] text-violet-700 font-medium mb-3">
+            <Rocket size={11} /> Spin-Out Lab
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900">{WEEK_TITLES[week]}</h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Day <span className="font-semibold text-gray-900">{dayNumber}</span> of 28 ·{' '}
+            <span className="text-gray-500">{state.days_remaining} day{state.days_remaining === 1 ? '' : 's'} left</span>
+          </p>
+        </div>
+      </header>
+
+      <ProgressBar week={week} />
+
+      <section className="bg-white border border-gray-200 rounded-2xl p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">This week's milestones</h2>
+        <ul className="space-y-2">
+          {weekKeys.map((key) => {
+            const done = completedKeys.has(key);
+            return (
+              <li
+                key={key}
+                className={`flex items-center justify-between gap-3 px-4 py-3 rounded-lg border ${
+                  done ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                      done ? 'bg-emerald-500 text-white' : 'bg-white border border-gray-300 text-gray-400'
+                    }`}
+                  >
+                    {done ? <Check size={14} /> : null}
+                  </div>
+                  <span className={`text-sm ${done ? 'text-emerald-900 line-through' : 'text-gray-900'}`}>
+                    {MILESTONE_LABELS[key] || key}
+                  </span>
+                </div>
+                {!done && (
+                  <button
+                    onClick={() => onComplete(key)}
+                    disabled={completing === key}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white px-3 py-1.5 rounded-md"
+                  >
+                    {completing === key ? <Loader2 className="animate-spin" size={12} /> : null}
+                    Mark complete
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        {completeError && (
+          <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+            {completeError}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Sparkles size={16} className="text-violet-600" /> Unlocked this sprint
+        </h2>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {features.map((f) => (
+            <div key={f} className="bg-white border border-gray-200 rounded-xl p-4">
+              <div className="text-sm font-semibold text-gray-900">{FEATURE_EXPLAINERS[f].label}</div>
+              <div className="text-xs text-gray-600 mt-1 leading-relaxed">{FEATURE_EXPLAINERS[f].blurb}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export default function SpinoutLabPage() {
+  const { user, refresh } = useAuth();
+  const navigate = useNavigate();
+  const [state, setState] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [completing, setCompleting] = useState(null);
+  const [completeError, setCompleteError] = useState('');
+  const [exiting, setExiting] = useState(false);
+  const [errored, setErrored] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const next = await spinoutLab.state();
+      setState(next);
+      setErrored(false);
+    } catch (e) {
+      reportError('spinout-lab:state', e);
+      setErrored(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) load();
+    else setLoading(false);
+  }, [user, load]);
+
+  // Unauthenticated → keep showing the public marketing page so the
+  // /spinout-lab URL still works for cold traffic.
+  if (!user) return <SpinoutLabMarketingPage />;
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center text-gray-500">
+        <Loader2 className="animate-spin mr-2" size={18} /> Loading your sprint…
+      </div>
+    );
+  }
+
+  // Lab is off and the user never started it (and isn't freshly incorporated
+  // via Week 4 auto-exit) → bounce to standard dashboard. We treat
+  // `is_incorporated && !active && state exists` as "just finished Week 4"
+  // and show the success state instead.
+  if (!state) {
+    if (errored) return <Navigate to="/" replace />;
+    return <Navigate to="/" replace />;
+  }
+
+  if (!state.active) {
+    // If user.spinout_lab_active was 1 in cached auth but server says off,
+    // they just finished Week 4 → show success. Otherwise bounce.
+    const wasActive =
+      user?.spinout_lab_active === 1 ||
+      (state.is_incorporated && (state.milestones || []).some((m) => m.key === 'incorporation_completed'));
+    if (!wasActive) return <Navigate to="/" replace />;
+
+    const onContinue = async () => {
+      setExiting(true);
+      try {
+        // Idempotent on the server — safe to call even though Week 4
+        // auto-exit already flipped the flags.
+        await spinoutLab.exit();
+      } catch (e) {
+        reportError('spinout-lab:exit', e);
+      }
+      try {
+        await refresh({ force: true });
+      } catch { /* no-op */ }
+      navigate('/');
+    };
+    return (
+      <div className="min-h-[60vh] flex items-center px-4 py-10">
+        <ExitSuccess onContinue={onContinue} busy={exiting} />
+      </div>
+    );
+  }
+
+  const onComplete = async (key) => {
+    setCompleting(key);
+    setCompleteError('');
+    try {
+      const next = await spinoutLab.complete(key);
+      setState(next);
+      // Auto-advance may have flipped the lab off (Week 4) — refresh auth
+      // so user.spinout_lab_active mirrors the server.
+      if (!next.active) {
+        try { await refresh({ force: true }); } catch { /* no-op */ }
+      }
+    } catch (e) {
+      setCompleteError(e?.message || 'Could not mark milestone complete');
+      reportError('spinout-lab:complete', e);
+    } finally {
+      setCompleting(null);
+    }
+  };
+
+  return <Dashboard state={state} onComplete={onComplete} completing={completing} completeError={completeError} />;
 }
