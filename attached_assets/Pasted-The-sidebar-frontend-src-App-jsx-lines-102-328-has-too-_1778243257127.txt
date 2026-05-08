@@ -1,0 +1,56 @@
+The sidebar (frontend/src/App.jsx lines ~102-328) has too many items. Reorganize per
+role into collapsible groups. Persist collapsed state per group in localStorage.
+
+Founder sidebar (existing, post-spinout):
+  - Home
+  - Build:        Projects · Customer Discovery · Roadmap · Brand Builder · Pitch Deck
+  - Validate:     Scoring · Mentors · Office Hours · Co-founder Match
+  - Capital:      Capital · Investors · Cap Table · Funds · Reserves · Waterfall
+  - Legal:        Incorporate · Cofounder Agreement · Section 83(b) · Compliance · KYC
+                  · ESign · Legal Templates
+  - Network:      Marketplace · Partners · Co-marketing · Network · Network Effects
+                  · Public Directory · Refer & Earn
+  - Account:      Activity · Tickets · Integrations · Settings · Documentation
+
+Investor sidebar:
+  - Home (Portfolio Health)
+  - Pipeline:     Pipeline · Deals · Matches · Watchlist Journal
+  - Portfolio:    Liquidity · Reserves · Waterfall · Cap Table (read)
+  - Network:      Mentors · Public Directory · Refer & Earn
+  - Account:      Activity · Settings · Documentation
+
+Partner sidebar:
+  - Home (Partner Portal)
+  - Sourcing:     Pipeline · Marketplace · Partner Office Hours · Network FX
+  - Insights:     Partner Insights · Metrics · Market Intelligence
+  - Network:      Co-marketing · Partners · Public Directory
+  - Account:      Activity · Settings · Documentation
+
+Mentor sidebar:
+  - Home
+  - Engagements:  Office Hours · Mentors · Tickets
+  - Network:      Public Directory · Refer & Earn
+  - Account:      Activity · Settings · Documentation
+
+Admin sidebar (everything, plus a top "Admin" group):
+  - Admin:        Admin · Monitoring · Infrastructure · API Bridge · Trust Center
+  - (then all groups above merged)
+
+Spin-Out Lab sidebar: handled separately in Prompt 3.
+
+Implementation:
+1. Define const SIDEBAR_GROUPS in frontend/src/sidebarConfig.js — one source of truth,
+   keyed by role. Each group: { key, label, items: [{ to, label, roles, requiredTier? }] }.
+2. App.jsx renders groups, filtering items by user.role and (Prompt 4) tier.
+3. Each group is a collapsible accordion. Default-open: Home + first content group.
+   Persist expanded keys to localStorage('sidebar_open_groups').
+4. Add a sidebar search input at the top: filters items by label as user types.
+5. When the user is in Spin-Out Lab (spinout_lab_active=1) render the SpinoutLabSidebar
+   from Prompt 3 instead.
+6. Mobile: keep the existing slide-in drawer; groups still collapsible.
+
+Acceptance:
+- Each role sees only their groups + items; nothing they shouldn't see.
+- Group collapsed state survives refresh.
+- Sidebar search highlights matches and hides non-matching items live.
+- No item appears twice across groups.
