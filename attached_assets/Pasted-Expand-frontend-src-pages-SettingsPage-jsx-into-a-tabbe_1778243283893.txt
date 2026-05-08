@@ -1,0 +1,74 @@
+Expand frontend/src/pages/SettingsPage.jsx into a tabbed page with these sections.
+Backed by Worker /api/settings (cloudflare-worker/src/routes/settings.ts). Add fields
+to the users table or a new user_settings table as needed.
+
+Tabs:
+1. Profile
+   - Display name, headline/title, short bio (≤280 chars), avatar upload (R2),
+     timezone (IANA), locale (en/fr/es/pt), pronouns, public profile slug
+2. Account
+   - Email (with verify flow already in EmailChangeConfirmPage), phone (optional),
+     password change, delete account (GDPR — hard delete after 30-day grace)
+3. Security
+   - 2FA enable/disable (TOTP — already exists), backup codes (from Prompt T6),
+     active sessions list with revoke buttons, login history (last 20)
+4. Notifications
+   - Email: digest frequency (daily/weekly/off), categories (mentions, deals,
+     calendar, scoring, billing) — boolean per category
+   - In-app: same categories with bell-toggle
+   - Quiet hours: start/end + tz
+5. Privacy
+   - Profile visibility (public / network only / private)
+   - Show in Public Directory (yes/no)
+   - Allow mentor/founder to discover me (yes/no)
+   - Data export (download JSON of all my data — async, emailed link)
+   - Activity log retention preference
+6. Integrations
+   - Connected accounts (LinkedIn, Google, Outlook, Slack) with disconnect buttons
+   - API keys (create/revoke) — only if API tier reached (skip for now per user
+     instruction — leave the UI hidden behind a feature flag)
+7. Billing  (founder only — covered in Prompt 4)
+   - Current tier, renewal date, payment method, invoices, manage subscription
+8. Appearance
+   - Theme: light / dark / system
+   - Density: comfy / compact
+   - Sidebar default: expanded / collapsed
+9. Developer (admin only)
+   - Toggle feature flags
+   - Force re-sync indices
+   - View raw user object
+
+Schema:
+  CREATE TABLE IF NOT EXISTS user_settings (
+    user_id INTEGER PRIMARY KEY,
+    timezone TEXT DEFAULT 'UTC',
+    locale TEXT DEFAULT 'en',
+    pronouns TEXT,
+    profile_slug TEXT UNIQUE,
+    visibility TEXT DEFAULT 'network' CHECK (visibility IN ('public','network','private')),
+    show_in_directory INTEGER DEFAULT 1,
+    discoverable INTEGER DEFAULT 1,
+    digest_frequency TEXT DEFAULT 'weekly',
+    notif_categories_email TEXT DEFAULT '{}',  -- json
+    notif_categories_inapp TEXT DEFAULT '{}',
+    quiet_hours_start TEXT,
+    quiet_hours_end TEXT,
+    theme TEXT DEFAULT 'system',
+    density TEXT DEFAULT 'comfy',
+    sidebar_default TEXT DEFAULT 'expanded',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+Implementation:
+- Worker: GET/PUT /api/settings/profile, /security, /notifications, /privacy,
+  /appearance, /integrations, /developer (admin only).
+- Frontend: SettingsPage.jsx becomes a side-tab layout with one component per tab.
+- Theme + density + sidebar_default applied globally via a SettingsContext that
+  reads from /api/settings on login.
+
+Acceptance:
+- Each tab saves and survives reload.
+- Theme switch is instant; system theme follows OS.
+- Public profile slug uniqueness validated server-side.
+- Privacy settings actually filter the user out of Public Directory listings.
+- Notifications respect quiet hours (worker side: skip sending push during window).

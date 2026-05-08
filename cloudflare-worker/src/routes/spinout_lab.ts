@@ -4,16 +4,24 @@
  * Mounted at /api/spinout-lab. JWT-auth-gated for every route (no admin
  * escape hatch). The lab is detected from `users.spinout_lab_active`.
  *
- *   GET  /state         → current week, days remaining, milestones, unlocked
- *                          features for the caller
- *   POST /start         → flip the lab on for the caller (idempotent)
- *   POST /milestone     → mark a milestone done; auto-advances week when
- *                          the current week's bar is fully met
- *   POST /exit          → mark the user incorporated and turn the lab off
- *                          (idempotent)
+ *   GET  /state      → current week, days remaining, milestones, unlocked
+ *                       features for the caller
+ *   POST /start      → flip the lab on for the caller (idempotent; 409 if
+ *                       the caller is already incorporated)
+ *   POST /milestone  → mark a milestone done; auto-advances week when the
+ *                       current week's bar is fully met. When week 4 is
+ *                       met (i.e. `incorporation_completed` is recorded),
+ *                       also flips `is_incorporated=1` and turns the lab
+ *                       off in the same DB round-trip.
+ *   POST /exit       → mark the user incorporated and turn the lab off
+ *                       (idempotent; the explicit user-driven escape hatch)
  *
  * The MILESTONES catalog is the single source of truth for what counts
  * toward week advancement and what features the sidebar/dashboard unlocks.
+ *
+ * Pure-logic functions (`getLabState`, `startLab`, `recordMilestone`,
+ * `exitLab`) are exported so the smoke test can drive the full flow
+ * against a mocked sql() helper without standing up Hono + JWT.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -27,9 +35,9 @@ const spinoutLab = new Hono<{ Bindings: Env }>();
 // `requiredAll` lists keys that MUST all be completed; `requiredAny` (when
 // present) is an additional set of which AT LEAST ONE must be completed.
 // Week 4's `incorporation_completed` milestone advances the week pointer
-// only — the explicit /exit route owns flipping `is_incorporated` and
-// turning the lab off, so the dashboard can show a confirmation step
-// before the sidebar swap.
+// AND triggers the auto-exit branch in `recordMilestone` (flips
+// `is_incorporated=1` + lab off). The explicit /exit route remains as a
+// user-driven escape hatch with the same effect.
 // ---------------------------------------------------------------------------
 type WeekDef = {
   week: 1 | 2 | 3 | 4;
@@ -128,7 +136,9 @@ export function unlockedFeaturesThrough(currentWeek: number): string[] {
 /** Days elapsed since `started_at` (UTC). Returns 0 when started_at is null. */
 function daysSince(startedAt: string | null | undefined, nowMs = Date.now()): number {
   if (!startedAt) return 0;
-  const startMs = Date.parse(startedAt.replace(' ', 'T') + (startedAt.includes('Z') ? '' : 'Z'));
+  const startMs = Date.parse(
+    startedAt.replace(' ', 'T') + (startedAt.includes('Z') ? '' : 'Z'),
+  );
   if (!Number.isFinite(startMs)) return 0;
   return Math.max(0, Math.floor((nowMs - startMs) / 86_400_000));
 }
@@ -136,104 +146,115 @@ function daysSince(startedAt: string | null | undefined, nowMs = Date.now()): nu
 const SPRINT_DAYS = 28;
 
 // ---------------------------------------------------------------------------
-// Handlers
+// Pure logic — exported so the test harness can drive the full flow against
+// a mocked sql() helper. The wire handlers below are thin wrappers.
 // ---------------------------------------------------------------------------
 
-async function getStateHandler(c: any) {
-  const user = await requireAuth(c);
-  const sql = getSQL(c.env);
+export type LabState = {
+  active: boolean;
+  week: number;
+  days_remaining: number;
+  started_at: string | null;
+  is_incorporated: boolean;
+  milestones: Array<{ key: string; week: number; completed_at: string }>;
+  unlocked_features: string[];
+};
+
+type Sql = (strings: TemplateStringsArray, ...values: any[]) => Promise<any[]>;
+
+// Named union return types — keep these as type aliases (not inline in the
+// function signature) so the test harness's brace balancer can slice each
+// logic function cleanly. See `cloudflare-worker/test/spinout_lab.test.mjs`.
+export type StartResult =
+  | { ok: true; state: LabState }
+  | { ok: false; status: 409; error: string };
+
+export type MilestoneResult =
+  | { ok: true; state: LabState }
+  | { ok: false; status: 400 | 409; error: string };
+
+export async function getLabState(sql: Sql, userId: number): Promise<LabState> {
   const rows = await sql`
     SELECT spinout_lab_active, spinout_lab_week, spinout_lab_started_at, is_incorporated
-    FROM users WHERE id = ${user.id}
+    FROM users WHERE id = ${userId}
   ` as any[];
   const row = rows[0] || {};
   const milestones = await sql`
     SELECT milestone_key AS key, week, completed_at
     FROM spinout_lab_milestones
-    WHERE user_id = ${user.id}
+    WHERE user_id = ${userId}
     ORDER BY week ASC, completed_at ASC
   ` as any[];
-  await sql.end();
 
   const week = Number(row.spinout_lab_week ?? 1);
-  const active = Number(row.spinout_lab_active ?? 0) === 1;
-  const days_remaining = Math.max(0, SPRINT_DAYS - daysSince(row.spinout_lab_started_at));
-  return c.json({
-    active,
+  return {
+    active: Number(row.spinout_lab_active ?? 0) === 1,
     week,
-    days_remaining,
+    days_remaining: Math.max(0, SPRINT_DAYS - daysSince(row.spinout_lab_started_at)),
     started_at: row.spinout_lab_started_at ?? null,
     is_incorporated: Number(row.is_incorporated ?? 0) === 1,
     milestones,
     unlocked_features: unlockedFeaturesThrough(week),
-  });
+  };
 }
 
-async function startHandler(c: any) {
-  const user = await requireAuth(c);
-  const sql = getSQL(c.env);
+export async function startLab(sql: Sql, userId: number): Promise<StartResult> {
   // Refuse to re-open the Lab for users who have already incorporated —
-  // preserves the product semantics that the Lab is strictly a
-  // pre-incorporation sprint. Idempotent on already-active sessions.
+  // the Lab is strictly a pre-incorporation sprint.
   const probe = await sql`
-    SELECT is_incorporated FROM users WHERE id = ${user.id}
+    SELECT is_incorporated FROM users WHERE id = ${userId}
   ` as any[];
   if (probe[0] && Number(probe[0].is_incorporated) === 1) {
-    await sql.end();
-    return c.json({ error: 'User is already incorporated' }, 409);
+    return { ok: false, status: 409, error: 'User is already incorporated' };
   }
-  // Idempotent: only flip rows that aren't already active. Once started,
-  // re-calling start() preserves the original started_at + week.
+  // Idempotent: COALESCE preserves an existing started_at and a non-zero
+  // week so re-calling start() doesn't reset progress.
   await sql`
     UPDATE users
     SET spinout_lab_active = 1,
         spinout_lab_week = COALESCE(NULLIF(spinout_lab_week, 0), 1),
         spinout_lab_started_at = COALESCE(spinout_lab_started_at, datetime('now'))
-    WHERE id = ${user.id}
+    WHERE id = ${userId}
   `;
-  await sql.end();
-  return getStateHandler(c);
+  return { ok: true, state: await getLabState(sql, userId) };
 }
 
-async function milestoneHandler(c: any) {
-  const user = await requireAuth(c);
-  const body = await c.req.json().catch(() => ({}));
-  const key = typeof body?.milestone_key === 'string' ? body.milestone_key.trim() : '';
-  if (!key) return c.json({ error: 'milestone_key is required' }, 400);
+export async function recordMilestone(
+  sql: Sql,
+  userId: number,
+  rawKey: string,
+): Promise<MilestoneResult> {
+  const key = (rawKey ?? '').trim();
+  if (!key) return { ok: false, status: 400, error: 'milestone_key is required' };
   if (!VALID_MILESTONE_KEYS.has(key)) {
-    return c.json({ error: `Unknown milestone_key: ${key}` }, 400);
+    return { ok: false, status: 400, error: `Unknown milestone_key: ${key}` };
   }
   const week = weekForKey(key);
-  if (!week) return c.json({ error: 'milestone_key has no week' }, 400);
-
-  const sql = getSQL(c.env);
+  if (!week) return { ok: false, status: 400, error: 'milestone_key has no week' };
 
   // Refuse to record milestones when the lab is off — prevents accidental
   // pollution from a feature page calling complete() after exit().
   const userRows = await sql`
-    SELECT spinout_lab_active, spinout_lab_week
-    FROM users WHERE id = ${user.id}
+    SELECT spinout_lab_active, spinout_lab_week FROM users WHERE id = ${userId}
   ` as any[];
   const u = userRows[0];
   if (!u || Number(u.spinout_lab_active) !== 1) {
-    await sql.end();
-    return c.json({ error: 'Spin-Out Lab is not active' }, 409);
+    return { ok: false, status: 409, error: 'Spin-Out Lab is not active' };
   }
 
   // Idempotent — UNIQUE(user_id, milestone_key) prevents duplicates.
   await sql`
     INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key)
-    VALUES (${user.id}, ${week}, ${key})
+    VALUES (${userId}, ${week}, ${key})
   `;
 
   // Auto-advance loop. Re-read the milestone set, then walk weeks from the
   // user's current week upward as long as each week is fully met. Cap at
-  // week 4. We never auto-flip is_incorporated here — the explicit /exit
-  // route owns that transition so the dashboard can show a confirmation
-  // before the sidebar swap.
+  // week 4. When week 4 is met, also flip `is_incorporated=1` and turn
+  // the lab off so the sidebar swaps without an extra round-trip.
   const completed = new Set<string>(
     ((await sql`
-      SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = ${user.id}
+      SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = ${userId}
     `) as any[]).map((r) => r.milestone_key),
   );
 
@@ -242,31 +263,67 @@ async function milestoneHandler(c: any) {
     newWeek += 1;
   }
   if (newWeek !== Number(u.spinout_lab_week)) {
-    await sql`UPDATE users SET spinout_lab_week = ${newWeek} WHERE id = ${user.id}`;
+    await sql`UPDATE users SET spinout_lab_week = ${newWeek} WHERE id = ${userId}`;
+  }
+  if (newWeek === 4 && weekMet(4, completed)) {
+    // Single statement so a partial failure can't half-incorporate the user.
+    // SQLite/D1 statement execution is atomic; either both columns flip or
+    // neither does. Mirrors the explicit /exit route's effect.
+    await sql`
+      UPDATE users SET spinout_lab_active = 0, is_incorporated = 1 WHERE id = ${userId}
+    `;
   }
 
-  await sql.end();
-  return getStateHandler(c);
+  return { ok: true, state: await getLabState(sql, userId) };
 }
 
-async function exitHandler(c: any) {
-  const user = await requireAuth(c);
-  const sql = getSQL(c.env);
+export async function exitLab(sql: Sql, userId: number): Promise<LabState> {
   // Single statement so a partial failure can't half-incorporate the user.
-  // SQLite/D1 statement execution is atomic; either both columns flip or
-  // neither does.
   await sql`
     UPDATE users
     SET spinout_lab_active = 0, is_incorporated = 1
-    WHERE id = ${user.id}
+    WHERE id = ${userId}
   `;
-  await sql.end();
-  return getStateHandler(c);
+  return getLabState(sql, userId);
 }
 
-spinoutLab.get('/state', getStateHandler);
-spinoutLab.post('/start', startHandler);
-spinoutLab.post('/milestone', milestoneHandler);
-spinoutLab.post('/exit', exitHandler);
+// ---------------------------------------------------------------------------
+// Wire handlers — thin wrappers around the pure logic above.
+// ---------------------------------------------------------------------------
+
+spinoutLab.get('/state', async (c) => {
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  const state = await getLabState(sql, user.id);
+  await sql.end();
+  return c.json(state);
+});
+
+spinoutLab.post('/start', async (c) => {
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  const r = await startLab(sql, user.id);
+  await sql.end();
+  if (!r.ok) return c.json({ error: r.error }, r.status);
+  return c.json(r.state);
+});
+
+spinoutLab.post('/milestone', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const sql = getSQL(c.env);
+  const r = await recordMilestone(sql, user.id, body?.milestone_key);
+  await sql.end();
+  if (!r.ok) return c.json({ error: r.error }, r.status);
+  return c.json(r.state);
+});
+
+spinoutLab.post('/exit', async (c) => {
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  const state = await exitLab(sql, user.id);
+  await sql.end();
+  return c.json(state);
+});
 
 export default spinoutLab;
