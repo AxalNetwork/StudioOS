@@ -302,6 +302,17 @@ export default function SpinoutLabPage() {
     else setLoading(false);
   }, [user, load]);
 
+  // Task #15 — Refresh the dashboard whenever a milestone is marked
+  // anywhere in the app (markMilestone in spinoutLabHooks.js dispatches
+  // this). Local "Mark complete" clicks already update state inline; this
+  // covers cross-page completions (pitch deck, mentor booking, etc.) that
+  // happen while the user is sitting on the Lab page in another tab/route.
+  useEffect(() => {
+    const onAdvanced = () => { load(); };
+    window.addEventListener('spinout-lab:advanced', onAdvanced);
+    return () => window.removeEventListener('spinout-lab:advanced', onAdvanced);
+  }, [load]);
+
   // Unauthenticated → keep showing the public marketing page so the
   // /spinout-lab URL still works for cold traffic.
   if (!user) return <SpinoutLabMarketingPage />;

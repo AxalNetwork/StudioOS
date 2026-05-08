@@ -2,6 +2,7 @@ import React, { useState, useEffect, createContext, useContext } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
+import SpinoutLabListener from './components/SpinoutLabListener';
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
@@ -956,6 +957,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AppInner />
+      <SpinoutLabListener />
     </AuthProvider>
   );
 }
