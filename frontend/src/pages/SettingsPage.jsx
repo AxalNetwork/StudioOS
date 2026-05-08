@@ -6,7 +6,7 @@ import {
   User, Globe, Mail, ShieldCheck, Bell, Lock, Briefcase, Users,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
   Plus, X, KeyRound, Palette, Plug, CreditCard, Code, UserCog,
-  Sun, Moon, Monitor,
+  Sun, Moon, Monitor, ChevronDown, Check,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 
@@ -214,7 +214,10 @@ export default function SettingsPage() {
       )}
 
       <div className="grid lg:grid-cols-[200px_1fr] gap-6">
-        <nav className="space-y-1 text-sm sticky top-4 self-start">
+        <div className="lg:hidden mb-2">
+          <SectionDropdown sections={sections} active={safeActive} onChange={setActive} />
+        </div>
+        <nav className="hidden lg:block space-y-1 text-sm sticky top-4 self-start">
           {sections.map(s => (
             <button
               key={s.id}
@@ -263,6 +266,75 @@ export default function SettingsPage() {
           {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperTab flash={flash} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------- Mobile section dropdown ----------------------------------------
+
+function SectionDropdown({ sections, active, onChange }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const current = sections.find(s => s.id === active) || sections[0];
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  const Icon = current.icon;
+  return (
+    <div className="relative" ref={wrapRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm shadow-sm hover:border-gray-300 transition-colors"
+      >
+        <span className="flex items-center gap-2.5 min-w-0">
+          <span className="w-7 h-7 rounded-lg bg-violet-50 text-violet-700 flex items-center justify-center flex-shrink-0">
+            <Icon size={14} />
+          </span>
+          <span className="font-medium text-gray-900 truncate">{current.label}</span>
+        </span>
+        <ChevronDown size={16} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          className="absolute left-0 right-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-40 py-1 max-h-[70vh] overflow-y-auto"
+        >
+          {sections.map(s => {
+            const SIcon = s.icon;
+            const isActive = s.id === active;
+            return (
+              <li key={s.id} role="option" aria-selected={isActive}>
+                <button
+                  type="button"
+                  onClick={() => { onChange(s.id); setOpen(false); }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-colors ${
+                    isActive ? 'bg-violet-50 text-violet-700' : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                    isActive ? 'bg-violet-100 text-violet-700' : 'bg-gray-50 text-gray-500'
+                  }`}>
+                    <SIcon size={14} />
+                  </span>
+                  <span className="flex-1 font-medium">{s.label}</span>
+                  {isActive && <Check size={14} className="text-violet-600" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
