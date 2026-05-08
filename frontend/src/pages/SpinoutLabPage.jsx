@@ -369,6 +369,17 @@ export default function SpinoutLabPage() {
     try {
       const next = await spinoutLab.complete(key);
       setState(next);
+      // Task #16 — Mirror the same event shape that markMilestone()
+      // dispatches so the global SpinoutLabListener can show its
+      // week-advance / completion celebration even when the founder
+      // marks a milestone directly from this page.
+      try {
+        window.dispatchEvent(
+          new CustomEvent('spinout-lab:advanced', {
+            detail: { state: next, milestoneKey: key },
+          }),
+        );
+      } catch { /* no-op */ }
       // Auto-advance may have flipped the lab off (Week 4) — refresh auth
       // so user.spinout_lab_active mirrors the server.
       if (!next.active) {
