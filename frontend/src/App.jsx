@@ -457,10 +457,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                   Impersonating {user.name}
                 </span>
               )}
-              <NotificationBell userId={user?.id} />
-              <button className="lg:hidden text-gray-600" onClick={() => setSidebarOpen(true)}>
-                <Menu size={20} />
-              </button>
+              <div className="flex items-center gap-1 ml-auto">
+                <NotificationBell userId={user?.id} />
+                <button className="lg:hidden text-gray-600 p-2 rounded-lg hover:bg-gray-100" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
+                  <Menu size={20} />
+                </button>
+              </div>
             </header>
             <div className="p-4 md:p-6 max-w-7xl mx-auto">
               {children}

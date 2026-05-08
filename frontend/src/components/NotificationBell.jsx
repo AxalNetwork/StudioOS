@@ -181,7 +181,7 @@ export default function NotificationBell({ userId }) {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-96 max-h-[28rem] overflow-hidden bg-white border border-gray-200 rounded-xl shadow-xl z-50 flex flex-col">
+        <div className="fixed left-1/2 -translate-x-1/2 sm:absolute sm:left-auto sm:right-0 sm:translate-x-0 mt-2 w-[calc(100vw-1rem)] max-w-sm sm:w-96 max-h-[28rem] overflow-hidden bg-white border border-gray-200 rounded-xl shadow-xl z-50 flex flex-col">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <div className="text-sm font-semibold text-gray-900">Notifications</div>
             <div className="flex items-center gap-2">
