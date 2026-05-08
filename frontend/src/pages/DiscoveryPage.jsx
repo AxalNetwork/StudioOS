@@ -100,18 +100,26 @@ export default function DiscoveryPage() {
         pains: editing.pains.filter((p) => (p || '').trim()),
       };
       const isCreate = !editing.id;
+      const priorCount = interviews.length;
       if (editing.id) await api.updateInterview(editing.id, payload);
       else await api.createInterview(projectId, payload);
       setEditing(null);
       await refresh();
       // Spin-Out Lab W1 — fire `customer_interview_logged_{1,2,3}` for the
-      // first three interviews on this project. `interviews` here was the
-      // pre-refresh list; +1 covers the just-created row. Worker dedups
-      // milestone keys, so re-firing is harmless.
+      // first three interviews on this project. priorCount was captured
+      // pre-refresh; +1 is the ordinal of the just-created row. Worker
+      // dedups milestone keys, so re-firing is harmless. The hook is
+      // wrapped in its own try/catch so a milestone-write failure never
+      // surfaces as "Failed to save interview" after a successful save.
       if (isCreate) {
-        const n = interviews.length + 1;
+        const n = priorCount + 1;
         if (n >= 1 && n <= 3) {
-          await markMilestone(user, `customer_interview_logged_${n}`);
+          try {
+            await markMilestone(user, `customer_interview_logged_${n}`);
+          } catch {
+            // markMilestone is already best-effort, but defend against
+            // any future change to its contract.
+          }
         }
       }
     } catch (e) {
