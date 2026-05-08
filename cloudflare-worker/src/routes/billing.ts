@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { ensureMiPaywallSchema, MI_PRO_PRODUCTS, userHasMiPro } from '../middleware/miAccess';
+import { upsertPlanFromStripeSubscription } from '../services/subscriptionPlans';
 
 // Epic 6 — Market Intel Pro billing surface.
 //
@@ -212,6 +213,56 @@ async function handleStripeEvent(
                            mi_subscription_period_end = ?
          WHERE mi_stripe_customer_id = ?`
       ).bind(status, obj.id as string, periodEnd, customer).run();
+      // Task #11 — auto-register the plan in `subscription_plans` so MRR/ARR
+      // analytics include any plan launched in Stripe without a code change.
+      // We pass the user's existing `mi_subscription_plan` as the preferred
+      // catalog key so the catalog row stays aligned with what's stored on
+      // the user (otherwise we could end up with users keyed on
+      // `mi_pro_monthly` while the catalog upsert keys on the Stripe
+      // `price.id`, leaving MRR at $0 for that user). When the user has no
+      // plan yet (subscription event arriving before checkout.session.completed
+      // for some reason), we backfill `users.mi_subscription_plan` with the
+      // resolved plan_id so user + catalog stay in lockstep.
+      // Wrapped because pricing-catalog upserts must never block billing state.
+      try {
+        const userRow = await env.DB.prepare(
+          'SELECT mi_subscription_plan FROM users WHERE mi_stripe_customer_id = ? LIMIT 1'
+        ).bind(customer).first<{ mi_subscription_plan: string | null }>();
+        const existingPlan = userRow?.mi_subscription_plan ?? null;
+        // If Stripe is sending a price.id that doesn't match what the user's
+        // existing catalog row was last seen with, treat it as a plan change
+        // (e.g. upgrade/downgrade from the customer portal) — drop the
+        // preferred-plan-id hint so the upsert keys on the new price.id and
+        // we re-align `users.mi_subscription_plan` below.
+        let preferred: string | null = existingPlan;
+        const itemPriceId = (((obj.items as { data?: Array<{ price?: { id?: string } }> } | undefined)?.data?.[0]?.price?.id)
+          ?? ((obj.plan as { id?: string } | undefined)?.id)
+          ?? null) as string | null;
+        if (existingPlan && itemPriceId) {
+          const catalogRow = await env.DB.prepare(
+            'SELECT stripe_price_id FROM subscription_plans WHERE plan_id = ? LIMIT 1'
+          ).bind(existingPlan).first<{ stripe_price_id: string | null }>().catch(() => null);
+          const storedPriceId = catalogRow?.stripe_price_id ?? null;
+          if (storedPriceId && storedPriceId !== itemPriceId) preferred = null;
+        }
+        const resolvedPlan = await upsertPlanFromStripeSubscription(
+          env,
+          obj as Parameters<typeof upsertPlanFromStripeSubscription>[1],
+          preferred,
+        );
+        // Backfill / re-align the user's plan id whenever Stripe disagrees
+        // with what we previously stored — covers both the "no plan yet"
+        // case and the "user upgraded/downgraded to a new Stripe price"
+        // case (where Stripe doesn't echo our checkout metadata.plan, so
+        // the resolved plan_id falls back to the new price.id).
+        if (resolvedPlan && resolvedPlan !== existingPlan) {
+          await env.DB.prepare(
+            'UPDATE users SET mi_subscription_plan = ? WHERE mi_stripe_customer_id = ?'
+          ).bind(resolvedPlan, customer).run();
+        }
+      } catch (e) {
+        console.warn('[billing] plan catalog upsert failed:', (e as Error).message);
+      }
       return;
     }
     case 'customer.subscription.deleted': {

@@ -340,3 +340,27 @@ CREATE TABLE IF NOT EXISTS roadmap_okrs (
 
 CREATE INDEX IF NOT EXISTS idx_roadmap_okrs_project_status_order
     ON roadmap_okrs (project_id, kanban_status, sort_order);
+
+-- ---------------------------------------------------------------------------
+-- Task #11 — Subscription plan catalog. Decouples MRR/ARR analytics from the
+-- old hardcoded `PLAN_MONTHLY_USD` map. Mirrored as
+-- `cloudflare-worker/sql/migrations/004_subscription_plans.sql` so the file
+-- can be applied to remote D1 with a single wrangler call. The Stripe webhook
+-- upserts a row here on every `customer.subscription.created|updated` event.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS subscription_plans (
+    plan_id           TEXT PRIMARY KEY,
+    monthly_price_usd REAL NOT NULL,
+    display_name      TEXT,
+    stripe_price_id   TEXT,
+    is_active         INTEGER NOT NULL DEFAULT 1,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sub_plans_active ON subscription_plans(is_active);
+
+INSERT OR IGNORE INTO subscription_plans (plan_id, monthly_price_usd, display_name)
+VALUES
+  ('mi_pro_monthly', 49, 'MI Pro · Monthly'),
+  ('mi_pro_annual',  39, 'MI Pro · Annual');

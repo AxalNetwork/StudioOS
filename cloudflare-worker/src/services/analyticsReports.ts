@@ -11,6 +11,7 @@
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import { loadPlanPriceMap, priceFor, ensureSubscriptionPlansSchema } from './subscriptionPlans';
 
 // ---------- common row helpers (no `any`) ----------
 type SqlRow = Record<string, unknown>;
@@ -55,13 +56,16 @@ export function parseRange(fromQ?: string | null, toQ?: string | null, defaultDa
 }
 
 // ---------- pricing (USD/month) ----------
-const PLAN_MONTHLY_USD: Record<string, number> = {
-  mi_pro_monthly: 49,
-  mi_pro_annual:  39,
-};
-export function planPrice(plan: string | null | undefined): number {
-  if (!plan) return 0;
-  return PLAN_MONTHLY_USD[plan] || 0;
+// Plan prices live in the `subscription_plans` D1 table (Task #11). Each
+// report function loads the catalog once at the top via `loadPlanPriceMap`
+// and then resolves prices through `priceFor(map, plan)`. Adding a new
+// Stripe plan registers automatically through the webhook, so no code
+// change is needed when pricing/plans evolve.
+//
+// `planPrice` is retained as a thin wrapper for callers that already have
+// a price map in hand.
+export function planPrice(map: Map<string, number>, plan: string | null | undefined): number {
+  return priceFor(map, plan);
 }
 
 // ---------- queries ----------
@@ -77,6 +81,7 @@ export interface OverviewReport {
 
 export async function loadOverview(env: Env, range: DateRange): Promise<OverviewReport> {
   const sql = getSQL(env);
+  const priceMap = await loadPlanPriceMap(env);
   const active = rows<SqlRow>(await sql`
     SELECT COUNT(DISTINCT user_id) AS c FROM activity_logs
     WHERE user_id IS NOT NULL AND created_at >= ${range.fromIso} AND created_at <= ${range.toIso}
@@ -135,7 +140,7 @@ export async function loadOverview(env: Env, range: DateRange): Promise<Overview
   const conversion = totalU > 0 ? (paidU / totalU) * 100 : 0;
 
   let mrr = 0;
-  for (const row of paidByPlan) mrr += planPrice(str(row.plan)) * num(row.c);
+  for (const row of paidByPlan) mrr += priceFor(priceMap, str(row.plan)) * num(row.c);
   const arr = mrr * 12;
 
   const sessionRows = rows<SqlRow>(await sql`
@@ -175,21 +180,29 @@ export async function loadOverview(env: Env, range: DateRange): Promise<Overview
 
 export async function loadCohorts(env: Env, granularity: 'week' | 'month', metric: 'retention' | 'revenue') {
   const sql = getSQL(env);
+  // Revenue mode joins `subscription_plans` directly in SQL (rather than
+  // loading the price map into JS), so we self-heal the table here for
+  // environments where migration 004 hasn't been applied yet — otherwise
+  // the endpoint would 500 instead of returning $0 cohorts.
+  if (metric === 'revenue') await ensureSubscriptionPlansSchema(env);
+  // Build a fully-qualified version of `fmt` for the JOIN query below; the
+  // unqualified `created_at` would be ambiguous once `subscription_plans`
+  // (which also has its own `created_at`) is joined in.
   const fmt = granularity === 'week'
     ? "strftime('%Y-W%W', created_at)"
     : "strftime('%Y-%m', created_at)";
+  const fmtU = granularity === 'week'
+    ? "strftime('%Y-W%W', u.created_at)"
+    : "strftime('%Y-%m', u.created_at)";
   if (metric === 'revenue') {
     const r = rows<SqlRow>(await sql.unsafe(
-      `SELECT ${fmt} AS cohort, COUNT(*) AS signups,
-              SUM(CASE WHEN mi_subscription_status='active' THEN 1 ELSE 0 END) AS paying,
-              SUM(CASE WHEN mi_subscription_status='active' THEN
-                  CASE mi_subscription_plan
-                    WHEN 'mi_pro_monthly' THEN 49
-                    WHEN 'mi_pro_annual'  THEN 39
-                    ELSE 0 END
-                  ELSE 0 END) AS mrr_usd
-         FROM users
-         WHERE created_at >= datetime('now','-12 months')
+      `SELECT ${fmtU} AS cohort, COUNT(*) AS signups,
+              SUM(CASE WHEN u.mi_subscription_status='active' THEN 1 ELSE 0 END) AS paying,
+              SUM(CASE WHEN u.mi_subscription_status='active'
+                       THEN COALESCE(sp.monthly_price_usd, 0) ELSE 0 END) AS mrr_usd
+         FROM users u
+         LEFT JOIN subscription_plans sp ON sp.plan_id = u.mi_subscription_plan
+         WHERE u.created_at >= datetime('now','-12 months')
          GROUP BY cohort ORDER BY cohort ASC`,
     ));
     return { metric, granularity, cohorts: r };
@@ -222,6 +235,7 @@ export async function loadUsers(env: Env, opts: {
     params.push(s, s);
   }
   const where = filters.join(' AND ');
+  const priceMap = await loadPlanPriceMap(env);
   const raw = rows<SqlRow>(await sql.unsafe(
     `SELECT u.id, u.email, u.name, u.role, u.created_at,
             u.mi_subscription_status AS sub_status,
@@ -248,13 +262,14 @@ export async function loadUsers(env: Env, opts: {
     last_seen_at: r.last_seen_at ? str(r.last_seen_at) : null,
     sessions_30d: num(r.sessions_30d),
     project_count: num(r.project_count),
-    lifetime_value_usd: planPrice(str(r.sub_plan)) * 12,
+    lifetime_value_usd: priceFor(priceMap, str(r.sub_plan)) * 12,
   }));
   return { users: enriched, total: num(totalRow[0]?.c), limit: opts.limit, offset: opts.offset };
 }
 
 export async function loadUser(env: Env, id: number) {
   const sql = getSQL(env);
+  const priceMap = await loadPlanPriceMap(env);
   const u = rows<SqlRow>(await sql`
     SELECT id, email, name, role, created_at,
            mi_subscription_status AS sub_status,
@@ -295,7 +310,7 @@ export async function loadUser(env: Env, id: number) {
         ? [{
             event_type: 'current_state',
             plan: str(u[0].sub_plan),
-            amount_usd: planPrice(str(u[0].sub_plan)),
+            amount_usd: priceFor(priceMap, str(u[0].sub_plan)),
             status: str(u[0].sub_status),
             occurred_at: str(u[0].sub_period_end || u[0].created_at),
           }]
@@ -317,7 +332,7 @@ export async function loadUser(env: Env, id: number) {
     })),
     billing_history: billing,
     error_count_90d: num(errorCount[0]?.c),
-    lifetime_value_usd: planPrice(str(u[0].sub_plan)) * 12,
+    lifetime_value_usd: priceFor(priceMap, str(u[0].sub_plan)) * 12,
   };
 }
 
@@ -331,6 +346,10 @@ export interface FinancialReport {
 
 export async function loadFinancial(env: Env, range: DateRange): Promise<FinancialReport> {
   const sql = getSQL(env);
+  // Same self-heal as `loadCohorts` revenue mode — the LTV-by-cohort query
+  // below joins `subscription_plans` directly.
+  await ensureSubscriptionPlansSchema(env);
+  const priceMap = await loadPlanPriceMap(env);
   const byTier = rows<SqlRow>(await sql`
     SELECT mi_subscription_plan AS plan, COUNT(*) AS subscribers
     FROM users
@@ -340,8 +359,8 @@ export async function loadFinancial(env: Env, range: DateRange): Promise<Financi
   const breakdown = byTier.map(r => ({
     plan: str(r.plan),
     subscribers: num(r.subscribers),
-    monthly_price_usd: planPrice(str(r.plan)),
-    mrr_usd: planPrice(str(r.plan)) * num(r.subscribers),
+    monthly_price_usd: priceFor(priceMap, str(r.plan)),
+    mrr_usd: priceFor(priceMap, str(r.plan)) * num(r.subscribers),
   }));
   const totalMrr = breakdown.reduce((a, r) => a + r.mrr_usd, 0);
   const newMrrRows = rows<SqlRow>(await sql`
@@ -352,7 +371,7 @@ export async function loadFinancial(env: Env, range: DateRange): Promise<Financi
       AND mi_subscription_period_end <= ${range.toIso}
     GROUP BY mi_subscription_plan
   `);
-  const newMrr = newMrrRows.reduce((a, r) => a + planPrice(str(r.plan)) * num(r.c), 0);
+  const newMrr = newMrrRows.reduce((a, r) => a + priceFor(priceMap, str(r.plan)) * num(r.c), 0);
   const churnRows = rows<SqlRow>(await sql`
     SELECT mi_subscription_plan AS plan, COUNT(*) AS c
     FROM users
@@ -361,19 +380,19 @@ export async function loadFinancial(env: Env, range: DateRange): Promise<Financi
       AND mi_subscription_period_end <= ${range.toIso}
     GROUP BY mi_subscription_plan
   `);
-  const churnMrr = churnRows.reduce((a, r) => a + planPrice(str(r.plan)) * num(r.c), 0);
+  const churnMrr = churnRows.reduce((a, r) => a + priceFor(priceMap, str(r.plan)) * num(r.c), 0);
   // LTV by signup cohort: estimate as paying * avg_plan_price * 12 (1y proxy).
+  // Joins `subscription_plans` so newly-launched plans automatically count.
+  // `u.created_at` is fully qualified because `subscription_plans` also has a
+  // `created_at` column.
   const cohortRows = rows<SqlRow>(await sql`
-    SELECT strftime('%Y-%m', created_at) AS cohort, COUNT(*) AS signups,
-           SUM(CASE WHEN mi_subscription_status='active' THEN 1 ELSE 0 END) AS paying,
-           SUM(CASE WHEN mi_subscription_status='active' THEN
-               CASE mi_subscription_plan
-                 WHEN 'mi_pro_monthly' THEN 49
-                 WHEN 'mi_pro_annual'  THEN 39
-                 ELSE 0 END
-               ELSE 0 END) AS mrr_per_cohort
-      FROM users
-      WHERE created_at >= datetime('now','-12 months')
+    SELECT strftime('%Y-%m', u.created_at) AS cohort, COUNT(*) AS signups,
+           SUM(CASE WHEN u.mi_subscription_status='active' THEN 1 ELSE 0 END) AS paying,
+           SUM(CASE WHEN u.mi_subscription_status='active'
+                    THEN COALESCE(sp.monthly_price_usd, 0) ELSE 0 END) AS mrr_per_cohort
+      FROM users u
+      LEFT JOIN subscription_plans sp ON sp.plan_id = u.mi_subscription_plan
+      WHERE u.created_at >= datetime('now','-12 months')
       GROUP BY cohort ORDER BY cohort ASC
   `);
   const ltvByCohort = cohortRows.map(r => ({
