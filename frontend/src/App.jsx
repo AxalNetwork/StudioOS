@@ -10,6 +10,7 @@ import {
   Settings as SettingsIcon, PieChart as PieIcon, Heart, Bookmark, Megaphone, BookOpen
 } from 'lucide-react';
 import { api } from './lib/api';
+import SpinoutLabSidebar from './components/SpinoutLabSidebar';
 import Dashboard from './pages/Dashboard';
 import ScoringPage from './pages/ScoringPage';
 import ProjectsPage from './pages/ProjectsPage';
@@ -443,6 +444,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   const isAdmin = (realUser || user)?.role === 'admin';
   const activeRole = isImpersonating ? user?.role : (isAdmin ? viewMode : user?.role);
   const navItems = getNavItems(activeRole || 'founder', primaryPersonaId);
+  // While the founder is in the Spin-Out Lab the sidebar collapses to the
+  // week-gated feature list. The standard nav returns the moment
+  // `spinout_lab_active` flips back to 0 (Week 4 auto-exit).
+  const inSpinoutLab = user?.spinout_lab_active === 1;
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
   // Tracks mouse/keyboard/scroll/touch on `window`. Disabled when no user is
@@ -491,6 +496,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 <X size={18} />
               </button>
             </div>
+            {inSpinoutLab ? (
+              <SpinoutLabSidebar onNavigate={() => setSidebarOpen(false)} />
+            ) : (
             <nav className="flex-1 py-3 overflow-y-auto">
               {navItems.map((item, idx) => {
                 if (item.section) {
@@ -528,6 +536,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 );
               })}
             </nav>
+            )}
             <div className="px-5 py-3 border-t border-gray-200">
               {user && (
                 <div className="flex items-center justify-between">
