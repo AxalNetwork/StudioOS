@@ -29,23 +29,32 @@ export default function RelationshipsPage() {
 
   const reload = async () => {
     setLoading(true); setErr('');
-    try {
-      const [s, r, l, lb] = await Promise.all([
-        api.partnerSummary(), api.partnerRelationships(),
-        api.activityLogs(200, 0), api.partnerLeaderboard(),
-      ]);
+    const labels = ['Partner summary', 'Relationships', 'Activity log', 'Leaderboard'];
+    const results = await Promise.allSettled([
+      api.partnerSummary(), api.partnerRelationships(),
+      api.activityLogs(200, 0), api.partnerLeaderboard(),
+    ]);
+    const [s, r, l, lb] = results;
+    if (s.status === 'fulfilled') setSummary(s.value); else setSummary(null);
+    setRels(r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []);
+    if (l.status === 'fulfilled') {
       // Strip observability noise — http_get / http_post rows are per-request
       // telemetry written by the middleware, not user-facing domain events.
-      const rawItems = l.items || l.logs || [];
+      const rawItems = l.value.items || l.value.logs || [];
       const filtered = rawItems.filter(item => {
         const action = item.action || item.action_type || '';
         return !action.startsWith('http_');
       });
-      setSummary(s); setRels(r);
       setLogs({ items: filtered, total: filtered.length });
-      setLeaderboard(lb);
-    } catch (e) { setErr(e.message); }
-    finally { setLoading(false); }
+    } else {
+      setLogs({ items: [], total: 0 });
+    }
+    setLeaderboard(lb.status === 'fulfilled' && Array.isArray(lb.value) ? lb.value : []);
+    const failures = results
+      .map((res, i) => res.status === 'rejected' ? `${labels[i]}: ${res.reason?.message || 'failed'}` : null)
+      .filter(Boolean);
+    if (failures.length) setErr(failures.join(' • '));
+    setLoading(false);
   };
   useEffect(() => { reload(); }, []);
 
