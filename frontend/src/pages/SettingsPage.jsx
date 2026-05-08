@@ -183,6 +183,16 @@ export default function SettingsPage() {
 
   const role = (data.role || '').toLowerCase();
   const sections = SECTIONS.filter(s => !s.roles || s.roles.includes(role));
+  // Render-time gate: a non-admin who deep-links to /settings/developer must
+  // not get the Developer UI rendered just because the URL parsed `active`
+  // before role was known. Mirror the nav filter on the content side and
+  // bounce `active` (which also rewrites the URL via the effect above).
+  const allowedIds = new Set(sections.map(s => s.id));
+  const safeActive = allowedIds.has(active) ? active : 'profile';
+  if (safeActive !== active) {
+    // Defer the state update to after render so we don't violate React rules.
+    queueMicrotask(() => setActive('profile'));
+  }
 
   return (
     <div className="max-w-5xl">
@@ -205,7 +215,7 @@ export default function SettingsPage() {
               key={s.id}
               onClick={() => setActive(s.id)}
               className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
-                active === s.id ? 'bg-violet-50 text-violet-700 font-medium' : 'text-gray-600 hover:bg-gray-50'
+                safeActive === s.id ? 'bg-violet-50 text-violet-700 font-medium' : 'text-gray-600 hover:bg-gray-50'
               }`}
             >
               <s.icon size={14} />
@@ -215,7 +225,7 @@ export default function SettingsPage() {
         </nav>
 
         <div className="space-y-6">
-          {active === 'profile' && (
+          {safeActive === 'profile' && (
             <>
               <ProfileSection data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
               <ProfileExtrasCard flash={flash} />
@@ -223,29 +233,29 @@ export default function SettingsPage() {
               <RolePreferencesSection data={data} patch={patch} />
             </>
           )}
-          {active === 'account' && (
+          {safeActive === 'account' && (
             <>
               <EmailSection data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
               <AccountDeletionCard data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
             </>
           )}
-          {active === 'security' && <AuthSection data={data} flash={flash} />}
-          {active === 'notifications' && (
+          {safeActive === 'security' && <AuthSection data={data} flash={flash} />}
+          {safeActive === 'notifications' && (
             <>
               <NotificationsSection data={data} patch={patch} />
               <DigestQuietHoursCard flash={flash} />
             </>
           )}
-          {active === 'privacy' && (
+          {safeActive === 'privacy' && (
             <>
               <PrivacyCoreCard flash={flash} />
               <PrivacySection data={data} patch={patch} flash={flash} reload={() => api.getSettings().then(setData)} hideAccountDelete />
             </>
           )}
-          {active === 'integrations' && <IntegrationsTab flash={flash} />}
-          {active === 'billing' && <BillingTab data={data} />}
-          {active === 'appearance' && <AppearanceTab flash={flash} />}
-          {active === 'developer' && <DeveloperTab flash={flash} />}
+          {safeActive === 'integrations' && allowedIds.has('integrations') && <IntegrationsTab flash={flash} />}
+          {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} />}
+          {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
+          {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperTab flash={flash} />}
         </div>
       </div>
     </div>
