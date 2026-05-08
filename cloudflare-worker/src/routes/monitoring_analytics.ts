@@ -26,6 +26,7 @@ import {
   reportToCsv, reportToHtml,
   signDownloadToken, verifyDownloadToken,
 } from '../services/analyticsReports';
+import { ensureSubscriptionPlansSchema } from '../services/subscriptionPlans';
 
 type AppCtx = Context<{ Bindings: Env }>;
 type ExportReport = 'overview' | 'users' | 'financial' | 'technical' | 'management';
@@ -98,8 +99,10 @@ r.get('/overview', async (c) => {
 // the dropdown on the Admin Analytics tab. Sourced from `fx_rates`.
 r.get('/currencies', async (c) => {
   await requireAdmin(c);
+  // Self-heal in case migration 005 hasn't been applied yet — matches the
+  // pattern used by /overview and /financial.
+  await ensureSubscriptionPlansSchema(c.env);
   const sql = getSQL(c.env);
-  // ensureSchema in subscriptionPlans seeds fx_rates on first call.
   const rowsRaw = await sql`SELECT currency, usd_rate, updated_at FROM fx_rates ORDER BY currency ASC`;
   const arr = Array.isArray(rowsRaw) ? rowsRaw : [];
   return c.json({ currencies: arr });
