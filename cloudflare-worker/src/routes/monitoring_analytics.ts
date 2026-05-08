@@ -91,7 +91,18 @@ r.get('/overview', async (c) => {
   await requireAdmin(c);
   await ensureSchema(c.env);
   const p = tryParseRange(c); if ('err' in p) return p.err;
-  return c.json(await loadOverview(c.env, p.range));
+  return c.json(await loadOverview(c.env, p.range, c.req.query('currency')));
+});
+
+// Task #14 — list of currencies the analytics layer can display in. Drives
+// the dropdown on the Admin Analytics tab. Sourced from `fx_rates`.
+r.get('/currencies', async (c) => {
+  await requireAdmin(c);
+  const sql = getSQL(c.env);
+  // ensureSchema in subscriptionPlans seeds fx_rates on first call.
+  const rowsRaw = await sql`SELECT currency, usd_rate, updated_at FROM fx_rates ORDER BY currency ASC`;
+  const arr = Array.isArray(rowsRaw) ? rowsRaw : [];
+  return c.json({ currencies: arr });
 });
 
 r.get('/cohorts', async (c) => {
@@ -123,7 +134,7 @@ r.get('/user/:id', async (c) => {
 r.get('/financial', async (c) => {
   await requireAdmin(c);
   const p = tryParseRange(c); if ('err' in p) return p.err;
-  return c.json(await loadFinancial(c.env, p.range));
+  return c.json(await loadFinancial(c.env, p.range, c.req.query('currency')));
 });
 
 r.get('/technical', async (c) => {
@@ -176,10 +187,13 @@ r.post('/export', async (c) => {
   const filters = (body.filters && typeof body.filters === 'object') ? body.filters as Record<string, unknown> : {};
   const filtersJson = JSON.stringify({ from: range.from, to: range.to, ...filters });
 
+  // Task #14 — caller can pin the export to a specific display currency.
+  const ccy = (typeof body.currency === 'string' ? body.currency : null) ?? (typeof filters.currency === 'string' ? filters.currency : null);
+
   // Gather data
   let data: unknown;
-  if (report === 'overview') data = await loadOverview(c.env, range);
-  else if (report === 'financial') data = await loadFinancial(c.env, range);
+  if (report === 'overview') data = await loadOverview(c.env, range, ccy);
+  else if (report === 'financial') data = await loadFinancial(c.env, range, ccy);
   else if (report === 'technical') data = await loadTechnical(c.env, range);
   else if (report === 'users') data = await loadUsers(c.env, {
     role: (filters.role as string) || null,
@@ -189,8 +203,8 @@ r.post('/export', async (c) => {
     offset: 0,
   });
   else /* management */ data = {
-    overview: await loadOverview(c.env, range),
-    financial: await loadFinancial(c.env, range),
+    overview: await loadOverview(c.env, range, ccy),
+    financial: await loadFinancial(c.env, range, ccy),
     technical: await loadTechnical(c.env, range),
   };
 

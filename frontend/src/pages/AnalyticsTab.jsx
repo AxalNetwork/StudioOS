@@ -138,26 +138,52 @@ function RecentExports({ refreshKey }) {
   );
 }
 
-function OverviewSub({ range, anonymized, onExport, busy }) {
+function fmtMoney(amount, code) {
+  const ccy = (code || 'USD').toUpperCase();
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency', currency: ccy, maximumFractionDigits: ccy === 'JPY' ? 0 : 0,
+    }).format(Number(amount || 0));
+  } catch {
+    return `${ccy} ${Number(amount || 0).toLocaleString()}`;
+  }
+}
+
+function FxBadge({ code, asOf }) {
+  if (!code) return null;
+  return (
+    <span className="text-[11px] text-gray-500 ml-2">
+      Display: <span className="font-medium text-gray-700">{code}</span>
+      {asOf && <> · FX as of {String(asOf).slice(0, 10)}</>}
+    </span>
+  );
+}
+
+function OverviewSub({ range, anonymized, currency, onExport, busy }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
   useEffect(() => {
     setData(null); setErr('');
-    api.analyticsOverview(range.from, range.to)
+    api.analyticsOverview(range.from, range.to, currency)
       .then(setData)
       .catch(e => setErr(e?.message || 'Failed to load'));
-  }, [range.from, range.to]);
+  }, [range.from, range.to, currency]);
   if (err) return <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2"><AlertTriangle size={14} className="inline mr-1" /> {err}</div>;
   if (!data) return <div className="text-sm text-gray-500 py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" /> Loading…</div>;
-  const fmt$ = (n) => `$${Number(n || 0).toLocaleString()}`;
+  const ccy = data.display_currency || 'USD';
+  const mrr = data.mrr ?? data.mrr_usd;
+  const arr = data.arr ?? data.arr_usd;
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end"><ExportButtons onExport={onExport} busy={busy} /></div>
+      <div className="flex items-center justify-between">
+        <FxBadge code={ccy} asOf={data.fx_as_of} />
+        <ExportButtons onExport={onExport} busy={busy} />
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Active users" value={data.active_users.toLocaleString()} sub={`Last ${data.range.days}d`} />
         <Stat label="New signups" value={data.new_signups.toLocaleString()} />
         <Stat label="Conversion" value={`${data.conversion_to_paid_pct}%`} sub={`${data.paid_users}/${data.total_users}`} />
-        <Stat label="MRR" value={fmt$(data.mrr_usd)} sub={`ARR ${fmt$(data.arr_usd)}`} />
+        <Stat label={`MRR (${ccy})`} value={fmtMoney(mrr, ccy)} sub={`ARR ${fmtMoney(arr, ccy)}`} />
         <Stat label="Churn" value={`${data.churn_rate_pct}%`} sub={`${data.churned_subscriptions} sub(s)`} />
         <Stat label="Avg session" value={`${data.avg_session_minutes}m`} />
         <Stat label="P50 / P95 latency" value={`${data.p50_latency_ms} / ${data.p95_latency_ms}ms`} sub={`${data.total_requests.toLocaleString()} req`} />
@@ -368,27 +394,34 @@ function UserDrillDown({ id, anonymized, onClose }) {
   );
 }
 
-function FinancialSub({ range, onExport, busy }) {
+function FinancialSub({ range, currency, onExport, busy }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
   useEffect(() => {
     setData(null); setErr('');
-    api.analyticsFinancial(range.from, range.to).then(setData).catch(e => setErr(e?.message || 'Failed'));
-  }, [range.from, range.to]);
+    api.analyticsFinancial(range.from, range.to, currency).then(setData).catch(e => setErr(e?.message || 'Failed'));
+  }, [range.from, range.to, currency]);
   if (err) return <div className="text-sm text-red-600">{err}</div>;
   if (!data) return <div className="text-sm text-gray-500 py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" /> Loading…</div>;
-  const fmt$ = (n) => `$${Number(n || 0).toLocaleString()}`;
+  const ccy = data.display_currency || 'USD';
+  const totalMrr = data.total_mrr ?? data.total_mrr_usd;
+  const arr = data.arr ?? data.arr_usd;
+  const newMrr = data.new_mrr ?? data.new_mrr_usd;
+  const churnMrr = data.churn_mrr ?? data.churn_mrr_usd;
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end"><ExportButtons onExport={onExport} busy={busy} /></div>
+      <div className="flex items-center justify-between">
+        <FxBadge code={ccy} asOf={data.fx_as_of} />
+        <ExportButtons onExport={onExport} busy={busy} />
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat label="Total MRR" value={fmt$(data.total_mrr_usd)} />
-        <Stat label="ARR" value={fmt$(data.arr_usd)} />
-        <Stat label="New MRR (window)" value={fmt$(data.new_mrr_usd)} />
-        <Stat label="Churn MRR (window)" value={fmt$(data.churn_mrr_usd)} />
+        <Stat label={`Total MRR (${ccy})`} value={fmtMoney(totalMrr, ccy)} />
+        <Stat label={`ARR (${ccy})`} value={fmtMoney(arr, ccy)} />
+        <Stat label={`New MRR (${ccy})`} value={fmtMoney(newMrr, ccy)} />
+        <Stat label={`Churn MRR (${ccy})`} value={fmtMoney(churnMrr, ccy)} />
       </div>
       <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="text-sm font-semibold text-gray-900 mb-2">MRR by tier</div>
+        <div className="text-sm font-semibold text-gray-900 mb-2">MRR by tier ({ccy})</div>
         <div style={{ width: '100%', height: 220 }}>
           <ResponsiveContainer>
             <BarChart data={data.mrr_breakdown_by_tier}>
@@ -396,31 +429,38 @@ function FinancialSub({ range, onExport, busy }) {
               <XAxis dataKey="plan" tick={{ fontSize: 10, fill: '#6b7280' }} />
               <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
               <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-              <Bar dataKey="mrr_usd" fill="#7c3aed" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="mrr" fill="#7c3aed" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
         <table className="w-full text-xs mt-3">
           <thead className="text-gray-500">
-            <tr><th className="text-left py-1">Plan</th><th className="text-right">Subscribers</th><th className="text-right">Price</th><th className="text-right">MRR</th></tr>
+            <tr>
+              <th className="text-left py-1">Plan</th>
+              <th className="text-right">Subscribers</th>
+              <th className="text-right">Native price</th>
+              <th className="text-right">Price ({ccy})</th>
+              <th className="text-right">MRR ({ccy})</th>
+            </tr>
           </thead>
           <tbody>
             {data.mrr_breakdown_by_tier.map((r, i) => (
               <tr key={i} className="border-t border-gray-100">
                 <td className="py-1">{r.plan}</td>
                 <td className="text-right">{r.subscribers}</td>
-                <td className="text-right">{fmt$(r.monthly_price_usd)}</td>
-                <td className="text-right font-semibold">{fmt$(r.mrr_usd)}</td>
+                <td className="text-right text-gray-500">{fmtMoney(r.native_monthly_price ?? r.monthly_price_usd, r.native_currency || 'USD')}</td>
+                <td className="text-right">{fmtMoney(r.monthly_price ?? r.monthly_price_usd, ccy)}</td>
+                <td className="text-right font-semibold">{fmtMoney(r.mrr ?? r.mrr_usd, ccy)}</td>
               </tr>
             ))}
             {data.mrr_breakdown_by_tier.length === 0 && (
-              <tr><td colSpan={4} className="text-center py-3 text-gray-400">No paying subscribers in this period.</td></tr>
+              <tr><td colSpan={5} className="text-center py-3 text-gray-400">No paying subscribers in this period.</td></tr>
             )}
           </tbody>
         </table>
       </div>
       <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="text-sm font-semibold text-gray-900 mb-2">LTV by signup cohort</div>
+        <div className="text-sm font-semibold text-gray-900 mb-2">LTV by signup cohort ({ccy})</div>
         <table className="w-full text-xs">
           <thead className="text-gray-500">
             <tr><th className="text-left py-1">Cohort</th><th className="text-right">Signups</th><th className="text-right">Paying</th><th className="text-right">Est. LTV</th></tr>
@@ -431,7 +471,7 @@ function FinancialSub({ range, onExport, busy }) {
                 <td className="py-1 font-mono">{r.cohort}</td>
                 <td className="text-right">{r.signups}</td>
                 <td className="text-right">{r.paying}</td>
-                <td className="text-right">{fmt$(r.estimated_ltv_usd)}</td>
+                <td className="text-right">{fmtMoney(r.estimated_ltv ?? r.estimated_ltv_usd, ccy)}</td>
               </tr>
             ))}
             {(data.ltv_by_cohort || []).length === 0 && (
@@ -540,16 +580,17 @@ function TechnicalView({ data, onExport, busy }) {
   );
 }
 
-function ManagementSub({ range, onExport, busy }) {
+function ManagementSub({ range, currency, onExport, busy }) {
   const [overview, setOverview] = useState(null);
   const [financial, setFinancial] = useState(null);
   useEffect(() => {
     Promise.all([
-      api.analyticsOverview(range.from, range.to),
-      api.analyticsFinancial(range.from, range.to),
+      api.analyticsOverview(range.from, range.to, currency),
+      api.analyticsFinancial(range.from, range.to, currency),
     ]).then(([o, f]) => { setOverview(o); setFinancial(f); }).catch(() => {});
-  }, [range.from, range.to]);
-  const fmt$ = (n) => `$${Number(n || 0).toLocaleString()}`;
+  }, [range.from, range.to, currency]);
+  const ccy = financial?.display_currency || overview?.display_currency || 'USD';
+  const m$ = (n) => fmtMoney(n, ccy);
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end"><ExportButtons onExport={onExport} busy={busy} /></div>
@@ -558,7 +599,7 @@ function ManagementSub({ range, onExport, busy }) {
         {overview && financial ? (
           <ul className="text-sm text-gray-700 space-y-1">
             <li><strong>{overview.active_users.toLocaleString()}</strong> active users · <strong>{overview.new_signups.toLocaleString()}</strong> new signups · <strong>{overview.conversion_to_paid_pct}%</strong> paid conversion</li>
-            <li><strong>{fmt$(financial.total_mrr_usd)}</strong> total MRR · <strong>{fmt$(financial.arr_usd)}</strong> ARR · new {fmt$(financial.new_mrr_usd)} / churn {fmt$(financial.churn_mrr_usd)}</li>
+            <li><strong>{m$(financial.total_mrr ?? financial.total_mrr_usd)}</strong> total MRR · <strong>{m$(financial.arr ?? financial.arr_usd)}</strong> ARR · new {m$(financial.new_mrr ?? financial.new_mrr_usd)} / churn {m$(financial.churn_mrr ?? financial.churn_mrr_usd)} <span className="text-xs text-gray-500">({ccy}{financial.fx_as_of ? ` · FX ${String(financial.fx_as_of).slice(0,10)}` : ''})</span></li>
             <li>Reliability: P50 <strong>{overview.p50_latency_ms}ms</strong> · P95 <strong>{overview.p95_latency_ms}ms</strong> · error rate <strong>{overview.error_rate_pct}%</strong></li>
             <li>Engagement: avg session <strong>{overview.avg_session_minutes} min</strong> · churn rate <strong>{overview.churn_rate_pct}%</strong></li>
           </ul>
@@ -576,13 +617,32 @@ export default function AnalyticsTab() {
   const [auditKey, setAuditKey] = useState(0);
   const [exportNote, setExportNote] = useState('');
   const [usersFilters, setUsersFilters] = useState({});
+  // Task #14 — currency selector. Persisted per-browser so admins don't have
+  // to re-select on every visit.
+  const [currency, setCurrency] = useState(() => {
+    try { return localStorage.getItem('analytics:currency') || 'USD'; } catch { return 'USD'; }
+  });
+  const [currencies, setCurrencies] = useState([
+    'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR', 'SGD', 'CHF', 'SEK',
+  ]);
+  useEffect(() => {
+    try { localStorage.setItem('analytics:currency', currency); } catch {}
+  }, [currency]);
+  useEffect(() => {
+    api.analyticsCurrencies()
+      .then(r => {
+        const list = (r.currencies || []).map(c => c.currency).filter(Boolean);
+        if (list.length) setCurrencies(list);
+      })
+      .catch(() => {});
+  }, []);
 
   const onExport = useCallback(async (format) => {
     setExporting(true); setExportNote('');
     try {
       const filters = sub === 'users' ? usersFilters : {};
       const res = await api.analyticsExport({
-        report: sub, format, from: range.from, to: range.to, filters,
+        report: sub, format, from: range.from, to: range.to, filters, currency,
       });
       setAuditKey(k => k + 1);
       if (res.download_url) {
@@ -598,7 +658,7 @@ export default function AnalyticsTab() {
     } finally {
       setExporting(false);
     }
-  }, [sub, range, usersFilters]);
+  }, [sub, range, usersFilters, currency]);
 
   return (
     <div className="space-y-4">
@@ -612,6 +672,17 @@ export default function AnalyticsTab() {
           <input type="date" value={range.to}
                  onChange={e => setRange(r => ({ ...r, to: e.target.value }))}
                  className="border border-gray-300 rounded px-2 py-1" />
+        </div>
+        <div className="flex items-center gap-1 text-xs text-gray-600">
+          Currency
+          <select
+            value={currency}
+            onChange={e => setCurrency(e.target.value)}
+            className="border border-gray-300 rounded px-2 py-1 bg-white"
+            title="Display MRR/ARR in this currency (FX-converted from USD)"
+          >
+            {currencies.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
         </div>
         <button
           onClick={() => setAnonymized(a => !a)}
@@ -647,11 +718,11 @@ export default function AnalyticsTab() {
         })}
       </div>
 
-      {sub === 'overview'  && <OverviewSub  range={range} anonymized={anonymized} onExport={onExport} busy={exporting} />}
-      {sub === 'users'     && <UsersSub                  anonymized={anonymized} onExport={onExport} busy={exporting} onFiltersChange={setUsersFilters} />}
-      {sub === 'financial' && <FinancialSub range={range}                          onExport={onExport} busy={exporting} />}
-      {sub === 'technical' && <TechnicalSub range={range}                          onExport={onExport} busy={exporting} />}
-      {sub === 'management'&& <ManagementSub range={range}                         onExport={onExport} busy={exporting} />}
+      {sub === 'overview'  && <OverviewSub  range={range} anonymized={anonymized} currency={currency} onExport={onExport} busy={exporting} />}
+      {sub === 'users'     && <UsersSub                  anonymized={anonymized}                     onExport={onExport} busy={exporting} onFiltersChange={setUsersFilters} />}
+      {sub === 'financial' && <FinancialSub range={range}                          currency={currency} onExport={onExport} busy={exporting} />}
+      {sub === 'technical' && <TechnicalSub range={range}                                              onExport={onExport} busy={exporting} />}
+      {sub === 'management'&& <ManagementSub range={range}                         currency={currency} onExport={onExport} busy={exporting} />}
 
       <RecentExports refreshKey={auditKey} />
     </div>

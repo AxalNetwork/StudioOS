@@ -1,15 +1,19 @@
 /**
  * Task #11 — Subscription plan catalog.
+ * Task #14 — Multi-currency support (native currency + FX conversion).
  *
  * Backed by the `subscription_plans` D1 table (migration
- * `cloudflare-worker/sql/migrations/004_subscription_plans.sql`). Replaces
- * the previously-hardcoded `PLAN_MONTHLY_USD` map in analyticsReports.ts so
- * that launching a new plan in Stripe (or inserting a row here) reflects in
- * MRR/ARR immediately, without a code change.
+ * `cloudflare-worker/sql/migrations/004_subscription_plans.sql`, extended by
+ * `005_plan_currency_and_fx.sql`). Replaces the previously-hardcoded
+ * `PLAN_MONTHLY_USD` map in analyticsReports.ts so launching a new plan in
+ * Stripe (or inserting a row here) reflects in MRR/ARR immediately, without
+ * a code change.
  *
  * The Stripe webhook calls `upsertPlanFromStripeSubscription` on every
  * `customer.subscription.created|updated` event so plans register the first
- * time anyone subscribes to them.
+ * time anyone subscribes to them, capturing both the USD-normalised figure
+ * (for cross-plan rollups) and the native currency + amount (for honest,
+ * FX-rate-controlled display).
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
@@ -20,14 +24,24 @@ export interface SubscriptionPlanRow {
   display_name: string | null;
   stripe_price_id: string | null;
   is_active: number;
+  currency: string;
+  native_amount: number | null;
+  native_interval: string | null;
+}
+
+/** Per-plan pricing as carried through analytics. */
+export interface PlanPricing {
+  usd: number;             // monthly USD (for cross-currency rollups)
+  currency: string;        // ISO 4217 code Stripe charged in
+  nativeAmount: number;    // monthly amount in `currency` (0 if unknown)
 }
 
 let _schemaReady = false;
 
 /**
- * Idempotent CREATE TABLE + seed. Mirrors migration 004 so a fresh worker
- * boot has the catalog available even if the wrangler migration hasn't been
- * applied yet (matches the pattern used by `ensureMiPaywallSchema`).
+ * Idempotent CREATE TABLE + seed. Mirrors migrations 004 + 005 so a fresh
+ * worker boot has the catalog available even if the wrangler migration
+ * hasn't been applied yet (matches the pattern used by `ensureMiPaywallSchema`).
  */
 export async function ensureSubscriptionPlansSchema(env: Env): Promise<void> {
   if (_schemaReady) return;
@@ -43,13 +57,36 @@ export async function ensureSubscriptionPlansSchema(env: Env): Promise<void> {
       "updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_sub_plans_active ON subscription_plans(is_active)');
+    // Task #14 — best-effort ALTERs (idempotent; "duplicate column" is fine).
+    for (const a of [
+      "ALTER TABLE subscription_plans ADD COLUMN currency TEXT NOT NULL DEFAULT 'USD'",
+      'ALTER TABLE subscription_plans ADD COLUMN native_amount REAL',
+      'ALTER TABLE subscription_plans ADD COLUMN native_interval TEXT',
+    ]) {
+      try { await env.DB.exec(a); }
+      catch (e) { if (!/duplicate column/i.test((e as Error).message || '')) throw e; }
+    }
+    await env.DB.exec(
+      'CREATE TABLE IF NOT EXISTS fx_rates (' +
+      'currency TEXT PRIMARY KEY, ' +
+      'usd_rate REAL NOT NULL, ' +
+      "updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
+    );
     // Seed the two legacy plans. INSERT OR IGNORE so admin edits survive boot.
     await env.DB.prepare(
-      "INSERT OR IGNORE INTO subscription_plans (plan_id, monthly_price_usd, display_name) VALUES ('mi_pro_monthly', 49, 'MI Pro · Monthly')",
+      "INSERT OR IGNORE INTO subscription_plans (plan_id, monthly_price_usd, display_name, currency, native_amount, native_interval) VALUES ('mi_pro_monthly', 49, 'MI Pro · Monthly', 'USD', 49, 'month')",
     ).run();
     await env.DB.prepare(
-      "INSERT OR IGNORE INTO subscription_plans (plan_id, monthly_price_usd, display_name) VALUES ('mi_pro_annual', 39, 'MI Pro · Annual')",
+      "INSERT OR IGNORE INTO subscription_plans (plan_id, monthly_price_usd, display_name, currency, native_amount, native_interval) VALUES ('mi_pro_annual', 39, 'MI Pro · Annual', 'USD', 468, 'year')",
     ).run();
+    // Seed FX rates (illustrative; admins refresh by editing rows).
+    const seed: Array<[string, number]> = [
+      ['USD', 1.0], ['EUR', 0.92], ['GBP', 0.79], ['CAD', 1.37], ['AUD', 1.52],
+      ['JPY', 152.0], ['INR', 83.5], ['SGD', 1.35], ['CHF', 0.88], ['SEK', 10.4],
+    ];
+    for (const [c, r] of seed) {
+      await env.DB.prepare('INSERT OR IGNORE INTO fx_rates (currency, usd_rate) VALUES (?, ?)').bind(c, r).run();
+    }
     _schemaReady = true;
   } catch (e) {
     console.warn('[subscriptionPlans] ensureSchema failed:', (e as Error).message);
@@ -57,21 +94,31 @@ export async function ensureSubscriptionPlansSchema(env: Env): Promise<void> {
 }
 
 /**
- * Load every known plan as a `plan_id → monthly_price_usd` map. Analytics
+ * Load every known plan as a `plan_id → PlanPricing` map. Analytics
  * functions call this once at the top of a request and pass the map down,
  * so a single report does at most one DB read for pricing.
  */
-export async function loadPlanPriceMap(env: Env): Promise<Map<string, number>> {
+export async function loadPlanPriceMap(env: Env): Promise<Map<string, PlanPricing>> {
   await ensureSubscriptionPlansSchema(env);
   const sql = getSQL(env);
   try {
-    const rows = (await sql`SELECT plan_id, monthly_price_usd FROM subscription_plans`) as Array<{
-      plan_id: string; monthly_price_usd: number | string;
+    const rows = (await sql`SELECT plan_id, monthly_price_usd, currency, native_amount FROM subscription_plans`) as Array<{
+      plan_id: string;
+      monthly_price_usd: number | string;
+      currency: string | null;
+      native_amount: number | string | null;
     }>;
-    const map = new Map<string, number>();
+    const map = new Map<string, PlanPricing>();
     for (const r of rows) {
-      const n = typeof r.monthly_price_usd === 'number' ? r.monthly_price_usd : Number(r.monthly_price_usd);
-      if (Number.isFinite(n)) map.set(r.plan_id, n);
+      const usd = typeof r.monthly_price_usd === 'number' ? r.monthly_price_usd : Number(r.monthly_price_usd);
+      const native = r.native_amount == null ? usd
+        : (typeof r.native_amount === 'number' ? r.native_amount : Number(r.native_amount));
+      if (!Number.isFinite(usd)) continue;
+      map.set(r.plan_id, {
+        usd,
+        currency: (r.currency || 'USD').toUpperCase(),
+        nativeAmount: Number.isFinite(native) ? native : usd,
+      });
     }
     return map;
   } catch (e) {
@@ -80,9 +127,61 @@ export async function loadPlanPriceMap(env: Env): Promise<Map<string, number>> {
   }
 }
 
-export function priceFor(map: Map<string, number>, plan: string | null | undefined): number {
+/** Returns the monthly USD figure for a plan (0 if unknown). */
+export function priceFor(map: Map<string, PlanPricing>, plan: string | null | undefined): number {
   if (!plan) return 0;
-  return map.get(plan) ?? 0;
+  return map.get(plan)?.usd ?? 0;
+}
+
+/** Returns the monthly amount in the plan's native currency (0 if unknown). */
+export function nativePriceFor(map: Map<string, PlanPricing>, plan: string | null | undefined): { amount: number; currency: string } {
+  const row = plan ? map.get(plan) : undefined;
+  if (!row) return { amount: 0, currency: 'USD' };
+  return { amount: row.nativeAmount, currency: row.currency };
+}
+
+// ---------- FX ----------
+
+export interface FxTable {
+  /** ISO code → "1 USD = N <currency>". Always contains USD=1. */
+  rates: Map<string, number>;
+  /** Most-recent `updated_at` across loaded rows (ISO string), or null if empty. */
+  asOf: string | null;
+}
+
+export async function loadFxRates(env: Env): Promise<FxTable> {
+  await ensureSubscriptionPlansSchema(env);
+  const sql = getSQL(env);
+  const out: FxTable = { rates: new Map([['USD', 1]]), asOf: null };
+  try {
+    const rows = (await sql`SELECT currency, usd_rate, updated_at FROM fx_rates`) as Array<{
+      currency: string; usd_rate: number | string; updated_at: string | null;
+    }>;
+    for (const r of rows) {
+      const code = (r.currency || '').toUpperCase();
+      const rate = typeof r.usd_rate === 'number' ? r.usd_rate : Number(r.usd_rate);
+      if (!code || !Number.isFinite(rate) || rate <= 0) continue;
+      out.rates.set(code, rate);
+      if (r.updated_at && (!out.asOf || r.updated_at > out.asOf)) out.asOf = r.updated_at;
+    }
+  } catch (e) {
+    console.warn('[subscriptionPlans] loadFxRates failed:', (e as Error).message);
+  }
+  return out;
+}
+
+/**
+ * Convert a USD amount to `target` using the FX table. Returns 0 if the
+ * target currency isn't in the table. Rounds to 2 decimals (or 0 for JPY).
+ */
+export function convertFromUsd(usd: number, target: string, fx: FxTable): number {
+  const code = (target || 'USD').toUpperCase();
+  const rate = fx.rates.get(code);
+  if (!rate || !Number.isFinite(usd)) return 0;
+  const raw = usd * rate;
+  const decimals = code === 'JPY' ? 0 : 2;
+  const m = Math.pow(10, decimals);
+  return Math.round(raw * m) / m;
 }
 
 // ---------- Stripe webhook upsert ----------
@@ -90,6 +189,7 @@ export function priceFor(map: Map<string, number>, plan: string | null | undefin
 interface StripePrice {
   id?: string;
   unit_amount?: number | null;
+  currency?: string | null;
   recurring?: { interval?: string; interval_count?: number } | null;
 }
 interface StripeSubscriptionItem { price?: StripePrice | null }
@@ -105,6 +205,9 @@ interface StripeSubscriptionLike {
  * normalised monthly USD figure. Matches the convention the analytics layer
  * uses (annual plans are stored as their monthly equivalent so MRR math is a
  * straight `subscribers * monthly_price`).
+ *
+ * NOTE: This function does NOT FX-convert — it assumes the input is already
+ * USD. The webhook does the FX-conversion separately via `loadFxRates`.
  */
 export function monthlyUsdFromStripePrice(price: StripePrice | null | undefined): number | null {
   if (!price || price.unit_amount == null) return null;
@@ -119,6 +222,15 @@ export function monthlyUsdFromStripePrice(price: StripePrice | null | undefined)
     case 'year':  return Number((dollars / (12 * count)).toFixed(2));
     default:      return Number((dollars / count).toFixed(2));
   }
+}
+
+/**
+ * Convert a Stripe price to a monthly amount in the price's NATIVE currency
+ * (no FX conversion). Used to populate `subscription_plans.native_amount`.
+ */
+export function monthlyNativeFromStripePrice(price: StripePrice | null | undefined): number | null {
+  // Same maths as `monthlyUsdFromStripePrice` — divisions are unit-agnostic.
+  return monthlyUsdFromStripePrice(price);
 }
 
 /**
@@ -138,8 +250,10 @@ export function monthlyUsdFromStripePrice(price: StripePrice | null | undefined)
  *      later rename via the catalog row.
  *
  * Existing rows are NEVER overwritten on price (admins may have set the
- * canonical USD figure manually); only `stripe_price_id` and `updated_at`
- * are refreshed. New rows get the price derived from the Stripe payload.
+ * canonical USD figure manually); only `stripe_price_id`, `currency`,
+ * `native_amount`, `native_interval` and `updated_at` are refreshed. New
+ * rows get the price derived from the Stripe payload, FX-converted to USD
+ * via the `fx_rates` table.
  *
  * Returns the resolved plan_id, or null if no row could be derived.
  */
@@ -151,19 +265,32 @@ export async function upsertPlanFromStripeSubscription(
   const item = subscription.items?.data?.[0];
   const price = (item?.price ?? subscription.plan ?? null) as StripePrice | null;
   if (!price) return null;
-  const monthly = monthlyUsdFromStripePrice(price);
-  if (monthly == null) return null;
+  const native = monthlyNativeFromStripePrice(price);
+  if (native == null) return null;
+  const currency = (price.currency || 'usd').toUpperCase();
+  // FX-normalise to USD for the `monthly_price_usd` column. If the rate is
+  // missing we fall back to assuming the native amount IS USD — better to
+  // under-represent than to drop the plan entirely.
+  await ensureSubscriptionPlansSchema(env);
+  const fx = await loadFxRates(env);
+  const rate = fx.rates.get(currency);
+  const monthlyUsd = rate && rate > 0
+    ? Number((native / rate).toFixed(2))
+    : native;
+  const interval = price.recurring?.interval ?? 'month';
   const planId = preferredPlanId || subscription.metadata?.plan || price.id || null;
   if (!planId) return null;
-  await ensureSubscriptionPlansSchema(env);
   try {
     await env.DB.prepare(
-      'INSERT INTO subscription_plans (plan_id, monthly_price_usd, display_name, stripe_price_id) ' +
-      'VALUES (?, ?, ?, ?) ' +
+      'INSERT INTO subscription_plans (plan_id, monthly_price_usd, display_name, stripe_price_id, currency, native_amount, native_interval) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?) ' +
       'ON CONFLICT(plan_id) DO UPDATE SET ' +
       '  stripe_price_id = excluded.stripe_price_id, ' +
+      '  currency        = excluded.currency, ' +
+      '  native_amount   = excluded.native_amount, ' +
+      '  native_interval = excluded.native_interval, ' +
       "  updated_at = datetime('now')",
-    ).bind(planId, monthly, planId, price.id ?? null).run();
+    ).bind(planId, monthlyUsd, planId, price.id ?? null, currency, native, interval).run();
     return planId;
   } catch (e) {
     console.warn('[subscriptionPlans] upsertPlanFromStripeSubscription failed:', (e as Error).message);

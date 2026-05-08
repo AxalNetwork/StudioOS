@@ -598,15 +598,16 @@ export const api = {
   monitoringCleanup: () => request('/monitoring/cleanup', { method: 'POST' }),
 
   // ---------- Monitoring → Analytics (admin, Task #3) ----------
-  analyticsOverview: (from, to) =>
-    request(`/monitoring/analytics/overview?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
+  analyticsOverview: (from, to, currency = '') =>
+    request(`/monitoring/analytics/overview?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
+  analyticsCurrencies: () => request('/monitoring/analytics/currencies'),
   analyticsCohorts: (metric = 'retention', granularity = 'week') =>
     request(`/monitoring/analytics/cohorts?metric=${metric}&granularity=${granularity}`),
   analyticsUsers: ({ role = '', tier = '', search = '', limit = 50, offset = 0 } = {}) =>
     request(`/monitoring/analytics/users?role=${encodeURIComponent(role)}&tier=${encodeURIComponent(tier)}&search=${encodeURIComponent(search)}&limit=${limit}&offset=${offset}`),
   analyticsUser: (id) => request(`/monitoring/analytics/user/${id}`),
-  analyticsFinancial: (from, to) =>
-    request(`/monitoring/analytics/financial?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
+  analyticsFinancial: (from, to, currency = '') =>
+    request(`/monitoring/analytics/financial?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
   analyticsTechnical: (from, to) =>
     request(`/monitoring/analytics/technical?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
   analyticsExport: (payload) =>

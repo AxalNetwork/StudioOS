@@ -354,6 +354,11 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
     display_name      TEXT,
     stripe_price_id   TEXT,
     is_active         INTEGER NOT NULL DEFAULT 1,
+    -- Task #14 — preserve native Stripe currency so MRR can be displayed in
+    -- the original billing currency without re-querying Stripe.
+    currency          TEXT NOT NULL DEFAULT 'USD',
+    native_amount     REAL,
+    native_interval   TEXT,
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -364,3 +369,17 @@ INSERT OR IGNORE INTO subscription_plans (plan_id, monthly_price_usd, display_na
 VALUES
   ('mi_pro_monthly', 49, 'MI Pro · Monthly'),
   ('mi_pro_annual',  39, 'MI Pro · Annual');
+
+-- Task #14 — FX lookup used by Admin Analytics `?currency=` queries.
+-- Admins refresh rates by editing rows directly; the as-of timestamp is
+-- surfaced in every API response so consumers can judge staleness.
+CREATE TABLE IF NOT EXISTS fx_rates (
+    currency   TEXT PRIMARY KEY,
+    usd_rate   REAL NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+INSERT OR IGNORE INTO fx_rates (currency, usd_rate) VALUES
+  ('USD', 1.0000), ('EUR', 0.9200), ('GBP', 0.7900), ('CAD', 1.3700),
+  ('AUD', 1.5200), ('JPY', 152.0000), ('INR', 83.5000), ('SGD', 1.3500),
+  ('CHF', 0.8800), ('SEK', 10.4000);

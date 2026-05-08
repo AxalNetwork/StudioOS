@@ -11,7 +11,11 @@
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { loadPlanPriceMap, priceFor, ensureSubscriptionPlansSchema } from './subscriptionPlans';
+import {
+  loadPlanPriceMap, priceFor, ensureSubscriptionPlansSchema,
+  loadFxRates, convertFromUsd,
+  type PlanPricing,
+} from './subscriptionPlans';
 
 // ---------- common row helpers (no `any`) ----------
 type SqlRow = Record<string, unknown>;
@@ -64,24 +68,48 @@ export function parseRange(fromQ?: string | null, toQ?: string | null, defaultDa
 //
 // `planPrice` is retained as a thin wrapper for callers that already have
 // a price map in hand.
-export function planPrice(map: Map<string, number>, plan: string | null | undefined): number {
+export function planPrice(map: Map<string, PlanPricing>, plan: string | null | undefined): number {
   return priceFor(map, plan);
+}
+
+// Task #14 — Display-currency helpers. Reports keep all internal math in
+// USD (so plans denominated in different currencies can roll up safely),
+// then convert ONCE on the way out using the `fx_rates` table.
+const ALLOWED_CURRENCIES = new Set([
+  'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR', 'SGD', 'CHF', 'SEK',
+]);
+export function normaliseCurrency(raw: string | null | undefined): string {
+  const c = String(raw || 'USD').toUpperCase();
+  return ALLOWED_CURRENCIES.has(c) ? c : 'USD';
+}
+async function displayContext(env: Env, raw: string | null | undefined) {
+  const currency = normaliseCurrency(raw);
+  const fx = await loadFxRates(env);
+  const conv = (usd: number) => convertFromUsd(usd, currency, fx);
+  return { currency, fx, conv, asOf: fx.asOf };
 }
 
 // ---------- queries ----------
 export interface OverviewReport {
   range: { from: string; to: string; days: number };
   active_users: number; new_signups: number; total_users: number; paid_users: number;
-  conversion_to_paid_pct: number; mrr_usd: number; arr_usd: number;
+  conversion_to_paid_pct: number;
+  // MRR/ARR are reported in USD (always) AND in the requested display currency.
+  // Frontends should prefer `mrr` + `display_currency`; `mrr_usd` is preserved
+  // for back-compat with anything reading the legacy field.
+  mrr_usd: number; arr_usd: number;
+  mrr: number; arr: number;
+  display_currency: string; fx_as_of: string | null;
   churned_subscriptions: number; churn_rate_pct: number; avg_session_minutes: number;
   p50_latency_ms: number; p95_latency_ms: number; error_rate_pct: number; total_requests: number;
   top_pages: Array<{ endpoint: string; hits: number }>;
   daily_active: Array<{ day: string; active: number }>;
 }
 
-export async function loadOverview(env: Env, range: DateRange): Promise<OverviewReport> {
+export async function loadOverview(env: Env, range: DateRange, currency?: string | null): Promise<OverviewReport> {
   const sql = getSQL(env);
   const priceMap = await loadPlanPriceMap(env);
+  const disp = await displayContext(env, currency);
   const active = rows<SqlRow>(await sql`
     SELECT COUNT(DISTINCT user_id) AS c FROM activity_logs
     WHERE user_id IS NOT NULL AND created_at >= ${range.fromIso} AND created_at <= ${range.toIso}
@@ -166,6 +194,10 @@ export async function loadOverview(env: Env, range: DateRange): Promise<Overview
     conversion_to_paid_pct: Number(conversion.toFixed(2)),
     mrr_usd: mrr,
     arr_usd: arr,
+    mrr: disp.conv(mrr),
+    arr: disp.conv(arr),
+    display_currency: disp.currency,
+    fx_as_of: disp.asOf,
     churned_subscriptions: churnedC,
     churn_rate_pct: paidU > 0 ? Number(((churnedC / paidU) * 100).toFixed(2)) : 0,
     avg_session_minutes: avgSessionMin,
@@ -338,30 +370,56 @@ export async function loadUser(env: Env, id: number) {
 
 export interface FinancialReport {
   range: { from: string; to: string };
+  // USD figures kept for back-compat; new `*_display` fields carry the
+  // chosen display currency. Per-tier rows additionally surface the plan's
+  // native currency (what Stripe actually charged).
   total_mrr_usd: number; arr_usd: number; new_mrr_usd: number;
   expansion_mrr_usd: number; churn_mrr_usd: number;
-  mrr_breakdown_by_tier: Array<{ plan: string; subscribers: number; monthly_price_usd: number; mrr_usd: number }>;
-  ltv_by_cohort: Array<{ cohort: string; signups: number; paying: number; estimated_ltv_usd: number }>;
+  total_mrr: number; arr: number; new_mrr: number; churn_mrr: number;
+  display_currency: string; fx_as_of: string | null;
+  mrr_breakdown_by_tier: Array<{
+    plan: string; subscribers: number;
+    monthly_price_usd: number; mrr_usd: number;
+    monthly_price: number; mrr: number;
+    native_currency: string; native_monthly_price: number; native_mrr: number;
+  }>;
+  ltv_by_cohort: Array<{ cohort: string; signups: number; paying: number;
+    estimated_ltv_usd: number; estimated_ltv: number }>;
 }
 
-export async function loadFinancial(env: Env, range: DateRange): Promise<FinancialReport> {
+export async function loadFinancial(env: Env, range: DateRange, currency?: string | null): Promise<FinancialReport> {
   const sql = getSQL(env);
   // Same self-heal as `loadCohorts` revenue mode — the LTV-by-cohort query
   // below joins `subscription_plans` directly.
   await ensureSubscriptionPlansSchema(env);
   const priceMap = await loadPlanPriceMap(env);
+  const disp = await displayContext(env, currency);
   const byTier = rows<SqlRow>(await sql`
     SELECT mi_subscription_plan AS plan, COUNT(*) AS subscribers
     FROM users
     WHERE mi_subscription_status = 'active' AND mi_subscription_plan IS NOT NULL
     GROUP BY mi_subscription_plan
   `);
-  const breakdown = byTier.map(r => ({
-    plan: str(r.plan),
-    subscribers: num(r.subscribers),
-    monthly_price_usd: priceFor(priceMap, str(r.plan)),
-    mrr_usd: priceFor(priceMap, str(r.plan)) * num(r.subscribers),
-  }));
+  const breakdown = byTier.map(r => {
+    const plan = str(r.plan);
+    const subs = num(r.subscribers);
+    const usdPrice = priceFor(priceMap, plan);
+    const usdMrr = usdPrice * subs;
+    const pricing: PlanPricing | undefined = priceMap.get(plan);
+    const nativeCcy = pricing?.currency || 'USD';
+    const nativePrice = pricing?.nativeAmount ?? usdPrice;
+    return {
+      plan,
+      subscribers: subs,
+      monthly_price_usd: usdPrice,
+      mrr_usd: usdMrr,
+      monthly_price: disp.conv(usdPrice),
+      mrr: disp.conv(usdMrr),
+      native_currency: nativeCcy,
+      native_monthly_price: nativePrice,
+      native_mrr: nativePrice * subs,
+    };
+  });
   const totalMrr = breakdown.reduce((a, r) => a + r.mrr_usd, 0);
   const newMrrRows = rows<SqlRow>(await sql`
     SELECT mi_subscription_plan AS plan, COUNT(*) AS c
@@ -395,19 +453,30 @@ export async function loadFinancial(env: Env, range: DateRange): Promise<Financi
       WHERE u.created_at >= datetime('now','-12 months')
       GROUP BY cohort ORDER BY cohort ASC
   `);
-  const ltvByCohort = cohortRows.map(r => ({
-    cohort: str(r.cohort),
-    signups: num(r.signups),
-    paying: num(r.paying),
-    estimated_ltv_usd: num(r.mrr_per_cohort) * 12,
-  }));
+  const ltvByCohort = cohortRows.map(r => {
+    const ltvUsd = num(r.mrr_per_cohort) * 12;
+    return {
+      cohort: str(r.cohort),
+      signups: num(r.signups),
+      paying: num(r.paying),
+      estimated_ltv_usd: ltvUsd,
+      estimated_ltv: disp.conv(ltvUsd),
+    };
+  });
+  const arrUsd = totalMrr * 12;
   return {
     range: { from: range.from, to: range.to },
     total_mrr_usd: totalMrr,
-    arr_usd: totalMrr * 12,
+    arr_usd: arrUsd,
     new_mrr_usd: newMrr,
     expansion_mrr_usd: 0,
     churn_mrr_usd: churnMrr,
+    total_mrr: disp.conv(totalMrr),
+    arr: disp.conv(arrUsd),
+    new_mrr: disp.conv(newMrr),
+    churn_mrr: disp.conv(churnMrr),
+    display_currency: disp.currency,
+    fx_as_of: disp.asOf,
     mrr_breakdown_by_tier: breakdown,
     ltv_by_cohort: ltvByCohort,
   };
@@ -528,6 +597,9 @@ export function reportToCsv(report: string, data: unknown): string {
       { metric: 'conversion_to_paid_pct', value: o.conversion_to_paid_pct },
       { metric: 'mrr_usd', value: o.mrr_usd },
       { metric: 'arr_usd', value: o.arr_usd },
+      { metric: `mrr_${(o.display_currency || 'usd').toLowerCase()}`, value: o.mrr },
+      { metric: `arr_${(o.display_currency || 'usd').toLowerCase()}`, value: o.arr },
+      { metric: 'fx_as_of', value: o.fx_as_of || '' },
       { metric: 'churn_rate_pct', value: o.churn_rate_pct },
       { metric: 'avg_session_minutes', value: o.avg_session_minutes },
       { metric: 'p50_latency_ms', value: o.p50_latency_ms },
@@ -539,8 +611,13 @@ export function reportToCsv(report: string, data: unknown): string {
   }
   if (report === 'financial') {
     const f = d as unknown as FinancialReport;
-    return toCsv(f.mrr_breakdown_by_tier as unknown as CsvRow[], ['plan', 'subscribers', 'monthly_price_usd', 'mrr_usd'])
-      + '\n' + toCsv(f.ltv_by_cohort as unknown as CsvRow[], ['cohort', 'signups', 'paying', 'estimated_ltv_usd']);
+    const header = `# display_currency=${f.display_currency || 'USD'} fx_as_of=${f.fx_as_of || ''}\n`;
+    return header
+      + toCsv(f.mrr_breakdown_by_tier as unknown as CsvRow[],
+          ['plan', 'subscribers', 'native_currency', 'native_monthly_price', 'native_mrr',
+           'monthly_price_usd', 'mrr_usd', 'monthly_price', 'mrr'])
+      + '\n' + toCsv(f.ltv_by_cohort as unknown as CsvRow[],
+          ['cohort', 'signups', 'paying', 'estimated_ltv_usd', 'estimated_ltv']);
   }
   if (report === 'technical') {
     const t = d as unknown as TechnicalReport;
@@ -603,14 +680,22 @@ export function reportToHtml(report: string, data: unknown, range: DateRange): s
     </table>`;
 
   let body = '';
+  // Task #14 — currency-aware money formatter (falls back to USD).
+  const fmtMoney = (amount: number, code: string) => {
+    try {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: code || 'USD', maximumFractionDigits: 0 }).format(amount);
+    } catch { return `${code} ${amount}`; }
+  };
   if (report === 'overview' || report === 'management') {
     const o = (report === 'management' ? d.overview : d) as OverviewReport;
-    body += `<h2>Key metrics</h2>
+    const ccy = o?.display_currency || 'USD';
+    const asOf = o?.fx_as_of ? ` <span style="font-size:9px;color:#888">(FX as of ${esc(o.fx_as_of.slice(0, 10))})</span>` : '';
+    body += `<h2>Key metrics${asOf}</h2>
       <div class="grid">
         <div class="card"><div class="lbl">Active users</div><div class="val">${esc(String(o?.active_users))}</div></div>
         <div class="card"><div class="lbl">New signups</div><div class="val">${esc(String(o?.new_signups))}</div></div>
-        <div class="card"><div class="lbl">MRR</div><div class="val">$${esc(String(o?.mrr_usd))}</div></div>
-        <div class="card"><div class="lbl">ARR</div><div class="val">$${esc(String(o?.arr_usd))}</div></div>
+        <div class="card"><div class="lbl">MRR (${esc(ccy)})</div><div class="val">${esc(fmtMoney(o?.mrr ?? o?.mrr_usd ?? 0, ccy))}</div></div>
+        <div class="card"><div class="lbl">ARR (${esc(ccy)})</div><div class="val">${esc(fmtMoney(o?.arr ?? o?.arr_usd ?? 0, ccy))}</div></div>
         <div class="card"><div class="lbl">Conversion to paid</div><div class="val">${esc(String(o?.conversion_to_paid_pct))}%</div></div>
         <div class="card"><div class="lbl">Churn rate</div><div class="val">${esc(String(o?.churn_rate_pct))}%</div></div>
         <div class="card"><div class="lbl">P50 latency</div><div class="val">${esc(String(o?.p50_latency_ms))}ms</div></div>
@@ -622,11 +707,18 @@ export function reportToHtml(report: string, data: unknown, range: DateRange): s
   }
   if (report === 'financial' || report === 'management') {
     const f = (report === 'management' ? d.financial : d) as FinancialReport;
-    body += `<p><strong>Total MRR:</strong> $${esc(String(f?.total_mrr_usd))} · <strong>ARR:</strong> $${esc(String(f?.arr_usd))}
-             · <strong>New MRR:</strong> $${esc(String(f?.new_mrr_usd))} · <strong>Churn MRR:</strong> $${esc(String(f?.churn_mrr_usd))}</p>`;
-    body += svgBarChart((f?.mrr_breakdown_by_tier || []).map(r => ({ label: r.plan, value: r.mrr_usd })), 'MRR by tier');
-    body += table('MRR breakdown by tier', f?.mrr_breakdown_by_tier as unknown as Array<Record<string, unknown>> || [], ['plan', 'subscribers', 'monthly_price_usd', 'mrr_usd']);
-    body += table('LTV by cohort', f?.ltv_by_cohort as unknown as Array<Record<string, unknown>> || [], ['cohort', 'signups', 'paying', 'estimated_ltv_usd']);
+    const ccy = f?.display_currency || 'USD';
+    const asOf = f?.fx_as_of ? ` <span style="font-size:9px;color:#888">(FX as of ${esc(f.fx_as_of.slice(0, 10))})</span>` : '';
+    body += `<p>Display currency: <strong>${esc(ccy)}</strong>${asOf}</p>`;
+    body += `<p><strong>Total MRR:</strong> ${esc(fmtMoney(f?.total_mrr ?? f?.total_mrr_usd ?? 0, ccy))} ·
+             <strong>ARR:</strong> ${esc(fmtMoney(f?.arr ?? f?.arr_usd ?? 0, ccy))} ·
+             <strong>New MRR:</strong> ${esc(fmtMoney(f?.new_mrr ?? f?.new_mrr_usd ?? 0, ccy))} ·
+             <strong>Churn MRR:</strong> ${esc(fmtMoney(f?.churn_mrr ?? f?.churn_mrr_usd ?? 0, ccy))}</p>`;
+    body += svgBarChart((f?.mrr_breakdown_by_tier || []).map(r => ({ label: r.plan, value: r.mrr ?? r.mrr_usd })), `MRR by tier (${ccy})`);
+    body += table('MRR breakdown by tier', f?.mrr_breakdown_by_tier as unknown as Array<Record<string, unknown>> || [],
+      ['plan', 'subscribers', 'native_currency', 'native_monthly_price', 'native_mrr', 'monthly_price', 'mrr']);
+    body += table('LTV by cohort', f?.ltv_by_cohort as unknown as Array<Record<string, unknown>> || [],
+      ['cohort', 'signups', 'paying', 'estimated_ltv']);
   }
   if (report === 'technical' || report === 'management') {
     const t = (report === 'management' ? d.technical : d) as TechnicalReport;
