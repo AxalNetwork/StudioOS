@@ -77,11 +77,34 @@ CREATE TABLE IF NOT EXISTS users (
     email_verified INTEGER NOT NULL DEFAULT 0,
     verification_token TEXT,
     verification_token_expires TEXT,
+    -- Spin-Out Lab — 4-week guided sprint state for pre-incorporation
+    -- founders. Defaults keep the lab OFF so existing users are unaffected
+    -- until /api/spinout-lab/start fires. `is_incorporated` flips once the
+    -- /exit route runs (or — outside the lab — after a full incorporate
+    -- wizard completes).
+    spinout_lab_active INTEGER NOT NULL DEFAULT 0,
+    spinout_lab_week INTEGER NOT NULL DEFAULT 1,
+    spinout_lab_started_at TEXT,
+    is_incorporated INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_uid ON users(uid);
+
+-- Spin-Out Lab milestone log. One row per (user_id, milestone_key); the
+-- handler only ever issues INSERT OR IGNORE so re-calls are no-ops.
+CREATE TABLE IF NOT EXISTS spinout_lab_milestones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    week INTEGER NOT NULL,
+    milestone_key TEXT NOT NULL,
+    completed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (user_id, milestone_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_spinout_lab_milestones_user
+    ON spinout_lab_milestones(user_id);
 
 CREATE TABLE IF NOT EXISTS projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

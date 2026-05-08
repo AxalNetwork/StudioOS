@@ -1042,3 +1042,17 @@ export const api = {
   // it returns the canonical VCFund list with id/uid/name/total_commitment.
   capitalFundsList: () => request('/capital/funds'),
 };
+
+// Spin-Out Lab — 4-week guided sprint for pre-incorporation founders.
+// Namespaced separately from `api` to keep the surface small and obvious
+// for the call sites that wire milestone completion in feature pages.
+export const spinoutLab = {
+  state: () => request('/spinout-lab/state'),
+  start: () => request('/spinout-lab/start', { method: 'POST' }),
+  complete: (milestone_key) =>
+    request('/spinout-lab/milestone', {
+      method: 'POST',
+      body: JSON.stringify({ milestone_key }),
+    }),
+  exit: () => request('/spinout-lab/exit', { method: 'POST' }),
+};

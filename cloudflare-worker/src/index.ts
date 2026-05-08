@@ -69,6 +69,7 @@ import wellbeingRoutes from './routes/wellbeing';
 import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
 import cofounderRoutes from './routes/cofounder';
+import spinoutLabRoutes from './routes/spinout_lab';
 // T13/T14/T15 — port of FastAPI mentors/partner_office_hours/watchlist/journal/
 // portfolio_health/references/comarketing/company/needs/insights routers.
 import mentorsRoutes from './routes/mentors';
@@ -233,6 +234,8 @@ app.route('/api/wellbeing', wellbeingRoutes);
 app.route('/api/compliance', complianceRoutes);
 app.route('/api/captable', captableRoutes);
 app.route('/api/cofounder', cofounderRoutes);
+// Spin-Out Lab — guided 4-week sprint for pre-incorporation founders.
+app.route('/api/spinout-lab', spinoutLabRoutes);
 // T13 — Mentors + Partner Office Hours.
 app.route('/api/mentors', mentorsRoutes);
 app.route('/api/partner-office-hours', partnerOfficeHoursRoutes);
