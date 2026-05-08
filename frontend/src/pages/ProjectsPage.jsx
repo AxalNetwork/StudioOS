@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Search, ChevronDown, X } from 'lucide-react';
 import { api } from '../lib/api';
+import { safeReadJSON } from '../lib/storage';
 import { StatusBadge, WeekBadge } from './Dashboard';
 import VirtualList from '../components/VirtualList';
 
@@ -15,6 +16,10 @@ export default function ProjectsPage() {
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState('');
   const [form, setForm] = useState({ name: '', description: '', sector: '', founder_email: '', founder_name: '', problem_statement: '', solution: '' });
+  // Founder/investor users always submit projects under their own identity —
+  // hide the founder name/email inputs (worker forces founder_id from JWT).
+  const currentUser = safeReadJSON('user', null);
+  const canPickFounder = currentUser?.role === 'admin' || currentUser?.role === 'partner';
 
   const load = () => {
     setLoading(true);
@@ -54,8 +59,12 @@ export default function ProjectsPage() {
           <div className="grid md:grid-cols-2 gap-4">
             <Input label="Project Name" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
             <SectorSelect value={form.sector} onChange={v => setForm(f => ({ ...f, sector: v }))} />
-            <Input label="Founder Name" value={form.founder_name} onChange={v => setForm(f => ({ ...f, founder_name: v }))} />
-            <Input label="Founder Email" value={form.founder_email} onChange={v => setForm(f => ({ ...f, founder_email: v }))} />
+            {canPickFounder && (
+              <>
+                <Input label="Founder Name" value={form.founder_name} onChange={v => setForm(f => ({ ...f, founder_name: v }))} />
+                <Input label="Founder Email" value={form.founder_email} onChange={v => setForm(f => ({ ...f, founder_email: v }))} />
+              </>
+            )}
             <div className="md:col-span-2">
               <Input label="Description" value={form.description} onChange={v => setForm(f => ({ ...f, description: v }))} />
             </div>

@@ -51,21 +51,57 @@ projects.get('/:id', async (c) => {
   return c.json({ ...project, founder });
 });
 
-async function createProjectHandler(c: any) {
-  await requireAuth(c);
-  const data = await c.req.json();
-  const sql = getSQL(c.env);
-
-  let founderId = null;
-  if (data.founder_email) {
-    const existing = await sql`SELECT id FROM founders WHERE email = ${data.founder_email}`;
+/**
+ * Resolve which founder row a NEW project should be attached to.
+ *
+ *  - Founders are forced onto their OWN founder_id (form values ignored). If
+ *    they don't have one yet, we auto-create the row from their account name +
+ *    email and link it via users.founder_id.
+ *  - Admin / partner / investor look the founder up by the form's
+ *    founder_email (creating a new row if needed). If no email is supplied
+ *    the project ships unattached, matching legacy behaviour.
+ */
+export async function resolveFounderIdForCreate(
+  user: { id: number; role: string; email: string; name?: string | null; founder_id?: number | null },
+  data: { founder_email?: string; founder_name?: string },
+  sql: any,
+): Promise<number | null> {
+  if (user.role === 'founder') {
+    if (user.founder_id) return user.founder_id;
+    const existing = await sql`SELECT id FROM founders WHERE email = ${user.email}`;
+    let founderId: number;
     if (existing.length > 0) {
       founderId = existing[0].id;
     } else {
-      const [f] = await sql`INSERT INTO founders (name, email) VALUES (${data.founder_name || 'Unknown'}, ${data.founder_email}) RETURNING id`;
-      founderId = f.id;
+      // founders.email is UNIQUE — guard against the rare race where two
+      // concurrent first-project creates from the same founder both pass the
+      // SELECT above. The losing INSERT will throw; fall back to a re-SELECT.
+      try {
+        const [f] = await sql`INSERT INTO founders (name, email) VALUES (${user.name || 'Unknown'}, ${user.email}) RETURNING id`;
+        founderId = f.id;
+      } catch (e: any) {
+        if (!/UNIQUE|constraint/i.test(e?.message || '')) throw e;
+        const retry = await sql`SELECT id FROM founders WHERE email = ${user.email}`;
+        if (retry.length === 0) throw e;
+        founderId = retry[0].id;
+      }
     }
+    await sql`UPDATE users SET founder_id = ${founderId} WHERE id = ${user.id}`;
+    return founderId;
   }
+  if (!data.founder_email) return null;
+  const existing = await sql`SELECT id FROM founders WHERE email = ${data.founder_email}`;
+  if (existing.length > 0) return existing[0].id;
+  const [f] = await sql`INSERT INTO founders (name, email) VALUES (${data.founder_name || 'Unknown'}, ${data.founder_email}) RETURNING id`;
+  return f.id;
+}
+
+async function createProjectHandler(c: any) {
+  const user = await requireAuth(c);
+  const data = await c.req.json();
+  const sql = getSQL(c.env);
+
+  const founderId = await resolveFounderIdForCreate(user as any, data, sql);
 
   const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, ${data.stage || 'idea'}, ${founderId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${data.use_of_funds || null}) RETURNING *`;
 
