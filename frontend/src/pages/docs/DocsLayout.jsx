@@ -294,7 +294,7 @@ export default function DocsLayout() {
       </aside>
 
       {/* Mobile: collapsed top search bar (rail hidden on small screens). */}
-      <div className="lg:hidden fixed top-16 inset-x-0 z-30 bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-2">
+      <div className="lg:hidden -mx-4 -mt-4 mb-4 bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-2">
         <div className="relative">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
