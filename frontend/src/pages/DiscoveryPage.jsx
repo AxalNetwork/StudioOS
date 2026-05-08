@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Trash2, MessageSquare, CheckCircle2, XCircle, HelpCircle, AlertCircle, Save, X, FolderPlus } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import { markMilestone } from '../lib/spinoutLabHooks';
 
 const STATUSES = [
   { value: 'validated', label: 'Validated', icon: CheckCircle2, tone: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
@@ -21,6 +23,7 @@ function emptyInterview() {
 }
 
 export default function DiscoveryPage() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState(null);
@@ -96,10 +99,21 @@ export default function DiscoveryPage() {
         hypotheses: editing.hypotheses.filter((h) => (h.hypothesis || '').trim()),
         pains: editing.pains.filter((p) => (p || '').trim()),
       };
+      const isCreate = !editing.id;
       if (editing.id) await api.updateInterview(editing.id, payload);
       else await api.createInterview(projectId, payload);
       setEditing(null);
       await refresh();
+      // Spin-Out Lab W1 — fire `customer_interview_logged_{1,2,3}` for the
+      // first three interviews on this project. `interviews` here was the
+      // pre-refresh list; +1 covers the just-created row. Worker dedups
+      // milestone keys, so re-firing is harmless.
+      if (isCreate) {
+        const n = interviews.length + 1;
+        if (n >= 1 && n <= 3) {
+          await markMilestone(user, `customer_interview_logged_${n}`);
+        }
+      }
     } catch (e) {
       const msg = (e?.message || '').toLowerCase();
       if (e?.status === 404 || msg.includes('not found')) {
