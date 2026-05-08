@@ -1,7 +1,6 @@
 /**
  * Task #3 — Admin analytics endpoints, mounted at /api/monitoring/analytics.
- * Every route is admin-only via requireAdmin (Cloudflare Access perimeter
- * additionally restricts the whole worker in production, see deploy docs).
+ * Every route is admin-only via requireAdmin.
  *
  * Routes:
  *   GET  /overview?from=&to=
@@ -14,10 +13,10 @@
  *   GET  /audit?limit=&offset=          (Recent Exports panel)
  *   GET  /download/:token               (HMAC-gated R2 fetch)
  *
- * R2 storage key: `analytics-exports/<admin_id>/<isoTs>-<rand>.<ext>`
- * Download URL: `${APP_URL or origin}/api/monitoring/analytics/download/<token>`
+ * Storage key: `analytics-exports/<admin_id>/<isoTs>-<rand>.<ext>`
  */
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAdmin } from '../auth';
@@ -27,6 +26,21 @@ import {
   reportToCsv, reportToHtml,
   signDownloadToken, verifyDownloadToken,
 } from '../services/analyticsReports';
+
+type AppCtx = Context<{ Bindings: Env }>;
+type ExportReport = 'overview' | 'users' | 'financial' | 'technical' | 'management';
+
+interface BrowserBinding {
+  fetch: (input: string, init?: RequestInit) => Promise<Response>;
+}
+interface AuditInsert {
+  adminId: number;
+  report: ExportReport;
+  format: string;
+  filtersJson: string;
+  storageKey: string | null;
+  downloadUrl: string;
+}
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -52,8 +66,20 @@ async function ensureSchema(env: Env): Promise<void> {
   }
 }
 
+async function writeAudit(env: Env, a: AuditInsert): Promise<void> {
+  try {
+    const sql = getSQL(env);
+    await sql`
+      INSERT INTO admin_audit_log (admin_user_id, action, report_type, format, filters_json, storage_key, download_url)
+      VALUES (${a.adminId}, 'analytics_export', ${a.report}, ${a.format}, ${a.filtersJson}, ${a.storageKey}, ${a.downloadUrl})
+    `;
+  } catch (e) {
+    console.warn('[analytics] audit insert failed:', (e as Error).message);
+  }
+}
+
 // ---------- read endpoints ----------
-function tryParseRange(c: any): { range: ReturnType<typeof parseRange> } | { err: Response } {
+function tryParseRange(c: AppCtx) {
   try { return { range: parseRange(c.req.query('from'), c.req.query('to')) }; }
   catch (e) {
     if (e instanceof BadRangeError) return { err: c.json({ detail: e.message }, 400) };
@@ -113,7 +139,7 @@ r.get('/audit', async (c) => {
   const sql = getSQL(c.env);
   const limit = clampInt(c.req.query('limit'), 25, 1, 100);
   const offset = clampInt(c.req.query('offset'), 0, 0, 100000);
-  const rows = await sql`
+  const items = await sql`
     SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
            a.action, a.report_type, a.format, a.filters_json,
            a.download_url, a.exported_at
@@ -124,36 +150,43 @@ r.get('/audit', async (c) => {
     LIMIT ${limit} OFFSET ${offset}
   `;
   const totalRow = await sql`SELECT COUNT(*) AS c FROM admin_audit_log WHERE action = 'analytics_export'`;
-  const total = Number((totalRow as any[])[0]?.c || 0);
-  return c.json({ items: rows, total, limit, offset, has_more: offset + (rows as any[]).length < total });
+  const itemsArr = Array.isArray(items) ? items : [];
+  const totalArr = Array.isArray(totalRow) ? totalRow : [];
+  const total = Number((totalArr[0] as { c?: number } | undefined)?.c || 0);
+  return c.json({ items: itemsArr, total, limit, offset, has_more: offset + itemsArr.length < total });
 });
 
 // ---------- export ----------
 r.post('/export', async (c) => {
   const admin = await requireAdmin(c);
   await ensureSchema(c.env);
-  let body: any = {};
-  try { body = await c.req.json(); } catch {}
-  const report = String(body.report || 'overview').toLowerCase();
+  let body: Record<string, unknown> = {};
+  try { body = (await c.req.json()) as Record<string, unknown>; } catch {}
+  const reportRaw = String(body.report || 'overview').toLowerCase();
+  const allowedReports = new Set<ExportReport>(['overview', 'users', 'financial', 'technical', 'management']);
+  if (!allowedReports.has(reportRaw as ExportReport)) return c.json({ detail: 'Invalid report' }, 400);
+  const report = reportRaw as ExportReport;
   const format = (String(body.format || 'csv').toLowerCase() === 'pdf' ? 'pdf' : 'csv') as 'csv' | 'pdf';
-  const allowedReports = new Set(['overview', 'users', 'financial', 'technical', 'management']);
-  if (!allowedReports.has(report)) return c.json({ detail: 'Invalid report' }, 400);
-  let range: ReturnType<typeof parseRange>;
-  try { range = parseRange(body.from || null, body.to || null); }
+  let range;
+  try { range = parseRange(typeof body.from === 'string' ? body.from : null, typeof body.to === 'string' ? body.to : null); }
   catch (e) {
     if (e instanceof BadRangeError) return c.json({ detail: e.message }, 400);
     throw e;
   }
-  const filters = body.filters || {};
+  const filters = (body.filters && typeof body.filters === 'object') ? body.filters as Record<string, unknown> : {};
+  const filtersJson = JSON.stringify({ from: range.from, to: range.to, ...filters });
 
   // Gather data
-  let data: any;
+  let data: unknown;
   if (report === 'overview') data = await loadOverview(c.env, range);
   else if (report === 'financial') data = await loadFinancial(c.env, range);
   else if (report === 'technical') data = await loadTechnical(c.env, range);
   else if (report === 'users') data = await loadUsers(c.env, {
-    role: filters.role || null, tier: filters.tier || null, search: filters.search || null,
-    limit: clampInt(filters.limit, 200, 1, 1000), offset: 0,
+    role: (filters.role as string) || null,
+    tier: (filters.tier as string) || null,
+    search: (filters.search as string) || null,
+    limit: clampInt(String(filters.limit ?? ''), 200, 1, 1000),
+    offset: 0,
   });
   else /* management */ data = {
     overview: await loadOverview(c.env, range),
@@ -162,47 +195,50 @@ r.post('/export', async (c) => {
   };
 
   // Render
-  let bodyStr: string;
+  let bodyStr = '';
+  let pdfBytes: ArrayBuffer | null = null;
   let contentType: string;
   let ext: string;
+
   if (format === 'csv') {
     bodyStr = reportToCsv(report, data);
     contentType = 'text/csv; charset=utf-8';
     ext = 'csv';
   } else {
-    // PDF: render styled HTML. If a Browser Rendering binding (`BROWSER`) is
-    // configured, use it to convert HTML→PDF; otherwise fall back to HTML
-    // (browsers can print-to-PDF). The download URL/extension reflects the
-    // actual artifact so the user is never misled about the format.
+    // PDF requires a Browser Rendering binding. We do NOT silently downgrade
+    // to HTML — return 503 so the caller can pick CSV instead and the audit
+    // record reflects the failure.
     const html = reportToHtml(report, data, range);
-    const browser = (c.env as any).BROWSER;
-    if (browser && typeof browser.fetch === 'function') {
-      try {
-        // Cloudflare Browser Rendering REST contract — POST { html } returns PDF bytes.
-        const res = await browser.fetch('https://browser.local/pdf', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ html }),
-        });
-        if (res.ok) {
-          const buf = await res.arrayBuffer();
-          bodyStr = '';
-          // store as binary below
-          (data as any).__pdfBuf = buf;
-          contentType = 'application/pdf';
-          ext = 'pdf';
-        } else {
-          bodyStr = html; contentType = 'text/html; charset=utf-8'; ext = 'html';
-        }
-      } catch {
-        bodyStr = html; contentType = 'text/html; charset=utf-8'; ext = 'html';
-      }
-    } else {
-      bodyStr = html; contentType = 'text/html; charset=utf-8'; ext = 'html';
+    const browser = (c.env as unknown as { BROWSER?: BrowserBinding }).BROWSER;
+    if (!browser || typeof browser.fetch !== 'function') {
+      await writeAudit(c.env, {
+        adminId: admin.id, report, format: 'pdf_unavailable',
+        filtersJson, storageKey: null, downloadUrl: '',
+      });
+      return c.json({
+        detail: 'PDF rendering not configured: bind Cloudflare Browser Rendering as BROWSER, or export as CSV.',
+      }, 503);
+    }
+    try {
+      const res = await browser.fetch('https://browser.local/pdf', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ html }),
+      });
+      if (!res.ok) throw new Error(`browser rendering returned ${res.status}`);
+      pdfBytes = await res.arrayBuffer();
+      contentType = 'application/pdf';
+      ext = 'pdf';
+    } catch (e) {
+      await writeAudit(c.env, {
+        adminId: admin.id, report, format: 'pdf_failed',
+        filtersJson, storageKey: null, downloadUrl: '',
+      });
+      return c.json({ detail: `PDF rendering failed: ${(e as Error).message}` }, 502);
     }
   }
 
-  // Upload to R2
+  // Build storage key + token
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const rand = crypto.getRandomValues(new Uint8Array(6));
   const randHex = Array.from(rand).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -210,34 +246,32 @@ r.post('/export', async (c) => {
 
   const r2 = c.env.FILES;
   if (!r2) {
-    // No R2 binding — fall back to inline base64 download. This keeps dev
-    // working without R2 wiring.
-    const inline = `data:${contentType};base64,${btoa(bodyStr)}`;
+    // No R2 binding (dev). Inline data: URL fallback. Audit row still recorded.
+    const inline = pdfBytes
+      ? `data:${contentType};base64,${btoa(String.fromCharCode(...new Uint8Array(pdfBytes)))}`
+      : `data:${contentType};base64,${btoa(bodyStr)}`;
+    await writeAudit(c.env, {
+      adminId: admin.id, report, format: ext,
+      filtersJson, storageKey: null, downloadUrl: inline,
+    });
     return c.json({
       download_url: inline,
       storage: 'inline',
       report, format: ext, range: { from: range.from, to: range.to },
     });
   }
-  const r2Body: ArrayBuffer | string = (data as any).__pdfBuf ? (data as any).__pdfBuf as ArrayBuffer : bodyStr;
+
+  const r2Body: ArrayBuffer | string = pdfBytes ?? bodyStr;
   await r2.put(key, r2Body, { httpMetadata: { contentType } });
 
   const token = await signDownloadToken(c.env, key, 86400);
   const origin = new URL(c.req.url).origin;
   const downloadUrl = `${origin}/api/monitoring/analytics/download/${token}`;
 
-  // Audit log
-  try {
-    const sql = getSQL(c.env);
-    await sql`
-      INSERT INTO admin_audit_log (admin_user_id, action, report_type, format, filters_json, storage_key, download_url)
-      VALUES (${admin.id}, 'analytics_export', ${report}, ${ext},
-              ${JSON.stringify({ from: range.from, to: range.to, ...filters })},
-              ${key}, ${downloadUrl})
-    `;
-  } catch (e) {
-    console.warn('[analytics] audit insert failed:', (e as Error).message);
-  }
+  await writeAudit(c.env, {
+    adminId: admin.id, report, format: ext,
+    filtersJson, storageKey: key, downloadUrl,
+  });
 
   return c.json({
     download_url: downloadUrl,
@@ -258,7 +292,6 @@ r.get('/download/:token', async (c) => {
   if (!obj) return c.json({ detail: 'Not found' }, 404);
   const headers = new Headers();
   headers.set('content-type', obj.httpMetadata?.contentType || 'application/octet-stream');
-  // Encourage download with the original filename.
   const filename = v.key.split('/').pop() || 'export';
   headers.set('content-disposition', `attachment; filename="${filename}"`);
   return new Response(obj.body, { status: 200, headers });

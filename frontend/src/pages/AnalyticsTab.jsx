@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   BarChart3, Users as UsersIcon, DollarSign, Cpu, ClipboardList,
   Download, FileText, RefreshCw, EyeOff, Eye, AlertTriangle, ChevronRight,
+  ArrowUp, ArrowDown,
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -24,6 +25,39 @@ function defaultRange() {
 }
 function maskEmail(e, id) { return `user#${id || '?'}`; }
 function maskName(_n, id) { return `User ${id || '?'}`; }
+
+function useSort(initial = { key: null, dir: 'asc' }) {
+  const [sort, setSort] = useState(initial);
+  const toggle = (key) => setSort(s => s.key === key
+    ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' }
+    : { key, dir: 'asc' });
+  const apply = (rows) => {
+    if (!sort.key) return rows;
+    const sign = sort.dir === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const av = a[sort.key]; const bv = b[sort.key];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * sign;
+      return String(av).localeCompare(String(bv)) * sign;
+    });
+  };
+  return { sort, toggle, apply };
+}
+
+function SortHeader({ sort, toggle, k, children, align = 'left' }) {
+  const active = sort.key === k;
+  return (
+    <th className={`px-3 py-2 font-medium select-none cursor-pointer hover:text-violet-700 ${align === 'right' ? 'text-right' : 'text-left'}`}
+        onClick={() => toggle(k)}>
+      <span className="inline-flex items-center gap-0.5">
+        {children}
+        {active ? (sort.dir === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />) : null}
+      </span>
+    </th>
+  );
+}
 
 function Stat({ label, value, sub }) {
   return (
@@ -169,6 +203,7 @@ function UsersSub({ anonymized, onExport, busy }) {
   const [offset, setOffset] = useState(0);
   const [err, setErr] = useState('');
   const [drillId, setDrillId] = useState(null);
+  const sorter = useSort();
   const limit = 25;
   const load = useCallback(() => {
     setErr('');
@@ -208,18 +243,18 @@ function UsersSub({ anonymized, onExport, busy }) {
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-600">
             <tr>
-              <th className="text-left px-3 py-2 font-medium">User</th>
-              <th className="text-left px-3 py-2 font-medium">Role</th>
-              <th className="text-left px-3 py-2 font-medium">Tier</th>
-              <th className="text-right px-3 py-2 font-medium">Sessions 30d</th>
-              <th className="text-right px-3 py-2 font-medium">Projects</th>
-              <th className="text-right px-3 py-2 font-medium">LTV</th>
-              <th className="text-left px-3 py-2 font-medium">Last seen</th>
+              <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="email">User</SortHeader>
+              <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="role">Role</SortHeader>
+              <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="sub_plan">Tier</SortHeader>
+              <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="sessions_30d" align="right">Sessions 30d</SortHeader>
+              <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="project_count" align="right">Projects</SortHeader>
+              <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="lifetime_value_usd" align="right">LTV</SortHeader>
+              <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="last_seen_at">Last seen</SortHeader>
               <th></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {(data?.users || []).map(u => (
+            {sorter.apply(data?.users || []).map(u => (
               <tr key={u.id} className="hover:bg-gray-50">
                 <td className="px-3 py-2">
                   <div className="font-medium text-gray-900">{anonymized ? maskName(u.name, u.id) : (u.name || '—')}</div>
@@ -307,6 +342,20 @@ function UserDrillDown({ id, anonymized, onClose }) {
                   {data.support_tickets.length === 0 && <div className="text-gray-400 px-2 py-2">No tickets.</div>}
                 </div>
               </div>
+              <div>
+                <div className="font-semibold text-gray-700 mb-1">Billing history ({data.billing_history?.length || 0})</div>
+                <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-32 overflow-y-auto">
+                  {(data.billing_history || []).map((b, i) => (
+                    <div key={i} className="flex items-center justify-between px-2 py-1">
+                      <span className="text-gray-700">{b.event_type} · {b.plan}</span>
+                      <span className="text-gray-500">${b.amount_usd} · {b.status}</span>
+                    </div>
+                  ))}
+                  {(!data.billing_history || data.billing_history.length === 0) && (
+                    <div className="text-gray-400 px-2 py-2">No billing events.</div>
+                  )}
+                </div>
+              </div>
               <div className="text-gray-600">Errors logged (90d): <strong>{data.error_count_90d}</strong></div>
             </>
           )}
@@ -367,6 +416,27 @@ function FinancialSub({ range, onExport, busy }) {
           </tbody>
         </table>
       </div>
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="text-sm font-semibold text-gray-900 mb-2">LTV by signup cohort</div>
+        <table className="w-full text-xs">
+          <thead className="text-gray-500">
+            <tr><th className="text-left py-1">Cohort</th><th className="text-right">Signups</th><th className="text-right">Paying</th><th className="text-right">Est. LTV</th></tr>
+          </thead>
+          <tbody>
+            {(data.ltv_by_cohort || []).map((r, i) => (
+              <tr key={i} className="border-t border-gray-100">
+                <td className="py-1 font-mono">{r.cohort}</td>
+                <td className="text-right">{r.signups}</td>
+                <td className="text-right">{r.paying}</td>
+                <td className="text-right">{fmt$(r.estimated_ltv_usd)}</td>
+              </tr>
+            ))}
+            {(data.ltv_by_cohort || []).length === 0 && (
+              <tr><td colSpan={4} className="text-center py-3 text-gray-400">No cohort data.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -380,6 +450,11 @@ function TechnicalSub({ range, onExport, busy }) {
   }, [range.from, range.to]);
   if (err) return <div className="text-sm text-red-600">{err}</div>;
   if (!data) return <div className="text-sm text-gray-500 py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" /> Loading…</div>;
+  return <TechnicalView data={data} onExport={onExport} busy={busy} />;
+}
+
+function TechnicalView({ data, onExport, busy }) {
+  const routeSorter = useSort({ key: 'hits', dir: 'desc' });
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end"><ExportButtons onExport={onExport} busy={busy} /></div>
@@ -394,17 +469,17 @@ function TechnicalSub({ range, onExport, busy }) {
         <table className="w-full text-xs">
           <thead className="text-gray-500">
             <tr>
-              <th className="text-left py-1">Endpoint</th>
-              <th className="text-right">Hits</th>
-              <th className="text-right">P50</th>
-              <th className="text-right">P95</th>
-              <th className="text-right">P99</th>
-              <th className="text-right">5xx</th>
-              <th className="text-right">Err %</th>
+              <SortHeader sort={routeSorter.sort} toggle={routeSorter.toggle} k="endpoint">Endpoint</SortHeader>
+              <SortHeader sort={routeSorter.sort} toggle={routeSorter.toggle} k="hits" align="right">Hits</SortHeader>
+              <SortHeader sort={routeSorter.sort} toggle={routeSorter.toggle} k="p50_ms" align="right">P50</SortHeader>
+              <SortHeader sort={routeSorter.sort} toggle={routeSorter.toggle} k="p95_ms" align="right">P95</SortHeader>
+              <SortHeader sort={routeSorter.sort} toggle={routeSorter.toggle} k="p99_ms" align="right">P99</SortHeader>
+              <SortHeader sort={routeSorter.sort} toggle={routeSorter.toggle} k="errors_5xx" align="right">5xx</SortHeader>
+              <SortHeader sort={routeSorter.sort} toggle={routeSorter.toggle} k="error_rate_pct" align="right">Err %</SortHeader>
             </tr>
           </thead>
           <tbody>
-            {data.by_route.map((r, i) => (
+            {routeSorter.apply(data.by_route).map((r, i) => (
               <tr key={i} className="border-t border-gray-100">
                 <td className="py-1 font-mono truncate max-w-xs">{r.endpoint}</td>
                 <td className="text-right">{Number(r.hits).toLocaleString()}</td>
@@ -416,6 +491,26 @@ function TechnicalSub({ range, onExport, busy }) {
               </tr>
             ))}
             {data.by_route.length === 0 && <tr><td colSpan={7} className="text-center py-3 text-gray-400">No traffic.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="text-sm font-semibold text-gray-900 mb-2">Slow queries (highest P95)</div>
+        <table className="w-full text-xs">
+          <thead className="text-gray-500">
+            <tr><th className="text-left py-1">Endpoint</th><th className="text-right">P95</th><th className="text-right">Hits</th></tr>
+          </thead>
+          <tbody>
+            {(data.slow_queries || []).map((s, i) => (
+              <tr key={i} className="border-t border-gray-100">
+                <td className="py-1 font-mono truncate max-w-md">{s.endpoint}</td>
+                <td className="text-right">{s.p95_ms}ms</td>
+                <td className="text-right">{Number(s.hits).toLocaleString()}</td>
+              </tr>
+            ))}
+            {(data.slow_queries || []).length === 0 && (
+              <tr><td colSpan={3} className="text-center py-3 text-gray-400">No data.</td></tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -486,12 +581,15 @@ export default function AnalyticsTab() {
       });
       setAuditKey(k => k + 1);
       if (res.download_url) {
-        // Open in new tab; for inline (data:) it triggers a download depending on browser.
         window.open(res.download_url, '_blank', 'noopener,noreferrer');
         setExportNote(`Export ready · ${res.format?.toUpperCase()} · expires in 24h`);
       }
     } catch (e) {
-      setExportNote(e?.message || 'Export failed');
+      setAuditKey(k => k + 1);
+      const msg = e?.message || 'Export failed';
+      setExportNote(format === 'pdf' && /503|not configured|rendering/i.test(msg)
+        ? 'PDF rendering is not configured on this environment. Try CSV.'
+        : msg);
     } finally {
       setExporting(false);
     }
