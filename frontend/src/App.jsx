@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
@@ -7,9 +7,10 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
-  ChevronDown, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock, Calendar,
-  Settings as SettingsIcon, PieChart as PieIcon, Heart, Bookmark, Megaphone, BookOpen
+  ChevronDown, ChevronRight, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock, Calendar,
+  Settings as SettingsIcon, PieChart as PieIcon, Heart, Bookmark, Megaphone, BookOpen, Search
 } from 'lucide-react';
+import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier } from './sidebarConfig';
 import { api } from './lib/api';
 import SpinoutLabSidebar from './components/SpinoutLabSidebar';
 import Dashboard from './pages/Dashboard';
@@ -100,237 +101,7 @@ import CommandPalette from './components/CommandPalette';
 import InstallPrompt from './components/InstallPrompt';
 import useInactivityTimeout from './hooks/useInactivityTimeout';
 
-// Item shapes:
-//   { to, icon, label }                         -> nav link
-//   { section: 'Core' }                         -> section header
-//   { divider: true }                           -> horizontal rule
-const NAV_BY_ROLE = {
-  admin: [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/admin', icon: Shield, label: 'Admin Console' },
-
-    { section: 'Core' },
-    { to: '/projects', icon: Zap, label: 'Projects' },
-    { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
-    { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
-    { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
-
-    { section: 'Intelligence' },
-    { to: '/scoring', icon: Target, label: 'Scoring Engine' },
-    { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
-    { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
-    { to: '/matches', icon: Sparkles, label: 'AI Matches' },
-    { to: '/deals', icon: Handshake, label: 'Deal Flow' },
-
-    { section: 'Network' },
-    { to: '/partners', icon: Users, label: 'Partners' },
-    { to: '/refer', icon: Share2, label: 'Refer & Earn' },
-    { to: '/relationships', icon: Handshake, label: 'Relationships' },
-    { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
-
-    { section: 'Capital & Liquidity' },
-    { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
-    { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
-    { to: '/payouts', icon: Wallet, label: 'Payouts' },
-    { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
-    { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
-    { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
-    { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
-
-    { section: 'Legal & Compliance' },
-    { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-    { to: '/incorporate', icon: Scale, label: 'Incorporate' },
-    { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
-    { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker' },
-    { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
-    { to: '/trust', icon: Lock, label: 'Trust Center' },
-    { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
-
-    { section: 'Advanced' },
-    { to: '/monitoring', icon: Activity, label: 'Monitoring' },
-    { to: '/activity', icon: Activity, label: 'Activity Log' },
-    { to: '/tickets', icon: Ticket, label: 'Support' },
-    { to: '/integrations', icon: Plug, label: 'Integrations' },
-    { to: '/marketplace', icon: Briefcase, label: 'Marketplace' },
-    { to: '/services', icon: Package, label: 'Service Catalogue' },
-    { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
-    { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
-    { to: '/partner/office-hours', icon: Calendar, label: 'Partner Office Hours' },
-    { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing Review' },
-
-    { section: 'Portals' },
-    { to: '/founder', icon: Rocket, label: 'Founder Portal' },
-    { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
-
-    { divider: true },
-    { to: '/docs', icon: BookOpen, label: 'Documentation' },
-    { to: '/settings', icon: SettingsIcon, label: 'Settings' },
-  ],
-
-  founder: [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-
-    { section: 'Core' },
-    { to: '/projects', icon: Zap, label: 'Projects' },
-    { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
-    { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
-    { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
-
-    { section: 'Intelligence' },
-    { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
-    { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
-    { to: '/build/deck', icon: Sparkles, label: 'Pitch Deck' },
-    { to: '/build/financials', icon: DollarSign, label: 'Financial Model' },
-    { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
-    { to: '/build/roadmap', icon: Layers, label: 'Roadmap' },
-    { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
-    { to: '/build/captable', icon: PieIcon, label: 'Cap Table' },
-
-    { section: 'Legal & Compliance' },
-    { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-    { to: '/incorporate', icon: Scale, label: 'Incorporate' },
-    { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
-    { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker' },
-    { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
-    { to: '/trust', icon: Lock, label: 'Trust Center' },
-
-    { section: 'Wellbeing' },
-    { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
-
-    { section: 'Network & Growth' },
-    { to: '/services', icon: Package, label: 'Service Catalogue' },
-    { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
-    { to: '/refer', icon: Share2, label: 'Refer & Earn' },
-    { to: '/relationships', icon: Handshake, label: 'Relationships' },
-    { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
-
-    { section: 'Capital & Liquidity' },
-    { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
-    { to: '/payouts', icon: Wallet, label: 'Payouts' },
-
-    { section: 'Support' },
-    { to: '/activity', icon: Activity, label: 'Activity Log' },
-    { to: '/tickets', icon: Ticket, label: 'Support' },
-    // KYC intentionally hidden from founders. Identity verification is only
-    // mandatory at the moment a founder signs binding incorporation/SAFE
-    // docs — the signing endpoints enforce that server-side and the eSign
-    // page surfaces a banner with a link to /kyc when needed. The /kyc
-    // route itself remains reachable by direct URL.
-
-    { divider: true },
-    { to: '/calendar', icon: Calendar, label: 'Calendar' },
-    { to: '/cofounder', icon: Users, label: 'Find a Co-founder' },
-    { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
-    { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
-    { to: '/founder', icon: Rocket, label: 'Founder Portal', highlight: true },
-    { to: '/docs', icon: BookOpen, label: 'Documentation' },
-    { to: '/settings', icon: SettingsIcon, label: 'Settings' },
-  ],
-
-  partner: [
-    { section: 'Intelligence' },
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/scoring', icon: Target, label: 'Scoring Engine' },
-    { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
-    { to: '/matches', icon: Sparkles, label: 'AI Matches' },
-    { to: '/deals', icon: Handshake, label: 'Deal Flow' },
-
-    { section: 'Core' },
-    { to: '/projects', icon: Zap, label: 'Projects' },
-    { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
-
-    { section: 'Network' },
-    { to: '/services', icon: Package, label: 'My Service Catalogue' },
-    { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
-    { to: '/partners', icon: Users, label: 'Partners' },
-    { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
-    { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
-    { to: '/refer', icon: Share2, label: 'Refer & Earn' },
-    { to: '/relationships', icon: Handshake, label: 'Relationships' },
-    { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
-
-    { section: 'Capital & Liquidity' },
-    // Phase 0.1 — /capital and /funds are investor-only LP surfaces; partners
-    // see liquidity + payouts (their commission/exit surface).
-    { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
-    { to: '/payouts', icon: Wallet, label: 'Payouts' },
-    { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
-    { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
-
-    { section: 'Legal & Compliance' },
-    { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-
-    { section: 'Support' },
-    { to: '/activity', icon: Activity, label: 'Activity Log' },
-    { to: '/tickets', icon: Ticket, label: 'Support' },
-    { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
-    { to: '/trust', icon: Lock, label: 'Trust Center' },
-
-    { divider: true },
-    { to: '/calendar', icon: Calendar, label: 'Calendar' },
-    { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
-    { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal', highlight: true },
-    { to: '/docs', icon: BookOpen, label: 'Documentation' },
-    { to: '/settings', icon: SettingsIcon, label: 'Settings' },
-  ],
-
-  // Phase 0.1 — investor lane. Capital-allocator nav: scoring, deal flow,
-  // matches, market intel, capital, liquidity, funds, legal-capital. No
-  // partner-side payouts/relationships/refer surface — that's service-provider
-  // territory.
-  investor: [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-
-    { section: 'Intelligence' },
-    { to: '/scoring', icon: Target, label: 'Scoring Engine' },
-    { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
-    { to: '/matches', icon: Sparkles, label: 'AI Matches' },
-    { to: '/deals', icon: Handshake, label: 'Deal Flow' },
-
-    { section: 'Pipeline' },
-    { to: '/projects', icon: Zap, label: 'Projects' },
-    { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
-
-    { section: 'Capital & Liquidity' },
-    { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
-    { to: '/funds', icon: TrendingUp, label: 'Funds' },
-    { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
-    { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
-    { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
-    { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
-    { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
-
-    { section: 'Legal & Compliance' },
-    { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-    { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
-    { to: '/trust', icon: Lock, label: 'Trust Center' },
-
-    { section: 'Support' },
-    { to: '/activity', icon: Activity, label: 'Activity Log' },
-    { to: '/tickets', icon: Ticket, label: 'Support' },
-
-    { divider: true },
-    { to: '/calendar', icon: Calendar, label: 'Calendar' },
-    { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
-    { to: '/partner-portal', icon: UserCircle, label: 'Investor Portal', highlight: true },
-    { to: '/docs', icon: BookOpen, label: 'Documentation' },
-    { to: '/settings', icon: SettingsIcon, label: 'Settings' },
-  ],
-
-  // Task #35 — mentor lane. Manages own office hours + reviews mentees.
-  mentor: [
-    { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
-    { to: '/calendar', icon: Calendar, label: 'Calendar' },
-    { to: '/mentors', icon: UserCircle, label: 'Mentor Directory' },
-    { section: 'Account' },
-    { to: '/tickets', icon: Ticket, label: 'Support' },
-    { to: '/activity', icon: Activity, label: 'Activity Log' },
-    { divider: true },
-    { to: '/calendar', icon: Calendar, label: 'Calendar' },
-    { to: '/docs', icon: BookOpen, label: 'Documentation' },
-    { to: '/settings', icon: SettingsIcon, label: 'Settings' },
-  ],
-};
+// Phase B · Prompt 5 — sidebar groups now live in `frontend/src/sidebarConfig.js`.
 
 const ROLE_LABELS = {
   admin: 'Admin',
@@ -359,24 +130,163 @@ const ROLE_DEFAULT_PATH = {
 const ViewModeContext = createContext(null);
 export const useViewMode = () => useContext(ViewModeContext);
 
-function getNavItems(role, primaryPersonaId) {
-  const base = NAV_BY_ROLE[role] || NAV_BY_ROLE.founder;
+function getSidebarGroups(role, primaryPersonaId, user) {
+  const base = SIDEBAR_GROUPS[role] || SIDEBAR_GROUPS.founder;
+  // Apply tier gating per group (stub passes everything through today;
+  // Phase C will swap `hasTier` for the real subscription check).
+  const groups = base
+    .map((g) => ({ ...g, items: filterItemsByTier(g.items, user) }))
+    .filter((g) => (g.items || []).length > 0);
+
+  // Persona-specific deep-links surface as their own collapsible group
+  // inserted right after Home, skipping anything the role already shows
+  // so we never duplicate a row.
   const persona = primaryPersonaId ? PERSONA_LOOKUP[primaryPersonaId] : null;
   if (!persona || !Array.isArray(persona.nav_extras) || persona.nav_extras.length === 0) {
-    return base;
+    return groups;
   }
-  // Surface persona-specific deep-links above the divider, but skip ones the
-  // role's nav already exposes so we never produce duplicate sidebar rows.
-  const existingPaths = new Set(base.filter((i) => i.to).map((i) => i.to));
+  const existingPaths = new Set();
+  groups.forEach((g) => g.items.forEach((it) => existingPaths.add(it.to)));
   const extras = persona.nav_extras.filter((e) => !existingPaths.has(e.to));
-  if (extras.length === 0) return base;
-  const dividerIdx = base.findIndex((i) => i.divider);
-  const insertAt = dividerIdx === -1 ? base.length : dividerIdx;
-  const personaSection = [
-    { section: `For ${persona.label}` },
-    ...extras.map((e) => ({ to: e.to, icon: Sparkles, label: e.label })),
-  ];
-  return [...base.slice(0, insertAt), ...personaSection, ...base.slice(insertAt)];
+  if (extras.length === 0) return groups;
+  const personaGroup = {
+    key: `persona-${persona.id || primaryPersonaId}`,
+    label: `For ${persona.label}`,
+    items: extras.map((e) => ({ to: e.to, icon: Sparkles, label: e.label })),
+  };
+  // Insert after the Home group (index 0) so personas always sit near the top.
+  return [groups[0], personaGroup, ...groups.slice(1)].filter(Boolean);
+}
+
+// Highlight matching substring inside a label. Returns a JSX-friendly
+// fragment when there's a match, otherwise the plain label.
+function highlightMatch(label, query) {
+  if (!query) return label;
+  const lower = label.toLowerCase();
+  const idx = lower.indexOf(query.toLowerCase());
+  if (idx === -1) return label;
+  return (
+    <>
+      {label.slice(0, idx)}
+      <mark className="bg-yellow-200 text-gray-900 rounded px-0.5">
+        {label.slice(idx, idx + query.length)}
+      </mark>
+      {label.slice(idx + query.length)}
+    </>
+  );
+}
+
+function SidebarNav({ groups, role, onNavigate }) {
+  const [query, setQuery] = useState('');
+  // Persisted open-state per group key. We seed once from
+  // localStorage merged with `defaultOpenGroups()` so first-time users
+  // land with Home + the first content group expanded.
+  const [openKeys, setOpenKeys] = useState(() => {
+    const stored = safeReadJSON('sidebar_open_groups');
+    if (stored && typeof stored === 'object') {
+      return new Set(Object.keys(stored).filter((k) => stored[k]));
+    }
+    // Seed defaults from the first role we render — refined per render below.
+    return new Set();
+  });
+  const [seeded, setSeeded] = useState(false);
+
+  // Lazy-seed defaults once we know the role's group keys (groups change
+  // when the admin toggles "View as"). We only seed when localStorage
+  // had nothing for us (first visit).
+  useEffect(() => {
+    if (seeded) return;
+    const stored = safeReadJSON('sidebar_open_groups');
+    if (stored && typeof stored === 'object' && Object.keys(stored).length > 0) {
+      setSeeded(true);
+      return;
+    }
+    const defaults = role ? defaultOpenGroups(role) : new Set(groups.slice(0, 2).map((g) => g.key));
+    setOpenKeys(defaults);
+    setSeeded(true);
+  }, [groups, role, seeded]);
+
+  const persistOpen = useCallback((next) => {
+    const obj = {};
+    next.forEach((k) => { obj[k] = true; });
+    try { localStorage.setItem('sidebar_open_groups', JSON.stringify(obj)); } catch { /* ignore */ }
+  }, []);
+
+  const toggleGroup = useCallback((key) => {
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      persistOpen(next);
+      return next;
+    });
+  }, [persistOpen]);
+
+  const q = query.trim().toLowerCase();
+  // When the user types, force-expand any group with a match so the
+  // matching items are visible without manual clicking.
+  const effectiveOpen = q
+    ? new Set(groups.filter((g) => g.items.some((it) => it.label.toLowerCase().includes(q))).map((g) => g.key))
+    : openKeys;
+
+  return (
+    <nav className="flex-1 py-3 overflow-y-auto" aria-label="Primary navigation">
+      <div className="px-3 pb-2">
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search…"
+            aria-label="Search sidebar"
+            className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400"
+          />
+        </div>
+      </div>
+      {groups.map((group) => {
+        const visibleItems = q
+          ? group.items.filter((it) => it.label.toLowerCase().includes(q))
+          : group.items;
+        if (q && visibleItems.length === 0) return null;
+        const isOpen = effectiveOpen.has(group.key);
+        return (
+          <div key={group.key} className="mb-0.5">
+            <button
+              type="button"
+              onClick={() => toggleGroup(group.key)}
+              aria-expanded={isOpen}
+              className="w-full flex items-center gap-1 px-5 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600"
+            >
+              {isOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+              <span>{group.label}</span>
+            </button>
+            {isOpen && visibleItems.map((item) => {
+              const { to, icon: Icon, label, highlight } = item;
+              return (
+                <NavLink
+                  key={to}
+                  to={to}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
+                      isActive
+                        ? 'text-violet-600 bg-violet-50 border-r-2 border-violet-600'
+                        : highlight
+                          ? 'text-violet-700 font-medium bg-violet-50/60 hover:bg-violet-100'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    }`
+                  }
+                >
+                  {Icon && <Icon size={16} />}
+                  <span className="truncate">{highlightMatch(label, q)}</span>
+                </NavLink>
+              );
+            })}
+          </div>
+        );
+      })}
+    </nav>
+  );
 }
 
 function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, impersonatedUser }) {
@@ -445,7 +355,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isAdmin = (realUser || user)?.role === 'admin';
   const activeRole = isImpersonating ? user?.role : (isAdmin ? viewMode : user?.role);
-  const navItems = getNavItems(activeRole || 'founder', primaryPersonaId);
+  const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
   // While the founder is in the Spin-Out Lab the sidebar collapses to the
   // week-gated feature list. The standard nav returns the moment
   // `spinout_lab_active` flips back to 0 (Week 4 auto-exit).
@@ -501,43 +411,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             {inSpinoutLab ? (
               <SpinoutLabSidebar onNavigate={() => setSidebarOpen(false)} />
             ) : (
-            <nav className="flex-1 py-3 overflow-y-auto">
-              {navItems.map((item, idx) => {
-                if (item.section) {
-                  return (
-                    <div
-                      key={`section-${idx}`}
-                      className="px-5 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400"
-                    >
-                      {item.section}
-                    </div>
-                  );
-                }
-                if (item.divider) {
-                  return <div key={`divider-${idx}`} className="mx-5 my-2 border-t border-gray-200" />;
-                }
-                const { to, icon: Icon, label, highlight } = item;
-                return (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    onClick={() => setSidebarOpen(false)}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
-                        isActive
-                          ? 'text-violet-600 bg-violet-50 border-r-2 border-violet-600'
-                          : highlight
-                            ? 'text-violet-700 font-medium bg-violet-50/60 hover:bg-violet-100'
-                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                      }`
-                    }
-                  >
-                    <Icon size={16} />
-                    {label}
-                  </NavLink>
-                );
-              })}
-            </nav>
+              <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={() => setSidebarOpen(false)} />
             )}
             <div className="px-5 py-3 border-t border-gray-200">
               {user && (
