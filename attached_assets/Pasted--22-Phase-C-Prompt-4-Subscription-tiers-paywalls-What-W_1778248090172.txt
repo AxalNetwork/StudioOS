@@ -1,0 +1,35 @@
+#22 - Phase C · Prompt 4 — Subscription tiers + paywalls
+What & Why
+Introduce real subscription tiers (Free / Growth / Studio) and replace Prompt 5's stub hasTier() helper with a real check driven by the user's current tier. Add server-side gates on tier-restricted routes and a client-side paywall component on tier-restricted pages. Spin-Out Lab founders bypass all paywalls while their lab is active (the 30-day sprint) — that integration ships in Phase C / Prompt 3.
+
+Done looks like
+A user's current tier is fetched on auth and exposed via context.
+Sidebar requiredTier items are hidden / locked correctly per tier.
+Tier-gated routes return 402-style errors server-side for users without the required tier; the frontend shows a paywall CTA.
+Billing tab in Settings shows current tier, renewal date, payment method, invoices, and a manage-subscription link.
+Stripe checkout (or the existing billing integration) upgrades the user and reflects the new tier without re-login.
+Spin-Out Lab active users (user.spinout_lab_active === 1) bypass all client + server paywalls.
+npm run build + worker tsc --noEmit clean.
+Out of scope
+Annual vs monthly pricing toggles, coupon codes, dunning workflows.
+Team / organization seats.
+Re-laying out the sidebar (Prompt 5 already owns layout; this only swaps the stub hasTier() implementation).
+Steps
+Tier model — Add users.subscription_tier (or equivalent) and any tier-related billing columns as a new migration.
+Real hasTier() — Replace the Prompt 5 stub with a check against the auth context's tier. Sidebar visibility now reflects real entitlements.
+Server gates — Add a requireTier(tier) helper and apply it to tier-restricted worker routes; return a structured 402 payload the frontend can render as a paywall.
+Paywall component — Reusable component shown on locked pages with upgrade CTA hitting Stripe checkout.
+Lab bypass — requireTier and hasTier() both treat spinout_lab_active === 1 as a blanket pass during the sprint.
+Settings/Billing tab — Implement the Billing tab placeholder from Prompt 6: current tier, renewal, invoices, manage-subscription.
+Verify — Free → Growth → Studio upgrade round-trip, paywall render on a locked feature, lab user bypass confirmed.
+Relevant files
+frontend/src/App.jsx
+frontend/src/hooks/useAuthSync.jsx
+cloudflare-worker/src/routes/billing.ts
+cloudflare-worker/src/auth.ts
+cloudflare-worker/src/schema.sql
+cloudflare-worker/sql/migrations/
+Dependencies
+
+Phase B · Prompt 7 — Documentation rewrite
+Main

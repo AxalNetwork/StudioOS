@@ -1,0 +1,33 @@
+#24 - Phase D · Prompt 8 — Admin analytics on Monitoring page
+What & Why
+Add an admin-only "User Analytics" tab to the Monitoring page with overview / users / financial / technical / management sub-tabs, backed by new admin-gated worker routes. Each sub-tab supports CSV + PDF export to an R2-presigned URL and writes an audit row.
+
+Done looks like
+Admin sees an Analytics tab with five sub-tabs; non-admins get 403.
+Overview shows real numbers (not zeros); MRR matches Stripe.
+CSV export downloads with the documented columns per sub-tab.
+PDF export renders a styled report (logo, date range, sections, charts as images) via a server-side renderer.
+All exports recorded in admin_audit_log and surfaced in a "Recent Exports" panel.
+Anonymized-view toggle hides emails/names but keeps IDs.
+npm run build + worker tsc --noEmit clean.
+Out of scope
+Net-new product analytics events beyond what's already captured.
+Real-time dashboards (poll-on-load is fine).
+Non-admin / partner / investor analytics surfaces.
+Steps
+Worker routes — Implement the seven /api/monitoring/analytics/* endpoints per the brief, all guarded by requireAdmin + Cloudflare Access. Use Workers Analytics Engine + D1 + R2 logs as data sources. Concrete row types, no any.
+Audit logging — Every export request writes to admin_audit_log with admin_user_id, report_type, filters_json, exported_at, download_url.
+PDF rendering — Server-side HTML→PDF via Cloudflare Browser Rendering or equivalent service; charts as images in the report template.
+R2 presigned download — Export endpoint returns a 24h presigned URL the client redirects to.
+Frontend tab — Add the Analytics tab with sub-tabs, recharts visuals, sortable + paginated tables, date-range picker (default last 30 days), CSV + PDF buttons per sub-tab, anonymized-view toggle, and a Recent Exports panel reading from the audit log.
+Verify — Admin sees real numbers; non-admin gets 403; CSV + PDF exports download successfully and appear in Recent Exports.
+Relevant files
+frontend/src/pages/MonitoringPage.jsx
+cloudflare-worker/src/routes/monitoring.ts
+cloudflare-worker/src/auth.ts
+cloudflare-worker/src/schema.sql
+attached_assets/Pasted-Add-a-User-Analytics-tab-to-frontend-src-pages-Monitori_1778244116524.txt
+Dependencies
+
+Phase C · Prompt 3 — Spin-Out Lab × Tiers (bypass + polish)
+Main
