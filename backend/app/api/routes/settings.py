@@ -1088,3 +1088,244 @@ def data_export(user: User = Depends(get_current_user), session: Session = Depen
             "content-disposition": f'attachment; filename="axal-data-export-{user.uid or user.id}.json"',
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Task #1 / Task #20 — Settings sub-routes (privacy, appearance, notifications,
+# v2 read). Mirrors `cloudflare-worker/src/routes/settings.ts` so the dev
+# backend serves the same shape as production. Backed by a new `user_settings`
+# table with one row per user, lazily upserted on first read.
+# ---------------------------------------------------------------------------
+
+_user_settings_migrated = False
+
+def _ensure_user_settings_schema(session: Session) -> None:
+    global _user_settings_migrated
+    if _user_settings_migrated:
+        return
+    try:
+        session.exec(text(
+            """
+            CREATE TABLE IF NOT EXISTS user_settings (
+                user_id INTEGER PRIMARY KEY,
+                timezone TEXT DEFAULT 'UTC',
+                locale TEXT DEFAULT 'en',
+                pronouns TEXT,
+                profile_slug TEXT UNIQUE,
+                visibility TEXT DEFAULT 'network',
+                show_in_directory INTEGER DEFAULT 1,
+                discoverable INTEGER DEFAULT 1,
+                digest_frequency TEXT DEFAULT 'weekly',
+                notif_categories_email TEXT DEFAULT '{}',
+                notif_categories_inapp TEXT DEFAULT '{}',
+                quiet_hours_start TEXT,
+                quiet_hours_end TEXT,
+                quiet_hours_tz TEXT DEFAULT 'UTC',
+                theme TEXT DEFAULT 'system',
+                density TEXT DEFAULT 'comfy',
+                sidebar_default TEXT DEFAULT 'expanded',
+                feature_flags TEXT DEFAULT '{}',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        ))
+        session.commit()
+    except Exception:
+        session.rollback()
+    _user_settings_migrated = True
+
+
+_DEFAULT_USER_SETTINGS = {
+    "timezone": "UTC",
+    "locale": "en",
+    "pronouns": None,
+    "profile_slug": None,
+    "visibility": "network",
+    "show_in_directory": 1,
+    "discoverable": 1,
+    "digest_frequency": "weekly",
+    "notif_categories_email": "{}",
+    "notif_categories_inapp": "{}",
+    "quiet_hours_start": None,
+    "quiet_hours_end": None,
+    "quiet_hours_tz": "UTC",
+    "theme": "system",
+    "density": "comfy",
+    "sidebar_default": "expanded",
+    "feature_flags": "{}",
+}
+
+_ALLOWED_VISIBILITY = {"public", "network", "private"}
+_ALLOWED_THEME = {"system", "light", "dark"}
+_ALLOWED_DENSITY = {"comfy", "compact"}
+_ALLOWED_SIDEBAR = {"expanded", "collapsed"}
+_ALLOWED_DIGEST = {"off", "daily", "weekly", "monthly"}
+
+
+def _get_user_settings(session: Session, user_id: int) -> dict:
+    _ensure_user_settings_schema(session)
+    row = session.exec(
+        text("SELECT * FROM user_settings WHERE user_id = :uid"),
+        params={"uid": user_id},
+    ).first()
+    if row is None:
+        # Lazily insert defaults so PUT can UPDATE without a separate path.
+        try:
+            session.exec(
+                text("INSERT INTO user_settings (user_id) VALUES (:uid) ON CONFLICT (user_id) DO NOTHING"),
+                params={"uid": user_id},
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+        return {"user_id": user_id, **_DEFAULT_USER_SETTINGS}
+    m = dict(row._mapping)  # type: ignore[attr-defined]
+    return m
+
+
+def _pick_privacy(row: dict) -> dict:
+    return {
+        "visibility": row.get("visibility") or "network",
+        "show_in_directory": bool(row.get("show_in_directory")),
+        "discoverable": bool(row.get("discoverable")),
+    }
+
+
+def _pick_appearance(row: dict) -> dict:
+    return {
+        "theme": row.get("theme") or "system",
+        "density": row.get("density") or "comfy",
+        "sidebar_default": row.get("sidebar_default") or "expanded",
+    }
+
+
+def _pick_notifications(row: dict) -> dict:
+    try:
+        email = json.loads(row.get("notif_categories_email") or "{}")
+    except Exception:
+        email = {}
+    try:
+        inapp = json.loads(row.get("notif_categories_inapp") or "{}")
+    except Exception:
+        inapp = {}
+    return {
+        "digest_frequency": row.get("digest_frequency") or "weekly",
+        "notif_categories_email": email,
+        "notif_categories_inapp": inapp,
+        "quiet_hours_start": row.get("quiet_hours_start"),
+        "quiet_hours_end": row.get("quiet_hours_end"),
+        "quiet_hours_tz": row.get("quiet_hours_tz") or "UTC",
+    }
+
+
+def _pick_profile(row: dict) -> dict:
+    return {
+        "timezone": row.get("timezone") or "UTC",
+        "locale": row.get("locale") or "en",
+        "pronouns": row.get("pronouns"),
+        "profile_slug": row.get("profile_slug"),
+    }
+
+
+def _apply_user_settings_patch(session: Session, user_id: int, patch: dict) -> dict:
+    if not patch:
+        return _get_user_settings(session, user_id)
+    # Ensure the row exists first.
+    _get_user_settings(session, user_id)
+    sets = ", ".join(f"{k} = :{k}" for k in patch.keys())
+    params = {**patch, "uid": user_id}
+    try:
+        session.exec(
+            text(f"UPDATE user_settings SET {sets}, updated_at = CURRENT_TIMESTAMP WHERE user_id = :uid"),
+            params=params,
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise HTTPException(status_code=500, detail="Update failed")
+    return _get_user_settings(session, user_id)
+
+
+# --- Privacy --------------------------------------------------------------
+@router.get("/privacy")
+def get_privacy_settings(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    return _pick_privacy(_get_user_settings(session, user.id))
+
+
+@router.put("/privacy")
+def update_privacy_settings(payload: dict, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    patch: dict = {}
+    if "visibility" in payload:
+        v = payload["visibility"]
+        if v not in _ALLOWED_VISIBILITY:
+            raise HTTPException(status_code=400, detail="Invalid visibility")
+        patch["visibility"] = v
+    if "show_in_directory" in payload:
+        patch["show_in_directory"] = 1 if payload["show_in_directory"] else 0
+    if "discoverable" in payload:
+        patch["discoverable"] = 1 if payload["discoverable"] else 0
+    return _pick_privacy(_apply_user_settings_patch(session, user.id, patch))
+
+
+# --- Appearance -----------------------------------------------------------
+@router.get("/appearance")
+def get_appearance_settings(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    return _pick_appearance(_get_user_settings(session, user.id))
+
+
+@router.put("/appearance")
+def update_appearance_settings(payload: dict, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    patch: dict = {}
+    if "theme" in payload:
+        if payload["theme"] not in _ALLOWED_THEME:
+            raise HTTPException(status_code=400, detail="Invalid theme")
+        patch["theme"] = payload["theme"]
+    if "density" in payload:
+        if payload["density"] not in _ALLOWED_DENSITY:
+            raise HTTPException(status_code=400, detail="Invalid density")
+        patch["density"] = payload["density"]
+    if "sidebar_default" in payload:
+        if payload["sidebar_default"] not in _ALLOWED_SIDEBAR:
+            raise HTTPException(status_code=400, detail="Invalid sidebar_default")
+        patch["sidebar_default"] = payload["sidebar_default"]
+    return _pick_appearance(_apply_user_settings_patch(session, user.id, patch))
+
+
+# --- Notifications --------------------------------------------------------
+@router.get("/notifications")
+def get_notification_settings(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    return _pick_notifications(_get_user_settings(session, user.id))
+
+
+@router.put("/notifications")
+def update_notification_settings(payload: dict, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    patch: dict = {}
+    if "digest_frequency" in payload:
+        if payload["digest_frequency"] not in _ALLOWED_DIGEST:
+            raise HTTPException(status_code=400, detail="Invalid digest_frequency")
+        patch["digest_frequency"] = payload["digest_frequency"]
+    if "notif_categories_email" in payload:
+        patch["notif_categories_email"] = json.dumps(payload["notif_categories_email"] or {})
+    if "notif_categories_inapp" in payload:
+        patch["notif_categories_inapp"] = json.dumps(payload["notif_categories_inapp"] or {})
+    for k in ("quiet_hours_start", "quiet_hours_end", "quiet_hours_tz"):
+        if k in payload:
+            patch[k] = payload[k]
+    return _pick_notifications(_apply_user_settings_patch(session, user.id, patch))
+
+
+# --- v2 (full snapshot for SettingsContext bootstrap) --------------------
+@router.get("/v2")
+def get_settings_v2(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    row = _get_user_settings(session, user.id)
+    try:
+        flags = json.loads(row.get("feature_flags") or "{}")
+    except Exception:
+        flags = {}
+    return {
+        "profile": _pick_profile(row),
+        "privacy": _pick_privacy(row),
+        "appearance": _pick_appearance(row),
+        "notifications": _pick_notifications(row),
+        "feature_flags": flags,
+    }
