@@ -14,7 +14,7 @@ const PROJECT_ROW_HEIGHT = 52;
 const PROJECT_GRID = 'minmax(0, 2fr) minmax(0, 1fr) 110px 120px minmax(0, 1fr) 56px';
 
 export default function ProjectsPage() {
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -50,6 +50,12 @@ export default function ProjectsPage() {
       await api.createProject({ ...form, name: form.name.trim() });
       setShowForm(false);
       setForm({ name: '', description: '', sector: '', founder_email: '', founder_name: '', problem_statement: '', solution: '' });
+      // Worker's resolveFounderIdForCreate may have just back-filled
+      // users.founder_id for a first-time founder. Force-refresh /auth/me
+      // (bypassing the 5-min throttle in useAuthSync) so canEdit/canDelete
+      // gating reflects the new founder_id immediately — otherwise the
+      // founder can't see edit/delete on the project they just created.
+      try { if (typeof refresh === 'function') await refresh({ force: true }); } catch {}
       load();
       showToast({ kind: 'success', msg: 'Project created' });
       await markMilestone(currentUser, 'project_created');
