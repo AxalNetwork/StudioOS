@@ -65,6 +65,7 @@ import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
 import calendarRoutes from './routes/calendar';
 import financialsRoutes from './routes/financials';
+import progressRoutes from './routes/progress';
 import wellbeingRoutes from './routes/wellbeing';
 import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
@@ -229,6 +230,7 @@ app.route('/api/linkedin', linkedinRoutes);
 app.route('/api/calendar', calendarRoutes);
 // T11 — Financial Model Builder + Founder Wellbeing (ported from FastAPI).
 app.route('/api/financials', financialsRoutes);
+app.route('/api/progress', progressRoutes);
 app.route('/api/wellbeing', wellbeingRoutes);
 // T12 — Compliance calendar + Cap-table simulator + Co-founder matching.
 app.route('/api/compliance', complianceRoutes);

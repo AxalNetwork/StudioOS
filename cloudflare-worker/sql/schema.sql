@@ -303,3 +303,40 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_logs(user_id);
+
+-- ---------------------------------------------------------------------------
+-- Task #8 — Customer Discovery + Roadmap (worker port of progress.py).
+-- Mirrored as cloudflare-worker/sql/migrations/001_progress_tables.sql so the
+-- file can be applied to remote D1 via a single wrangler call. Column names
+-- mirror the FastAPI model so the shipping frontend works unchanged.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS discovery_interviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    interviewee_name TEXT NOT NULL,
+    interviewee_role TEXT,
+    interview_date TEXT,
+    notes TEXT,
+    hypotheses_json TEXT,
+    pains_json TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_discovery_interviews_project
+    ON discovery_interviews (project_id);
+
+CREATE TABLE IF NOT EXISTS roadmap_okrs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    objective TEXT NOT NULL,
+    key_results_json TEXT,
+    kanban_status TEXT NOT NULL DEFAULT 'now',
+    quarter TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_roadmap_okrs_project_status_order
+    ON roadmap_okrs (project_id, kanban_status, sort_order);
