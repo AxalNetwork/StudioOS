@@ -26,7 +26,7 @@ import {
   reportToCsv, reportToHtml,
   signDownloadToken, verifyDownloadToken,
 } from '../services/analyticsReports';
-import { ensureSubscriptionPlansSchema } from '../services/subscriptionPlans';
+import { ensureSubscriptionPlansSchema, listPlansFull, updatePlan } from '../services/subscriptionPlans';
 
 type AppCtx = Context<{ Bindings: Env }>;
 type ExportReport = 'overview' | 'users' | 'financial' | 'technical' | 'management';
@@ -168,6 +168,49 @@ r.get('/audit', async (c) => {
   const totalArr = Array.isArray(totalRow) ? totalRow : [];
   const total = Number((totalArr[0] as { c?: number } | undefined)?.c || 0);
   return c.json({ items: itemsArr, total, limit, offset, has_more: offset + itemsArr.length < total });
+});
+
+// ---------- plan catalog (Task #13) ----------
+r.get('/plans', async (c) => {
+  await requireAdmin(c);
+  const plans = await listPlansFull(c.env);
+  return c.json({ plans });
+});
+
+r.patch('/plans/:planId', async (c) => {
+  const admin = await requireAdmin(c);
+  const planId = c.req.param('planId');
+  if (!planId) return c.json({ detail: 'Missing planId' }, 400);
+  let body: Record<string, unknown> = {};
+  try { body = (await c.req.json()) as Record<string, unknown>; } catch {}
+  const patch: { monthly_price_usd?: number; display_name?: string | null; is_active?: boolean } = {};
+  if (body.monthly_price_usd !== undefined) {
+    const n = Number(body.monthly_price_usd);
+    if (!Number.isFinite(n) || n < 0) return c.json({ detail: 'monthly_price_usd must be ≥ 0' }, 400);
+    patch.monthly_price_usd = n;
+  }
+  if (body.display_name !== undefined) {
+    patch.display_name = body.display_name == null ? null : String(body.display_name);
+  }
+  if (body.is_active !== undefined) {
+    patch.is_active = !!body.is_active;
+  }
+  let updated;
+  try { updated = await updatePlan(c.env, planId, patch); }
+  catch (e) { return c.json({ detail: (e as Error).message }, 400); }
+  if (!updated) return c.json({ detail: 'Plan not found' }, 404);
+  await ensureSchema(c.env);
+  try {
+    const sql = getSQL(c.env);
+    const filtersJson = JSON.stringify({ plan_id: planId, ...patch });
+    await sql`
+      INSERT INTO admin_audit_log (admin_user_id, action, report_type, format, filters_json, storage_key, download_url)
+      VALUES (${admin.id}, 'subscription_plan_update', ${planId}, 'patch', ${filtersJson}, NULL, '')
+    `;
+  } catch (e) {
+    console.warn('[analytics] plan update audit failed:', (e as Error).message);
+  }
+  return c.json({ plan: updated });
 });
 
 // ---------- export ----------

@@ -184,6 +184,94 @@ export function convertFromUsd(usd: number, target: string, fx: FxTable): number
   return Math.round(raw * m) / m;
 }
 
+// ---------- Admin catalog management (Task #13) ----------
+
+/**
+ * Full plan rows for the admin catalog UI. Sorted with active plans first,
+ * then alphabetically by plan_id so newly auto-registered Stripe-id plans
+ * sort below the friendly named ones.
+ */
+export async function listPlansFull(env: Env): Promise<SubscriptionPlanRow[]> {
+  await ensureSubscriptionPlansSchema(env);
+  const sql = getSQL(env);
+  try {
+    const rows = (await sql`
+      SELECT plan_id, monthly_price_usd, display_name, stripe_price_id, is_active,
+             currency, native_amount, native_interval
+        FROM subscription_plans
+       ORDER BY is_active DESC, plan_id ASC
+    `) as Array<SubscriptionPlanRow & { monthly_price_usd: number | string; native_amount: number | string | null }>;
+    return rows.map(r => ({
+      plan_id: r.plan_id,
+      monthly_price_usd: typeof r.monthly_price_usd === 'number'
+        ? r.monthly_price_usd
+        : Number(r.monthly_price_usd),
+      display_name: r.display_name ?? null,
+      stripe_price_id: r.stripe_price_id ?? null,
+      is_active: Number(r.is_active) ? 1 : 0,
+      currency: (r.currency || 'USD').toUpperCase(),
+      native_amount: r.native_amount == null ? null
+        : (typeof r.native_amount === 'number' ? r.native_amount : Number(r.native_amount)),
+      native_interval: r.native_interval ?? null,
+    }));
+  } catch (e) {
+    console.warn('[subscriptionPlans] listPlansFull failed:', (e as Error).message);
+    return [];
+  }
+}
+
+export interface PlanUpdate {
+  monthly_price_usd?: number;
+  display_name?: string | null;
+  is_active?: boolean;
+}
+
+/**
+ * Patch an existing plan row. Returns the updated row, or null if the
+ * plan_id does not exist. We deliberately do NOT allow renaming `plan_id`
+ * here — that's the join key against `users.mi_subscription_plan` and the
+ * Stripe webhook upsert relies on it being stable.
+ */
+export async function updatePlan(
+  env: Env,
+  planId: string,
+  patch: PlanUpdate,
+): Promise<SubscriptionPlanRow | null> {
+  await ensureSubscriptionPlansSchema(env);
+  const sets: string[] = [];
+  const binds: Array<string | number | null> = [];
+  if (patch.monthly_price_usd !== undefined) {
+    const n = Number(patch.monthly_price_usd);
+    if (!Number.isFinite(n) || n < 0) throw new Error('monthly_price_usd must be a non-negative number');
+    sets.push('monthly_price_usd = ?'); binds.push(n);
+  }
+  if (patch.display_name !== undefined) {
+    const v = patch.display_name == null ? null : String(patch.display_name).trim().slice(0, 200) || null;
+    sets.push('display_name = ?'); binds.push(v);
+  }
+  if (patch.is_active !== undefined) {
+    sets.push('is_active = ?'); binds.push(patch.is_active ? 1 : 0);
+  }
+  if (!sets.length) {
+    // Nothing to change — just return the current row.
+    const cur = await listPlansFull(env);
+    return cur.find(p => p.plan_id === planId) ?? null;
+  }
+  sets.push("updated_at = datetime('now')");
+  try {
+    const res = await env.DB.prepare(
+      `UPDATE subscription_plans SET ${sets.join(', ')} WHERE plan_id = ?`,
+    ).bind(...binds, planId).run();
+    const changes = (res as { meta?: { changes?: number } }).meta?.changes ?? 0;
+    if (!changes) return null;
+    const cur = await listPlansFull(env);
+    return cur.find(p => p.plan_id === planId) ?? null;
+  } catch (e) {
+    console.warn('[subscriptionPlans] updatePlan failed:', (e as Error).message);
+    throw e;
+  }
+}
+
 // ---------- Stripe webhook upsert ----------
 
 interface StripePrice {

@@ -613,6 +613,11 @@ export const api = {
   analyticsExport: (payload) =>
     request('/monitoring/analytics/export', { method: 'POST', body: JSON.stringify(payload) }),
   analyticsAudit: (limit = 25) => request(`/monitoring/analytics/audit?limit=${limit}`),
+  analyticsListPlans: () => request('/monitoring/analytics/plans'),
+  analyticsUpdatePlan: (planId, patch) =>
+    request(`/monitoring/analytics/plans/${encodeURIComponent(planId)}`, {
+      method: 'PATCH', body: JSON.stringify(patch),
+    }),
 
   // ---------- Infrastructure (admin) ----------
   infraQueue: () => request('/infra/queue'),

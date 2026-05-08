@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   BarChart3, Users as UsersIcon, DollarSign, Cpu, ClipboardList,
   Download, FileText, RefreshCw, EyeOff, Eye, AlertTriangle, ChevronRight,
-  ArrowUp, ArrowDown,
+  ArrowUp, ArrowDown, Check, X as XIcon, Pencil,
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -394,15 +394,174 @@ function UserDrillDown({ id, anonymized, onClose }) {
   );
 }
 
+function PlanCatalog({ onChanged }) {
+  const [plans, setPlans] = useState(null);
+  const [err, setErr] = useState('');
+  const [editing, setEditing] = useState(null); // {plan_id, monthly_price_usd, display_name}
+  const [saving, setSaving] = useState(false);
+  const [savingFlag, setSavingFlag] = useState(null); // plan_id of in-flight is_active toggle
+
+  const load = useCallback(() => {
+    setErr('');
+    api.analyticsListPlans()
+      .then(r => setPlans(r.plans || []))
+      .catch(e => setErr(e?.message || 'Failed to load plans'));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const startEdit = (p) => setEditing({
+    plan_id: p.plan_id,
+    monthly_price_usd: String(p.monthly_price_usd ?? 0),
+    display_name: p.display_name || '',
+  });
+  const cancelEdit = () => setEditing(null);
+  const saveEdit = async () => {
+    if (!editing) return;
+    const priceNum = Number(editing.monthly_price_usd);
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      setErr('Price must be a non-negative number'); return;
+    }
+    setSaving(true); setErr('');
+    try {
+      await api.analyticsUpdatePlan(editing.plan_id, {
+        monthly_price_usd: priceNum,
+        display_name: editing.display_name.trim() || null,
+      });
+      setEditing(null);
+      load();
+      onChanged && onChanged();
+    } catch (e) {
+      setErr(e?.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+  const toggleActive = async (p) => {
+    setSavingFlag(p.plan_id); setErr('');
+    try {
+      await api.analyticsUpdatePlan(p.plan_id, { is_active: !p.is_active });
+      load();
+      onChanged && onChanged();
+    } catch (e) {
+      setErr(e?.message || 'Update failed');
+    } finally {
+      setSavingFlag(null);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <div className="text-sm font-semibold text-gray-900">Subscription plan catalog</div>
+          <div className="text-xs text-gray-500">Edits update MRR / ARR immediately. Plan IDs are managed by Stripe and can't be renamed.</div>
+        </div>
+        <button onClick={load} className="text-xs text-gray-600 hover:text-gray-900 inline-flex items-center gap-1">
+          <RefreshCw size={11} /> Refresh
+        </button>
+      </div>
+      {err && <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{err}</div>}
+      <table className="w-full text-xs">
+        <thead className="text-gray-500">
+          <tr>
+            <th className="text-left py-1">Plan ID</th>
+            <th className="text-left">Display name</th>
+            <th className="text-right">Monthly price (USD)</th>
+            <th className="text-left">Stripe price ID</th>
+            <th className="text-center">Active</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {plans === null && (
+            <tr><td colSpan={6} className="text-center py-3 text-gray-400">Loading…</td></tr>
+          )}
+          {plans && plans.length === 0 && (
+            <tr><td colSpan={6} className="text-center py-3 text-gray-400">No plans registered yet.</td></tr>
+          )}
+          {plans && plans.map(p => {
+            const isEdit = editing && editing.plan_id === p.plan_id;
+            return (
+              <tr key={p.plan_id} className="border-t border-gray-100 align-middle">
+                <td className="py-1.5 font-mono text-gray-700">{p.plan_id}</td>
+                <td className="py-1.5">
+                  {isEdit ? (
+                    <input
+                      value={editing.display_name}
+                      onChange={e => setEditing(s => ({ ...s, display_name: e.target.value }))}
+                      placeholder="(none)"
+                      className="border border-gray-300 rounded px-2 py-1 text-xs w-full"
+                    />
+                  ) : (p.display_name || <span className="text-gray-400">—</span>)}
+                </td>
+                <td className="py-1.5 text-right">
+                  {isEdit ? (
+                    <input
+                      type="number" min="0" step="0.01"
+                      value={editing.monthly_price_usd}
+                      onChange={e => setEditing(s => ({ ...s, monthly_price_usd: e.target.value }))}
+                      className="border border-gray-300 rounded px-2 py-1 text-xs w-24 text-right"
+                    />
+                  ) : `$${Number(p.monthly_price_usd).toLocaleString(undefined, { minimumFractionDigits: p.monthly_price_usd % 1 ? 2 : 0 })}`}
+                </td>
+                <td className="py-1.5 font-mono text-gray-500 truncate max-w-[180px]">
+                  {p.stripe_price_id || <span className="text-gray-300">—</span>}
+                </td>
+                <td className="py-1.5 text-center">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={!!p.is_active}
+                    onClick={() => toggleActive(p)}
+                    disabled={savingFlag === p.plan_id || isEdit}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                      p.is_active ? 'bg-violet-600' : 'bg-gray-300'
+                    } ${savingFlag === p.plan_id ? 'opacity-60' : ''}`}
+                    title={p.is_active ? 'Active — click to deactivate' : 'Inactive — click to activate'}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition ${
+                      p.is_active ? 'translate-x-5' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </td>
+                <td className="py-1.5 text-right">
+                  {isEdit ? (
+                    <span className="inline-flex gap-1">
+                      <button onClick={saveEdit} disabled={saving}
+                              className="px-2 py-1 rounded bg-violet-600 text-white inline-flex items-center gap-1 disabled:opacity-50">
+                        <Check size={11} /> Save
+                      </button>
+                      <button onClick={cancelEdit} disabled={saving}
+                              className="px-2 py-1 rounded border border-gray-300 text-gray-600 inline-flex items-center gap-1">
+                        <XIcon size={11} /> Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button onClick={() => startEdit(p)}
+                            className="px-2 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1">
+                      <Pencil size={11} /> Edit
+                    </button>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function FinancialSub({ range, currency, onExport, busy }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     setData(null); setErr('');
     api.analyticsFinancial(range.from, range.to, currency).then(setData).catch(e => setErr(e?.message || 'Failed'));
-  }, [range.from, range.to, currency]);
-  if (err) return <div className="text-sm text-red-600">{err}</div>;
-  if (!data) return <div className="text-sm text-gray-500 py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" /> Loading…</div>;
+  }, [range.from, range.to, currency, reloadKey]);
+  if (err) return <div className="space-y-4"><div className="text-sm text-red-600">{err}</div><PlanCatalog onChanged={() => setReloadKey(k => k + 1)} /></div>;
+  if (!data) return <div className="space-y-4"><div className="text-sm text-gray-500 py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" /> Loading…</div><PlanCatalog onChanged={() => setReloadKey(k => k + 1)} /></div>;
   const ccy = data.display_currency || 'USD';
   const totalMrr = data.total_mrr ?? data.total_mrr_usd;
   const arr = data.arr ?? data.arr_usd;
@@ -480,6 +639,7 @@ function FinancialSub({ range, currency, onExport, busy }) {
           </tbody>
         </table>
       </div>
+      <PlanCatalog onChanged={() => setReloadKey(k => k + 1)} />
     </div>
   );
 }
