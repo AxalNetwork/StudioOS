@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import InfrastructureTab from './InfrastructureTab';
+import AnalyticsTab from './AnalyticsTab';
 import { Activity, AlertTriangle, RefreshCw, Sparkles, ShieldAlert, Zap, Server, Clock, TrendingUp, ChevronDown, X, User as UserIcon, Hash, Copy, Check } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from 'recharts';
 import { api } from '../lib/api';
@@ -268,7 +269,7 @@ export default function MonitoringPage() {
   })();
   const initialTab = (() => {
     const t = qp.get('tab');
-    return (t === 'integrity' || t === 'infra' || t === 'overview') ? t : 'overview';
+    return (t === 'integrity' || t === 'infra' || t === 'overview' || t === 'analytics') ? t : 'overview';
   })();
   const [tab, setTab] = useState(initialTab);
   const focusSnapshotId = (() => {
@@ -366,6 +367,7 @@ export default function MonitoringPage() {
       <div className="border-b border-gray-200 flex gap-1 overflow-x-auto [&>button]:whitespace-nowrap">
         {[
           { id: 'overview', label: 'Overview' },
+          { id: 'analytics', label: 'User Analytics' },
           { id: 'integrity', label: 'Score Integrity' },
           { id: 'infra', label: 'Infrastructure' },
         ].map(t => (
@@ -384,6 +386,7 @@ export default function MonitoringPage() {
       </div>
 
       {tab === 'infra' ? <InfrastructureTab /> :
+       tab === 'analytics' ? <AnalyticsTab /> :
        tab === 'integrity' ? <ScoreIntegrityTab focusSnapshotId={focusSnapshotId} /> : (
       <>
       {/* Summary cards */}

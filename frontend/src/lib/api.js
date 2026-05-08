@@ -597,6 +597,22 @@ export const api = {
   monitoringThroughput: () => request('/monitoring/throughput'),
   monitoringCleanup: () => request('/monitoring/cleanup', { method: 'POST' }),
 
+  // ---------- Monitoring → Analytics (admin, Task #3) ----------
+  analyticsOverview: (from, to) =>
+    request(`/monitoring/analytics/overview?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
+  analyticsCohorts: (metric = 'retention', granularity = 'week') =>
+    request(`/monitoring/analytics/cohorts?metric=${metric}&granularity=${granularity}`),
+  analyticsUsers: ({ role = '', tier = '', search = '', limit = 50, offset = 0 } = {}) =>
+    request(`/monitoring/analytics/users?role=${encodeURIComponent(role)}&tier=${encodeURIComponent(tier)}&search=${encodeURIComponent(search)}&limit=${limit}&offset=${offset}`),
+  analyticsUser: (id) => request(`/monitoring/analytics/user/${id}`),
+  analyticsFinancial: (from, to) =>
+    request(`/monitoring/analytics/financial?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
+  analyticsTechnical: (from, to) =>
+    request(`/monitoring/analytics/technical?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
+  analyticsExport: (payload) =>
+    request('/monitoring/analytics/export', { method: 'POST', body: JSON.stringify(payload) }),
+  analyticsAudit: (limit = 25) => request(`/monitoring/analytics/audit?limit=${limit}`),
+
   // ---------- Infrastructure (admin) ----------
   infraQueue: () => request('/infra/queue'),
   infraMetrics: (minutes = 60) => request(`/infra/metrics?minutes=${minutes}`),

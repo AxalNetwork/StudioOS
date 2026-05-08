@@ -3,8 +3,12 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireAdmin } from '../auth';
 import type { ScoreSnapshotRow, AnomalyFlag } from '../services/scoreIntegrity';
+import analytics from './monitoring_analytics';
 
 const monitoring = new Hono<{ Bindings: Env }>();
+
+// Task #3 — admin analytics sub-router (5 sub-tabs + export).
+monitoring.route('/analytics', analytics);
 
 // ---------- /metrics ----------
 // Admin-only: returns aggregated time-series for the dashboard.
