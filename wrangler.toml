@@ -138,6 +138,14 @@ index_name = "axal-search"
 binding     = "FILES"
 bucket_name = "studioos-files"
 
+# ---------- Browser Rendering ----------
+# Powers true PDF generation for Admin Analytics exports
+# (cloudflare-worker/src/routes/monitoring_analytics.ts). Without this binding
+# the /export endpoint returns 503 for format=pdf and the audit row records
+# `pdf_unavailable` — see Task #9.
+[browser]
+binding = "BROWSER"
+
 # ---------- Cron Triggers ----------
 # Drains the in-DB queue every minute; daily cleanup runs at 03:00 UTC
 # inside the same handler.
@@ -239,6 +247,9 @@ index_name = "axal-search"
 [[env.production.r2_buckets]]
 binding     = "FILES"
 bucket_name = "studioos-files"
+
+[env.production.browser]
+binding = "BROWSER"
 
 [env.production.triggers]
 crons = ["* * * * *"]
