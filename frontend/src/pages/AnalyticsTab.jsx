@@ -195,7 +195,7 @@ function OverviewSub({ range, anonymized, onExport, busy }) {
   );
 }
 
-function UsersSub({ anonymized, onExport, busy }) {
+function UsersSub({ anonymized, onExport, busy, onFiltersChange }) {
   const [data, setData] = useState(null);
   const [search, setSearch] = useState('');
   const [role, setRole] = useState('');
@@ -205,6 +205,9 @@ function UsersSub({ anonymized, onExport, busy }) {
   const [drillId, setDrillId] = useState(null);
   const sorter = useSort();
   const limit = 25;
+  useEffect(() => {
+    if (onFiltersChange) onFiltersChange({ search, role, tier, limit, offset });
+  }, [search, role, tier, offset, onFiltersChange]);
   const load = useCallback(() => {
     setErr('');
     api.analyticsUsers({ search, role, tier, limit, offset })
@@ -572,12 +575,14 @@ export default function AnalyticsTab() {
   const [exporting, setExporting] = useState(false);
   const [auditKey, setAuditKey] = useState(0);
   const [exportNote, setExportNote] = useState('');
+  const [usersFilters, setUsersFilters] = useState({});
 
   const onExport = useCallback(async (format) => {
     setExporting(true); setExportNote('');
     try {
+      const filters = sub === 'users' ? usersFilters : {};
       const res = await api.analyticsExport({
-        report: sub, format, from: range.from, to: range.to, filters: {},
+        report: sub, format, from: range.from, to: range.to, filters,
       });
       setAuditKey(k => k + 1);
       if (res.download_url) {
@@ -593,7 +598,7 @@ export default function AnalyticsTab() {
     } finally {
       setExporting(false);
     }
-  }, [sub, range]);
+  }, [sub, range, usersFilters]);
 
   return (
     <div className="space-y-4">
@@ -643,7 +648,7 @@ export default function AnalyticsTab() {
       </div>
 
       {sub === 'overview'  && <OverviewSub  range={range} anonymized={anonymized} onExport={onExport} busy={exporting} />}
-      {sub === 'users'     && <UsersSub                  anonymized={anonymized} onExport={onExport} busy={exporting} />}
+      {sub === 'users'     && <UsersSub                  anonymized={anonymized} onExport={onExport} busy={exporting} onFiltersChange={setUsersFilters} />}
       {sub === 'financial' && <FinancialSub range={range}                          onExport={onExport} busy={exporting} />}
       {sub === 'technical' && <TechnicalSub range={range}                          onExport={onExport} busy={exporting} />}
       {sub === 'management'&& <ManagementSub range={range}                         onExport={onExport} busy={exporting} />}

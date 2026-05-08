@@ -667,9 +667,15 @@ function b64urlDecode(s: string): Uint8Array {
   return out;
 }
 async function hmacKey(env: Env): Promise<CryptoKey> {
-  const secret = env.JWT_SECRET || 'dev-secret';
+  const secret = env.JWT_SECRET;
+  if (!secret || secret.length < 16) {
+    if ((env as unknown as { ENVIRONMENT?: string }).ENVIRONMENT === 'production') {
+      throw new Error('JWT_SECRET is required to sign analytics download tokens');
+    }
+    console.warn('[analytics] JWT_SECRET missing/short; using dev fallback');
+  }
   return crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(secret),
+    'raw', new TextEncoder().encode(secret || 'dev-secret-do-not-use'),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'],
   );
 }
