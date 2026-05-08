@@ -162,10 +162,21 @@ activity.post('/sync-github', async (c) => {
 
   if (!putRes.ok) {
     const errText = await putRes.text().catch(() => '');
-    return c.json({
-      status: 'failed',
-      message: `GitHub commit failed (${putRes.status}). ${errText.slice(0, 200)}`,
-    }, 502);
+    let ghMessage = '';
+    try { ghMessage = (JSON.parse(errText) || {}).message || ''; } catch { ghMessage = errText.slice(0, 160); }
+    let friendly: string;
+    if (putRes.status === 401) {
+      friendly = 'GitHub rejected the server credentials (401). The GITHUB_ACCESS_TOKEN has expired or been revoked — an admin needs to rotate it in the Cloudflare Worker secrets.';
+    } else if (putRes.status === 403) {
+      friendly = 'GitHub denied the request (403). The token is valid but lacks write access to the target repo, or you are rate-limited.';
+    } else if (putRes.status === 404) {
+      friendly = 'GitHub could not find the target repo (404). Check GITHUB_REPO_OWNER and GITHUB_REPO_NAME on the worker.';
+    } else if (putRes.status === 422) {
+      friendly = `GitHub rejected the commit (422). ${ghMessage}`.trim();
+    } else {
+      friendly = `GitHub commit failed (${putRes.status}).${ghMessage ? ' ' + ghMessage : ''}`;
+    }
+    return c.json({ status: 'failed', message: friendly }, 502);
   }
 
   const result: any = await putRes.json();
