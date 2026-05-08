@@ -160,7 +160,30 @@ export type LabState = {
   unlocked_features: string[];
 };
 
-type Sql = (strings: TemplateStringsArray, ...values: any[]) => Promise<any[]>;
+// Concrete row shapes for every SELECT this module issues. Keeps the Sql
+// helper's call sites typed without falling back to `any`.
+type UserStateRow = {
+  spinout_lab_active: number | null;
+  spinout_lab_week: number | null;
+  spinout_lab_started_at: string | null;
+  is_incorporated: number | null;
+};
+type UserActiveWeekRow = {
+  spinout_lab_active: number | null;
+  spinout_lab_week: number | null;
+};
+type IsIncorporatedRow = { is_incorporated: number | null };
+type MilestoneRow = { key: string; week: number; completed_at: string };
+type MilestoneKeyRow = { milestone_key: string };
+
+// Generic-tagged sql helper: each call site chooses the row type it expects.
+// Mirrors the shape of `getSQL(c.env)` from `db.ts` (postgres-style template
+// literal) without leaking `any` into the rest of the module.
+type SqlValue = string | number | boolean | null;
+type Sql = <T = unknown>(
+  strings: TemplateStringsArray,
+  ...values: SqlValue[]
+) => Promise<T[]>;
 
 // Named union return types — keep these as type aliases (not inline in the
 // function signature) so the test harness's brace balancer can slice each
@@ -174,23 +197,23 @@ export type MilestoneResult =
   | { ok: false; status: 400 | 409; error: string };
 
 export async function getLabState(sql: Sql, userId: number): Promise<LabState> {
-  const rows = await sql`
+  const rows = await sql<UserStateRow>`
     SELECT spinout_lab_active, spinout_lab_week, spinout_lab_started_at, is_incorporated
     FROM users WHERE id = ${userId}
-  ` as any[];
-  const row = rows[0] || {};
-  const milestones = await sql`
+  `;
+  const row: Partial<UserStateRow> = rows[0] ?? {};
+  const milestones = await sql<MilestoneRow>`
     SELECT milestone_key AS key, week, completed_at
     FROM spinout_lab_milestones
     WHERE user_id = ${userId}
     ORDER BY week ASC, completed_at ASC
-  ` as any[];
+  `;
 
   const week = Number(row.spinout_lab_week ?? 1);
   return {
     active: Number(row.spinout_lab_active ?? 0) === 1,
     week,
-    days_remaining: Math.max(0, SPRINT_DAYS - daysSince(row.spinout_lab_started_at)),
+    days_remaining: Math.max(0, SPRINT_DAYS - daysSince(row.spinout_lab_started_at ?? null)),
     started_at: row.spinout_lab_started_at ?? null,
     is_incorporated: Number(row.is_incorporated ?? 0) === 1,
     milestones,
@@ -201,9 +224,9 @@ export async function getLabState(sql: Sql, userId: number): Promise<LabState> {
 export async function startLab(sql: Sql, userId: number): Promise<StartResult> {
   // Refuse to re-open the Lab for users who have already incorporated —
   // the Lab is strictly a pre-incorporation sprint.
-  const probe = await sql`
+  const probe = await sql<IsIncorporatedRow>`
     SELECT is_incorporated FROM users WHERE id = ${userId}
-  ` as any[];
+  `;
   if (probe[0] && Number(probe[0].is_incorporated) === 1) {
     return { ok: false, status: 409, error: 'User is already incorporated' };
   }
@@ -234,9 +257,9 @@ export async function recordMilestone(
 
   // Refuse to record milestones when the lab is off — prevents accidental
   // pollution from a feature page calling complete() after exit().
-  const userRows = await sql`
+  const userRows = await sql<UserActiveWeekRow>`
     SELECT spinout_lab_active, spinout_lab_week FROM users WHERE id = ${userId}
-  ` as any[];
+  `;
   const u = userRows[0];
   if (!u || Number(u.spinout_lab_active) !== 1) {
     return { ok: false, status: 409, error: 'Spin-Out Lab is not active' };
@@ -252,11 +275,10 @@ export async function recordMilestone(
   // user's current week upward as long as each week is fully met. Cap at
   // week 4. When week 4 is met, also flip `is_incorporated=1` and turn
   // the lab off so the sidebar swaps without an extra round-trip.
-  const completed = new Set<string>(
-    ((await sql`
-      SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = ${userId}
-    `) as any[]).map((r) => r.milestone_key),
-  );
+  const completedRows = await sql<MilestoneKeyRow>`
+    SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = ${userId}
+  `;
+  const completed = new Set<string>(completedRows.map((r) => r.milestone_key));
 
   let newWeek = Number(u.spinout_lab_week ?? 1);
   while (newWeek < 4 && weekMet(newWeek, completed)) {
@@ -308,11 +330,14 @@ spinoutLab.post('/start', async (c) => {
   return c.json(r.state);
 });
 
+type MilestoneBody = { milestone_key?: unknown };
+
 spinoutLab.post('/milestone', async (c) => {
   const user = await requireAuth(c);
-  const body = await c.req.json().catch(() => ({} as any));
+  const body = (await c.req.json().catch(() => ({}))) as MilestoneBody;
+  const key = typeof body.milestone_key === 'string' ? body.milestone_key : '';
   const sql = getSQL(c.env);
-  const r = await recordMilestone(sql, user.id, body?.milestone_key);
+  const r = await recordMilestone(sql, user.id, key);
   await sql.end();
   if (!r.ok) return c.json({ error: r.error }, r.status);
   return c.json(r.state);
