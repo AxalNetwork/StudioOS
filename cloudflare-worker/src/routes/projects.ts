@@ -253,6 +253,14 @@ projects.put('/:id', async (c) => {
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
 
+  // Task #17 — parity with create: reject blank `name` on update so the
+  // direct-API path can't whitewash an existing project's title.
+  if (data.name !== undefined) {
+    const nameTrimmed = typeof data.name === 'string' ? data.name.trim() : '';
+    if (!nameTrimmed) { await sql.end(); return c.json({ error: 'Project name is required' }, 400); }
+    data.name = nameTrimmed;
+  }
+
   // Only admin/partner may change status, stage, or playbook week.
   const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds'];
   const privilegedFields = ['stage', 'status', 'playbook_week'];
