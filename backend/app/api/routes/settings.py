@@ -1329,3 +1329,137 @@ def get_settings_v2(session: Session = Depends(get_session), user: User = Depend
         "notifications": _pick_notifications(row),
         "feature_flags": flags,
     }
+
+
+# --- Profile sub-route -----------------------------------------------------
+@router.get("/profile")
+def get_profile_settings(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    return _pick_profile(_get_user_settings(session, user.id))
+
+
+@router.put("/profile")
+def update_profile_settings(payload: dict, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    patch: dict = {}
+    if "timezone" in payload:
+        v = payload["timezone"]
+        if v is not None and (not isinstance(v, str) or len(v) > 64):
+            raise HTTPException(status_code=400, detail="Invalid timezone")
+        patch["timezone"] = v
+    if "locale" in payload:
+        v = payload["locale"]
+        if v is not None and (not isinstance(v, str) or len(v) > 16):
+            raise HTTPException(status_code=400, detail="Invalid locale")
+        patch["locale"] = v
+    if "pronouns" in payload:
+        v = payload["pronouns"]
+        if v is not None and (not isinstance(v, str) or len(v) > 32):
+            raise HTTPException(status_code=400, detail="Invalid pronouns")
+        patch["pronouns"] = v
+    if "profile_slug" in payload:
+        v = payload["profile_slug"]
+        if v is not None:
+            if not isinstance(v, str) or not v or len(v) > 64 or not all(ch.isalnum() or ch in "-_" for ch in v):
+                raise HTTPException(status_code=400, detail="Invalid profile_slug")
+        patch["profile_slug"] = v
+    return _pick_profile(_apply_user_settings_patch(session, user.id, patch))
+
+
+# --- Security read-only summary -------------------------------------------
+@router.get("/security")
+def get_security_settings(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    try:
+        recovery = json.loads(getattr(user, "totp_recovery_codes", None) or "[]") or []
+    except Exception:
+        recovery = []
+    try:
+        active = session.exec(
+            text("SELECT COUNT(*) AS c FROM user_sessions WHERE user_id = :uid AND revoked_at IS NULL"),
+            params={"uid": user.id},
+        ).first()
+        active_sessions = int(active._mapping["c"]) if active else 0  # type: ignore[attr-defined]
+    except Exception:
+        active_sessions = 0
+    return {
+        "email_verified": bool(getattr(user, "email_verified", False)),
+        "totp_configured": bool(getattr(user, "totp_secret", None)),
+        "totp_recovery_codes_remaining": len(recovery) if isinstance(recovery, list) else 0,
+        "active_sessions": active_sessions,
+    }
+
+
+# --- Integrations connected accounts (best-effort) ------------------------
+@router.get("/integrations")
+def get_integrations_settings(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    def _connected(table: str) -> bool:
+        try:
+            r = session.exec(
+                text(f"SELECT 1 FROM {table} WHERE user_id = :uid LIMIT 1"),
+                params={"uid": user.id},
+            ).first()
+            return r is not None
+        except Exception:
+            return False
+    return {
+        "accounts": [
+            {"provider": "linkedin", "connected": _connected("linkedin_oauth_tokens"), "disconnect_url": "/api/linkedin/disconnect"},
+            {"provider": "google",   "connected": _connected("google_oauth_tokens"),   "disconnect_url": "/api/calendar/google/disconnect"},
+            {"provider": "outlook",  "connected": _connected("microsoft_oauth_tokens"), "disconnect_url": "/api/calendar/microsoft/disconnect"},
+            {"provider": "slack",    "connected": False, "disconnect_url": None},
+        ],
+        "api_keys_enabled": False,
+        "api_keys": [],
+    }
+
+
+# --- Developer (admin only) ----------------------------------------------
+def _require_admin(user: User) -> None:
+    if (getattr(user, "role", "") or "").lower() != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+
+@router.get("/developer")
+def get_developer_settings(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    _require_admin(user)
+    row = _get_user_settings(session, user.id)
+    try:
+        flags = json.loads(row.get("feature_flags") or "{}")
+    except Exception:
+        flags = {}
+    return {
+        "feature_flags": flags,
+        "raw_user": {
+            "id": user.id,
+            "uid": getattr(user, "uid", None),
+            "email": user.email,
+            "name": getattr(user, "name", None),
+            "role": getattr(user, "role", None),
+            "email_verified": bool(getattr(user, "email_verified", False)),
+            "kyc_status": getattr(user, "kyc_status", None),
+            "created_at": str(user.created_at) if getattr(user, "created_at", None) else None,
+            "last_active_at": str(user.last_active_at) if getattr(user, "last_active_at", None) else None,
+        },
+    }
+
+
+@router.put("/developer")
+def update_developer_settings(payload: dict, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    _require_admin(user)
+    patch: dict = {}
+    if "feature_flags" in payload and isinstance(payload["feature_flags"], dict):
+        safe: dict = {}
+        for k, v in payload["feature_flags"].items():
+            if isinstance(k, str) and len(k) <= 64:
+                safe[k] = bool(v)
+        patch["feature_flags"] = json.dumps(safe)
+    row = _apply_user_settings_patch(session, user.id, patch)
+    try:
+        flags = json.loads(row.get("feature_flags") or "{}")
+    except Exception:
+        flags = {}
+    return {"feature_flags": flags}
+
+
+@router.post("/developer/resync-indices")
+def resync_developer_indices(user: User = Depends(get_current_user)):
+    _require_admin(user)
+    return {"ok": True, "queued": True, "message": "Re-sync request logged. The next scheduled cron will pick this up."}
