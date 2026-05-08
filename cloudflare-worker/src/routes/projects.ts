@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireRole, requireAdmin, canAccessFounderResource } from '../auth';
+import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
 import { runFullScore } from '../services/scoring';
 
 const projects = new Hono<{ Bindings: Env }>();
@@ -99,11 +99,15 @@ export async function resolveFounderIdForCreate(
 async function createProjectHandler(c: any) {
   const user = await requireAuth(c);
   const data = await c.req.json();
+  // Task #17 — name is required. Without this an empty form silently
+  // creates a blank "" project that founders then can't filter / find.
+  const name = typeof data?.name === 'string' ? data.name.trim() : '';
+  if (!name) return c.json({ error: 'Project name is required' }, 400);
   const sql = getSQL(c.env);
 
   const founderId = await resolveFounderIdForCreate(user as any, data, sql);
 
-  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, ${data.stage || 'idea'}, ${founderId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${data.use_of_funds || null}) RETURNING *`;
+  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${name}, ${data.description || null}, ${data.sector || null}, ${data.stage || 'idea'}, ${founderId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${data.use_of_funds || null}) RETURNING *`;
 
   await sql`INSERT INTO deals (project_id, status) VALUES (${project.id}, 'applied')`;
   await sql`INSERT INTO activity_logs (project_id, action, details) VALUES (${project.id}, 'project_created', ${`Project '${project.name}' submitted`})`;
@@ -270,11 +274,20 @@ projects.put('/:id', async (c) => {
 });
 
 projects.delete('/:id', async (c) => {
-  await requireAdmin(c);
+  // Task #17 — founders must be able to delete their OWN projects (the
+  // happy path includes a delete step). Admins keep blanket delete rights.
+  const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id FROM projects WHERE id = ${id}`;
+  const rows = await sql`SELECT id, founder_id FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+  const project = rows[0];
+  const isPrivileged = user.role === 'admin';
+  const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
+  if (!isPrivileged && !isOwner) {
+    await sql.end();
+    return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
+  }
   await sql`DELETE FROM projects WHERE id = ${id}`;
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_delete', { type: 'project', id }); } catch {}
   await sql.end();

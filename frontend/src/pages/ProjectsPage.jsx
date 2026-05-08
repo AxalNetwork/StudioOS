@@ -1,45 +1,78 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, ChevronDown, X } from 'lucide-react';
+import { Plus, Search, ChevronDown, X, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { StatusBadge, WeekBadge } from './Dashboard';
 import VirtualList from '../components/VirtualList';
+import { useToast } from '../components/useToast';
 
 // T24 — Single line per row with py-3.
 const PROJECT_ROW_HEIGHT = 52;
-const PROJECT_GRID = 'minmax(0, 2fr) minmax(0, 1fr) 110px 120px minmax(0, 1fr)';
+const PROJECT_GRID = 'minmax(0, 2fr) minmax(0, 1fr) 110px 120px minmax(0, 1fr) 56px';
 
 export default function ProjectsPage() {
   const { user } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState('');
   const [form, setForm] = useState({ name: '', description: '', sector: '', founder_email: '', founder_name: '', problem_statement: '', solution: '' });
+  const { toast, showToast } = useToast();
   // Founder/investor users always submit projects under their own identity —
   // hide the founder name/email inputs (worker forces founder_id from JWT).
   const currentUser = user || safeReadJSON('user', null);
   const canPickFounder = currentUser?.role === 'admin' || currentUser?.role === 'partner';
+  const isAdmin = currentUser?.role === 'admin';
 
   const load = () => {
     setLoading(true);
-    api.listProjects().then(setProjects).catch(() => {}).finally(() => setLoading(false));
+    setLoadError('');
+    api.listProjects()
+      .then((rows) => setProjects(Array.isArray(rows) ? rows : []))
+      .catch((e) => setLoadError(e?.message || 'Failed to load projects'))
+      .finally(() => setLoading(false));
   };
 
   useEffect(load, []);
 
   const submit = async () => {
+    if (!form.name.trim()) {
+      showToast({ kind: 'error', msg: 'Project name is required' });
+      return;
+    }
+    setSubmitting(true);
     try {
-      await api.createProject(form);
+      await api.createProject({ ...form, name: form.name.trim() });
       setShowForm(false);
       setForm({ name: '', description: '', sector: '', founder_email: '', founder_name: '', problem_statement: '', solution: '' });
       load();
+      showToast({ kind: 'success', msg: 'Project created' });
       await markMilestone(currentUser, 'project_created');
-    } catch (e) { alert(e.message); }
+    } catch (e) {
+      showToast({ kind: 'error', msg: e?.message || 'Failed to create project' });
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  const handleDelete = async (project) => {
+    if (!project?.id) return;
+    if (!window.confirm(`Delete "${project.name}"? This cannot be undone.`)) return;
+    try {
+      await api.deleteProject(project.id);
+      setProjects(prev => prev.filter(p => p.id !== project.id));
+      showToast({ kind: 'success', msg: 'Project deleted' });
+    } catch (e) {
+      showToast({ kind: 'error', msg: e?.message || 'Failed to delete project' });
+    }
+  };
+
+  const canDelete = (p) => isAdmin || (!!currentUser?.founder_id && p.founder_id === currentUser.founder_id);
 
   const filtered = projects.filter(p =>
     !filter || p.name.toLowerCase().includes(filter.toLowerCase()) || p.sector?.toLowerCase().includes(filter.toLowerCase())
@@ -76,8 +109,8 @@ export default function ProjectsPage() {
             <Input label="Solution" value={form.solution} onChange={v => setForm(f => ({ ...f, solution: v }))} />
           </div>
           <div className="flex gap-3 mt-4">
-            <button onClick={submit} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm text-white font-medium transition-colors">Create</button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm text-gray-900">Cancel</button>
+            <button onClick={submit} disabled={submitting} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm text-white font-medium transition-colors">{submitting ? 'Creating…' : 'Create'}</button>
+            <button onClick={() => setShowForm(false)} disabled={submitting} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm text-gray-900 disabled:opacity-50">Cancel</button>
           </div>
         </div>
       )}
@@ -95,10 +128,18 @@ export default function ProjectsPage() {
 
       {loading ? (
         <div className="text-gray-600 text-center py-10 text-sm">Loading...</div>
+      ) : loadError ? (
+        <div className="bg-white border border-red-200 rounded-xl px-5 py-8 text-center text-sm">
+          <div className="text-red-600 mb-2">Couldn't load projects</div>
+          <div className="text-gray-600 mb-4">{loadError}</div>
+          <button onClick={load} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-white text-sm">Retry</button>
+        </div>
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           {filtered.length === 0 ? (
-            <div className="px-5 py-8 text-center text-gray-500 text-sm">No projects found</div>
+            <div className="px-5 py-8 text-center text-gray-500 text-sm">
+              {projects.length === 0 ? 'No projects yet — click "New Project" to get started.' : 'No projects match your filter'}
+            </div>
           ) : (
             <VirtualList
               items={filtered}
@@ -107,7 +148,7 @@ export default function ProjectsPage() {
               ariaLabel={`Projects list, ${filtered.length} projects`}
               virtualRow={(p, _i, style, ariaAttributes) => (
                 <div style={style} {...ariaAttributes}
-                     className="hover:bg-gray-50/50 transition-colors border-b border-gray-800 text-sm">
+                     className="hover:bg-gray-50/50 transition-colors border-b border-gray-100 text-sm">
                   <div style={{ display: 'grid', gridTemplateColumns: PROJECT_GRID, alignItems: 'center', height: '100%' }}>
                     <div className="px-5 py-3 min-w-0">
                       <Link to={`/projects/${p.id}`} className="text-gray-900 hover:text-violet-600 font-medium truncate block">{p.name}</Link>
@@ -117,6 +158,18 @@ export default function ProjectsPage() {
                     <div className="px-5 py-3"><StatusBadge status={p.status} /></div>
                     <div className="px-5 py-3 hidden md:block"><WeekBadge week={p.playbook_week} /></div>
                     <div className="px-5 py-3 hidden md:block text-gray-600 capitalize truncate">{p.stage}</div>
+                    <div className="px-3 py-3 flex items-center justify-end">
+                      {canDelete(p) && (
+                        <button
+                          onClick={() => handleDelete(p)}
+                          className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                          aria-label={`Delete ${p.name}`}
+                          title="Delete project"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -130,9 +183,10 @@ export default function ProjectsPage() {
                       <th className="text-left px-5 py-3">Status</th>
                       <th className="text-left px-5 py-3 hidden md:table-cell">Week</th>
                       <th className="text-left px-5 py-3 hidden md:table-cell">Stage</th>
+                      <th className="px-3 py-3 w-14" aria-label="Actions"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-800">
+                  <tbody className="divide-y divide-gray-100">
                     {items.map(p => (
                       <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="px-5 py-3">
@@ -143,6 +197,18 @@ export default function ProjectsPage() {
                         <td className="px-5 py-3"><StatusBadge status={p.status} /></td>
                         <td className="px-5 py-3 hidden md:table-cell"><WeekBadge week={p.playbook_week} /></td>
                         <td className="px-5 py-3 hidden md:table-cell text-gray-600 capitalize">{p.stage}</td>
+                        <td className="px-3 py-3 text-right">
+                          {canDelete(p) && (
+                            <button
+                              onClick={() => handleDelete(p)}
+                              className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                              aria-label={`Delete ${p.name}`}
+                              title="Delete project"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -150,6 +216,14 @@ export default function ProjectsPage() {
               )}
             </VirtualList>
           )}
+        </div>
+      )}
+
+      {toast && (
+        <div className={`fixed bottom-6 right-6 px-4 py-2 rounded-lg shadow-lg text-sm text-white ${
+          toast.kind === 'error' ? 'bg-red-600' : 'bg-violet-600'
+        }`} role="status">
+          {toast.msg || (typeof toast === 'string' ? toast : '')}
         </div>
       )}
     </div>
@@ -181,7 +255,7 @@ function Input({ label, value, onChange }) {
       <label className="block text-xs text-gray-600 mb-1">{label}</label>
       <input
         type="text" value={value} onChange={e => onChange(e.target.value)}
-        className="w-full bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
+        className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
       />
     </div>
   );

@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import { useToast } from '../components/useToast';
+import { useEscapeClose } from '../components/useEscapeClose';
 import { StatusBadge } from './Dashboard';
 
 const weekLabels = {
@@ -14,19 +17,27 @@ const weekLabels = {
 
 export default function ProjectDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { toast, showToast } = useToast();
   const [project, setProject] = useState(null);
   const [scores, setScores] = useState([]);
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [editing, setEditing] = useState(false);
 
   const load = () => {
+    setLoadError('');
     Promise.all([
       api.getProject(id),
-      api.getScores(id),
-      api.listDocuments(id),
+      api.getScores(id).catch(() => []),
+      api.listDocuments(id).catch(() => []),
     ]).then(([p, s, d]) => {
       setProject(p); setScores(s); setDocs(d);
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch((e) => {
+      setLoadError(e?.message || 'Failed to load project');
+    }).finally(() => setLoading(false));
   };
 
   useEffect(load, [id]);
@@ -35,26 +46,48 @@ export default function ProjectDetail() {
     try {
       const updated = await api.advanceWeek(id);
       setProject(p => ({ ...p, ...updated }));
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast({ kind: 'error', msg: e.message }); }
   };
 
   const incorporate = async () => {
     try {
       const res = await api.incorporateProject(id);
-      alert(res.message);
+      showToast({ kind: 'success', msg: res.message || 'Incorporation requested' });
       load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast({ kind: 'error', msg: e.message }); }
   };
 
   const spinout = async () => {
     try {
       const res = await api.spinoutProject(id);
-      alert(res.message);
+      showToast({ kind: 'success', msg: res.message || 'Spin-out triggered' });
       load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast({ kind: 'error', msg: e.message }); }
   };
 
+  const handleDelete = async () => {
+    if (!project) return;
+    if (!window.confirm(`Delete "${project.name}"? This cannot be undone.`)) return;
+    try {
+      await api.deleteProject(project.id);
+      navigate('/projects');
+    } catch (e) { showToast({ kind: 'error', msg: e.message }); }
+  };
+
+  const isAdmin = user?.role === 'admin';
+  const isOwner = !!user?.founder_id && project && project.founder_id === user.founder_id;
+  const canEdit = isAdmin || isOwner;
+  const canDelete = isAdmin || isOwner;
+
   if (loading) return <div className="text-gray-600 text-center py-20">Loading...</div>;
+  if (loadError) {
+    return (
+      <div className="text-center py-20">
+        <div className="text-red-600 text-sm mb-3">{loadError}</div>
+        <Link to="/projects" className="text-violet-600 hover:underline text-sm">Back to Projects</Link>
+      </div>
+    );
+  }
   if (!project) return <div className="text-red-600 text-center py-20">Project not found</div>;
 
   const week = weekLabels[project.playbook_week] || weekLabels.week_1;
@@ -71,9 +104,14 @@ export default function ProjectDetail() {
           <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
           <p className="text-sm text-gray-600">{project.description || project.sector}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <StatusBadge status={project.status} />
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            {canEdit && (
+              <button onClick={() => setEditing(true)} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs text-gray-700">
+                <Pencil size={12} /> Edit
+              </button>
+            )}
             {project.playbook_week !== 'complete' && (
               <button onClick={advanceWeek} className="flex items-center gap-1 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 rounded-lg text-xs text-white">
                 <ChevronRight size={12} /> Advance Week
@@ -89,9 +127,35 @@ export default function ProjectDetail() {
                 <Rocket size={12} /> Spin Out
               </button>
             )}
+            {canDelete && (
+              <button onClick={handleDelete} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-red-200 hover:bg-red-50 rounded-lg text-xs text-red-600">
+                <Trash2 size={12} /> Delete
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {editing && (
+        <EditProjectModal
+          project={project}
+          onClose={() => setEditing(false)}
+          onSaved={(updated) => {
+            setProject((p) => ({ ...p, ...updated }));
+            setEditing(false);
+            showToast({ kind: 'success', msg: 'Project updated' });
+          }}
+          onError={(msg) => showToast({ kind: 'error', msg })}
+        />
+      )}
+
+      {toast && (
+        <div className={`fixed bottom-6 right-6 px-4 py-2 rounded-lg shadow-lg text-sm text-white z-50 ${
+          toast.kind === 'error' ? 'bg-red-600' : 'bg-violet-600'
+        }`} role="status">
+          {toast.msg || (typeof toast === 'string' ? toast : '')}
+        </div>
+      )}
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <InfoCard label="Sector" value={project.sector} />
@@ -192,6 +256,107 @@ function InfoCard({ label, value }) {
     <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
       <div className="text-[10px] text-gray-600 uppercase tracking-wider">{label}</div>
       <div className="text-sm text-gray-900 font-medium mt-0.5 capitalize">{value || '—'}</div>
+    </div>
+  );
+}
+
+const EDITABLE_FIELDS = [
+  { key: 'name', label: 'Project Name', required: true },
+  { key: 'description', label: 'Description' },
+  { key: 'sector', label: 'Sector' },
+  { key: 'problem_statement', label: 'Problem Statement', textarea: true },
+  { key: 'solution', label: 'Solution', textarea: true },
+];
+
+function EditProjectModal({ project, onClose, onSaved, onError }) {
+  const [form, setForm] = useState(() => ({
+    name: project.name || '',
+    description: project.description || '',
+    sector: project.sector || '',
+    problem_statement: project.problem_statement || '',
+    solution: project.solution || '',
+  }));
+  const [saving, setSaving] = useState(false);
+
+  const handleClose = useCallback(() => {
+    if (!saving) onClose();
+  }, [onClose, saving]);
+  useEscapeClose(handleClose);
+
+  const submit = async () => {
+    if (!form.name.trim()) {
+      onError('Project name is required');
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await api.updateProject(project.id, { ...form, name: form.name.trim() });
+      onSaved(updated);
+    } catch (e) {
+      onError(e?.message || 'Failed to update project');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      onClick={handleClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label="Edit project"
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+          <h2 className="text-base font-semibold text-gray-900">Edit Project</h2>
+          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          {EDITABLE_FIELDS.map((f) => (
+            <div key={f.key}>
+              <label className="block text-xs text-gray-600 mb-1">
+                {f.label}{f.required && <span className="text-red-500"> *</span>}
+              </label>
+              {f.textarea ? (
+                <textarea
+                  value={form[f.key]}
+                  onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
+                  rows={3}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={form[f.key]}
+                  onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+          <button
+            onClick={submit}
+            disabled={saving}
+            className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm text-white font-medium"
+          >
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+          <button
+            onClick={handleClose}
+            disabled={saving}
+            className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg text-sm text-gray-900 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
