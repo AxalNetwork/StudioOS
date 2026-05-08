@@ -10,6 +10,7 @@
  * underlying business action that triggered the notify call.
  */
 import type { Env } from '../types';
+import { getUserSettings, isInQuietHours } from './userSettings';
 
 export type NotifyChannel = 'in_app' | 'email' | 'slack';
 
@@ -113,6 +114,16 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
     const resolved = resolveChannels(prefs, args.type, channels);
     if (resolved.length === 0) return null;
 
+    // T20 — Quiet hours: if the user is currently inside their configured
+    // quiet window, suppress real-time push (DO broadcast) and email/slack
+    // dispatch — but STILL write the inbox row so the bell catches up when
+    // they return. Failures here must never block the underlying notify.
+    let quiet = false;
+    try {
+      const us = await getUserSettings(env, args.userId);
+      quiet = isInQuietHours(us);
+    } catch (e) { console.warn('[notify] quiet-hours lookup failed', e); }
+
     let rowId: number | null = null;
     if (resolved.includes('in_app')) {
       const insert: any = await env.DB.prepare(
@@ -133,7 +144,11 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
       // channel, which the bell already subscribes to. The DO's broadcast()
       // filters `type:"notification"` frames to the recipient socket only —
       // server-side authorization, NOT client-side filtering.
-      try {
+      // Skipped during quiet hours — the row is already in the inbox so
+      // the bell will surface it on next page-load / focus.
+      if (quiet) {
+        // no-op; intentional during quiet window
+      } else try {
         const { notifyPipelineRoom } = await import('./realtime');
         await notifyPipelineRoom(env, 'overview', {
           type: 'notification',
@@ -151,14 +166,14 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
       } catch (e) { console.warn('[notify] realtime push failed', e); }
     }
 
-    if (resolved.includes('email')) {
+    if (resolved.includes('email') && !quiet) {
       try {
         const u: any = await env.DB.prepare(`SELECT email FROM users WHERE id = ?`).bind(args.userId).first();
         if (u?.email) await sendEmail(env, u.email, `[Axal] ${args.title}`, args.body || args.title);
       } catch (e) { console.warn('[notify] email lookup failed', e); }
     }
 
-    if (resolved.includes('slack')) {
+    if (resolved.includes('slack') && !quiet) {
       const hook = (env as any).SLACK_WEBHOOK_URL;
       if (hook) await postSlack(hook, `*${args.title}*\n${args.body || ''}\n${args.link || ''}`);
     }

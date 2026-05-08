@@ -386,12 +386,25 @@ partnernet.get('/leaderboard', async (c) => {
   return c.json((rows as any[]).map(r => ({ ...r, verified_badges: safeJson(r.verified_badges, [] as string[]) })));
 });
 
-// Public, redacted leaderboard — name + score + badges only (no email/earnings)
+// Public, redacted leaderboard — name + score + badges only (no email/earnings).
+// T20 — users who set show_in_directory=0 in user_settings are excluded from
+// the leaderboard (NOT NULL guard tolerates absence of the row, defaulting to
+// visible). The user_settings.user_id column matches partners.user_id, not
+// partner_summary.id, so we LEFT JOIN through partners.
 partnernet.get('/leaderboard/public', async (c) => {
   await requireAuth(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id, name, role, network_score, active_relationships, network_reach, verified_badges FROM partner_summary WHERE network_score > 0 ORDER BY network_score DESC LIMIT 25`;
+  const rows = await sql`
+    SELECT ps.id, ps.name, ps.role, ps.network_score, ps.active_relationships, ps.network_reach, ps.verified_badges
+      FROM partner_summary ps
+      LEFT JOIN partners p ON p.id = ps.id
+      LEFT JOIN user_settings us ON us.user_id = p.user_id
+     WHERE ps.network_score > 0
+       AND (us.show_in_directory IS NULL OR us.show_in_directory = 1)
+     ORDER BY ps.network_score DESC
+     LIMIT 25
+  `;
   await sql.end();
   return c.json((rows as any[]).map(r => ({
     ...r,

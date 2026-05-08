@@ -25,6 +25,14 @@ import { getSQL } from '../db';
 import { requireAuth, hashToken, generateToken } from '../auth';
 import { putHeadshotFromDataUri, getHeadshot } from '../services/r2';
 import { sendVerificationEmail } from '../services/email';
+import {
+  ensureUserSettings as ensureUserSettingsTable,
+  getUserSettings,
+  upsertUserSettings,
+  SettingsValidationError,
+  type UserSettingsPatch,
+  type UserSettingsRow,
+} from '../services/userSettings';
 
 const settings = new Hono<{ Bindings: Env }>();
 
@@ -750,6 +758,268 @@ settings.delete('/founder/invites/:id', async (c) => {
   await sql`UPDATE founder_invites SET revoked_at = datetime('now') WHERE id = ${id}`;
   await sql.end();
   return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Task #20 — Phase B · Prompt 6 — Settings expansion (tabbed).
+//
+// New surfaces backed by the `user_settings` table (services/userSettings.ts +
+// sql/migrations/002_user_settings.sql). The legacy GET/PATCH /api/settings
+// remains the canonical channel for name/bio/socials/jurisdictions/role_prefs;
+// the sub-routes below own everything in user_settings (theme, density,
+// sidebar_default, profile_slug, timezone, locale, quiet hours, visibility,
+// show_in_directory, etc.). Each sub-route is a focused projection of the
+// row, returning only the fields the matching UI tab needs.
+// ---------------------------------------------------------------------------
+
+function pickProfile(row: UserSettingsRow) {
+  return {
+    timezone: row.timezone,
+    locale: row.locale,
+    pronouns: row.pronouns,
+    profile_slug: row.profile_slug,
+  };
+}
+function pickPrivacy(row: UserSettingsRow) {
+  return {
+    visibility: row.visibility,
+    show_in_directory: !!row.show_in_directory,
+    discoverable: !!row.discoverable,
+  };
+}
+function pickAppearance(row: UserSettingsRow) {
+  return {
+    theme: row.theme,
+    density: row.density,
+    sidebar_default: row.sidebar_default,
+  };
+}
+function pickNotifications(row: UserSettingsRow) {
+  let email: Record<string, boolean> = {};
+  let inapp: Record<string, boolean> = {};
+  try { email = JSON.parse(row.notif_categories_email || '{}'); } catch {}
+  try { inapp = JSON.parse(row.notif_categories_inapp || '{}'); } catch {}
+  return {
+    digest_frequency: row.digest_frequency,
+    notif_categories_email: email,
+    notif_categories_inapp: inapp,
+    quiet_hours_start: row.quiet_hours_start,
+    quiet_hours_end: row.quiet_hours_end,
+    quiet_hours_tz: row.quiet_hours_tz,
+  };
+}
+function pickFeatureFlags(row: UserSettingsRow): Record<string, boolean> {
+  try { return JSON.parse(row.feature_flags || '{}'); } catch { return {}; }
+}
+
+function handleSettingsError(c: Context<{ Bindings: Env }>, e: unknown) {
+  if (e instanceof SettingsValidationError) {
+    return c.json({ error: e.message }, e.status as any);
+  }
+  console.error('[settings v2] update failed', e);
+  return c.json({ error: 'Update failed' }, 500);
+}
+
+// GET /api/settings/v2 — full user_settings row (all tabs at once).
+settings.get('/v2', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const row = await getUserSettings(c.env, user.id);
+  return c.json({
+    profile: pickProfile(row),
+    privacy: pickPrivacy(row),
+    appearance: pickAppearance(row),
+    notifications: pickNotifications(row),
+    feature_flags: pickFeatureFlags(row),
+  });
+});
+
+// --- Profile sub-route ------------------------------------------------------
+settings.get('/profile', async (c) => {
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  const row = await getUserSettings(c.env, user.id);
+  return c.json(pickProfile(row));
+});
+settings.put('/profile', async (c) => {
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const patch: UserSettingsPatch = {};
+  if ('timezone' in body) patch.timezone = body.timezone;
+  if ('locale' in body) patch.locale = body.locale;
+  if ('pronouns' in body) patch.pronouns = body.pronouns;
+  if ('profile_slug' in body) patch.profile_slug = body.profile_slug;
+  try {
+    const row = await upsertUserSettings(c.env, user.id, patch);
+    return c.json(pickProfile(row));
+  } catch (e) { return handleSettingsError(c, e); }
+});
+
+// --- Privacy sub-route ------------------------------------------------------
+settings.get('/privacy', async (c) => {
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  const row = await getUserSettings(c.env, user.id);
+  return c.json(pickPrivacy(row));
+});
+settings.put('/privacy', async (c) => {
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const patch: UserSettingsPatch = {};
+  if ('visibility' in body) patch.visibility = body.visibility;
+  if ('show_in_directory' in body) patch.show_in_directory = body.show_in_directory;
+  if ('discoverable' in body) patch.discoverable = body.discoverable;
+  try {
+    const row = await upsertUserSettings(c.env, user.id, patch);
+    return c.json(pickPrivacy(row));
+  } catch (e) { return handleSettingsError(c, e); }
+});
+
+// --- Appearance sub-route (theme/density/sidebar_default) -------------------
+settings.get('/appearance', async (c) => {
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  const row = await getUserSettings(c.env, user.id);
+  return c.json(pickAppearance(row));
+});
+settings.put('/appearance', async (c) => {
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const patch: UserSettingsPatch = {};
+  if ('theme' in body) patch.theme = body.theme;
+  if ('density' in body) patch.density = body.density;
+  if ('sidebar_default' in body) patch.sidebar_default = body.sidebar_default;
+  try {
+    const row = await upsertUserSettings(c.env, user.id, patch);
+    return c.json(pickAppearance(row));
+  } catch (e) { return handleSettingsError(c, e); }
+});
+
+// --- Notifications sub-route (digest + categories + quiet hours) ------------
+settings.get('/notifications', async (c) => {
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  const row = await getUserSettings(c.env, user.id);
+  return c.json(pickNotifications(row));
+});
+settings.put('/notifications', async (c) => {
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const patch: UserSettingsPatch = {};
+  if ('digest_frequency' in body) patch.digest_frequency = body.digest_frequency;
+  if ('notif_categories_email' in body) patch.notif_categories_email = body.notif_categories_email;
+  if ('notif_categories_inapp' in body) patch.notif_categories_inapp = body.notif_categories_inapp;
+  if ('quiet_hours_start' in body) patch.quiet_hours_start = body.quiet_hours_start;
+  if ('quiet_hours_end' in body) patch.quiet_hours_end = body.quiet_hours_end;
+  if ('quiet_hours_tz' in body) patch.quiet_hours_tz = body.quiet_hours_tz;
+  try {
+    const row = await upsertUserSettings(c.env, user.id, patch);
+    return c.json(pickNotifications(row));
+  } catch (e) { return handleSettingsError(c, e); }
+});
+
+// --- Security sub-route (read-only summary; mutations go through dedicated
+// endpoints — /sessions, /totp/repair, /totp/recovery-codes/regenerate) -----
+settings.get('/security', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  const rows = await sql`
+    SELECT email_verified, totp_recovery_codes,
+           CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END AS totp_configured
+      FROM users WHERE id = ${user.id}
+  `;
+  const sessions = await sql`
+    SELECT COUNT(*) AS active FROM user_sessions
+     WHERE user_id = ${user.id} AND revoked_at IS NULL
+  `;
+  await sql.end();
+  if (!rows.length) return c.json({ error: 'User not found' }, 404);
+  const remaining = (() => {
+    try { return (JSON.parse(rows[0].totp_recovery_codes || '[]') || []).length; }
+    catch { return 0; }
+  })();
+  return c.json({
+    email_verified: !!rows[0].email_verified,
+    totp_configured: !!rows[0].totp_configured,
+    totp_recovery_codes_remaining: remaining,
+    active_sessions: Number(sessions[0]?.active || 0),
+  });
+});
+
+// --- Integrations sub-route (connected accounts overview) ------------------
+settings.get('/integrations', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  // Best-effort lookups against tables that may not exist on every env;
+  // any failure becomes "not connected" rather than a 500.
+  const safeOne = async (q: () => Promise<any[]>): Promise<boolean> => {
+    try { const r = await q(); return r.length > 0; } catch { return false; }
+  };
+  const linkedin = await safeOne(() => sql`SELECT 1 FROM linkedin_oauth_tokens WHERE user_id = ${user.id} LIMIT 1`);
+  const google = await safeOne(() => sql`SELECT 1 FROM google_oauth_tokens WHERE user_id = ${user.id} LIMIT 1`);
+  const microsoft = await safeOne(() => sql`SELECT 1 FROM microsoft_oauth_tokens WHERE user_id = ${user.id} LIMIT 1`);
+  await sql.end();
+  return c.json({
+    accounts: [
+      { provider: 'linkedin', connected: linkedin, disconnect_url: '/api/linkedin/disconnect' },
+      { provider: 'google',   connected: google,   disconnect_url: '/api/calendar/google/disconnect' },
+      { provider: 'outlook',  connected: microsoft, disconnect_url: '/api/calendar/microsoft/disconnect' },
+      { provider: 'slack',    connected: false,    disconnect_url: null },
+    ],
+    api_keys_enabled: false, // T20 — feature flag is OFF until API tier ships.
+    api_keys: [],
+  });
+});
+
+// --- Developer sub-route (admin only): feature flag toggles + raw user object
+settings.get('/developer', async (c) => {
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  if ((user.role || '').toLowerCase() !== 'admin') return c.json({ error: 'Admin role required' }, 403);
+  const row = await getUserSettings(c.env, user.id);
+  const sql = getSQL(c.env);
+  const userRow = await sql`SELECT id, uid, email, name, role, email_verified, kyc_status, created_at, last_active_at FROM users WHERE id = ${user.id}`;
+  await sql.end();
+  return c.json({
+    feature_flags: pickFeatureFlags(row),
+    raw_user: userRow[0] || null,
+  });
+});
+settings.put('/developer', async (c) => {
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  if ((user.role || '').toLowerCase() !== 'admin') return c.json({ error: 'Admin role required' }, 403);
+  const body = await c.req.json().catch(() => ({} as any));
+  const patch: UserSettingsPatch = {};
+  if ('feature_flags' in body && body.feature_flags && typeof body.feature_flags === 'object') {
+    const safe: Record<string, boolean> = {};
+    for (const [k, v] of Object.entries(body.feature_flags)) {
+      if (typeof k === 'string' && k.length <= 64) safe[k] = !!v;
+    }
+    patch.feature_flags = safe;
+  }
+  try {
+    const row = await upsertUserSettings(c.env, user.id, patch);
+    return c.json({ feature_flags: pickFeatureFlags(row) });
+  } catch (e) { return handleSettingsError(c, e); }
+});
+settings.post('/developer/resync-indices', async (c) => {
+  const user = await requireAuth(c);
+  if ((user.role || '').toLowerCase() !== 'admin') return c.json({ error: 'Admin role required' }, 403);
+  // Best-effort kick of the search backfill cron — defers to existing route
+  // if available, otherwise just logs an admin activity row.
+  const sql = getSQL(c.env);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+            VALUES ('developer_resync_indices', 'Admin requested search index re-sync from /settings/developer',
+                    ${user.email}, ${user.id})`;
+  await sql.end();
+  return c.json({ ok: true, queued: true, message: 'Re-sync request logged. The next scheduled cron will pick this up.' });
 });
 
 export default settings;

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, createContext, useContext } fr
 import { safeReadJSON } from './lib/storage';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
+import { SettingsProvider } from './contexts/SettingsContext';
 import SpinoutLabListener from './components/SpinoutLabListener';
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
@@ -830,8 +831,10 @@ export default function App() {
   // main.jsx already wraps <App /> in BrowserRouter.
   return (
     <AuthProvider>
-      <AppInner />
-      <SpinoutLabListener />
+      <SettingsProvider>
+        <AppInner />
+        <SpinoutLabListener />
+      </SettingsProvider>
     </AuthProvider>
   );
 }

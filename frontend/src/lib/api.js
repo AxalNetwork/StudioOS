@@ -685,6 +685,20 @@ export const api = {
   revokeSession: (id) => request(`/settings/sessions/${id}/revoke`, { method: 'POST', body: JSON.stringify({}) }),
   regenerateRecoveryCodes: (totp_code) =>
     request('/settings/totp/recovery-codes/regenerate', { method: 'POST', body: JSON.stringify({ totp_code }) }),
+  // Task #20 — settings sub-routes (user_settings table).
+  getProfileSettings: () => request('/settings/profile'),
+  updateProfileSettings: (data) => request('/settings/profile', { method: 'PUT', body: JSON.stringify(data) }),
+  getPrivacySettings: () => request('/settings/privacy'),
+  updatePrivacySettings: (data) => request('/settings/privacy', { method: 'PUT', body: JSON.stringify(data) }),
+  getAppearanceSettings: () => request('/settings/appearance'),
+  updateAppearanceSettings: (data) => request('/settings/appearance', { method: 'PUT', body: JSON.stringify(data) }),
+  getNotificationSettings: () => request('/settings/notifications'),
+  updateNotificationSettings: (data) => request('/settings/notifications', { method: 'PUT', body: JSON.stringify(data) }),
+  getSecuritySettings: () => request('/settings/security'),
+  getIntegrationSettings: () => request('/settings/integrations'),
+  getDeveloperSettings: () => request('/settings/developer'),
+  updateDeveloperSettings: (data) => request('/settings/developer', { method: 'PUT', body: JSON.stringify(data) }),
+  resyncDeveloperIndices: () => request('/settings/developer/resync-indices', { method: 'POST', body: JSON.stringify({}) }),
   listFounderInvites: () => request('/settings/founder/invites'),
   createFounderInvite: (data) =>
     request('/settings/founder/invites', { method: 'POST', body: JSON.stringify(data) }),

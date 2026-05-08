@@ -370,17 +370,27 @@ cofounder.get('/browse', async (c) => {
 
   const userIds = rows.map((p) => p.user_id);
   const uidById = new Map<number, string>();
+  // T20 — exclude users who set show_in_directory=0 in user_settings.
+  // The table is created lazily; absence == default (visible).
+  const hiddenIds = new Set<number>();
   if (userIds.length) {
     const placeholders = userIds.map(() => '?').join(',');
     const ures = await c.env.DB.prepare(
       `SELECT id, uid FROM users WHERE id IN (${placeholders})`,
     ).bind(...userIds).all<{ id: number; uid: string | null }>();
     for (const u of (ures.results || []) as any[]) uidById.set(u.id, u.uid || '');
+    try {
+      const hres = await c.env.DB.prepare(
+        `SELECT user_id FROM user_settings WHERE show_in_directory = 0 AND user_id IN (${placeholders})`,
+      ).bind(...userIds).all<{ user_id: number }>();
+      for (const h of (hres.results || []) as any[]) hiddenIds.add(h.user_id);
+    } catch {}
   }
 
   const scored: Array<{ score: number; why: string[]; profile: ProfileRow }> = [];
   for (const p of rows) {
     if (closedIds.has(p.user_id)) continue;
+    if (hiddenIds.has(p.user_id)) continue;
     const cSkills = loadList(p.skills_json).map((s) => s.toLowerCase());
     const cSectors = loadList(p.sectors_json).map((s) => s.toLowerCase());
     if (skill && !cSkills.includes(skill)) continue;
