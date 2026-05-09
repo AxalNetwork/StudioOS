@@ -184,11 +184,17 @@ async function loadEsignContracts(sql: ReturnType<typeof getSQL>): Promise<Unifi
 // Pull every legacy `documents` row that hasn't been ported to esign yet.
 // Project + founder email is batch-resolved to avoid N+1.
 async function loadDocumentsContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
-  const docs: any[] = await sql`
-    SELECT * FROM documents
-     WHERE migrated_to_esign_id IS NULL
-     ORDER BY created_at DESC
-  `;
+  // Restrict to actual contract doc_types so non-contract noise (memos,
+  // 'other', NDAs, etc.) doesn't pollute Admin Contracts list/stats.
+  const contractTypes = Array.from(CONTRACT_DOC_TYPES);
+  const placeholders = contractTypes.map(() => '?').join(',');
+  const docs: any[] = await sql.unsafe(
+    `SELECT * FROM documents
+      WHERE migrated_to_esign_id IS NULL
+        AND LOWER(COALESCE(doc_type, '')) IN (${placeholders})
+      ORDER BY created_at DESC`,
+    contractTypes,
+  );
   if (docs.length === 0) return [];
 
   const projectIds = Array.from(new Set(docs.map(d => d.project_id).filter(Boolean))) as number[];
@@ -316,7 +322,11 @@ adminContracts.get('/templates', async (c) => {
   const sql = getSQL(c.env);
   try {
     const [docs, envs]: [any[], any[]] = await Promise.all([
-      sql`SELECT template_name, doc_type, created_at FROM documents`,
+      sql.unsafe(
+        `SELECT template_name, doc_type, created_at FROM documents
+          WHERE LOWER(COALESCE(doc_type, '')) IN (${Array.from(CONTRACT_DOC_TYPES).map(() => '?').join(',')})`,
+        Array.from(CONTRACT_DOC_TYPES),
+      ),
       sql`SELECT document_type, created_at FROM esign_envelopes`,
     ]);
     const usage = new Map<string, number>();
