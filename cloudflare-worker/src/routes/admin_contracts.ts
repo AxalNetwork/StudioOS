@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
+import { mintDownloadToken } from '../services/signedDownload';
 
 const adminContracts = new Hono<{ Bindings: Env }>();
 
@@ -280,16 +281,61 @@ adminContracts.post('/:uid/void', async (c) => {
   }
 });
 
-// Download / share-link endpoints rely on R2 object storage which is wired up
-// in the FastAPI backend, not the worker. Return a friendly 501 so the UI
-// can surface a clear message instead of a generic failure.
+// Task #1 (security hardening) — Contract download is now backed by the
+// shared one-time signed-URL primitive (`services/signedDownload.ts` →
+// `routes/files.ts:/api/files/dl/:token`). The R2 bucket itself is private;
+// admins receive a 5-minute, single-use token that audits each download.
+//
+// Two endpoints:
+//   - GET  /:uid/download      — 302 redirect to the signed URL (browser
+//                                navigation, "Download" button in admin UI).
+//   - POST /:uid/download-url  — JSON body returning {url, expires_at} so
+//                                the SPA can copy/share the link.
+async function mintContractDownload(c: any) {
+  const adminUser = await requireAdmin(c);
+  const uid = c.req.param('uid');
+  const sql = getSQL(c.env);
+  try {
+    const rows: any[] = await sql`SELECT id, uid, title, file_key, status FROM documents WHERE uid = ${uid} LIMIT 1`;
+    if (rows.length === 0) return { error: c.json({ error: 'Contract not found' }, 404) };
+    const d = rows[0];
+    if (!d.file_key) return { error: c.json({ error: 'Contract has no stored file yet' }, 404) };
+    if (typeof d.file_key !== 'string' || !/^contracts?\/|^esign\/|^documents\//.test(d.file_key)) {
+      // Defence-in-depth: refuse to mint a token for an unexpected R2 prefix
+      // so a future bug that lets `file_key` be set arbitrarily can't be
+      // pivoted into reading other buckets.
+      return { error: c.json({ error: 'Invalid document storage key' }, 400) };
+    }
+    const minted = await mintDownloadToken(c.env, {
+      key: d.file_key,
+      ttlSec: 300, // hard-clamped to 5 min upstream too, but explicit here
+      audience: 'admin_contract',
+      userId: adminUser.id,
+    });
+    // Audit-log the mint (the actual download is also logged by files.ts).
+    try {
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+                VALUES ('contract_download_url_issued',
+                        ${JSON.stringify({ uid: d.uid, title: d.title, expires_at: minted.expires_at })},
+                        ${await hashEmail(adminUser.email)},
+                        ${adminUser.id})`;
+    } catch (e) { console.error('[admin_contracts] audit log failed', e); }
+    return { ok: { url: `/api/files/dl/${minted.token}`, expires_at: minted.expires_at } };
+  } finally {
+    await sql.end();
+  }
+}
+
 adminContracts.get('/:uid/download', async (c) => {
-  await requireAdmin(c);
-  return c.json({ error: 'Contract download is only available from the dev backend in this environment.' }, 501);
+  const r = await mintContractDownload(c);
+  if (r.error) return r.error;
+  return c.redirect(r.ok!.url, 302);
 });
+
 adminContracts.post('/:uid/download-url', async (c) => {
-  await requireAdmin(c);
-  return c.json({ error: 'Share links are only available from the dev backend in this environment.' }, 501);
+  const r = await mintContractDownload(c);
+  if (r.error) return r.error;
+  return c.json(r.ok);
 });
 
 export default adminContracts;

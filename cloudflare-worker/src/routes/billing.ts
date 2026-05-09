@@ -164,6 +164,15 @@ billing.post('/stripe/webhook', async (c) => {
   const raw = await c.req.text();
   const sig = c.req.header('stripe-signature') ?? '';
   const secret = c.env.STRIPE_WEBHOOK_SECRET;
+  // Task #1 (security hardening) — STRIPE_WEBHOOK_SECRET is mandatory in
+  // production. A misconfigured prod (no secret) would otherwise silently
+  // accept any payload that POSTed to this route, which is a forge-the-event
+  // primitive. Dev/preview keep the soft-accept behaviour so local Stripe
+  // CLI testing without a webhook secret still works.
+  const envName = String((c.env as { ENVIRONMENT?: string }).ENVIRONMENT || '').toLowerCase();
+  if (!secret && (envName === 'production' || envName === 'prod')) {
+    return c.json({ error: 'webhook_misconfigured' }, 503);
+  }
   if (secret) {
     const ok = await verifyStripeSignature(raw, sig, secret);
     if (!ok) return c.json({ error: 'invalid_signature' }, 400);

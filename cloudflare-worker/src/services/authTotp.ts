@@ -139,7 +139,13 @@ export async function loadTotp(
       // `auth_totp.secret_ct` row. The sentinel preserves "TOTP is
       // configured" semantics while the base32 regex in `loadTotp` ensures
       // it can never be mis-read as a real secret.
-      env.DB.prepare(`UPDATE users SET password_hash = '__totp__' WHERE id = ?`).bind(userId),
+      // Set password_reset_required = 1 so the next login flow can prompt
+      // the user to re-establish a clean credential. The login route reads
+      // this flag and surfaces it to the SPA, which routes to the recovery
+      // UI. Acceptable to set during read-path migration: it only affects
+      // legacy users (whose password_hash was misused for TOTP); fresh
+      // enrolments never hit this branch.
+      env.DB.prepare(`UPDATE users SET password_hash = '__totp__', password_reset_required = 1 WHERE id = ?`).bind(userId),
     ]);
   } catch (e) {
     console.error('[authTotp] lazy migration failed for user', userId, e);
