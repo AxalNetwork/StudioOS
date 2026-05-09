@@ -183,7 +183,7 @@ export default function SettingsPage() {
     }
   };
 
-  if (loading) return <div className="text-gray-600 text-center py-20">Loading…</div>;
+  if (loading) return <div className="text-gray-600 dark:text-gray-400 text-center py-20">Loading…</div>;
   if (error) return (
     <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 max-w-xl">
       Could not load your settings: {error}
@@ -223,7 +223,7 @@ export default function SettingsPage() {
               key={s.id}
               onClick={() => setActive(s.id)}
               className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
-                safeActive === s.id ? 'bg-violet-50 text-violet-700 font-medium' : 'text-gray-600 hover:bg-gray-50'
+                safeActive === s.id ? 'bg-violet-50 text-violet-700 font-medium' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50'
               }`}
             >
               <s.icon size={14} />
@@ -295,20 +295,20 @@ function SectionDropdown({ sections, active, onChange }) {
         onClick={() => setOpen(o => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="w-full flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm shadow-sm hover:border-gray-300 transition-colors"
+        className="w-full flex items-center justify-between gap-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm shadow-sm hover:border-gray-300 transition-colors"
       >
         <span className="flex items-center gap-2.5 min-w-0">
           <span className="w-7 h-7 rounded-lg bg-violet-50 text-violet-700 flex items-center justify-center flex-shrink-0">
             <Icon size={14} />
           </span>
-          <span className="font-medium text-gray-900 truncate">{current.label}</span>
+          <span className="font-medium text-gray-900 dark:text-gray-100 truncate">{current.label}</span>
         </span>
         <ChevronDown size={16} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <ul
           role="listbox"
-          className="absolute left-0 right-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-40 py-1 max-h-[70vh] overflow-y-auto"
+          className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-40 py-1 max-h-[70vh] overflow-y-auto"
         >
           {sections.map(s => {
             const SIcon = s.icon;
@@ -319,11 +319,11 @@ function SectionDropdown({ sections, active, onChange }) {
                   type="button"
                   onClick={() => { onChange(s.id); setOpen(false); }}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-colors ${
-                    isActive ? 'bg-violet-50 text-violet-700' : 'text-gray-700 hover:bg-gray-50'
+                    isActive ? 'bg-violet-50 text-violet-700' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50'
                   }`}
                 >
                   <span className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    isActive ? 'bg-violet-100 text-violet-700' : 'bg-gray-50 text-gray-500'
+                    isActive ? 'bg-violet-100 text-violet-700' : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
                   }`}>
                     <SIcon size={14} />
                   </span>
@@ -408,7 +408,7 @@ function ProfileSection({ data, onSaved, flash, patch }) {
       <Card title="Profile" description="Your headshot, name, and bio show up across the platform.">
         <div className="flex items-start gap-5">
           <div className="flex flex-col items-center gap-2">
-            <div className="w-24 h-24 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden">
+            <div className="w-24 h-24 rounded-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center overflow-hidden">
               {headshotPreview ? (
                 <img src={headshotPreview} alt="" className="w-full h-full object-cover" onError={() => setHeadshotPreview(null)} />
               ) : (
@@ -468,7 +468,7 @@ function JurisdictionsSection({ data, patch }) {
           return (
             <button key={j.code} onClick={() => toggle(j.code)}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                isSel ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-700 border-gray-200 hover:border-violet-400'
+                isSel ? 'bg-violet-600 text-white border-violet-600' : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-violet-400'
               }`}>
               {j.code} · {j.name}
             </button>
@@ -506,7 +506,7 @@ function EmailSection({ data, flash, reload }) {
     <Card title="Email address" description="The new address must confirm within 24 hours. The old address can revoke the change within 24 hours of the request.">
       <div className="space-y-3">
         <Field label="Current email">
-          <input value={data.email} disabled className={`${inputCls} bg-gray-50 text-gray-500`} />
+          <input value={data.email} disabled className={`${inputCls} bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400`} />
         </Field>
         {pending ? (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
@@ -642,7 +642,7 @@ function AuthSection({ data, flash }) {
       <Card title="Two-factor authentication" description="Re-pair your authenticator if you lost or replaced your device.">
         {!qrPayload ? (
           <div className="space-y-3">
-            <div className="text-sm text-gray-700">
+            <div className="text-sm text-gray-700 dark:text-gray-300">
               Status: {data.totp_configured
                 ? <span className="text-emerald-700 font-medium">Configured</span>
                 : <span className="text-amber-700 font-medium">Not configured</span>}
@@ -662,12 +662,12 @@ function AuthSection({ data, flash }) {
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="text-sm text-gray-700">Scan with your authenticator. After scanning, sign out and back in to confirm.</div>
+            <div className="text-sm text-gray-700 dark:text-gray-300">Scan with your authenticator. After scanning, sign out and back in to confirm.</div>
             {qrPayload.qr_code ? (
               <img src={`data:image/png;base64,${qrPayload.qr_code}`} alt="TOTP QR"
-                className="w-48 h-48 border border-gray-200 rounded-lg p-2 bg-white" />
+                className="w-48 h-48 border border-gray-200 dark:border-gray-700 rounded-lg p-2 bg-white dark:bg-gray-900" />
             ) : (
-              <div className="text-xs text-gray-600 break-all p-3 bg-gray-50 rounded-lg">{qrPayload.provisioning_uri}</div>
+              <div className="text-xs text-gray-600 dark:text-gray-400 break-all p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">{qrPayload.provisioning_uri}</div>
             )}
             <Field label="Manual entry secret">
               <input value={qrPayload.totp_secret} readOnly className={`${inputCls} font-mono`} onFocus={e => e.target.select()} />
@@ -685,7 +685,7 @@ function AuthSection({ data, flash }) {
             </div>
             <div className="grid grid-cols-2 gap-2 font-mono text-sm">
               {generatedCodes.map((c, i) => (
-                <div key={i} className="bg-gray-50 border border-gray-200 rounded px-3 py-2 select-all">{c}</div>
+                <div key={i} className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-3 py-2 select-all">{c}</div>
               ))}
             </div>
             <div className="flex gap-2">
@@ -694,14 +694,14 @@ function AuthSection({ data, flash }) {
                 Download as .txt
               </button>
               <button onClick={() => setGeneratedCodes(null)}
-                className="px-4 py-2 border border-gray-300 hover:border-gray-400 text-gray-700 rounded-lg text-sm">
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:border-gray-400 text-gray-700 dark:text-gray-300 rounded-lg text-sm">
                 I've saved them
               </button>
             </div>
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="text-sm text-gray-700">
+            <div className="text-sm text-gray-700 dark:text-gray-300">
               {remaining > 0
                 ? <>You have <span className="font-semibold">{remaining}</span> unused recovery code{remaining === 1 ? '' : 's'}.</>
                 : <span className="text-amber-700">You don't have any recovery codes yet — generate a set and store them somewhere safe.</span>}
@@ -719,7 +719,7 @@ function AuthSection({ data, flash }) {
                 </div>
               </Field>
             ) : (
-              <div className="text-sm text-gray-500">Configure TOTP first.</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Configure TOTP first.</div>
             )}
           </div>
         )}
@@ -728,14 +728,14 @@ function AuthSection({ data, flash }) {
       <Card title="Active sessions" description="See every device with an active session and revoke individual ones — or sign everything out at once.">
         {sessionsErr && <div className="text-sm text-red-600 mb-3">{sessionsErr}</div>}
         {sessions === null ? (
-          <div className="text-sm text-gray-500">Loading sessions…</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Loading sessions…</div>
         ) : sessions.length === 0 ? (
-          <div className="text-sm text-gray-500 mb-3">No tracked sessions yet. New sign-ins will appear here.</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-3">No tracked sessions yet. New sign-ins will appear here.</div>
         ) : (
           <div className="overflow-x-auto mb-4">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider">
+                <tr className="border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   <th className="text-left px-2 py-2 font-medium">Device</th>
                   <th className="text-left px-2 py-2 font-medium">IP</th>
                   <th className="text-left px-2 py-2 font-medium">First seen</th>
@@ -747,7 +747,7 @@ function AuthSection({ data, flash }) {
                 {sessions.map(s => {
                   const isRevoked = !!s.revoked_at;
                   return (
-                    <tr key={s.id} className={`border-b border-gray-100 ${isRevoked ? 'text-gray-400' : 'text-gray-800'}`}>
+                    <tr key={s.id} className={`border-b border-gray-100 dark:border-gray-800 ${isRevoked ? 'text-gray-400' : 'text-gray-800 dark:text-gray-200'}`}>
                       <td className="px-2 py-2 max-w-xs truncate" title={s.user_agent || ''}>
                         {s.user_agent || 'Unknown device'}
                         {s.is_current && (
@@ -802,11 +802,11 @@ function NotificationsSection({ data, patch }) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-200">
-            <th className="text-left px-2 py-2 text-xs text-gray-500 font-medium">Event</th>
+          <tr className="border-b border-gray-200 dark:border-gray-700">
+            <th className="text-left px-2 py-2 text-xs text-gray-500 dark:text-gray-400 font-medium">Event</th>
             {NOTIFICATION_CHANNELS.map(c => (
               <th key={c.key}
-                className="text-center px-2 py-2 text-xs text-gray-500 font-medium uppercase tracking-wider"
+                className="text-center px-2 py-2 text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider"
                 title={c.disabled ? c.hint : undefined}>
                 {c.label}
                 {c.disabled && (
@@ -820,8 +820,8 @@ function NotificationsSection({ data, patch }) {
         </thead>
         <tbody>
           {events.map(ev => (
-            <tr key={ev.key} className="border-b border-gray-100">
-              <td className="px-2 py-2 text-gray-800">{ev.label}</td>
+            <tr key={ev.key} className="border-b border-gray-100 dark:border-gray-800">
+              <td className="px-2 py-2 text-gray-800 dark:text-gray-200">{ev.label}</td>
               {NOTIFICATION_CHANNELS.map(c => {
                 const checked = !!prefs[ev.key]?.[c.key];
                 return (
@@ -829,7 +829,7 @@ function NotificationsSection({ data, patch }) {
                     <input type="checkbox" checked={checked} disabled={!!c.disabled}
                       onChange={e => setEvent(ev.key, c.key, e.target.checked)}
                       title={c.disabled ? c.hint : undefined}
-                      className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 disabled:opacity-40 disabled:cursor-not-allowed" />
+                      className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500 disabled:opacity-40 disabled:cursor-not-allowed" />
                   </td>
                 );
               })}
@@ -977,7 +977,7 @@ function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <a href={publicUrl} target="_blank" rel="noreferrer noopener"
                  className="font-mono text-sm text-violet-900 hover:underline break-all">{publicUrl}</a>
-              <button onClick={copyPublicUrl} className="ml-auto rounded-md border border-violet-300 bg-white px-2 py-1 text-xs text-violet-700 hover:bg-violet-100">
+              <button onClick={copyPublicUrl} className="ml-auto rounded-md border border-violet-300 bg-white dark:bg-gray-900 px-2 py-1 text-xs text-violet-700 hover:bg-violet-100">
                 {copied ? 'Copied' : 'Copy'}
               </button>
             </div>
@@ -985,15 +985,15 @@ function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
         )}
         <div className="space-y-2">
           {fieldList.map(({ key, label }) => (
-            <label key={key} className="flex items-center gap-3 text-sm text-gray-800">
+            <label key={key} className="flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200">
               <input type="checkbox" checked={pp[key] !== false}
                 onChange={e => setVisible(key, e.target.checked)}
-                className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500" />
+                className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
               {label}
             </label>
           ))}
         </div>
-        <p className="mt-3 text-xs text-gray-500">
+        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
           Email and account details are never published. Inactive or deletion-requested accounts return 404.
         </p>
       </Card>
@@ -1002,14 +1002,14 @@ function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
         <Card title="Your data" description="Download everything we know about you, or request deletion.">
           <div className="flex flex-wrap gap-3">
             <button onClick={exportData} disabled={exporting}
-              className="px-4 py-2 border border-gray-300 hover:border-gray-400 text-gray-800 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:border-gray-400 text-gray-800 dark:text-gray-200 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
               <Download size={14} /> {exporting ? 'Preparing…' : 'Download my data'}
             </button>
             {data.deletion_requested_at ? (
               <div className="flex items-center gap-3">
                 <span className="text-xs text-amber-700">Deletion requested {new Date(data.deletion_requested_at).toLocaleDateString()}</span>
                 <button onClick={cancelDelete} disabled={deleting}
-                  className="px-3 py-2 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel request</button>
+                  className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel request</button>
               </div>
             ) : (
               <button onClick={requestDelete} disabled={deleting}
@@ -1178,14 +1178,14 @@ function CofounderInvitesCard() {
       )}
 
       {invites === null ? (
-        <div className="text-sm text-gray-500">Loading invites…</div>
+        <div className="text-sm text-gray-500 dark:text-gray-400">Loading invites…</div>
       ) : invites.length === 0 ? (
-        <div className="text-sm text-gray-500">No invites yet.</div>
+        <div className="text-sm text-gray-500 dark:text-gray-400">No invites yet.</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider">
+              <tr className="border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 <th className="text-left px-2 py-2 font-medium">Invitee</th>
                 <th className="text-left px-2 py-2 font-medium">Role</th>
                 <th className="text-left px-2 py-2 font-medium">Status</th>
@@ -1198,18 +1198,18 @@ function CofounderInvitesCard() {
                 let status = 'Pending';
                 let cls = 'text-amber-700 bg-amber-50 border-amber-200';
                 if (i.accepted_at) { status = 'Accepted'; cls = 'text-emerald-700 bg-emerald-50 border-emerald-200'; }
-                else if (i.revoked_at) { status = 'Revoked'; cls = 'text-gray-500 bg-gray-50 border-gray-200'; }
+                else if (i.revoked_at) { status = 'Revoked'; cls = 'text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'; }
                 return (
-                  <tr key={i.id} className="border-b border-gray-100">
+                  <tr key={i.id} className="border-b border-gray-100 dark:border-gray-800">
                     <td className="px-2 py-2">
-                      <div className="text-gray-800">{i.invitee_name || i.invitee_email}</div>
-                      {i.invitee_name && <div className="text-xs text-gray-500">{i.invitee_email}</div>}
+                      <div className="text-gray-800 dark:text-gray-200">{i.invitee_name || i.invitee_email}</div>
+                      {i.invitee_name && <div className="text-xs text-gray-500 dark:text-gray-400">{i.invitee_email}</div>}
                     </td>
-                    <td className="px-2 py-2 text-gray-700">{i.role}</td>
+                    <td className="px-2 py-2 text-gray-700 dark:text-gray-300">{i.role}</td>
                     <td className="px-2 py-2">
                       <span className={`inline-block text-xs px-2 py-0.5 rounded-full border ${cls}`}>{status}</span>
                     </td>
-                    <td className="px-2 py-2 text-xs text-gray-600">
+                    <td className="px-2 py-2 text-xs text-gray-600 dark:text-gray-400">
                       {i.expires_at ? new Date(i.expires_at).toLocaleDateString() : '—'}
                     </td>
                     <td className="px-2 py-2 text-right">
@@ -1313,7 +1313,7 @@ function PartnerPrefs({ data, patch }) {
             onTouchEnd={e => save({ risk_score: Number(e.target.value) })}
             onKeyUp={e => save({ risk_score: Number(e.target.value) })}
             className="w-full accent-violet-600" />
-          <div className="flex justify-between text-[11px] text-gray-500 mt-1">
+          <div className="flex justify-between text-[11px] text-gray-500 dark:text-gray-400 mt-1">
             <span>Capital preservation</span>
             <span>Balanced</span>
             <span>Frontier / venture</span>
@@ -1394,7 +1394,7 @@ function ProfileExtrasCard({ flash }) {
   };
 
   if (err) return <Card title="Profile details"><div className="text-sm text-red-600">{err}</div></Card>;
-  if (!row) return <Card title="Profile details"><div className="text-sm text-gray-500">Loading…</div></Card>;
+  if (!row) return <Card title="Profile details"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
 
   const tz = row.timezone || 'UTC';
   const tzOptions = COMMON_TIMEZONES.includes(tz) ? COMMON_TIMEZONES : [tz, ...COMMON_TIMEZONES];
@@ -1478,14 +1478,14 @@ function AccountDeletionCard({ data, flash, reload }) {
     <Card title="Account & data" description="Export your data, or request account deletion (30-day grace period before hard delete).">
       <div className="flex flex-wrap gap-3">
         <button onClick={exportData} disabled={exporting}
-          className="px-4 py-2 border border-gray-300 hover:border-gray-400 text-gray-800 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
+          className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:border-gray-400 text-gray-800 dark:text-gray-200 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
           <Download size={14} /> {exporting ? 'Preparing…' : 'Download my data (JSON)'}
         </button>
         {data.deletion_requested_at ? (
           <div className="flex items-center gap-3">
             <span className="text-xs text-amber-700">Deletion requested {new Date(data.deletion_requested_at).toLocaleDateString()}</span>
             <button onClick={cancelDelete} disabled={deleting}
-              className="px-3 py-2 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel request</button>
+              className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel request</button>
           </div>
         ) : (
           <button onClick={requestDelete} disabled={deleting}
@@ -1535,7 +1535,7 @@ function DigestQuietHoursCard({ flash }) {
   };
 
   if (err) return <Card title="Digest & quiet hours"><div className="text-sm text-red-600">{err}</div></Card>;
-  if (!row) return <Card title="Digest & quiet hours"><div className="text-sm text-gray-500">Loading…</div></Card>;
+  if (!row) return <Card title="Digest & quiet hours"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
 
   const email = row.notif_categories_email || {};
   const inapp = row.notif_categories_inapp || {};
@@ -1561,7 +1561,7 @@ function DigestQuietHoursCard({ flash }) {
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider">
+              <tr className="border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 <th className="text-left px-2 py-2 font-medium">Category</th>
                 <th className="text-center px-2 py-2 font-medium">Email</th>
                 <th className="text-center px-2 py-2 font-medium">In-app</th>
@@ -1569,17 +1569,17 @@ function DigestQuietHoursCard({ flash }) {
             </thead>
             <tbody>
               {NOTIF_CATEGORY_KEYS.map(c => (
-                <tr key={c.key} className="border-b border-gray-100">
-                  <td className="px-2 py-2 text-gray-800">{c.label}</td>
+                <tr key={c.key} className="border-b border-gray-100 dark:border-gray-800">
+                  <td className="px-2 py-2 text-gray-800 dark:text-gray-200">{c.label}</td>
                   <td className="text-center px-2 py-2">
                     <input type="checkbox" checked={!!email[c.key]} disabled={busy}
                       onChange={e => setCategory('email', c.key, e.target.checked)}
-                      className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500" />
+                      className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
                   </td>
                   <td className="text-center px-2 py-2">
                     <input type="checkbox" checked={!!inapp[c.key]} disabled={busy}
                       onChange={e => setCategory('inapp', c.key, e.target.checked)}
-                      className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500" />
+                      className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
                   </td>
                 </tr>
               ))}
@@ -1644,7 +1644,7 @@ function PrivacyCoreCard({ flash }) {
   };
 
   if (err) return <Card title="Visibility"><div className="text-sm text-red-600">{err}</div></Card>;
-  if (!row) return <Card title="Visibility"><div className="text-sm text-gray-500">Loading…</div></Card>;
+  if (!row) return <Card title="Visibility"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
 
   return (
     <Card title="Visibility & discovery"
@@ -1657,16 +1657,16 @@ function PrivacyCoreCard({ flash }) {
             <option value="private">Private — admins only</option>
           </select>
         </Field>
-        <label className="flex items-center gap-3 text-sm text-gray-800">
+        <label className="flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200">
           <input type="checkbox" checked={!!row.show_in_directory} disabled={busy}
             onChange={e => save({ show_in_directory: e.target.checked })}
-            className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500" />
+            className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
           Show me in the Public Directory
         </label>
-        <label className="flex items-center gap-3 text-sm text-gray-800">
+        <label className="flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200">
           <input type="checkbox" checked={!!row.discoverable} disabled={busy}
             onChange={e => save({ discoverable: e.target.checked })}
-            className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500" />
+            className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
           Allow mentors and founders to discover me for matching
         </label>
       </div>
@@ -1714,18 +1714,18 @@ function IntegrationsTab({ flash }) {
   };
 
   if (err) return <Card title="Integrations"><div className="text-sm text-red-600">{err}</div></Card>;
-  if (!row) return <Card title="Integrations"><div className="text-sm text-gray-500">Loading…</div></Card>;
+  if (!row) return <Card title="Integrations"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
 
   return (
     <>
       <Card title="Connected accounts"
         description="OAuth links to third-party services. Disconnecting revokes the stored refresh token; the provider may still show Axal as authorized until you remove it from their account settings.">
-        <div className="divide-y divide-gray-100">
+        <div className="divide-y divide-gray-100 dark:divide-gray-800">
           {(row.accounts || []).map(acct => (
             <div key={acct.provider} className="flex items-center justify-between py-3">
               <div>
-                <div className="text-sm font-medium text-gray-900">{PROVIDER_LABELS[acct.provider] || acct.provider}</div>
-                <div className={`text-xs ${acct.connected ? 'text-emerald-700' : 'text-gray-500'}`}>
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{PROVIDER_LABELS[acct.provider] || acct.provider}</div>
+                <div className={`text-xs ${acct.connected ? 'text-emerald-700' : 'text-gray-500 dark:text-gray-400'}`}>
                   {acct.connected ? 'Connected' : 'Not connected'}
                 </div>
               </div>
@@ -1747,7 +1747,7 @@ function IntegrationsTab({ flash }) {
       {row.api_keys_enabled && (
         <Card title="API keys"
           description="Personal access tokens for programmatic access. Each key is shown exactly once.">
-          <div className="text-sm text-gray-500">No keys yet.</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">No keys yet.</div>
         </Card>
       )}
     </>
@@ -1760,17 +1760,17 @@ function BillingTab({ data }) {
     <Card title="Billing"
       description="Subscription tier, payment method, and invoices. Full self-serve management is shipping with the Tiers track.">
       <div className="space-y-3 text-sm">
-        <div className="flex items-center justify-between border border-gray-200 rounded-lg p-4">
+        <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div>
-            <div className="text-xs uppercase tracking-wider text-gray-500">Current tier</div>
-            <div className="text-lg font-semibold text-gray-900 capitalize">{tier}</div>
+            <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Current tier</div>
+            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100 capitalize">{tier}</div>
           </div>
           <a href="/founder?tab=billing"
             className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">
             Manage plan
           </a>
         </div>
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-gray-500 dark:text-gray-400">
           Need an invoice or to update your payment method? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
         </div>
       </div>
@@ -1792,7 +1792,7 @@ function AppearanceTab({ flash }) {
     } finally { setBusy(false); }
   };
 
-  if (loading) return <Card title="Appearance"><div className="text-sm text-gray-500">Loading…</div></Card>;
+  if (loading) return <Card title="Appearance"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
 
   const themes = [
     { value: 'light', label: 'Light', icon: Sun },
@@ -1811,7 +1811,7 @@ function AppearanceTab({ flash }) {
             return (
               <button key={t.value} disabled={busy} onClick={() => set({ theme: t.value })}
                 className={`flex flex-col items-center gap-2 px-4 py-4 rounded-lg border text-sm transition-colors ${
-                  active ? 'border-violet-600 bg-violet-50 text-violet-700' : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                  active ? 'border-violet-600 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900'
                 }`}>
                 <Icon size={20} />
                 {t.label}
@@ -1828,7 +1828,7 @@ function AppearanceTab({ flash }) {
             return (
               <button key={d} disabled={busy} onClick={() => set({ density: d })}
                 className={`px-4 py-3 rounded-lg border text-sm capitalize transition-colors ${
-                  active ? 'border-violet-600 bg-violet-50 text-violet-700' : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                  active ? 'border-violet-600 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900'
                 }`}>{d}</button>
             );
           })}
@@ -1842,7 +1842,7 @@ function AppearanceTab({ flash }) {
             return (
               <button key={s} disabled={busy} onClick={() => set({ sidebar_default: s })}
                 className={`px-4 py-3 rounded-lg border text-sm capitalize transition-colors ${
-                  active ? 'border-violet-600 bg-violet-50 text-violet-700' : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                  active ? 'border-violet-600 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900'
                 }`}>{s}</button>
             );
           })}
@@ -1907,7 +1907,7 @@ function DeveloperTab({ flash }) {
   };
 
   if (err) return <Card title="Developer"><div className="text-sm text-red-600">{err}</div></Card>;
-  if (!row) return <Card title="Developer"><div className="text-sm text-gray-500">Loading…</div></Card>;
+  if (!row) return <Card title="Developer"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
 
   const flags = row.feature_flags || {};
   const flagKeys = Object.keys(flags).sort();
@@ -1916,17 +1916,17 @@ function DeveloperTab({ flash }) {
     <>
       <Card title="Feature flags" description="Per-account toggles. Use sparingly — most product flags belong in the worker bindings.">
         {flagKeys.length === 0 ? (
-          <div className="text-sm text-gray-500 mb-3">No flags set.</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-3">No flags set.</div>
         ) : (
-          <div className="divide-y divide-gray-100 mb-3">
+          <div className="divide-y divide-gray-100 dark:divide-gray-800 mb-3">
             {flagKeys.map(k => (
               <div key={k} className="flex items-center justify-between py-2">
-                <div className="font-mono text-sm text-gray-800">{k}</div>
+                <div className="font-mono text-sm text-gray-800 dark:text-gray-200">{k}</div>
                 <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-2 text-xs text-gray-600">
+                  <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                     <input type="checkbox" checked={!!flags[k]} disabled={busy}
                       onChange={e => toggleFlag(k, e.target.checked)}
-                      className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500" />
+                      className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
                     {flags[k] ? 'On' : 'Off'}
                   </label>
                   <button onClick={() => removeFlag(k)} disabled={busy}
@@ -1950,7 +1950,7 @@ function DeveloperTab({ flash }) {
 
       <Card title="Search indices" description="Force re-sync of derived caches and search indices for your account.">
         <button onClick={resync} disabled={resyncing}
-          className="px-4 py-2 border border-gray-300 hover:border-gray-400 text-gray-800 rounded-lg text-sm disabled:opacity-50">
+          className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:border-gray-400 text-gray-800 dark:text-gray-200 rounded-lg text-sm disabled:opacity-50">
           {resyncing ? 'Queueing…' : 'Re-sync indices'}
         </button>
       </Card>
