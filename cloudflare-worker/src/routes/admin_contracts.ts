@@ -5,6 +5,7 @@ import { getSQL } from '../db';
 import { requireAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken } from '../services/signedDownload';
+import { sendAgreementAssignedEmail } from '../services/email';
 
 type AppContext = Context<{ Bindings: Env }>;
 type ContractDownloadResult =
@@ -49,35 +50,172 @@ function daysBetween(a: any, b: any): number | null {
   return Math.max(0, Math.floor((t1 - t2) / 86400000));
 }
 
-function enrichRow(d: any, projectName: string | null, founderEmail: string | null) {
+// ---------------------------------------------------------------------------
+// Task #2 — Unified contract row.
+//
+// Admin "All Contracts" reads from BOTH the legacy `documents` table and the
+// modern `esign_envelopes` table. Rows from each source are normalised into
+// the same shape (`UnifiedContract`) so the frontend can render them
+// uniformly. The `source` discriminator is preserved so write actions
+// (resend / void / download) can dispatch back to the correct table.
+// ---------------------------------------------------------------------------
+interface UnifiedContract {
+  id: number;
+  uid: string;
+  title: string;
+  doc_type: string | null;
+  status: string; // unified: draft|generated|sent|signed|void
+  template_name: string | null;
+  project_id: number | null;
+  project_name: string | null;
+  recipient_email: string | null;
+  signed_by: string | null;
+  signed_at: string | null;
+  signed_ip: string | null;
+  days_to_sign: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+  file_key: string | null;
+  file_size: number | null;
+  file_content_type: string | null;
+  file_sha256: string | null;
+  source: 'documents' | 'esign';
+}
+
+function enrichDocRow(d: any, projectName: string | null, founderEmail: string | null): UnifiedContract {
   const recipient = d.signed_by || founderEmail || null;
   return {
     id: d.id,
     uid: d.uid,
     title: d.title,
     doc_type: d.doc_type,
-    status: d.status,
+    status: String(d.status || '').toLowerCase(),
     template_name: d.template_name,
     project_id: d.project_id,
     project_name: projectName,
     recipient_email: recipient,
     signed_by: d.signed_by,
     signed_at: d.signed_at,
-    signed_ip: d.signed_ip,
+    signed_ip: d.signed_ip ?? null,
     days_to_sign: daysBetween(d.signed_at, d.created_at),
     created_at: d.created_at,
     updated_at: d.updated_at,
-    file_key: d.file_key,
-    file_size: d.file_size,
-    file_content_type: d.file_content_type,
-    file_sha256: d.file_sha256,
+    file_key: d.file_key ?? null,
+    file_size: d.file_size ?? null,
+    file_content_type: d.file_content_type ?? null,
+    file_sha256: d.file_sha256 ?? null,
+    source: 'documents',
   };
 }
 
-// GET /api/admin/contracts — list with filters
+// Map esign envelope status → unified contract status.
+//   sent / partially_signed → sent (still pending signature)
+//   completed               → signed
+//   rejected / void         → void
+function mapEsignStatus(s: string): string {
+  const x = String(s || '').toLowerCase();
+  if (x === 'completed') return 'signed';
+  if (x === 'rejected' || x === 'void') return 'void';
+  return 'sent';
+}
+
+function enrichEsignRow(e: any): UnifiedContract {
+  return {
+    id: e.id,
+    uid: e.envelope_uuid,
+    title: e.document_title,
+    doc_type: e.document_type,
+    status: mapEsignStatus(e.status),
+    template_name: e.document_type,
+    project_id: e.deal_id ?? null,
+    project_name: null,
+    recipient_email: e.recipient_email || null,
+    signed_by: e.signer_name || e.recipient_name || e.recipient_email || null,
+    signed_at: e.last_signed_at || e.completed_at || null,
+    signed_ip: e.signer_ip || null,
+    days_to_sign: daysBetween(e.last_signed_at || e.completed_at, e.created_at),
+    created_at: e.created_at,
+    updated_at: e.completed_at || e.created_at,
+    file_key: e.signed_r2_key || null,
+    file_size: null,
+    file_content_type: e.signed_r2_key ? 'application/pdf' : null,
+    file_sha256: null,
+    source: 'esign',
+  };
+}
+
+// Pull every esign envelope joined with its first/most-recent recipient
+// and the most-recent signature event. Returns rows in unified shape.
+async function loadEsignContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
+  // SQLite/D1 doesn't have lateral joins; we use scalar subqueries to fold
+  // recipient + signature info into a single row per envelope.
+  const rows: any[] = await sql`
+    SELECT
+      e.id, e.envelope_uuid, e.user_id, e.deal_id,
+      e.document_type, e.document_title,
+      e.status, e.created_at, e.completed_at, e.signed_r2_key,
+      (SELECT recipient_email FROM esign_recipients WHERE envelope_id = e.id ORDER BY id ASC LIMIT 1) AS recipient_email,
+      (SELECT recipient_name  FROM esign_recipients WHERE envelope_id = e.id ORDER BY id ASC LIMIT 1) AS recipient_name,
+      (SELECT recipient_name  FROM esign_recipients WHERE envelope_id = e.id AND status = 'signed' ORDER BY signed_at DESC LIMIT 1) AS signer_name,
+      (SELECT signer_ip       FROM esign_recipients WHERE envelope_id = e.id AND status = 'signed' ORDER BY signed_at DESC LIMIT 1) AS signer_ip,
+      (SELECT MAX(signed_at)  FROM esign_recipients WHERE envelope_id = e.id) AS last_signed_at
+    FROM esign_envelopes e
+    ORDER BY e.created_at DESC
+  `;
+  return rows.map(enrichEsignRow);
+}
+
+// Pull every legacy `documents` row that hasn't been ported to esign yet.
+// Project + founder email is batch-resolved to avoid N+1.
+async function loadDocumentsContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
+  const docs: any[] = await sql`
+    SELECT * FROM documents
+     WHERE migrated_to_esign_id IS NULL
+     ORDER BY created_at DESC
+  `;
+  if (docs.length === 0) return [];
+
+  const projectIds = Array.from(new Set(docs.map(d => d.project_id).filter(Boolean))) as number[];
+  const projectMap = new Map<number, { name: string; founder_email: string | null }>();
+  if (projectIds.length > 0) {
+    // D1 doesn't support array binding; build an IN (?,?,?) clause manually.
+    const placeholders = projectIds.map(() => '?').join(',');
+    const projRows: any[] = await sql.unsafe(
+      `SELECT p.id, p.name, f.email AS founder_email
+         FROM projects p
+         LEFT JOIN founders f ON f.id = p.founder_id
+        WHERE p.id IN (${placeholders})`,
+      projectIds,
+    );
+    for (const r of projRows) {
+      projectMap.set(r.id, { name: r.name, founder_email: r.founder_email });
+    }
+  }
+
+  return docs.map(d => {
+    const p = d.project_id ? projectMap.get(d.project_id) : null;
+    return enrichDocRow(d, p?.name || null, p?.founder_email || null);
+  });
+}
+
+async function loadAllContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
+  const [docRows, esignRows] = await Promise.all([
+    loadDocumentsContracts(sql),
+    loadEsignContracts(sql),
+  ]);
+  const merged = [...docRows, ...esignRows];
+  merged.sort((a, b) => {
+    const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return tb - ta;
+  });
+  return merged;
+}
+
+// GET /api/admin/contracts — list with filters (UNION over documents + esign).
 adminContracts.get('/', async (c) => {
   await requireAdmin(c);
-  const status = c.req.query('status') || '';
+  const status = (c.req.query('status') || '').toLowerCase();
   const docType = c.req.query('doc_type') || '';
   const projectId = c.req.query('project_id');
   const q = (c.req.query('q') || '').toLowerCase();
@@ -86,46 +224,11 @@ adminContracts.get('/', async (c) => {
 
   const sql = getSQL(c.env);
   try {
-    // Pull all matching docs, then enrich + filter in JS (matches FastAPI parity).
-    let docs: any[];
-    if (status && docType && projectId) {
-      docs = await sql`SELECT * FROM documents WHERE status = ${status} AND doc_type = ${docType} AND project_id = ${parseInt(projectId)} ORDER BY created_at DESC`;
-    } else if (status && docType) {
-      docs = await sql`SELECT * FROM documents WHERE status = ${status} AND doc_type = ${docType} ORDER BY created_at DESC`;
-    } else if (status && projectId) {
-      docs = await sql`SELECT * FROM documents WHERE status = ${status} AND project_id = ${parseInt(projectId)} ORDER BY created_at DESC`;
-    } else if (docType && projectId) {
-      docs = await sql`SELECT * FROM documents WHERE doc_type = ${docType} AND project_id = ${parseInt(projectId)} ORDER BY created_at DESC`;
-    } else if (status) {
-      docs = await sql`SELECT * FROM documents WHERE status = ${status} ORDER BY created_at DESC`;
-    } else if (docType) {
-      docs = await sql`SELECT * FROM documents WHERE doc_type = ${docType} ORDER BY created_at DESC`;
-    } else if (projectId) {
-      docs = await sql`SELECT * FROM documents WHERE project_id = ${parseInt(projectId)} ORDER BY created_at DESC`;
-    } else {
-      docs = await sql`SELECT * FROM documents ORDER BY created_at DESC`;
-    }
+    let rows = await loadAllContracts(sql);
 
-    // Batch-resolve project + founder emails so we don't do N round-trips.
-    const projectIds = Array.from(new Set(docs.map(d => d.project_id).filter(Boolean)));
-    const projectMap = new Map<number, { name: string; founder_email: string | null }>();
-    if (projectIds.length > 0) {
-      const projRows = await sql`
-        SELECT p.id, p.name, f.email AS founder_email
-          FROM projects p
-          LEFT JOIN founders f ON f.id = p.founder_id
-         WHERE p.id = ANY(${projectIds})
-      `;
-      for (const r of projRows as any[]) {
-        projectMap.set(r.id, { name: r.name, founder_email: r.founder_email });
-      }
-    }
-
-    let rows = docs.map(d => {
-      const p = d.project_id ? projectMap.get(d.project_id) : null;
-      return enrichRow(d, p?.name || null, p?.founder_email || null);
-    });
-
+    if (status)    rows = rows.filter(r => r.status === status);
+    if (docType)   rows = rows.filter(r => r.doc_type === docType);
+    if (projectId) rows = rows.filter(r => r.project_id === parseInt(projectId));
     if (q) {
       rows = rows.filter(r =>
         (r.title || '').toLowerCase().includes(q) ||
@@ -136,33 +239,35 @@ adminContracts.get('/', async (c) => {
     }
 
     const total = rows.length;
-    return c.json({ total, limit, offset, items: rows.slice(offset, offset + limit) });
+    return c.json({
+      total, limit, offset,
+      items: rows.slice(offset, offset + limit),
+      meta: { sources: ['documents', 'esign_envelopes'], unioned: true },
+    });
   } finally {
     await sql.end();
   }
 });
 
-// GET /api/admin/contracts/stats
+// GET /api/admin/contracts/stats — aggregate counters across the union.
 adminContracts.get('/stats', async (c) => {
   await requireAdmin(c);
   const sql = getSQL(c.env);
   try {
-    const docs: any[] = await sql`SELECT status, doc_type, signed_at, created_at FROM documents`;
+    const rows = await loadAllContracts(sql);
     const byStatus: Record<string, number> = { draft: 0, generated: 0, sent: 0, signed: 0, void: 0 };
     const byTypeCount = new Map<string, number>();
     const signDays: number[] = [];
     let signedRecent = 0;
-    const now = Date.now();
-    const cutoff = now - 30 * 86400000;
+    const cutoff = Date.now() - 30 * 86400000;
 
-    for (const d of docs) {
-      const s = String(d.status || '').toLowerCase();
-      if (s in byStatus) byStatus[s]++;
-      if (d.doc_type) byTypeCount.set(d.doc_type, (byTypeCount.get(d.doc_type) || 0) + 1);
-      const days = daysBetween(d.signed_at, d.created_at);
+    for (const r of rows) {
+      if (r.status in byStatus) byStatus[r.status]++;
+      if (r.doc_type) byTypeCount.set(r.doc_type, (byTypeCount.get(r.doc_type) || 0) + 1);
+      const days = daysBetween(r.signed_at, r.created_at);
       if (days != null) signDays.push(days);
-      if (d.signed_at) {
-        const t = new Date(d.signed_at).getTime();
+      if (r.signed_at) {
+        const t = new Date(r.signed_at).getTime();
         if (Number.isFinite(t) && t >= cutoff) signedRecent++;
       }
     }
@@ -173,10 +278,12 @@ adminContracts.get('/stats', async (c) => {
       .map(([type, count]) => ({ type, count }));
 
     return c.json({
-      total: docs.length,
+      total: rows.length,
       by_status: byStatus,
       by_type: byType,
-      avg_days_to_sign: signDays.length ? Math.round((signDays.reduce((a, b) => a + b, 0) / signDays.length) * 10) / 10 : null,
+      avg_days_to_sign: signDays.length
+        ? Math.round((signDays.reduce((a, b) => a + b, 0) / signDays.length) * 10) / 10
+        : null,
       signed_last_30d: signedRecent,
       pending_signature: byStatus.sent + byStatus.generated,
     });
@@ -186,22 +293,27 @@ adminContracts.get('/stats', async (c) => {
 });
 
 // GET /api/admin/contracts/templates — catalog with usage counts.
+// Counts come from BOTH `documents.template_name|doc_type` and
+// `esign_envelopes.document_type` so usage isn't undercounted post-migration.
 adminContracts.get('/templates', async (c) => {
   await requireAdmin(c);
   const sql = getSQL(c.env);
   try {
-    const docs: any[] = await sql`SELECT template_name, doc_type, created_at FROM documents`;
+    const [docs, envs]: [any[], any[]] = await Promise.all([
+      sql`SELECT template_name, doc_type, created_at FROM documents`,
+      sql`SELECT document_type, created_at FROM esign_envelopes`,
+    ]);
     const usage = new Map<string, number>();
     const lastUsed = new Map<string, string>();
-    for (const d of docs) {
-      const key = d.template_name || d.doc_type;
-      if (!key) continue;
+    const bump = (key: string | null | undefined, when: string | null | undefined) => {
+      if (!key) return;
       usage.set(key, (usage.get(key) || 0) + 1);
       const prev = lastUsed.get(key);
-      if (d.created_at && (!prev || new Date(d.created_at) > new Date(prev))) {
-        lastUsed.set(key, d.created_at);
-      }
-    }
+      if (when && (!prev || new Date(when) > new Date(prev))) lastUsed.set(key, when);
+    };
+    for (const d of docs) bump(d.template_name || d.doc_type, d.created_at);
+    for (const e of envs) bump(e.document_type, e.created_at);
+
     const out = Object.entries(TEMPLATES).map(([k, v]) => ({
       key: k,
       title: v.title,
@@ -218,111 +330,223 @@ adminContracts.get('/templates', async (c) => {
   }
 });
 
-// GET /api/admin/contracts/:uid — detail
+// ---------------------------------------------------------------------------
+// Per-row dispatch helpers — admin write actions look up `:uid` in BOTH
+// tables and dispatch to the right backing store.
+// ---------------------------------------------------------------------------
+type ContractRowRef =
+  | { source: 'documents'; row: any }
+  | { source: 'esign'; row: any }
+  | null;
+
+async function findContractByUid(sql: ReturnType<typeof getSQL>, uid: string): Promise<ContractRowRef> {
+  // documents.uid is 32-char hex; esign_envelopes.envelope_uuid is a 36-char
+  // standard UUID with dashes. They can't collide, but we still try
+  // documents first since legacy rows are more common during the
+  // transition.
+  const docs: any[] = await sql`SELECT * FROM documents WHERE uid = ${uid} LIMIT 1`;
+  if (docs.length > 0) {
+    const d = docs[0];
+    if (!d.migrated_to_esign_id) return { source: 'documents', row: d };
+    // Migrated — follow the back-pointer into esign_envelopes so callers
+    // operate on the live row.
+    const envs: any[] = await sql`SELECT * FROM esign_envelopes WHERE id = ${d.migrated_to_esign_id} LIMIT 1`;
+    if (envs.length > 0) return { source: 'esign', row: envs[0] };
+  }
+  const envs: any[] = await sql`SELECT * FROM esign_envelopes WHERE envelope_uuid = ${uid} LIMIT 1`;
+  if (envs.length > 0) return { source: 'esign', row: envs[0] };
+  return null;
+}
+
+// GET /api/admin/contracts/:uid — detail (UNION-aware).
 adminContracts.get('/:uid', async (c) => {
   await requireAdmin(c);
-  const uid = c.req.param('uid');
+  const uid = c.req.param('uid') ?? '';
   const sql = getSQL(c.env);
   try {
-    const rows: any[] = await sql`SELECT * FROM documents WHERE uid = ${uid} LIMIT 1`;
-    if (rows.length === 0) return c.json({ error: 'Contract not found' }, 404);
-    const d = rows[0];
-    let projName: string | null = null;
-    let founderEmail: string | null = null;
-    if (d.project_id) {
-      const pr: any[] = await sql`
-        SELECT p.name, f.email AS founder_email
-          FROM projects p
-          LEFT JOIN founders f ON f.id = p.founder_id
-         WHERE p.id = ${d.project_id}
-         LIMIT 1
-      `;
-      if (pr[0]) { projName = pr[0].name; founderEmail = pr[0].founder_email; }
+    const ref = await findContractByUid(sql, uid);
+    if (!ref) return c.json({ error: 'Contract not found' }, 404);
+
+    if (ref.source === 'documents') {
+      const d = ref.row;
+      let projName: string | null = null;
+      let founderEmail: string | null = null;
+      if (d.project_id) {
+        const pr: any[] = await sql`
+          SELECT p.name, f.email AS founder_email
+            FROM projects p
+            LEFT JOIN founders f ON f.id = p.founder_id
+           WHERE p.id = ${d.project_id}
+           LIMIT 1
+        `;
+        if (pr[0]) { projName = pr[0].name; founderEmail = pr[0].founder_email; }
+      }
+      return c.json(enrichDocRow(d, projName, founderEmail));
     }
-    return c.json(enrichRow(d, projName, founderEmail));
+
+    // esign source — re-query with the recipient subselects so the detail
+    // payload matches list shape.
+    const envRows: any[] = await sql`
+      SELECT
+        e.id, e.envelope_uuid, e.user_id, e.deal_id,
+        e.document_type, e.document_title,
+        e.status, e.created_at, e.completed_at, e.signed_r2_key,
+        (SELECT recipient_email FROM esign_recipients WHERE envelope_id = e.id ORDER BY id ASC LIMIT 1) AS recipient_email,
+        (SELECT recipient_name  FROM esign_recipients WHERE envelope_id = e.id ORDER BY id ASC LIMIT 1) AS recipient_name,
+        (SELECT recipient_name  FROM esign_recipients WHERE envelope_id = e.id AND status = 'signed' ORDER BY signed_at DESC LIMIT 1) AS signer_name,
+        (SELECT signer_ip       FROM esign_recipients WHERE envelope_id = e.id AND status = 'signed' ORDER BY signed_at DESC LIMIT 1) AS signer_ip,
+        (SELECT MAX(signed_at)  FROM esign_recipients WHERE envelope_id = e.id) AS last_signed_at
+      FROM esign_envelopes e WHERE e.id = ${ref.row.id} LIMIT 1
+    `;
+    if (!envRows[0]) return c.json({ error: 'Contract not found' }, 404);
+    return c.json(enrichEsignRow(envRows[0]));
   } finally {
     await sql.end();
   }
 });
 
-// POST /api/admin/contracts/:uid/resend
+// POST /api/admin/contracts/:uid/resend — UNION dispatch.
 adminContracts.post('/:uid/resend', async (c) => {
   const adminUser = await requireAdmin(c);
-  const uid = c.req.param('uid');
+  const uid = c.req.param('uid') ?? '';
   const sql = getSQL(c.env);
   try {
-    const rows: any[] = await sql`SELECT id, uid, title, status, project_id FROM documents WHERE uid = ${uid} LIMIT 1`;
-    if (rows.length === 0) return c.json({ error: 'Contract not found' }, 404);
-    const d = rows[0];
-    if (String(d.status).toLowerCase() === 'signed') {
+    const ref = await findContractByUid(sql, uid);
+    if (!ref) return c.json({ error: 'Contract not found' }, 404);
+
+    if (ref.source === 'documents') {
+      const d = ref.row;
+      if (String(d.status).toLowerCase() === 'signed') {
+        return c.json({ error: 'Cannot resend a signed contract' }, 400);
+      }
+      await sql`UPDATE documents SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE uid = ${d.uid}`;
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_resent', ${`Admin ${adminUser.name} resent contract '${d.title}'`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
+      const updated: any[] = await sql`SELECT * FROM documents WHERE uid = ${d.uid} LIMIT 1`;
+      return c.json({ ok: true, contract: enrichDocRow(updated[0], null, null) });
+    }
+
+    // esign source — re-email the pending recipient with their existing
+    // signing URL. If their token has expired, mint a fresh 7-day token.
+    const env = ref.row;
+    if (String(env.status).toLowerCase() === 'completed') {
       return c.json({ error: 'Cannot resend a signed contract' }, 400);
     }
-    await sql`UPDATE documents SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE uid = ${uid}`;
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_resent', ${`Admin ${adminUser.name} resent contract '${d.title}'`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
-    const updated: any[] = await sql`SELECT * FROM documents WHERE uid = ${uid} LIMIT 1`;
-    return c.json({ ok: true, contract: enrichRow(updated[0], null, null) });
+    if (String(env.status).toLowerCase() === 'rejected' || String(env.status).toLowerCase() === 'void') {
+      return c.json({ error: 'Cannot resend a voided contract' }, 400);
+    }
+    const recRows: any[] = await sql`
+      SELECT id, recipient_email, recipient_name, signing_token, token_expires_at
+        FROM esign_recipients
+       WHERE envelope_id = ${env.id} AND status = 'pending'
+       ORDER BY id ASC LIMIT 1
+    `;
+    if (!recRows[0]) return c.json({ error: 'No pending recipient to resend to' }, 400);
+    const rec = recRows[0];
+    let token = rec.signing_token;
+    if (new Date(rec.token_expires_at).getTime() < Date.now()) {
+      // Mint a fresh token + extend expiry.
+      const bytes = new Uint8Array(32);
+      crypto.getRandomValues(bytes);
+      token = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      await sql`UPDATE esign_recipients SET signing_token = ${token}, token_expires_at = ${newExpiry} WHERE id = ${rec.id}`;
+    }
+    const appUrl = (c.env as any).APP_URL || 'https://axal.vc';
+    const signingUrl = `${appUrl}/esign/${token}`;
+    const emailSent = await sendAgreementAssignedEmail(
+      c.env,
+      rec.recipient_email,
+      rec.recipient_name || rec.recipient_email,
+      env.document_title,
+      signingUrl,
+      adminUser.name || adminUser.email,
+    );
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_resent', ${JSON.stringify({ envelope_id: env.id, envelope_uuid: env.envelope_uuid, email_sent: emailSent })}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
+    return c.json({ ok: true, email_sent: emailSent });
   } finally {
     await sql.end();
   }
 });
 
-// POST /api/admin/contracts/:uid/void
+// POST /api/admin/contracts/:uid/void — UNION dispatch.
 adminContracts.post('/:uid/void', async (c) => {
   const adminUser = await requireAdmin(c);
-  const uid = c.req.param('uid');
+  const uid = c.req.param('uid') ?? '';
   const sql = getSQL(c.env);
   try {
-    const rows: any[] = await sql`SELECT id, uid, title, status, project_id FROM documents WHERE uid = ${uid} LIMIT 1`;
-    if (rows.length === 0) return c.json({ error: 'Contract not found' }, 404);
-    const d = rows[0];
-    if (String(d.status).toLowerCase() === 'signed') {
+    const ref = await findContractByUid(sql, uid);
+    if (!ref) return c.json({ error: 'Contract not found' }, 404);
+
+    if (ref.source === 'documents') {
+      const d = ref.row;
+      if (String(d.status).toLowerCase() === 'signed') {
+        return c.json({ error: 'Cannot void a signed contract' }, 400);
+      }
+      await sql`UPDATE documents SET status = 'void', updated_at = CURRENT_TIMESTAMP WHERE uid = ${d.uid}`;
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_voided', ${`Admin ${adminUser.name} voided contract '${d.title}'`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
+      const updated: any[] = await sql`SELECT * FROM documents WHERE uid = ${d.uid} LIMIT 1`;
+      return c.json({ ok: true, contract: enrichDocRow(updated[0], null, null) });
+    }
+
+    // esign — mark envelope void + cancel any pending recipients so their
+    // magic links stop working. Audit row references envelope id, never
+    // the recipient email (T22.1 hashed-actor convention).
+    const env = ref.row;
+    if (String(env.status).toLowerCase() === 'completed') {
       return c.json({ error: 'Cannot void a signed contract' }, 400);
     }
-    await sql`UPDATE documents SET status = 'void', updated_at = CURRENT_TIMESTAMP WHERE uid = ${uid}`;
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_voided', ${`Admin ${adminUser.name} voided contract '${d.title}'`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
-    const updated: any[] = await sql`SELECT * FROM documents WHERE uid = ${uid} LIMIT 1`;
-    return c.json({ ok: true, contract: enrichRow(updated[0], null, null) });
+    await sql`UPDATE esign_envelopes SET status = 'void' WHERE id = ${env.id}`;
+    await sql`UPDATE esign_recipients SET status = 'rejected' WHERE envelope_id = ${env.id} AND status = 'pending'`;
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_voided', ${JSON.stringify({ envelope_id: env.id, envelope_uuid: env.envelope_uuid, title: env.document_title })}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
+    return c.json({ ok: true });
   } finally {
     await sql.end();
   }
 });
 
-// Task #1 (security hardening) — Contract download is now backed by the
-// shared one-time signed-URL primitive (`services/signedDownload.ts` →
+// Task #1 (security hardening) — Contract download is backed by the shared
+// one-time signed-URL primitive (`services/signedDownload.ts` →
 // `routes/files.ts:/api/files/dl/:token`). The R2 bucket itself is private;
 // admins receive a 5-minute, single-use token that audits each download.
 //
-// Two endpoints:
-//   - GET  /:uid/download      — 302 redirect to the signed URL (browser
-//                                navigation, "Download" button in admin UI).
-//   - POST /:uid/download-url  — JSON body returning {url, expires_at} so
-//                                the SPA can copy/share the link.
+// Task #2 — `file_key` is sourced from documents.file_key OR
+// esign_envelopes.signed_r2_key (which begins with `esign/signed/` and is
+// already in the prefix allowlist).
 async function mintContractDownload(c: AppContext): Promise<ContractDownloadResult> {
   const adminUser = await requireAdmin(c);
-  const uid = c.req.param('uid');
+  const uid = c.req.param('uid') ?? '';
   const sql = getSQL(c.env);
   try {
-    const rows: any[] = await sql`SELECT id, uid, title, file_key, status FROM documents WHERE uid = ${uid} LIMIT 1`;
-    if (rows.length === 0) return { error: c.json({ error: 'Contract not found' }, 404) };
-    const d = rows[0];
-    if (!d.file_key) return { error: c.json({ error: 'Contract has no stored file yet' }, 404) };
-    if (typeof d.file_key !== 'string' || !/^contracts?\/|^esign\/|^documents\//.test(d.file_key)) {
+    const ref = await findContractByUid(sql, uid);
+    if (!ref) return { error: c.json({ error: 'Contract not found' }, 404) };
+
+    let fileKey: string | null;
+    let title: string;
+    if (ref.source === 'documents') {
+      fileKey = ref.row.file_key || null;
+      title = ref.row.title;
+    } else {
+      fileKey = ref.row.signed_r2_key || null;
+      title = ref.row.document_title;
+    }
+
+    if (!fileKey) return { error: c.json({ error: 'Contract has no stored file yet' }, 404) };
+    if (typeof fileKey !== 'string' || !/^contracts?\/|^esign\/|^documents\//.test(fileKey)) {
       // Defence-in-depth: refuse to mint a token for an unexpected R2 prefix
       // so a future bug that lets `file_key` be set arbitrarily can't be
       // pivoted into reading other buckets.
       return { error: c.json({ error: 'Invalid document storage key' }, 400) };
     }
     const minted = await mintDownloadToken(c.env, {
-      key: d.file_key,
-      ttlSec: 300, // hard-clamped to 5 min upstream too, but explicit here
+      key: fileKey,
+      ttlSec: 300,
       audience: 'admin_contract',
       userId: adminUser.id,
     });
-    // Audit-log the mint (the actual download is also logged by files.ts).
     try {
       await sql`INSERT INTO activity_logs (action, details, actor, user_id)
                 VALUES ('contract_download_url_issued',
-                        ${JSON.stringify({ uid: d.uid, title: d.title, expires_at: minted.expires_at })},
+                        ${JSON.stringify({ uid, title, source: ref.source, expires_at: minted.expires_at })},
                         ${await hashEmail(adminUser.email)},
                         ${adminUser.id})`;
     } catch (e) { console.error('[admin_contracts] audit log failed', e); }

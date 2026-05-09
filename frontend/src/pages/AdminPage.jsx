@@ -1323,6 +1323,20 @@ export function ContractsPanel() {
         <KpiTile label="Signed Last 30d"     value={stats?.signed_last_30d ?? '—'} />
       </div>
 
+      {/* Task #2 — Admin "All Contracts" reads from BOTH the legacy
+          `documents` table AND the modern `esign_envelopes` table. The
+          banner below explains the union view; rows are tagged with their
+          source in `ContractRow` so admins can see which backing store
+          a row came from while the migration is in flight. */}
+      <div className="bg-violet-50 border border-violet-200 text-violet-900 text-xs rounded-lg px-3 py-2 mb-3 flex items-start gap-2">
+        <FileText size={14} className="mt-0.5 flex-shrink-0 text-violet-600" />
+        <div>
+          <span className="font-semibold">Unified contracts view.</span> This list shows agreements from both the legacy
+          documents store and the e-sign envelope store (the system used for new sends). Resend, void, and download
+          actions are dispatched to the correct backing store automatically.
+        </div>
+      </div>
+
       {/* Sub-tabs */}
       <div className="flex items-center gap-2 mb-4">
         {[
@@ -1365,7 +1379,10 @@ export function ContractsPanel() {
         <TemplatesGrid templates={templates} />
       ) : items.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm">
-          No contracts found for this filter.
+          {sub === 'pending' && 'No contracts are currently awaiting signature. New sends will appear here within a few seconds.'}
+          {sub === 'signed' && 'No signed contracts yet. Once a recipient completes signing, the contract will appear here with its signed-at timestamp.'}
+          {sub === 'all' && 'No contracts found. Send your first agreement from the Profiles tab to get started.'}
+          {sub !== 'pending' && sub !== 'signed' && sub !== 'all' && 'No contracts found for this filter.'}
         </div>
       ) : (
         <div className="space-y-2">
@@ -1413,7 +1430,15 @@ function ContractRow({ c, onOpen }) {
             {c.days_to_sign != null && <span>Days to sign: <span className="text-gray-700 font-medium">{c.days_to_sign}</span></span>}
           </div>
         </div>
-        <StatusPill status={c.status} />
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {c.source === 'esign' && (
+            <span title="Stored in esign_envelopes (modern e-sign flow)"
+              className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded uppercase tracking-wider">
+              eSign
+            </span>
+          )}
+          <StatusPill status={c.status} />
+        </div>
       </div>
     </button>
   );
