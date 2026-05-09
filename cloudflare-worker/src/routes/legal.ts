@@ -159,9 +159,26 @@ legal.post('/incorporate/wizard', async (c) => {
       (_m, k) => (fill as any)[k] ?? '');
 
   const generated: Array<{ id: number; title: string; doc_type: string; reused: boolean }> = [];
+  // Task #2 — Contract doc_types are tracked separately so the wizard
+  // response can tell the founder which kit items now require an e-sign
+  // envelope instead of being inserted as 'generated' rows in `documents`.
+  // (esign_envelopes is the single source of truth for active contracts.)
+  const pendingEsign: Array<{ template_key: string; title: string; doc_type: string; reason: string }> = [];
   for (const tkey of j.templates) {
     const meta = JURISDICTION_TEMPLATES[tkey] || (TEMPLATES as any)[tkey];
     if (!meta) continue;
+    // Task #2 — Skip contract doc_types entirely. We surface them in the
+    // response under `pending_esign` so the frontend can prompt the
+    // founder to issue them through POST /api/legal/esign/send.
+    if (CONTRACT_DOC_TYPES.has(String(tkey).toLowerCase())) {
+      pendingEsign.push({
+        template_key: tkey,
+        title: meta.title,
+        doc_type: tkey,
+        reason: 'use_esign_envelope',
+      });
+      continue;
+    }
     const existing = await sql`SELECT id, title FROM documents WHERE project_id = ${project.id} AND template_name = ${tkey} LIMIT 1`;
     if (existing.length) {
       generated.push({ id: (existing[0] as any).id, title: meta.title, doc_type: tkey, reused: true });
@@ -244,6 +261,7 @@ legal.post('/incorporate/wizard', async (c) => {
       reused: reusedEntity,
     },
     documents: generated,
+    pending_esign: pendingEsign,
     seeded_compliance: seededCompliance,
     handoff,
   });
