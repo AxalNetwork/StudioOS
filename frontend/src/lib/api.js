@@ -620,6 +620,8 @@ export const api = {
     if (opts.plan_id) params.set('plan_id', opts.plan_id);
     if (opts.admin_user_id) params.set('admin_user_id', String(opts.admin_user_id));
     if (opts.admin_q) params.set('admin_q', opts.admin_q);
+    if (opts.from) params.set('from', opts.from);
+    if (opts.to) params.set('to', opts.to);
     return request(`/monitoring/analytics/audit?${params.toString()}`);
   },
   // Task #20 — Stream the Plan change history CSV for the active filters.
@@ -629,6 +631,8 @@ export const api = {
     if (opts.plan_id) params.set('plan_id', opts.plan_id);
     if (opts.admin_user_id) params.set('admin_user_id', String(opts.admin_user_id));
     if (opts.admin_q) params.set('admin_q', opts.admin_q);
+    if (opts.from) params.set('from', opts.from);
+    if (opts.to) params.set('to', opts.to);
     const token = localStorage.getItem('token');
     const qs = params.toString();
     const res = await fetch(`/api/monitoring/analytics/audit/export.csv${qs ? `?${qs}` : ''}`, {

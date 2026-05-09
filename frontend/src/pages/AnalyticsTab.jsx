@@ -882,6 +882,9 @@ function PlanAuditHistory({ refreshKey }) {
   const [planFilter, setPlanFilter] = useState('');
   const [adminFilter, setAdminFilter] = useState('');
   const [adminFilterDraft, setAdminFilterDraft] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [dateErr, setDateErr] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -892,6 +895,12 @@ function PlanAuditHistory({ refreshKey }) {
   }, [refreshKey]);
 
   useEffect(() => {
+    if (fromDate && toDate && fromDate > toDate) {
+      setDateErr('From date must be on or before To date.');
+      setItems([]); setTotal(0); setHasMore(false);
+      return;
+    }
+    setDateErr('');
     let alive = true;
     setItems(null); setErr(''); setHasMore(false); setTotal(0);
     const opts = {};
@@ -900,6 +909,8 @@ function PlanAuditHistory({ refreshKey }) {
       if (/^\d+$/.test(adminFilter.trim())) opts.admin_user_id = adminFilter.trim();
       else opts.admin_q = adminFilter.trim();
     }
+    if (fromDate) opts.from = fromDate;
+    if (toDate) opts.to = toDate;
     api.analyticsAudit(PAGE_SIZE, 'subscription_plan_update', opts)
       .then(r => {
         if (!alive) return;
@@ -909,7 +920,7 @@ function PlanAuditHistory({ refreshKey }) {
       })
       .catch(e => { if (alive) setErr(e?.message || 'Failed to load'); });
     return () => { alive = false; };
-  }, [refreshKey, planFilter, adminFilter]);
+  }, [refreshKey, planFilter, adminFilter, fromDate, toDate]);
 
   const loadMore = async () => {
     if (loadingMore || !items) return;
@@ -921,6 +932,8 @@ function PlanAuditHistory({ refreshKey }) {
         if (/^\d+$/.test(adminFilter.trim())) opts.admin_user_id = adminFilter.trim();
         else opts.admin_q = adminFilter.trim();
       }
+      if (fromDate) opts.from = fromDate;
+      if (toDate) opts.to = toDate;
       const r = await api.analyticsAudit(PAGE_SIZE, 'subscription_plan_update', opts);
       setItems(prev => [...(prev || []), ...(r.items || [])]);
       setTotal(Number(r.total || 0));
@@ -940,8 +953,11 @@ function PlanAuditHistory({ refreshKey }) {
     setPlanFilter('');
     setAdminFilter('');
     setAdminFilterDraft('');
+    setFromDate('');
+    setToDate('');
+    setDateErr('');
   };
-  const hasFilters = !!(planFilter || adminFilter);
+  const hasFilters = !!(planFilter || adminFilter || fromDate || toDate);
 
   // Task #20 — Stream the currently-filtered audit rows as CSV. The worker
   // logs the export to admin_audit_log so finance has a who/when trail.
@@ -957,6 +973,8 @@ function PlanAuditHistory({ refreshKey }) {
         if (/^\d+$/.test(adminFilter.trim())) opts.admin_user_id = adminFilter.trim();
         else opts.admin_q = adminFilter.trim();
       }
+      if (fromDate) opts.from = fromDate;
+      if (toDate) opts.to = toDate;
       await api.analyticsAuditExportCsv(opts);
     } catch (e) {
       setExportErr(e?.message || 'Export failed');
@@ -1037,6 +1055,26 @@ function PlanAuditHistory({ refreshKey }) {
             Apply
           </button>
         </form>
+        <div>
+          <label className="block text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">From</label>
+          <input
+            type="date"
+            value={fromDate}
+            max={toDate || undefined}
+            onChange={e => setFromDate(e.target.value)}
+            className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">To</label>
+          <input
+            type="date"
+            value={toDate}
+            min={fromDate || undefined}
+            onChange={e => setToDate(e.target.value)}
+            className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+          />
+        </div>
         {hasFilters && (
           <button
             type="button"
@@ -1060,6 +1098,7 @@ function PlanAuditHistory({ refreshKey }) {
           </button>
         </div>
       </div>
+      {dateErr && <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{dateErr}</div>}
       {exportErr && <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{exportErr}</div>}
       {err && <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{err}</div>}
       {items === null ? (

@@ -148,6 +148,42 @@ r.get('/technical', async (c) => {
 });
 
 // ---------- recent exports ----------
+// Parse YYYY-MM-DD into a 'YYYY-MM-DD HH:MM:SS' bound (start-of-day for `from`,
+// end-of-day for `to`). Returns null for empty/invalid input so callers can
+// silently drop the predicate rather than 400.
+function parseDateBound(raw: string | undefined, end: boolean): string | null {
+  if (!raw) return null;
+  const s = raw.toString().trim();
+  if (!s) return null;
+  // Accept YYYY-MM-DD only — no times, no tz; matches HTML <input type=date>.
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const y = Number(m[1]); const mo = Number(m[2]); const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return `${m[1]}-${m[2]}-${m[3]} ${end ? '23:59:59' : '00:00:00'}`;
+}
+
+function buildAuditWhere(opts: {
+  action: string;
+  planId: string | null;
+  adminUserId: number | null;
+  adminQ: string | null;
+  fromBound: string | null;
+  toBound: string | null;
+}): { where: string; params: any[] } {
+  const clauses: string[] = ['a.action = ?'];
+  const params: any[] = [opts.action];
+  if (opts.planId) { clauses.push('a.report_type = ?'); params.push(opts.planId); }
+  if (opts.adminUserId !== null) { clauses.push('a.admin_user_id = ?'); params.push(opts.adminUserId); }
+  if (opts.adminQ) {
+    clauses.push('(LOWER(u.email) LIKE ? OR LOWER(u.name) LIKE ?)');
+    params.push(opts.adminQ, opts.adminQ);
+  }
+  if (opts.fromBound) { clauses.push('a.exported_at >= ?'); params.push(opts.fromBound); }
+  if (opts.toBound) { clauses.push('a.exported_at <= ?'); params.push(opts.toBound); }
+  return { where: clauses.join(' AND '), params };
+}
+
 r.get('/audit', async (c) => {
   await requireAdmin(c);
   await ensureSchema(c.env);
@@ -160,88 +196,31 @@ r.get('/audit', async (c) => {
   const planIdRaw = (c.req.query('plan_id') || '').toString().trim();
   const adminIdRaw = (c.req.query('admin_user_id') || '').toString().trim();
   const adminQRaw = (c.req.query('admin_q') || '').toString().trim();
+  const fromRaw = (c.req.query('from') || '').toString().trim();
+  const toRaw = (c.req.query('to') || '').toString().trim();
   const planId = planIdRaw.slice(0, 100) || null;
   const adminUserId = adminIdRaw && /^\d+$/.test(adminIdRaw) ? Number(adminIdRaw) : null;
   const adminQ = adminQRaw ? `%${adminQRaw.slice(0, 100).toLowerCase()}%` : null;
+  const fromBound = parseDateBound(fromRaw, false);
+  const toBound = parseDateBound(toRaw, true);
 
-  let items, totalRow;
-  if (planId && adminUserId !== null) {
-    items = await sql`
-      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
-             a.action, a.report_type, a.format, a.filters_json,
-             a.download_url, a.exported_at
-      FROM admin_audit_log a
-      LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action} AND a.report_type = ${planId} AND a.admin_user_id = ${adminUserId}
-      ORDER BY a.exported_at DESC LIMIT ${limit} OFFSET ${offset}
-    `;
-    totalRow = await sql`SELECT COUNT(*) AS c FROM admin_audit_log WHERE action = ${action} AND report_type = ${planId} AND admin_user_id = ${adminUserId}`;
-  } else if (planId && adminQ) {
-    items = await sql`
-      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
-             a.action, a.report_type, a.format, a.filters_json,
-             a.download_url, a.exported_at
-      FROM admin_audit_log a
-      LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action} AND a.report_type = ${planId}
-        AND (LOWER(u.email) LIKE ${adminQ} OR LOWER(u.name) LIKE ${adminQ})
-      ORDER BY a.exported_at DESC LIMIT ${limit} OFFSET ${offset}
-    `;
-    totalRow = await sql`
-      SELECT COUNT(*) AS c FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action} AND a.report_type = ${planId}
-        AND (LOWER(u.email) LIKE ${adminQ} OR LOWER(u.name) LIKE ${adminQ})
-    `;
-  } else if (planId) {
-    items = await sql`
-      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
-             a.action, a.report_type, a.format, a.filters_json,
-             a.download_url, a.exported_at
-      FROM admin_audit_log a
-      LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action} AND a.report_type = ${planId}
-      ORDER BY a.exported_at DESC LIMIT ${limit} OFFSET ${offset}
-    `;
-    totalRow = await sql`SELECT COUNT(*) AS c FROM admin_audit_log WHERE action = ${action} AND report_type = ${planId}`;
-  } else if (adminUserId !== null) {
-    items = await sql`
-      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
-             a.action, a.report_type, a.format, a.filters_json,
-             a.download_url, a.exported_at
-      FROM admin_audit_log a
-      LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action} AND a.admin_user_id = ${adminUserId}
-      ORDER BY a.exported_at DESC LIMIT ${limit} OFFSET ${offset}
-    `;
-    totalRow = await sql`SELECT COUNT(*) AS c FROM admin_audit_log WHERE action = ${action} AND admin_user_id = ${adminUserId}`;
-  } else if (adminQ) {
-    items = await sql`
-      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
-             a.action, a.report_type, a.format, a.filters_json,
-             a.download_url, a.exported_at
-      FROM admin_audit_log a
-      LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action}
-        AND (LOWER(u.email) LIKE ${adminQ} OR LOWER(u.name) LIKE ${adminQ})
-      ORDER BY a.exported_at DESC LIMIT ${limit} OFFSET ${offset}
-    `;
-    totalRow = await sql`
-      SELECT COUNT(*) AS c FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action}
-        AND (LOWER(u.email) LIKE ${adminQ} OR LOWER(u.name) LIKE ${adminQ})
-    `;
-  } else {
-    items = await sql`
-      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
-             a.action, a.report_type, a.format, a.filters_json,
-             a.download_url, a.exported_at
-      FROM admin_audit_log a
-      LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action}
-      ORDER BY a.exported_at DESC LIMIT ${limit} OFFSET ${offset}
-    `;
-    totalRow = await sql`SELECT COUNT(*) AS c FROM admin_audit_log WHERE action = ${action}`;
-  }
+  const { where, params } = buildAuditWhere({ action, planId, adminUserId, adminQ, fromBound, toBound });
+  const items = await sql.unsafe(
+    `SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
+            a.action, a.report_type, a.format, a.filters_json,
+            a.download_url, a.exported_at
+     FROM admin_audit_log a
+     LEFT JOIN users u ON u.id = a.admin_user_id
+     WHERE ${where}
+     ORDER BY a.exported_at DESC LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+  const totalRow = await sql.unsafe(
+    `SELECT COUNT(*) AS c FROM admin_audit_log a
+     LEFT JOIN users u ON u.id = a.admin_user_id
+     WHERE ${where}`,
+    params
+  );
   const itemsArr = Array.isArray(items) ? items : [];
   const totalArr = Array.isArray(totalRow) ? totalRow : [];
   const total = Number((totalArr[0] as { c?: number } | undefined)?.c || 0);
@@ -251,7 +230,14 @@ r.get('/audit', async (c) => {
     limit,
     offset,
     has_more: offset + itemsArr.length < total,
-    filters: { action, plan_id: planId, admin_user_id: adminUserId, admin_q: adminQRaw || null },
+    filters: {
+      action,
+      plan_id: planId,
+      admin_user_id: adminUserId,
+      admin_q: adminQRaw || null,
+      from: fromBound ? fromRaw : null,
+      to: toBound ? toRaw : null,
+    },
   });
 });
 
@@ -266,64 +252,25 @@ r.get('/audit/export.csv', async (c) => {
   const planIdRaw = (c.req.query('plan_id') || '').toString().trim();
   const adminIdRaw = (c.req.query('admin_user_id') || '').toString().trim();
   const adminQRaw = (c.req.query('admin_q') || '').toString().trim();
+  const fromRaw = (c.req.query('from') || '').toString().trim();
+  const toRaw = (c.req.query('to') || '').toString().trim();
   const planId = planIdRaw.slice(0, 100) || null;
   const adminUserId = adminIdRaw && /^\d+$/.test(adminIdRaw) ? Number(adminIdRaw) : null;
   const adminQ = adminQRaw ? `%${adminQRaw.slice(0, 100).toLowerCase()}%` : null;
+  const fromBound = parseDateBound(fromRaw, false);
+  const toBound = parseDateBound(toRaw, true);
   const action = 'subscription_plan_update';
   const MAX_ROWS = 10000;
 
-  let rows;
-  if (planId && adminUserId !== null) {
-    rows = await sql`
-      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
-             a.report_type, a.format, a.filters_json, a.exported_at
-      FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action} AND a.report_type = ${planId} AND a.admin_user_id = ${adminUserId}
-      ORDER BY a.exported_at DESC LIMIT ${MAX_ROWS}
-    `;
-  } else if (planId && adminQ) {
-    rows = await sql`
-      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
-             a.report_type, a.format, a.filters_json, a.exported_at
-      FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action} AND a.report_type = ${planId}
-        AND (LOWER(u.email) LIKE ${adminQ} OR LOWER(u.name) LIKE ${adminQ})
-      ORDER BY a.exported_at DESC LIMIT ${MAX_ROWS}
-    `;
-  } else if (planId) {
-    rows = await sql`
-      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
-             a.report_type, a.format, a.filters_json, a.exported_at
-      FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action} AND a.report_type = ${planId}
-      ORDER BY a.exported_at DESC LIMIT ${MAX_ROWS}
-    `;
-  } else if (adminUserId !== null) {
-    rows = await sql`
-      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
-             a.report_type, a.format, a.filters_json, a.exported_at
-      FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action} AND a.admin_user_id = ${adminUserId}
-      ORDER BY a.exported_at DESC LIMIT ${MAX_ROWS}
-    `;
-  } else if (adminQ) {
-    rows = await sql`
-      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
-             a.report_type, a.format, a.filters_json, a.exported_at
-      FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action}
-        AND (LOWER(u.email) LIKE ${adminQ} OR LOWER(u.name) LIKE ${adminQ})
-      ORDER BY a.exported_at DESC LIMIT ${MAX_ROWS}
-    `;
-  } else {
-    rows = await sql`
-      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
-             a.report_type, a.format, a.filters_json, a.exported_at
-      FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
-      WHERE a.action = ${action}
-      ORDER BY a.exported_at DESC LIMIT ${MAX_ROWS}
-    `;
-  }
+  const { where, params } = buildAuditWhere({ action, planId, adminUserId, adminQ, fromBound, toBound });
+  const rows = await sql.unsafe(
+    `SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
+            a.report_type, a.format, a.filters_json, a.exported_at
+     FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
+     WHERE ${where}
+     ORDER BY a.exported_at DESC LIMIT ?`,
+    [...params, MAX_ROWS]
+  );
   const arr = (Array.isArray(rows) ? rows : []) as PlanAuditRow[];
   const csv = planAuditToCsv(arr);
 
@@ -332,6 +279,8 @@ r.get('/audit/export.csv', async (c) => {
     plan_id: planId,
     admin_user_id: adminUserId,
     admin_q: adminQRaw || null,
+    from: fromBound ? fromRaw : null,
+    to: toBound ? toRaw : null,
     row_count: arr.length,
   });
   await writeAudit(c.env, {
