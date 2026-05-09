@@ -189,7 +189,10 @@ select::-ms-expand { display: none; }
 /* Card-like containers without explicit header/body sub-regions (e.g. the
    plain Dashboard cards) get a touch less padding. Settings cards declare
    [data-card-header]/[data-card-body]/[data-card-footer] and use the rules
-   above instead, so we exclude them here to avoid doubling the trim. */
+   above instead, so we exclude them here to avoid doubling the trim.
+   Note: relies on CSS `:has()` (Chrome/Edge 105+, Safari 15.4+, Firefox 121+).
+   On unsupported engines the rule simply no-ops and Dashboard cards keep
+   their default Tailwind padding — comfy/compact still flips elsewhere. */
 [data-density="compact"] [data-card]:not(:has(> [data-card-body])) {
   padding: 0.875rem;
 }
