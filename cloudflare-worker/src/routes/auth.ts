@@ -6,7 +6,7 @@ import { getSQL } from '../db';
 import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken } from '../auth';
 import { sendVerificationEmail } from '../services/email';
 import { verifyTurnstile } from '../services/turnstile';
-import { persistNewTotpEnrolment, loadTotp, updateRecoveryHashes, markTotpUsed } from '../services/authTotp';
+import { persistNewTotpEnrolment, loadTotp, updateRecoveryHashes, markTotpUsed, hasTotpConfigured, clearTotp } from '../services/authTotp';
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -220,7 +220,7 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
 
   if (existing.length > 0) {
     const user = existing[0];
-    if (user.email_verified && user.password_hash) {
+    if (user.email_verified && (await hasTotpConfigured(c.env, user.id))) {
       await sql.end();
       return c.json({ error: 'Email already registered' }, 409);
     }
@@ -293,15 +293,20 @@ auth.post('/resend-verification', async (c) => {
 
   const user = users[0];
 
-  if (user.email_verified && user.password_hash) {
+  const totpConfigured = await hasTotpConfigured(c.env, user.id);
+  if (user.email_verified && totpConfigured) {
     return c.json({ message: genericMsg, email_sent: false, already_verified: true });
   }
 
-  if (!user.email_verified || !user.password_hash) {
+  if (!user.email_verified || !totpConfigured) {
     try {
       const sql = getSQL(c.env);
-      await sql`UPDATE users SET email_verified = false, password_hash = NULL WHERE id = ${user.id}`;
+      // Task #1 — clear half-finished TOTP state on resend so the user gets
+      // a fresh enrolment slot. We delete the auth_totp row directly (no
+      // password_hash mutation needed: it's already independent now).
+      await sql`UPDATE users SET email_verified = false WHERE id = ${user.id}`;
       await sql.end();
+      try { await clearTotp(c.env, user.id); } catch (e) { console.error('[AUTH] clearTotp on resend failed', e); }
     } catch (e: any) {
       console.error(`[AUTH] resend reset failed for ${email}: ${e?.message || 'Unknown error'}`);
     }
@@ -400,7 +405,7 @@ auth.post('/setup-totp', safe('setup-totp', 'Could not set up authenticator. Ple
   if (user.verification_token_expires && new Date() > new Date(user.verification_token_expires)) {
     await sql.end(); return c.json({ error: 'Setup token expired.' }, 403);
   }
-  if (user.password_hash) { await sql.end(); return c.json({ error: 'TOTP is already configured.' }, 409); }
+  if (await hasTotpConfigured(c.env, user.id)) { await sql.end(); return c.json({ error: 'TOTP is already configured.' }, 409); }
 
   const secret = new Secret();
   const totp = new TOTP({ issuer: 'Axal VC StudioOS', label: email, secret });
@@ -412,16 +417,13 @@ auth.post('/setup-totp', safe('setup-totp', 'Could not set up authenticator. Ple
   // ever stores SHA-256 hashes.
   const { plain: recoveryCodes, hashes: recoveryHashes } = await mintRecoveryCodes();
 
-  // Task #33 — TOTP secrets now live in `auth_totp` (encrypted) instead of
-  // `users.password_hash`. We still write a non-null sentinel into
-  // password_hash so legacy code paths that gate on its presence
-  // (e.g. login `!user.password_hash` check below) continue to detect that
-  // the user has completed TOTP enrolment without us having to grep every
-  // call site in this PR. The sentinel is the literal string '__totp__'
-  // and is rejected by `loadTotp`'s base32 regex so it can never be
-  // mistaken for a real secret.
+  // Task #1 — TOTP secrets live exclusively in `auth_totp` (encrypted).
+  // `users.password_hash` is deliberately untouched here: the column is
+  // reserved for real credential storage and "is TOTP configured?" is
+  // now derived from `hasTotpConfigured(env, userId)` (auth_totp row
+  // presence) at every call site.
   await persistNewTotpEnrolment(c.env, user.id, totpSecret, recoveryHashes);
-  await sql`UPDATE users SET password_hash = '__totp__', totp_recovery_codes = ${JSON.stringify(recoveryHashes)}, verification_token = NULL, verification_token_expires = NULL WHERE id = ${user.id}`;
+  await sql`UPDATE users SET totp_recovery_codes = ${JSON.stringify(recoveryHashes)}, verification_token = NULL, verification_token_expires = NULL WHERE id = ${user.id}`;
   await sql.end();
 
   const uri = totp.toString();
@@ -454,8 +456,15 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
 
   const user = users[0];
   if (!user.email_verified) { await sql.end(); return c.json({ error: 'Please verify your email before logging in.' }, 403); }
-  if (!user.password_hash) { await sql.end(); return c.json({ error: 'Account not set up for TOTP authentication' }, 401); }
   if (!user.is_active) { await sql.end(); return c.json({ error: 'Account is inactive' }, 403); }
+  // Task #1 — "TOTP configured?" is sourced from `auth_totp` row presence
+  // (with a fallback to a legacy base32 secret pending migration). We no
+  // longer gate on `users.password_hash`: that column is reserved for
+  // future real-credential storage and must not double as a 2FA flag.
+  if (!(await hasTotpConfigured(c.env, user.id))) {
+    await sql.end();
+    return c.json({ error: 'Account not set up for TOTP authentication' }, 401);
+  }
 
   // Task #33 — load TOTP secret from `auth_totp` (preferred) with lazy
   // migration off the legacy `users.password_hash` storage. Returns null

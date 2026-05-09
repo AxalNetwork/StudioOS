@@ -23,6 +23,7 @@ import type { Env, UserSessionRow } from '../types';
 import { decodeJwt } from 'jose';
 import { getSQL } from '../db';
 import { requireAuth, hashToken, generateToken } from '../auth';
+import { hasTotpConfigured, loadTotp, persistNewTotpEnrolment } from '../services/authTotp';
 import { putHeadshotFromDataUri, getHeadshot } from '../services/r2';
 import { sendVerificationEmail } from '../services/email';
 import {
@@ -161,9 +162,12 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
            notification_prefs, privacy_prefs, role_prefs,
            deletion_requested_at, last_active_at, created_at,
            totp_recovery_codes,
-           CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END AS totp_configured
+           0 AS totp_configured
     FROM users WHERE id = ${user.id}
   `;
+  if (rows.length) {
+    rows[0].totp_configured = (await hasTotpConfigured(c.env, user.id)) ? 1 : 0;
+  }
   const pendingChange = await sql`
     SELECT id, new_email, requested_at, confirm_expires_at, confirmed_at, revoked_at
     FROM email_change_requests
@@ -466,12 +470,19 @@ settings.post('/totp/repair', async (c) => {
   if (!code) return c.json({ error: 'Current TOTP code required' }, 400);
 
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT password_hash FROM users WHERE id = ${user.id}`;
-  if (!rows.length || !rows[0].password_hash) {
+  // Task #1 — read the current secret from `auth_totp` (with legacy
+  // password_hash fallback handled inside loadTotp). Re-pair persists the
+  // NEW secret to auth_totp via persistNewTotpEnrolment; password_hash is
+  // no longer mutated.
+  const userRow = await sql`SELECT password_hash, totp_recovery_codes FROM users WHERE id = ${user.id}`;
+  const totpRow = userRow.length
+    ? await loadTotp(c.env, user.id, userRow[0].password_hash, userRow[0].totp_recovery_codes)
+    : null;
+  if (!totpRow) {
     await sql.end();
     return c.json({ error: 'TOTP is not configured for this account' }, 400);
   }
-  const current = new TOTP({ secret: Secret.fromBase32(rows[0].password_hash) });
+  const current = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
   if (current.validate({ token: code, window: 1 }) === null) {
     await sql.end();
     return c.json({ error: 'Invalid current TOTP code' }, 401);
@@ -480,7 +491,7 @@ settings.post('/totp/repair', async (c) => {
   const secret = new Secret();
   const newTotp = new TOTP({ issuer: 'Axal VC StudioOS', label: user.email, secret });
   const newSecret = secret.base32;
-  await sql`UPDATE users SET password_hash = ${newSecret} WHERE id = ${user.id}`;
+  await persistNewTotpEnrolment(c.env, user.id, newSecret, totpRow.recoveryHashes);
   // Invalidate existing sessions — the user is about to scan a new QR.
   const nowSec = Math.floor(Date.now() / 1000);
   await sql`UPDATE users SET jwt_min_iat = ${nowSec} WHERE id = ${user.id}`;
@@ -640,12 +651,16 @@ settings.post('/totp/recovery-codes/regenerate', async (c) => {
   const code = clampStr(body?.totp_code, 12);
   if (!code) return c.json({ error: 'Current TOTP code required' }, 400);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT password_hash FROM users WHERE id = ${user.id}`;
-  if (!rows.length || !rows[0].password_hash) {
+  // Task #1 — load via authTotp service (auth_totp row → legacy fallback).
+  const userRow = await sql`SELECT password_hash, totp_recovery_codes FROM users WHERE id = ${user.id}`;
+  const totpRow = userRow.length
+    ? await loadTotp(c.env, user.id, userRow[0].password_hash, userRow[0].totp_recovery_codes)
+    : null;
+  if (!totpRow) {
     await sql.end();
     return c.json({ error: 'TOTP is not configured for this account' }, 400);
   }
-  const totp = new TOTP({ secret: Secret.fromBase32(rows[0].password_hash) });
+  const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
   if (totp.validate({ token: code, window: 1 }) === null) {
     await sql.end();
     return c.json({ error: 'Invalid current TOTP code' }, 401);
@@ -930,9 +945,12 @@ settings.get('/security', async (c) => {
   const sql = getSQL(c.env);
   const rows = await sql`
     SELECT email_verified, totp_recovery_codes,
-           CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END AS totp_configured
+           0 AS totp_configured
       FROM users WHERE id = ${user.id}
   `;
+  if (rows.length) {
+    rows[0].totp_configured = (await hasTotpConfigured(c.env, user.id)) ? 1 : 0;
+  }
   const sessions = await sql`
     SELECT COUNT(*) AS active FROM user_sessions
      WHERE user_id = ${user.id} AND revoked_at IS NULL

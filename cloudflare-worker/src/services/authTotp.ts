@@ -131,21 +131,13 @@ export async function loadTotp(
          VALUES (?, ?, ?)
          ON CONFLICT(user_id) DO NOTHING`
       ).bind(userId, ct, JSON.stringify(legacyHashes)),
-      // Replace the misused column with the same sentinel new enrolments
-      // write (`'__totp__'`). We deliberately do NOT NULL it: many auth
-      // gates throughout the codebase short-circuit on `!user.password_hash`
-      // to mean "no second factor configured" (e.g. login pre-checks). A
-      // post-migration login would then 401 the user despite a valid
-      // `auth_totp.secret_ct` row. The sentinel preserves "TOTP is
-      // configured" semantics while the base32 regex in `loadTotp` ensures
-      // it can never be mis-read as a real secret.
-      // Set password_reset_required = 1 so the next login flow can prompt
-      // the user to re-establish a clean credential. The login route reads
-      // this flag and surfaces it to the SPA, which routes to the recovery
-      // UI. Acceptable to set during read-path migration: it only affects
-      // legacy users (whose password_hash was misused for TOTP); fresh
-      // enrolments never hit this branch.
-      env.DB.prepare(`UPDATE users SET password_hash = '__totp__', password_reset_required = 1 WHERE id = ?`).bind(userId),
+      // Task #1 — fully decouple TOTP state from `users.password_hash`.
+      // The legacy column is now NULLed (so it carries no TOTP secret AND
+      // no sentinel that would be mistaken for a credential), and
+      // `password_reset_required = 1` is set so the next login surfaces
+      // the recovery flow. Auth-factor presence is now derived solely
+      // from the `auth_totp` row (see `hasTotpConfigured`).
+      env.DB.prepare(`UPDATE users SET password_hash = NULL, password_reset_required = 1 WHERE id = ?`).bind(userId),
     ]);
   } catch (e) {
     console.error('[authTotp] lazy migration failed for user', userId, e);
@@ -180,4 +172,39 @@ export async function markTotpUsed(env: Env, userId: number): Promise<void> {
 /** True iff the user is currently in the legacy storage (for diagnostics). */
 export function isLegacyTotpSecret(passwordHash: string | null | undefined): boolean {
   return !!passwordHash && BASE32_RE.test(passwordHash);
+}
+
+/**
+ * Task #1 — Auth-factor presence check. The canonical source of truth for
+ * "does this user have TOTP configured?" is now an `auth_totp` row OR a
+ * legacy base32 secret still pending migration in `users.password_hash`.
+ * Call sites that previously gated on `!!user.password_hash` should use
+ * this helper instead so `password_hash` can be reserved for real
+ * credential storage in the future.
+ */
+export async function hasTotpConfigured(env: Env, userId: number): Promise<boolean> {
+  await ensureSchema(env);
+  const row = await env.DB.prepare(
+    `SELECT 1 AS x FROM auth_totp WHERE user_id = ? LIMIT 1`
+  ).bind(userId).first<{ x: number }>();
+  if (row) return true;
+  // Legacy fallback — a base32 secret still parked in users.password_hash
+  // that hasn't been lazily migrated yet (loadTotp moves it on next login).
+  const legacy = await env.DB.prepare(
+    `SELECT password_hash FROM users WHERE id = ?`
+  ).bind(userId).first<{ password_hash: string | null }>();
+  return !!legacy?.password_hash && BASE32_RE.test(legacy.password_hash);
+}
+
+/**
+ * Task #1 — Hard-delete a user's TOTP enrolment AND any legacy base32
+ * secret in `users.password_hash`. Used by the "re-pair TOTP" flow after
+ * the new secret is persisted, and by full TOTP disable.
+ */
+export async function clearTotp(env: Env, userId: number): Promise<void> {
+  await ensureSchema(env);
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM auth_totp WHERE user_id = ?`).bind(userId),
+    env.DB.prepare(`UPDATE users SET password_hash = NULL WHERE id = ?`).bind(userId),
+  ]);
 }
