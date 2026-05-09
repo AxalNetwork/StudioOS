@@ -400,8 +400,21 @@ function PlanCatalog({ onChanged }) {
   const [editing, setEditing] = useState(null); // {plan_id, monthly_price_usd, display_name}
   const [saving, setSaving] = useState(false);
   const [savingFlag, setSavingFlag] = useState(null); // plan_id of in-flight is_active toggle
-  const [creating, setCreating] = useState(null); // {plan_id, monthly_price_usd, display_name, stripe_price_id}
+  const [creating, setCreating] = useState(null); // {plan_id, monthly_price_usd, display_name, stripe_price_id, currency, native_amount}
   const [createBusy, setCreateBusy] = useState(false);
+  // Task #18 — currency dropdown options for the "Add plan" form, sourced
+  // from the same endpoint as the dashboard-level selector.
+  const [planCurrencies, setPlanCurrencies] = useState([
+    'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR', 'SGD', 'CHF', 'SEK',
+  ]);
+  useEffect(() => {
+    api.analyticsCurrencies()
+      .then(r => {
+        const list = (r.currencies || []).map(c => c.currency).filter(Boolean);
+        if (list.length) setPlanCurrencies(list);
+      })
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(() => {
     setErr('');
@@ -440,7 +453,10 @@ function PlanCatalog({ onChanged }) {
   };
   const startCreate = () => {
     setErr('');
-    setCreating({ plan_id: '', monthly_price_usd: '', display_name: '', stripe_price_id: '' });
+    setCreating({
+      plan_id: '', monthly_price_usd: '', display_name: '', stripe_price_id: '',
+      currency: 'USD', native_amount: '',
+    });
   };
   const cancelCreate = () => setCreating(null);
   const submitCreate = async () => {
@@ -450,18 +466,30 @@ function PlanCatalog({ onChanged }) {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,63}$/.test(planId)) {
       setErr('Plan ID must be 1-64 chars: letters, digits, _ . -'); return;
     }
-    const priceNum = Number(creating.monthly_price_usd);
-    if (!Number.isFinite(priceNum) || priceNum < 0) {
-      setErr('Price must be a non-negative number'); return;
+    const currency = (creating.currency || 'USD').toUpperCase();
+    const isUsd = currency === 'USD';
+    const payload = {
+      plan_id: planId,
+      display_name: creating.display_name.trim() || null,
+      stripe_price_id: creating.stripe_price_id.trim() || null,
+      currency,
+    };
+    if (isUsd) {
+      const priceNum = Number(creating.monthly_price_usd);
+      if (!Number.isFinite(priceNum) || priceNum < 0) {
+        setErr('Price must be a non-negative number'); return;
+      }
+      payload.monthly_price_usd = priceNum;
+    } else {
+      const nativeNum = Number(creating.native_amount);
+      if (!Number.isFinite(nativeNum) || nativeNum < 0) {
+        setErr('Native amount must be a non-negative number'); return;
+      }
+      payload.native_amount = nativeNum;
     }
     setCreateBusy(true); setErr('');
     try {
-      await api.analyticsCreatePlan({
-        plan_id: planId,
-        monthly_price_usd: priceNum,
-        display_name: creating.display_name.trim() || null,
-        stripe_price_id: creating.stripe_price_id.trim() || null,
-      });
+      await api.analyticsCreatePlan(payload);
       setCreating(null);
       load();
       onChanged && onChanged();
@@ -520,15 +548,39 @@ function PlanCatalog({ onChanged }) {
               />
             </label>
             <label className="text-xs">
-              <span className="block text-gray-600 mb-0.5">Monthly price (USD) <span className="text-red-500">*</span></span>
-              <input
-                type="number" min="0" step="0.01"
-                value={creating.monthly_price_usd}
-                onChange={e => setCreating(s => ({ ...s, monthly_price_usd: e.target.value }))}
-                placeholder="e.g. 99"
-                className="border border-gray-300 rounded px-2 py-1 text-xs w-full text-right"
-              />
+              <span className="block text-gray-600 mb-0.5">Currency</span>
+              <select
+                value={creating.currency}
+                onChange={e => setCreating(s => ({ ...s, currency: e.target.value }))}
+                className="border border-gray-300 rounded px-2 py-1 text-xs w-full bg-white"
+              >
+                {planCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </label>
+            {creating.currency === 'USD' ? (
+              <label className="text-xs">
+                <span className="block text-gray-600 mb-0.5">Monthly price (USD) <span className="text-red-500">*</span></span>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={creating.monthly_price_usd}
+                  onChange={e => setCreating(s => ({ ...s, monthly_price_usd: e.target.value }))}
+                  placeholder="e.g. 99"
+                  className="border border-gray-300 rounded px-2 py-1 text-xs w-full text-right"
+                />
+              </label>
+            ) : (
+              <label className="text-xs">
+                <span className="block text-gray-600 mb-0.5">Monthly price ({creating.currency}) <span className="text-red-500">*</span></span>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={creating.native_amount}
+                  onChange={e => setCreating(s => ({ ...s, native_amount: e.target.value }))}
+                  placeholder={`Native amount in ${creating.currency}`}
+                  className="border border-gray-300 rounded px-2 py-1 text-xs w-full text-right"
+                  title="USD price will be FX-derived from this amount."
+                />
+              </label>
+            )}
             <label className="text-xs">
               <span className="block text-gray-600 mb-0.5">Display name</span>
               <input

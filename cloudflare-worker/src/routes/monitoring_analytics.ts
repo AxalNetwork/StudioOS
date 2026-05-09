@@ -269,9 +269,15 @@ r.post('/plans', async (c) => {
   try {
     plan = await createPlan(c.env, {
       plan_id: String(body.plan_id ?? ''),
-      monthly_price_usd: Number(body.monthly_price_usd),
+      monthly_price_usd: body.monthly_price_usd === undefined || body.monthly_price_usd === null || body.monthly_price_usd === ''
+        ? undefined
+        : Number(body.monthly_price_usd),
       display_name: body.display_name === undefined ? null : (body.display_name as string | null),
       stripe_price_id: body.stripe_price_id === undefined ? null : (body.stripe_price_id as string | null),
+      currency: body.currency === undefined ? null : (body.currency as string | null),
+      native_amount: body.native_amount === undefined || body.native_amount === null || body.native_amount === ''
+        ? null
+        : Number(body.native_amount),
     });
   } catch (e) {
     if (e instanceof PlanCreateError) return c.json({ detail: e.message }, e.status as 400 | 409 | 500);
@@ -287,6 +293,8 @@ r.post('/plans', async (c) => {
       monthly_price_usd: plan.monthly_price_usd,
       display_name: plan.display_name,
       stripe_price_id: plan.stripe_price_id,
+      currency: plan.currency,
+      native_amount: plan.native_amount,
     });
     await sql`
       INSERT INTO admin_audit_log (admin_user_id, action, report_type, format, filters_json, storage_key, download_url)

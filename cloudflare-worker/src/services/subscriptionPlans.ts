@@ -222,9 +222,22 @@ export async function listPlansFull(env: Env): Promise<SubscriptionPlanRow[]> {
 
 export interface PlanCreate {
   plan_id: string;
-  monthly_price_usd: number;
+  /**
+   * Monthly USD price. Required when `currency` is USD or unset. When a
+   * non-USD `currency` + `native_amount` are supplied this is ignored —
+   * the USD figure is FX-derived from the native amount (matching the
+   * Stripe webhook upsert path).
+   */
+  monthly_price_usd?: number;
   display_name?: string | null;
   stripe_price_id?: string | null;
+  /** ISO 4217 code. Defaults to USD when omitted. */
+  currency?: string | null;
+  /**
+   * Monthly amount in `currency`. Required when `currency` is non-USD;
+   * defaults to `monthly_price_usd` when `currency` is USD.
+   */
+  native_amount?: number | null;
 }
 
 export class PlanCreateError extends Error {
@@ -240,8 +253,10 @@ const PLAN_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,63}$/;
 /**
  * Insert a brand-new catalog row. Used by the admin "Add plan" UI so a plan
  * can be advertised before the first Stripe subscriber lands. The row is
- * inserted with `is_active=1` and `currency='USD'` (matching the legacy seed
- * defaults); admins can toggle/edit it via the existing PATCH endpoint.
+ * inserted with `is_active=1`. Currency defaults to USD; pass a non-USD
+ * `currency` + `native_amount` to launch a regional plan (Task #18) — the
+ * USD figure is then FX-derived from the `fx_rates` table, matching the
+ * Stripe webhook upsert path. Admins can toggle/edit via PATCH.
  *
  * Throws `PlanCreateError` (with HTTP status hint) for validation failures
  * and duplicates so the route layer can map them to clean 4xx responses.
@@ -253,16 +268,44 @@ export async function createPlan(env: Env, input: PlanCreate): Promise<Subscript
   if (!PLAN_ID_RE.test(planId)) {
     throw new PlanCreateError('plan_id must be 1-64 chars: letters, digits, _ . -');
   }
-  const price = Number(input.monthly_price_usd);
-  if (!Number.isFinite(price) || price < 0) {
-    throw new PlanCreateError('monthly_price_usd must be a non-negative number');
-  }
   const displayName = input.display_name == null
     ? null
     : (String(input.display_name).trim().slice(0, 200) || null);
   const stripePriceId = input.stripe_price_id == null
     ? null
     : (String(input.stripe_price_id).trim().slice(0, 200) || null);
+
+  // Task #18 — multi-currency support. When `currency` is non-USD, the
+  // native amount is the source of truth and `monthly_price_usd` is
+  // FX-derived (mirrors `upsertPlanFromStripeSubscription`). USD path
+  // keeps its original semantics.
+  const currency = String(input.currency || 'USD').toUpperCase().trim() || 'USD';
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new PlanCreateError('currency must be a 3-letter ISO 4217 code');
+  }
+  let price: number;
+  let nativeAmount: number;
+  if (currency === 'USD') {
+    const p = Number(input.monthly_price_usd);
+    if (!Number.isFinite(p) || p < 0) {
+      throw new PlanCreateError('monthly_price_usd must be a non-negative number');
+    }
+    price = p;
+    const n = input.native_amount == null ? p : Number(input.native_amount);
+    nativeAmount = Number.isFinite(n) && n >= 0 ? n : p;
+  } else {
+    const n = Number(input.native_amount);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new PlanCreateError('native_amount must be a non-negative number when currency is non-USD');
+    }
+    nativeAmount = n;
+    const fx = await loadFxRates(env);
+    const rate = fx.rates.get(currency);
+    if (!rate || rate <= 0) {
+      throw new PlanCreateError(`No FX rate available for currency "${currency}"`);
+    }
+    price = Number((n / rate).toFixed(2));
+  }
 
   // Duplicate check up-front so we can return a friendly 409. The unique
   // PRIMARY KEY constraint would also catch this, but its error message is
@@ -277,8 +320,8 @@ export async function createPlan(env: Env, input: PlanCreate): Promise<Subscript
   try {
     await env.DB.prepare(
       'INSERT INTO subscription_plans (plan_id, monthly_price_usd, display_name, stripe_price_id, is_active, currency, native_amount, native_interval) ' +
-      "VALUES (?, ?, ?, ?, 1, 'USD', ?, 'month')",
-    ).bind(planId, price, displayName, stripePriceId, price).run();
+      "VALUES (?, ?, ?, ?, 1, ?, ?, 'month')",
+    ).bind(planId, price, displayName, stripePriceId, currency, nativeAmount).run();
   } catch (e) {
     const msg = (e as Error).message || '';
     if (/UNIQUE|PRIMARY KEY/i.test(msg)) {
