@@ -629,6 +629,10 @@ export const api = {
     request(`/monitoring/analytics/plans/${encodeURIComponent(planId)}`, {
       method: 'PATCH', body: JSON.stringify(patch),
     }),
+  analyticsDeletePlan: (planId) =>
+    request(`/monitoring/analytics/plans/${encodeURIComponent(planId)}`, {
+      method: 'DELETE',
+    }),
 
   // ---------- Infrastructure (admin) ----------
   infraQueue: () => request('/infra/queue'),

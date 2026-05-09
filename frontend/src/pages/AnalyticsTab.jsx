@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   BarChart3, Users as UsersIcon, DollarSign, Cpu, ClipboardList,
   Download, FileText, RefreshCw, EyeOff, Eye, AlertTriangle, ChevronRight,
-  ArrowUp, ArrowDown, Check, X as XIcon, Pencil, Plus,
+  ArrowUp, ArrowDown, Check, X as XIcon, Pencil, Plus, Trash2,
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -400,6 +400,8 @@ function PlanCatalog({ onChanged }) {
   const [editing, setEditing] = useState(null); // {plan_id, monthly_price_usd, display_name}
   const [saving, setSaving] = useState(false);
   const [savingFlag, setSavingFlag] = useState(null); // plan_id of in-flight is_active toggle
+  const [deletingFlag, setDeletingFlag] = useState(null); // plan_id of in-flight delete
+  const [confirmDelete, setConfirmDelete] = useState(null); // plan_id awaiting confirm
   const [creating, setCreating] = useState(null); // {plan_id, monthly_price_usd, display_name, stripe_price_id, currency, native_amount}
   const [createBusy, setCreateBusy] = useState(false);
   // Task #18 — currency dropdown options for the "Add plan" form, sourced
@@ -497,6 +499,22 @@ function PlanCatalog({ onChanged }) {
       setErr(e?.message || 'Create failed');
     } finally {
       setCreateBusy(false);
+    }
+  };
+
+  const askDelete = (p) => { setErr(''); setConfirmDelete(p.plan_id); };
+  const cancelDelete = () => setConfirmDelete(null);
+  const confirmDeletePlan = async (p) => {
+    setDeletingFlag(p.plan_id); setErr('');
+    try {
+      await api.analyticsDeletePlan(p.plan_id);
+      setConfirmDelete(null);
+      load();
+      onChanged && onChanged();
+    } catch (e) {
+      setErr(e?.message || 'Delete failed');
+    } finally {
+      setDeletingFlag(null);
     }
   };
 
@@ -633,6 +651,10 @@ function PlanCatalog({ onChanged }) {
           )}
           {plans && plans.map(p => {
             const isEdit = editing && editing.plan_id === p.plan_id;
+            const subs = Number(p.subscriber_count || 0);
+            const canDelete = subs === 0;
+            const isConfirming = confirmDelete === p.plan_id;
+            const isDeleting = deletingFlag === p.plan_id;
             return (
               <tr key={p.plan_id} className="border-t border-gray-100 align-middle">
                 <td className="py-1.5 font-mono text-gray-700">{p.plan_id}</td>
@@ -688,11 +710,39 @@ function PlanCatalog({ onChanged }) {
                         <XIcon size={11} /> Cancel
                       </button>
                     </span>
+                  ) : isConfirming ? (
+                    <span className="inline-flex items-center gap-1">
+                      <span className="text-[11px] text-gray-600 mr-1">Delete plan?</span>
+                      <button onClick={() => confirmDeletePlan(p)} disabled={isDeleting}
+                              className="px-2 py-1 rounded bg-red-600 text-white inline-flex items-center gap-1 disabled:opacity-50">
+                        <Check size={11} /> {isDeleting ? 'Deleting…' : 'Confirm'}
+                      </button>
+                      <button onClick={cancelDelete} disabled={isDeleting}
+                              className="px-2 py-1 rounded border border-gray-300 text-gray-600 inline-flex items-center gap-1">
+                        <XIcon size={11} /> Cancel
+                      </button>
+                    </span>
                   ) : (
-                    <button onClick={() => startEdit(p)}
-                            className="px-2 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1">
-                      <Pencil size={11} /> Edit
-                    </button>
+                    <span className="inline-flex gap-1">
+                      <button onClick={() => startEdit(p)}
+                              className="px-2 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1">
+                        <Pencil size={11} /> Edit
+                      </button>
+                      <button
+                        onClick={() => askDelete(p)}
+                        disabled={!canDelete}
+                        title={canDelete
+                          ? 'Permanently delete this plan'
+                          : `Can't delete — ${subs} user(s) still reference this plan. Deactivate it instead.`}
+                        className={`px-2 py-1 rounded border inline-flex items-center gap-1 ${
+                          canDelete
+                            ? 'border-red-200 text-red-600 hover:bg-red-50'
+                            : 'border-gray-200 text-gray-300 cursor-not-allowed'
+                        }`}
+                      >
+                        <Trash2 size={11} /> Delete
+                      </button>
+                    </span>
                   )}
                 </td>
               </tr>
@@ -782,6 +832,11 @@ function PlanAuditHistory({ refreshKey }) {
     try { parsed = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return String(raw); }
     if (!parsed || typeof parsed !== 'object') return String(raw);
     const parts = [];
+    if (parsed.deleted) {
+      const label = parsed.display_name ? `“${parsed.display_name}”` : null;
+      parts.push(label ? `deleted (${label})` : 'deleted');
+      return parts.join(' · ');
+    }
     if (parsed.created) {
       parts.push('created');
       if (parsed.stripe_price_id) parts.push(`stripe → ${parsed.stripe_price_id}`);

@@ -27,6 +27,13 @@ export interface SubscriptionPlanRow {
   currency: string;
   native_amount: number | null;
   native_interval: string | null;
+  /**
+   * Task #19 — count of `users.mi_subscription_plan` rows that still
+   * reference this plan_id (any status, including cancelled). When 0 the
+   * plan is safe to fully delete from the catalog; otherwise the row is
+   * load-bearing and may only be toggled inactive.
+   */
+  subscriber_count: number;
 }
 
 /** Per-plan pricing as carried through analytics. */
@@ -196,11 +203,16 @@ export async function listPlansFull(env: Env): Promise<SubscriptionPlanRow[]> {
   const sql = getSQL(env);
   try {
     const rows = (await sql`
-      SELECT plan_id, monthly_price_usd, display_name, stripe_price_id, is_active,
-             currency, native_amount, native_interval
-        FROM subscription_plans
-       ORDER BY is_active DESC, plan_id ASC
-    `) as Array<SubscriptionPlanRow & { monthly_price_usd: number | string; native_amount: number | string | null }>;
+      SELECT sp.plan_id, sp.monthly_price_usd, sp.display_name, sp.stripe_price_id,
+             sp.is_active, sp.currency, sp.native_amount, sp.native_interval,
+             (SELECT COUNT(*) FROM users u WHERE u.mi_subscription_plan = sp.plan_id) AS subscriber_count
+        FROM subscription_plans sp
+       ORDER BY sp.is_active DESC, sp.plan_id ASC
+    `) as Array<SubscriptionPlanRow & {
+      monthly_price_usd: number | string;
+      native_amount: number | string | null;
+      subscriber_count: number | string | null;
+    }>;
     return rows.map(r => ({
       plan_id: r.plan_id,
       monthly_price_usd: typeof r.monthly_price_usd === 'number'
@@ -213,6 +225,7 @@ export async function listPlansFull(env: Env): Promise<SubscriptionPlanRow[]> {
       native_amount: r.native_amount == null ? null
         : (typeof r.native_amount === 'number' ? r.native_amount : Number(r.native_amount)),
       native_interval: r.native_interval ?? null,
+      subscriber_count: r.subscriber_count == null ? 0 : Number(r.subscriber_count) || 0,
     }));
   } catch (e) {
     console.warn('[subscriptionPlans] listPlansFull failed:', (e as Error).message);
@@ -385,6 +398,37 @@ export async function updatePlan(
     console.warn('[subscriptionPlans] updatePlan failed:', (e as Error).message);
     throw e;
   }
+}
+
+/**
+ * Task #19 — fully delete a catalog row.
+ *
+ * Refuses (PlanCreateError, status 409) when any `users.mi_subscription_plan`
+ * row still references the plan, even if the user's subscription has lapsed.
+ * Keeping the catalog row intact preserves the join used by analytics and
+ * the audit history. Admins should toggle the plan inactive in that case.
+ *
+ * Returns the row that was deleted (caller uses it to render the audit
+ * line / user-facing summary), or null if the plan_id does not exist.
+ */
+export async function deletePlan(env: Env, planId: string): Promise<SubscriptionPlanRow | null> {
+  await ensureSubscriptionPlansSchema(env);
+  const all = await listPlansFull(env);
+  const row = all.find(p => p.plan_id === planId);
+  if (!row) return null;
+  if (row.subscriber_count > 0) {
+    throw new PlanCreateError(
+      `Plan "${planId}" still has ${row.subscriber_count} subscriber(s); deactivate it instead.`,
+      409,
+    );
+  }
+  try {
+    await env.DB.prepare('DELETE FROM subscription_plans WHERE plan_id = ?').bind(planId).run();
+  } catch (e) {
+    console.warn('[subscriptionPlans] deletePlan failed:', (e as Error).message);
+    throw e;
+  }
+  return row;
 }
 
 // ---------- Stripe webhook upsert ----------

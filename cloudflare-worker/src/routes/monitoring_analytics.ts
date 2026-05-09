@@ -26,7 +26,7 @@ import {
   reportToCsv, reportToHtml,
   signDownloadToken, verifyDownloadToken,
 } from '../services/analyticsReports';
-import { ensureSubscriptionPlansSchema, listPlansFull, updatePlan, createPlan, PlanCreateError } from '../services/subscriptionPlans';
+import { ensureSubscriptionPlansSchema, listPlansFull, updatePlan, createPlan, deletePlan, PlanCreateError } from '../services/subscriptionPlans';
 
 type AppCtx = Context<{ Bindings: Env }>;
 type ExportReport = 'overview' | 'users' | 'financial' | 'technical' | 'management';
@@ -340,6 +340,39 @@ r.patch('/plans/:planId', async (c) => {
     console.warn('[analytics] plan update audit failed:', (e as Error).message);
   }
   return c.json({ plan: updated });
+});
+
+r.delete('/plans/:planId', async (c) => {
+  const admin = await requireAdmin(c);
+  const planId = c.req.param('planId');
+  if (!planId) return c.json({ detail: 'Missing planId' }, 400);
+  let deleted;
+  try {
+    deleted = await deletePlan(c.env, planId);
+  } catch (e) {
+    if (e instanceof PlanCreateError) return c.json({ detail: e.message }, e.status as 400 | 409 | 500);
+    console.warn('[analytics] deletePlan unexpected error:', (e as Error).message);
+    return c.json({ detail: (e as Error).message || 'Delete failed' }, 500);
+  }
+  if (!deleted) return c.json({ detail: 'Plan not found' }, 404);
+  await ensureSchema(c.env);
+  try {
+    const sql = getSQL(c.env);
+    const filtersJson = JSON.stringify({
+      plan_id: planId,
+      deleted: true,
+      display_name: deleted.display_name,
+      monthly_price_usd: deleted.monthly_price_usd,
+      currency: deleted.currency,
+    });
+    await sql`
+      INSERT INTO admin_audit_log (admin_user_id, action, report_type, format, filters_json, storage_key, download_url)
+      VALUES (${admin.id}, 'subscription_plan_update', ${planId}, 'delete', ${filtersJson}, NULL, '')
+    `;
+  } catch (e) {
+    console.warn('[analytics] plan delete audit failed:', (e as Error).message);
+  }
+  return c.json({ ok: true, plan: deleted });
 });
 
 // ---------- export ----------
