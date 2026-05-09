@@ -288,6 +288,17 @@ legal.post('/templates/:key/generate', async (c) => {
     await sql.end();
     return c.json({ error: 'Forbidden' }, 403);
   }
+  // Task #2 — esign_envelopes is the single source of truth for actual
+  // contracts. Refuse to mint a NEW contract-type row in `documents`;
+  // callers must use POST /api/legal/esign/send to issue an envelope.
+  // Non-contract templates (memos, internal docs) are still generatable.
+  if (CONTRACT_DOC_TYPES.has(String(key).toLowerCase())) {
+    await sql.end();
+    return c.json({
+      error: 'This template is a contract doc_type — use the e-sign envelope flow (POST /api/legal/esign/send) instead.',
+      code: 'use_esign_envelope',
+    }, 409);
+  }
   let content = template.content;
   if (body.company_name) content = content.replace(/\{company_name\}/g, body.company_name);
   if (body.project_id) content = content.replace(/\{project_id\}/g, body.project_id);
@@ -356,6 +367,18 @@ legal.post('/documents', async (c) => {
     // Founders may not create unattached documents.
     await sql.end();
     return c.json({ error: 'Forbidden' }, 403);
+  }
+  // Task #2 — Hard guard: refuse to insert any contract doc_type into
+  // `documents`. esign_envelopes is the single source of truth for active
+  // contracts going forward. Non-contract docs (memos, drafts, 'other')
+  // remain allowed.
+  const requestedType = String(data.doc_type || 'other').toLowerCase();
+  if (CONTRACT_DOC_TYPES.has(requestedType)) {
+    await sql.end();
+    return c.json({
+      error: `doc_type '${requestedType}' is a contract type — create it via POST /api/legal/esign/send so it lives in esign_envelopes.`,
+      code: 'use_esign_envelope',
+    }, 409);
   }
   const [doc] = await sql`INSERT INTO documents (project_id, title, doc_type, content, template_name) VALUES (${data.project_id || null}, ${data.title}, ${data.doc_type || 'other'}, ${data.content || null}, ${data.template_name || null}) RETURNING *`;
   await sql.end();
