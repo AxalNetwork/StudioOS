@@ -421,7 +421,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                   {ROLE_LABELS[activeRole]} View
                 </span>
               )}
-              <button className="ml-auto lg:hidden text-gray-600 dark:text-gray-300" onClick={() => setSidebarOpen(false)}>
+              <button className="ml-auto text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setSidebarOpen(false)} aria-label="Collapse sidebar" title="Collapse sidebar">
                 <X size={18} />
               </button>
             </div>
