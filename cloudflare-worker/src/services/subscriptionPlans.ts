@@ -376,9 +376,10 @@ export async function updatePlan(
   await ensureSubscriptionPlansSchema(env);
   const sets: string[] = [];
   const binds: Array<string | number | null> = [];
-  // Task #25 — handle native_amount FIRST so a paired
-  // {monthly_price_usd, native_amount} payload (USD path edge case)
-  // still respects an explicit USD override below.
+  // Task #25 — when `native_amount` is provided, it is the source of
+  // truth: USD is FX-derived from it (mirrors createPlan + Stripe
+  // webhook). A paired `monthly_price_usd` in the same payload is
+  // intentionally ignored so the FX-derived invariant always wins.
   if (patch.native_amount !== undefined) {
     const n = Number(patch.native_amount);
     if (!Number.isFinite(n) || n < 0) throw new Error('native_amount must be a non-negative number');
