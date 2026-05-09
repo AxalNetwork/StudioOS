@@ -417,6 +417,13 @@ dd.post('/cases/:uid/sections/:sectionId/verdict', async (c) => {
 
   const sql = getSQL(c.env);
   try {
+    // Integrity: the URL section MUST belong to the URL case before we
+    // emit any side effects (audit row, owner notification, score
+    // recompute). Without this, a mismatched (uid, sectionId) pair
+    // would silently no-op the UPDATE while still polluting the audit
+    // log of `:uid` with a verdict on a section from a different case.
+    const secOwn: any[] = await sql`SELECT 1 FROM dd_sections WHERE id = ${sectionId} AND case_id = ${caseId} LIMIT 1`;
+    if (secOwn.length === 0) return c.json({ error: 'Section does not belong to this case' }, 404);
     if (user.role !== 'admin') {
       const r: any[] = await sql`SELECT 1 FROM dd_reviewers WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
       if (r.length === 0) return c.json({ error: 'You are not assigned to this section' }, 403);
