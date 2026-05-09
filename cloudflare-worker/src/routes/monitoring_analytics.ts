@@ -25,6 +25,7 @@ import {
   loadFinancial, loadTechnical,
   reportToCsv, reportToHtml,
   signDownloadToken, verifyDownloadToken,
+  planAuditToCsv, type PlanAuditRow,
 } from '../services/analyticsReports';
 import { ensureSubscriptionPlansSchema, listPlansFull, updatePlan, createPlan, deletePlan, PlanCreateError } from '../services/subscriptionPlans';
 
@@ -251,6 +252,107 @@ r.get('/audit', async (c) => {
     offset,
     has_more: offset + itemsArr.length < total,
     filters: { action, plan_id: planId, admin_user_id: adminUserId, admin_q: adminQRaw || null },
+  });
+});
+
+// ---------- Task #20: CSV export of the Plan change history panel ----------
+// Mirrors the /audit filters (plan_id, admin_user_id, admin_q) for action=
+// 'subscription_plan_update'. Hard-capped at 10k rows so a single bad request
+// can't pull the whole table; finance reviews are batched by date elsewhere.
+r.get('/audit/export.csv', async (c) => {
+  const admin = await requireAdmin(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  const planIdRaw = (c.req.query('plan_id') || '').toString().trim();
+  const adminIdRaw = (c.req.query('admin_user_id') || '').toString().trim();
+  const adminQRaw = (c.req.query('admin_q') || '').toString().trim();
+  const planId = planIdRaw.slice(0, 100) || null;
+  const adminUserId = adminIdRaw && /^\d+$/.test(adminIdRaw) ? Number(adminIdRaw) : null;
+  const adminQ = adminQRaw ? `%${adminQRaw.slice(0, 100).toLowerCase()}%` : null;
+  const action = 'subscription_plan_update';
+  const MAX_ROWS = 10000;
+
+  let rows;
+  if (planId && adminUserId !== null) {
+    rows = await sql`
+      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
+             a.report_type, a.format, a.filters_json, a.exported_at
+      FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
+      WHERE a.action = ${action} AND a.report_type = ${planId} AND a.admin_user_id = ${adminUserId}
+      ORDER BY a.exported_at DESC LIMIT ${MAX_ROWS}
+    `;
+  } else if (planId && adminQ) {
+    rows = await sql`
+      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
+             a.report_type, a.format, a.filters_json, a.exported_at
+      FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
+      WHERE a.action = ${action} AND a.report_type = ${planId}
+        AND (LOWER(u.email) LIKE ${adminQ} OR LOWER(u.name) LIKE ${adminQ})
+      ORDER BY a.exported_at DESC LIMIT ${MAX_ROWS}
+    `;
+  } else if (planId) {
+    rows = await sql`
+      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
+             a.report_type, a.format, a.filters_json, a.exported_at
+      FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
+      WHERE a.action = ${action} AND a.report_type = ${planId}
+      ORDER BY a.exported_at DESC LIMIT ${MAX_ROWS}
+    `;
+  } else if (adminUserId !== null) {
+    rows = await sql`
+      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
+             a.report_type, a.format, a.filters_json, a.exported_at
+      FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
+      WHERE a.action = ${action} AND a.admin_user_id = ${adminUserId}
+      ORDER BY a.exported_at DESC LIMIT ${MAX_ROWS}
+    `;
+  } else if (adminQ) {
+    rows = await sql`
+      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
+             a.report_type, a.format, a.filters_json, a.exported_at
+      FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
+      WHERE a.action = ${action}
+        AND (LOWER(u.email) LIKE ${adminQ} OR LOWER(u.name) LIKE ${adminQ})
+      ORDER BY a.exported_at DESC LIMIT ${MAX_ROWS}
+    `;
+  } else {
+    rows = await sql`
+      SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
+             a.report_type, a.format, a.filters_json, a.exported_at
+      FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
+      WHERE a.action = ${action}
+      ORDER BY a.exported_at DESC LIMIT ${MAX_ROWS}
+    `;
+  }
+  const arr = (Array.isArray(rows) ? rows : []) as PlanAuditRow[];
+  const csv = planAuditToCsv(arr);
+
+  // Audit row so finance can see who pulled what + when.
+  const filtersJson = JSON.stringify({
+    plan_id: planId,
+    admin_user_id: adminUserId,
+    admin_q: adminQRaw || null,
+    row_count: arr.length,
+  });
+  await writeAudit(c.env, {
+    adminId: admin.id,
+    report: 'subscription_plan_audit' as ExportReport,
+    format: 'csv',
+    filtersJson,
+    storageKey: null,
+    downloadUrl: '',
+  });
+
+  const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  const planTag = planId ? `-${planId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40)}` : '';
+  const filename = `plan-change-history${planTag}-${ts}.csv`;
+  return new Response(csv, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Cache-Control': 'no-store',
+    },
   });
 });
 

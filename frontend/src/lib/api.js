@@ -622,6 +622,32 @@ export const api = {
     if (opts.admin_q) params.set('admin_q', opts.admin_q);
     return request(`/monitoring/analytics/audit?${params.toString()}`);
   },
+  // Task #20 — Stream the Plan change history CSV for the active filters.
+  // Returns a Blob + filename so the caller can trigger a download.
+  analyticsAuditExportCsv: async (opts = {}) => {
+    const params = new URLSearchParams();
+    if (opts.plan_id) params.set('plan_id', opts.plan_id);
+    if (opts.admin_user_id) params.set('admin_user_id', String(opts.admin_user_id));
+    if (opts.admin_q) params.set('admin_q', opts.admin_q);
+    const token = localStorage.getItem('token');
+    const qs = params.toString();
+    const res = await fetch(`/api/monitoring/analytics/audit/export.csv${qs ? `?${qs}` : ''}`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let detail = res.statusText || 'Export failed';
+      try { const e = await res.json(); detail = e?.detail || e?.error || detail; } catch {}
+      const e = new Error(detail); e.status = res.status; throw e;
+    }
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || 'plan-change-history.csv';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  },
   analyticsListPlans: () => request('/monitoring/analytics/plans'),
   analyticsCreatePlan: (payload) =>
     request('/monitoring/analytics/plans', { method: 'POST', body: JSON.stringify(payload) }),

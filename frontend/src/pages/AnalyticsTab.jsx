@@ -933,6 +933,28 @@ function PlanAuditHistory({ refreshKey }) {
   };
   const hasFilters = !!(planFilter || adminFilter);
 
+  // Task #20 — Stream the currently-filtered audit rows as CSV. The worker
+  // logs the export to admin_audit_log so finance has a who/when trail.
+  const [exporting, setExporting] = useState(false);
+  const [exportErr, setExportErr] = useState('');
+  const exportCsv = async () => {
+    if (exporting) return;
+    setExporting(true); setExportErr('');
+    try {
+      const opts = {};
+      if (planFilter) opts.plan_id = planFilter;
+      if (adminFilter) {
+        if (/^\d+$/.test(adminFilter.trim())) opts.admin_user_id = adminFilter.trim();
+        else opts.admin_q = adminFilter.trim();
+      }
+      await api.analyticsAuditExportCsv(opts);
+    } catch (e) {
+      setExportErr(e?.message || 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const describePatch = (raw) => {
     if (!raw) return null;
     let parsed;
@@ -1014,7 +1036,21 @@ function PlanAuditHistory({ refreshKey }) {
             Clear filters
           </button>
         )}
+        <div className="ml-auto">
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={exporting || (items !== null && items.length === 0 && !hasFilters)}
+            title={hasFilters ? 'Export rows matching current filters' : 'Export all plan changes'}
+            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1"
+          >
+            {exporting
+              ? <><RefreshCw size={11} className="animate-spin" /> Exporting…</>
+              : <><Download size={11} /> Export CSV</>}
+          </button>
+        </div>
       </div>
+      {exportErr && <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{exportErr}</div>}
       {err && <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{err}</div>}
       {items === null ? (
         <div className="text-xs text-gray-400 text-center py-3"><RefreshCw size={11} className="inline animate-spin mr-1" /> Loading…</div>

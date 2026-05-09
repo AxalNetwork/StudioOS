@@ -644,6 +644,72 @@ export function reportToCsv(report: string, data: unknown): string {
   return toCsv(rowsOut, ['section', 'metric', 'value']);
 }
 
+// Task #20 — CSV export of the Plan change history panel.
+// Each row is one admin_audit_log entry where action='subscription_plan_update'.
+// `filters_json` is a JSON object describing the diff (created/deleted/price/etc.);
+// we surface it as a single human-readable "change_summary" column AND keep the
+// raw JSON so finance can re-parse if needed.
+export interface PlanAuditRow {
+  id: number;
+  exported_at: string;
+  admin_user_id: number;
+  admin_email: string | null;
+  admin_name: string | null;
+  report_type: string | null; // plan_id
+  format: string | null; // 'create' | 'patch' | 'delete'
+  filters_json: string | null;
+}
+function describePlanPatch(raw: string | null): string {
+  if (!raw) return '';
+  let parsed: Record<string, unknown>;
+  try { parsed = JSON.parse(raw) as Record<string, unknown>; } catch { return String(raw); }
+  if (!parsed || typeof parsed !== 'object') return String(raw);
+  const parts: string[] = [];
+  if (parsed.deleted) {
+    const label = parsed.display_name ? `"${String(parsed.display_name)}"` : '';
+    parts.push(label ? `deleted (${label})` : 'deleted');
+    return parts.join(' · ');
+  }
+  if (parsed.created) {
+    parts.push('created');
+    if (parsed.stripe_price_id) parts.push(`stripe → ${String(parsed.stripe_price_id)}`);
+  }
+  if (parsed.monthly_price_usd !== undefined && parsed.monthly_price_usd !== null) {
+    parts.push(`price → $${Number(parsed.monthly_price_usd)}`);
+  }
+  if (parsed.display_name !== undefined) {
+    const v = parsed.display_name;
+    parts.push(`name → ${v == null || v === '' ? '(none)' : `"${String(v)}"`}`);
+  }
+  if (parsed.is_active !== undefined) {
+    parts.push(parsed.is_active ? 'activated' : 'deactivated');
+  }
+  if (parsed.currency !== undefined && parsed.currency !== null && !parsed.created && !parsed.deleted) {
+    parts.push(`currency → ${String(parsed.currency)}`);
+  }
+  if (parsed.native_amount !== undefined && parsed.native_amount !== null && !parsed.created && !parsed.deleted) {
+    parts.push(`native → ${Number(parsed.native_amount)}`);
+  }
+  return parts.join(' · ');
+}
+export function planAuditToCsv(rows: PlanAuditRow[]): string {
+  const data: CsvRow[] = rows.map(r => ({
+    id: r.id,
+    exported_at_utc: r.exported_at || '',
+    plan_id: r.report_type || '',
+    change_type: r.format || '',
+    change_summary: describePlanPatch(r.filters_json),
+    admin_user_id: r.admin_user_id,
+    admin_email: r.admin_email || '',
+    admin_name: r.admin_name || '',
+    raw_diff_json: r.filters_json || '',
+  }));
+  return toCsv(data, [
+    'id', 'exported_at_utc', 'plan_id', 'change_type', 'change_summary',
+    'admin_user_id', 'admin_email', 'admin_name', 'raw_diff_json',
+  ]);
+}
+
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="28" height="28">
   <rect x="2" y="2" width="28" height="28" rx="6" fill="#7c3aed"/>
   <text x="16" y="21" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="14" fill="#fff">A</text>
