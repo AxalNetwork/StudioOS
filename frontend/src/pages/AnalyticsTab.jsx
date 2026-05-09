@@ -406,14 +406,29 @@ function PlanCatalog({ onChanged }) {
   const [createBusy, setCreateBusy] = useState(false);
   // Task #18 — currency dropdown options for the "Add plan" form, sourced
   // from the same endpoint as the dashboard-level selector.
+  // Task #23 — also retain the full {currency, usd_rate, updated_at} rows
+  // so the form can render a live USD preview using the same rate the
+  // backend will FX-convert with on submit.
   const [planCurrencies, setPlanCurrencies] = useState([
     'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR', 'SGD', 'CHF', 'SEK',
   ]);
+  const [fxRates, setFxRates] = useState({}); // { CCY: { usd_rate, updated_at } }
   useEffect(() => {
     api.analyticsCurrencies()
       .then(r => {
-        const list = (r.currencies || []).map(c => c.currency).filter(Boolean);
+        const arr = Array.isArray(r.currencies) ? r.currencies : [];
+        const list = arr.map(c => c.currency).filter(Boolean);
         if (list.length) setPlanCurrencies(list);
+        const map = {};
+        for (const row of arr) {
+          if (row && row.currency) {
+            map[String(row.currency).toUpperCase()] = {
+              usd_rate: Number(row.usd_rate),
+              updated_at: row.updated_at || null,
+            };
+          }
+        }
+        setFxRates(map);
       })
       .catch(() => {});
   }, []);
@@ -597,6 +612,35 @@ function PlanCatalog({ onChanged }) {
                   className="border border-gray-300 rounded px-2 py-1 text-xs w-full text-right"
                   title="USD price will be FX-derived from this amount."
                 />
+                {(() => {
+                  // Task #23 — live USD preview using the same fx_rates row
+                  // the backend will divide by on submit (monthly_price_usd
+                  // = native_amount / usd_rate).
+                  const fx = fxRates[creating.currency];
+                  const nativeNum = Number(creating.native_amount);
+                  if (!fx || !Number.isFinite(fx.usd_rate) || fx.usd_rate <= 0) {
+                    return (
+                      <span className="block mt-0.5 text-amber-600">
+                        No FX rate on file for {creating.currency} — submit will fail.
+                      </span>
+                    );
+                  }
+                  if (!Number.isFinite(nativeNum) || nativeNum <= 0) {
+                    return (
+                      <span className="block mt-0.5 text-gray-500">
+                        1 USD ≈ {fx.usd_rate.toLocaleString(undefined, { maximumFractionDigits: 4 })} {creating.currency}
+                        {fx.updated_at ? ` · rate as of ${new Date(fx.updated_at).toLocaleDateString()}` : ''}
+                      </span>
+                    );
+                  }
+                  const usd = nativeNum / fx.usd_rate;
+                  return (
+                    <span className="block mt-0.5 text-gray-600">
+                      ≈ ${usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                      {fx.updated_at ? ` · rate as of ${new Date(fx.updated_at).toLocaleDateString()}` : ''}
+                    </span>
+                  );
+                })()}
               </label>
             )}
             <label className="text-xs">
