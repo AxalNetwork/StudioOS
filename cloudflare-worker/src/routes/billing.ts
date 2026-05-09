@@ -164,16 +164,21 @@ billing.post('/stripe/webhook', async (c) => {
   const raw = await c.req.text();
   const sig = c.req.header('stripe-signature') ?? '';
   const secret = c.env.STRIPE_WEBHOOK_SECRET;
-  // Task #1 (security hardening) — STRIPE_WEBHOOK_SECRET is mandatory in
-  // production. A misconfigured prod (no secret) would otherwise silently
-  // accept any payload that POSTed to this route, which is a forge-the-event
-  // primitive. Dev/preview keep the soft-accept behaviour so local Stripe
-  // CLI testing without a webhook secret still works.
+  // Task #1 (security hardening) — fail-closed for the Stripe webhook.
+  // Historically this route accepted unsigned payloads whenever
+  // STRIPE_WEBHOOK_SECRET was unset, which gave any unauth caller the
+  // ability to forge subscription state changes. We now ONLY soft-accept
+  // when the worker is explicitly running in a local/dev/test/preview
+  // environment AND the secret is unset; every other config (including the
+  // dangerous "ENVIRONMENT variable typo / unset" case) hard-rejects with
+  // 503 so the misconfiguration is loud rather than silently exploitable.
   const envName = String((c.env as { ENVIRONMENT?: string }).ENVIRONMENT || '').toLowerCase();
-  if (!secret && (envName === 'production' || envName === 'prod')) {
-    return c.json({ error: 'webhook_misconfigured' }, 503);
-  }
-  if (secret) {
+  const SOFT_ACCEPT_ENVS = new Set(['development', 'dev', 'test', 'local', 'preview']);
+  if (!secret) {
+    if (!SOFT_ACCEPT_ENVS.has(envName)) {
+      return c.json({ error: 'webhook_misconfigured' }, 503);
+    }
+  } else {
     const ok = await verifyStripeSignature(raw, sig, secret);
     if (!ok) return c.json({ error: 'invalid_signature' }, 400);
   }

@@ -1,9 +1,15 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken } from '../services/signedDownload';
+
+type AppContext = Context<{ Bindings: Env }>;
+type ContractDownloadResult =
+  | { ok: { url: string; expires_at: string }; error?: undefined }
+  | { ok?: undefined; error: Response };
 
 const adminContracts = new Hono<{ Bindings: Env }>();
 
@@ -291,7 +297,7 @@ adminContracts.post('/:uid/void', async (c) => {
 //                                navigation, "Download" button in admin UI).
 //   - POST /:uid/download-url  — JSON body returning {url, expires_at} so
 //                                the SPA can copy/share the link.
-async function mintContractDownload(c: any) {
+async function mintContractDownload(c: AppContext): Promise<ContractDownloadResult> {
   const adminUser = await requireAdmin(c);
   const uid = c.req.param('uid');
   const sql = getSQL(c.env);
@@ -329,7 +335,7 @@ async function mintContractDownload(c: any) {
 adminContracts.get('/:uid/download', async (c) => {
   const r = await mintContractDownload(c);
   if (r.error) return r.error;
-  return c.redirect(r.ok!.url, 302);
+  return c.redirect(r.ok.url, 302);
 });
 
 adminContracts.post('/:uid/download-url', async (c) => {

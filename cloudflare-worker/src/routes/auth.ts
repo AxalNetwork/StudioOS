@@ -459,7 +459,11 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
 
   // Task #33 — load TOTP secret from `auth_totp` (preferred) with lazy
   // migration off the legacy `users.password_hash` storage. Returns null
-  // if no usable TOTP secret exists for the user.
+  // if no usable TOTP secret exists for the user. Task #1 — when the
+  // migration runs (source === 'legacy'), the user's `password_hash` was
+  // misused for TOTP storage and is now wiped to a sentinel; we surface
+  // `password_reset_required` to the SPA AND fire a forced password-reset
+  // email so the user re-establishes a clean credential.
   const totpRow = await loadTotp(c.env, user.id, user.password_hash, user.totp_recovery_codes);
   if (!totpRow) { await sql.end(); return c.json({ error: 'Account not set up for TOTP authentication' }, 401); }
   const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
@@ -512,12 +516,49 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   const csrfToken = generateCsrfToken();
   setAuthCookies(c, jwtToken, csrfToken);
 
+  // Task #1 — surface password_reset_required so the SPA can route the user
+  // straight to the recovery flow. Re-read the flag from the row we just
+  // touched (the lazy TOTP migration may have just set it to 1 above).
+  let passwordResetRequired = Number(user.password_reset_required ?? 0) === 1;
+  if (totpRow.source === 'legacy') {
+    passwordResetRequired = true;
+    // Fire-and-forget: email failures must not block login. We use
+    // executionCtx.waitUntil so the worker doesn't return before the
+    // outbound HTTPS call lands, but the response is still sent immediately.
+    try {
+      const sendForcedResetEmail = async () => {
+        try {
+          const { sendNotificationEmail } = await import('../services/email');
+          await sendNotificationEmail(
+            c.env,
+            user.email,
+            'Action required: re-establish your Axal StudioOS sign-in',
+            `Hi ${user.name || ''},\n\n` +
+            `As part of a security upgrade, your account requires you to ` +
+            `re-establish your sign-in credential. Please visit ` +
+            `${(c.env as { APP_URL?: string }).APP_URL || 'https://app.axal.vc'}/settings ` +
+            `and complete the password-reset flow.\n\n` +
+            `If you did not just sign in, please contact support immediately.`,
+          );
+        } catch (e) {
+          console.error('[auth] forced reset email failed', e);
+        }
+      };
+      const ctx = (c as { executionCtx?: { waitUntil?: (p: Promise<unknown>) => void } }).executionCtx;
+      if (ctx?.waitUntil) ctx.waitUntil(sendForcedResetEmail());
+      else void sendForcedResetEmail();
+    } catch (e) {
+      console.error('[auth] forced reset dispatch failed', e);
+    }
+  }
+
   return c.json({
     token: jwtToken,
     csrf_token: csrfToken,
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
     expires_in: 24 * 3600,
     used_recovery_code: usedRecoveryCode || undefined,
+    password_reset_required: passwordResetRequired || undefined,
   });
 }));
 
