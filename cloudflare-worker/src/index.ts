@@ -94,6 +94,7 @@ import { securityHeadersMiddleware } from './middleware/securityHeaders';
 import { csrfMiddleware } from './middleware/csrf';
 import { requireCfAccess } from './middleware/cfAccess';
 import filesRoutes from './routes/files';
+import ddRoutes from './routes/dd';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -219,6 +220,7 @@ app.route('/api/infra', infra);
 // Token-gated only — no admin/auth at the route layer because the token
 // itself is the authorisation. See services/signedDownload.ts.
 app.route('/api/files', filesRoutes);
+app.route('/api/dd', ddRoutes);
 app.route('/api/funds', funds);
 app.route('/api/liquidity', liquidity);
 app.route('/api/email', email);

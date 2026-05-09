@@ -34,6 +34,8 @@ import MarketIntelPage from './pages/MarketIntelPage';
 import AdvisoryPage from './pages/AdvisoryPage';
 import ActivityPage from './pages/ActivityPage';
 import AdminPage from './pages/AdminPage';
+import AdminDueDiligencePage from './pages/AdminDueDiligencePage';
+import AdminDueDiligenceCasePage from './pages/AdminDueDiligenceCasePage';
 import ApiBridgePage from './pages/ApiBridgePage';
 import LandingPage from './pages/LandingPage';
 import SpinoutLabPage from './pages/SpinoutLabPage';
@@ -793,6 +795,8 @@ function AppInner() {
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'mentor'], <AdminDueDiligencePage />)} />
+      <Route path="/admin/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'mentor'], <AdminDueDiligenceCasePage />)} />
       <Route path="/scoring" element={guard(['admin', 'partner', 'investor'], <ScoringPage />)} />
       <Route path="/projects" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectsPage />)} />
       <Route path="/projects/:id" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectDetail />)} />

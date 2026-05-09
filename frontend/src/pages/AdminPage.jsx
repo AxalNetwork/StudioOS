@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
-import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, Clock, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2 } from 'lucide-react';
+import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, Clock, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { PERSONAS as PERSONA_TAXONOMY } from '../lib/personas';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
@@ -223,6 +224,10 @@ export default function AdminPage({ onImpersonate }) {
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'personas' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
           <Sparkles size={14} className="inline mr-1.5" /> Personas
         </button>
+        <Link to="/admin/due-diligence"
+          className="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors border-transparent text-gray-600 hover:text-gray-900">
+          <ShieldAlert size={14} className="inline mr-1.5" /> Due Diligence
+        </Link>
       </div>
 
       {tab === 'contracts' && <ContractsPanel />}

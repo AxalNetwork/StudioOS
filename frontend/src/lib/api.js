@@ -1124,6 +1124,30 @@ export const api = {
   capitalFundsList: () => request('/capital/funds'),
 };
 
+// Task #3 — Due Diligence module. Admin/partner/investor/mentor only;
+// founders are blocked at the worker level (any 403 surfaces directly).
+export const dd = {
+  catalog: () => request('/dd/catalog'),
+  listCases: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/dd/cases${q ? `?${q}` : ''}`);
+  },
+  openCase: (data) => request('/dd/cases', { method: 'POST', body: JSON.stringify(data) }),
+  getCase: (uid) => request(`/dd/cases/${uid}`),
+  scan: (uid, connectors) => request(`/dd/cases/${uid}/scan`, { method: 'POST', body: JSON.stringify({ connectors }) }),
+  assignSection: (uid, sectionId, userId) =>
+    request(`/dd/cases/${uid}/sections/${sectionId}/assign`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  setVerdict: (uid, sectionId, verdict, reviewerNotes, ndaSigned = false) =>
+    request(`/dd/cases/${uid}/sections/${sectionId}/verdict`, {
+      method: 'POST',
+      body: JSON.stringify({ verdict, reviewer_notes: reviewerNotes, nda_signed: ndaSigned }),
+    }),
+  recompute: (uid) => request(`/dd/cases/${uid}/recompute`, { method: 'POST' }),
+  generateReport: (uid) => request(`/dd/cases/${uid}/report`, { method: 'POST' }),
+  shareReport: (uid) => request(`/dd/cases/${uid}/report/share`, { method: 'POST' }),
+  audit: (uid) => request(`/dd/cases/${uid}/audit`),
+};
+
 // Spin-Out Lab — 4-week guided sprint for pre-incorporation founders.
 // Namespaced separately from `api` to keep the surface small and obvious
 // for the call sites that wire milestone completion in feature pages.
