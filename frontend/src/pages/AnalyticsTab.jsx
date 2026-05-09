@@ -413,7 +413,7 @@ function PlanCatalog({ onChanged }) {
     'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR', 'SGD', 'CHF', 'SEK',
   ]);
   const [fxRates, setFxRates] = useState({}); // { CCY: { usd_rate, updated_at } }
-  useEffect(() => {
+  const refreshCurrencies = useCallback(() => {
     api.analyticsCurrencies()
       .then(r => {
         const arr = Array.isArray(r.currencies) ? r.currencies : [];
@@ -432,6 +432,7 @@ function PlanCatalog({ onChanged }) {
       })
       .catch(() => {});
   }, []);
+  useEffect(() => { refreshCurrencies(); }, [refreshCurrencies]);
 
   const load = useCallback(() => {
     setErr('');
@@ -470,6 +471,10 @@ function PlanCatalog({ onChanged }) {
   };
   const startCreate = () => {
     setErr('');
+    // Task #23 — re-fetch FX rates whenever the form opens so admins always
+    // see today's rate (in case the form sat closed across a daily fx_rates
+    // refresh on the worker).
+    refreshCurrencies();
     setCreating({
       plan_id: '', monthly_price_usd: '', display_name: '', stripe_price_id: '',
       currency: 'USD', native_amount: '',
