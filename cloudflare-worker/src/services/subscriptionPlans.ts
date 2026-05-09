@@ -220,6 +220,78 @@ export async function listPlansFull(env: Env): Promise<SubscriptionPlanRow[]> {
   }
 }
 
+export interface PlanCreate {
+  plan_id: string;
+  monthly_price_usd: number;
+  display_name?: string | null;
+  stripe_price_id?: string | null;
+}
+
+export class PlanCreateError extends Error {
+  status: number;
+  constructor(message: string, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+const PLAN_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,63}$/;
+
+/**
+ * Insert a brand-new catalog row. Used by the admin "Add plan" UI so a plan
+ * can be advertised before the first Stripe subscriber lands. The row is
+ * inserted with `is_active=1` and `currency='USD'` (matching the legacy seed
+ * defaults); admins can toggle/edit it via the existing PATCH endpoint.
+ *
+ * Throws `PlanCreateError` (with HTTP status hint) for validation failures
+ * and duplicates so the route layer can map them to clean 4xx responses.
+ */
+export async function createPlan(env: Env, input: PlanCreate): Promise<SubscriptionPlanRow> {
+  await ensureSubscriptionPlansSchema(env);
+  const planId = String(input.plan_id || '').trim();
+  if (!planId) throw new PlanCreateError('plan_id is required');
+  if (!PLAN_ID_RE.test(planId)) {
+    throw new PlanCreateError('plan_id must be 1-64 chars: letters, digits, _ . -');
+  }
+  const price = Number(input.monthly_price_usd);
+  if (!Number.isFinite(price) || price < 0) {
+    throw new PlanCreateError('monthly_price_usd must be a non-negative number');
+  }
+  const displayName = input.display_name == null
+    ? null
+    : (String(input.display_name).trim().slice(0, 200) || null);
+  const stripePriceId = input.stripe_price_id == null
+    ? null
+    : (String(input.stripe_price_id).trim().slice(0, 200) || null);
+
+  // Duplicate check up-front so we can return a friendly 409. The unique
+  // PRIMARY KEY constraint would also catch this, but its error message is
+  // engine-specific.
+  const existing = (await env.DB.prepare(
+    'SELECT plan_id FROM subscription_plans WHERE plan_id = ?',
+  ).bind(planId).first()) as { plan_id?: string } | null;
+  if (existing && existing.plan_id) {
+    throw new PlanCreateError(`Plan "${planId}" already exists`, 409);
+  }
+
+  try {
+    await env.DB.prepare(
+      'INSERT INTO subscription_plans (plan_id, monthly_price_usd, display_name, stripe_price_id, is_active, currency, native_amount, native_interval) ' +
+      "VALUES (?, ?, ?, ?, 1, 'USD', ?, 'month')",
+    ).bind(planId, price, displayName, stripePriceId, price).run();
+  } catch (e) {
+    const msg = (e as Error).message || '';
+    if (/UNIQUE|PRIMARY KEY/i.test(msg)) {
+      throw new PlanCreateError(`Plan "${planId}" already exists`, 409);
+    }
+    throw e;
+  }
+  const all = await listPlansFull(env);
+  const row = all.find(p => p.plan_id === planId);
+  if (!row) throw new PlanCreateError('Plan inserted but could not be reloaded', 500);
+  return row;
+}
+
 export interface PlanUpdate {
   monthly_price_usd?: number;
   display_name?: string | null;

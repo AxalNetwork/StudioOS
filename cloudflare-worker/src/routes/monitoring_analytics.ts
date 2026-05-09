@@ -26,7 +26,7 @@ import {
   reportToCsv, reportToHtml,
   signDownloadToken, verifyDownloadToken,
 } from '../services/analyticsReports';
-import { ensureSubscriptionPlansSchema, listPlansFull, updatePlan } from '../services/subscriptionPlans';
+import { ensureSubscriptionPlansSchema, listPlansFull, updatePlan, createPlan, PlanCreateError } from '../services/subscriptionPlans';
 
 type AppCtx = Context<{ Bindings: Env }>;
 type ExportReport = 'overview' | 'users' | 'financial' | 'technical' | 'management';
@@ -178,6 +178,43 @@ r.get('/plans', async (c) => {
   await requireAdmin(c);
   const plans = await listPlansFull(c.env);
   return c.json({ plans });
+});
+
+r.post('/plans', async (c) => {
+  const admin = await requireAdmin(c);
+  let body: Record<string, unknown> = {};
+  try { body = (await c.req.json()) as Record<string, unknown>; } catch {}
+  let plan;
+  try {
+    plan = await createPlan(c.env, {
+      plan_id: String(body.plan_id ?? ''),
+      monthly_price_usd: Number(body.monthly_price_usd),
+      display_name: body.display_name === undefined ? null : (body.display_name as string | null),
+      stripe_price_id: body.stripe_price_id === undefined ? null : (body.stripe_price_id as string | null),
+    });
+  } catch (e) {
+    if (e instanceof PlanCreateError) return c.json({ detail: e.message }, e.status as 400 | 409 | 500);
+    console.warn('[analytics] createPlan unexpected error:', (e as Error).message);
+    return c.json({ detail: (e as Error).message || 'Create failed' }, 500);
+  }
+  await ensureSchema(c.env);
+  try {
+    const sql = getSQL(c.env);
+    const filtersJson = JSON.stringify({
+      plan_id: plan.plan_id,
+      created: true,
+      monthly_price_usd: plan.monthly_price_usd,
+      display_name: plan.display_name,
+      stripe_price_id: plan.stripe_price_id,
+    });
+    await sql`
+      INSERT INTO admin_audit_log (admin_user_id, action, report_type, format, filters_json, storage_key, download_url)
+      VALUES (${admin.id}, 'subscription_plan_update', ${plan.plan_id}, 'create', ${filtersJson}, NULL, '')
+    `;
+  } catch (e) {
+    console.warn('[analytics] plan create audit failed:', (e as Error).message);
+  }
+  return c.json({ plan }, 201);
 });
 
 r.patch('/plans/:planId', async (c) => {

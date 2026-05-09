@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   BarChart3, Users as UsersIcon, DollarSign, Cpu, ClipboardList,
   Download, FileText, RefreshCw, EyeOff, Eye, AlertTriangle, ChevronRight,
-  ArrowUp, ArrowDown, Check, X as XIcon, Pencil,
+  ArrowUp, ArrowDown, Check, X as XIcon, Pencil, Plus,
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -400,6 +400,8 @@ function PlanCatalog({ onChanged }) {
   const [editing, setEditing] = useState(null); // {plan_id, monthly_price_usd, display_name}
   const [saving, setSaving] = useState(false);
   const [savingFlag, setSavingFlag] = useState(null); // plan_id of in-flight is_active toggle
+  const [creating, setCreating] = useState(null); // {plan_id, monthly_price_usd, display_name, stripe_price_id}
+  const [createBusy, setCreateBusy] = useState(false);
 
   const load = useCallback(() => {
     setErr('');
@@ -436,6 +438,40 @@ function PlanCatalog({ onChanged }) {
       setSaving(false);
     }
   };
+  const startCreate = () => {
+    setErr('');
+    setCreating({ plan_id: '', monthly_price_usd: '', display_name: '', stripe_price_id: '' });
+  };
+  const cancelCreate = () => setCreating(null);
+  const submitCreate = async () => {
+    if (!creating) return;
+    const planId = (creating.plan_id || '').trim();
+    if (!planId) { setErr('Plan ID is required'); return; }
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,63}$/.test(planId)) {
+      setErr('Plan ID must be 1-64 chars: letters, digits, _ . -'); return;
+    }
+    const priceNum = Number(creating.monthly_price_usd);
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      setErr('Price must be a non-negative number'); return;
+    }
+    setCreateBusy(true); setErr('');
+    try {
+      await api.analyticsCreatePlan({
+        plan_id: planId,
+        monthly_price_usd: priceNum,
+        display_name: creating.display_name.trim() || null,
+        stripe_price_id: creating.stripe_price_id.trim() || null,
+      });
+      setCreating(null);
+      load();
+      onChanged && onChanged();
+    } catch (e) {
+      setErr(e?.message || 'Create failed');
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
   const toggleActive = async (p) => {
     setSavingFlag(p.plan_id); setErr('');
     try {
@@ -454,12 +490,76 @@ function PlanCatalog({ onChanged }) {
       <div className="flex items-center justify-between mb-2">
         <div>
           <div className="text-sm font-semibold text-gray-900">Subscription plan catalog</div>
-          <div className="text-xs text-gray-500">Edits update MRR / ARR immediately. Plan IDs are managed by Stripe and can't be renamed.</div>
+          <div className="text-xs text-gray-500">Edits update MRR / ARR immediately. Plan IDs are stable join keys and can't be renamed once created.</div>
         </div>
-        <button onClick={load} className="text-xs text-gray-600 hover:text-gray-900 inline-flex items-center gap-1">
-          <RefreshCw size={11} /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={startCreate}
+            disabled={!!creating}
+            className="text-xs px-2 py-1 rounded bg-violet-600 text-white inline-flex items-center gap-1 disabled:opacity-50"
+          >
+            <Plus size={11} /> Add plan
+          </button>
+          <button onClick={load} className="text-xs text-gray-600 hover:text-gray-900 inline-flex items-center gap-1">
+            <RefreshCw size={11} /> Refresh
+          </button>
+        </div>
       </div>
+      {creating && (
+        <div className="mb-3 p-3 rounded-lg border border-violet-200 bg-violet-50/50">
+          <div className="text-xs font-semibold text-gray-900 mb-2">New plan</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <label className="text-xs">
+              <span className="block text-gray-600 mb-0.5">Plan ID <span className="text-red-500">*</span></span>
+              <input
+                value={creating.plan_id}
+                onChange={e => setCreating(s => ({ ...s, plan_id: e.target.value }))}
+                placeholder="e.g. mi_team_monthly"
+                className="border border-gray-300 rounded px-2 py-1 text-xs w-full font-mono"
+                autoFocus
+              />
+            </label>
+            <label className="text-xs">
+              <span className="block text-gray-600 mb-0.5">Monthly price (USD) <span className="text-red-500">*</span></span>
+              <input
+                type="number" min="0" step="0.01"
+                value={creating.monthly_price_usd}
+                onChange={e => setCreating(s => ({ ...s, monthly_price_usd: e.target.value }))}
+                placeholder="e.g. 99"
+                className="border border-gray-300 rounded px-2 py-1 text-xs w-full text-right"
+              />
+            </label>
+            <label className="text-xs">
+              <span className="block text-gray-600 mb-0.5">Display name</span>
+              <input
+                value={creating.display_name}
+                onChange={e => setCreating(s => ({ ...s, display_name: e.target.value }))}
+                placeholder="e.g. Team · Monthly"
+                className="border border-gray-300 rounded px-2 py-1 text-xs w-full"
+              />
+            </label>
+            <label className="text-xs">
+              <span className="block text-gray-600 mb-0.5">Stripe price ID (optional)</span>
+              <input
+                value={creating.stripe_price_id}
+                onChange={e => setCreating(s => ({ ...s, stripe_price_id: e.target.value }))}
+                placeholder="price_…"
+                className="border border-gray-300 rounded px-2 py-1 text-xs w-full font-mono"
+              />
+            </label>
+          </div>
+          <div className="mt-2 flex items-center justify-end gap-2">
+            <button onClick={cancelCreate} disabled={createBusy}
+                    className="px-2 py-1 rounded border border-gray-300 text-gray-600 text-xs inline-flex items-center gap-1">
+              <XIcon size={11} /> Cancel
+            </button>
+            <button onClick={submitCreate} disabled={createBusy}
+                    className="px-2 py-1 rounded bg-violet-600 text-white text-xs inline-flex items-center gap-1 disabled:opacity-50">
+              <Check size={11} /> {createBusy ? 'Creating…' : 'Create plan'}
+            </button>
+          </div>
+        </div>
+      )}
       {err && <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{err}</div>}
       <table className="w-full text-xs">
         <thead className="text-gray-500">
@@ -570,6 +670,10 @@ function PlanAuditHistory({ refreshKey }) {
     try { parsed = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return String(raw); }
     if (!parsed || typeof parsed !== 'object') return String(raw);
     const parts = [];
+    if (parsed.created) {
+      parts.push('created');
+      if (parsed.stripe_price_id) parts.push(`stripe → ${parsed.stripe_price_id}`);
+    }
     if (parsed.monthly_price_usd !== undefined) {
       parts.push(`price → $${Number(parsed.monthly_price_usd).toLocaleString(undefined, { minimumFractionDigits: parsed.monthly_price_usd % 1 ? 2 : 0 })}`);
     }

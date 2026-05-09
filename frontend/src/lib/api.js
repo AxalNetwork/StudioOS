@@ -615,6 +615,8 @@ export const api = {
   analyticsAudit: (limit = 25, action = 'analytics_export') =>
     request(`/monitoring/analytics/audit?limit=${limit}&action=${encodeURIComponent(action)}`),
   analyticsListPlans: () => request('/monitoring/analytics/plans'),
+  analyticsCreatePlan: (payload) =>
+    request('/monitoring/analytics/plans', { method: 'POST', body: JSON.stringify(payload) }),
   analyticsUpdatePlan: (planId, patch) =>
     request(`/monitoring/analytics/plans/${encodeURIComponent(planId)}`, {
       method: 'PATCH', body: JSON.stringify(patch),
