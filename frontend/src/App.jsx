@@ -370,6 +370,15 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     setSidebarOpen(appearance?.sidebar_default !== 'collapsed');
     initialSyncRef.current = true;
   }, [settingsLoading, appearance?.sidebar_default]);
+  // On desktop the sidebar should stay open during normal navigation —
+  // only the user's explicit close button (or selecting "collapsed" in
+  // Settings → Appearance) should hide it. On mobile, tapping any nav link
+  // collapses the drawer so the page is visible.
+  const closeOnMobileNav = useCallback(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+      setSidebarOpen(false);
+    }
+  }, []);
   const isAdmin = (realUser || user)?.role === 'admin';
   const activeRole = isImpersonating ? user?.role : (isAdmin ? viewMode : user?.role);
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
@@ -426,9 +435,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               </button>
             </div>
             {inSpinoutLab ? (
-              <SpinoutLabSidebar onNavigate={() => setSidebarOpen(false)} />
+              <SpinoutLabSidebar onNavigate={closeOnMobileNav} />
             ) : (
-              <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={() => setSidebarOpen(false)} />
+              <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} />
             )}
             <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-800">
               {user && (
