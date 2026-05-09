@@ -174,3 +174,18 @@ select::-ms-expand { display: none; }
 /* Dashboards / list pages that opt in via the main content wrapper get
    tighter top/bottom padding too. */
 [data-density="compact"] [data-app-main] { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+
+/* Compact density also tightens the most common Tailwind vertical-rhythm
+   helpers when used inside the page wrapper. This is intentionally
+   tag-agnostic so dashboards and list pages benefit without per-component
+   refactors. Tailwind's defaults: space-y-6 = 1.5rem, space-y-4 = 1rem,
+   space-y-3 = 0.75rem, gap-6 = 1.5rem, gap-4 = 1rem. We shave ~33%. */
+[data-density="compact"] [data-density-target] .space-y-6 > * + * { margin-top: 1rem; }
+[data-density="compact"] [data-density-target] .space-y-4 > * + * { margin-top: 0.625rem; }
+[data-density="compact"] [data-density-target] .space-y-3 > * + * { margin-top: 0.5rem; }
+[data-density="compact"] [data-density-target] .gap-6 { gap: 1rem; }
+[data-density="compact"] [data-density-target] .gap-4 { gap: 0.625rem; }
+[data-density="compact"] [data-density-target] .gap-3 { gap: 0.5rem; }
+/* Card-like containers (Settings + Dashboard share the data-card hook) get
+   a touch less padding too. */
+[data-density="compact"] [data-card] { padding: 0.875rem !important; }
