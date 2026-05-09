@@ -404,7 +404,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
         <div className="flex flex-1 overflow-hidden">
           <aside className={`
-            ${sidebarOpen ? 'lg:relative' : 'fixed'}
+            fixed ${sidebarOpen ? 'lg:relative' : ''}
             inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800
             flex flex-col
             transform transition-transform duration-200
