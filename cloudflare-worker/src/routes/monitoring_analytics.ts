@@ -312,11 +312,17 @@ r.patch('/plans/:planId', async (c) => {
   if (!planId) return c.json({ detail: 'Missing planId' }, 400);
   let body: Record<string, unknown> = {};
   try { body = (await c.req.json()) as Record<string, unknown>; } catch {}
-  const patch: { monthly_price_usd?: number; display_name?: string | null; is_active?: boolean } = {};
+  const patch: { monthly_price_usd?: number; display_name?: string | null; is_active?: boolean; native_amount?: number } = {};
   if (body.monthly_price_usd !== undefined) {
     const n = Number(body.monthly_price_usd);
     if (!Number.isFinite(n) || n < 0) return c.json({ detail: 'monthly_price_usd must be ≥ 0' }, 400);
     patch.monthly_price_usd = n;
+  }
+  // Task #25 — non-USD plans edit by native amount; service derives USD via fx_rates.
+  if (body.native_amount !== undefined && body.native_amount !== null && body.native_amount !== '') {
+    const n = Number(body.native_amount);
+    if (!Number.isFinite(n) || n < 0) return c.json({ detail: 'native_amount must be ≥ 0' }, 400);
+    patch.native_amount = n;
   }
   if (body.display_name !== undefined) {
     patch.display_name = body.display_name == null ? null : String(body.display_name);

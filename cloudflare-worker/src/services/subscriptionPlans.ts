@@ -352,6 +352,14 @@ export interface PlanUpdate {
   monthly_price_usd?: number;
   display_name?: string | null;
   is_active?: boolean;
+  /**
+   * Task #25 — native-currency price. When provided, the row's existing
+   * `currency` is used to look up an FX rate and `monthly_price_usd` is
+   * derived as `native_amount / usd_rate` (mirrors createPlan + Stripe
+   * webhook upsert). Renaming `currency` itself is intentionally NOT
+   * allowed here — see Task #22 for that.
+   */
+  native_amount?: number;
 }
 
 /**
@@ -368,10 +376,47 @@ export async function updatePlan(
   await ensureSubscriptionPlansSchema(env);
   const sets: string[] = [];
   const binds: Array<string | number | null> = [];
-  if (patch.monthly_price_usd !== undefined) {
+  // Task #25 — handle native_amount FIRST so a paired
+  // {monthly_price_usd, native_amount} payload (USD path edge case)
+  // still respects an explicit USD override below.
+  if (patch.native_amount !== undefined) {
+    const n = Number(patch.native_amount);
+    if (!Number.isFinite(n) || n < 0) throw new Error('native_amount must be a non-negative number');
+    // Look up the row's current currency. We deliberately re-read it
+    // instead of trusting client input so this endpoint can never be
+    // used to change currency (that's Task #22's scope).
+    const cur = (await env.DB.prepare(
+      'SELECT currency FROM subscription_plans WHERE plan_id = ?',
+    ).bind(planId).first()) as { currency?: string } | null;
+    if (!cur) return null; // plan not found — fall through, post-UPDATE check returns null too
+    const currency = String(cur.currency || 'USD').toUpperCase();
+    sets.push('native_amount = ?'); binds.push(n);
+    if (currency === 'USD') {
+      // USD path: native and USD are the same number.
+      sets.push('monthly_price_usd = ?'); binds.push(n);
+    } else {
+      const fx = await loadFxRates(env);
+      const rate = fx.rates.get(currency);
+      if (!rate || rate <= 0) {
+        throw new Error(`No FX rate available for currency "${currency}"`);
+      }
+      sets.push('monthly_price_usd = ?'); binds.push(Number((n / rate).toFixed(2)));
+    }
+  }
+  if (patch.monthly_price_usd !== undefined && patch.native_amount === undefined) {
     const n = Number(patch.monthly_price_usd);
     if (!Number.isFinite(n) || n < 0) throw new Error('monthly_price_usd must be a non-negative number');
     sets.push('monthly_price_usd = ?'); binds.push(n);
+    // Task #25 — keep native_amount in sync for USD plans so the catalog
+    // invariant (native == USD on USD rows) survives USD-only edits. For
+    // non-USD plans we deliberately leave native_amount alone — the caller
+    // should use the native_amount field instead, which FX-derives USD.
+    const cur = (await env.DB.prepare(
+      'SELECT currency FROM subscription_plans WHERE plan_id = ?',
+    ).bind(planId).first()) as { currency?: string } | null;
+    if (cur && String(cur.currency || 'USD').toUpperCase() === 'USD') {
+      sets.push('native_amount = ?'); binds.push(n);
+    }
   }
   if (patch.display_name !== undefined) {
     const v = patch.display_name == null ? null : String(patch.display_name).trim().slice(0, 200) || null;

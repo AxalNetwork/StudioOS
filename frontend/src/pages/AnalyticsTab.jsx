@@ -442,24 +442,40 @@ function PlanCatalog({ onChanged }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const startEdit = (p) => setEditing({
-    plan_id: p.plan_id,
-    monthly_price_usd: String(p.monthly_price_usd ?? 0),
-    display_name: p.display_name || '',
-  });
+  const startEdit = (p) => {
+    // Task #25 — re-fetch FX rates on edit open so the live USD preview
+    // for non-USD plans always reflects today's rate (matches startCreate).
+    refreshCurrencies();
+    const currency = String(p.currency || 'USD').toUpperCase();
+    setEditing({
+      plan_id: p.plan_id,
+      currency,
+      monthly_price_usd: String(p.monthly_price_usd ?? 0),
+      native_amount: String(p.native_amount ?? p.monthly_price_usd ?? 0),
+      display_name: p.display_name || '',
+    });
+  };
   const cancelEdit = () => setEditing(null);
   const saveEdit = async () => {
     if (!editing) return;
-    const priceNum = Number(editing.monthly_price_usd);
-    if (!Number.isFinite(priceNum) || priceNum < 0) {
-      setErr('Price must be a non-negative number'); return;
+    const isUsd = (editing.currency || 'USD') === 'USD';
+    const payload = { display_name: editing.display_name.trim() || null };
+    if (isUsd) {
+      const priceNum = Number(editing.monthly_price_usd);
+      if (!Number.isFinite(priceNum) || priceNum < 0) {
+        setErr('Price must be a non-negative number'); return;
+      }
+      payload.monthly_price_usd = priceNum;
+    } else {
+      const nativeNum = Number(editing.native_amount);
+      if (!Number.isFinite(nativeNum) || nativeNum < 0) {
+        setErr('Native amount must be a non-negative number'); return;
+      }
+      payload.native_amount = nativeNum;
     }
     setSaving(true); setErr('');
     try {
-      await api.analyticsUpdatePlan(editing.plan_id, {
-        monthly_price_usd: priceNum,
-        display_name: editing.display_name.trim() || null,
-      });
+      await api.analyticsUpdatePlan(editing.plan_id, payload);
       setEditing(null);
       load();
       onChanged && onChanged();
@@ -719,12 +735,54 @@ function PlanCatalog({ onChanged }) {
                 </td>
                 <td className="py-1.5 text-right">
                   {isEdit ? (
-                    <input
-                      type="number" min="0" step="0.01"
-                      value={editing.monthly_price_usd}
-                      onChange={e => setEditing(s => ({ ...s, monthly_price_usd: e.target.value }))}
-                      className="border border-gray-300 rounded px-2 py-1 text-xs w-24 text-right"
-                    />
+                    (editing.currency || 'USD') === 'USD' ? (
+                      <input
+                        type="number" min="0" step="0.01"
+                        value={editing.monthly_price_usd}
+                        onChange={e => setEditing(s => ({ ...s, monthly_price_usd: e.target.value }))}
+                        className="border border-gray-300 rounded px-2 py-1 text-xs w-24 text-right"
+                      />
+                    ) : (
+                      <div className="inline-flex flex-col items-end gap-0.5">
+                        <div className="inline-flex items-center gap-1">
+                          <input
+                            type="number" min="0" step="0.01"
+                            value={editing.native_amount}
+                            onChange={e => setEditing(s => ({ ...s, native_amount: e.target.value }))}
+                            className="border border-gray-300 rounded px-2 py-1 text-xs w-24 text-right"
+                            title="USD price will be FX-derived from this amount."
+                          />
+                          <span className="text-[11px] text-gray-500">{editing.currency}</span>
+                        </div>
+                        {(() => {
+                          // Task #25 — same live USD preview as the Add plan form (Task #23).
+                          const fx = fxRates[editing.currency];
+                          const nativeNum = Number(editing.native_amount);
+                          if (!fx || !Number.isFinite(fx.usd_rate) || fx.usd_rate <= 0) {
+                            return (
+                              <span className="text-[11px] text-amber-600">
+                                No FX rate on file for {editing.currency} — save will fail.
+                              </span>
+                            );
+                          }
+                          if (!Number.isFinite(nativeNum) || nativeNum <= 0) {
+                            return (
+                              <span className="text-[11px] text-gray-500">
+                                1 USD ≈ {fx.usd_rate.toLocaleString(undefined, { maximumFractionDigits: 4 })} {editing.currency}
+                                {fx.updated_at ? ` · rate as of ${new Date(fx.updated_at).toLocaleDateString()}` : ''}
+                              </span>
+                            );
+                          }
+                          const usd = nativeNum / fx.usd_rate;
+                          return (
+                            <span className="text-[11px] text-gray-600">
+                              ≈ ${usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                              {fx.updated_at ? ` · rate as of ${new Date(fx.updated_at).toLocaleDateString()}` : ''}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    )
                   ) : `$${Number(p.monthly_price_usd).toLocaleString(undefined, { minimumFractionDigits: p.monthly_price_usd % 1 ? 2 : 0 })}`}
                 </td>
                 <td className="py-1.5 font-mono text-gray-500 truncate max-w-[180px]">
