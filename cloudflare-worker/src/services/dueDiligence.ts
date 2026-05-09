@@ -18,6 +18,7 @@
  */
 import type { Env } from '../types';
 import { encryptColumn, decryptColumn } from './columnCipher';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 // ---------- Section catalog ----------
 
@@ -347,17 +348,133 @@ interface BrowserBinding {
 }
 
 /**
- * Best-effort PDF render via Cloudflare Browser Rendering. When the
- * `BROWSER` binding is missing or the call fails we return the styled
- * HTML instead — the caller MUST surface the actual format used.
+ * Render a real Axal-VC-branded PDF using pdf-lib (already a dep). When
+ * the Cloudflare `BROWSER` binding is present we prefer that path (richer
+ * typography). pdf-lib gives us a true PDF artifact even on the bare
+ * Worker runtime — HTML is only used as a last-resort if even pdf-lib
+ * fails (which it shouldn't on the Worker runtime).
+ */
+const AXAL_PURPLE = rgb(0.486, 0.227, 0.929);   // #7C3AEDish
+const BAND_RGB: Record<string, ReturnType<typeof rgb>> = {
+  green: rgb(0.063, 0.725, 0.506),
+  yellow: rgb(0.961, 0.620, 0.043),
+  amber: rgb(0.976, 0.451, 0.086),
+  red: rgb(0.937, 0.267, 0.267),
+};
+const SEV_RGB: Record<string, ReturnType<typeof rgb>> = {
+  critical: rgb(0.863, 0.149, 0.149),
+  high: rgb(0.976, 0.451, 0.086),
+  medium: rgb(0.961, 0.620, 0.043),
+  low: rgb(0.231, 0.510, 0.965),
+  info: rgb(0.420, 0.447, 0.502),
+};
+
+function wrap(text: string, max: number): string[] {
+  const out: string[] = [];
+  for (const para of String(text).split('\n')) {
+    let cur = '';
+    for (const word of para.split(/\s+/)) {
+      if (!word) continue;
+      const trial = cur ? `${cur} ${word}` : word;
+      if (trial.length <= max) cur = trial;
+      else { if (cur) out.push(cur); cur = word; }
+    }
+    if (cur) out.push(cur);
+    out.push('');
+  }
+  while (out.length && out[out.length - 1] === '') out.pop();
+  return out;
+}
+
+export async function renderReportPdf(cs: ReportCase, sections: ReportSection[]): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const PAGE_W = 612, PAGE_H = 792, MARGIN = 54;
+  let page = doc.addPage([PAGE_W, PAGE_H]);
+  let y = PAGE_H - MARGIN;
+  const newPage = () => { page = doc.addPage([PAGE_W, PAGE_H]); y = PAGE_H - MARGIN; };
+  const ensure = (h: number) => { if (y - h < MARGIN) newPage(); };
+
+  // Header band
+  page.drawRectangle({ x: 0, y: PAGE_H - 6, width: PAGE_W, height: 6, color: AXAL_PURPLE });
+  page.drawText('AXAL VC — DUE DILIGENCE', { x: MARGIN, y: y - 14, size: 9, font: bold, color: AXAL_PURPLE });
+  y -= 30;
+  page.drawText(cs.subject_label, { x: MARGIN, y, size: 22, font: bold, color: rgb(0.067, 0.094, 0.153) });
+  y -= 18;
+  page.drawText(`${cs.subject_type} · case ${cs.uid}`, { x: MARGIN, y, size: 10, font, color: rgb(0.420, 0.447, 0.502) });
+
+  // Risk badge (right-aligned)
+  const band = cs.risk_band || 'green';
+  const score = cs.risk_score != null ? `${Math.round(cs.risk_score * 100)}/100` : '—';
+  const badgeW = 150, badgeX = PAGE_W - MARGIN - badgeW, badgeY = PAGE_H - MARGIN - 70;
+  page.drawRectangle({ x: badgeX, y: badgeY, width: badgeW, height: 60, color: BAND_RGB[band] });
+  page.drawText('RISK BAND', { x: badgeX + 10, y: badgeY + 42, size: 8, font: bold, color: rgb(1, 1, 1) });
+  page.drawText(band.toUpperCase(), { x: badgeX + 10, y: badgeY + 22, size: 18, font: bold, color: rgb(1, 1, 1) });
+  page.drawText(`score ${score}`, { x: badgeX + 10, y: badgeY + 8, size: 9, font, color: rgb(1, 1, 1) });
+  y = badgeY - 24;
+
+  // Executive summary
+  page.drawText('EXECUTIVE SUMMARY', { x: MARGIN, y, size: 9, font: bold, color: rgb(0.420, 0.447, 0.502) });
+  y -= 14;
+  const summary = cs.notes || 'No analyst summary provided. The composite score is the weighted mean of section scores, each capped by the worst unresolved finding severity within that section, then overridden by reviewer verdict where present.';
+  for (const line of wrap(summary, 95)) { ensure(13); page.drawText(line, { x: MARGIN, y, size: 10, font, color: rgb(0.216, 0.255, 0.318) }); y -= 13; }
+  y -= 8;
+
+  // Sections
+  for (const sec of sections) {
+    ensure(40);
+    page.drawLine({ start: { x: MARGIN, y: y + 4 }, end: { x: PAGE_W - MARGIN, y: y + 4 }, thickness: 0.5, color: rgb(0.898, 0.906, 0.922) });
+    y -= 14;
+    page.drawText(sec.title, { x: MARGIN, y, size: 13, font: bold, color: rgb(0.067, 0.094, 0.153) });
+    const meta = `weight ${sec.weight.toFixed(2)} · ${sec.status}${sec.verdict ? ` · ${sec.verdict.toUpperCase()}` : ''}`;
+    page.drawText(meta, { x: PAGE_W - MARGIN - font.widthOfTextAtSize(meta, 9), y, size: 9, font, color: rgb(0.420, 0.447, 0.502) });
+    y -= 16;
+    if (sec.reviewer_notes) {
+      for (const line of wrap(`Reviewer: ${sec.reviewer_notes}`, 95)) { ensure(12); page.drawText(line, { x: MARGIN, y, size: 9, font, color: rgb(0.298, 0.337, 0.404) }); y -= 12; }
+      y -= 4;
+    }
+    if (sec.findings.length === 0) {
+      ensure(12); page.drawText('No findings recorded.', { x: MARGIN + 6, y, size: 9, font, color: rgb(0.612, 0.639, 0.686) }); y -= 14;
+    } else {
+      for (const f of sec.findings) {
+        ensure(28);
+        const sevColor = SEV_RGB[f.severity] || SEV_RGB.info;
+        page.drawRectangle({ x: MARGIN, y: y - 2, width: 4, height: 12, color: sevColor });
+        page.drawText(`[${f.severity.toUpperCase()}] ${f.title}`, { x: MARGIN + 10, y, size: 10, font: bold, color: rgb(0.067, 0.094, 0.153) });
+        y -= 13;
+        if (f.detail) {
+          for (const line of wrap(f.detail, 92)) { ensure(11); page.drawText(line, { x: MARGIN + 10, y, size: 9, font, color: rgb(0.298, 0.337, 0.404) }); y -= 11; }
+        }
+        if (f.evidence_url) { ensure(11); page.drawText(f.evidence_url, { x: MARGIN + 10, y, size: 8, font, color: AXAL_PURPLE }); y -= 11; }
+        y -= 4;
+      }
+    }
+    y -= 6;
+  }
+
+  // Footer on every page
+  const footer = `Confidential — Axal Ventures internal use only · generated ${new Date().toISOString()}`;
+  for (const p of doc.getPages()) {
+    p.drawText(footer, { x: MARGIN, y: 28, size: 7, font, color: rgb(0.612, 0.639, 0.686) });
+  }
+  return doc.save();
+}
+
+/**
+ * Best-effort PDF render. Order of preference:
+ *   1) Cloudflare Browser Rendering (`env.BROWSER`) — richest typography
+ *   2) pdf-lib — real PDF, always available on the Worker runtime
+ *   3) Styled HTML — only if pdf-lib itself fails (defensive)
+ * The caller MUST surface the actual format used.
  */
 export async function renderReportArtifact(
   env: Env, cs: ReportCase, sections: ReportSection[],
 ): Promise<{ format: 'pdf' | 'html'; bytes: ArrayBuffer; contentType: string }> {
-  const html = renderReportHtml(cs, sections);
   const browser = (env as unknown as { BROWSER?: BrowserBinding }).BROWSER;
   if (browser) {
     try {
+      const html = renderReportHtml(cs, sections);
       const res = await browser.fetch('https://browser/pdf', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -368,13 +485,17 @@ export async function renderReportArtifact(
         return { format: 'pdf', bytes: buf, contentType: 'application/pdf' };
       }
     } catch (e) {
-      console.warn('[dd] BROWSER render failed, falling back to HTML:', (e as Error).message);
+      console.warn('[dd] BROWSER render failed, falling back to pdf-lib:', (e as Error).message);
     }
   }
-  return {
-    format: 'html', bytes: new TextEncoder().encode(html).buffer as ArrayBuffer,
-    contentType: 'text/html; charset=utf-8',
-  };
+  try {
+    const bytes = await renderReportPdf(cs, sections);
+    return { format: 'pdf', bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, contentType: 'application/pdf' };
+  } catch (e) {
+    console.warn('[dd] pdf-lib render failed, last-resort HTML:', (e as Error).message);
+    const html = renderReportHtml(cs, sections);
+    return { format: 'html', bytes: new TextEncoder().encode(html).buffer as ArrayBuffer, contentType: 'text/html; charset=utf-8' };
+  }
 }
 
 // Re-exports so route + connector dispatch live in one place.

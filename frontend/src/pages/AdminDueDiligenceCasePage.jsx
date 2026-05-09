@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Play, FileDown, Send, RefreshCw, Shield, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Play, FileDown, Send, RefreshCw, Shield, AlertTriangle, CheckCircle2, ClipboardList, Mail, Upload } from 'lucide-react';
 import { dd } from '../lib/api';
 import { reportError } from '../lib/log';
 import { useToast } from '../components/useToast';
@@ -25,14 +25,28 @@ const BAND_STYLES = {
   amber: 'bg-orange-500',
   red: 'bg-red-600',
 };
+const SOURCE_STATUS = {
+  queued: 'bg-gray-100 text-gray-600',
+  running: 'bg-sky-100 text-sky-700 animate-pulse',
+  ok: 'bg-emerald-100 text-emerald-700',
+  error: 'bg-red-100 text-red-700',
+  disabled: 'bg-gray-100 text-gray-500',
+};
 
 export default function AdminDueDiligenceCasePage() {
   const { uid } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const inv = searchParams.get('inv');
+  const focusSection = searchParams.get('section');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [verdictModal, setVerdictModal] = useState(null);
   const [assignModal, setAssignModal] = useState(null);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [inviteBanner, setInviteBanner] = useState(null);
+  const sectionRefs = useRef({});
+  const inviteConsumedRef = useRef(false);
   const { toast, push } = useToast();
 
   const load = useCallback(async () => {
@@ -47,9 +61,49 @@ export default function AdminDueDiligenceCasePage() {
   }, [uid, push]);
   useEffect(() => { load(); }, [load]);
 
+  // Consume the magic-link invite jti once on first load. The backend
+  // validates the jti against dd_reviewers and (a) records acceptance for
+  // audit + (b) returns the section_id this reviewer was invited to.
+  useEffect(() => {
+    if (!inv || inviteConsumedRef.current) return;
+    inviteConsumedRef.current = true;
+    (async () => {
+      try {
+        const r = await dd.acceptInvite(uid, inv);
+        setInviteBanner({ sectionId: r.section_id });
+        // Strip ?inv= from URL so a refresh doesn't re-consume.
+        const next = new URLSearchParams(searchParams);
+        next.delete('inv');
+        setSearchParams(next, { replace: true });
+      } catch (e) {
+        push(`Invitation invalid: ${e.message || 'expired or revoked'}`, 'error');
+      }
+    })();
+  }, [inv, uid, searchParams, setSearchParams, push]);
+
+  // Scroll & highlight the focused section once data is loaded.
+  useEffect(() => {
+    if (!focusSection || !data) return;
+    const el = sectionRefs.current[focusSection];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-2', 'ring-violet-400');
+      setTimeout(() => el.classList.remove('ring-2', 'ring-violet-400'), 3000);
+    }
+  }, [focusSection, data]);
+
+  // Poll for scan status while any source row is queued/running.
+  useEffect(() => {
+    if (!data) return;
+    const inFlight = (data.sources || []).some(s => s.status === 'queued' || s.status === 'running');
+    if (!inFlight) return;
+    const t = setInterval(() => { load(); }, 2500);
+    return () => clearInterval(t);
+  }, [data, load]);
+
   const runScan = async () => {
     setBusy(true);
-    try { await dd.scan(uid); push('Scan complete', 'success'); await load(); }
+    try { await dd.scan(uid); push('Scan queued — results will appear shortly', 'success'); await load(); }
     catch (e) { push(e.message || 'Scan failed', 'error'); }
     finally { setBusy(false); }
   };
@@ -59,10 +113,8 @@ export default function AdminDueDiligenceCasePage() {
     try {
       const r = await dd.generateReport(uid);
       if (r.download_url) {
-        // Open the report in a new tab. Same-origin worker route streams the
-        // file with Content-Disposition: attachment, so the browser downloads
-        // it directly. Format may be 'pdf' or 'html' depending on whether
-        // Browser Rendering is bound — surface that to the user.
+        // Open the report in a new tab. Same-origin worker route streams
+        // the file with Content-Disposition: attachment.
         window.open(r.download_url, '_blank', 'noopener,noreferrer');
         push(`Report generated (${r.format.toUpperCase()})`, 'success');
       }
@@ -85,12 +137,19 @@ export default function AdminDueDiligenceCasePage() {
   const cs = data.case;
   const score = cs.risk_score != null ? Math.round(cs.risk_score * 100) : null;
   const band = cs.risk_band || 'green';
+  const scanInFlight = (data.sources || []).some(s => s.status === 'queued' || s.status === 'running');
 
   return (
     <div>
       <Link to="/admin/due-diligence" className="inline-flex items-center gap-1 text-sm text-violet-600 hover:underline mb-3">
         <ArrowLeft size={14} /> All cases
       </Link>
+
+      {inviteBanner && (
+        <div className="mb-4 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-sm text-violet-900 dark:text-violet-200 flex items-center gap-2">
+          <Mail size={16} /> You're reviewing this case as an invited expert. Your assigned section is highlighted below.
+        </div>
+      )}
 
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
@@ -102,10 +161,10 @@ export default function AdminDueDiligenceCasePage() {
             <span className="capitalize">{cs.subject_type}</span> · case <span className="font-mono">{cs.uid}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={runScan} disabled={busy}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={runScan} disabled={busy || scanInFlight}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:opacity-60">
-            <Play size={14} /> Run external scan
+            <Play size={14} /> {scanInFlight ? 'Scan running…' : 'Run external scan'}
           </button>
           <button onClick={generateReport} disabled={busy}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-gray-900 dark:bg-gray-700 text-white rounded-lg font-medium hover:bg-black dark:hover:bg-gray-600 disabled:opacity-60">
@@ -117,6 +176,10 @@ export default function AdminDueDiligenceCasePage() {
               <Send size={14} /> Notify founder
             </button>
           )}
+          <button onClick={() => setAuditOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50">
+            <ClipboardList size={14} /> Audit log
+          </button>
           <button onClick={load} className="p-2 text-gray-600 hover:text-violet-600" title="Refresh"><RefreshCw size={16} /></button>
         </div>
       </div>
@@ -148,12 +211,14 @@ export default function AdminDueDiligenceCasePage() {
       <div className="space-y-3 mb-6">
         {data.sections.map(s => {
           const sectionFindings = data.findings.filter(f => f.section_id === s.id);
+          const hasNda = data.attachments.some(a => a.section_id === s.id);
           return (
-            <div key={s.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+            <div key={s.id} ref={(el) => { if (el) sectionRefs.current[String(s.id)] = el; }}
+              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 transition-shadow">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                 <div>
                   <div className="font-semibold text-gray-900 dark:text-gray-100">{s.title}</div>
-                  <div className="text-xs text-gray-500">weight {Number(s.weight).toFixed(2)} · {s.status}</div>
+                  <div className="text-xs text-gray-500">weight {Number(s.weight).toFixed(2)} · {s.status}{hasNda ? ' · NDA on file' : ''}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   {s.verdict && (
@@ -208,7 +273,7 @@ export default function AdminDueDiligenceCasePage() {
               <tr key={s.id} className="border-t border-gray-100 dark:border-gray-700/40">
                 <td className="px-3 py-2 font-mono text-xs">{s.connector}</td>
                 <td className="px-3 py-2 text-center">
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${s.status === 'ok' ? 'bg-emerald-100 text-emerald-700' : s.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>{s.status}</span>
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${SOURCE_STATUS[s.status] || SOURCE_STATUS.queued}`}>{s.status}</span>
                 </td>
                 <td className="px-3 py-2 text-center text-xs">{s.records_count}</td>
                 <td className="px-3 py-2 text-center text-xs">{s.findings_emitted}</td>
@@ -220,10 +285,16 @@ export default function AdminDueDiligenceCasePage() {
       </div>
 
       {verdictModal && (
-        <VerdictModal section={verdictModal} onClose={() => setVerdictModal(null)}
-          onSave={async (verdict, notes, ndaSigned) => {
-            try { await dd.setVerdict(uid, verdictModal.id, verdict, notes, ndaSigned); push('Verdict recorded', 'success'); setVerdictModal(null); load(); }
+        <VerdictModal section={verdictModal} caseUid={uid}
+          attachments={data.attachments.filter(a => a.section_id === verdictModal.id)}
+          onClose={() => setVerdictModal(null)}
+          onSave={async (verdict, notes) => {
+            try { await dd.setVerdict(uid, verdictModal.id, verdict, notes, false); push('Verdict recorded', 'success'); setVerdictModal(null); load(); }
             catch (e) { push(e.message || 'Failed', 'error'); }
+          }}
+          onUploadNda={async (file) => {
+            try { await dd.uploadNda(uid, verdictModal.id, file); push('NDA uploaded', 'success'); load(); }
+            catch (e) { push(e.message || 'NDA upload failed', 'error'); throw e; }
           }} />
       )}
       {assignModal && (
@@ -233,6 +304,7 @@ export default function AdminDueDiligenceCasePage() {
             catch (e) { push(e.message || 'Failed', 'error'); }
           }} />
       )}
+      {auditOpen && <AuditDrawer uid={uid} onClose={() => setAuditOpen(false)} />}
       {toast}
     </div>
   );
@@ -247,11 +319,23 @@ function Stat({ label, value, highlight }) {
   );
 }
 
-function VerdictModal({ section, onClose, onSave }) {
+function VerdictModal({ section, attachments, onClose, onSave, onUploadNda }) {
   useEscapeClose(onClose);
   const [verdict, setVerdict] = useState(section.verdict || 'pass');
   const [notes, setNotes] = useState(section.reviewer_notes || '');
-  const [ndaSigned, setNdaSigned] = useState(Boolean(section.reviewer_signed_nda_at));
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
+  const ndaOnFile = attachments.length > 0 || Boolean(section.reviewer_signed_nda_at);
+
+  const upload = async () => {
+    const f = fileRef.current?.files?.[0];
+    if (!f) return;
+    setUploading(true);
+    try { await onUploadNda(f); fileRef.current.value = ''; }
+    catch { /* toast handled by caller */ }
+    finally { setUploading(false); }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
@@ -269,14 +353,32 @@ function VerdictModal({ section, onClose, onSave }) {
           <textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)}
             className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900" />
         </label>
-        <label className="flex items-center gap-2 text-sm mb-4">
-          <input type="checkbox" checked={ndaSigned} onChange={(e) => setNdaSigned(e.target.checked)} />
-          <span>I have signed the reviewer NDA for this case.</span>
-        </label>
+        <div className="mb-4 p-3 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/40">
+          <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
+            <Upload size={12} /> Reviewer NDA
+          </div>
+          {ndaOnFile ? (
+            <div className="text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+              <CheckCircle2 size={12} /> Signed NDA on file ({attachments.length || 1} document{attachments.length === 1 ? '' : 's'}).
+            </div>
+          ) : (
+            <>
+              <input ref={fileRef} type="file" accept="application/pdf,image/*"
+                className="block text-xs text-gray-700 dark:text-gray-300 file:mr-2 file:px-2 file:py-1 file:rounded file:border-0 file:bg-violet-600 file:text-white file:text-xs" />
+              <button type="button" onClick={upload} disabled={uploading}
+                className="mt-2 px-3 py-1 text-xs bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-60">
+                {uploading ? 'Uploading…' : 'Upload signed NDA'}
+              </button>
+              <p className="text-[10px] text-gray-500 mt-1">PDF preferred, max 10MB. Required before submitting any verdict other than "n/a".</p>
+            </>
+          )}
+        </div>
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
-          <button onClick={() => onSave(verdict, notes, ndaSigned)}
-            className="px-4 py-2 text-sm bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700">
+          <button onClick={() => onSave(verdict, notes)}
+            disabled={verdict !== 'n_a' && !ndaOnFile}
+            title={verdict !== 'n_a' && !ndaOnFile ? 'Upload the signed NDA before submitting a verdict.' : ''}
+            className="px-4 py-2 text-sm bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:opacity-60">
             <CheckCircle2 size={14} className="inline mr-1" /> Save verdict
           </button>
         </div>
@@ -292,7 +394,7 @@ function AssignModal({ section, onClose, onSave }) {
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">Assign reviewer — {section.title}</h3>
-        <p className="text-xs text-gray-500 mb-3">Enter the user ID of the partner / investor / mentor who will review this section. They will be notified by email and in-app.</p>
+        <p className="text-xs text-gray-500 mb-3">Enter the user ID of the partner / investor / mentor who will review this section. They will be notified by email and in-app with a magic link scoped to this section.</p>
         <input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="User ID"
           className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 mb-4" />
         <div className="flex justify-end gap-2">
@@ -301,6 +403,56 @@ function AssignModal({ section, onClose, onSave }) {
             className="px-4 py-2 text-sm bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:opacity-60">Assign</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AuditDrawer({ uid, onClose }) {
+  useEscapeClose(onClose);
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let alive = true;
+    dd.audit(uid).then(r => { if (alive) setItems(r.items || []); })
+      .catch(e => { if (alive) setError(e.message || 'Failed to load audit log'); });
+    return () => { alive = false; };
+  }, [uid]);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex justify-end" onClick={onClose}>
+      <aside className="w-full max-w-md h-full bg-white dark:bg-gray-800 shadow-xl border-l border-gray-200 dark:border-gray-700 flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <header className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ClipboardList size={16} className="text-violet-600" />
+            <h3 className="font-bold text-gray-900 dark:text-gray-100">Case audit log</h3>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-900 text-xl leading-none">×</button>
+        </header>
+        <div className="flex-1 overflow-y-auto px-5 py-4 text-sm">
+          {error && <div className="text-red-600 text-xs">{error}</div>}
+          {!error && items === null && <div className="text-gray-500 text-xs">Loading…</div>}
+          {!error && items && items.length === 0 && <div className="text-gray-500 text-xs">No audit entries yet.</div>}
+          {items && items.length > 0 && (
+            <ol className="space-y-3 border-l-2 border-violet-100 dark:border-gray-700 pl-4">
+              {items.map(it => (
+                <li key={it.id} className="relative">
+                  <span className="absolute -left-[22px] top-1 w-3 h-3 rounded-full bg-violet-500 border-2 border-white dark:border-gray-800" />
+                  <div className="text-xs font-medium text-gray-900 dark:text-gray-100">{it.action.replace(/_/g, ' ')}</div>
+                  <div className="text-[11px] text-gray-500">
+                    {it.actor_name || it.actor_email || (it.actor_email_hash ? `actor#${it.actor_email_hash.slice(0, 8)}` : 'system')} · {new Date(it.created_at).toLocaleString()}
+                  </div>
+                  {it.target_type && (
+                    <div className="text-[11px] text-gray-500 font-mono">{it.target_type}#{it.target_id}</div>
+                  )}
+                  {it.details && (
+                    <pre className="mt-1 text-[10px] bg-gray-50 dark:bg-gray-900/40 text-gray-600 dark:text-gray-400 p-1.5 rounded overflow-x-auto">{it.details}</pre>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </aside>
     </div>
   );
 }

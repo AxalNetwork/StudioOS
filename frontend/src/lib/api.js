@@ -1146,6 +1146,12 @@ export const dd = {
   generateReport: (uid) => request(`/dd/cases/${uid}/report`, { method: 'POST' }),
   shareReport: (uid) => request(`/dd/cases/${uid}/report/share`, { method: 'POST' }),
   audit: (uid) => request(`/dd/cases/${uid}/audit`),
+  acceptInvite: (uid, jti) => request(`/dd/cases/${uid}/reviewer-invite/${jti}`, { method: 'POST' }),
+  uploadNda: (uid, sectionId, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request(`/dd/cases/${uid}/sections/${sectionId}/nda`, { method: 'POST', body: fd });
+  },
 };
 
 // Spin-Out Lab — 4-week guided sprint for pre-incorporation founders.

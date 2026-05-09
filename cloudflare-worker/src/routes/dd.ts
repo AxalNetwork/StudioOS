@@ -62,6 +62,24 @@ async function requireDdReader(c: AppContext): Promise<AppUser> {
   return user as unknown as AppUser;
 }
 
+/**
+ * Scoped-write guard: admin can mutate any case; everyone else must own
+ * the case OR have a `dd_reviewers` row on it. Knowing the case UID is
+ * not enough — partners cannot scan/assign/report on cases they do not
+ * own or review.
+ */
+async function requireCaseWriter(c: AppContext, cs: Record<string, unknown>): Promise<AppUser> {
+  const user = await requireDdReader(c);
+  if (user.role === 'admin') return user;
+  if (Number(cs.owner_user_id) === user.id) return user;
+  const sql = getSQL(c.env);
+  try {
+    const r: any[] = await sql`SELECT 1 FROM dd_reviewers WHERE case_id = ${cs.id} AND user_id = ${user.id} LIMIT 1`;
+    if (r.length === 0) throw new Error('Forbidden: not a case owner or reviewer');
+  } finally { await sql.end(); }
+  return user;
+}
+
 async function audit(env: Env, caseId: number, actor: AppUser | null, action: string, target?: { type: string; id: number }, details?: unknown): Promise<void> {
   try {
     const actorHash = actor?.email ? await hashEmail(actor.email) : null;
@@ -219,88 +237,116 @@ dd.get('/cases/:uid', async (c) => {
 
 // ---------- external scan ----------
 
+// Async scan: enqueue rows immediately as 'queued', return 202, then run
+// each connector in the background via waitUntil so the request returns
+// fast and the frontend can poll case GET to see status transitions
+// (queued → running → ok/error). This is the queue-backed ingestion
+// pattern without requiring a Cloudflare Queue binding.
+async function processConnector(env: Env, sourceId: number, caseId: number, meta: typeof CONNECTORS[number], subjectLabel: string, ownerUserId: number, caseUid: string): Promise<void> {
+  const sql = getSQL(env);
+  try {
+    await sql`UPDATE dd_external_sources SET status = 'running', started_at = CURRENT_TIMESTAMP WHERE id = ${sourceId}`;
+    let r;
+    try { r = await runConnector(env, meta, subjectLabel); }
+    catch (e) { r = { status: 'error' as const, records_count: 0, raw_response: null, findings: [], error_message: (e as Error).message }; }
+    let emitted = 0;
+    for (const f of r.findings) {
+      const sectionRows: any[] = await sql`SELECT id FROM dd_sections WHERE case_id = ${caseId} AND section_key = ${f.section_key || meta.default_section} LIMIT 1`;
+      const sectionId = sectionRows[0]?.id || null;
+      const inserted2: any[] = await sql`
+        INSERT INTO dd_findings (case_id, section_id, source_id, source_kind, severity, title, evidence_url)
+        VALUES (${caseId}, ${sectionId}, ${sourceId}, ${f.source_kind}, ${f.severity}, ${f.title}, ${f.evidence_url || null})
+        RETURNING id`;
+      const findingId = Number(inserted2[0].id);
+      const detailEnc = await encField(env, 'dd_findings', 'detail', findingId, f.detail);
+      const subjEnc   = await encField(env, 'dd_findings', 'subject_name', findingId, f.subject_name || null);
+      const exEnc     = await encField(env, 'dd_findings', 'evidence_excerpt', findingId, f.evidence_excerpt || null);
+      await sql`UPDATE dd_findings SET detail_enc = ${detailEnc}, subject_name_enc = ${subjEnc}, evidence_excerpt_enc = ${exEnc} WHERE id = ${findingId}`;
+      emitted++;
+      if (f.severity === 'high' || f.severity === 'critical') {
+        await notify(env, {
+          userId: ownerUserId,
+          type: 'dd_high_severity_finding',
+          title: `[${f.severity.toUpperCase()}] DD finding on ${subjectLabel}`,
+          body: f.title,
+          link: `/admin/due-diligence/${caseUid}`,
+          channels: ['in_app', 'email'],
+        }).catch(() => null);
+      }
+    }
+    const rawEnc = await encField(env, 'dd_external_sources', 'raw_response', sourceId, r.raw_response ? JSON.stringify(r.raw_response) : null);
+    await sql`
+      UPDATE dd_external_sources
+         SET status = ${r.status}, records_count = ${r.records_count},
+             findings_emitted = ${emitted}, error_message = ${r.error_message || null},
+             raw_response_enc = ${rawEnc}, completed_at = CURRENT_TIMESTAMP
+       WHERE id = ${sourceId}`;
+  } finally { await sql.end(); }
+}
+
 dd.post('/cases/:uid/scan', async (c) => {
-  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  let user: AppUser;
+  try { user = await requireCaseWriter(c, cs); }
+  catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
   if (user.role !== 'admin' && user.role !== 'partner') {
     return c.json({ error: 'Only admins or partners may run scans' }, 403);
   }
-  const cs = await getCaseByUid(c.env, c.req.param('uid'));
-  if (!cs) return c.json({ error: 'Case not found' }, 404);
   const caseId = Number(cs.id);
   const subjectLabel = String(cs.subject_label || '');
+  const ownerUserId = Number(cs.owner_user_id);
+  const caseUid = String(cs.uid);
 
   const body = await c.req.json().catch(() => ({}));
   const requested: string[] = Array.isArray(body.connectors) && body.connectors.length
     ? body.connectors : CONNECTORS.map(x => x.key);
 
   const sql = getSQL(c.env);
-  const results: Array<{ connector: string; status: string; findings_emitted: number }> = [];
+  const queued: Array<{ id: number; connector: string }> = [];
   try {
     for (const meta of CONNECTORS) {
       if (!requested.includes(meta.key)) continue;
-      const startedAt = new Date().toISOString();
       const inserted: any[] = await sql`
-        INSERT INTO dd_external_sources (case_id, connector, status, started_at)
-        VALUES (${caseId}, ${meta.key}, 'running', ${startedAt})
+        INSERT INTO dd_external_sources (case_id, connector, status)
+        VALUES (${caseId}, ${meta.key}, 'queued')
         RETURNING id`;
-      const sourceId = Number(inserted[0].id);
-      let r;
-      try {
-        r = await runConnector(c.env, meta, subjectLabel);
-      } catch (e) {
-        r = { status: 'error' as const, records_count: 0, raw_response: null, findings: [], error_message: (e as Error).message };
-      }
-      let emitted = 0;
-      for (const f of r.findings) {
-        // Map finding into findings table (PII columns encrypted).
-        const sectionRows: any[] = await sql`SELECT id FROM dd_sections WHERE case_id = ${caseId} AND section_key = ${f.section_key || meta.default_section} LIMIT 1`;
-        const sectionId = sectionRows[0]?.id || null;
-        const inserted2: any[] = await sql`
-          INSERT INTO dd_findings (case_id, section_id, source_id, source_kind, severity, title, evidence_url)
-          VALUES (${caseId}, ${sectionId}, ${sourceId}, ${f.source_kind}, ${f.severity}, ${f.title}, ${f.evidence_url || null})
-          RETURNING id`;
-        const findingId = Number(inserted2[0].id);
-        const detailEnc = await encField(c.env, 'dd_findings', 'detail', findingId, f.detail);
-        const subjEnc   = await encField(c.env, 'dd_findings', 'subject_name', findingId, f.subject_name || null);
-        const exEnc     = await encField(c.env, 'dd_findings', 'evidence_excerpt', findingId, f.evidence_excerpt || null);
-        await sql`UPDATE dd_findings SET detail_enc = ${detailEnc}, subject_name_enc = ${subjEnc}, evidence_excerpt_enc = ${exEnc} WHERE id = ${findingId}`;
-        emitted++;
-
-        // High/critical findings push a notification to the case owner.
-        if (f.severity === 'high' || f.severity === 'critical') {
-          await notify(c.env, {
-            userId: Number(cs.owner_user_id),
-            type: 'dd_high_severity_finding',
-            title: `[${f.severity.toUpperCase()}] DD finding on ${subjectLabel}`,
-            body: f.title,
-            link: `/admin/due-diligence/${cs.uid}`,
-            channels: ['in_app', 'email'],
-          }).catch(() => null);
-        }
-      }
-      const rawEnc = await encField(c.env, 'dd_external_sources', 'raw_response', sourceId, r.raw_response ? JSON.stringify(r.raw_response) : null);
-      await sql`
-        UPDATE dd_external_sources
-           SET status = ${r.status}, records_count = ${r.records_count},
-               findings_emitted = ${emitted}, error_message = ${r.error_message || null},
-               raw_response_enc = ${rawEnc}, completed_at = CURRENT_TIMESTAMP
-         WHERE id = ${sourceId}`;
-      results.push({ connector: meta.key, status: r.status, findings_emitted: emitted });
+      queued.push({ id: Number(inserted[0].id), connector: meta.key });
     }
-    await sql`UPDATE dd_cases SET external_scan_completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ${caseId}`;
-    await audit(c.env, caseId, user, 'external_scan_run', { type: 'dd_case', id: caseId }, { connectors: results });
-    await recomputeAndStoreScore(c.env, caseId);
-    return c.json({ ok: true, results });
+    await sql`UPDATE dd_cases SET status = 'in_review', updated_at = CURRENT_TIMESTAMP WHERE id = ${caseId}`;
+    await audit(c.env, caseId, user, 'external_scan_started', { type: 'dd_case', id: caseId }, { connectors: queued.map(q => q.connector) });
   } finally { await sql.end(); }
+
+  // Background processing — frontend polls /cases/:uid for status updates.
+  c.executionCtx.waitUntil((async () => {
+    for (const q of queued) {
+      const meta = CONNECTORS.find(m => m.key === q.connector);
+      if (!meta) continue;
+      try { await processConnector(c.env, q.id, caseId, meta, subjectLabel, ownerUserId, caseUid); }
+      catch (e) { console.warn(`[dd] connector ${q.connector} failed:`, (e as Error).message); }
+    }
+    try {
+      const sql2 = getSQL(c.env);
+      try {
+        await sql2`UPDATE dd_cases SET external_scan_completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ${caseId}`;
+      } finally { await sql2.end(); }
+      await recomputeAndStoreScore(c.env, caseId);
+      await audit(c.env, caseId, null, 'external_scan_completed', { type: 'dd_case', id: caseId }, { connectors_run: queued.length });
+    } catch (e) { console.warn('[dd] scan finalisation failed:', (e as Error).message); }
+  })());
+
+  return c.json({ ok: true, queued, message: 'Scan queued; poll /cases/:uid for status.' }, 202);
 });
 
 // ---------- reviewers / assignment ----------
 
 dd.post('/cases/:uid/sections/:sectionId/assign', async (c) => {
-  const user = await requireDdReader(c);
-  if (user.role !== 'admin' && user.role !== 'partner') return c.json({ error: 'Forbidden' }, 403);
   const cs = await getCaseByUid(c.env, c.req.param('uid'));
   if (!cs) return c.json({ error: 'Case not found' }, 404);
+  let user: AppUser;
+  try { user = await requireCaseWriter(c, cs); }
+  catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
+  if (user.role !== 'admin' && user.role !== 'partner') return c.json({ error: 'Forbidden' }, 403);
   const caseId = Number(cs.id);
   const sectionId = parseInt(c.req.param('sectionId'), 10);
   const body = await c.req.json().catch(() => ({}));
@@ -359,17 +405,27 @@ dd.post('/cases/:uid/sections/:sectionId/verdict', async (c) => {
       const r: any[] = await sql`SELECT 1 FROM dd_reviewers WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
       if (r.length === 0) return c.json({ error: 'You are not assigned to this section' }, 403);
     }
+    // Server-side NDA enforcement: any verdict other than 'n_a' requires
+    // a real signed-NDA artifact on file. The client-side gate in
+    // VerdictModal is just UX — a malicious client could call the API
+    // directly. The legacy `body.nda_signed` boolean is intentionally
+    // ignored: only an actual `dd_attachments` row (uploaded via /nda)
+    // OR an admin override counts as evidence.
+    if (verdict !== 'n_a' && user.role !== 'admin') {
+      const ndaRows: any[] = await sql`
+        SELECT 1 FROM dd_attachments
+         WHERE section_id = ${sectionId} AND uploaded_by_user_id = ${user.id}
+         LIMIT 1`;
+      if (ndaRows.length === 0) {
+        return c.json({ error: 'Signed NDA must be uploaded before submitting a verdict' }, 412);
+      }
+    }
     await sql`
       UPDATE dd_sections
          SET verdict = ${verdict}, reviewer_notes = ${body.reviewer_notes ? String(body.reviewer_notes) : null},
              status = 'completed', completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
        WHERE id = ${sectionId} AND case_id = ${caseId}`;
-    if (body.nda_signed) {
-      await sql`UPDATE dd_sections SET reviewer_signed_nda_at = CURRENT_TIMESTAMP WHERE id = ${sectionId}`;
-      await sql`UPDATE dd_reviewers SET nda_signed_at = CURRENT_TIMESTAMP, responded_at = CURRENT_TIMESTAMP WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
-    } else {
-      await sql`UPDATE dd_reviewers SET responded_at = CURRENT_TIMESTAMP WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
-    }
+    await sql`UPDATE dd_reviewers SET responded_at = CURRENT_TIMESTAMP WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
     await audit(c.env, caseId, user, 'section_completed', { type: 'dd_section', id: sectionId }, { verdict });
     await notify(c.env, {
       userId: Number(cs.owner_user_id),
@@ -410,9 +466,10 @@ async function recomputeAndStoreScore(env: Env, caseId: number): Promise<{ score
 }
 
 dd.post('/cases/:uid/recompute', async (c) => {
-  await requireDdReader(c);
   const cs = await getCaseByUid(c.env, c.req.param('uid'));
   if (!cs) return c.json({ error: 'Case not found' }, 404);
+  try { await requireCaseWriter(c, cs); }
+  catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
   const r = await recomputeAndStoreScore(c.env, Number(cs.id));
   return c.json(r);
 });
@@ -420,10 +477,12 @@ dd.post('/cases/:uid/recompute', async (c) => {
 // ---------- report generation + share ----------
 
 dd.post('/cases/:uid/report', async (c) => {
-  const user = await requireDdReader(c);
-  if (user.role !== 'admin' && user.role !== 'partner') return c.json({ error: 'Forbidden' }, 403);
   const cs = await getCaseByUid(c.env, c.req.param('uid'));
   if (!cs) return c.json({ error: 'Case not found' }, 404);
+  let user: AppUser;
+  try { user = await requireCaseWriter(c, cs); }
+  catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
+  if (user.role !== 'admin' && user.role !== 'partner') return c.json({ error: 'Forbidden' }, 403);
   const caseId = Number(cs.id);
 
   const sql = getSQL(c.env);
@@ -536,16 +595,100 @@ dd.get('/cases/:uid/audit', async (c) => {
   const user = await requireDdReader(c);
   const cs = await getCaseByUid(c.env, c.req.param('uid'));
   if (!cs) return c.json({ error: 'Case not found' }, 404);
-  if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
-    return c.json({ error: 'Forbidden' }, 403);
-  }
   const sql = getSQL(c.env);
   try {
+    if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+      // Assigned reviewers may also view the audit trail for cases they
+      // are reviewing — they need to see what's been done before/after
+      // their verdict. Anyone else is rejected.
+      const r: any[] = await sql`SELECT 1 FROM dd_reviewers WHERE case_id = ${cs.id} AND user_id = ${user.id} LIMIT 1`;
+      if (r.length === 0) return c.json({ error: 'Forbidden' }, 403);
+    }
     const rows: any[] = await sql`
       SELECT a.*, u.name AS actor_name, u.email AS actor_email
         FROM dd_audit_log a LEFT JOIN users u ON u.id = a.actor_user_id
        WHERE a.case_id = ${cs.id} ORDER BY a.created_at DESC LIMIT 200`;
     return c.json({ items: rows });
+  } finally { await sql.end(); }
+});
+
+// ---------- reviewer magic-link acceptance ----------
+//
+// The /assign endpoint mints a `magic_link_jti` and emails the reviewer
+// a link `/admin/due-diligence/<uid>?section=<id>&inv=<jti>`. The
+// frontend posts the jti here on first load to (a) validate the
+// invitation hasn't been revoked, (b) record acceptance for audit, and
+// (c) confirm the reviewer's scoped access. We deliberately do NOT
+// auto-create a reviewer row from a stale jti — the row already exists
+// from the assign step; we only validate the jti matches.
+
+dd.post('/cases/:uid/reviewer-invite/:jti', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const jti = c.req.param('jti');
+  const sql = getSQL(c.env);
+  try {
+    const r: any[] = await sql`
+      SELECT id, section_id, user_id FROM dd_reviewers
+       WHERE case_id = ${cs.id} AND magic_link_jti = ${jti} LIMIT 1`;
+    if (r.length === 0) return c.json({ error: 'Invitation invalid or expired' }, 403);
+    if (Number(r[0].user_id) !== user.id) {
+      return c.json({ error: 'This invitation belongs to a different user' }, 403);
+    }
+    await sql`UPDATE dd_reviewers SET responded_at = COALESCE(responded_at, CURRENT_TIMESTAMP) WHERE id = ${r[0].id}`;
+    await audit(c.env, Number(cs.id), user, 'reviewer_invite_accepted', { type: 'dd_section', id: Number(r[0].section_id) });
+    return c.json({ ok: true, section_id: Number(r[0].section_id) });
+  } finally { await sql.end(); }
+});
+
+// ---------- reviewer NDA attachment ----------
+//
+// Reviewers upload a signed NDA (PDF) which is persisted in R2 + a
+// `dd_attachments` row + flips `nda_signed_at` on both the section and
+// the reviewer row. This replaces the previous "tick a box" NDA flow
+// with real evidence on file. Falls back gracefully when R2 isn't bound
+// (the attachment row records the missing file_key as `inline:`).
+
+dd.post('/cases/:uid/sections/:sectionId/nda', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const caseId = Number(cs.id);
+  const sectionId = parseInt(c.req.param('sectionId'), 10);
+  const sql = getSQL(c.env);
+  try {
+    if (user.role !== 'admin') {
+      const r: any[] = await sql`SELECT 1 FROM dd_reviewers WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
+      if (r.length === 0) return c.json({ error: 'You are not assigned to this section' }, 403);
+    }
+
+    const form = await c.req.formData().catch(() => null);
+    const file = form?.get('file');
+    if (!file || typeof file === 'string') return c.json({ error: 'NDA file required (multipart field "file")' }, 400);
+    const filename = (file as File).name || 'nda.pdf';
+    const mime = (file as File).type || 'application/pdf';
+    const buf = await (file as File).arrayBuffer();
+    const size = buf.byteLength;
+    if (size > 10 * 1024 * 1024) return c.json({ error: 'NDA file too large (max 10MB)' }, 413);
+
+    let storageKey = `inline:${genUid()}`;
+    if (c.env.FILES) {
+      storageKey = `dd-ndas/${caseId}/${sectionId}/${Date.now()}-${genUid().slice(0, 8)}-${filename}`;
+      try { await c.env.FILES.put(storageKey, buf, { httpMetadata: { contentType: mime } }); }
+      catch (e) {
+        console.warn('[dd] NDA R2 put failed:', (e as Error).message);
+        storageKey = `inline:failed:${genUid()}`;
+      }
+    }
+
+    await sql`
+      INSERT INTO dd_attachments (case_id, section_id, file_key, filename, mime_type, size_bytes, uploaded_by_user_id)
+      VALUES (${caseId}, ${sectionId}, ${storageKey}, ${filename}, ${mime}, ${size}, ${user.id})`;
+    await sql`UPDATE dd_sections SET reviewer_signed_nda_at = CURRENT_TIMESTAMP WHERE id = ${sectionId}`;
+    await sql`UPDATE dd_reviewers SET nda_signed_at = CURRENT_TIMESTAMP WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
+    await audit(c.env, caseId, user, 'nda_uploaded', { type: 'dd_section', id: sectionId }, { filename, size_bytes: size });
+    return c.json({ ok: true, filename, size_bytes: size });
   } finally { await sql.end(); }
 });
 
