@@ -113,6 +113,42 @@ export async function decryptString(
   }
 }
 
+/**
+ * Encrypt arbitrary binary data (e.g. a generated PDF report) before
+ * writing to R2. Output: 12-byte IV || AES-GCM ciphertext+tag (raw
+ * bytes, NOT base64). Companion to {@link decryptBytes}. Used by the
+ * DD report writer so report artifacts are never stored as plaintext
+ * in object storage.
+ */
+export async function encryptBytes(
+  env: { AXAL_ENCRYPTION_SECRET?: string; JWT_SECRET?: string },
+  plaintext: ArrayBuffer | Uint8Array,
+): Promise<Uint8Array> {
+  const key = await deriveKey(getSecret(env));
+  const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+  const ptBytes = plaintext instanceof Uint8Array ? plaintext : new Uint8Array(plaintext);
+  const ct = new Uint8Array(
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, ptBytes),
+  );
+  const out = new Uint8Array(iv.length + ct.length);
+  out.set(iv, 0);
+  out.set(ct, iv.length);
+  return out;
+}
+
+export async function decryptBytes(
+  env: { AXAL_ENCRYPTION_SECRET?: string; JWT_SECRET?: string },
+  blob: ArrayBuffer | Uint8Array,
+): Promise<Uint8Array> {
+  const key = await deriveKey(getSecret(env));
+  const bytes = blob instanceof Uint8Array ? blob : new Uint8Array(blob);
+  if (bytes.length < IV_BYTES + 16) throw new Error('decryptBytes: payload too short');
+  const iv = bytes.slice(0, IV_BYTES);
+  const ct = bytes.slice(IV_BYTES);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  return new Uint8Array(pt);
+}
+
 /** Decrypt a string that was originally an integer (1..5 wellbeing answer). */
 export async function decryptInt(
   env: { AXAL_ENCRYPTION_SECRET?: string; JWT_SECRET?: string },

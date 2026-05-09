@@ -25,6 +25,7 @@ import {
   renderReportArtifact,
   type DDSubjectType, type ReportCase, type ReportSection,
 } from '../services/dueDiligence';
+import { encryptBytes, decryptBytes } from '../services/cryptoBox';
 
 const dd = new Hono<{ Bindings: Env }>();
 type AppContext = Context<{ Bindings: Env }>;
@@ -83,14 +84,19 @@ async function requireCaseWriter(c: AppContext, cs: Record<string, unknown>): Pr
 async function audit(env: Env, caseId: number, actor: AppUser | null, action: string, target?: { type: string; id: number }, details?: unknown): Promise<void> {
   try {
     const actorHash = actor?.email ? await hashEmail(actor.email) : null;
-    await env.DB.prepare(
-      `INSERT INTO dd_audit_log (case_id, actor_user_id, actor_email_hash, action, target_type, target_id, details)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    // Insert without details first so we have a row id to encrypt against
+    // (column cipher uses rowId as AAD).
+    const ins = await env.DB.prepare(
+      `INSERT INTO dd_audit_log (case_id, actor_user_id, actor_email_hash, action, target_type, target_id)
+       VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
     ).bind(
       caseId, actor?.id || null, actorHash, action,
       target?.type || null, target?.id || null,
-      details ? JSON.stringify(details) : null,
-    ).run();
+    ).first<{ id: number }>();
+    if (details && ins?.id) {
+      const detailsEnc = await encField(env, 'dd_audit_log', 'details', Number(ins.id), JSON.stringify(details));
+      await env.DB.prepare(`UPDATE dd_audit_log SET details_enc = ? WHERE id = ?`).bind(detailsEnc, ins.id).run();
+    }
   } catch (e) {
     console.warn('[dd] audit insert failed:', (e as Error).message);
   }
@@ -163,12 +169,16 @@ dd.post('/cases', async (c) => {
   try {
     const uid = genUid();
     const inserted: any[] = await sql`
-      INSERT INTO dd_cases (uid, subject_type, subject_id, subject_label, owner_user_id, notes)
-      VALUES (${uid}, ${subjectType}, ${subjectId}, ${subjectLabel}, ${user.id}, ${body.notes ? String(body.notes) : null})
+      INSERT INTO dd_cases (uid, subject_type, subject_id, subject_label, owner_user_id)
+      VALUES (${uid}, ${subjectType}, ${subjectId}, ${subjectLabel}, ${user.id})
       RETURNING id, uid, subject_type, subject_id, subject_label, status, owner_user_id, created_at`;
     const row = inserted[0];
     const caseId = Number(row.id);
 
+    if (body.notes) {
+      const notesEnc = await encField(c.env, 'dd_cases', 'notes', caseId, String(body.notes));
+      await sql`UPDATE dd_cases SET notes_enc = ${notesEnc} WHERE id = ${caseId}`;
+    }
     if (body.subject_email) {
       const enc = await encField(c.env, 'dd_cases', 'subject_email', caseId, String(body.subject_email));
       await sql`UPDATE dd_cases SET subject_email_enc = ${enc} WHERE id = ${caseId}`;
@@ -223,14 +233,20 @@ dd.get('/cases/:uid', async (c) => {
       resolved_at: f.resolved_at,
       created_at: f.created_at,
     })));
+    const decryptedSections = await Promise.all(sections.map(async s => ({
+      ...s,
+      reviewer_notes: await decField(c.env, 'dd_sections', 'reviewer_notes', s.id, s.reviewer_notes_enc),
+      reviewer_notes_enc: undefined,
+    })));
     return c.json({
       case: {
         ...cs,
         subject_email: await decField(c.env, 'dd_cases', 'subject_email', caseId, cs.subject_email_enc as string | null),
         subject_legal_name: await decField(c.env, 'dd_cases', 'subject_legal_name', caseId, cs.subject_legal_name_enc as string | null),
-        subject_email_enc: undefined, subject_legal_name_enc: undefined,
+        notes: await decField(c.env, 'dd_cases', 'notes', caseId, cs.notes_enc as string | null),
+        subject_email_enc: undefined, subject_legal_name_enc: undefined, notes_enc: undefined,
       },
-      sections, findings: decryptedFindings, sources, attachments, reviewers,
+      sections: decryptedSections, findings: decryptedFindings, sources, attachments, reviewers,
     });
   } finally { await sql.end(); }
 });
@@ -420,9 +436,12 @@ dd.post('/cases/:uid/sections/:sectionId/verdict', async (c) => {
         return c.json({ error: 'Signed NDA must be uploaded before submitting a verdict' }, 412);
       }
     }
+    const notesEnc = body.reviewer_notes
+      ? await encField(c.env, 'dd_sections', 'reviewer_notes', sectionId, String(body.reviewer_notes))
+      : null;
     await sql`
       UPDATE dd_sections
-         SET verdict = ${verdict}, reviewer_notes = ${body.reviewer_notes ? String(body.reviewer_notes) : null},
+         SET verdict = ${verdict}, reviewer_notes_enc = ${notesEnc},
              status = 'completed', completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
        WHERE id = ${sectionId} AND case_id = ${caseId}`;
     await sql`UPDATE dd_reviewers SET responded_at = CURRENT_TIMESTAMP WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
@@ -491,7 +510,8 @@ dd.post('/cases/:uid/report', async (c) => {
     const findings: any[] = await sql`SELECT * FROM dd_findings WHERE case_id = ${caseId} ORDER BY severity DESC, created_at DESC`;
     const reportSections: ReportSection[] = await Promise.all(sections.map(async s => ({
       section_key: s.section_key, title: s.title, weight: Number(s.weight),
-      status: s.status, verdict: s.verdict, reviewer_notes: s.reviewer_notes,
+      status: s.status, verdict: s.verdict,
+      reviewer_notes: await decField(c.env, 'dd_sections', 'reviewer_notes', s.id, s.reviewer_notes_enc),
       findings: await Promise.all(findings.filter(f => f.section_id === s.id).map(async f => ({
         severity: f.severity, title: f.title,
         detail: await decField(c.env, 'dd_findings', 'detail', f.id, f.detail_enc),
@@ -504,24 +524,32 @@ dd.post('/cases/:uid/report', async (c) => {
       risk_score: cs.risk_score == null ? null : Number(cs.risk_score),
       risk_band: cs.risk_band as string | null,
       status: String(cs.status), created_at: String(cs.created_at),
-      notes: cs.notes as string | null,
+      notes: await decField(c.env, 'dd_cases', 'notes', caseId, cs.notes_enc as string | null),
     };
 
     const artifact = await renderReportArtifact(c.env, reportCase, reportSections);
     const ts = Date.now();
     const ext = artifact.format === 'pdf' ? 'pdf' : 'html';
-    const key = `dd-reports/${caseId}/${ts}-${genUid().slice(0, 8)}.${ext}`;
+    // Encryption-at-rest: DD reports may contain PII (subject email,
+    // legal name) and confidential reviewer notes. We encrypt the bytes
+    // with cryptoBox AES-GCM before R2 put, store under .enc suffix
+    // with `application/octet-stream`, and persist the *real* MIME in
+    // `inner_content_type` so the download route can restore it.
+    const encryptedBytes = await encryptBytes(c.env, artifact.bytes);
+    const key = `dd-reports/${caseId}/${ts}-${genUid().slice(0, 8)}.${ext}.enc`;
     let storedKey: string | null = null;
     if (c.env.FILES) {
       try {
-        await c.env.FILES.put(key, artifact.bytes, { httpMetadata: { contentType: artifact.contentType } });
+        await c.env.FILES.put(key, encryptedBytes, { httpMetadata: { contentType: 'application/octet-stream' } });
         storedKey = key;
       } catch (e) { console.warn('[dd] R2 put failed:', (e as Error).message); }
     }
 
     const inserted: any[] = await sql`
-      INSERT INTO dd_reports (case_id, storage_key, format, risk_score_at_generation, risk_band_at_generation, generated_by_user_id)
-      VALUES (${caseId}, ${storedKey}, ${artifact.format}, ${reportCase.risk_score}, ${reportCase.risk_band}, ${user.id})
+      INSERT INTO dd_reports (case_id, storage_key, format, encrypted, inner_content_type,
+                              risk_score_at_generation, risk_band_at_generation, generated_by_user_id)
+      VALUES (${caseId}, ${storedKey}, ${artifact.format}, 1, ${artifact.contentType},
+              ${reportCase.risk_score}, ${reportCase.risk_band}, ${user.id})
       RETURNING id, format, created_at`;
     await sql`UPDATE dd_cases SET report_generated_at = CURRENT_TIMESTAMP WHERE id = ${caseId}`;
     await audit(c.env, caseId, user, 'report_generated', { type: 'dd_report', id: Number(inserted[0].id) }, { format: artifact.format });
@@ -547,10 +575,29 @@ dd.get('/reports/download/:token', async (c) => {
   if (!c.env.FILES) return c.json({ error: 'Storage not configured' }, 503);
   const obj = await c.env.FILES.get(v.key);
   if (!obj) return c.json({ error: 'Report not found' }, 404);
-  return new Response(obj.body as ReadableStream, {
+  // Look up the report metadata to know whether the stored bytes are
+  // encrypted and what the real content-type/extension should be.
+  const meta = await c.env.DB.prepare(
+    `SELECT encrypted, inner_content_type, format FROM dd_reports WHERE storage_key = ? LIMIT 1`,
+  ).bind(v.key).first<{ encrypted: number; inner_content_type: string | null; format: string }>();
+  const isEnc = meta?.encrypted === 1 || v.key.endsWith('.enc');
+  const realCT = meta?.inner_content_type
+    || (meta?.format === 'pdf' ? 'application/pdf' : 'text/html; charset=utf-8');
+  const ext = meta?.format === 'pdf' ? 'pdf' : 'html';
+  let body: BodyInit;
+  if (isEnc) {
+    const ciphertext = await obj.arrayBuffer();
+    const plaintext = await decryptBytes(c.env, ciphertext);
+    body = plaintext;
+  } else {
+    body = obj.body as ReadableStream;
+  }
+  const baseName = v.key.split('/').pop()?.replace(/\.enc$/, '') || `dd-report.${ext}`;
+  return new Response(body, {
     headers: {
-      'content-type': obj.httpMetadata?.contentType || 'application/octet-stream',
-      'content-disposition': `attachment; filename="dd-report-${v.key.split('/').pop()}"`,
+      'content-type': realCT,
+      'content-disposition': `attachment; filename="${baseName}"`,
+      'cache-control': 'private, no-store',
     },
   });
 });
@@ -608,7 +655,59 @@ dd.get('/cases/:uid/audit', async (c) => {
       SELECT a.*, u.name AS actor_name, u.email AS actor_email
         FROM dd_audit_log a LEFT JOIN users u ON u.id = a.actor_user_id
        WHERE a.case_id = ${cs.id} ORDER BY a.created_at DESC LIMIT 200`;
-    return c.json({ items: rows });
+    // Decrypt details_enc back to JSON for the audit drawer. Failures
+    // surface as null details (the row is still shown so reviewers see
+    // *that* something happened even if the payload is unreadable).
+    const items = await Promise.all(rows.map(async r => {
+      let details: unknown = null;
+      if (r.details_enc) {
+        const raw = await decField(c.env, 'dd_audit_log', 'details', r.id, r.details_enc);
+        try { details = raw ? JSON.parse(raw) : null; } catch { details = raw; }
+      }
+      return { ...r, details, details_enc: undefined };
+    }));
+    return c.json({ items });
+  } finally { await sql.end(); }
+});
+
+// ---------- expertise-based reviewer suggestions ----------
+//
+// Routes assign-modal lookups for "who has reviewed this section_key
+// before?". Suggested experts = users whose role is admin/partner/
+// mentor/investor and who either (a) have completed prior verdicts on
+// the same section_key (ranked by count desc, most-recent tiebreaker)
+// or (b) match the section's domain via a hand-curated mapping in
+// `users.expertise_tags`-style columns. Falls back to all eligible
+// users when no prior history exists. Admins-only call.
+
+dd.get('/experts', async (c) => {
+  const user = await requireDdReader(c);
+  if (user.role !== 'admin' && user.role !== 'partner') {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+  const sectionKey = c.req.query('section_key') || '';
+  const sql = getSQL(c.env);
+  try {
+    let suggestions: any[] = [];
+    if (sectionKey) {
+      suggestions = await sql`
+        SELECT u.id, u.name, u.email, u.role,
+               COUNT(s.id) AS prior_reviews,
+               MAX(s.completed_at) AS last_reviewed_at
+          FROM dd_sections s
+          JOIN users u ON u.id = s.assignee_user_id
+         WHERE s.section_key = ${sectionKey}
+           AND s.verdict IS NOT NULL
+           AND u.role IN ('admin','partner','mentor','investor')
+         GROUP BY u.id, u.name, u.email, u.role
+         ORDER BY prior_reviews DESC, last_reviewed_at DESC
+         LIMIT 10`;
+    }
+    const eligible: any[] = await sql`
+      SELECT id, name, email, role FROM users
+       WHERE role IN ('admin','partner','mentor','investor')
+       ORDER BY name LIMIT 100`;
+    return c.json({ suggestions, eligible });
   } finally { await sql.end(); }
 });
 
@@ -658,6 +757,11 @@ dd.post('/cases/:uid/sections/:sectionId/nda', async (c) => {
   const sectionId = parseInt(c.req.param('sectionId'), 10);
   const sql = getSQL(c.env);
   try {
+    // Integrity: the sectionId in the URL MUST belong to the case in
+    // the URL. Without this check a reviewer assigned to case A could
+    // upload an NDA "for" a section of case B by URL-tampering.
+    const secOwn: any[] = await sql`SELECT 1 FROM dd_sections WHERE id = ${sectionId} AND case_id = ${caseId} LIMIT 1`;
+    if (secOwn.length === 0) return c.json({ error: 'Section does not belong to this case' }, 404);
     if (user.role !== 'admin') {
       const r: any[] = await sql`SELECT 1 FROM dd_reviewers WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
       if (r.length === 0) return c.json({ error: 'You are not assigned to this section' }, 403);

@@ -207,6 +207,9 @@ export default function AdminDueDiligenceCasePage() {
         </div>
       )}
 
+      <FindingHeatmap sections={data.sections} findings={data.findings} />
+      <ReviewerQueue reviewers={data.reviewers} sections={data.sections} />
+
       <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Sections</h2>
       <div className="space-y-3 mb-6">
         {data.sections.map(s => {
@@ -289,7 +292,7 @@ export default function AdminDueDiligenceCasePage() {
           attachments={data.attachments.filter(a => a.section_id === verdictModal.id)}
           onClose={() => setVerdictModal(null)}
           onSave={async (verdict, notes) => {
-            try { await dd.setVerdict(uid, verdictModal.id, verdict, notes, false); push('Verdict recorded', 'success'); setVerdictModal(null); load(); }
+            try { await dd.setVerdict(uid, verdictModal.id, verdict, notes); push('Verdict recorded', 'success'); setVerdictModal(null); load(); }
             catch (e) { push(e.message || 'Failed', 'error'); }
           }}
           onUploadNda={async (file) => {
@@ -387,21 +390,169 @@ function VerdictModal({ section, attachments, onClose, onSave, onUploadNda }) {
   );
 }
 
+// Expertise-driven reviewer picker. Backend /dd/experts returns
+// `suggestions` (users who have completed prior verdicts on this same
+// section_key, ranked by review count) and `eligible` (all admin/
+// partner/mentor/investor users) as a fallback. Admins can still type
+// any user id manually if the dropdown doesn't surface the right
+// person.
 function AssignModal({ section, onClose, onSave }) {
   useEscapeClose(onClose);
-  const [userId, setUserId] = useState(section.assignee_user_id || '');
+  const [userId, setUserId] = useState(section.assignee_user_id ? String(section.assignee_user_id) : '');
+  const [suggestions, setSuggestions] = useState([]);
+  const [eligible, setEligible] = useState([]);
+  const [loadingExperts, setLoadingExperts] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    dd.experts(section.section_key).then(r => {
+      if (!alive) return;
+      setSuggestions(r.suggestions || []);
+      setEligible(r.eligible || []);
+    }).catch(() => null).finally(() => { if (alive) setLoadingExperts(false); });
+    return () => { alive = false; };
+  }, [section.section_key]);
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">Assign reviewer — {section.title}</h3>
-        <p className="text-xs text-gray-500 mb-3">Enter the user ID of the partner / investor / mentor who will review this section. They will be notified by email and in-app with a magic link scoped to this section.</p>
-        <input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="User ID"
-          className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 mb-4" />
+        <p className="text-xs text-gray-500 mb-3">Pick a reviewer for this section. They'll be notified by email and in-app with a magic link scoped to this section.</p>
+        {loadingExperts && <div className="text-xs text-gray-500 mb-2">Loading suggested experts…</div>}
+        {!loadingExperts && suggestions.length > 0 && (
+          <div className="mb-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Suggested (prior reviews on this section type)</div>
+            <ul className="space-y-1">
+              {suggestions.map(u => (
+                <li key={u.id}>
+                  <button type="button" onClick={() => setUserId(String(u.id))}
+                    className={`w-full text-left px-3 py-2 rounded-lg border text-xs flex items-center justify-between ${
+                      String(userId) === String(u.id)
+                        ? 'border-violet-400 bg-violet-50 dark:bg-violet-900/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40'
+                    }`}>
+                    <span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{u.name || u.email}</span>
+                      <span className="text-gray-500 ml-1.5">({u.role})</span>
+                    </span>
+                    <span className="text-gray-500">{u.prior_reviews} prior</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {!loadingExperts && eligible.length > 0 && (
+          <label className="block mb-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Or pick from all eligible reviewers</div>
+            <select value={userId} onChange={(e) => setUserId(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900">
+              <option value="">— choose —</option>
+              {eligible.map(u => (
+                <option key={u.id} value={u.id}>{u.name || u.email} · {u.role}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="block text-xs mb-4">
+          <span className="text-gray-500">Or enter a user ID directly</span>
+          <input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="User ID"
+            className="w-full mt-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900" />
+        </label>
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
           <button onClick={() => onSave(Number(userId))} disabled={!userId}
             className="px-4 py-2 text-sm bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:opacity-60">Assign</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Compact 5×N grid: one row per section, one column per severity. Cell
+// shade encodes the count of unresolved findings at that severity.
+// Surfaces hot zones at a glance without forcing reviewers to scan the
+// section list one by one.
+function FindingHeatmap({ sections, findings }) {
+  const SEV_COLS = ['critical', 'high', 'medium', 'low', 'info'];
+  const counts = sections.map(s => {
+    const row = { section: s };
+    for (const sev of SEV_COLS) row[sev] = 0;
+    for (const f of findings) {
+      if (f.section_id === s.id && !f.resolved_at && row[f.severity] !== undefined) row[f.severity]++;
+    }
+    return row;
+  });
+  const totalFindings = findings.length;
+  if (totalFindings === 0) return null;
+  const shadeFor = (sev, n) => {
+    if (n === 0) return 'bg-gray-50 dark:bg-gray-900/30 text-gray-300 dark:text-gray-600';
+    const base = SEV_STYLES[sev];
+    return base + ' font-bold';
+  };
+  return (
+    <div className="mb-6">
+      <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Finding heatmap</h2>
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 overflow-x-auto">
+        <table className="w-full text-xs min-w-[480px]">
+          <thead><tr className="text-[10px] uppercase tracking-wider text-gray-500">
+            <th className="text-left px-2 py-1">Section</th>
+            {SEV_COLS.map(s => <th key={s} className="px-2 py-1 text-center w-14">{s}</th>)}
+          </tr></thead>
+          <tbody>{counts.map(({ section, ...row }) => (
+            <tr key={section.id} className="border-t border-gray-100 dark:border-gray-700/40">
+              <td className="px-2 py-1.5 text-gray-800 dark:text-gray-200">{section.title}</td>
+              {SEV_COLS.map(sev => (
+                <td key={sev} className="px-1 py-1 text-center">
+                  <span className={`inline-block w-9 h-6 leading-6 rounded ${shadeFor(sev, row[sev])}`}>{row[sev] || ''}</span>
+                </td>
+              ))}
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Reviewer queue: who's been invited, what their NDA + response state
+// is, and which section they own. Helps the case lead chase outstanding
+// reviews without scrolling the section list.
+function ReviewerQueue({ reviewers, sections }) {
+  if (!reviewers || reviewers.length === 0) return null;
+  const sectionTitle = (id) => sections.find(s => s.id === id)?.title || `Section #${id}`;
+  return (
+    <div className="mb-6">
+      <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Reviewer queue</h2>
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+        <table className="w-full text-xs">
+          <thead><tr className="bg-gray-50 dark:bg-gray-900/40 text-[10px] uppercase tracking-wider text-gray-500">
+            <th className="text-left px-3 py-2">Reviewer</th>
+            <th className="text-left px-3 py-2">Section</th>
+            <th className="px-3 py-2">Invited</th>
+            <th className="px-3 py-2">Accepted</th>
+            <th className="px-3 py-2">NDA</th>
+            <th className="px-3 py-2">Verdict</th>
+          </tr></thead>
+          <tbody>{reviewers.map(r => {
+            const section = sections.find(s => s.id === r.section_id);
+            const verdict = section?.verdict;
+            return (
+              <tr key={r.id} className="border-t border-gray-100 dark:border-gray-700/40">
+                <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{r.user_name || r.user_email}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{sectionTitle(r.section_id)}</td>
+                <td className="px-3 py-2 text-center text-gray-500">{r.invited_at ? new Date(r.invited_at).toLocaleDateString() : '—'}</td>
+                <td className="px-3 py-2 text-center">{r.responded_at ? <CheckCircle2 size={12} className="inline text-emerald-600" /> : <span className="text-gray-300">—</span>}</td>
+                <td className="px-3 py-2 text-center">{r.nda_signed_at ? <CheckCircle2 size={12} className="inline text-emerald-600" /> : <span className="text-gray-300">—</span>}</td>
+                <td className="px-3 py-2 text-center">
+                  {verdict
+                    ? <span className={`text-[10px] px-1.5 py-0.5 rounded ${VERDICT_STYLES[verdict]}`}>{verdict.toUpperCase()}</span>
+                    : <span className="text-gray-300">pending</span>}
+                </td>
+              </tr>
+            );
+          })}</tbody>
+        </table>
       </div>
     </div>
   );

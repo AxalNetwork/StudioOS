@@ -1137,11 +1137,12 @@ export const dd = {
   scan: (uid, connectors) => request(`/dd/cases/${uid}/scan`, { method: 'POST', body: JSON.stringify({ connectors }) }),
   assignSection: (uid, sectionId, userId) =>
     request(`/dd/cases/${uid}/sections/${sectionId}/assign`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
-  setVerdict: (uid, sectionId, verdict, reviewerNotes, ndaSigned = false) =>
+  setVerdict: (uid, sectionId, verdict, reviewerNotes) =>
     request(`/dd/cases/${uid}/sections/${sectionId}/verdict`, {
       method: 'POST',
-      body: JSON.stringify({ verdict, reviewer_notes: reviewerNotes, nda_signed: ndaSigned }),
+      body: JSON.stringify({ verdict, reviewer_notes: reviewerNotes }),
     }),
+  experts: (sectionKey) => request(`/dd/experts${sectionKey ? `?section_key=${encodeURIComponent(sectionKey)}` : ''}`),
   recompute: (uid) => request(`/dd/cases/${uid}/recompute`, { method: 'POST' }),
   generateReport: (uid) => request(`/dd/cases/${uid}/report`, { method: 'POST' }),
   shareReport: (uid) => request(`/dd/cases/${uid}/report/share`, { method: 'POST' }),

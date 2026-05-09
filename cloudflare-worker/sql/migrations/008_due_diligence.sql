@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS dd_cases (
   risk_score REAL,
   risk_band TEXT CHECK(risk_band IN ('green','yellow','amber','red')),
   owner_user_id INTEGER NOT NULL REFERENCES users(id),
-  notes TEXT,
+  notes_enc TEXT,
   external_scan_completed_at TIMESTAMP,
   report_generated_at TIMESTAMP,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS dd_sections (
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','assigned','in_review','completed','blocked')),
   assignee_user_id INTEGER REFERENCES users(id),
   verdict TEXT CHECK(verdict IN ('pass','warn','fail','n_a')),
-  reviewer_notes TEXT,
+  reviewer_notes_enc TEXT,
   reviewer_signed_nda_at TIMESTAMP,
   completed_at TIMESTAMP,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -123,6 +123,13 @@ CREATE TABLE IF NOT EXISTS dd_reports (
   case_id INTEGER NOT NULL REFERENCES dd_cases(id) ON DELETE CASCADE,
   storage_key TEXT,
   format TEXT NOT NULL CHECK(format IN ('pdf','html')),
+  -- 1 when the bytes at storage_key are encrypted via cryptoBox.encryptBytes
+  -- (the on-disk content type is then 'application/octet-stream' and the
+  -- *real* content type is recorded in `inner_content_type`). Download
+  -- route looks at this column to decide whether to decrypt before
+  -- streaming to the browser.
+  encrypted INTEGER NOT NULL DEFAULT 1,
+  inner_content_type TEXT,
   risk_score_at_generation REAL,
   risk_band_at_generation TEXT,
   generated_by_user_id INTEGER NOT NULL REFERENCES users(id),
@@ -138,7 +145,7 @@ CREATE TABLE IF NOT EXISTS dd_audit_log (
   action TEXT NOT NULL,
   target_type TEXT,
   target_id INTEGER,
-  details TEXT,
+  details_enc TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_dd_audit_case ON dd_audit_log(case_id, created_at DESC);
