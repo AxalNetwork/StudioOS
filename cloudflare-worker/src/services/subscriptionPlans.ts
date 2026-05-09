@@ -353,13 +353,18 @@ export interface PlanUpdate {
   display_name?: string | null;
   is_active?: boolean;
   /**
-   * Task #25 — native-currency price. When provided, the row's existing
-   * `currency` is used to look up an FX rate and `monthly_price_usd` is
-   * derived as `native_amount / usd_rate` (mirrors createPlan + Stripe
-   * webhook upsert). Renaming `currency` itself is intentionally NOT
-   * allowed here — see Task #22 for that.
+   * Task #25 — native-currency price. When provided, the (target) currency
+   * is used to look up an FX rate and `monthly_price_usd` is derived as
+   * `native_amount / usd_rate` (mirrors createPlan + Stripe webhook upsert).
    */
   native_amount?: number;
+  /**
+   * Task #22 — change the plan's billing currency. When provided, the new
+   * currency drives the FX lookup used to re-derive `monthly_price_usd`
+   * from `native_amount` (either the new value in the same patch, or the
+   * existing row's value).
+   */
+  currency?: string;
 }
 
 /**
@@ -376,47 +381,73 @@ export async function updatePlan(
   await ensureSubscriptionPlansSchema(env);
   const sets: string[] = [];
   const binds: Array<string | number | null> = [];
-  // Task #25 — when `native_amount` is provided, it is the source of
-  // truth: USD is FX-derived from it (mirrors createPlan + Stripe
-  // webhook). A paired `monthly_price_usd` in the same payload is
-  // intentionally ignored so the FX-derived invariant always wins.
-  if (patch.native_amount !== undefined) {
-    const n = Number(patch.native_amount);
-    if (!Number.isFinite(n) || n < 0) throw new Error('native_amount must be a non-negative number');
-    // Look up the row's current currency. We deliberately re-read it
-    // instead of trusting client input so this endpoint can never be
-    // used to change currency (that's Task #22's scope).
+  // Task #22/#25 — pricing is a single coherent unit (currency +
+  // native_amount → FX-derived USD). When ANY of currency / native_amount /
+  // monthly_price_usd is in the patch, re-read the current row so we can
+  // resolve the target triple coherently and re-derive USD from FX.
+  const pricingTouched =
+    patch.currency !== undefined ||
+    patch.native_amount !== undefined ||
+    patch.monthly_price_usd !== undefined;
+  if (pricingTouched) {
     const cur = (await env.DB.prepare(
-      'SELECT currency FROM subscription_plans WHERE plan_id = ?',
-    ).bind(planId).first()) as { currency?: string } | null;
-    if (!cur) return null; // plan not found — fall through, post-UPDATE check returns null too
-    const currency = String(cur.currency || 'USD').toUpperCase();
-    sets.push('native_amount = ?'); binds.push(n);
-    if (currency === 'USD') {
-      // USD path: native and USD are the same number.
-      sets.push('monthly_price_usd = ?'); binds.push(n);
-    } else {
-      const fx = await loadFxRates(env);
-      const rate = fx.rates.get(currency);
-      if (!rate || rate <= 0) {
-        throw new Error(`No FX rate available for currency "${currency}"`);
+      'SELECT currency, native_amount, monthly_price_usd FROM subscription_plans WHERE plan_id = ?',
+    ).bind(planId).first()) as
+      | { currency?: string; native_amount?: number | string | null; monthly_price_usd?: number | string | null }
+      | null;
+    if (!cur) return null;
+    // Target currency: explicit patch wins; otherwise existing row.
+    let targetCurrency: string;
+    if (patch.currency !== undefined) {
+      targetCurrency = String(patch.currency || '').toUpperCase().trim();
+      if (!/^[A-Z]{3}$/.test(targetCurrency)) {
+        throw new Error('currency must be a 3-letter ISO 4217 code');
       }
-      sets.push('monthly_price_usd = ?'); binds.push(Number((n / rate).toFixed(2)));
+    } else {
+      targetCurrency = String(cur.currency || 'USD').toUpperCase();
     }
-  }
-  if (patch.monthly_price_usd !== undefined && patch.native_amount === undefined) {
-    const n = Number(patch.monthly_price_usd);
-    if (!Number.isFinite(n) || n < 0) throw new Error('monthly_price_usd must be a non-negative number');
-    sets.push('monthly_price_usd = ?'); binds.push(n);
-    // Task #25 — keep native_amount in sync for USD plans so the catalog
-    // invariant (native == USD on USD rows) survives USD-only edits. For
-    // non-USD plans we deliberately leave native_amount alone — the caller
-    // should use the native_amount field instead, which FX-derives USD.
-    const cur = (await env.DB.prepare(
-      'SELECT currency FROM subscription_plans WHERE plan_id = ?',
-    ).bind(planId).first()) as { currency?: string } | null;
-    if (cur && String(cur.currency || 'USD').toUpperCase() === 'USD') {
+    // Target native amount: explicit patch wins; else existing native_amount;
+    // else fall back to existing USD price (legacy USD-only rows).
+    let nativeAmount: number;
+    if (patch.native_amount !== undefined) {
+      const n = Number(patch.native_amount);
+      if (!Number.isFinite(n) || n < 0) throw new Error('native_amount must be a non-negative number');
+      nativeAmount = n;
+    } else if (cur.native_amount != null && Number.isFinite(Number(cur.native_amount))) {
+      nativeAmount = Number(cur.native_amount);
+    } else {
+      nativeAmount = Number(cur.monthly_price_usd ?? 0);
+    }
+    // USD-only override path: caller patched ONLY monthly_price_usd on a
+    // USD-currency plan. Honour it directly (preserves the historical
+    // USD-edit UX) and mirror to native_amount so the invariant holds.
+    if (
+      patch.currency === undefined &&
+      patch.native_amount === undefined &&
+      patch.monthly_price_usd !== undefined &&
+      targetCurrency === 'USD'
+    ) {
+      const n = Number(patch.monthly_price_usd);
+      if (!Number.isFinite(n) || n < 0) throw new Error('monthly_price_usd must be a non-negative number');
+      sets.push('monthly_price_usd = ?'); binds.push(n);
       sets.push('native_amount = ?'); binds.push(n);
+    } else {
+      // FX-derive USD from (targetCurrency, nativeAmount). For USD plans
+      // the rate is 1 (or absent in fx_rates) — short-circuit.
+      let usd: number;
+      if (targetCurrency === 'USD') {
+        usd = nativeAmount;
+      } else {
+        const fx = await loadFxRates(env);
+        const rate = fx.rates.get(targetCurrency);
+        if (!rate || rate <= 0) {
+          throw new Error(`No FX rate available for currency "${targetCurrency}"`);
+        }
+        usd = Number((nativeAmount / rate).toFixed(2));
+      }
+      sets.push('currency = ?'); binds.push(targetCurrency);
+      sets.push('native_amount = ?'); binds.push(nativeAmount);
+      sets.push('monthly_price_usd = ?'); binds.push(usd);
     }
   }
   if (patch.display_name !== undefined) {
