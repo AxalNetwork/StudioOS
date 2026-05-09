@@ -186,6 +186,10 @@ select::-ms-expand { display: none; }
 [data-density="compact"] [data-density-target] .gap-6 { gap: 1rem; }
 [data-density="compact"] [data-density-target] .gap-4 { gap: 0.625rem; }
 [data-density="compact"] [data-density-target] .gap-3 { gap: 0.5rem; }
-/* Card-like containers (Settings + Dashboard share the data-card hook) get
-   a touch less padding too. */
-[data-density="compact"] [data-card] { padding: 0.875rem !important; }
+/* Card-like containers without explicit header/body sub-regions (e.g. the
+   plain Dashboard cards) get a touch less padding. Settings cards declare
+   [data-card-header]/[data-card-body]/[data-card-footer] and use the rules
+   above instead, so we exclude them here to avoid doubling the trim. */
+[data-density="compact"] [data-card]:not(:has(> [data-card-body])) {
+  padding: 0.875rem;
+}
