@@ -470,9 +470,9 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   // migration off the legacy `users.password_hash` storage. Returns null
   // if no usable TOTP secret exists for the user. Task #1 — when the
   // migration runs (source === 'legacy'), the user's `password_hash` was
-  // misused for TOTP storage and is now wiped to a sentinel; we surface
-  // `password_reset_required` to the SPA AND fire a forced password-reset
-  // email so the user re-establishes a clean credential.
+  // misused for TOTP storage and is now NULLed + `password_reset_required`
+  // is set to 1; we surface that flag to the SPA AND fire a forced
+  // password-reset email so the user re-establishes a clean credential.
   const totpRow = await loadTotp(c.env, user.id, user.password_hash, user.totp_recovery_codes);
   if (!totpRow) { await sql.end(); return c.json({ error: 'Account not set up for TOTP authentication' }, 401); }
   const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
