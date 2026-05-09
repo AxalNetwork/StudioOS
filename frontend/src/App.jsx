@@ -354,11 +354,22 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
 
 function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId }) {
   // Task #31 — Honor the user's "Sidebar default" appearance preference on
-  // first paint of each session. Desktop lg+ keeps the sidebar permanently
-  // visible via the `lg:translate-x-0` class regardless; this initial value
-  // primarily affects the mobile drawer on small viewports.
-  const { appearance } = useSettings();
-  const [sidebarOpen, setSidebarOpen] = useState(() => appearance?.sidebar_default === 'expanded');
+  // first paint AND when the async appearance load completes (so the
+  // server-side preference wins over the cached default on a fresh device).
+  // Applied on desktop too: when 'collapsed' the sidebar slides off-screen
+  // and a hamburger reveals it.
+  const { appearance, loading: settingsLoading } = useSettings();
+  const [sidebarOpen, setSidebarOpen] = useState(() => appearance?.sidebar_default !== 'collapsed');
+  const initialSyncRef = React.useRef(false);
+  useEffect(() => {
+    // One-shot sync the moment the SettingsProvider's first /appearance
+    // round-trip resolves; subsequent toggles by the user are NOT
+    // overridden because we flip the ref on the first run.
+    if (initialSyncRef.current) return;
+    if (settingsLoading) return;
+    setSidebarOpen(appearance?.sidebar_default !== 'collapsed');
+    initialSyncRef.current = true;
+  }, [settingsLoading, appearance?.sidebar_default]);
   const isAdmin = (realUser || user)?.role === 'admin';
   const activeRole = isImpersonating ? user?.role : (isAdmin ? viewMode : user?.role);
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
@@ -393,11 +404,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
         <div className="flex flex-1 overflow-hidden">
           <aside className={`
-            fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800
+            ${sidebarOpen ? 'lg:relative' : 'fixed'}
+            inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800
             flex flex-col
             transform transition-transform duration-200
-            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-            lg:relative lg:translate-x-0
+            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:hidden'}
           `}>
             <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-200 dark:border-gray-800">
               <img src="/axal-mark.png" alt="Axal VC" className="h-8 w-8 rounded-lg object-cover flex-shrink-0" />
@@ -442,7 +453,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           )}
 
           <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950">
-            <header className="lg:hidden sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between gap-3">
+            <header className={`sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between gap-3 ${sidebarOpen ? 'lg:hidden' : ''}`}>
               <div className="flex items-center gap-2.5 lg:hidden">
                 <img src="/axal-mark.png" alt="Axal VC" className="h-8 w-8 rounded-lg object-contain flex-shrink-0" />
                 <div>
@@ -464,12 +475,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               )}
               <div className="flex items-center gap-1 ml-auto">
                 <NotificationBell userId={user?.id} />
-                <button className="lg:hidden text-gray-600 dark:text-gray-300 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
+                <button className="text-gray-600 dark:text-gray-300 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
                   <Menu size={20} />
                 </button>
               </div>
             </header>
-            <div data-app-main className="p-4 md:p-6 max-w-7xl mx-auto">
+            <div data-app-main data-density-target className="p-4 md:p-6 max-w-7xl mx-auto">
               {children}
             </div>
           </main>

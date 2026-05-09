@@ -34,6 +34,7 @@ An API-first Venture Studio Operating System designed to manage the entire start
 - Production API is a Cloudflare Worker for performance and scalability, while FastAPI provides a faster local development loop.
 - Strict separation of production (Cloudflare D1) and development (SQLite) databases.
 - Frontend logging and storage handled via `safeReadJSON`/`safeWriteJSON` and `reportError` for robust error handling and data integrity.
+- Theme/density use a CSS-variable system in `frontend/src/index.css` (`--app-bg`, `--app-surface`, `--app-text`, `--app-input-*`) under `:root` and `[data-theme="dark"]/.dark`, plus Tailwind 4 `@custom-variant dark (&:where(.dark, .dark *))`. SettingsContext flips both `data-theme` and the `.dark` class on `<html>`. Body, inputs, autofill, scrollbars, and native `<select>` panels flip automatically; new pages should add `dark:` Tailwind variants on hardcoded `bg-white`/`text-gray-*` tokens. Density rules target `[data-card]` (Settings cards) and `[data-density-target]` (page wrappers).
 - API ↔ Worker drift is prevented by a CI script, ensuring consistency between frontend and backend contracts.
 - Rate limiting is implemented per bucket, and strict CSP headers are enforced for security.
 

@@ -67,16 +67,16 @@ export default function Dashboard() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-bold text-gray-900">Welcome back, {user.name?.split(' ')[0] || user.email.split('@')[0]}</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Welcome back, {user.name?.split(' ')[0] || user.email.split('@')[0]}</h1>
             <RoleBadge role={user.role} />
           </div>
-          <p className="text-sm text-gray-600">Here's your venture studio at a glance.</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Here's your venture studio at a glance.</p>
           <div className="mt-3"><SemanticSearch /></div>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
-            <button onClick={() => setShowNotifs(s => !s)} className="relative p-2 rounded-lg border border-gray-200 hover:bg-gray-50">
-              <Bell size={16} className="text-gray-700" />
+            <button onClick={() => setShowNotifs(s => !s)} className="relative p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
+              <Bell size={16} className="text-gray-700 dark:text-gray-300" />
               {unreadNotifs > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{unreadNotifs}</span>}
             </button>
             {showNotifs && <NotifDropdown items={notifications} onClose={() => setShowNotifs(false)} />}
@@ -288,10 +288,10 @@ function IndependentSubsidiariesWidget() {
 
 function Card({ title, icon: Icon, link, linkLabel, children }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div data-card className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900 flex items-center gap-2"><Icon size={16} className="text-violet-600" /> {title}</h3>
-        {link && <Link to={link} className="text-xs text-violet-600 hover:text-violet-700 flex items-center gap-1">{linkLabel} <ChevronRight size={12} /></Link>}
+        <h3 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2"><Icon size={16} className="text-violet-600 dark:text-violet-400" /> {title}</h3>
+        {link && <Link to={link} className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-700 flex items-center gap-1">{linkLabel} <ChevronRight size={12} /></Link>}
       </div>
       {children}
     </div>
@@ -306,22 +306,22 @@ function Stat({ icon: Icon, label, value, sub, color = 'violet' }) {
     amber: 'bg-amber-100 text-amber-600',
   };
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
       <div className="flex items-center gap-2 mb-2">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${colors[color]}`}><Icon size={14} /></div>
-        <span className="text-xs text-gray-600 uppercase tracking-wider">{label}</span>
+        <span className="text-xs text-gray-600 dark:text-gray-400 uppercase tracking-wider">{label}</span>
       </div>
-      <div className="text-2xl font-bold text-gray-900">{value}</div>
-      {sub && <div className="text-[10px] text-gray-500 mt-1 truncate">{sub}</div>}
+      <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</div>
+      {sub && <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 truncate">{sub}</div>}
     </div>
   );
 }
 
 function MiniStat({ label, value }) {
   return (
-    <div className="bg-gray-50 rounded-lg p-2">
-      <div className="text-[10px] uppercase text-gray-500">{label}</div>
-      <div className="text-sm font-bold text-gray-900 truncate">{value}</div>
+    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
+      <div className="text-[10px] uppercase text-gray-500 dark:text-gray-400">{label}</div>
+      <div className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{value}</div>
     </div>
   );
 }
@@ -365,17 +365,17 @@ function NotifDropdown({ items, onClose }) {
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-96 overflow-y-auto">
-        <div className="px-4 py-2 border-b border-gray-200 font-semibold text-sm flex items-center gap-2"><Bell size={14} /> Recent Activity</div>
+      <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-lg z-50 max-h-96 overflow-y-auto">
+        <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-800 font-semibold text-sm flex items-center gap-2 dark:text-gray-100"><Bell size={14} /> Recent Activity</div>
         {(!items || items.length === 0) ? (
-          <div className="text-xs text-gray-500 text-center py-6">No recent activity.</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 text-center py-6">No recent activity.</div>
         ) : items.map((n, i) => (
-          <div key={i} className="px-4 py-2 border-b border-gray-100 last:border-0 hover:bg-gray-50">
+          <div key={i} className="px-4 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800">
             <div className="flex items-start gap-2">
               <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${n.kind === 'commission' ? 'bg-emerald-500' : 'bg-violet-500'}`} />
               <div className="flex-1 min-w-0">
-                <div className="text-xs text-gray-900 truncate">{n.title}</div>
-                <div className="text-[10px] text-gray-500 flex items-center gap-2">
+                <div className="text-xs text-gray-900 dark:text-gray-100 truncate">{n.title}</div>
+                <div className="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-2">
                   <span>{n.kind === 'commission' ? '💰' : '🤝'} {n.kind}</span>
                   {n.amount_cents != null && <span className="font-bold text-emerald-600">+${(n.amount_cents/100).toFixed(2)}</span>}
                   <span>{new Date(n.created_at).toLocaleString()}</span>
@@ -401,13 +401,13 @@ function QuickLinks({ role }) {
   ];
   const filtered = links.filter(l => l.roles.includes(role) || role === 'admin');
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <div className="text-xs font-semibold text-gray-700 mb-3">Quick Links</div>
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+      <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-3">Quick Links</div>
       <div className="grid grid-cols-2 gap-2">
         {filtered.map(l => {
           const Icon = l.icon;
           return (
-            <Link key={l.to} to={l.to} className="flex items-center gap-2 text-xs text-gray-700 hover:bg-violet-50 hover:text-violet-700 p-2 rounded transition-colors">
+            <Link key={l.to} to={l.to} className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 hover:text-violet-700 dark:hover:text-violet-300 p-2 rounded transition-colors">
               <Icon size={12} /> {l.label}
             </Link>
           );
@@ -463,13 +463,13 @@ function PersonaTile({ state }) {
   if (!persona) return null;
   const incomplete = expected_extras > 0 && extras_count < expected_extras;
   return (
-    <div className="flex items-center gap-3 p-4 bg-white border border-gray-200 rounded-xl">
-      <div className="w-9 h-9 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center">
+    <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
+      <div className="w-9 h-9 rounded-lg bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 flex items-center justify-center">
         <Sparkles size={18} />
       </div>
       <div className="flex-1">
-        <div className="text-sm font-semibold text-gray-900">{persona.label}</div>
-        <div className="text-xs text-gray-500">
+        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{persona.label}</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">
           {expected_extras > 0
             ? `${extras_count} / ${expected_extras} profile questions answered`
             : 'Profile complete'}
