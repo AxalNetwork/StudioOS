@@ -153,17 +153,20 @@ r.get('/audit', async (c) => {
   const sql = getSQL(c.env);
   const limit = clampInt(c.req.query('limit'), 25, 1, 100);
   const offset = clampInt(c.req.query('offset'), 0, 0, 100000);
+  const ALLOWED_ACTIONS = ['analytics_export', 'subscription_plan_update'] as const;
+  const requested = (c.req.query('action') || 'analytics_export').toString();
+  const action = (ALLOWED_ACTIONS as readonly string[]).includes(requested) ? requested : 'analytics_export';
   const items = await sql`
     SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
            a.action, a.report_type, a.format, a.filters_json,
            a.download_url, a.exported_at
     FROM admin_audit_log a
     LEFT JOIN users u ON u.id = a.admin_user_id
-    WHERE a.action = 'analytics_export'
+    WHERE a.action = ${action}
     ORDER BY a.exported_at DESC
     LIMIT ${limit} OFFSET ${offset}
   `;
-  const totalRow = await sql`SELECT COUNT(*) AS c FROM admin_audit_log WHERE action = 'analytics_export'`;
+  const totalRow = await sql`SELECT COUNT(*) AS c FROM admin_audit_log WHERE action = ${action}`;
   const itemsArr = Array.isArray(items) ? items : [];
   const totalArr = Array.isArray(totalRow) ? totalRow : [];
   const total = Number((totalArr[0] as { c?: number } | undefined)?.c || 0);

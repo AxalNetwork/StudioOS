@@ -612,7 +612,8 @@ export const api = {
     request(`/monitoring/analytics/technical?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
   analyticsExport: (payload) =>
     request('/monitoring/analytics/export', { method: 'POST', body: JSON.stringify(payload) }),
-  analyticsAudit: (limit = 25) => request(`/monitoring/analytics/audit?limit=${limit}`),
+  analyticsAudit: (limit = 25, action = 'analytics_export') =>
+    request(`/monitoring/analytics/audit?limit=${limit}&action=${encodeURIComponent(action)}`),
   analyticsListPlans: () => request('/monitoring/analytics/plans'),
   analyticsUpdatePlan: (planId, patch) =>
     request(`/monitoring/analytics/plans/${encodeURIComponent(planId)}`, {

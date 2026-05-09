@@ -552,6 +552,73 @@ function PlanCatalog({ onChanged }) {
   );
 }
 
+function PlanAuditHistory({ refreshKey }) {
+  const [items, setItems] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let alive = true;
+    setItems(null); setErr('');
+    api.analyticsAudit(25, 'subscription_plan_update')
+      .then(r => { if (alive) setItems(r.items || []); })
+      .catch(e => { if (alive) setErr(e?.message || 'Failed to load'); });
+    return () => { alive = false; };
+  }, [refreshKey]);
+
+  const describePatch = (raw) => {
+    if (!raw) return null;
+    let parsed;
+    try { parsed = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return String(raw); }
+    if (!parsed || typeof parsed !== 'object') return String(raw);
+    const parts = [];
+    if (parsed.monthly_price_usd !== undefined) {
+      parts.push(`price → $${Number(parsed.monthly_price_usd).toLocaleString(undefined, { minimumFractionDigits: parsed.monthly_price_usd % 1 ? 2 : 0 })}`);
+    }
+    if (parsed.display_name !== undefined) {
+      parts.push(`name → ${parsed.display_name == null || parsed.display_name === '' ? '(none)' : `“${parsed.display_name}”`}`);
+    }
+    if (parsed.is_active !== undefined) {
+      parts.push(parsed.is_active ? 'activated' : 'deactivated');
+    }
+    return parts.length ? parts.join(' · ') : null;
+  };
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <div className="text-sm font-semibold text-gray-900">Plan change history</div>
+          <div className="text-xs text-gray-500">Most recent edits to subscription plans, including who made them.</div>
+        </div>
+        <span className="text-xs text-gray-500">{items?.length || 0} item(s)</span>
+      </div>
+      {err && <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{err}</div>}
+      {items === null ? (
+        <div className="text-xs text-gray-400 text-center py-3"><RefreshCw size={11} className="inline animate-spin mr-1" /> Loading…</div>
+      ) : items.length === 0 ? (
+        <div className="text-xs text-gray-400 text-center py-3">No edits yet.</div>
+      ) : (
+        <div className="divide-y divide-gray-100">
+          {items.map(it => {
+            const summary = describePatch(it.filters_json);
+            return (
+              <div key={it.id} className="py-2 text-xs">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-medium text-gray-900 font-mono">{it.report_type || '—'}</div>
+                  <div className="text-gray-500 whitespace-nowrap">{new Date((it.exported_at || '').replace(' ', 'T') + 'Z').toLocaleString()}</div>
+                </div>
+                <div className="text-gray-600 mt-0.5">
+                  {summary ? <span className="text-gray-800">{summary}</span> : <span className="text-gray-400">No diff recorded</span>}
+                  <span className="text-gray-500"> · by {it.admin_email || it.admin_name || `user#${it.admin_user_id}`}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FinancialSub({ range, currency, onExport, busy }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
@@ -560,8 +627,9 @@ function FinancialSub({ range, currency, onExport, busy }) {
     setData(null); setErr('');
     api.analyticsFinancial(range.from, range.to, currency).then(setData).catch(e => setErr(e?.message || 'Failed'));
   }, [range.from, range.to, currency, reloadKey]);
-  if (err) return <div className="space-y-4"><div className="text-sm text-red-600">{err}</div><PlanCatalog onChanged={() => setReloadKey(k => k + 1)} /></div>;
-  if (!data) return <div className="space-y-4"><div className="text-sm text-gray-500 py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" /> Loading…</div><PlanCatalog onChanged={() => setReloadKey(k => k + 1)} /></div>;
+  const onPlanChanged = () => setReloadKey(k => k + 1);
+  if (err) return <div className="space-y-4"><div className="text-sm text-red-600">{err}</div><PlanCatalog onChanged={onPlanChanged} /><PlanAuditHistory refreshKey={reloadKey} /></div>;
+  if (!data) return <div className="space-y-4"><div className="text-sm text-gray-500 py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" /> Loading…</div><PlanCatalog onChanged={onPlanChanged} /><PlanAuditHistory refreshKey={reloadKey} /></div>;
   const ccy = data.display_currency || 'USD';
   const totalMrr = data.total_mrr ?? data.total_mrr_usd;
   const arr = data.arr ?? data.arr_usd;
@@ -639,7 +707,8 @@ function FinancialSub({ range, currency, onExport, busy }) {
           </tbody>
         </table>
       </div>
-      <PlanCatalog onChanged={() => setReloadKey(k => k + 1)} />
+      <PlanCatalog onChanged={onPlanChanged} />
+      <PlanAuditHistory refreshKey={reloadKey} />
     </div>
   );
 }
