@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireRole, requireApprovedKyc, canAccessFounderResource } from '../auth';
 import { seedStandardEventsForJurisdiction } from './compliance';
+import { CONTRACT_DOC_TYPES } from './admin_contracts';
 
 const legal = new Hono<{ Bindings: Env }>();
 
@@ -374,6 +375,19 @@ legal.put('/documents/:id/sign', async (c) => {
   if (!canAccessFounderResource(user, (rows[0] as any).project_founder_id)) {
     await sql.end();
     return c.json({ error: 'Forbidden' }, 403);
+  }
+  // Task #2 — esign_envelopes is the single source of truth for active
+  // contracts. Reject the legacy in-place sign for any contract doc_type;
+  // callers must use POST /api/legal/esign/send to issue a real e-sign
+  // envelope. Non-contract docs (memos, drafts, internal notes) are still
+  // signable here for backward compatibility.
+  const docType = String((rows[0] as any).doc_type || '').toLowerCase();
+  if (CONTRACT_DOC_TYPES.has(docType)) {
+    await sql.end();
+    return c.json({
+      error: 'This is a contract doc_type — use the e-sign envelope flow (POST /api/legal/esign/send) instead.',
+      code: 'use_esign_envelope',
+    }, 409);
   }
   await sql`UPDATE documents SET status = 'signed', signed_by = ${signed_by || 'Unknown'}, signed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   const [updated] = await sql`SELECT * FROM documents WHERE id = ${id}`;

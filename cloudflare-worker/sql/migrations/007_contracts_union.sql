@@ -60,6 +60,16 @@ SELECT
 FROM documents d
 WHERE d.migrated_to_esign_id IS NULL
   AND LOWER(COALESCE(d.status, '')) IN ('sent', 'signed', 'void')
+  -- Only migrate ACTUAL contract doc_types — keep this list in sync with
+  -- CONTRACT_DOC_TYPES in cloudflare-worker/src/routes/admin_contracts.ts.
+  -- Templates, memos, drafts, and other non-contract documents stay in
+  -- `documents` so contract stats/listings aren't distorted.
+  AND LOWER(COALESCE(d.doc_type, '')) IN (
+    'operating_agreement','carried_interest','ic_charter','service_agreement',
+    'lpa','ppm','subscription','mgmt_company',
+    'safe','term_sheet','bylaws','equity_split','ip_license','spa','voting_rights',
+    'form_adv','aml_kyc','section_83b'
+  )
   AND NOT EXISTS (SELECT 1 FROM esign_envelopes e WHERE e.envelope_uuid = d.uid);
 
 -- Tag the originals with the new envelope id so the union read path can
@@ -70,4 +80,10 @@ UPDATE documents
        )
  WHERE migrated_to_esign_id IS NULL
    AND LOWER(COALESCE(status, '')) IN ('sent', 'signed', 'void')
+   AND LOWER(COALESCE(doc_type, '')) IN (
+     'operating_agreement','carried_interest','ic_charter','service_agreement',
+     'lpa','ppm','subscription','mgmt_company',
+     'safe','term_sheet','bylaws','equity_split','ip_license','spa','voting_rights',
+     'form_adv','aml_kyc','section_83b'
+   )
    AND EXISTS (SELECT 1 FROM esign_envelopes WHERE envelope_uuid = documents.uid);

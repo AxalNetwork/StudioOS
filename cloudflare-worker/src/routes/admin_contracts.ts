@@ -21,6 +21,22 @@ const TEMPLATE_LAYERS: Record<string, { label: string; description: string }> = 
   compliance: { label: 'Compliance & Regulatory', description: 'SEC filings, AML/KYC, and tax elections' },
 };
 
+// Task #2 — Single source of truth for which `documents.doc_type` values
+// represent ACTUAL contracts (vs. templates, memos, or other non-contract
+// documents). Used by:
+//   - migration 007_contracts_union.sql (backfill predicate)
+//   - this file's stats helpers
+//   - legal.ts to refuse new sign-path writes for these types so e-sign
+//     becomes the single source of truth going forward.
+// Keep in sync with the keys in TEMPLATES below — any new contract type
+// added must also be added here.
+export const CONTRACT_DOC_TYPES: ReadonlySet<string> = new Set([
+  'operating_agreement', 'carried_interest', 'ic_charter', 'service_agreement',
+  'lpa', 'ppm', 'subscription', 'mgmt_company',
+  'safe', 'term_sheet', 'bylaws', 'equity_split', 'ip_license', 'spa', 'voting_rights',
+  'form_adv', 'aml_kyc', 'section_83b',
+]);
+
 const TEMPLATES: Record<string, { title: string; layer: string }> = {
   operating_agreement: { title: 'Operating Agreement (LLC)', layer: 'gp' },
   carried_interest: { title: 'Carried Interest / Partnership Agreement', layer: 'gp' },
