@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, createContext, useContext } fr
 import { safeReadJSON } from './lib/storage';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
-import { SettingsProvider } from './contexts/SettingsContext';
+import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import SpinoutLabListener from './components/SpinoutLabListener';
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
@@ -240,7 +240,7 @@ function SidebarNav({ groups, role, onNavigate }) {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search…"
             aria-label="Search sidebar"
-            className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400"
+            className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400 dark:placeholder:text-gray-500"
           />
         </div>
       </div>
@@ -256,7 +256,7 @@ function SidebarNav({ groups, role, onNavigate }) {
               type="button"
               onClick={() => toggleGroup(group.key)}
               aria-expanded={isOpen}
-              className="w-full flex items-center gap-1 px-5 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600"
+              className="w-full flex items-center gap-1 px-5 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             >
               {isOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
               <span>{group.label}</span>
@@ -271,10 +271,10 @@ function SidebarNav({ groups, role, onNavigate }) {
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
                       isActive
-                        ? 'text-violet-600 bg-violet-50 border-r-2 border-violet-600'
+                        ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
                         : highlight
-                          ? 'text-violet-700 font-medium bg-violet-50/60 hover:bg-violet-100'
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                          ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50/60 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40'
+                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
                     }`
                   }
                 >
@@ -353,7 +353,12 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
 }
 
 function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Task #31 — Honor the user's "Sidebar default" appearance preference on
+  // first paint of each session. Desktop lg+ keeps the sidebar permanently
+  // visible via the `lg:translate-x-0` class regardless; this initial value
+  // primarily affects the mobile drawer on small viewports.
+  const { appearance } = useSettings();
+  const [sidebarOpen, setSidebarOpen] = useState(() => appearance?.sidebar_default === 'expanded');
   const isAdmin = (realUser || user)?.role === 'admin';
   const activeRole = isImpersonating ? user?.role : (isAdmin ? viewMode : user?.role);
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
@@ -374,7 +379,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
   return (
     <ViewModeContext.Provider value={{ viewMode: activeRole, isAdmin, isImpersonating }}>
-      <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
+      <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
         {isAdmin && (
           <PortalSwitcher
             viewMode={viewMode}
@@ -388,24 +393,24 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
         <div className="flex flex-1 overflow-hidden">
           <aside className={`
-            fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200
+            fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800
             flex flex-col
             transform transition-transform duration-200
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             lg:relative lg:translate-x-0
           `}>
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-200">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-200 dark:border-gray-800">
               <img src="/axal-mark.png" alt="Axal VC" className="h-8 w-8 rounded-lg object-cover flex-shrink-0" />
               <div>
-                <div className="font-semibold text-sm text-gray-900">Axal VC</div>
-                <div className="text-[10px] text-gray-500">StudioOS v1.0</div>
+                <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">Axal VC</div>
+                <div className="text-[10px] text-gray-500 dark:text-gray-400">StudioOS v1.0</div>
               </div>
               {isAdmin && activeRole !== 'admin' && (
                 <span className={`ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS[activeRole]}`}>
                   {ROLE_LABELS[activeRole]} View
                 </span>
               )}
-              <button className="ml-auto lg:hidden text-gray-600" onClick={() => setSidebarOpen(false)}>
+              <button className="ml-auto lg:hidden text-gray-600 dark:text-gray-300" onClick={() => setSidebarOpen(false)}>
                 <X size={18} />
               </button>
             </div>
@@ -414,17 +419,17 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             ) : (
               <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={() => setSidebarOpen(false)} />
             )}
-            <div className="px-5 py-3 border-t border-gray-200">
+            <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-800">
               {user && (
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs text-gray-900 font-medium truncate">{user.name}</div>
-                    <div className="text-[10px] text-gray-500 truncate">{user.email}</div>
+                    <div className="text-xs text-gray-900 dark:text-gray-100 font-medium truncate">{user.name}</div>
+                    <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{user.email}</div>
                     <span className={`inline-block mt-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${ROLE_COLORS[user.role] || 'bg-gray-100 text-gray-600'}`}>
                       {ROLE_LABELS[user.role] || user.role}
                     </span>
                   </div>
-                  <button onClick={onLogout} className="text-gray-500 hover:text-red-500 transition-colors" title="Sign out">
+                  <button onClick={onLogout} className="text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors" title="Sign out">
                     <LogOut size={14} />
                   </button>
                 </div>
@@ -436,13 +441,13 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
           )}
 
-          <main className="flex-1 overflow-y-auto">
-            <header className="lg:hidden sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-gray-200 px-4 py-3 flex items-center justify-between gap-3">
+          <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950">
+            <header className="lg:hidden sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 lg:hidden">
                 <img src="/axal-mark.png" alt="Axal VC" className="h-8 w-8 rounded-lg object-contain flex-shrink-0" />
                 <div>
-                  <div className="text-sm font-bold text-gray-900 leading-tight">Axal VC</div>
-                  <div className="text-[10px] text-gray-500 leading-tight">StudioOS v1.0</div>
+                  <div className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight">Axal VC</div>
+                  <div className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">StudioOS v1.0</div>
                 </div>
               </div>
               <div className="hidden lg:block flex-1">
@@ -459,12 +464,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               )}
               <div className="flex items-center gap-1 ml-auto">
                 <NotificationBell userId={user?.id} />
-                <button className="lg:hidden text-gray-600 p-2 rounded-lg hover:bg-gray-100" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
+                <button className="lg:hidden text-gray-600 dark:text-gray-300 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
                   <Menu size={20} />
                 </button>
               </div>
             </header>
-            <div className="p-4 md:p-6 max-w-7xl mx-auto">
+            <div data-app-main className="p-4 md:p-6 max-w-7xl mx-auto">
               {children}
             </div>
           </main>

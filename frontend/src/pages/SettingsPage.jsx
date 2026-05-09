@@ -201,8 +201,8 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-5xl">
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Settings</h1>
-      <p className="text-gray-600 mb-6">Profile, security, notifications, and role preferences for your Axal account.</p>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">Settings</h1>
+      <p className="text-gray-600 dark:text-gray-400 mb-6">Profile, security, notifications, and role preferences for your Axal account.</p>
 
       {toast && (
         <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 ${
@@ -343,13 +343,13 @@ function SectionDropdown({ sections, active, onChange }) {
 
 function Card({ title, description, children, footer }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl">
-      <div className="px-5 py-4 border-b border-gray-100">
-        <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
-        {description && <p className="text-xs text-gray-500 mt-1">{description}</p>}
+    <div data-card className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl">
+      <div data-card-header className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
+        {description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{description}</p>}
       </div>
-      <div className="p-5">{children}</div>
-      {footer && <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 rounded-b-xl">{footer}</div>}
+      <div data-card-body className="p-5">{children}</div>
+      {footer && <div data-card-footer className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl">{footer}</div>}
     </div>
   );
 }
@@ -357,14 +357,14 @@ function Card({ title, description, children, footer }) {
 function Field({ label, hint, children }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-gray-700 block mb-1">{label}</span>
+      <span className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">{label}</span>
       {children}
-      {hint && <span className="text-[11px] text-gray-500 block mt-1">{hint}</span>}
+      {hint && <span className="text-[11px] text-gray-500 dark:text-gray-400 block mt-1">{hint}</span>}
     </label>
   );
 }
 
-const inputCls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500';
+const inputCls = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500';
 
 function ProfileSection({ data, onSaved, flash, patch }) {
   const [name, setName] = useState(data.name || '');

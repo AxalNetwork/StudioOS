@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Tailwind 4 — opt the .dark class on <html> in as the activator for the
+   `dark:` variant. SettingsContext flips this class based on the user's
+   theme preference (or live OS in `system` mode). Without this declaration
+   every `dark:` utility silently no-ops. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-brand: #8b5cf6;
   --color-brand-light: #a78bfa;
@@ -16,15 +22,57 @@
   --color-gvpn-amber: #F2B33D;
 }
 
+/* ---------------------------------------------------------------------------
+   Task #31 — Theme system.
+
+   Light + dark color tokens are exposed as CSS variables so the global shell
+   (body, inputs, scrollbars) flips automatically when SettingsContext sets
+   `<html data-theme="dark">` + `class="dark"`. Components that still use
+   hardcoded Tailwind colors (e.g. `bg-white`, `text-gray-900`) keep working
+   in light mode and are progressively converted to `dark:` variants where
+   the surface is most visible (App shell, Settings cards, inputs).
+   ------------------------------------------------------------------------ */
+:root {
+  --app-bg: #f9fafb;
+  --app-surface: #ffffff;
+  --app-surface-2: #f3f4f6;
+  --app-text: #111827;
+  --app-text-muted: #6b7280;
+  --app-border: #e5e7eb;
+  --app-input-bg: #ffffff;
+  --app-input-text: #111827;
+  --app-input-border: #d1d5db;
+  --app-scroll-track: #e5e7eb;
+  --app-scroll-thumb: #9ca3af;
+}
+
+[data-theme="dark"], .dark {
+  --app-bg: #0b1220;
+  --app-surface: #111827;
+  --app-surface-2: #1f2937;
+  --app-text: #e5e7eb;
+  --app-text-muted: #9ca3af;
+  --app-border: #374151;
+  --app-input-bg: #1f2937;
+  --app-input-text: #f3f4f6;
+  --app-input-border: #4b5563;
+  --app-scroll-track: #1f2937;
+  --app-scroll-thumb: #4b5563;
+  color-scheme: dark;
+}
+
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   margin: 0;
-  background: #f9fafb;
+  background: var(--app-bg);
+  color: var(--app-text);
 }
 
-/* Force legible input text regardless of OS/browser color-scheme detection.
-   The dark CSS custom properties above (--color-surface) can cause browsers
-   to infer dark-mode and render input text nearly white. */
+/* Force legible input text. We previously hardcoded white/black, which
+   prevented dark mode from ever skinning inputs. Now the values come from
+   the CSS variables above so light mode stays identical and dark mode
+   gets a matching dark control. Browser autofill is overridden inline
+   below so Chrome's yellow-on-white doesn't leak through. */
 input,
 input[type='text'],
 input[type='email'],
@@ -36,17 +84,21 @@ input[type='search'],
 input[type='url'],
 select,
 textarea {
-  color: #111827;
-  background-color: #ffffff;
-  color-scheme: light;
+  color: var(--app-input-text);
+  background-color: var(--app-input-bg);
 }
+
+:root input, :root select, :root textarea { color-scheme: light; }
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea { color-scheme: dark; }
 
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
-  -webkit-text-fill-color: #111827;
-  box-shadow: 0 0 0px 1000px #ffffff inset;
+  -webkit-text-fill-color: var(--app-input-text);
+  box-shadow: 0 0 0px 1000px var(--app-input-bg) inset;
 }
 
 /* Modernize every native <select> across the app:
@@ -77,21 +129,48 @@ select:not([multiple]):not([size]):disabled {
 /* Hide the legacy IE/Edge dropdown arrow if present. */
 select::-ms-expand { display: none; }
 
-/* The native dropdown panel inherits the page's color-scheme; force light
-   so the menu items render with dark text on a white background even when
-   the OS is in dark mode. */
-select option {
+/* The native dropdown panel inherits the page's color-scheme. In light mode
+   we force a white panel so menu items render with dark text even when the
+   OS is dark. In dark mode we let the panel inherit. */
+:root select option {
   background-color: #ffffff;
   color: #111827;
+}
+[data-theme="dark"] select option {
+  background-color: #1f2937;
+  color: #f3f4f6;
 }
 
 ::-webkit-scrollbar {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #1f2937;
+  background: var(--app-scroll-track);
 }
 ::-webkit-scrollbar-thumb {
-  background: #4b5563;
+  background: var(--app-scroll-thumb);
   border-radius: 3px;
 }
+
+/* ---------------------------------------------------------------------------
+   Density (Compact vs Comfy).
+
+   `<html data-density="compact">` is set by SettingsContext when the user
+   picks "Compact" in Settings → Appearance. We tighten common spacing on
+   the Settings page card primitive and on dashboards/list pages that opt
+   in via `data-density-target` on a wrapper (see App.jsx main wrapper).
+
+   Comfy is the default and uses the existing Tailwind padding values, so
+   no override is needed there.
+   ------------------------------------------------------------------------ */
+[data-density="compact"] [data-density-target] { gap: 0.75rem; }
+[data-density="compact"] [data-density-target] > * + * { margin-top: 0.5rem; }
+
+/* Settings page Card primitive — the most-touched surface. */
+[data-density="compact"] [data-card] > [data-card-header] { padding: 0.625rem 1rem; }
+[data-density="compact"] [data-card] > [data-card-body]   { padding: 0.875rem 1rem; }
+[data-density="compact"] [data-card] > [data-card-footer] { padding: 0.5rem 1rem; }
+
+/* Dashboards / list pages that opt in via the main content wrapper get
+   tighter top/bottom padding too. */
+[data-density="compact"] [data-app-main] { padding-top: 0.75rem; padding-bottom: 0.75rem; }
