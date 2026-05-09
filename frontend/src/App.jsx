@@ -359,7 +359,13 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // Applied on desktop too: when 'collapsed' the sidebar slides off-screen
   // and a hamburger reveals it.
   const { appearance, loading: settingsLoading } = useSettings();
-  const [sidebarOpen, setSidebarOpen] = useState(() => appearance?.sidebar_default !== 'collapsed');
+  // Mobile defaults to closed regardless of preference (the drawer covers the
+  // whole viewport so opening it on every load would block the page). On
+  // desktop we honor the user's saved sidebar_default.
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) return false;
+    return appearance?.sidebar_default !== 'collapsed';
+  });
   const initialSyncRef = React.useRef(false);
   useEffect(() => {
     // One-shot sync the moment the SettingsProvider's first /appearance
@@ -367,7 +373,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     // overridden because we flip the ref on the first run.
     if (initialSyncRef.current) return;
     if (settingsLoading) return;
-    setSidebarOpen(appearance?.sidebar_default !== 'collapsed');
+    const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
+    setSidebarOpen(!isMobile && appearance?.sidebar_default !== 'collapsed');
     initialSyncRef.current = true;
   }, [settingsLoading, appearance?.sidebar_default]);
   // On desktop the sidebar should stay open during normal navigation —

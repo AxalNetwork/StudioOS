@@ -288,7 +288,7 @@ function IndependentSubsidiariesWidget() {
 
 function Card({ title, icon: Icon, link, linkLabel, children }) {
   return (
-    <div data-card className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:border-gray-800 rounded-xl p-5">
+    <div data-card className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2"><Icon size={16} className="text-violet-600 dark:text-violet-400" /> {title}</h3>
         {link && <Link to={link} className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-700 flex items-center gap-1">{linkLabel} <ChevronRight size={12} /></Link>}
@@ -306,7 +306,7 @@ function Stat({ icon: Icon, label, value, sub, color = 'violet' }) {
     amber: 'bg-amber-100 text-amber-600',
   };
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:border-gray-800 rounded-xl p-4">
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
       <div className="flex items-center gap-2 mb-2">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${colors[color]}`}><Icon size={14} /></div>
         <span className="text-xs text-gray-600 dark:text-gray-400 uppercase tracking-wider">{label}</span>
@@ -365,8 +365,8 @@ function NotifDropdown({ items, onClose }) {
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:border-gray-800 rounded-xl shadow-lg z-50 max-h-96 overflow-y-auto">
-        <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 dark:border-gray-800 font-semibold text-sm flex items-center gap-2 dark:text-gray-100"><Bell size={14} /> Recent Activity</div>
+      <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-lg z-50 max-h-96 overflow-y-auto">
+        <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-800 font-semibold text-sm flex items-center gap-2 dark:text-gray-100"><Bell size={14} /> Recent Activity</div>
         {(!items || items.length === 0) ? (
           <div className="text-xs text-gray-500 dark:text-gray-400 text-center py-6">No recent activity.</div>
         ) : items.map((n, i) => (
@@ -401,7 +401,7 @@ function QuickLinks({ role }) {
   ];
   const filtered = links.filter(l => l.roles.includes(role) || role === 'admin');
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:border-gray-800 rounded-xl p-4">
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
       <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-3">Quick Links</div>
       <div className="grid grid-cols-2 gap-2">
         {filtered.map(l => {
@@ -463,7 +463,7 @@ function PersonaTile({ state }) {
   if (!persona) return null;
   const incomplete = expected_extras > 0 && extras_count < expected_extras;
   return (
-    <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:border-gray-800 rounded-xl">
+    <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
       <div className="w-9 h-9 rounded-lg bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 flex items-center justify-center">
         <Sparkles size={18} />
       </div>
