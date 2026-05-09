@@ -204,26 +204,42 @@ dd.get('/cases/:uid', async (c) => {
   const cs = await getCaseByUid(c.env, c.req.param('uid'));
   if (!cs) return c.json({ error: 'Case not found' }, 404);
   const caseId = Number(cs.id);
-  if (user.role !== 'admin') {
+  // Three response shapes by role:
+  //   - admin                 → full case (all sections, all findings, all PII)
+  //   - owner (case creator)  → full case
+  //   - assigned reviewer     → SCOPED case: only the sections they own,
+  //                             only the findings on those sections, only
+  //                             the reviewers/attachments for those
+  //                             sections, and case PII fields redacted.
+  // Anyone else (admin/partner/investor/mentor without an assignment on
+  // this case) is rejected with 403.
+  let scopedSectionIds: Set<number> | null = null; // null = unrestricted
+  if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
     const sql = getSQL(c.env);
-    const access: any[] = await sql`
-      SELECT 1 FROM dd_cases c
-       WHERE c.id = ${caseId}
-         AND (c.owner_user_id = ${user.id}
-              OR EXISTS (SELECT 1 FROM dd_reviewers r WHERE r.case_id = c.id AND r.user_id = ${user.id}))`;
-    await sql.end();
-    if (access.length === 0) return c.json({ error: 'Forbidden' }, 403);
+    try {
+      const reviewerRows: any[] = await sql`
+        SELECT DISTINCT section_id FROM dd_reviewers
+         WHERE case_id = ${caseId} AND user_id = ${user.id}`;
+      if (reviewerRows.length === 0) return c.json({ error: 'Forbidden' }, 403);
+      scopedSectionIds = new Set(reviewerRows.map(r => Number(r.section_id)).filter(Boolean));
+    } finally { await sql.end(); }
   }
   const sql = getSQL(c.env);
   try {
-    const [sections, findings, sources, attachments, reviewers]: [any[], any[], any[], any[], any[]] = await Promise.all([
+    const [sectionsAll, findingsAll, sources, attachmentsAll, reviewersAll]: [any[], any[], any[], any[], any[]] = await Promise.all([
       sql`SELECT * FROM dd_sections WHERE case_id = ${caseId} ORDER BY id`,
       sql`SELECT * FROM dd_findings WHERE case_id = ${caseId} ORDER BY created_at DESC`,
       sql`SELECT id, connector, status, records_count, findings_emitted, error_message, started_at, completed_at FROM dd_external_sources WHERE case_id = ${caseId} ORDER BY id DESC`,
       sql`SELECT id, section_id, filename, mime_type, size_bytes, uploaded_by_user_id, created_at FROM dd_attachments WHERE case_id = ${caseId}`,
       sql`SELECT r.*, u.name AS user_name, u.email AS user_email FROM dd_reviewers r JOIN users u ON u.id = r.user_id WHERE r.case_id = ${caseId}`,
     ]);
-    // Decrypt findings detail/excerpt for display
+    const allowSection = (sid: number | null | undefined) =>
+      scopedSectionIds == null ? true : (sid != null && scopedSectionIds.has(Number(sid)));
+    const sections = sectionsAll.filter(s => allowSection(s.id));
+    const findings = findingsAll.filter(f => allowSection(f.section_id));
+    const attachments = attachmentsAll.filter(a => allowSection(a.section_id));
+    const reviewers = reviewersAll.filter(r => allowSection(r.section_id));
+
     const decryptedFindings = await Promise.all(findings.map(async f => ({
       id: f.id, section_id: f.section_id, source_id: f.source_id, source_kind: f.source_kind,
       severity: f.severity, title: f.title, evidence_url: f.evidence_url,
@@ -238,15 +254,27 @@ dd.get('/cases/:uid', async (c) => {
       reviewer_notes: await decField(c.env, 'dd_sections', 'reviewer_notes', s.id, s.reviewer_notes_enc),
       reviewer_notes_enc: undefined,
     })));
+
+    // Reviewer-scoped responses redact case-wide PII (subject_email,
+    // subject_legal_name, notes) — reviewers should only see what they
+    // need to evaluate their assigned section, not the full subject
+    // dossier. Owners + admins see everything.
+    const isScoped = scopedSectionIds != null;
+    const caseOut: Record<string, unknown> = {
+      ...cs,
+      subject_email: isScoped ? null : await decField(c.env, 'dd_cases', 'subject_email', caseId, cs.subject_email_enc as string | null),
+      subject_legal_name: isScoped ? null : await decField(c.env, 'dd_cases', 'subject_legal_name', caseId, cs.subject_legal_name_enc as string | null),
+      notes: isScoped ? null : await decField(c.env, 'dd_cases', 'notes', caseId, cs.notes_enc as string | null),
+      subject_email_enc: undefined, subject_legal_name_enc: undefined, notes_enc: undefined,
+      scoped: isScoped,
+    };
     return c.json({
-      case: {
-        ...cs,
-        subject_email: await decField(c.env, 'dd_cases', 'subject_email', caseId, cs.subject_email_enc as string | null),
-        subject_legal_name: await decField(c.env, 'dd_cases', 'subject_legal_name', caseId, cs.subject_legal_name_enc as string | null),
-        notes: await decField(c.env, 'dd_cases', 'notes', caseId, cs.notes_enc as string | null),
-        subject_email_enc: undefined, subject_legal_name_enc: undefined, notes_enc: undefined,
-      },
-      sections: decryptedSections, findings: decryptedFindings, sources, attachments, reviewers,
+      case: caseOut,
+      sections: decryptedSections,
+      findings: decryptedFindings,
+      sources: isScoped ? [] : sources, // scan results are case-wide; hide from scoped reviewers
+      attachments,
+      reviewers,
     });
   } finally { await sql.end(); }
 });
