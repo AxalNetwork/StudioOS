@@ -103,7 +103,7 @@ export const api = {
   health: () => request('/health'),
   stats: () => request('/dashboard/stats'),
 
-  listProjects: (status) => request(`/projects/${status ? `?status=${status}` : ''}`),
+  listProjects: (status) => request(`/projects${status ? `?status=${status}` : ''}`),
   getProject: (id) => request(`/projects/${id}`),
   createProject: (data) => request('/projects', { method: 'POST', body: JSON.stringify(data) }),
   updateProject: (id, data) => request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
