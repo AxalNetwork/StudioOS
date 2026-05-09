@@ -6,6 +6,7 @@ import { getSQL } from '../db';
 import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken } from '../auth';
 import { sendVerificationEmail } from '../services/email';
 import { verifyTurnstile } from '../services/turnstile';
+import { persistNewTotpEnrolment, loadTotp, updateRecoveryHashes, markTotpUsed } from '../services/authTotp';
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -74,7 +75,15 @@ async function tryConsumeRecoveryCode(env: Env, userId: number, raw: string): Pr
     const idx = stored.indexOf(candidateHash);
     if (idx === -1) return false;
     stored.splice(idx, 1);
-    await sql`UPDATE users SET totp_recovery_codes = ${JSON.stringify(stored)} WHERE id = ${userId}`;
+    // Task #33 — keep the new auth_totp.recovery_hashes column in lockstep
+    // with the legacy users.totp_recovery_codes column. updateRecoveryHashes
+    // batches both writes; if auth_totp has no row yet (legacy user),
+    // mirror the legacy update only.
+    try {
+      await updateRecoveryHashes(env, userId, stored);
+    } catch {
+      await sql`UPDATE users SET totp_recovery_codes = ${JSON.stringify(stored)} WHERE id = ${userId}`;
+    }
     return true;
   } catch (e) {
     console.error('[AUTH:recovery-code] consume failed:', e);
@@ -403,7 +412,16 @@ auth.post('/setup-totp', safe('setup-totp', 'Could not set up authenticator. Ple
   // ever stores SHA-256 hashes.
   const { plain: recoveryCodes, hashes: recoveryHashes } = await mintRecoveryCodes();
 
-  await sql`UPDATE users SET password_hash = ${totpSecret}, totp_recovery_codes = ${JSON.stringify(recoveryHashes)}, verification_token = NULL, verification_token_expires = NULL WHERE id = ${user.id}`;
+  // Task #33 — TOTP secrets now live in `auth_totp` (encrypted) instead of
+  // `users.password_hash`. We still write a non-null sentinel into
+  // password_hash so legacy code paths that gate on its presence
+  // (e.g. login `!user.password_hash` check below) continue to detect that
+  // the user has completed TOTP enrolment without us having to grep every
+  // call site in this PR. The sentinel is the literal string '__totp__'
+  // and is rejected by `loadTotp`'s base32 regex so it can never be
+  // mistaken for a real secret.
+  await persistNewTotpEnrolment(c.env, user.id, totpSecret, recoveryHashes);
+  await sql`UPDATE users SET password_hash = '__totp__', totp_recovery_codes = ${JSON.stringify(recoveryHashes)}, verification_token = NULL, verification_token_expires = NULL WHERE id = ${user.id}`;
   await sql.end();
 
   const uri = totp.toString();
@@ -439,7 +457,12 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   if (!user.password_hash) { await sql.end(); return c.json({ error: 'Account not set up for TOTP authentication' }, 401); }
   if (!user.is_active) { await sql.end(); return c.json({ error: 'Account is inactive' }, 403); }
 
-  const totp = new TOTP({ secret: Secret.fromBase32(user.password_hash) });
+  // Task #33 — load TOTP secret from `auth_totp` (preferred) with lazy
+  // migration off the legacy `users.password_hash` storage. Returns null
+  // if no usable TOTP secret exists for the user.
+  const totpRow = await loadTotp(c.env, user.id, user.password_hash, user.totp_recovery_codes);
+  if (!totpRow) { await sql.end(); return c.json({ error: 'Account not set up for TOTP authentication' }, 401); }
+  const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
   const delta = totp.validate({ token: totp_code, window: 1 });
   let usedRecoveryCode = false;
   if (delta === null) {
@@ -449,6 +472,9 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
     await sql.end();
     usedRecoveryCode = await tryConsumeRecoveryCode(c.env, user.id, totp_code);
     if (!usedRecoveryCode) return c.json({ error: 'Invalid TOTP code' }, 401);
+  } else {
+    // Best-effort audit field on auth_totp.last_used_at — non-fatal if it fails.
+    await markTotpUsed(c.env, user.id);
   }
   const sql2 = usedRecoveryCode ? getSQL(c.env) : sql;
 
@@ -565,9 +591,11 @@ auth.post('/verify-totp', safe('verify-totp', 'Could not verify your code. Pleas
   const users = await sql`SELECT * FROM users WHERE email = ${email}`;
   await sql.end();
 
-  if (users.length === 0 || !users[0].password_hash) return c.json({ error: 'Invalid credentials' }, 401);
-
-  const totp = new TOTP({ secret: Secret.fromBase32(users[0].password_hash) });
+  if (users.length === 0) return c.json({ error: 'Invalid credentials' }, 401);
+  // Task #33 — read TOTP via authTotp (auth_totp table → fallback legacy column).
+  const totpRow = await loadTotp(c.env, users[0].id, users[0].password_hash, users[0].totp_recovery_codes);
+  if (!totpRow) return c.json({ error: 'Invalid credentials' }, 401);
+  const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
   const valid = totp.validate({ token: totp_code, window: 1 }) !== null;
   return c.json({ valid });
 }));

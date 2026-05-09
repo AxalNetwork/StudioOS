@@ -92,6 +92,8 @@ import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
 import { csrfMiddleware } from './middleware/csrf';
+import { requireCfAccess } from './middleware/cfAccess';
+import filesRoutes from './routes/files';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -190,6 +192,22 @@ app.route('/api/users', users);
 app.route('/api/market-intel', marketIntel);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
+// Task #33 — Cloudflare Access perimeter on the most sensitive route groups.
+// `requireCfAccess` is a soft no-op when CF_ACCESS_TEAM_DOMAIN / CF_ACCESS_AUD
+// are unset (dev/preview); production wrangler secrets engage the gate. The
+// in-app requireAdmin/requireAuth checks still run as the inner perimeter.
+// We mount BOTH the exact root and the wildcard because Hono's `/*`
+// pattern doesn't always match the bare root path — without this any
+// `GET /api/admin` (no trailing slash) would skip the perimeter and rely
+// on RBAC alone, which is exactly the leaked-admin-JWT scenario this
+// middleware exists to defend against.
+app.use('/api/admin', requireCfAccess());
+app.use('/api/admin/*', requireCfAccess());
+app.use('/api/monitoring', requireCfAccess());
+app.use('/api/monitoring/*', requireCfAccess());
+app.use('/api/infra', requireCfAccess());
+app.use('/api/infra/*', requireCfAccess());
+
 // Mount the more-specific /admin/contracts prefix FIRST so it takes
 // precedence over the generic /admin router (which has no contract routes).
 app.route('/api/admin/contracts', adminContracts);
@@ -197,6 +215,10 @@ app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);
 app.route('/api/infra', infra);
+// Task #33 — One-time signed R2 download endpoint (`/api/files/dl/:token`).
+// Token-gated only — no admin/auth at the route layer because the token
+// itself is the authorisation. See services/signedDownload.ts.
+app.route('/api/files', filesRoutes);
 app.route('/api/funds', funds);
 app.route('/api/liquidity', liquidity);
 app.route('/api/email', email);

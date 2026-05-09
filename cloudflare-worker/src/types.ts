@@ -52,6 +52,23 @@ export interface Env {
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_ATLAS_API_KEY?: string;
+  // Task #33 — Master keys for column-level cipher (PII / financial / cap-table)
+  // and for one-time signed R2 download URLs. Both MUST be ≥32 bytes in
+  // production. Generate via `openssl rand -hex 32`. Provision per env via
+  //   `npx wrangler secret put KEK_PII --env=production`
+  //   `npx wrangler secret put KEK_R2  --env=production`
+  // Dev/preview workers fall back to JWT_SECRET (with one-shot warning).
+  KEK_PII?: string;
+  KEK_R2?: string;
+  // Symmetric secret used by `services/cryptoBox.ts` for wellbeing data.
+  // Kept distinct from KEK_PII so a key rotation on PII columns never
+  // invalidates wellbeing rows.
+  AXAL_ENCRYPTION_SECRET?: string;
+  // Task #33 — Cloudflare Access perimeter for /api/admin|monitoring|infra.
+  // Both MUST be set in production for the gate to engage; either unset
+  // means the middleware is a no-op (dev / preview).
+  CF_ACCESS_TEAM_DOMAIN?: string;   // e.g. "axal.cloudflareaccess.com"
+  CF_ACCESS_AUD?: string;           // Application AUD tag from the Access dashboard
   AI?: any;
   // R2 bucket for KYC documents and other large/private blobs.
   // Optional so unit-test envs without R2 bindings still type-check.

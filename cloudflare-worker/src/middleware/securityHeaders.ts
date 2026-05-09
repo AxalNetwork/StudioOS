@@ -50,8 +50,19 @@ export function securityHeadersMiddleware() {
     h.set('X-Content-Type-Options', 'nosniff');
     h.set('X-Frame-Options', 'DENY');
     h.set('Referrer-Policy', 'no-referrer');
-    h.set('Permissions-Policy', 'geolocation=(), camera=(), microphone=(), payment=()');
+    // Task #33 — broaden Permissions-Policy to deny every powerful sensor
+    // by default. Add features only when an actual route needs them.
+    h.set(
+      'Permissions-Policy',
+      'geolocation=(), camera=(), microphone=(), payment=(), usb=(), bluetooth=(), accelerometer=(), gyroscope=(), magnetometer=(), midi=(), serial=(), hid=(), interest-cohort=()',
+    );
     h.set('Cross-Origin-Resource-Policy', 'same-site');
+    // Task #33 — Cross-Origin-Opener-Policy isolates the API browsing context
+    // from any opener so window.opener-style attacks cannot read worker
+    // responses. Same-origin is the strictest setting that doesn't break
+    // legitimate same-origin OAuth popups (the few we have run on the SPA,
+    // not the API).
+    h.set('Cross-Origin-Opener-Policy', 'same-origin');
     // Nonce-based CSP. `'strict-dynamic'` lets a nonce'd loader script bring
     // in additional scripts without each one needing its own nonce — this is
     // the modern OWASP-recommended pattern. `'unsafe-inline'` is included as
