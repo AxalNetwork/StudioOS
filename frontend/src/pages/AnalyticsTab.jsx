@@ -653,16 +653,76 @@ function PlanCatalog({ onChanged }) {
 }
 
 function PlanAuditHistory({ refreshKey }) {
+  const PAGE_SIZE = 25;
   const [items, setItems] = useState(null);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState('');
+  const [planOptions, setPlanOptions] = useState([]);
+  const [planFilter, setPlanFilter] = useState('');
+  const [adminFilter, setAdminFilter] = useState('');
+  const [adminFilterDraft, setAdminFilterDraft] = useState('');
+
   useEffect(() => {
     let alive = true;
-    setItems(null); setErr('');
-    api.analyticsAudit(25, 'subscription_plan_update')
-      .then(r => { if (alive) setItems(r.items || []); })
-      .catch(e => { if (alive) setErr(e?.message || 'Failed to load'); });
+    api.analyticsListPlans()
+      .then(r => { if (alive) setPlanOptions(Array.isArray(r?.plans) ? r.plans : []); })
+      .catch(() => {});
     return () => { alive = false; };
   }, [refreshKey]);
+
+  useEffect(() => {
+    let alive = true;
+    setItems(null); setErr(''); setHasMore(false); setTotal(0);
+    const opts = {};
+    if (planFilter) opts.plan_id = planFilter;
+    if (adminFilter) {
+      if (/^\d+$/.test(adminFilter.trim())) opts.admin_user_id = adminFilter.trim();
+      else opts.admin_q = adminFilter.trim();
+    }
+    api.analyticsAudit(PAGE_SIZE, 'subscription_plan_update', opts)
+      .then(r => {
+        if (!alive) return;
+        setItems(r.items || []);
+        setTotal(Number(r.total || 0));
+        setHasMore(!!r.has_more);
+      })
+      .catch(e => { if (alive) setErr(e?.message || 'Failed to load'); });
+    return () => { alive = false; };
+  }, [refreshKey, planFilter, adminFilter]);
+
+  const loadMore = async () => {
+    if (loadingMore || !items) return;
+    setLoadingMore(true);
+    try {
+      const opts = { offset: items.length };
+      if (planFilter) opts.plan_id = planFilter;
+      if (adminFilter) {
+        if (/^\d+$/.test(adminFilter.trim())) opts.admin_user_id = adminFilter.trim();
+        else opts.admin_q = adminFilter.trim();
+      }
+      const r = await api.analyticsAudit(PAGE_SIZE, 'subscription_plan_update', opts);
+      setItems(prev => [...(prev || []), ...(r.items || [])]);
+      setTotal(Number(r.total || 0));
+      setHasMore(!!r.has_more);
+    } catch (e) {
+      setErr(e?.message || 'Failed to load more');
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const applyAdminFilter = (e) => {
+    e?.preventDefault?.();
+    setAdminFilter(adminFilterDraft.trim());
+  };
+  const clearFilters = () => {
+    setPlanFilter('');
+    setAdminFilter('');
+    setAdminFilterDraft('');
+  };
+  const hasFilters = !!(planFilter || adminFilter);
 
   const describePatch = (raw) => {
     if (!raw) return null;
@@ -693,13 +753,59 @@ function PlanAuditHistory({ refreshKey }) {
           <div className="text-sm font-semibold text-gray-900">Plan change history</div>
           <div className="text-xs text-gray-500">Most recent edits to subscription plans, including who made them.</div>
         </div>
-        <span className="text-xs text-gray-500">{items?.length || 0} item(s)</span>
+        <span className="text-xs text-gray-500">
+          {items ? `${items.length} of ${total}` : '—'} item(s)
+        </span>
+      </div>
+      <div className="flex flex-wrap items-end gap-2 mb-3">
+        <div>
+          <label className="block text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">Plan</label>
+          <select
+            value={planFilter}
+            onChange={e => setPlanFilter(e.target.value)}
+            className="text-xs border border-gray-300 rounded px-2 py-1 bg-white min-w-[140px]"
+          >
+            <option value="">All plans</option>
+            {planOptions.map(p => (
+              <option key={p.plan_id} value={p.plan_id}>
+                {p.display_name ? `${p.display_name} (${p.plan_id})` : p.plan_id}
+              </option>
+            ))}
+          </select>
+        </div>
+        <form onSubmit={applyAdminFilter} className="flex items-end gap-1">
+          <div>
+            <label className="block text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">Admin (email or user id)</label>
+            <input
+              type="text"
+              value={adminFilterDraft}
+              onChange={e => setAdminFilterDraft(e.target.value)}
+              placeholder="e.g. alice@ or 42"
+              className="text-xs border border-gray-300 rounded px-2 py-1 bg-white min-w-[180px]"
+            />
+          </div>
+          <button
+            type="submit"
+            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50"
+          >
+            Apply
+          </button>
+        </form>
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="text-xs px-2 py-1 text-gray-600 hover:text-gray-900 underline"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
       {err && <div className="text-xs text-red-600 mb-2"><AlertTriangle size={11} className="inline mr-1" />{err}</div>}
       {items === null ? (
         <div className="text-xs text-gray-400 text-center py-3"><RefreshCw size={11} className="inline animate-spin mr-1" /> Loading…</div>
       ) : items.length === 0 ? (
-        <div className="text-xs text-gray-400 text-center py-3">No edits yet.</div>
+        <div className="text-xs text-gray-400 text-center py-3">{hasFilters ? 'No edits match these filters.' : 'No edits yet.'}</div>
       ) : (
         <div className="divide-y divide-gray-100">
           {items.map(it => {
@@ -717,6 +823,18 @@ function PlanAuditHistory({ refreshKey }) {
               </div>
             );
           })}
+        </div>
+      )}
+      {items && items.length > 0 && hasMore && (
+        <div className="mt-3 text-center">
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="text-xs px-3 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            {loadingMore ? <><RefreshCw size={11} className="inline animate-spin mr-1" /> Loading…</> : `Load more (${total - items.length} remaining)`}
+          </button>
         </div>
       )}
     </div>

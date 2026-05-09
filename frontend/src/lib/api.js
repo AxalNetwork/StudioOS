@@ -612,8 +612,16 @@ export const api = {
     request(`/monitoring/analytics/technical?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
   analyticsExport: (payload) =>
     request('/monitoring/analytics/export', { method: 'POST', body: JSON.stringify(payload) }),
-  analyticsAudit: (limit = 25, action = 'analytics_export') =>
-    request(`/monitoring/analytics/audit?limit=${limit}&action=${encodeURIComponent(action)}`),
+  analyticsAudit: (limit = 25, action = 'analytics_export', opts = {}) => {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    params.set('action', action);
+    if (opts.offset) params.set('offset', String(opts.offset));
+    if (opts.plan_id) params.set('plan_id', opts.plan_id);
+    if (opts.admin_user_id) params.set('admin_user_id', String(opts.admin_user_id));
+    if (opts.admin_q) params.set('admin_q', opts.admin_q);
+    return request(`/monitoring/analytics/audit?${params.toString()}`);
+  },
   analyticsListPlans: () => request('/monitoring/analytics/plans'),
   analyticsCreatePlan: (payload) =>
     request('/monitoring/analytics/plans', { method: 'POST', body: JSON.stringify(payload) }),
