@@ -124,6 +124,10 @@ function workingBankFor(user: User): Question[] {
   return bankFor(persona);
 }
 
+// IDs of the three detector questions, used by /answer to keep the
+// detector active mid-onboarding even after users.role flips.
+const DETECTOR_IDS: string[] = ROLE_DETECTOR.map((q) => q.id);
+
 // ---------------------------------------------------------------------------
 // Conversation helpers.
 // ---------------------------------------------------------------------------
@@ -440,8 +444,20 @@ advisor.post('/answer', async (c) => {
     if (fresh) liveUser = { ...user, ...fresh };
   }
 
-  const bank = workingBankFor(liveUser);
   const answered = await effectiveAnsweredSet(c.env, liveUser, conv.id);
+  // Enforce the full 3-question detector for null-role onboarding:
+  // even after writeRouter flips users.role on `role_detect.primary`,
+  // keep the detector ahead of the persona bank until
+  // `role_detect.organization` and `role_detect.headline` are also
+  // recorded in advisor_answers. For users whose role was already
+  // set when /start ran, the conversation never accumulated detector
+  // answers, so this path collapses cleanly to the persona bank.
+  const detectorPending =
+    DETECTOR_IDS.some((id) => answered.has(id)) &&
+    DETECTOR_IDS.some((id) => !answered.has(id));
+  const bank = detectorPending
+    ? [...ROLE_DETECTOR, ...bankFor(personaFor(liveUser))]
+    : workingBankFor(liveUser);
   const next = nextUnansweredQuestion(bank, answered);
   await refreshCounts(c.env, conv.id, next?.id || null);
 
