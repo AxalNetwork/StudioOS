@@ -174,6 +174,15 @@ export const EXISTING_FOUNDER_BANK = [
     page_target: '/build/roadmap',
     validate: all(required, minChars(10)),
   },
+  {
+    id: 'founder.okrs.q1_objective3',
+    label: 'Third objective?',
+    type: 'long',
+    explainer: 'Third (and final) roadmap OKR for the quarter — three is the recommended cap.',
+    doc_anchor: 'build/roadmap',
+    page_target: '/build/roadmap',
+    validate: all(required, minChars(10)),
+  },
 
   // --- Mentors needed --------------------------------------------------
   {

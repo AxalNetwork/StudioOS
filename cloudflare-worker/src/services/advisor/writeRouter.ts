@@ -604,16 +604,84 @@ export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<
   if (role === 'founder' || role === 'admin') {
     if (user.founder_id) {
       const proj = await env.DB.prepare(
-        `SELECT name, description, sector, stage, growth_signals
+        `SELECT id, name, description, sector, stage, growth_signals
            FROM projects WHERE founder_id = ?
            ORDER BY updated_at DESC, id DESC LIMIT 1`,
-      ).bind(user.founder_id).first<{ name: string | null; description: string | null; sector: string | null; stage: string | null; growth_signals: string | null }>().catch(() => null);
+      ).bind(user.founder_id).first<{ id: number; name: string | null; description: string | null; sector: string | null; stage: string | null; growth_signals: string | null }>().catch(() => null);
       if (proj) {
         if (proj.name && proj.name !== '(unnamed project)') answered.add('founder.project.name');
         if (proj.description) answered.add('founder.project.pitch');
         if (proj.sector)      answered.add('founder.project.sector');
         if (proj.stage && proj.stage !== 'idea') answered.add('founder.project.stage');
         if (proj.growth_signals) answered.add('founder.project.traction');
+
+        // ---- AC-2 hydration: advisor-slot domain reads -------------
+        // Discovery interview slots (advisor:interview1..3) → mark
+        // both name + pains questions answered when their row exists
+        // and the corresponding column is populated.
+        try {
+          const rows = await env.DB.prepare(
+            `SELECT interviewee_role, interviewee_name, pains_json
+               FROM discovery_interviews
+               WHERE project_id = ? AND interviewee_role LIKE 'advisor:interview%'`,
+          ).bind(proj.id).all<{ interviewee_role: string; interviewee_name: string | null; pains_json: string | null }>().catch(() => ({ results: [] as Array<{ interviewee_role: string; interviewee_name: string | null; pains_json: string | null }> }));
+          for (const r of rows.results || []) {
+            const m = /^advisor:interview([1-3])$/.exec(r.interviewee_role);
+            if (!m) continue;
+            const n = m[1];
+            if (r.interviewee_name && r.interviewee_name !== '(unnamed)') answered.add(`founder.discovery.interview${n}.name`);
+            if (r.pains_json && r.pains_json !== '[]') answered.add(`founder.discovery.interview${n}.pains`);
+          }
+        } catch { /* discovery_interviews may not exist in legacy dev */ }
+
+        // Roadmap OKR slots (advisor:q1_obj1..3).
+        try {
+          const rows = await env.DB.prepare(
+            `SELECT quarter, objective FROM roadmap_okrs
+               WHERE project_id = ? AND quarter LIKE 'advisor:q1_obj%'`,
+          ).bind(proj.id).all<{ quarter: string; objective: string | null }>().catch(() => ({ results: [] as Array<{ quarter: string; objective: string | null }> }));
+          for (const r of rows.results || []) {
+            const m = /^advisor:q1_obj([1-3])$/.exec(r.quarter);
+            if (m && r.objective) answered.add(`founder.okrs.q1_objective${m[1]}`);
+          }
+        } catch { /* roadmap_okrs may not exist */ }
+
+        // Brand basics (landing_pages tagline + theme_color). Default
+        // theme_color is '#7c3aed', so only count it as answered if
+        // it was changed.
+        try {
+          const lp = await env.DB.prepare(
+            `SELECT tagline, theme_color FROM landing_pages WHERE project_id = ?`,
+          ).bind(proj.id).first<{ tagline: string | null; theme_color: string | null }>().catch(() => null);
+          if (lp?.tagline) answered.add('founder.brand.tagline');
+          if (lp?.theme_color && lp.theme_color.toLowerCase() !== '#7c3aed') answered.add('founder.brand.theme_color');
+        } catch { /* landing_pages may not exist */ }
+
+        // Deck-draft seed: mark Problem / Market answered when the
+        // current pitch_decks row has a slide with that title and a
+        // non-empty body.
+        try {
+          const deck = await env.DB.prepare(
+            `SELECT slides FROM pitch_decks
+               WHERE project_id = ? AND is_current = 1
+               ORDER BY version DESC LIMIT 1`,
+          ).bind(proj.id).first<{ slides: string | null }>().catch(() => null);
+          if (deck?.slides) {
+            try {
+              const parsed = JSON.parse(deck.slides);
+              if (Array.isArray(parsed)) {
+                for (const s of parsed) {
+                  if (!s || typeof s !== 'object') continue;
+                  const t = String(s.title || '').trim().toLowerCase();
+                  const body = String(s.body || '').trim();
+                  if (!body) continue;
+                  if (t === 'problem') answered.add('founder.deck.problem');
+                  if (t === 'market')  answered.add('founder.deck.market');
+                }
+              }
+            } catch { /* malformed slides — skip */ }
+          }
+        } catch { /* pitch_decks may not exist */ }
       }
     }
   }
