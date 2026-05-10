@@ -103,25 +103,25 @@ function personaFor(user: User): Persona {
   return 'unknown';
 }
 
-// Build the working bank. The 3-question role-detector
-// (primary / organization / headline) is always prepended so a
-// brand-new user with `users.role = null` is taken through ALL three
-// detector questions before the conversation pivots into the persona
-// bank — even after writeRouter flips users.role on
-// `role_detect.primary`, the remaining two detector questions stay
-// ahead of the persona questions in the bank.
+// Build the working bank.
 //
-// Users who already have role + organization + headline populated on
-// the users row (e.g. set during signup or back-filled via
-// /settings) get every detector question pre-marked as answered by
-// hydrateAlreadyAnswered() in /start, so they skip the detector
-// entirely and land directly in their persona bank. That keeps the
-// "detector runs only when role is null" contract while still
-// guaranteeing the full 3-question sequence for null-role users.
+// AC-1 contract: "persona detection runs first if `users.role` is
+// null". So:
+//   - role unknown → bank = ROLE_DETECTOR (3 questions; the
+//     writeRouter saves primary→users.role, organization→
+//     users.organization, headline→users.headline as they land).
+//   - role known   → bank = persona bank (organization/headline are
+//     optional profile niceties handled by /settings; the advisor
+//     does not gate the persona pivot on them).
+//
+// Once `role_detect.primary` is saved during onboarding, the next
+// /answer call re-reads the user, sees the flipped role, and pivots
+// straight into the persona bank for the next question. Existing
+// role-known users start directly in the persona bank from /start.
 function workingBankFor(user: User): Question[] {
   const persona = personaFor(user);
   if (persona === 'unknown') return ROLE_DETECTOR;
-  return [...ROLE_DETECTOR, ...bankFor(persona)];
+  return bankFor(persona);
 }
 
 // ---------------------------------------------------------------------------
