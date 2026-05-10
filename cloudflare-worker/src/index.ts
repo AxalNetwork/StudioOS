@@ -736,6 +736,34 @@ export default {
             console.error('[cron] docusign sync failed', e);
           }
         }
+        // Task #14 (AA-1) — Market Intelligence aggregator cron.
+        // Per-cadence dispatch + nightly composite recompute.
+        //   • hourly sources   → top of hour (minute === 0)
+        //   • daily sources    → 02:30 UTC
+        //   • weekly sources   → Sunday 02:45 UTC (UTC day 0)
+        //   • recomputeIndexes → 03:15 UTC nightly (after daily runs settle)
+        try {
+          const { runSourcesByCadence, recomputeIndexes } = await import('./services/market_intel/aggregator');
+          await import('./services/market_intel/sources'); // ensures registerSource() ran
+          if (now.getUTCMinutes() === 0) {
+            const r = await runSourcesByCadence(env, 'hourly');
+            if (r.scanned) console.info(`[cron] mi hourly scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
+          }
+          if (now.getUTCHours() === 2 && now.getUTCMinutes() === 30) {
+            const r = await runSourcesByCadence(env, 'daily');
+            if (r.scanned) console.info(`[cron] mi daily scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
+          }
+          if (now.getUTCDay() === 0 && now.getUTCHours() === 2 && now.getUTCMinutes() === 45) {
+            const r = await runSourcesByCadence(env, 'weekly');
+            if (r.scanned) console.info(`[cron] mi weekly scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
+          }
+          if (now.getUTCHours() === 3 && now.getUTCMinutes() === 15) {
+            const r = await recomputeIndexes(env);
+            console.info(`[cron] mi recompute sectors=${r.sectors} rows_written=${r.rows_written}`);
+          }
+        } catch (e) {
+          console.error('[cron] market intel failed', e);
+        }
         // Task #14 — flush pending digest emails. Cheap on idle ticks
         // (single GROUP BY query) and only sends to users whose local
         // time is currently 09:00 with cadence-matched weekday. The
