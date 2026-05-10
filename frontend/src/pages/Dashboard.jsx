@@ -8,8 +8,8 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import SemanticSearch from '../components/SemanticSearch';
-import { PERSONA_BY_ID } from '../lib/personas';
 import InvestorTrialBanner from '../components/InvestorTrialBanner';
+import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
@@ -17,7 +17,6 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [error, setError] = useState('');
-  const [personaState, setPersonaState] = useState({ primary: null, extras_count: 0, expected_extras: 0 });
 
   const load = async (fresh = false) => {
     try {
@@ -29,17 +28,6 @@ export default function Dashboard() {
   };
 
   useEffect(() => { load(); }, []);
-  useEffect(() => {
-    api.getMyPersonas().then((r) => {
-      const primary = r?.personas?.find((p) => p.is_primary) || r?.personas?.[0] || null;
-      const persona = primary ? PERSONA_BY_ID[primary.persona_id] : null;
-      const expected = persona?.follow_up_questions?.length || 0;
-      // Bank questions are namespaced per persona, so we count only the ones
-      // that match the user's primary persona (no cross-persona inflation).
-      const extrasCount = (r?.extras || []).filter((e) => primary && e.persona_id === primary.persona_id).length;
-      setPersonaState({ primary, extras_count: extrasCount, expected_extras: expected });
-    }).catch(() => {});
-  }, []);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -93,8 +81,8 @@ export default function Dashboard() {
       {/* Task #7 (W-2) — investor trial countdown banner (auto-hides) */}
       <InvestorTrialBanner user={user} />
 
-      {/* Persona tile */}
-      <PersonaTile state={personaState} />
+      {/* Task #12 (AC-3) — Personal Advisor replaces the legacy persona tile. */}
+      <PersonalAdvisor />
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -456,43 +444,3 @@ function WeekBadge({ week }) {
 
 export { StatusBadge, WeekBadge };
 
-function PersonaTile({ state }) {
-  const { primary, extras_count, expected_extras } = state;
-  if (!primary) {
-    return (
-      <Link to="/onboarding/persona"
-        className="flex items-center gap-3 p-4 bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl hover:border-violet-400 transition-colors">
-        <Sparkles size={22} className="text-violet-600" />
-        <div className="flex-1">
-          <div className="text-sm font-semibold text-violet-900">Tell us who you are</div>
-          <div className="text-xs text-violet-700">2 minutes — we'll tailor StudioOS to your role.</div>
-        </div>
-        <ArrowRight size={16} className="text-violet-700" />
-      </Link>
-    );
-  }
-  const persona = PERSONA_BY_ID[primary.persona_id];
-  if (!persona) return null;
-  const incomplete = expected_extras > 0 && extras_count < expected_extras;
-  return (
-    <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
-      <div className="w-9 h-9 rounded-lg bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 flex items-center justify-center">
-        <Sparkles size={18} />
-      </div>
-      <div className="flex-1">
-        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{persona.label}</div>
-        <div className="text-xs text-gray-500 dark:text-gray-400">
-          {expected_extras > 0
-            ? `${extras_count} / ${expected_extras} profile questions answered`
-            : 'Profile complete'}
-        </div>
-      </div>
-      {incomplete && (
-        <Link to="/onboarding/persona"
-          className="text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg flex items-center gap-1">
-          Continue <ArrowRight size={12} />
-        </Link>
-      )}
-    </div>
-  );
-}
