@@ -239,7 +239,7 @@ export default function IntegrationsPage() {
                               <AlertCircle size={11} className="mt-0.5 shrink-0" />
                               <span>
                                 {it.provider_key === 'crunchbase'
-                                  ? 'Crunchbase daily limit reached (Basic = 200 calls/day). Search will re-enable after the reset.'
+                                  ? 'Crunchbase daily limit reached — try again tomorrow.'
                                   : 'Daily API limit reached for this connection. New lookups will resume after the reset.'}
                                 {resetAt && (
                                   <span className="block mt-0.5 text-amber-700 dark:text-amber-300">Resumes at {resetAt}.</span>

@@ -520,7 +520,7 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
             <div className="mt-3 text-xs px-3 py-2 rounded border border-amber-300 bg-amber-50 text-amber-800 flex items-start gap-1.5">
               <AlertCircle size={12} className="mt-0.5 shrink-0" />
               <span>
-                Crunchbase daily limit reached (Basic = 200 calls/day). Search will re-enable after the reset.
+                Crunchbase daily limit reached — try again tomorrow.
                 <span className="block mt-0.5 text-[11px] text-amber-700">
                   Resumes at {new Date(rateLimitedUntil).toLocaleString()}.
                 </span>

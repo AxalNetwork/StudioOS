@@ -201,10 +201,12 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
           };
         }
         const findings: RawFinding[] = [];
-        const opStatus = (top.operating_status || '').toLowerCase();
-        const sevForStatus: RawFinding['severity'] = opStatus === 'closed' ? 'high' : opStatus === 'active' ? 'info' : 'medium';
+        // Per spec: Crunchbase findings default to `info`. The only
+        // escalation is the "funding=null + domain registered" rule
+        // below (low). Operating status / closed flags are surfaced
+        // as detail text but DO NOT escalate severity here.
         findings.push({
-          source_kind: 'crunchbase', severity: sevForStatus,
+          source_kind: 'crunchbase', severity: 'info',
           title: `Crunchbase: ${top.name} — ${top.operating_status || 'status unknown'}`,
           detail: [
             top.short_description || '',

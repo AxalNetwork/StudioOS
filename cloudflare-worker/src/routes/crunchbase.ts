@@ -55,7 +55,7 @@ async function withConn<T>(c: Context<{ Bindings: Env }>, user: User, fn: (apiKe
         error: 'crunchbase_rate_limited',
         // Verbatim banner copy expected by the UI — keep in sync with the
         // amber banner in IntegrationsPage + the slide-over.
-        message: 'Crunchbase daily limit reached (Basic = 200 calls/day). Search will re-enable after the reset.',
+        message: 'Crunchbase daily limit reached — try again tomorrow.',
         reset_hint: e.resetHint || null,
         reset_epoch: resetEpoch,
       }, 429);

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
-import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, ChevronDown, Info, Lightbulb, Users } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, ChevronDown, Info, Lightbulb, Users, Database, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { api } from '../lib/api';
 
 export default function MarketIntelPage() {
@@ -312,6 +313,15 @@ export default function MarketIntelPage() {
       {tab === 'private' && (
         <div className="space-y-4">
           <TabExplainer text="Private rounds = direct competitors' funding signals. Who just raised, at what stage, and at what valuation tells you whether the sector is heating up — and where your portfolio is mispriced." />
+          {/* Competitor enrichment — pick one of YOUR enriched projects and
+              pull live competitor signals from Crunchbase. Logo grid (uses
+              snapshot image_url) + funding-history bar chart (per-competitor
+              total_funding_usd from the search hits, sorted desc). Single
+              source of truth = stored snapshot + the existing /competitors
+              endpoint; no new backend route. */}
+          {enriched.length > 0 && (
+            <CompetitorEnrichmentBlock projects={enriched} />
+          )}
           {enriched.length > 0 && (
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
@@ -782,6 +792,143 @@ function TabExplainer({ text }) {
     <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-[11px] text-gray-600 flex items-start gap-2">
       <Info size={13} className="text-violet-500 shrink-0 mt-0.5" />
       <span>{text}</span>
+    </div>
+  );
+}
+
+// Competitor enrichment — picks one of the user's enriched projects
+// (those with a Crunchbase snapshot) and renders (a) a logo grid of
+// competitors pulled from the existing /competitors endpoint, and
+// (b) a horizontal funding bar chart so partners can compare total
+// raised across the competitor set at a glance. Single-source-of-truth
+// for the data is the stored project snapshot + the live competitors
+// endpoint; no new backend route required.
+function CompetitorEnrichmentBlock({ projects }) {
+  const [selectedId, setSelectedId] = useState(projects[0]?.id || '');
+  const [source, setSource] = useState(null);
+  const [comps, setComps] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  const [rateLimited, setRateLimited] = useState(false);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    setLoading(true); setErr(''); setRateLimited(false);
+    api.crunchbaseCompetitors(selectedId, 10).then((res) => {
+      setSource(res?.source || null);
+      setComps(Array.isArray(res?.competitors) ? res.competitors : []);
+    }).catch((e) => {
+      const code = e?.data?.error || '';
+      if (code === 'crunchbase_rate_limited' || e?.status === 429) setRateLimited(true);
+      else setErr(e?.message || 'Failed to load competitors');
+      setSource(null); setComps([]);
+    }).finally(() => setLoading(false));
+  }, [selectedId]);
+
+  // Funding-history dataset — sorted desc by funding so the bars read
+  // top-down "biggest competitor first". Source is included as a pinned
+  // first row (highlighted) so the user sees their portfolio company in
+  // context with peer raises.
+  const allRows = [
+    ...(source ? [{ ...source, _isSource: true }] : []),
+    ...comps,
+  ].map((r) => ({
+    name: (r.name || '').slice(0, 22),
+    fundingM: r.funding_total_usd ? Math.round((r.funding_total_usd / 1e6) * 10) / 10 : 0,
+    isSource: !!r._isSource,
+    cb_url: r.cb_url || (r.permalink ? `https://www.crunchbase.com/organization/${r.permalink}` : null),
+  })).sort((a, b) => b.fundingM - a.fundingM);
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+            <Database size={14} className="text-violet-600" /> Competitor enrichment (Crunchbase)
+          </h3>
+          <p className="text-[11px] text-gray-500 mt-0.5">Live competitor signals for one of your enriched projects.</p>
+        </div>
+        <select
+          value={selectedId}
+          onChange={(e) => setSelectedId(e.target.value)}
+          className="text-xs bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-gray-900 focus:border-violet-500 focus:outline-none"
+        >
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {rateLimited && (
+        <div className="text-xs px-3 py-2 rounded border border-amber-300 bg-amber-50 text-amber-800 flex items-start gap-1.5 mb-3">
+          <Info size={12} className="mt-0.5 shrink-0" />
+          <span>Crunchbase daily limit reached — try again tomorrow.</span>
+        </div>
+      )}
+      {err && !rateLimited && (
+        <div className="text-xs text-red-600 mb-3">{err}</div>
+      )}
+
+      {loading ? (
+        <div className="text-xs text-gray-500 py-6 text-center">Loading competitors…</div>
+      ) : !rateLimited && comps.length === 0 ? (
+        <div className="text-xs text-gray-500 py-6 text-center">
+          No competitor matches in the Crunchbase Basic search index for this project's category groups.
+        </div>
+      ) : (
+        <>
+          <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-2">Logo grid ({comps.length} peers)</div>
+          <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-8 gap-3 mb-5">
+            {comps.map((c) => (
+              <a
+                key={c.uuid}
+                href={c.cb_url || (c.permalink ? `https://www.crunchbase.com/organization/${c.permalink}` : '#')}
+                target="_blank" rel="noopener noreferrer"
+                title={`${c.name}${c.short_description ? ` — ${c.short_description}` : ''}`}
+                className="group flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-200 hover:border-violet-400 hover:bg-violet-50/30 transition-colors"
+              >
+                {c.image_url ? (
+                  <img src={c.image_url} alt="" className="w-10 h-10 rounded object-cover bg-gray-100" loading="lazy" />
+                ) : (
+                  <div className="w-10 h-10 rounded bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center text-[10px] font-semibold text-violet-700">
+                    {(c.name || '?').slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div className="text-[10px] text-gray-700 truncate w-full text-center group-hover:text-violet-700">{c.name}</div>
+              </a>
+            ))}
+          </div>
+
+          {allRows.some((r) => r.fundingM > 0) && (
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Funding history (USD millions raised, total)</div>
+                <div className="text-[10px] text-gray-500 flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-violet-600 inline-block" /> your project</span>
+                  <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block" /> competitor</span>
+                </div>
+              </div>
+              <div style={{ width: '100%', height: Math.max(180, allRows.length * 28) }}>
+                <ResponsiveContainer>
+                  <BarChart layout="vertical" data={allRows} margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+                    <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} tickFormatter={(v) => `$${v}M`} />
+                    <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10, fill: '#374151' }} />
+                    <Tooltip
+                      formatter={(v) => [`$${v}M raised`, 'Total funding']}
+                      labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11 }}
+                    />
+                    <Bar dataKey="fundingM" radius={[0, 4, 4, 0]}>
+                      {allRows.map((row, i) => (
+                        <Cell key={i} fill={row.isSource ? '#7c3aed' : '#10b981'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }
