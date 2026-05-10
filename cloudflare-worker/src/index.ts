@@ -761,6 +761,13 @@ export default {
             const r = await recomputeIndexes(env);
             console.info(`[cron] mi recompute sectors=${r.sectors} rows_written=${r.rows_written}`);
           }
+          // Institutional quarterly Axal-VC PDF — stub trigger. The PDF
+          // renderer + R2 dropbox land with AA-2; this cron simply logs
+          // the eligible window so we have an audit trail before the
+          // generator ships. Fires on the 1st of Jan/Apr/Jul/Oct at 04:00.
+          if (now.getUTCDate() === 1 && [0, 3, 6, 9].includes(now.getUTCMonth()) && now.getUTCHours() === 4 && now.getUTCMinutes() === 0) {
+            console.info(`[cron] mi quarterly_pdf eligible_period=${now.getUTCFullYear()}Q${Math.floor(now.getUTCMonth() / 3) + 1} (renderer pending AA-2)`);
+          }
         } catch (e) {
           console.error('[cron] market intel failed', e);
         }

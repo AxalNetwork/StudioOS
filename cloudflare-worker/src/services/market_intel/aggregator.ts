@@ -56,24 +56,41 @@ async function persistRows(env: Env, rows: CommonRow[]): Promise<{ inserted: num
   return { inserted: rows.length };
 }
 
-async function runOneSource(env: Env, src: SourceDescriptor): Promise<{ source: string; inserted: number; mode: 'live' | 'stub' | 'skipped'; error?: string }> {
-  if (await isExhausted(env, src.key)) {
-    return { source: src.key, inserted: 0, mode: 'skipped', error: 'quota_exhausted' };
+async function runOneSource(env: Env, src: SourceDescriptor): Promise<{ source: string; inserted: number; mode: 'live' | 'stub' | 'degraded'; error?: string }> {
+  const sectors = SECTORS.slice();
+  const wantLive = isLive(env, src.key) && typeof src.fetchLive === 'function';
+  // GRACEFUL DEGRADE — when a LIVE provider has burned its daily quota
+  // we don't skip the cadence: we fall back to the deterministic stub so
+  // the aggregator's recency window stays populated and composites don't
+  // flatline. The mode label tells operators what happened.
+  if (wantLive && (await isExhausted(env, src.key))) {
+    const rows = src.fetchStub({ sectors, now: new Date() });
+    const r = await persistRows(env, rows);
+    return { source: src.key, inserted: r.inserted, mode: 'degraded', error: 'quota_exhausted' };
   }
-  const live = isLive(env, src.key) && typeof src.fetchLive === 'function';
   try {
-    const sectors = SECTORS.slice();
-    const rows = live
+    const rows = wantLive
       ? await src.fetchLive!(env, { sectors })
       : src.fetchStub({ sectors, now: new Date() });
-    if (live) await bumpQuota(env, src.key, { cap: src.daily_cap });
+    if (wantLive) await bumpQuota(env, src.key, { cap: src.daily_cap });
     const r = await persistRows(env, rows);
-    return { source: src.key, inserted: r.inserted, mode: live ? 'live' : 'stub' };
+    return { source: src.key, inserted: r.inserted, mode: wantLive ? 'live' : 'stub' };
   } catch (e) {
     const msg = (e as Error)?.message || 'fetch_failed';
-    if (/429|rate.?limit/i.test(msg)) await markRateLimited(env, src.key);
-    else if (live) await bumpQuota(env, src.key, { error: true, cap: src.daily_cap });
-    return { source: src.key, inserted: 0, mode: live ? 'live' : 'stub', error: msg };
+    if (wantLive && /429|rate.?limit/i.test(msg)) await markRateLimited(env, src.key);
+    else if (wantLive) await bumpQuota(env, src.key, { error: true, cap: src.daily_cap });
+    // Same continuity guarantee on transient failures: fill the window
+    // with stub rows rather than leaving sectors data-starved.
+    if (wantLive) {
+      try {
+        const rows = src.fetchStub({ sectors, now: new Date() });
+        const r = await persistRows(env, rows);
+        return { source: src.key, inserted: r.inserted, mode: 'degraded', error: msg };
+      } catch {
+        /* fall through */
+      }
+    }
+    return { source: src.key, inserted: 0, mode: wantLive ? 'live' : 'stub', error: msg };
   }
 }
 
@@ -87,7 +104,9 @@ export async function runSourcesByCadence(env: Env, cadence: Cadence): Promise<{
     const r = await runOneSource(env, s);
     details.push(r);
     inserted += r.inserted;
-    if (r.error) failed += 1; else ok += 1;
+    // 'degraded' is still successful continuity — count as ok but
+    // surface the underlying error string in `details` for operators.
+    if (r.error && r.mode !== 'degraded') failed += 1; else ok += 1;
   }
   return { scanned: sources.length, ok, failed, inserted, details };
 }

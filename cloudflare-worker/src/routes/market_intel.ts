@@ -3,6 +3,11 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { getLiveQuotes, getMarketHeadlines } from '../services/market-data';
 import { ensureInvestorTier, effectiveInvestorTier, type InvestorUser } from '../middleware/requireInvestorTier';
+import type { User } from '../types';
+import type { TierUser } from '../middleware/requireTier';
+
+/** Authenticated caller as enriched by requireAuth + tier joins. */
+type MIUser = User & Partial<TierUser> & Partial<InvestorUser>;
 import { ensureMarketIntelSchema } from '../services/market_intel/schema';
 import { listSources, isLive } from '../services/market_intel/registry';
 import { SECTORS, recomputeIndexes } from '../services/market_intel/aggregator';
@@ -189,7 +194,7 @@ type Role = 'admin' | 'founder' | 'partner' | 'investor' | 'mentor';
 const FULL_LENS_BYPASS: Role[] = ['admin', 'partner', 'mentor'];
 
 /** Founder-tier (subscription_tier) covers Growth+ when role is founder. */
-function founderHasGrowth(user: any): boolean {
+function founderHasGrowth(user: MIUser | null | undefined): boolean {
   if (!user) return false;
   if (user.role !== 'founder') return false;
   const tier = String(user.subscription_tier ?? 'free').toLowerCase();
@@ -197,7 +202,7 @@ function founderHasGrowth(user: any): boolean {
 }
 
 /** Returns true when caller may see the full lens (vs free composite-only view). */
-function callerHasFullLens(user: any): boolean {
+function callerHasFullLens(user: MIUser | null | undefined): boolean {
   if (!user) return false;
   if (FULL_LENS_BYPASS.includes(user.role as Role)) return true;
   if (user.role === 'investor') {
@@ -211,6 +216,13 @@ interface IndexRow {
   sector: string; geo: string; period_key: string;
   dimension: string; value: number; source_count: number;
   computed_at: string;
+}
+interface CitationRow {
+  source_key: string; sector: string; metric_key: string;
+  metric_value: number; ts: string; citation_url: string | null;
+}
+interface WatchlistRow {
+  id: number; sector: string; geo: string; cadence: string; created_at: string;
 }
 
 async function readCurrentIndexes(env: Env, period: string): Promise<IndexRow[]> {
@@ -253,16 +265,21 @@ marketIntel.get('/sector-compass', async (c) => {
     bySector[r.sector] = bySector[r.sector] || {};
     bySector[r.sector][r.dimension] = r;
   }
+  // Payload-level tier gating. Free callers get the composite headline
+  // ONLY (no per-dimension breakdown); Growth+/bypass callers get the
+  // full dimensional lens. Cache keys already fold in `tierLabel` so
+  // the two shapes never cross-pollute the edge cache.
+  const isFull = tierLabel === 'full';
   const sectors = SECTORS.map((sector) => {
     const dims = bySector[sector] || {};
     const composite = dims.composite?.value ?? 50;
+    if (!isFull) return { sector, composite };
     return {
       sector,
       composite,
-      dimensions: ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'].reduce((acc, d) => {
+      dimensions: (['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'] as const).reduce((acc, d) => {
         const r = dims[d];
-        if (r) acc[d] = { value: r.value, source_count: r.source_count };
-        else acc[d] = { value: 50, source_count: 0 };
+        acc[d] = r ? { value: r.value, source_count: r.source_count } : { value: 50, source_count: 0 };
         return acc;
       }, {} as Record<string, { value: number; source_count: number }>),
     };
@@ -290,7 +307,7 @@ marketIntel.get('/founder-lens', async (c) => {
   }
   const period = periodKey();
   const rows = await readCurrentIndexes(c.env, period);
-  const picks: any[] = [];
+  const picks: Array<{ sector: string; composite: number; demand: number; supply: number; opportunity_gap: number }> = [];
   for (const sector of SECTORS) {
     const r = rows.filter((x) => x.sector === sector);
     const composite = r.find((x) => x.dimension === 'composite')?.value ?? 50;
@@ -355,12 +372,12 @@ marketIntel.get('/citations', async (c) => {
         `SELECT source_key, sector, metric_key, metric_value, ts, citation_url
            FROM market_intel_rows WHERE ts >= ? AND sector = ?
            ORDER BY ts DESC LIMIT ?`
-      ).bind(cutoff, sector, limit).all<any>()).results
+      ).bind(cutoff, sector, limit).all<CitationRow>()).results
     : (await c.env.DB.prepare(
         `SELECT source_key, sector, metric_key, metric_value, ts, citation_url
            FROM market_intel_rows WHERE ts >= ?
            ORDER BY ts DESC LIMIT ?`
-      ).bind(cutoff, limit).all<any>()).results;
+      ).bind(cutoff, limit).all<CitationRow>()).results;
   return c.json({ rows: rows || [] });
 });
 
@@ -392,7 +409,7 @@ marketIntel.get('/watchlist', async (c) => {
   }
   const rows = (await c.env.DB.prepare(
     `SELECT id, sector, geo, cadence, created_at FROM market_intel_watchlist WHERE user_id = ? ORDER BY id DESC`
-  ).bind(user.id).all<any>()).results || [];
+  ).bind(user.id).all<WatchlistRow>()).results || [];
   return c.json({ rows });
 });
 
@@ -403,7 +420,7 @@ marketIntel.post('/watchlist', async (c) => {
   }
   const body = await c.req.json<{ sector?: string; geo?: string; cadence?: 'weekly' | 'monthly' }>().catch(() => ({} as { sector?: string; geo?: string; cadence?: 'weekly' | 'monthly' }));
   const sector = String(body.sector || '').trim();
-  if (!sector || !SECTORS.includes(sector as any)) {
+  if (!sector || !(SECTORS as readonly string[]).includes(sector)) {
     return c.json({ error: 'invalid_sector' }, 400);
   }
   const geo = body.geo || 'global';
