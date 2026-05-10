@@ -204,19 +204,59 @@ admin_partners.post('/deals/:id/terminate', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const reason = String(body.reason || '').slice(0, 500);
   if (!reason) return c.json({ error: 'reason is required' }, 400);
-  const upd = await c.env.DB.prepare(
+
+  // Snapshot the deal before termination so we can revoke tier grants.
+  const deal: any = await c.env.DB.prepare(
+    `SELECT id, user_id, granted_tier_founder, granted_tier_investor
+       FROM partner_deals WHERE id = ? AND status = 'active'`,
+  ).bind(id).first();
+  if (!deal) return c.json({ error: 'Deal is not active or not found' }, 409);
+
+  await c.env.DB.prepare(
     `UPDATE partner_deals
         SET status = 'terminated', terminated_at = CURRENT_TIMESTAMP,
             terminated_by_user_id = ?, termination_reason = ?
       WHERE id = ? AND status = 'active'`,
   ).bind(admin.id, reason, id).run();
-  if ((upd.meta?.changes || 0) === 0) {
-    return c.json({ error: 'Deal is not active or not found' }, 409);
+
+  // Revoke tier grants from the partner. We only revoke if the user's
+  // current tier still matches what THIS deal granted (subscription_status
+  // = 'partner_grant' / 'partner_referral'), so we don't clobber a paying
+  // subscription that may have replaced the grant during the deal's life.
+  if (deal.user_id) {
+    if (deal.granted_tier_founder) {
+      try {
+        await c.env.DB.prepare(
+          `UPDATE users SET subscription_tier = 'free',
+                              subscription_status = 'partner_revoked',
+                              subscription_renews_at = NULL
+             WHERE id = ?
+               AND subscription_tier = ?
+               AND subscription_status = 'partner_grant'`,
+        ).bind(deal.user_id, deal.granted_tier_founder).run();
+      } catch (e) { console.warn('[admin_partners] revoke founder tier failed', e); }
+    }
+    if (deal.granted_tier_investor) {
+      try {
+        await c.env.DB.prepare(
+          `UPDATE users SET investor_tier = 'free',
+                              investor_subscription_status = 'partner_revoked',
+                              investor_subscription_renews_at = NULL,
+                              investor_dealroom_max = 5
+             WHERE id = ?
+               AND investor_tier = ?
+               AND investor_subscription_status = 'partner_grant'`,
+        ).bind(deal.user_id, deal.granted_tier_investor).run();
+      } catch (e) { console.warn('[admin_partners] revoke investor tier failed', e); }
+    }
   }
+
   await logAdminAction(c.env, admin.id, admin.email, 'partner_deal_terminated', {
     deal_id: id, reason,
+    revoked_tier_founder: deal.granted_tier_founder,
+    revoked_tier_investor: deal.granted_tier_investor,
   });
-  return c.json({ ok: true });
+  return c.json({ ok: true, tiers_revoked: !!(deal.granted_tier_founder || deal.granted_tier_investor) });
 });
 
 function safeJsonArray(s: unknown): unknown[] {

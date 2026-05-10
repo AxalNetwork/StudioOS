@@ -194,7 +194,13 @@ export async function activatePartnerDealOnSignature(
   let userId: number;
   if (existing?.id) {
     userId = Number(existing.id);
-    if (existing.role !== 'admin') {
+    // Do NOT overwrite an existing non-admin role (founder/investor/mentor)
+    // with 'partner' — that would silently demote access on role-gated
+    // surfaces. The deal grants tier benefits via subscription_tier /
+    // investor_tier columns regardless of users.role; primary role is
+    // preserved. Only promote when the row is at the default 'partner'
+    // (set by /auth/register for placeholder accounts) or unset.
+    if (!existing.role || existing.role === 'partner') {
       await env.DB.prepare(`UPDATE users SET role = 'partner' WHERE id = ?`).bind(userId).run();
     }
   } else {
