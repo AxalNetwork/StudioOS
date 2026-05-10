@@ -267,17 +267,17 @@ export async function activatePartnerDealOnSignature(
     ).bind(userId, deal.invitation_id).run();
   } catch {}
 
-  // Open DD case (subject_type='partner'). The section catalog
-  // (services/dueDiligence.ts SECTION_CATALOG) defines the partner
-  // sections — currently compliance_aml, reputation_press, cyber_posture.
-  // For non-capital deals we leave all sections active; capital
-  // partnerships will get extra KYC/accreditation reviewer assignments
-  // via the admin UI (X-2) once those section keys are added to the
-  // catalog. The auto-open guarantees the case exists with the
-  // invitation owner as the case owner.
+  // Open DD case (subject_type='partner'). KYB is ALWAYS seeded as
+  // active. KYC + Accreditation are gated to capital_partnership only —
+  // for non-capital deal types they are seeded with verdict='n_a' and
+  // status='completed' so reviewers don't have to clear them. AML
+  // (compliance_aml) is always active because every partner needs
+  // sanctions screening regardless of deal type.
   try {
     const { sectionsFor } = await import('./dueDiligence');
     const sections = sectionsFor('partner');
+    const isCapital = deal.deal_type === 'capital_partnership';
+    const naForNonCapital = new Set(['kyc_individual', 'accreditation']);
     const uidBytes = new Uint8Array(16);
     crypto.getRandomValues(uidBytes);
     const ddUid = Array.from(uidBytes).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -288,10 +288,18 @@ export async function activatePartnerDealOnSignature(
     if (ddIns?.id) {
       const ddCaseId = Number(ddIns.id);
       for (const s of sections) {
-        await env.DB.prepare(
-          `INSERT INTO dd_sections (case_id, section_key, title, weight)
-           VALUES (?, ?, ?, ?)`,
-        ).bind(ddCaseId, s.key, s.title, s.weight).run();
+        const skipForNonCapital = !isCapital && naForNonCapital.has(s.key);
+        if (skipForNonCapital) {
+          await env.DB.prepare(
+            `INSERT INTO dd_sections (case_id, section_key, title, weight, status, verdict, completed_at)
+             VALUES (?, ?, ?, ?, 'completed', 'n_a', CURRENT_TIMESTAMP)`,
+          ).bind(ddCaseId, s.key, s.title, s.weight).run();
+        } else {
+          await env.DB.prepare(
+            `INSERT INTO dd_sections (case_id, section_key, title, weight)
+             VALUES (?, ?, ?, ?)`,
+          ).bind(ddCaseId, s.key, s.title, s.weight).run();
+        }
       }
     }
   } catch (e) { console.warn('[partnerDeals] DD case open failed', (e as Error).message); }

@@ -206,19 +206,33 @@ onboard.post('/:token/select', async (c) => {
   const gate = gateInvitation(inv);
   if (!gate.ok) return c.json({ error: gate.error }, gate.status as 404 | 409 | 410);
   const body = await c.req.json().catch(() => ({}));
-  const dealType = String(body.deal_type || '').toLowerCase() as PartnerDealType;
   const allowed = parseAllowed(gate.inv.allowed_deal_types);
-  if (!allowed.includes(dealType)) {
-    return c.json({ error: 'Selected deal_type was not offered on this invitation' }, 400);
-  }
   // Recompute server-side from profile so the client cannot fabricate
-  // tier grants. The selected proposal is the one matching dealType.
+  // tier grants. Accept either `proposal_id` (1-based index into the
+  // server-recomputed proposals array, per the X-2 spec) OR `deal_type`
+  // (backward-compat path used by curl-driven flows).
   const profile: any = await c.env.DB.prepare(
     `SELECT * FROM partner_profiles WHERE invitation_id = ?`,
   ).bind(gate.inv.id).first();
   if (!profile) return c.json({ error: 'Submit profile first' }, 412);
   const proposals = buildProposals(allowed, profile);
-  const chosen: PartnerProposalDraft | undefined = proposals.find(p => p.deal_type === dealType);
+
+  let chosen: PartnerProposalDraft | undefined;
+  if (body.proposal_id != null) {
+    const idx = Number(body.proposal_id) - 1;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= proposals.length) {
+      return c.json({ error: 'proposal_id out of range', count: proposals.length }, 400);
+    }
+    chosen = proposals[idx];
+  } else if (body.deal_type) {
+    const dealType = String(body.deal_type).toLowerCase() as PartnerDealType;
+    if (!allowed.includes(dealType)) {
+      return c.json({ error: 'Selected deal_type was not offered on this invitation' }, 400);
+    }
+    chosen = proposals.find(p => p.deal_type === dealType);
+  } else {
+    return c.json({ error: 'proposal_id or deal_type required' }, 400);
+  }
   if (!chosen) return c.json({ error: 'No matching proposal could be generated' }, 400);
 
   // Prefer updating an existing 'proposed' deal row over inserting duplicates.

@@ -44,6 +44,13 @@ export const SECTION_CATALOG: ReadonlyArray<SectionDef> = [
   { key: 'compliance_aml',   title: 'Compliance / AML / Sanctions',    weight: 1.5, applies_to: ['project','founder','mentor','investor','partner'] },
   { key: 'reputation_press', title: 'Reputation & Press Signals',      weight: 0.75,applies_to: ['project','founder','mentor','investor','partner'] },
   { key: 'cyber_posture',    title: 'Cyber & Data Posture',            weight: 1.0, applies_to: ['project','partner'] },
+  // Task #8 (X-1) — Partner-specific KYB / KYC / Accreditation. KYB is
+  // ALWAYS seeded by activatePartnerDealOnSignature; KYC + Accreditation
+  // are seeded with verdict='n_a' for non-capital partner deals so
+  // reviewers don't have to clear them.
+  { key: 'kyb_entity',       title: 'KYB — Entity Verification',       weight: 1.5, applies_to: ['partner'] },
+  { key: 'kyc_individual',   title: 'KYC — Individual Verification',   weight: 1.5, applies_to: ['partner'] },
+  { key: 'accreditation',    title: 'Accredited / Qualified Status',   weight: 1.0, applies_to: ['partner'] },
 ];
 
 export function sectionsFor(subjectType: DDSubjectType): SectionDef[] {
