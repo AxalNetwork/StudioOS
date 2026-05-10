@@ -130,6 +130,26 @@ trust.post('/intro/request', async (c) => {
     return c.json({ error: 'envelope_creation_failed', message: (e as Error).message }, 500);
   }
   await upsertPairwiseNda(c.env, founderUserId, investor.id, env.envelope_uuid);
+
+  // Task #4 (Y-2) — in-app notification to the founder so the
+  // pending NDA appears in their bell inbox + Trust Center
+  // immediately, not just via email. `contract_sign_request` is
+  // listed in CRITICAL_CATEGORIES so it bypasses quiet hours.
+  try {
+    const { notify } = await import('../services/notify');
+    await notify(c.env, {
+      userId: founderUserId,
+      type: 'contract_sign_request',
+      title: 'New investor intro request',
+      body: `${investor.name || investor.email} has requested an introduction. Please review and sign the mutual NDA in your Trust Center.`,
+      link: '/trust',
+      category: 'contract_sign_request',
+      payload: { envelope_uuid: env.envelope_uuid, investor_user_id: investor.id },
+    });
+  } catch (e) {
+    console.error('[trust] founder intro notify failed', e);
+  }
+
   // SECURITY: never leak founder/Axal signing tokens back to the
   // requesting investor — they would be able to sign as all three
   // parties via the public /api/legal/esign/sign/:token endpoint and

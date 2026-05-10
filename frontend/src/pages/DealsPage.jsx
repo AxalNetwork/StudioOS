@@ -5,10 +5,36 @@ import { api } from '../lib/api';
 import { ArrowRight, ChevronDown, ChevronRight, Filter } from 'lucide-react';
 import ReferenceChecksPanel from '../components/ReferenceChecksPanel';
 import FounderRiskBadge from '../components/FounderRiskBadge';
+import LockedFounderCard from '../components/LockedFounderCard';
 
 function getCurrentRole() {
   try { return safeReadJSON('user', {}).role || null; }
   catch { return null; }
+}
+
+// Task #4 (Y-2) — investor-side founder unlock card. Lazy-loads the project
+// to surface the founder_user_id (only present on the GET /projects/:id
+// shape, not the listing), then defers entirely to LockedFounderCard which
+// itself short-circuits when an active pairwise NDA already exists.
+function InvestorFounderUnlock({ projectId }) {
+  const [proj, setProj] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.getProject(projectId)
+      .then(p => { if (!cancelled) setProj(p); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectId]);
+  if (!proj?.founder_user_id) return null;
+  return (
+    <LockedFounderCard
+      founderUserId={proj.founder_user_id}
+      founderHandle={proj.name}
+      sector={proj.sector}
+      stage={proj.stage}
+      headline={proj.description}
+    />
+  );
 }
 
 const STATUSES = ['all', 'applied', 'scored', 'active', 'funded', 'rejected'];
@@ -135,7 +161,10 @@ export default function DealsPage() {
                   </div>
                 </div>
                 {isOpen && canSeeReferences && (
-                  <div className="border-t border-gray-100 p-4 bg-gray-50/50">
+                  <div className="border-t border-gray-100 p-4 bg-gray-50/50 space-y-3">
+                    {role === 'investor' && deal.project_id && (
+                      <InvestorFounderUnlock projectId={deal.project_id} />
+                    )}
                     <ReferenceChecksPanel dealId={deal.id} currentUserRole={role} />
                   </div>
                 )}

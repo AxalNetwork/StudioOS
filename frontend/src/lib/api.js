@@ -972,6 +972,22 @@ export const api = {
   tierPortal: () => request('/billing/tier/portal', { method: 'POST' }),
 
   // ---------- Trust layer (Task #58) ----------
+  // Task #4 (Y-2) — Trust Center v2 endpoints. The legacy
+  // /trust/summary, /trust/kyb/*, /trust/accreditation/*, /trust/nda/*
+  // helpers below remain wired for backward compatibility — the new
+  // page consumes both the obligation matrix (/trust/me) and the
+  // legacy KYB/Accred/NDA helpers per role.
+  trustMe: () => request('/trust/me'),
+  trustAgreements: () => request('/trust/agreements'),
+  trustIntroRequest: (founder_user_id) =>
+    request('/trust/intro/request', { method: 'POST', body: JSON.stringify({ founder_user_id }) }),
+  trustIntroStatus: (founder_user_id) =>
+    request(`/trust/intro/status?founder=${encodeURIComponent(founder_user_id)}`),
+  trustObligationStart: (key) =>
+    request(`/trust/obligation/${encodeURIComponent(key)}/start`, { method: 'POST' }),
+  trustSanctions: () => request('/trust/sanctions'),
+  trustMatrix: (role) => request(`/trust/matrix${role ? `?role=${encodeURIComponent(role)}` : ''}`),
+
   getTrustSummary: () => request('/trust/summary'),
   getKybStatus: () => request('/trust/kyb/status'),
   startKyb: (payload) => request('/trust/kyb/start', { method: 'POST', body: JSON.stringify(payload) }),
