@@ -94,7 +94,15 @@ function WatchlistTab({ canSeeAll }) {
 
   const load = () => {
     api.watchlistList({ status: filter || undefined, owner })
-      .then(setData)
+      .then((res) => {
+        const items = Array.isArray(res?.items) ? res.items : [];
+        const counts = res?.counts && typeof res.counts === 'object' ? res.counts : items.reduce((acc, it) => {
+          const k = it?.status || 'watching';
+          acc[k] = (acc[k] || 0) + 1;
+          return acc;
+        }, {});
+        setData({ ...res, items, counts });
+      })
       .catch((e) => {
         const msg = (e?.message || '').toLowerCase();
         if (e?.status === 404 || msg === 'not found') setData({ counts: {}, items: [] });
@@ -192,9 +200,9 @@ function WatchlistTab({ canSeeAll }) {
                 <td className="px-4 py-3 capitalize">{it.conviction}</td>
                 <td className="px-4 py-3 text-xs text-slate-600">{it.source || '—'}</td>
                 <td className="px-4 py-3">
-                  <Pill className={STATUS_STYLES[it.status]}>{it.status.replace('_', ' ')}</Pill>
+                  <Pill className={STATUS_STYLES[it.status] || STATUS_STYLES.watching}>{(it.status || 'watching').replace('_', ' ')}</Pill>
                 </td>
-                <td className="px-4 py-3 text-xs text-slate-500">{new Date(it.updated_at).toLocaleDateString()}</td>
+                <td className="px-4 py-3 text-xs text-slate-500">{it.updated_at ? new Date(it.updated_at).toLocaleDateString() : '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1.5">
                     {it.project && it.status === 'watching' && (
@@ -310,7 +318,17 @@ function JournalTab({ canSeeAll }) {
       outcome_status: outcome || undefined,
       owner,
     })
-      .then(setData)
+      .then((res) => {
+        const items = Array.isArray(res?.items) ? res.items : [];
+        const counts_by_decision = res?.counts_by_decision && typeof res.counts_by_decision === 'object'
+          ? res.counts_by_decision
+          : items.reduce((acc, it) => {
+              const k = it?.decision || 'invest';
+              acc[k] = (acc[k] || 0) + 1;
+              return acc;
+            }, {});
+        setData({ ...res, items, counts_by_decision });
+      })
       .catch((e) => {
         const msg = (e?.message || '').toLowerCase();
         if (e?.status === 404 || msg === 'not found') setData({ counts_by_decision: {}, items: [] });
@@ -560,7 +578,29 @@ function AntiPortfolioTab({ canSeeAll }) {
   const [err, setErr] = useState(null);
   const [owner, setOwner] = useState('me');
   const load = () => {
-    api.antiportfolio(owner).then(setData).catch((e) => {
+    api.antiportfolio(owner).then((res) => {
+      const rows = Array.isArray(res?.rows) ? res.rows
+        : Array.isArray(res?.items) ? res.items
+        : [];
+      const counts = res?.counts && typeof res.counts === 'object' ? res.counts : rows.reduce((acc, r) => {
+        const k = r?.verdict || 'open';
+        acc[k] = (acc[k] || 0) + 1;
+        return acc;
+      }, {});
+      const total_passes = typeof res?.total_passes === 'number' ? res.total_passes : rows.length;
+      const decided = (counts.vindicated || 0) + (counts.regret || 0);
+      const regret_rate = typeof res?.regret_rate === 'number'
+        ? res.regret_rate
+        : (decided > 0 ? Math.round(((counts.regret || 0) / decided) * 100) : 0);
+      setData({
+        ...res,
+        rows,
+        counts,
+        total_passes,
+        regret_rate,
+        biggest_regret: res?.biggest_regret || null,
+      });
+    }).catch((e) => {
       const msg = (e?.message || '').toLowerCase();
       if (e?.status === 404 || msg === 'not found') {
         setData({ total_passes: 0, counts: {}, regret_rate: 0, rows: [], biggest_regret: null });
