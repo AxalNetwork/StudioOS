@@ -311,43 +311,6 @@ export default function MarketIntelPage() {
           {enriched.length > 0 && (
             <CompetitorEnrichmentBlock projects={enriched} />
           )}
-          {enriched.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900">Portfolio funding (Crunchbase)</h3>
-                  <p className="text-[11px] text-gray-500 mt-0.5">Projects with a Crunchbase snapshot. Use Project → Crunchbase to refresh.</p>
-                </div>
-                <span className="text-[10px] uppercase tracking-wider text-violet-600 font-semibold">{enriched.length} enriched</span>
-              </div>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {enriched.map((e) => (
-                  <Link key={e.id} to={`/projects/${e.id}`} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:border-violet-400 hover:bg-violet-50/30 transition-colors">
-                    {e.image_url ? (
-                      <img src={e.image_url} alt="" className="w-10 h-10 rounded object-cover bg-gray-100 shrink-0" loading="lazy" />
-                    ) : (
-                      <div className="w-10 h-10 rounded bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center text-xs font-semibold text-violet-700 shrink-0">
-                        {(e.name || '?').slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium text-gray-900 truncate">{e.name}</div>
-                      <div className="text-[11px] text-gray-500 truncate">
-                        {e.sector || '—'}{e.hq ? ` • ${e.hq}` : ''}
-                      </div>
-                      <div className="flex items-center gap-x-2 gap-y-0.5 mt-1 flex-wrap text-[11px]">
-                        {e.total_funding != null && (
-                          <span className="text-emerald-700 font-medium">${(e.total_funding / 1e6).toFixed(1)}M raised</span>
-                        )}
-                        {e.last_round && <span className="text-gray-600">{e.last_round}</span>}
-                        {e.employee_count && <span className="text-gray-500">{e.employee_count}</span>}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -785,36 +748,19 @@ function TabExplainer({ text }) {
   );
 }
 
+// Competitor enrichment driven entirely by cached snapshots already on
+// each project row (`crunchbase_data_json` → parsed in the parent's
+// listProjects handler). No live API call, so no rate-limit dependency.
 function CompetitorEnrichmentBlock({ projects }) {
-  const [selectedId, setSelectedId] = useState(projects[0]?.id || '');
-  const [source, setSource] = useState(null);
-  const [comps, setComps] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState('');
-  const [rateLimited, setRateLimited] = useState(false);
-
-  useEffect(() => {
-    if (!selectedId) return;
-    setLoading(true); setErr(''); setRateLimited(false);
-    api.crunchbaseCompetitors(selectedId, 10).then((res) => {
-      setSource(res?.source || null);
-      setComps(Array.isArray(res?.competitors) ? res.competitors : []);
-    }).catch((e) => {
-      const code = e?.data?.error || '';
-      if (code === 'crunchbase_rate_limited' || e?.status === 429) setRateLimited(true);
-      else setErr(e?.message || 'Failed to load competitors');
-      setSource(null); setComps([]);
-    }).finally(() => setLoading(false));
-  }, [selectedId]);
-
-  const allRows = [
-    ...(source ? [{ ...source, _isSource: true }] : []),
-    ...comps,
-  ].map((r) => ({
-    name: (r.name || '').slice(0, 22),
-    fundingM: r.funding_total_usd ? Math.round((r.funding_total_usd / 1e6) * 10) / 10 : 0,
-    isSource: !!r._isSource,
-    cb_url: r.cb_url || (r.permalink ? `https://www.crunchbase.com/organization/${r.permalink}` : null),
+  const rows = projects.map((p) => ({
+    id: p.id,
+    name: (p.name || '').slice(0, 24),
+    fundingM: p.total_funding != null ? Math.round((p.total_funding / 1e6) * 10) / 10 : 0,
+    image_url: p.image_url,
+    sector: p.sector,
+    hq: p.hq,
+    last_round: p.last_round,
+    employee_count: p.employee_count,
   })).sort((a, b) => b.fundingM - a.fundingM);
 
   return (
@@ -822,89 +768,47 @@ function CompetitorEnrichmentBlock({ projects }) {
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div>
           <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
-            <Database size={14} className="text-violet-600" /> Competitor enrichment (Crunchbase)
+            <Database size={14} className="text-violet-600" /> Portfolio funding (Crunchbase)
           </h3>
-          <p className="text-[11px] text-gray-500 mt-0.5">Live competitor signals for one of your enriched projects.</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">Cached snapshots from your enriched projects. Use Project → Crunchbase to refresh.</p>
         </div>
-        <select
-          value={selectedId}
-          onChange={(e) => setSelectedId(e.target.value)}
-          className="text-xs bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-gray-900 focus:border-violet-500 focus:outline-none"
-        >
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        <span className="text-[10px] uppercase tracking-wider text-violet-600 font-semibold">{projects.length} enriched</span>
       </div>
 
-      {rateLimited && (
-        <div className="text-xs px-3 py-2 rounded border border-amber-300 bg-amber-50 text-amber-800 flex items-start gap-1.5 mb-3">
-          <Info size={12} className="mt-0.5 shrink-0" />
-          <span>Crunchbase daily limit reached — try again tomorrow.</span>
-        </div>
-      )}
-      {err && !rateLimited && (
-        <div className="text-xs text-red-600 mb-3">{err}</div>
-      )}
+      <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-2">Logo grid</div>
+      <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-8 gap-3 mb-5">
+        {projects.map((e) => (
+          <Link
+            key={e.id}
+            to={`/projects/${e.id}`}
+            title={`${e.name}${e.sector ? ` — ${e.sector}` : ''}`}
+            className="group flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-200 hover:border-violet-400 hover:bg-violet-50/30 transition-colors"
+          >
+            {e.image_url ? (
+              <img src={e.image_url} alt="" className="w-10 h-10 rounded object-cover bg-gray-100" loading="lazy" />
+            ) : (
+              <div className="w-10 h-10 rounded bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center text-[10px] font-semibold text-violet-700">
+                {(e.name || '?').slice(0, 2).toUpperCase()}
+              </div>
+            )}
+            <div className="text-[10px] text-gray-700 truncate w-full text-center group-hover:text-violet-700">{e.name}</div>
+          </Link>
+        ))}
+      </div>
 
-      {loading ? (
-        <div className="text-xs text-gray-500 py-6 text-center">Loading competitors…</div>
-      ) : !rateLimited && comps.length === 0 ? (
-        <div className="text-xs text-gray-500 py-6 text-center">
-          No competitor matches in the Crunchbase Basic search index for this project's category groups.
-        </div>
-      ) : (
+      {rows.some((r) => r.fundingM > 0) && (
         <>
-          <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-2">Logo grid ({comps.length} peers)</div>
-          <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-8 gap-3 mb-5">
-            {comps.map((c) => (
-              <a
-                key={c.uuid}
-                href={c.cb_url || (c.permalink ? `https://www.crunchbase.com/organization/${c.permalink}` : '#')}
-                target="_blank" rel="noopener noreferrer"
-                title={`${c.name}${c.short_description ? ` — ${c.short_description}` : ''}`}
-                className="group flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-200 hover:border-violet-400 hover:bg-violet-50/30 transition-colors"
-              >
-                {c.image_url ? (
-                  <img src={c.image_url} alt="" className="w-10 h-10 rounded object-cover bg-gray-100" loading="lazy" />
-                ) : (
-                  <div className="w-10 h-10 rounded bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center text-[10px] font-semibold text-violet-700">
-                    {(c.name || '?').slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-                <div className="text-[10px] text-gray-700 truncate w-full text-center group-hover:text-violet-700">{c.name}</div>
-              </a>
-            ))}
+          <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-2">Funding history (USD millions raised, total)</div>
+          <div style={{ width: '100%', height: Math.max(180, rows.length * 28) }}>
+            <ResponsiveContainer>
+              <BarChart layout="vertical" data={rows} margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+                <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} tickFormatter={(v) => `$${v}M`} />
+                <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10, fill: '#374151' }} />
+                <Tooltip formatter={(v) => [`$${v}M raised`, 'Total funding']} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11 }} />
+                <Bar dataKey="fundingM" radius={[0, 4, 4, 0]} fill="#7c3aed" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-
-          {allRows.some((r) => r.fundingM > 0) && (
-            <>
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Funding history (USD millions raised, total)</div>
-                <div className="text-[10px] text-gray-500 flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-violet-600 inline-block" /> your project</span>
-                  <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block" /> competitor</span>
-                </div>
-              </div>
-              <div style={{ width: '100%', height: Math.max(180, allRows.length * 28) }}>
-                <ResponsiveContainer>
-                  <BarChart layout="vertical" data={allRows} margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
-                    <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} tickFormatter={(v) => `$${v}M`} />
-                    <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10, fill: '#374151' }} />
-                    <Tooltip
-                      formatter={(v) => [`$${v}M raised`, 'Total funding']}
-                      labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11 }}
-                    />
-                    <Bar dataKey="fundingM" radius={[0, 4, 4, 0]}>
-                      {allRows.map((row, i) => (
-                        <Cell key={i} fill={row.isSource ? '#7c3aed' : '#10b981'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </>
-          )}
         </>
       )}
     </div>
