@@ -6,7 +6,19 @@ import {
   Network, LayoutDashboard, UserCircle, LifeBuoy, FileText,
 } from 'lucide-react';
 import { SECTIONS } from './sections';
-import { createDocsFuse, highlight, snippet } from '../../lib/docs/search';
+import { createDocsFuse, splitForHighlight, snippet } from '../../lib/docs/search';
+
+// Wrap the pure-JS split helper into a JSX-friendly highlighter. Kept
+// inside the layout so the search module stays JSX-free.
+function highlight(text, q) {
+  return splitForHighlight(text, q).map((part, i) =>
+    part.match ? (
+      <mark key={i} className="bg-yellow-200 text-gray-900 rounded px-0.5">{part.text}</mark>
+    ) : (
+      <React.Fragment key={i}>{part.text}</React.Fragment>
+    )
+  );
+}
 
 // Resolve the lucide icon name strings used in section manifests.
 const ICONS = {

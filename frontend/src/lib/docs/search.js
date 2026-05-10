@@ -1,8 +1,7 @@
-// Fuse.js-backed search index for the docs surface. The DocsLayout
-// imports `createDocsFuse` to build a memoized index, and `highlight`
-// / `snippet` to render matches in the result list. Keeping all of
-// this out of the layout component lets the matcher be unit-tested
-// and re-used (e.g. by a future global search palette).
+// Fuse.js-backed search index for the docs surface. Pure JS — no
+// JSX — so the module is safe to import from any callsite (tests,
+// future global search palette, etc.). The DocsLayout wraps the
+// returned snippet text in its own JSX <mark> highlighter.
 
 import Fuse from 'fuse.js';
 import { SECTIONS } from '../../pages/docs/sections';
@@ -53,27 +52,25 @@ export function createDocsFuse() {
   });
 }
 
-// Highlight every occurrence of `q` inside `text` (case-insensitive).
-// Returns a JSX-friendly array; safe to drop straight into a node.
-export function highlight(text, q) {
-  if (!q) return text;
-  const lower = String(text).toLowerCase();
+// Split `text` around every case-insensitive occurrence of `q`,
+// returning a flat array of { text, match } parts. Callers wrap the
+// match parts in their own highlight component (the docs layout uses
+// a <mark> element, but other surfaces could differ).
+export function splitForHighlight(text, q) {
+  const str = String(text ?? '');
+  if (!q) return [{ text: str, match: false }];
+  const lower = str.toLowerCase();
   const ql = q.toLowerCase();
   const out = [];
   let cursor = 0;
   let idx = lower.indexOf(ql, cursor);
-  let key = 0;
   while (idx !== -1) {
-    if (idx > cursor) out.push(text.slice(cursor, idx));
-    out.push(
-      <mark key={key++} className="bg-yellow-200 text-gray-900 rounded px-0.5">
-        {text.slice(idx, idx + q.length)}
-      </mark>
-    );
+    if (idx > cursor) out.push({ text: str.slice(cursor, idx), match: false });
+    out.push({ text: str.slice(idx, idx + q.length), match: true });
     cursor = idx + q.length;
     idx = lower.indexOf(ql, cursor);
   }
-  if (cursor < text.length) out.push(text.slice(cursor));
+  if (cursor < str.length) out.push({ text: str.slice(cursor), match: false });
   return out;
 }
 
