@@ -89,12 +89,18 @@ const INVESTOR_BANK: Question[] = [
   { id: 'investor.profile.thesis',  persona: 'investor', prompt: 'Tell me your investment thesis in 2-4 sentences.', input_kind: 'long', skip_allowed: true },
 ];
 
+// Mentor bank — column names match the live D1 mentors schema as used
+// by routes/mentors.ts (display_name / bio / sectors_json /
+// expertise_json / hourly_rate_usd / linkedin_url). Earlier drafts
+// referenced `headline` / `capacity_per_week` / `hourly_rate` which do
+// not exist in the production schema.
 const MENTOR_BANK: Question[] = [
-  { id: 'mentor.profile.headline',  persona: 'mentor', prompt: 'Give me a one-line headline for your mentor profile.', input_kind: 'short' },
-  { id: 'mentor.profile.bio',       persona: 'mentor', prompt: 'A short bio (2-3 sentences) — what should founders know about you?', input_kind: 'long' },
-  { id: 'mentor.profile.sectors',   persona: 'mentor', prompt: 'Which sectors do you cover? (comma-separated)', input_kind: 'short' },
-  { id: 'mentor.profile.capacity',  persona: 'mentor', prompt: 'How many office-hours sessions can you take per week?', input_kind: 'number' },
-  { id: 'mentor.profile.hourly_rate', persona: 'mentor', prompt: 'Your hourly rate in USD (0 if pro-bono).', input_kind: 'number', skip_allowed: true },
+  { id: 'mentor.profile.display_name',   persona: 'mentor', prompt: 'What name should we display on your mentor profile?', input_kind: 'short' },
+  { id: 'mentor.profile.bio',            persona: 'mentor', prompt: 'A short bio (2-3 sentences) — what should founders know about you?', input_kind: 'long' },
+  { id: 'mentor.profile.sectors',        persona: 'mentor', prompt: 'Which sectors do you cover? (comma-separated)', input_kind: 'short' },
+  { id: 'mentor.profile.expertise',      persona: 'mentor', prompt: 'Which functional areas of expertise do you offer? (comma-separated)', input_kind: 'short' },
+  { id: 'mentor.profile.hourly_rate_usd', persona: 'mentor', prompt: 'Your hourly rate in USD (0 if pro-bono).', input_kind: 'number', skip_allowed: true },
+  { id: 'mentor.profile.linkedin_url',   persona: 'mentor', prompt: 'Share your LinkedIn URL so founders can vet you.', input_kind: 'short', skip_allowed: true },
 ];
 
 // Partners are profiled in the dedicated partner-onboarding wizard

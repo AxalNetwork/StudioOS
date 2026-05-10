@@ -54,7 +54,7 @@ import {
   type Persona,
   type Question,
 } from '../services/advisor/questionBank';
-import { routeAnswer, type WriteResult } from '../services/advisor/writeRouter';
+import { routeAnswer, hydrateAlreadyAnswered, type WriteResult } from '../services/advisor/writeRouter';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
@@ -104,12 +104,15 @@ function personaFor(user: User): Persona {
 }
 
 // Build the working bank for the conversation: when role is unknown
-// the role-detector triplet is asked first; once role is set we ask
-// the persona's questions.
+// the role-detector triplet is asked first; once role is set the
+// detector is suppressed so users with an existing role aren't
+// re-asked. Hydration in /start additionally pre-marks
+// role_detect.* questions as answered when the underlying users.role
+// / organization / headline columns are already populated.
 function workingBankFor(user: User): Question[] {
   const persona = personaFor(user);
   if (persona === 'unknown') return ROLE_DETECTOR;
-  return [...ROLE_DETECTOR, ...bankFor(persona)];
+  return bankFor(persona);
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +148,33 @@ async function answeredQuestionIds(env: Env, conversationId: number): Promise<Se
     `SELECT question_id FROM advisor_answers WHERE conversation_id = ?`,
   ).bind(conversationId).all<{ question_id: string }>();
   return new Set((rows.results || []).map(r => r.question_id));
+}
+
+/**
+ * Combine in-conversation answers with hydration from existing
+ * domain tables so questions whose data is already present aren't
+ * re-asked. Hydrated questions get a synthetic `advisor_answers` row
+ * with saved_status='saved' on first /start so subsequent visits
+ * remain consistent.
+ */
+async function effectiveAnsweredSet(
+  env: Env, user: User, conversationId: number,
+): Promise<Set<string>> {
+  const fromConv = await answeredQuestionIds(env, conversationId);
+  const fromDomain = await hydrateAlreadyAnswered(env, user);
+  for (const id of fromDomain) {
+    if (fromConv.has(id)) continue;
+    try {
+      await env.DB.prepare(
+        `INSERT INTO advisor_answers
+           (conversation_id, user_id, question_id, raw_value, saved_status)
+           VALUES (?, ?, ?, '', 'saved')
+         ON CONFLICT(conversation_id, question_id) DO NOTHING`,
+      ).bind(conversationId, user.id, id).run();
+      fromConv.add(id);
+    } catch { /* race on the unique index — safe to ignore */ }
+  }
+  return fromConv;
 }
 
 function nextUnansweredQuestion(bank: Question[], answered: Set<string>): Question | null {
@@ -246,27 +276,34 @@ advisor.post('/start', async (c) => {
     if (firstQ) await recordMessage(c.env, conv.id, 'assistant', firstQ.prompt, firstQ.id);
   }
 
-  const answered = await answeredQuestionIds(c.env, conv.id);
+  const answered = await effectiveAnsweredSet(c.env, user, conv.id);
   const next = nextUnansweredQuestion(bank, answered);
 
-  // Keep current_question_id and total_questions in sync if the
-  // persona changed mid-conversation (e.g. role just got set).
-  if (conv.total_questions !== bank.length || conv.current_question_id !== (next?.id || null)) {
+  // Refresh counts now that hydration may have inserted new rows.
+  await refreshCounts(c.env, conv.id, next?.id || null);
+  if (conv.total_questions !== bank.length) {
     await c.env.DB.prepare(
-      `UPDATE advisor_conversations SET total_questions = ?, current_question_id = ?, persona = ?, updated_at = datetime('now') WHERE id = ?`,
-    ).bind(bank.length, next?.id || null, personaFor(user), conv.id).run();
+      `UPDATE advisor_conversations SET total_questions = ?, persona = ?, updated_at = datetime('now') WHERE id = ?`,
+    ).bind(bank.length, personaFor(user), conv.id).run();
   }
+  const refreshed = await c.env.DB.prepare(
+    `SELECT answered_count, skipped_count FROM advisor_conversations WHERE id = ?`,
+  ).bind(conv.id).first<{ answered_count: number; skipped_count: number }>();
+  const ans = Number(refreshed?.answered_count || 0);
+  const skp = Number(refreshed?.skipped_count || 0);
 
   return c.json({
     conversation_uid: conv.uid,
     persona: personaFor(user),
     progress: {
-      total: bank.length,
-      answered: Number(conv.answered_count || 0),
-      skipped: Number(conv.skipped_count || 0),
-      percent: bank.length > 0 ? Math.round(((Number(conv.answered_count || 0) + Number(conv.skipped_count || 0)) / bank.length) * 100) : 100,
+      total: bank.length, answered: ans, skipped: skp,
+      percent: bank.length > 0 ? Math.round(((ans + skp) / bank.length) * 100) : 100,
     },
+    // `next_question` is the AC-1 spec name; `next` is kept as an
+    // alias for older clients that already shipped against it.
+    next_question: publicQuestion(next),
     next: publicQuestion(next),
+    hint: next?.hint || null,
     complete: !next,
   });
 });
@@ -281,7 +318,21 @@ async function readJson<T>(c: Context<{ Bindings: Env }>): Promise<T | null> {
 interface AnswerBody { conversation_uid?: string; question_id?: string; value?: unknown }
 
 // ---------------------------------------------------------------------------
-// POST /answer  —  persist an answer and return the next question.
+// POST /answer  —  persist an answer, route it through the
+// write-router, and stream the result + next question over SSE.
+//
+// Wire format (one event per line):
+//   tool_call    { name: 'writeAnswer', input: { question_id, value } }
+//   tool_result  { name: 'writeAnswer', saved_to, status, hint?, upgrade_link?, error? }
+//   next         { question }            — null when complete
+//   done         { conversation_uid, persona, complete, progress, saved_to, hint?, next_question }
+//   error        { message }
+//
+// The "tool_call/tool_result" shape mirrors the assistant.ts agentic
+// loop so the AC-3 client code can reuse the same SSE parser. /answer
+// itself does NOT call Anthropic — the routing is deterministic — so
+// the "tool" here is the in-process writeAnswer fn rather than an
+// LLM-driven tool_use.
 // ---------------------------------------------------------------------------
 advisor.post('/answer', async (c) => {
   const user = await requireAuth(c);
@@ -308,56 +359,86 @@ advisor.post('/answer', async (c) => {
   const q = questionById(body.question_id);
   if (!q) return c.json({ error: 'unknown question_id' }, 400);
 
-  // Persist the user's raw turn first so the conversation log is
-  // append-only and auditable even if the writeRouter throws.
-  await recordMessage(c.env, conv.id, 'user', valueStr, q.id);
+  const enc = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        // Persist the user turn first so the audit log is consistent
+        // even if a downstream step throws.
+        await recordMessage(c.env, conv.id, 'user', valueStr, q.id);
 
-  const result = valueStr
-    ? await routeAnswer(c.env, user, q.id, valueStr)
-    : { status: 'skipped' as const };
-  await recordAnswer(c.env, conv, user, q.id, valueStr, result);
+        controller.enqueue(enc.encode(sseEvent('tool_call', {
+          name: 'writeAnswer', input: { question_id: q.id, value: valueStr },
+        })));
 
-  // If role just got set via the role-detector, the user object in
-  // memory is stale. Re-fetch so the bank picks up the new persona.
-  let liveUser = user;
-  if (q.id === 'role_detect.primary' && result.status === 'saved') {
-    const fresh = await c.env.DB.prepare(
-      `SELECT id, email, name, role, founder_id FROM users WHERE id = ?`,
-    ).bind(user.id).first<User>();
-    if (fresh) liveUser = { ...user, ...fresh };
-  }
+        const result: WriteResult = valueStr
+          ? await routeAnswer(c.env, user, q.id, valueStr)
+          : { status: 'skipped' };
+        await recordAnswer(c.env, conv, user, q.id, valueStr, result);
 
-  const bank = workingBankFor(liveUser);
-  const answered = await answeredQuestionIds(c.env, conv.id);
-  const next = nextUnansweredQuestion(bank, answered);
-  await refreshCounts(c.env, conv.id, next?.id || null);
+        controller.enqueue(enc.encode(sseEvent('tool_result', {
+          name: 'writeAnswer',
+          status: result.status,
+          saved_to: result.saved_to || null,
+          hint: result.hint || null,
+          upgrade_link: result.upgrade_link || null,
+          error: result.error || null,
+        })));
 
-  // If we hit the end, mark the conversation complete (it can be
-  // re-opened later if the persona changes).
-  if (!next) {
-    await c.env.DB.prepare(
-      `UPDATE advisor_conversations SET state = 'complete', updated_at = datetime('now') WHERE id = ?`,
-    ).bind(conv.id).run();
-  }
+        // Re-fetch the user if the role-detector just changed persona.
+        let liveUser = user;
+        if (q.id === 'role_detect.primary' && result.status === 'saved') {
+          const fresh = await c.env.DB.prepare(
+            `SELECT id, email, name, role, founder_id FROM users WHERE id = ?`,
+          ).bind(user.id).first<User>();
+          if (fresh) liveUser = { ...user, ...fresh };
+        }
 
-  // Surface the assistant's next prompt in the message log too.
-  if (next) await recordMessage(c.env, conv.id, 'assistant', next.prompt, next.id);
+        const bank = workingBankFor(liveUser);
+        const answered = await effectiveAnsweredSet(c.env, liveUser, conv.id);
+        const next = nextUnansweredQuestion(bank, answered);
+        await refreshCounts(c.env, conv.id, next?.id || null);
 
-  return c.json({
-    conversation_uid: conv.uid,
-    persona: personaFor(liveUser),
-    saved: {
-      status: result.status,
-      to: result.saved_to || null,
-      hint: result.hint || null,
-      upgrade_link: result.upgrade_link || null,
-      error: result.error || null,
+        if (!next) {
+          await c.env.DB.prepare(
+            `UPDATE advisor_conversations SET state = 'complete', updated_at = datetime('now') WHERE id = ?`,
+          ).bind(conv.id).run();
+        } else {
+          await recordMessage(c.env, conv.id, 'assistant', next.prompt, next.id);
+        }
+
+        const counts = await c.env.DB.prepare(
+          `SELECT answered_count, skipped_count FROM advisor_conversations WHERE id = ?`,
+        ).bind(conv.id).first<{ answered_count: number; skipped_count: number }>();
+        const ans = Number(counts?.answered_count || 0);
+        const skp = Number(counts?.skipped_count || 0);
+
+        const nextPub = publicQuestion(next);
+        controller.enqueue(enc.encode(sseEvent('next', { question: nextPub })));
+        controller.enqueue(enc.encode(sseEvent('done', {
+          conversation_uid: conv.uid,
+          persona: personaFor(liveUser),
+          complete: !next,
+          saved_to: result.saved_to || null,
+          hint: result.hint || (nextPub?.hint as string | null | undefined) || null,
+          next_question: nextPub,
+          progress: {
+            total: bank.length, answered: ans, skipped: skp,
+            percent: bank.length > 0 ? Math.round(((ans + skp) / bank.length) * 100) : 100,
+          },
+        })));
+      } catch (e) {
+        controller.enqueue(enc.encode(sseEvent('error', { message: (e as Error).message })));
+      } finally {
+        controller.close();
+      }
     },
-    next: publicQuestion(next),
-    complete: !next,
-    progress: {
-      total: bank.length,
-      answered: Number((await c.env.DB.prepare(`SELECT answered_count FROM advisor_conversations WHERE id = ?`).bind(conv.id).first<{ answered_count: number }>())?.answered_count || 0),
+  });
+  return new Response(stream, {
+    headers: {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache, no-transform',
+      'x-accel-buffering': 'no',
     },
   });
 });

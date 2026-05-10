@@ -30,6 +30,23 @@ export interface WriteResult {
   error?: string;
 }
 
+// Subscription columns hang off the users row but are not part of the
+// canonical User type (which only carries auth-related fields). Type
+// the projection explicitly here so we don't reach for `any` casts.
+interface UserSubscriptionFields {
+  investor_subscription_status?: string | null;
+  subscription_status?: string | null;
+  mentor_id?: number | null;
+}
+
+async function loadSubscriptionFields(env: Env, userId: number): Promise<UserSubscriptionFields> {
+  const row = await env.DB.prepare(
+    `SELECT investor_subscription_status, subscription_status, mentor_id
+       FROM users WHERE id = ?`,
+  ).bind(userId).first<UserSubscriptionFields>().catch(() => null);
+  return row || {};
+}
+
 /**
  * Resolve the founder's "active" project. The advisor profiles the
  * founder's most-recently-touched project; when none exists we create
@@ -37,7 +54,7 @@ export interface WriteResult {
  * resolveFounderId() pattern in routes/projects.ts.
  */
 async function ensureFounderProject(env: Env, user: User): Promise<{ project_id: number; founder_id: number } | null> {
-  if (user.role !== 'founder') return null;
+  if (user.role !== 'founder' && user.role !== 'admin') return null;
   let founderId = user.founder_id || null;
   if (!founderId) {
     try {
@@ -83,20 +100,40 @@ async function ensureInvestorProfile(env: Env, user: User): Promise<boolean> {
   }
 }
 
+/**
+ * Resolve (or lazy-create) the mentor row owned by `user`. Uses the
+ * same lookup order as routes/mentors.ts:myMentor — users.mentor_id
+ * first, then fall back to mentors.user_id. Column names match the
+ * live D1 schema (display_name, email, is_active).
+ */
 async function ensureMentorRow(env: Env, user: User): Promise<{ id: number } | null> {
   try {
-    const existing = await env.DB.prepare(
-      `SELECT id FROM mentors WHERE LOWER(email) = LOWER(?) LIMIT 1`,
-    ).bind(user.email).first<{ id: number }>().catch(() => null);
-    if (existing?.id) return { id: Number(existing.id) };
-    // Generate a 16-hex uid — same convention as the rest of the codebase.
+    const subs = await loadSubscriptionFields(env, user.id);
+    if (subs.mentor_id) {
+      const byId = await env.DB.prepare(`SELECT id FROM mentors WHERE id = ?`)
+        .bind(subs.mentor_id).first<{ id: number }>().catch(() => null);
+      if (byId?.id) return { id: Number(byId.id) };
+    }
+    const byUser = await env.DB.prepare(`SELECT id FROM mentors WHERE user_id = ?`)
+      .bind(user.id).first<{ id: number }>().catch(() => null);
+    if (byUser?.id) return { id: Number(byUser.id) };
+
+    // Generate a 16-hex uid — matches the rest of the codebase.
     const bytes = new Uint8Array(16);
     crypto.getRandomValues(bytes);
     const uid = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-    const ins = await env.DB.prepare(
-      `INSERT INTO mentors (uid, name, email, status) VALUES (?, ?, ?, 'pending') RETURNING id`,
-    ).bind(uid, user.name || 'Mentor', user.email).first<{ id: number }>();
-    return ins ? { id: Number(ins.id) } : null;
+    const now = new Date().toISOString();
+    const r = await env.DB.prepare(
+      `INSERT INTO mentors (uid, user_id, display_name, email, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 1, ?, ?)`,
+    ).bind(uid, user.id, user.name || 'Mentor', user.email, now, now).run();
+    const newId = Number((r as { meta?: { last_row_id?: number } }).meta?.last_row_id || 0);
+    if (!newId) return null;
+    try {
+      await env.DB.prepare(`UPDATE users SET mentor_id = ? WHERE id = ?`)
+        .bind(newId, user.id).run();
+    } catch { /* mentor_id column may not be migrated yet */ }
+    return { id: newId };
   } catch {
     return null;
   }
@@ -106,14 +143,13 @@ function parseList(s: string): string[] {
   return s.split(',').map(t => t.trim()).filter(Boolean);
 }
 
-function tierForInvestorThesis(user: User): { ok: boolean; upgrade_link?: string } {
+async function tierForInvestorThesis(env: Env, user: User): Promise<{ ok: boolean; upgrade_link?: string }> {
   // The free tier writes the basic profile but the long-form `thesis`
   // text is part of the Investor Pro paywall (W-1, see billing.ts).
-  // Anything tied to investor_subscription_status='active' is treated
-  // as paid here.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const u = user as any;
-  const active = u.investor_subscription_status === 'active' || u.subscription_status === 'active';
+  // Anything tied to investor_subscription_status='active' or the
+  // generic subscription_status='active' is treated as paid here.
+  const subs = await loadSubscriptionFields(env, user.id);
+  const active = subs.investor_subscription_status === 'active' || subs.subscription_status === 'active';
   if (active) return { ok: true };
   return { ok: false, upgrade_link: '/billing/investor-upgrade' };
 }
@@ -213,7 +249,7 @@ export async function routeAnswer(
       return { status: 'failed', error: 'investor questions require investor role' };
     }
     if (questionId === 'investor.profile.thesis') {
-      const gate = tierForInvestorThesis(user);
+      const gate = await tierForInvestorThesis(env, user);
       if (!gate.ok) {
         return {
           status: 'paywalled',
@@ -262,17 +298,20 @@ export async function routeAnswer(
     const mentor = await ensureMentorRow(env, user);
     if (!mentor) return { status: 'failed', error: 'could not initialise mentor row' };
     const map: Record<string, { col: string; coerce?: (v: string) => number | string }> = {
-      'mentor.profile.headline':    { col: 'headline' },
-      'mentor.profile.bio':         { col: 'bio' },
-      'mentor.profile.sectors':     { col: 'sectors_json', coerce: (v) => JSON.stringify(parseList(v)) },
-      'mentor.profile.capacity':    { col: 'capacity_per_week', coerce: (v) => Math.max(0, Math.min(40, parseInt(v, 10) || 0)) },
-      'mentor.profile.hourly_rate': { col: 'hourly_rate', coerce: (v) => Math.max(0, parseFloat(v) || 0) },
+      'mentor.profile.display_name':    { col: 'display_name' },
+      'mentor.profile.bio':             { col: 'bio' },
+      'mentor.profile.sectors':         { col: 'sectors_json',   coerce: (v) => JSON.stringify(parseList(v)) },
+      'mentor.profile.expertise':       { col: 'expertise_json', coerce: (v) => JSON.stringify(parseList(v)) },
+      'mentor.profile.hourly_rate_usd': { col: 'hourly_rate_usd', coerce: (v) => Math.max(0, parseFloat(v) || 0) },
+      'mentor.profile.linkedin_url':    { col: 'linkedin_url' },
     };
     const m = map[questionId];
     if (!m) return { status: 'noop' };
     const dbValue = m.coerce ? m.coerce(value) : value;
     try {
-      await env.DB.prepare(`UPDATE mentors SET ${m.col} = ? WHERE id = ?`).bind(dbValue, mentor.id).run();
+      await env.DB.prepare(
+        `UPDATE mentors SET ${m.col} = ?, updated_at = ? WHERE id = ?`,
+      ).bind(dbValue, new Date().toISOString(), mentor.id).run();
       return {
         status: 'saved',
         saved_to: { table: 'mentors', column: m.col, id: mentor.id, page_url: '/mentors/me' },
@@ -307,4 +346,77 @@ export async function routeAnswer(
   }
 
   return { status: 'noop' };
+}
+
+// ---------------------------------------------------------------------------
+// Hydration — pre-mark questions whose answers are already present in
+// the underlying domain table, so /start doesn't re-ask the user for
+// data they entered through normal pages.
+//
+// Returns the set of question_ids the route layer should treat as
+// "already answered" for the purpose of nextUnansweredQuestion().
+// Per-persona reads only — no writes — so it's safe to call on every
+// /start invocation.
+// ---------------------------------------------------------------------------
+export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<string>> {
+  const answered = new Set<string>();
+  const role = String(user.role || '');
+
+  // Role detector — `users.role` already set means primary is answered.
+  if (role && role !== 'unknown') answered.add('role_detect.primary');
+  try {
+    const u = await env.DB.prepare(
+      `SELECT organization, headline FROM users WHERE id = ?`,
+    ).bind(user.id).first<{ organization: string | null; headline: string | null }>().catch(() => null);
+    if (u?.organization) answered.add('role_detect.organization');
+    if (u?.headline)     answered.add('role_detect.headline');
+  } catch { /* organization/headline not migrated everywhere */ }
+
+  if (role === 'founder' || role === 'admin') {
+    if (user.founder_id) {
+      const proj = await env.DB.prepare(
+        `SELECT name, description, sector, stage, growth_signals
+           FROM projects WHERE founder_id = ?
+           ORDER BY updated_at DESC, id DESC LIMIT 1`,
+      ).bind(user.founder_id).first<{ name: string | null; description: string | null; sector: string | null; stage: string | null; growth_signals: string | null }>().catch(() => null);
+      if (proj) {
+        if (proj.name && proj.name !== '(unnamed project)') answered.add('founder.project.name');
+        if (proj.description) answered.add('founder.project.pitch');
+        if (proj.sector)      answered.add('founder.project.sector');
+        if (proj.stage && proj.stage !== 'idea') answered.add('founder.project.stage');
+        if (proj.growth_signals) answered.add('founder.project.traction');
+      }
+    }
+  }
+
+  if (role === 'investor' || role === 'admin') {
+    const inv = await env.DB.prepare(
+      `SELECT investor_type, sectors_json, stages_json, ticket_band, thesis_text
+         FROM investor_profiles WHERE user_id = ?`,
+    ).bind(user.id).first<{ investor_type: string | null; sectors_json: string | null; stages_json: string | null; ticket_band: string | null; thesis_text: string | null }>().catch(() => null);
+    if (inv) {
+      if (inv.investor_type) answered.add('investor.profile.investor_type');
+      if (inv.sectors_json && inv.sectors_json !== '[]') answered.add('investor.profile.sectors');
+      if (inv.stages_json  && inv.stages_json  !== '[]') answered.add('investor.profile.stages');
+      if (inv.ticket_band)   answered.add('investor.profile.ticket_band');
+      if (inv.thesis_text)   answered.add('investor.profile.thesis');
+    }
+  }
+
+  if (role === 'mentor' || role === 'admin') {
+    const m = await env.DB.prepare(
+      `SELECT display_name, bio, sectors_json, expertise_json, hourly_rate_usd, linkedin_url
+         FROM mentors WHERE user_id = ?`,
+    ).bind(user.id).first<{ display_name: string | null; bio: string | null; sectors_json: string | null; expertise_json: string | null; hourly_rate_usd: number | null; linkedin_url: string | null }>().catch(() => null);
+    if (m) {
+      if (m.display_name && m.display_name !== (user.name || user.email)) answered.add('mentor.profile.display_name');
+      if (m.bio) answered.add('mentor.profile.bio');
+      if (m.sectors_json && m.sectors_json !== '[]')   answered.add('mentor.profile.sectors');
+      if (m.expertise_json && m.expertise_json !== '[]') answered.add('mentor.profile.expertise');
+      if (m.hourly_rate_usd != null) answered.add('mentor.profile.hourly_rate_usd');
+      if (m.linkedin_url)  answered.add('mentor.profile.linkedin_url');
+    }
+  }
+
+  return answered;
 }
