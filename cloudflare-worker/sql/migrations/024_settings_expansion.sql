@@ -1,51 +1,60 @@
 -- Task #1 (AE-1) — Settings expansion · schema source-of-truth.
 --
--- This file is the AE-1 schema-contract manifest. The only NEW columns it
--- introduces are `display_name` and `headline` on `users`; every other
--- column the AE-1 endpoints depend on already shipped in earlier numbered
--- migrations and is documented below for runbook traceability.
+-- Idempotent where SQLite/D1 allows it (CREATE TABLE / CREATE INDEX use
+-- IF NOT EXISTS); the two new ALTER ADD COLUMN statements at the bottom
+-- are not idempotent because D1's SQLite build doesn't support
+-- "ADD COLUMN IF NOT EXISTS". The runtime helpers
+-- `ensureProfileExpansionSchema()` and `ensureUserSettings()` re-apply
+-- the same DDL on isolate boot, so a partial migration here is recovered
+-- automatically — this file is purely the deployment-time artifact.
 --
--- ─────────────────────────────────────────────────────────────────────────
--- AE-1 column dependency manifest
--- ─────────────────────────────────────────────────────────────────────────
---
--- ON `users` (Phase A — already applied via 015_profile_expansion.sql):
---   full_legal_name, date_of_birth, nationality, tax_residency_country,
---   tax_id_number_enc, tax_id_last4, phone_e164_enc, phone_last4,
---   address_line1, address_line2, city, state_or_region, postal_code,
---   country, profile_completion_pct
---
--- ON `users` (Phase B — NEW in this migration):
---   display_name, headline
---
--- ON `user_settings` (already applied via 002_user_settings.sql + the
--- additive 014/015 columns; runtime-mirrored by services/userSettings.ts):
---   timezone, locale, pronouns, profile_slug, visibility,
---   show_in_directory, discoverable, digest_frequency,
---   notif_categories_email, notif_categories_inapp, quiet_hours_start,
---   quiet_hours_end, quiet_hours_tz, theme, density, sidebar_default,
---   feature_flags, dismissed_explainers
---
--- ON `corporate_profiles` (already applied via 015_profile_expansion.sql):
---   entity_name, entity_type, registration_number, tax_id_number_enc,
---   tax_id_last4, registered_country, registered_address_line1/2,
---   registered_city, registered_state, registered_postal,
---   signing_authority_name, signing_authority_title,
---   signing_authority_email, ubos_json, directors_json,
---   insurance_carriers_json, ubo_disclosed, aml_high_risk_jurisdiction,
---   sanctions_last_checked_at
---
--- ─────────────────────────────────────────────────────────────────────────
 -- Apply via:
 --   wrangler d1 execute studioos-db --remote --env="" \
 --     --file=cloudflare-worker/sql/migrations/024_settings_expansion.sql
 --
--- Re-runs will fail with "duplicate column name" — that is expected and
--- harmless. The runtime helpers (services/profileExpansion.ts +
--- services/userSettings.ts) re-apply the same DDL idempotently on isolate
--- boot, so the worker never depends on this file being run exactly once.
 -- ─────────────────────────────────────────────────────────────────────────
+-- 1) corporate_profiles  (idempotent re-state of 015's table for the AE-1
+--    contract — safe to re-run; CREATE IF NOT EXISTS short-circuits)
+-- ─────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS corporate_profiles (
+  user_id                       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  entity_name                   TEXT,
+  entity_type                   TEXT,
+  registration_number           TEXT,
+  tax_id_number_enc             TEXT,
+  tax_id_last4                  TEXT,
+  registered_country            TEXT,
+  registered_address_line1      TEXT,
+  registered_address_line2      TEXT,
+  registered_city               TEXT,
+  registered_state              TEXT,
+  registered_postal             TEXT,
+  signing_authority_name        TEXT,
+  signing_authority_title       TEXT,
+  signing_authority_email       TEXT,
+  ubos_json                     TEXT,
+  directors_json                TEXT,
+  insurance_carriers_json       TEXT,
+  ubo_disclosed                 INTEGER NOT NULL DEFAULT 0,
+  aml_high_risk_jurisdiction    INTEGER NOT NULL DEFAULT 0,
+  sanctions_last_checked_at     TEXT,
+  updated_at                    TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_corporate_profiles_country
+  ON corporate_profiles(registered_country);
 
--- Phase B additions ---------------------------------------------------------
+-- ─────────────────────────────────────────────────────────────────────────
+-- 2) user_settings.dismissed_explainers — idempotent index for AE-1
+--    (the column itself ships in 014; the index is restated here for
+--    completeness so a fresh-DB single-file replay still works.)
+-- ─────────────────────────────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_user_settings_slug
+  ON user_settings(profile_slug) WHERE profile_slug IS NOT NULL;
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 3) Phase B additions on `users` — the two columns that are NEW in AE-1.
+--    Re-running this file after these have been applied will fail with
+--    "duplicate column name" on the first ALTER, which is expected.
+-- ─────────────────────────────────────────────────────────────────────────
 ALTER TABLE users ADD COLUMN display_name TEXT;
 ALTER TABLE users ADD COLUMN headline TEXT;

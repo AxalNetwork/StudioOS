@@ -333,7 +333,10 @@ export async function upsertUserSettings(env: Env, userId: number, patch: UserSe
     const taken = await env.DB.prepare(
       `SELECT user_id FROM user_settings WHERE profile_slug = ? AND user_id != ?`,
     ).bind(slugUpdate[1], userId).first<{ user_id: number }>();
-    if (taken) throw new SettingsValidationError('profile_slug already in use', 409);
+    // AE-1: surface uniqueness conflicts as field-level 400s so the
+    // Settings UI can render the error inline next to the slug input,
+    // matching the envelope used for shape/format failures above.
+    if (taken) throw new SettingsValidationError('profile_slug already in use', 400, 'profile_slug');
   }
 
   // INSERT OR IGNORE then UPDATE — D1 lacks ON CONFLICT … DO UPDATE for

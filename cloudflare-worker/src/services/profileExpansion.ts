@@ -569,15 +569,17 @@ export async function updateCorporateProfile(
     ).bind(...params, userId).run();
   }
 
-  const post = await getCorporateProfile(env, userId);
-
-  // Recompute completeness ring for the user.
+  // Recompute completeness ring BEFORE re-reading `post`, so the value
+  // returned to the caller (and surfaced on the Settings UI) reflects the
+  // PUT we just persisted, not the stale pre-update percentage. AE-1
+  // requires `profile_completion_pct` on every relevant PUT response.
   const personal = await getPersonalProfile(env, userId);
-  const pct = computeCompletionPct(personal, post);
+  const corpForPct = await getCorporateProfile(env, userId);
+  const pct = computeCompletionPct(personal, corpForPct);
   if (pct !== personal.profile_completion_pct) {
     await env.DB.prepare(`UPDATE users SET profile_completion_pct = ? WHERE id = ?`).bind(pct, userId).run();
   }
-  return post;
+  return { ...corpForPct, profile_completion_pct: pct };
 }
 
 // --- Decryption helper (for contract auto-fill — exported but unused in
