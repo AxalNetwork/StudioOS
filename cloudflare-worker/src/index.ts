@@ -608,10 +608,13 @@ export default {
             console.error('[cron] carta sync failed', e);
           }
         }
-        // Task #2 — DocuSign reconcile sweep hourly at HH:05 (spreads load away
-        // from the top-of-hour batch). Polls in-flight envelopes so a missed
-        // Connect webhook delivery can't leave us stuck on `sent` forever.
-        if (now.getUTCMinutes() === 5) {
+        // Task #2 — DocuSign reconcile sweep every 30 minutes (HH:05 / HH:35).
+        // Polls in-flight envelopes so a missed Connect webhook delivery
+        // can't leave us stuck on `sent` forever. The 30-min cadence
+        // matches the HubSpot/Salesforce reconcile sweep cadence and the
+        // task spec; the +5-minute offset spreads load away from the
+        // top/bottom-of-hour batches.
+        if (now.getUTCMinutes() % 30 === 5) {
           try {
             const r = await syncAllDocusignIntegrations(env);
             if (r.scanned > 0) {

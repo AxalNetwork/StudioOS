@@ -367,9 +367,11 @@ profiling.post('/admin/:email/verify', async (c) => {
           : null;
         const recipientName = targetRow?.name || rows[0]?.full_name || rows[0]?.name || '';
         // Task #2 — admins can opt the verify-flow envelope through
-        // DocuSign by passing `via_provider:'docusign'` on the verify
+        // DocuSign by passing `provider:'docusign'` (canonical) or
+        // `via_provider:'docusign'` (legacy alias) on the verify
         // request body. Defaults to native if absent or invalid.
-        const viaProvider = reqBody?.via_provider === 'docusign' ? 'docusign' : 'native';
+        const providerRaw = String(reqBody?.provider ?? reqBody?.via_provider ?? 'native').toLowerCase();
+        const viaProvider = providerRaw === 'docusign' ? 'docusign' : 'native';
         esignResult = await createAndSendEnvelope(c.env, {
           adminUserId: adminUser.id,
           adminName: adminUser.name || adminUser.email,

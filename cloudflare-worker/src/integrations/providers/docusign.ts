@@ -451,13 +451,23 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 // ───────────────────────────────────────────────────────────── status mapping
 
-/** DocuSign envelope status → local esign_envelopes.status. */
+/**
+ * DocuSign envelope status → local esign_envelopes.status.
+ *
+ * Note: DocuSign distinguishes `sent` (recipient notified, not yet
+ * opened) from `delivered` (opened by recipient, not yet signed). The
+ * local schema doesn't yet have a separate `delivered` enum value, so
+ * both are recorded as `sent` for the status column — but the audit
+ * event preserves the original DocuSign status string verbatim
+ * (`docusign_delivered` vs `docusign_sent`) so the distinction is not
+ * lost.
+ */
 function mapDsStatus(s: string): 'sent' | 'partially_signed' | 'completed' | 'rejected' | 'void' {
   const x = (s || '').toLowerCase();
   if (x === 'completed') return 'completed';
   if (x === 'declined') return 'rejected';
   if (x === 'voided') return 'void';
-  if (x === 'delivered') return 'sent';
+  if (x === 'delivered') return 'sent'; // see note above
   return 'sent';
 }
 
@@ -513,9 +523,32 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
   if (!local) return { status: 'unknown', updated: false };
   const res = await dsFetch(env, row, `/envelopes/${encodeURIComponent(dsEnvelopeId)}`);
   if (!res.ok) return { status: local.status, updated: false };
-  const env2 = await res.json() as { status?: string; completedDateTime?: string };
+  const env2 = await res.json() as {
+    status?: string;
+    completedDateTime?: string;
+    voidedDateTime?: string;
+    voidedReason?: string;
+    declinedDateTime?: string;
+  };
   const newStatus = mapDsStatus(env2.status || '');
   if (newStatus === local.status) return { status: newStatus, updated: false };
+
+  // Capture decline / void reasons so the admin Contracts UI can render
+  // them. DocuSign only fills `voidedReason` for void; declines carry
+  // their reason on the recipient resource (we fetch lazily here).
+  let stateReason: string | null = null;
+  if (newStatus === 'void' && env2.voidedReason) {
+    stateReason = String(env2.voidedReason).slice(0, 500);
+  } else if (newStatus === 'rejected') {
+    try {
+      const rRes = await dsFetch(env, row, `/envelopes/${encodeURIComponent(dsEnvelopeId)}/recipients`);
+      if (rRes.ok) {
+        const rJ = await rRes.json() as { signers?: Array<{ declinedReason?: string }> };
+        const reason = (rJ.signers || []).map(s => s.declinedReason).find(Boolean);
+        if (reason) stateReason = String(reason).slice(0, 500);
+      }
+    } catch {}
+  }
 
   let signedKey: string | null = null;
   if (newStatus === 'completed') {
@@ -547,8 +580,12 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
        VALUES (?, NULL, NULL, ?, 'docusign', ?)`,
     ).bind(
       local.id,
-      `docusign_${newStatus}`,
-      JSON.stringify({ docusign_envelope_id: dsEnvelopeId, ds_status: env2.status }),
+      `docusign_${env2.status || newStatus}`,
+      JSON.stringify({
+        docusign_envelope_id: dsEnvelopeId,
+        ds_status: env2.status,
+        ...(stateReason ? { reason: stateReason } : {}),
+      }),
     ).run();
   } catch {}
   return { status: newStatus, updated: true };
