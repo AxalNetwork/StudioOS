@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
-import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, Clock, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert } from 'lucide-react';
+import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, Clock, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert, KeyRound, Trash2, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PERSONAS as PERSONA_TAXONOMY } from '../lib/personas';
 import { useToast } from '../components/useToast';
@@ -224,10 +224,15 @@ export default function AdminPage({ onImpersonate }) {
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'personas' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
           <Sparkles size={14} className="inline mr-1.5" /> Personas
         </button>
+        <button onClick={() => setTab('integration-keys')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'integration-keys' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+          <KeyRound size={14} className="inline mr-1.5" /> Integration Keys
+        </button>
       </div>
 
       {tab === 'contracts' && <ContractsPanel />}
       {tab === 'personas' && <PersonasPanel />}
+      {tab === 'integration-keys' && <IntegrationKeysPanel />}
 
       {tab === 'users' && (
         <>
@@ -1674,6 +1679,236 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Task #7 — Integration Keys panel (admin-managed OAuth client_id /
+// client_secret per provider). Sits alongside the existing tabs so a
+// non-engineer admin can stand up Slack / HubSpot / Salesforce /
+// DocuSign without redeploying the worker.
+// ──────────────────────────────────────────────────────────────────
+
+const PROVIDER_LABELS = {
+  slack: 'Slack',
+  hubspot: 'HubSpot',
+  salesforce: 'Salesforce',
+  docusign: 'DocuSign',
+};
+const PROVIDER_HINTS = {
+  slack: 'Get Client ID + Client Secret from api.slack.com → your app → Basic Information.',
+  hubspot: 'Get Client ID + Client Secret from your HubSpot Developer App → Auth tab.',
+  salesforce: 'Get Consumer Key + Consumer Secret from Setup → App Manager → your Connected App.',
+  docusign: 'Get Integration Key + Secret Key from DocuSign Admin → Apps and Keys.',
+};
+const PROVIDER_ENV_NAMES = {
+  slack: ['SLACK_CLIENT_ID', 'SLACK_CLIENT_SECRET'],
+  hubspot: ['HUBSPOT_CLIENT_ID', 'HUBSPOT_CLIENT_SECRET'],
+  salesforce: ['SF_CLIENT_ID', 'SF_CLIENT_SECRET'],
+  docusign: ['DOCUSIGN_CLIENT_ID', 'DOCUSIGN_CLIENT_SECRET'],
+};
+
+function IntegrationKeysPanel() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null);
+  const { toast, showToast } = useToast(3500);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const r = await api.adminListIntegrationKeys();
+      setRows(r.providers || []);
+    } catch (e) {
+      reportError(e, { where: 'IntegrationKeysPanel.refresh' });
+      showToast({ kind: 'err', msg: e.message || 'Failed to load' });
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, []);
+
+  const onDelete = async (provider) => {
+    const row = rows.find(r => r.provider_key === provider);
+    if (row?.source === 'env') {
+      showToast({ kind: 'err', msg: 'This provider is configured via env vars — remove the secret with `wrangler secret delete` instead.' });
+      return;
+    }
+    const n = row?.active_integrations || 0;
+    const msg = n > 0
+      ? `Remove ${PROVIDER_LABELS[provider]} keys?\n\nThis will disconnect ${n} active user integration${n === 1 ? '' : 's'}. Affected users will need to reconnect once new keys are configured.`
+      : `Remove ${PROVIDER_LABELS[provider]} keys?`;
+    if (!confirm(msg)) return;
+    try {
+      const r = await api.adminDeleteIntegrationKeys(provider);
+      showToast({ kind: 'ok', msg: r.disconnected_users
+        ? `Removed — ${r.disconnected_users} user integration${r.disconnected_users === 1 ? '' : 's'} disconnected.`
+        : 'Keys removed.' });
+      refresh();
+    } catch (e) {
+      showToast({ kind: 'err', msg: e.message || 'Failed to remove' });
+    }
+  };
+
+  return (
+    <div data-density-target>
+      {toast && (
+        <div className={`mb-4 px-4 py-2.5 rounded-lg text-sm ${toast.kind === 'ok' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+          {toast.msg}
+        </div>
+      )}
+      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 mb-5 flex gap-3">
+        <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+        <div className="text-sm text-amber-900 dark:text-amber-100">
+          <div className="font-semibold mb-1">OAuth client credentials are sensitive.</div>
+          <div className="text-amber-800 dark:text-amber-200">
+            Worker env vars always take precedence over keys configured here. Removing keys forcibly disconnects every active user integration for that provider — they'll need to reconnect once new keys are saved.
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-gray-500 text-sm py-8 justify-center">
+          <Loader2 size={16} className="animate-spin" /> Loading providers…
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {rows.map((row) => {
+            const label = PROVIDER_LABELS[row.provider_key] || row.provider_key;
+            const envNames = PROVIDER_ENV_NAMES[row.provider_key] || [];
+            const sourceBadge = row.source === 'env'
+              ? { text: 'env vars', cls: 'bg-blue-100 text-blue-700' }
+              : row.source === 'db'
+                ? { text: 'admin-managed', cls: 'bg-emerald-100 text-emerald-700' }
+                : { text: 'not configured', cls: 'bg-gray-100 text-gray-700' };
+            return (
+              <div key={row.provider_key} data-card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">{label}</h3>
+                      <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${sourceBadge.cls}`}>{sourceBadge.text}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {row.active_integrations} active user integration{row.active_integrations === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                </div>
+                {row.has_keys && row.client_id_preview && (
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-3 font-mono break-all">
+                    Client ID: {row.client_id_preview.length > 40 ? `${row.client_id_preview.slice(0, 36)}…` : row.client_id_preview}
+                  </div>
+                )}
+                {row.source === 'db' && row.updated_at && (
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-3">
+                    Last updated {new Date(row.updated_at).toLocaleString()}
+                  </div>
+                )}
+                {row.source === 'env' && (
+                  <div className="text-[11px] text-blue-700 dark:text-blue-300 mb-3">
+                    Configured via worker secret{envNames.length === 2 ? 's' : ''}: <code>{envNames.join('</code> + <code>')}</code>. Admin UI cannot edit env-var configs.
+                  </div>
+                )}
+                {row.source === 'unconfigured' && (
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-3">{PROVIDER_HINTS[row.provider_key]}</div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditing(row.provider_key)}
+                    disabled={row.source === 'env'}
+                    title={row.source === 'env' ? 'Configured via env var — edit the worker secret instead' : ''}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
+                    {row.source === 'db' ? 'Rotate keys' : 'Configure'}
+                  </button>
+                  {row.source === 'db' && (
+                    <button
+                      onClick={() => onDelete(row.provider_key)}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 inline-flex items-center gap-1.5">
+                      <Trash2 size={12} /> Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {editing && (
+        <IntegrationKeysEditModal
+          provider={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); refresh(); showToast({ kind: 'ok', msg: 'Keys saved.' }); }}
+          onError={(msg) => showToast({ kind: 'err', msg })}
+        />
+      )}
+    </div>
+  );
+}
+
+function IntegrationKeysEditModal({ provider, onClose, onSaved, onError }) {
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [saving, setSaving] = useState(false);
+  useEscapeClose(onClose);
+  const label = PROVIDER_LABELS[provider] || provider;
+
+  const submit = async (e) => {
+    e?.preventDefault?.();
+    if (!clientId.trim() || !clientSecret.trim()) {
+      onError('Both Client ID and Client Secret are required.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.adminSetIntegrationKeys(provider, clientId.trim(), clientSecret.trim());
+      onSaved();
+    } catch (e) {
+      onError(e.message || 'Failed to save');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <form onSubmit={submit} onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{label} OAuth keys</h3>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+        </div>
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">{PROVIDER_HINTS[provider]}</p>
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Client ID</label>
+        <input
+          autoFocus
+          value={clientId}
+          onChange={(e) => setClientId(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          className="w-full px-3 py-2 mb-3 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-mono"
+          placeholder="e.g. 1234567890.0987654321" />
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Client Secret</label>
+        <input
+          type="password"
+          value={clientSecret}
+          onChange={(e) => setClientSecret(e.target.value)}
+          autoComplete="new-password"
+          spellCheck={false}
+          className="w-full px-3 py-2 mb-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-mono"
+          placeholder="••••••••••••••••" />
+        <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-4">
+          Encrypted at rest. Only the secret hash is ever logged.
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose}
+                  className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200">
+            Cancel
+          </button>
+          <button type="submit" disabled={saving}
+                  className="px-4 py-2 text-sm font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 inline-flex items-center gap-2">
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            Save keys
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

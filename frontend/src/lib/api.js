@@ -462,6 +462,15 @@ export const api = {
   adminIssueContractShareLink: (uid, ttl_seconds = 300) =>
     request(`/admin/contracts/${uid}/download-url?ttl_seconds=${ttl_seconds}`, { method: 'POST' }),
   adminImpersonate: (userId) => request(`/admin/impersonate/${userId}`, { method: 'POST' }),
+  // Task #7 — admin-managed OAuth client credentials per provider.
+  adminListIntegrationKeys: () => request('/admin/integration-keys'),
+  adminSetIntegrationKeys: (provider, client_id, client_secret) =>
+    request(`/admin/integration-keys/${encodeURIComponent(provider)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ client_id, client_secret }),
+    }),
+  adminDeleteIntegrationKeys: (provider) =>
+    request(`/admin/integration-keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
   adminUpdateRole: (userId, role) => request(`/admin/users/${userId}/role?role=${role}`, { method: 'PATCH' }),
   adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),
   // Set per-user access level. `level` is 'limited' (browse-only, no signing

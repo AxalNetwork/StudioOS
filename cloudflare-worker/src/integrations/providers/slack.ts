@@ -41,12 +41,16 @@ interface SlackEnvVars {
   SLACK_CLIENT_SECRET?: string;
   APP_URL?: string;
 }
-function ensureCreds(env: Env): { id: string; secret: string } {
-  const e = env as Env & SlackEnvVars;
-  if (!e.SLACK_CLIENT_ID || !e.SLACK_CLIENT_SECRET) {
-    throw new Error('slack_oauth_unconfigured: SLACK_CLIENT_ID/SLACK_CLIENT_SECRET secrets must be set on the worker.');
+// Task #7 — env-var FIRST, admin-managed DB row as fallback. Same
+// `<provider>_oauth_unconfigured` error string preserved so the route
+// layer's 503 mapping (routes/integrations.ts /oauth/start) keeps working.
+async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {
+  const { loadOauthCreds } = await import('../../services/providerOauthKeys');
+  const c = await loadOauthCreds(env, 'slack');
+  if (!c) {
+    throw new Error('slack_oauth_unconfigured: SLACK_CLIENT_ID/SLACK_CLIENT_SECRET secrets must be set on the worker (or configured via Admin → Integration Keys).');
   }
-  return { id: e.SLACK_CLIENT_ID, secret: e.SLACK_CLIENT_SECRET };
+  return { id: c.id, secret: c.secret };
 }
 
 interface SlackOauthV2AccessResponse {
@@ -69,7 +73,7 @@ interface SlackOauthV2AccessResponse {
 }
 
 async function exchangeCode(env: Env, code: string): Promise<SlackOauthV2AccessResponse> {
-  const { id, secret } = ensureCreds(env);
+  const { id, secret } = await ensureCreds(env);
   const body = new URLSearchParams({
     code,
     client_id: id,
@@ -130,7 +134,7 @@ async function connect(_c: Context<{ Bindings: Env }>, _user: User, input: Conne
 }
 
 async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, state: string): Promise<string> {
-  const { id } = ensureCreds(c.env);
+  const { id } = await ensureCreds(c.env);
   const params = new URLSearchParams({
     client_id: id,
     scope: SCOPES.join(','),

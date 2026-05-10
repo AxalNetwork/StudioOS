@@ -43,6 +43,7 @@ import advisory from './routes/advisory';
 import activity from './routes/activity';
 import admin from './routes/admin';
 import adminContracts from './routes/admin_contracts';
+import adminIntegrationKeys from './routes/admin_integration_keys';
 import privateData from './routes/private-data';
 import monitoring from './routes/monitoring';
 import infra from './routes/infra';
@@ -277,6 +278,7 @@ app.use('/api/infra/*', requireCfAccess());
 // Mount the more-specific /admin/contracts prefix FIRST so it takes
 // precedence over the generic /admin router (which has no contract routes).
 app.route('/api/admin/contracts', adminContracts);
+app.route('/api/admin/integration-keys', adminIntegrationKeys);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);

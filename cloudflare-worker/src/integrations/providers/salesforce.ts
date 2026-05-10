@@ -59,11 +59,15 @@ function redirectUri(env: Env): string {
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
-function ensureCreds(env: Env): { id: string; secret: string } {
+async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {
+  // Task #7 — env-var FIRST, admin-managed DB row as fallback.
+  const { loadOauthCreds } = await import('../../services/providerOauthKeys');
+  const cred = await loadOauthCreds(env, 'salesforce');
+  if (cred) return { id: cred.id, secret: cred.secret };
   const id = (env as unknown as Record<string, string | undefined>).SF_CLIENT_ID;
   const secret = (env as unknown as Record<string, string | undefined>).SF_CLIENT_SECRET;
   if (!id || !secret) {
-    throw new Error('salesforce_oauth_unconfigured: SF_CLIENT_ID/SF_CLIENT_SECRET secrets must be set on the worker.');
+    throw new Error('salesforce_oauth_unconfigured: SF_CLIENT_ID/SF_CLIENT_SECRET secrets must be set on the worker (or configured via Admin → Integration Keys).');
   }
   return { id, secret };
 }
@@ -88,7 +92,7 @@ interface SfIdentity {
 }
 
 async function exchangeCode(env: Env, code: string, isSandbox: boolean, codeVerifier: string | null): Promise<SfTokenResponse> {
-  const { id, secret } = ensureCreds(env);
+  const { id, secret } = await ensureCreds(env);
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     client_id: id,
@@ -110,7 +114,7 @@ async function exchangeCode(env: Env, code: string, isSandbox: boolean, codeVeri
 }
 
 async function refreshAccessToken(env: Env, refreshToken: string, isSandbox: boolean): Promise<SfTokenResponse> {
-  const { id, secret } = ensureCreds(env);
+  const { id, secret } = await ensureCreds(env);
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     client_id: id,
@@ -281,7 +285,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
 }
 
 async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, state: string): Promise<string> {
-  const { id } = ensureCreds(c.env);
+  const { id } = await ensureCreds(c.env);
   // Sandbox flag flows from `?sandbox=1` on /oauth/start. The route layer
   // also stashes it in oauth_state_tokens.extra_json so the callback can
   // recover it independently of the query string.

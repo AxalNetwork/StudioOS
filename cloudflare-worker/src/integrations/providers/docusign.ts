@@ -68,11 +68,15 @@ function redirectUri(env: Env): string {
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
-function ensureCreds(env: Env): { id: string; secret: string } {
+async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {
+  // Task #7 — env-var FIRST, admin-managed DB row as fallback.
+  const { loadOauthCreds } = await import('../../services/providerOauthKeys');
+  const cred = await loadOauthCreds(env, 'docusign');
+  if (cred) return { id: cred.id, secret: cred.secret };
   const id = (env as unknown as Record<string, string | undefined>).DOCUSIGN_CLIENT_ID;
   const secret = (env as unknown as Record<string, string | undefined>).DOCUSIGN_CLIENT_SECRET;
   if (!id || !secret) {
-    throw new Error('docusign_oauth_unconfigured: DOCUSIGN_CLIENT_ID/DOCUSIGN_CLIENT_SECRET secrets must be set on the worker.');
+    throw new Error('docusign_oauth_unconfigured: DOCUSIGN_CLIENT_ID/DOCUSIGN_CLIENT_SECRET secrets must be set on the worker (or configured via Admin → Integration Keys).');
   }
   return { id, secret };
 }
@@ -105,7 +109,7 @@ function safeParse(s: string | null | undefined): Record<string, unknown> {
 // ───────────────────────────────────────────────────────────── token mgmt
 
 async function exchangeCode(env: Env, code: string, isDemo: boolean): Promise<TokenResponse> {
-  const { id, secret } = ensureCreds(env);
+  const { id, secret } = await ensureCreds(env);
   const basic = btoa(`${id}:${secret}`);
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -128,7 +132,7 @@ async function exchangeCode(env: Env, code: string, isDemo: boolean): Promise<To
 }
 
 async function refreshAccessToken(env: Env, refreshToken: string, isDemo: boolean): Promise<TokenResponse> {
-  const { id, secret } = ensureCreds(env);
+  const { id, secret } = await ensureCreds(env);
   const basic = btoa(`${id}:${secret}`);
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
@@ -261,7 +265,7 @@ async function dsFetch(env: Env, row: IntegrationRow, path: string, init: Reques
 // ───────────────────────────────────────────────────────────── connect / oauth
 
 async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, state: string): Promise<string> {
-  const { id } = ensureCreds(c.env);
+  const { id } = await ensureCreds(c.env);
   // is_demo is read from oauth_state_tokens.extra_json by the callback;
   // the authorize URL itself depends on it because demo and prod live on
   // different DocuSign account hosts.
@@ -1068,7 +1072,7 @@ async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: Integ
     const creds = await decryptCredentials(c.env, row.uid, row.credentials_enc);
     const rt = typeof creds?.refresh_token === 'string' ? creds.refresh_token : '';
     if (rt) {
-      const { id, secret } = ensureCreds(c.env);
+      const { id, secret } = await ensureCreds(c.env);
       const basic = btoa(`${id}:${secret}`);
       await fetch(`${authHost(isDemo)}/oauth/revoke`, {
         method: 'POST',

@@ -58,13 +58,14 @@ function redirectUri(env: Env): string {
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
-function ensureCreds(env: Env): { id: string; secret: string } {
-  const id = (env as unknown as Record<string, string | undefined>).HUBSPOT_CLIENT_ID;
-  const secret = (env as unknown as Record<string, string | undefined>).HUBSPOT_CLIENT_SECRET;
-  if (!id || !secret) {
-    throw new Error('hubspot_oauth_unconfigured: HUBSPOT_CLIENT_ID/HUBSPOT_CLIENT_SECRET secrets must be set on the worker.');
+async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {
+  // Task #7 — env-var FIRST, admin-managed DB row as fallback.
+  const { loadOauthCreds } = await import('../../services/providerOauthKeys');
+  const cred = await loadOauthCreds(env, 'hubspot');
+  if (!cred) {
+    throw new Error('hubspot_oauth_unconfigured: HUBSPOT_CLIENT_ID/HUBSPOT_CLIENT_SECRET secrets must be set on the worker (or configured via Admin → Integration Keys).');
   }
-  return { id, secret };
+  return { id: cred.id, secret: cred.secret };
 }
 
 interface HubSpotTokenResponse {
@@ -85,7 +86,7 @@ interface HubSpotTokenInfo {
 }
 
 async function exchangeCode(env: Env, code: string): Promise<HubSpotTokenResponse> {
-  const { id, secret } = ensureCreds(env);
+  const { id, secret } = await ensureCreds(env);
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     client_id: id,
@@ -106,7 +107,7 @@ async function exchangeCode(env: Env, code: string): Promise<HubSpotTokenRespons
 }
 
 async function refreshAccessToken(env: Env, refreshToken: string): Promise<HubSpotTokenResponse> {
-  const { id, secret } = ensureCreds(env);
+  const { id, secret } = await ensureCreds(env);
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     client_id: id,
@@ -263,7 +264,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
 }
 
 async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, state: string): Promise<string> {
-  const { id } = ensureCreds(c.env);
+  const { id } = await ensureCreds(c.env);
   const params = new URLSearchParams({
     client_id: id,
     redirect_uri: redirectUri(c.env),
@@ -510,9 +511,8 @@ async function webhook(c: Context<{ Bindings: Env }>, row: IntegrationRow, body:
   const ts = c.req.header('x-hubspot-request-timestamp');
   const sigHeader = c.req.header('x-hubspot-signature-v3');
   void signature; // intentionally unused; see comment above
-  const { secret } = (() => {
-    try { return ensureCreds(c.env); } catch { return { secret: '' }; }
-  })();
+  let secret = '';
+  try { secret = (await ensureCreds(c.env)).secret; } catch { /* leave empty → throws below */ }
   if (!secret) throw new Error('webhook_unverified_no_client_secret');
   if (!ts || !sigHeader) throw new Error('webhook_signature_missing');
   const ageMs = Date.now() - Number(ts);
