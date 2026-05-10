@@ -691,9 +691,24 @@ auth.post('/logout', safe('logout', 'Logout failed.', async (c) => {
 
 auth.get('/me', async (c) => {
   const user = await requireAuth(c);
+  // Self-healing FK backfill: if the user's role implies a founder
+  // or partner profile but the corresponding ID is null, lazy-create
+  // the row and link it. Idempotent + non-throwing — degrades to the
+  // current IDs on any DB error.
+  let founderId: number | null = user.founder_id ?? null;
+  let partnerId: number | null = (user as unknown as { partner_id?: number | null }).partner_id ?? null;
+  try {
+    const { ensureRoleProfile } = await import('../services/ensureRoleProfile');
+    const ids = await ensureRoleProfile(c.env, user);
+    founderId = ids.founder_id;
+    partnerId = ids.partner_id;
+  } catch (e) {
+    console.error('[auth:/me] ensureRoleProfile failed:', (e as Error).message);
+  }
   return c.json({
     id: user.id, email: user.email, name: user.name, role: user.role,
     is_active: user.is_active, created_at: user.created_at,
+    founder_id: founderId, partner_id: partnerId,
     kyc_status: (user as any).kyc_status || 'not_started',
     // 'limited' lets the user past the KYC gate to browse the app, but
     // they still cannot sign legal agreements (server-enforced in esign).
