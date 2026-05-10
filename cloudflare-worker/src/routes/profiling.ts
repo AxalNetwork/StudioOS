@@ -321,7 +321,8 @@ profiling.post('/admin/:email/verify', async (c) => {
   const adminUser = await requireAdmin(c);
   await ensureProfileTable(c.env);
   const email = decodeURIComponent(c.req.param('email'));
-  const { agreement_type, admin_notes, status } = await c.req.json();
+  const reqBody = await c.req.json();
+  const { agreement_type, admin_notes, status } = reqBody;
 
   const newStatus = ['verified', 'rejected', 'pending'].includes(status) ? status : 'verified';
 
@@ -365,6 +366,10 @@ profiling.post('/admin/:email/verify', async (c) => {
           ? await c.env.DB.prepare(`SELECT id, name, email FROM users WHERE id = ?`).bind(targetUserId).first().catch(() => null)
           : null;
         const recipientName = targetRow?.name || rows[0]?.full_name || rows[0]?.name || '';
+        // Task #2 — admins can opt the verify-flow envelope through
+        // DocuSign by passing `via_provider:'docusign'` on the verify
+        // request body. Defaults to native if absent or invalid.
+        const viaProvider = reqBody?.via_provider === 'docusign' ? 'docusign' : 'native';
         esignResult = await createAndSendEnvelope(c.env, {
           adminUserId: adminUser.id,
           adminName: adminUser.name || adminUser.email,
@@ -373,6 +378,7 @@ profiling.post('/admin/:email/verify', async (c) => {
           recipientName,
           documentType: agreement_type,
           appUrl: c.env.APP_URL || 'https://axal.vc',
+          viaProvider,
         });
       } else {
         esignResult = { envelope_id: existing.id, envelope_uuid: '', signing_url: '', email_sent: false };

@@ -249,6 +249,11 @@ adminContracts.get('/', async (c) => {
   const docType = c.req.query('doc_type') || '';
   const projectId = c.req.query('project_id');
   const q = (c.req.query('q') || '').toLowerCase();
+  // Task #2 — provider filter chip ("All / Native / DocuSign"). Only
+  // applies to esign-source rows; legacy `documents` rows are always
+  // 'native' so the filter naturally hides them when 'docusign' is
+  // selected.
+  const provider = (c.req.query('provider') || '').toLowerCase();
   const limit = Math.min(parseInt(c.req.query('limit') || '50', 10) || 50, 500);
   const offset = parseInt(c.req.query('offset') || '0', 10) || 0;
 
@@ -259,6 +264,9 @@ adminContracts.get('/', async (c) => {
     if (status)    rows = rows.filter(r => r.status === status);
     if (docType)   rows = rows.filter(r => r.doc_type === docType);
     if (projectId) rows = rows.filter(r => r.project_id === parseInt(projectId));
+    if (provider === 'native' || provider === 'docusign') {
+      rows = rows.filter(r => (r.provider || 'native') === provider);
+    }
     if (q) {
       rows = rows.filter(r =>
         (r.title || '').toLowerCase().includes(q) ||

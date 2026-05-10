@@ -97,6 +97,10 @@ async function ensureSchema(env: Env): Promise<void> {
     `ALTER TABLE esign_envelopes ADD COLUMN docusign_envelope_id TEXT`,
     `CREATE INDEX IF NOT EXISTS idx_esign_provider          ON esign_envelopes(provider)`,
     `CREATE INDEX IF NOT EXISTS idx_esign_docusign_envelope ON esign_envelopes(docusign_envelope_id)`,
+    // Partial UNIQUE — see migration 021 for rationale.
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_esign_user_docusign_envelope
+       ON esign_envelopes(user_id, docusign_envelope_id)
+       WHERE docusign_envelope_id IS NOT NULL`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch {}
@@ -267,15 +271,19 @@ export async function createAndSendEnvelope(
   // lands in the recipient's inbox.
   if (opts.viaProvider === 'docusign') {
     try {
-      const { findActiveDocusignIntegrationForUser, sendDocusignEnvelope } = await import('../integrations/providers/docusign');
+      const { findActiveDocusignIntegrationForUser, sendDocusignEnvelope, ensureDocusignWebhookSecret } = await import('../integrations/providers/docusign');
       const dsRow = await findActiveDocusignIntegrationForUser(env, opts.adminUserId);
       if (dsRow) {
+        const webhookSecret = await ensureDocusignWebhookSecret(env, dsRow);
         const ds = await sendDocusignEnvelope(env, dsRow, {
           documentTitle: tpl.title,
           documentBody: tpl.body,
           recipientEmail: opts.recipientEmail,
           recipientName: opts.recipientName,
           emailSubject: `Please sign: ${tpl.title}`,
+          appUrl: opts.appUrl,
+          webhookSecret,
+          integrationUid: dsRow.uid,
         });
         await env.DB.prepare(
           `UPDATE esign_envelopes SET provider = 'docusign', docusign_envelope_id = ? WHERE id = ?`,
@@ -457,7 +465,8 @@ esign.get('/sign/:token/document', async (c) => {
     ip: clientIp(c.req.raw),
     ua: c.req.header('user-agent') || undefined,
   });
-  return new Response(obj.body, {
+  const body = await materializeSignedPdf(c.env, rec.signed_r2_key, obj);
+  return new Response(body, {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="axal-${rec.envelope_uuid}.pdf"`,
@@ -494,7 +503,8 @@ esign.get('/:id{[0-9]+}/document', async (c) => {
     action: 'document_downloaded',
     ip: clientIp(c.req.raw),
   });
-  return new Response(obj.body, {
+  const body = await materializeSignedPdf(c.env, envRow.signed_r2_key, obj);
+  return new Response(body, {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="axal-envelope-${envRow.id}.pdf"`,
@@ -502,6 +512,19 @@ esign.get('/:id{[0-9]+}/document', async (c) => {
     },
   });
 });
+
+// Helper — DocuSign-routed envelopes are stored AES-GCM-encrypted in R2
+// at `esign/signed/<uuid>.pdf.enc`; in-house envelopes are stored
+// plaintext at `esign/signed/<uuid>.pdf`. We pick the decode path off
+// the suffix so a single download route handles both providers.
+async function materializeSignedPdf(env: Env, key: string, obj: R2ObjectBody): Promise<Uint8Array | ReadableStream | null> {
+  if (key.endsWith('.enc')) {
+    const { decryptBytes } = await import('../services/cryptoBox');
+    const ciphertext = new Uint8Array(await obj.arrayBuffer());
+    return await decryptBytes(env, ciphertext);
+  }
+  return obj.body;
+}
 
 // GET /api/legal/esign/sign/:token — public, fetch envelope for signing UI.
 esign.get('/sign/:token', async (c) => {

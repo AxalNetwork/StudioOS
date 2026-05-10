@@ -46,7 +46,13 @@ import {
   type IntegrationRow,
   type SyncResult,
 } from '../registry';
-import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../secrets';
+import {
+  decryptCredentials,
+  encryptCredentials,
+  encryptWebhookSecret,
+  type CredentialBlob,
+} from '../secrets';
+import { encryptBytes } from '../../services/cryptoBox';
 import { renderAgreementPdf, sha256Hex } from '../../services/pdf';
 
 const PROVIDER_KEY = 'docusign';
@@ -318,6 +324,17 @@ interface SendEnvelopeOpts {
   recipientEmail: string;
   recipientName: string;
   emailSubject?: string;
+  /**
+   * Public origin (e.g. `https://axal.vc`) used to build the per-envelope
+   * Connect callback URL. We embed `eventNotification` in the send
+   * payload so DocuSign POSTs status updates back to us WITHOUT the
+   * admin needing to manually configure account-level Connect.
+   */
+  appUrl: string;
+  /** Per-integration HMAC secret DocuSign signs the webhook body with. */
+  webhookSecret: string;
+  /** Integration row uid — used to build the per-row webhook URL. */
+  integrationUid: string;
 }
 
 interface SendEnvelopeResult {
@@ -354,6 +371,38 @@ export async function sendDocusignEnvelope(
     bodySha256: bodySha,
   });
   const pdfBase64 = bytesToBase64(pdf);
+  // eventNotification — per-envelope Connect subscription. DocuSign POSTs
+  // status updates to our worker route, signing the body with HMAC-SHA256
+  // keyed off `webhookSecret` (one of the `hmac` entries below). We
+  // subscribe to the lifecycle envelope events that affect our local
+  // status enum.
+  const webhookUrl = `${opts.appUrl.replace(/\/+$/, '')}/api/integrations/webhook/docusign/${encodeURIComponent(opts.integrationUid)}`;
+  const eventNotification = {
+    url: webhookUrl,
+    loggingEnabled: 'true',
+    requireAcknowledgment: 'true',
+    useSoapInterface: 'false',
+    includeDocuments: 'false',
+    includeEnvelopeVoidReason: 'true',
+    includeTimeZone: 'true',
+    includeSenderAccountAsCustomField: 'false',
+    includeDocumentFields: 'false',
+    includeCertificateOfCompletion: 'false',
+    envelopeEvents: [
+      { envelopeEventStatusCode: 'sent' },
+      { envelopeEventStatusCode: 'delivered' },
+      { envelopeEventStatusCode: 'completed' },
+      { envelopeEventStatusCode: 'declined' },
+      { envelopeEventStatusCode: 'voided' },
+    ],
+    eventData: {
+      version: 'restv2.1',
+      format: 'json',
+      includeData: ['recipients'],
+    },
+    hmac: [{ key: opts.webhookSecret, active: 'true' }],
+  };
+
   const payload = {
     emailSubject: opts.emailSubject || `Please sign: ${opts.documentTitle}`,
     status: 'sent',
@@ -379,6 +428,7 @@ export async function sendDocusignEnvelope(
         },
       }],
     },
+    eventNotification,
   };
   const res = await dsFetch(env, row, '/envelopes', {
     method: 'POST',
@@ -412,24 +462,29 @@ function mapDsStatus(s: string): 'sent' | 'partially_signed' | 'completed' | 're
 }
 
 /**
- * Pull the combined signed PDF for an envelope and store it (encrypted)
- * in R2 at the same `esign/signed/<envelope_uuid>.pdf` key the in-house
- * flow uses, so download routes work without a provider switch.
- *
- * NOTE: we deliberately store the DocuSign-returned PDF VERBATIM (no
- * re-encryption beyond R2 at-rest). The R2 bucket is private and worker
- * downloads stream through `/api/legal/esign/.../document` which does
- * its own RBAC, so plaintext-at-rest matches the in-house flow.
+ * Pull the combined signed PDF for an envelope and store it
+ * AES-GCM-encrypted in R2 under the canonical
+ * `esign/signed/<envelope_uuid>.pdf.enc` key. The download routes in
+ * routes/esign.ts detect the `.enc` suffix and decrypt on the way out
+ * with the same `cryptoBox` key (AXAL_ENCRYPTION_SECRET || JWT_SECRET).
  */
-async function pullAndStoreSignedPdf(env: Env, row: IntegrationRow, dsEnvelopeId: string, envelopeUuid: string): Promise<{ key: string; sha256: string } | null> {
-  const res = await dsFetch(env, row, `/envelopes/${encodeURIComponent(dsEnvelopeId)}/documents/combined`);
+async function pullAndStoreSignedPdf(env: Env, _row: IntegrationRow, dsEnvelopeId: string, envelopeUuid: string): Promise<{ key: string; sha256: string } | null> {
+  const res = await dsFetch(env, _row, `/envelopes/${encodeURIComponent(dsEnvelopeId)}/documents/combined`);
   if (!res.ok) return null;
   const buf = new Uint8Array(await res.arrayBuffer());
   if (buf.length === 0) return null;
   const sha = await sha256Hex(new TextDecoder('latin1').decode(buf));
-  const key = `esign/signed/${envelopeUuid}.pdf`;
+  // Encrypt the executed PDF before R2 put — matches the encrypted-at-rest
+  // policy for sensitive contract artifacts (see services/cryptoBox.ts and
+  // routes/dd.ts for prior art). The `.enc` suffix is the canonical marker
+  // the download routes use to decide whether to decrypt on the way out.
+  const ciphertext = await encryptBytes(env, buf);
+  const key = `esign/signed/${envelopeUuid}.pdf.enc`;
   if (env.FILES) {
-    await env.FILES.put(key, buf, { httpMetadata: { contentType: 'application/pdf' } });
+    await env.FILES.put(key, ciphertext, {
+      httpMetadata: { contentType: 'application/octet-stream' },
+      customMetadata: { inner_content_type: 'application/pdf', encrypted: '1' },
+    });
   }
   return { key, sha256: sha };
 }
@@ -653,6 +708,33 @@ export async function findActiveDocusignIntegrationForUser(env: Env, userId: num
     `SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'docusign' AND status = 'active' LIMIT 1`,
   ).bind(userId).first<IntegrationRow>();
   return r || null;
+}
+
+/**
+ * Lazily generate + persist a per-integration HMAC webhook secret, so
+ * the very first send-envelope call provisions Connect with a fresh
+ * secret. The plaintext secret is returned ONCE to the caller (to embed
+ * in the DocuSign `eventNotification.hmac` block) and the ciphertext is
+ * persisted in `integrations.webhook_secret_enc` for later verifyWebhook
+ * lookups. Subsequent sends decrypt the existing secret instead of
+ * rotating it.
+ */
+export async function ensureDocusignWebhookSecret(env: Env, row: IntegrationRow): Promise<string> {
+  if (row.webhook_secret_enc) {
+    const { decryptWebhookSecret } = await import('../secrets');
+    const cur = await decryptWebhookSecret(env, row.uid, row.webhook_secret_enc);
+    if (cur) return cur;
+  }
+  // 32 random bytes, base64url-encoded.
+  const buf = crypto.getRandomValues(new Uint8Array(32));
+  const b64 = btoa(String.fromCharCode(...buf)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const enc = await encryptWebhookSecret(env, row.uid, b64);
+  await env.DB.prepare(
+    `UPDATE integrations SET webhook_secret_enc = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+  ).bind(enc, row.id).run();
+  // Mutate the in-memory row so subsequent reads in the same request see it.
+  row.webhook_secret_enc = enc;
+  return b64;
 }
 
 // ───────────────────────────────────────────────────────────── register

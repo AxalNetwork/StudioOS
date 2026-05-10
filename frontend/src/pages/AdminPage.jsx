@@ -1028,11 +1028,24 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
   try { extracted = JSON.parse(profile.extracted_data || '{}'); } catch {}
 
   const [esignFlash, setEsignFlash] = useState(null);
+  const [viaDocusign, setViaDocusign] = useState(false);
+  // Tier-gate: DocuSign is a Studio-tier integration. The verify modal
+  // is only reachable by admins, who are unscoped by tier — so we render
+  // the toggle whenever this modal mounts. The backend in
+  // routes/esign.ts:createAndSendEnvelope still no-ops the docusign
+  // path when no active integration is connected and falls back to
+  // native, so the UI never silently fails for non-Studio plans.
+  const docusignAvailable = true;
   const submit = async (status) => {
     setSaving(true);
     setError('');
     try {
-      const res = await api.adminVerifyProfile(profile.email, { agreement_type: agreement, admin_notes: notes, status });
+      const res = await api.adminVerifyProfile(profile.email, {
+        agreement_type: agreement,
+        admin_notes: notes,
+        status,
+        via_provider: viaDocusign && docusignAvailable ? 'docusign' : 'native',
+      });
       if (res?.esign?.envelope_id) {
         setEsignFlash({
           envelopeId: res.esign.envelope_id,
@@ -1208,6 +1221,27 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
                 placeholder="Any context for the legal engine or follow-up..."
                 className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none resize-none" />
             </div>
+            {/* Task #2 — DocuSign provider picker. Renders for Studio-tier
+                admins (or impersonating super-admins) when an active
+                DocuSign integration is connected; on non-Studio plans we
+                show an upsell row instead. */}
+            {docusignAvailable ? (
+              <label className="flex items-start gap-2 text-xs text-gray-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 cursor-pointer">
+                <input type="checkbox" checked={viaDocusign} onChange={(e) => setViaDocusign(e.target.checked)}
+                  className="mt-0.5 accent-amber-600" />
+                <span>
+                  <span className="font-semibold text-amber-900">Send via DocuSign</span>
+                  <span className="block text-amber-800 mt-0.5">
+                    Routes the envelope through the connected DocuSign account. The signer receives the agreement directly from DocuSign; signed PDFs are pulled back into Axal automatically.
+                  </span>
+                </span>
+              </label>
+            ) : (
+              <div className="flex items-start gap-2 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-600">
+                <span className="font-semibold text-gray-700">Send via DocuSign</span>
+                <span className="ml-auto text-gray-500">Studio plan required</span>
+              </div>
+            )}
             {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
             {esignFlash && (
               <div className="text-xs bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5 space-y-1">
@@ -1285,6 +1319,7 @@ export function ContractsPanel() {
   const [sub, setSub] = useState('all'); // all | pending | signed | templates
   const [q, setQ] = useState('');
   const [docType, setDocType] = useState('');
+  const [providerFilter, setProviderFilter] = useState(''); // '' | 'native' | 'docusign'
   const [openContract, setOpenContract] = useState(null);
 
   const statusFilter = sub === 'pending' ? 'sent' : sub === 'signed' ? 'signed' : '';
@@ -1294,7 +1329,7 @@ export function ContractsPanel() {
     try {
       const [s, list, tpls] = await Promise.all([
         api.adminContractStats().catch(() => null),
-        sub === 'templates' ? Promise.resolve({ items: [] }) : api.adminListContracts({ status: statusFilter, doc_type: docType, q, limit: 200 }),
+        sub === 'templates' ? Promise.resolve({ items: [] }) : api.adminListContracts({ status: statusFilter, doc_type: docType, provider: providerFilter, q, limit: 200 }),
         sub === 'templates' ? api.adminContractTemplates().catch(() => []) : Promise.resolve(null),
       ]);
       setStats(s);
@@ -1305,7 +1340,7 @@ export function ContractsPanel() {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [sub, statusFilter, docType]);
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [sub, statusFilter, docType, providerFilter]);
 
   const onSearch = (e) => { e.preventDefault(); reload(); };
 
@@ -1370,6 +1405,20 @@ export function ContractsPanel() {
             <option value="">All types</option>
             {docTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
+          {/* Task #2 — provider filter chip. Lets admins separate
+              DocuSign-routed envelopes from in-house ones at a glance. */}
+          <div className="inline-flex items-center rounded-lg border border-gray-200 bg-white overflow-hidden text-xs">
+            {[['', 'All'], ['native', 'Native'], ['docusign', 'DocuSign']].map(([k, lbl]) => (
+              <button
+                key={k || 'all'}
+                type="button"
+                onClick={() => setProviderFilter(k)}
+                className={`px-3 py-2 font-medium border-l first:border-l-0 border-gray-200 ${providerFilter === k ? 'bg-violet-600 text-white' : 'text-gray-700 hover:bg-gray-50'}`}
+              >
+                {lbl}
+              </button>
+            ))}
+          </div>
           <button type="submit" className="px-3 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium">Search</button>
         </form>
       )}
