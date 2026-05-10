@@ -203,7 +203,13 @@ function buildUpdates(patch: UserSettingsPatch): Array<[string, unknown]> {
   }
   if (patch.locale !== undefined) {
     const loc = String(patch.locale || '').toLowerCase().slice(0, 8);
-    if (!ALLOWED_LOCALES.has(loc)) throw new SettingsValidationError(`locale must be one of ${[...ALLOWED_LOCALES].join(', ')}`);
+    if (!ALLOWED_LOCALES.has(loc)) {
+      throw new SettingsValidationError(
+        `locale must be one of ${[...ALLOWED_LOCALES].join(', ')}`,
+        400,
+        'locale',
+      );
+    }
     push('locale', loc);
   }
   if (patch.pronouns !== undefined) {
@@ -227,7 +233,7 @@ function buildUpdates(patch: UserSettingsPatch): Array<[string, unknown]> {
   }
   if (patch.visibility !== undefined) {
     if (!['public', 'network', 'private'].includes(patch.visibility)) {
-      throw new SettingsValidationError('visibility must be public|network|private');
+      throw new SettingsValidationError('visibility must be public|network|private', 400, 'visibility');
     }
     push('visibility', patch.visibility);
   }
@@ -288,19 +294,19 @@ function buildUpdates(patch: UserSettingsPatch): Array<[string, unknown]> {
   }
   if (patch.theme !== undefined) {
     if (!['light', 'dark', 'system'].includes(patch.theme)) {
-      throw new SettingsValidationError('theme must be light|dark|system');
+      throw new SettingsValidationError('theme must be light|dark|system', 400, 'theme');
     }
     push('theme', patch.theme);
   }
   if (patch.density !== undefined) {
     if (!['comfy', 'compact'].includes(patch.density)) {
-      throw new SettingsValidationError('density must be comfy|compact');
+      throw new SettingsValidationError('density must be comfy|compact', 400, 'density');
     }
     push('density', patch.density);
   }
   if (patch.sidebar_default !== undefined) {
     if (!['expanded', 'collapsed'].includes(patch.sidebar_default)) {
-      throw new SettingsValidationError('sidebar_default must be expanded|collapsed');
+      throw new SettingsValidationError('sidebar_default must be expanded|collapsed', 400, 'sidebar_default');
     }
     push('sidebar_default', patch.sidebar_default);
   }

@@ -1,33 +1,51 @@
--- Task #1 (AE-1) — Settings expansion · header fields.
+-- Task #1 (AE-1) — Settings expansion · schema source-of-truth.
 --
--- Adds `display_name` and `headline` to `users`. Every other column the
--- expanded /settings UI references already exists from prior migrations:
---   - 002_user_settings.sql      → user_settings (theme, density, sidebar,
---                                  timezone, locale, pronouns, profile_slug,
---                                  visibility, show_in_directory, discoverable,
---                                  digest_frequency, notif_categories_*,
---                                  quiet_hours_*, feature_flags,
---                                  dismissed_explainers)
---   - 015_profile_expansion.sql  → users (full_legal_name, date_of_birth,
---                                  nationality, tax_residency_country,
---                                  tax_id_number_enc, tax_id_last4,
---                                  phone_e164_enc, phone_last4, address_line1/2,
---                                  city, state_or_region, postal_code, country,
---                                  profile_completion_pct) + corporate_profiles
+-- This file is the AE-1 schema-contract manifest. The only NEW columns it
+-- introduces are `display_name` and `headline` on `users`; every other
+-- column the AE-1 endpoints depend on already shipped in earlier numbered
+-- migrations and is documented below for runbook traceability.
 --
--- The two columns below back the new GET/PUT /api/settings/profile/identity
--- surface (display name + tagline). They are runtime-mirrored in
--- services/profileExpansion.ts::ensureProfileExpansionSchema so dev SQLite
--- and existing remote D1 isolates pick them up without manual intervention.
+-- ─────────────────────────────────────────────────────────────────────────
+-- AE-1 column dependency manifest
+-- ─────────────────────────────────────────────────────────────────────────
 --
+-- ON `users` (Phase A — already applied via 015_profile_expansion.sql):
+--   full_legal_name, date_of_birth, nationality, tax_residency_country,
+--   tax_id_number_enc, tax_id_last4, phone_e164_enc, phone_last4,
+--   address_line1, address_line2, city, state_or_region, postal_code,
+--   country, profile_completion_pct
+--
+-- ON `users` (Phase B — NEW in this migration):
+--   display_name, headline
+--
+-- ON `user_settings` (already applied via 002_user_settings.sql + the
+-- additive 014/015 columns; runtime-mirrored by services/userSettings.ts):
+--   timezone, locale, pronouns, profile_slug, visibility,
+--   show_in_directory, discoverable, digest_frequency,
+--   notif_categories_email, notif_categories_inapp, quiet_hours_start,
+--   quiet_hours_end, quiet_hours_tz, theme, density, sidebar_default,
+--   feature_flags, dismissed_explainers
+--
+-- ON `corporate_profiles` (already applied via 015_profile_expansion.sql):
+--   entity_name, entity_type, registration_number, tax_id_number_enc,
+--   tax_id_last4, registered_country, registered_address_line1/2,
+--   registered_city, registered_state, registered_postal,
+--   signing_authority_name, signing_authority_title,
+--   signing_authority_email, ubos_json, directors_json,
+--   insurance_carriers_json, ubo_disclosed, aml_high_risk_jurisdiction,
+--   sanctions_last_checked_at
+--
+-- ─────────────────────────────────────────────────────────────────────────
 -- Apply via:
 --   wrangler d1 execute studioos-db --remote --env="" \
 --     --file=cloudflare-worker/sql/migrations/024_settings_expansion.sql
 --
--- Re-runs of this file will fail with "duplicate column name" — that is
--- expected and harmless. The runtime ensureProfileExpansionSchema swallows
--- the same error on isolate boot, so the worker never depends on this file
--- being run exactly once.
+-- Re-runs will fail with "duplicate column name" — that is expected and
+-- harmless. The runtime helpers (services/profileExpansion.ts +
+-- services/userSettings.ts) re-apply the same DDL idempotently on isolate
+-- boot, so the worker never depends on this file being run exactly once.
+-- ─────────────────────────────────────────────────────────────────────────
 
+-- Phase B additions ---------------------------------------------------------
 ALTER TABLE users ADD COLUMN display_name TEXT;
 ALTER TABLE users ADD COLUMN headline TEXT;

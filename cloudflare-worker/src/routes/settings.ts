@@ -185,24 +185,25 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
       AND confirm_expires_at > datetime('now')
     ORDER BY requested_at DESC LIMIT 1
   `;
-  // AE-1: surface a placeholder integrations array on the root payload
-  // so the Settings shell can render an empty state if the dedicated
-  // /api/settings/integrations call later fails. Looked up best-effort —
-  // any DB failure (e.g. table not yet created in a fresh env) is
-  // swallowed to `[]` rather than 500'ing the entire /settings page.
-  let integrationsList: Array<{ provider: string; connected: boolean }> = [];
+  // AE-1: include only currently-connected integrations on the root
+  // payload. Empty array when nothing is connected OR when any lookup
+  // throws — never 500 the Settings page just because the optional
+  // integrations subsystem is misconfigured. The dedicated
+  // /api/settings/integrations endpoint owns the full Connect/Disconnect
+  // catalogue; this is the lightweight summary the page header needs.
+  let integrationsList: Array<{ provider: string; connected: true }> = [];
   try {
     const safeOne = async (q: () => Promise<any[]>): Promise<boolean> => {
       try { const r = await q(); return r.length > 0; } catch { return false; }
     };
-    const linkedin = await safeOne(() => sql`SELECT 1 FROM linkedin_oauth_tokens WHERE user_id = ${user.id} LIMIT 1`);
-    const google = await safeOne(() => sql`SELECT 1 FROM google_oauth_tokens WHERE user_id = ${user.id} LIMIT 1`);
-    const microsoft = await safeOne(() => sql`SELECT 1 FROM microsoft_oauth_tokens WHERE user_id = ${user.id} LIMIT 1`);
-    integrationsList = [
-      { provider: 'linkedin', connected: linkedin },
-      { provider: 'google', connected: google },
-      { provider: 'outlook', connected: microsoft },
+    const candidates: Array<[string, () => Promise<any[]>]> = [
+      ['linkedin', () => sql`SELECT 1 FROM linkedin_oauth_tokens WHERE user_id = ${user.id} LIMIT 1`],
+      ['google',   () => sql`SELECT 1 FROM google_oauth_tokens   WHERE user_id = ${user.id} LIMIT 1`],
+      ['outlook',  () => sql`SELECT 1 FROM microsoft_oauth_tokens WHERE user_id = ${user.id} LIMIT 1`],
     ];
+    for (const [provider, q] of candidates) {
+      if (await safeOne(q)) integrationsList.push({ provider, connected: true });
+    }
   } catch (e) {
     console.warn('[settings] root integrations lookup failed (returning []):', (e as Error).message);
     integrationsList = [];
