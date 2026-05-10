@@ -278,6 +278,17 @@ export async function createAndSendEnvelope(
   // recipient email via a join into esign_recipients (which doesn't yet
   // exist for the new envelope, so user_id-keyed dedupe is the primary path).
   const recipientKey = (opts.recipientUserId ?? -1);
+  // Task #8 (X-1) — When `dealId` is supplied, include it in the dedupe
+  // predicate. Required for partner-onboarding where every invitation
+  // calls in with `recipientUserId = null` (the partner user row does
+  // not exist until activation). Without this, two pending partner
+  // invitations sharing `(document_type='partner_msa_v1', user_id=null)`
+  // would collide and the second invite would be handed back the first
+  // invite's envelope, cross-linking the deals. Existing callers that
+  // omit `dealId` (founder/investor flows that DO have recipientUserId)
+  // keep the original semantics — `COALESCE(deal_id,-2) = COALESCE(NULL,-2)`
+  // is true so dedupe still matches by user_id alone.
+  const dealKey = opts.dealId ?? null;
   const insertEnv: any = await env.DB.prepare(
     `INSERT INTO esign_envelopes (envelope_uuid, user_id, deal_id, document_type, document_title, document_body, body_sha256, status, created_by, audit_log)
      SELECT ?, ?, ?, ?, ?, ?, ?, 'sent', ?, '[]'
@@ -285,21 +296,24 @@ export async function createAndSendEnvelope(
         SELECT 1 FROM esign_envelopes
          WHERE document_type = ?
            AND COALESCE(user_id, -1) = ?
+           AND COALESCE(deal_id, -2) = COALESCE(?, -2)
            AND status IN ('sent', 'partially_signed')
       )
      RETURNING id`
   ).bind(
     envelopeUuid, opts.recipientUserId, opts.dealId || null, opts.documentType, tpl.title, tpl.body, bodySha, opts.adminUserId,
-    opts.documentType, recipientKey,
+    opts.documentType, recipientKey, dealKey,
   ).first();
   if (!insertEnv?.id) {
     // Lost the race — return the winning envelope's basic info so the caller
     // can surface it without re-emailing.
     const existing: any = await env.DB.prepare(
       `SELECT id, envelope_uuid FROM esign_envelopes
-        WHERE document_type = ? AND COALESCE(user_id, -1) = ? AND status IN ('sent', 'partially_signed')
+        WHERE document_type = ? AND COALESCE(user_id, -1) = ?
+          AND COALESCE(deal_id, -2) = COALESCE(?, -2)
+          AND status IN ('sent', 'partially_signed')
         ORDER BY id DESC LIMIT 1`
-    ).bind(opts.documentType, recipientKey).first();
+    ).bind(opts.documentType, recipientKey, dealKey).first();
     if (existing?.id) {
       return {
         envelope_id: existing.id as number,
@@ -859,6 +873,15 @@ esign.post('/sign/:token', async (c) => {
           await activatePairwiseNda(c.env, envelopeRow.envelope_uuid);
         } catch (e) { console.warn('[esign] activatePairwiseNda failed', e); }
       }
+      // Task #8 (X-1) — Partner deal activation hook. Any envelope linked
+      // to a `partner_deals` row by `envelope_id` triggers user creation,
+      // tier grants, referral-code activation, DD case open, and Trust
+      // Center seeding. Idempotent: a second pass on the same envelope is
+      // a no-op once status='active'.
+      try {
+        const { activatePartnerDealOnSignature } = await import('../services/partnerDeals');
+        await activatePartnerDealOnSignature(c.env, rec.envelope_id);
+      } catch (e) { console.warn('[esign] activatePartnerDealOnSignature failed', e); }
       if (envelopeRow?.user_id) {
         const { notify } = await import('../services/notify');
         await notify(c.env, {

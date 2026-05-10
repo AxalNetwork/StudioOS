@@ -272,14 +272,31 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
 
   if (ref_code) {
     try {
-      const { attachReferral } = await import('./network');
-      const linked = await attachReferral(c.env, user.id, String(ref_code).toUpperCase());
-      if (linked) {
-        // T22.1 — actor uses email_hash, never the plaintext email.
-        const sql2 = getSQL(c.env);
-        const refEmailHash = await hashEmail(email);
-        await sql2`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('referral_attached', ${`Joined via referral code ${ref_code}`}, ${refEmailHash}, ${user.id})`;
-        await sql2.end();
+      const code = String(ref_code).toUpperCase();
+      // Task #8 (X-1) — partner referral codes (PART-XXXXXXXX) grant tier
+      // benefits per the partner deal's terms; non-partner codes fall
+      // through to the legacy network referral chain.
+      if (code.startsWith('PART-')) {
+        try {
+          const { redeemPartnerReferralCode } = await import('../services/partnerDeals');
+          const redeemed = await redeemPartnerReferralCode(c.env, user.id, code);
+          if (redeemed) {
+            const sql2 = getSQL(c.env);
+            const refEmailHash = await hashEmail(email);
+            await sql2`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('partner_referral_redeemed', ${JSON.stringify({ partner_deal_id: redeemed.partner_deal_id, code })}, ${refEmailHash}, ${user.id})`;
+            await sql2.end();
+          }
+        } catch (e) { console.error('redeemPartnerReferralCode failed:', e); }
+      } else {
+        const { attachReferral } = await import('./network');
+        const linked = await attachReferral(c.env, user.id, code);
+        if (linked) {
+          // T22.1 — actor uses email_hash, never the plaintext email.
+          const sql2 = getSQL(c.env);
+          const refEmailHash = await hashEmail(email);
+          await sql2`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('referral_attached', ${`Joined via referral code ${ref_code}`}, ${refEmailHash}, ${user.id})`;
+          await sql2.end();
+        }
       }
     } catch (e) { console.error('attachReferral failed:', e); }
   }

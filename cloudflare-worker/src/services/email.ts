@@ -254,6 +254,96 @@ export async function sendAgreementAssignedEmail(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Task #8 (X-1) — Partner invitation email. Sent from `noreply@axal.vc`
+// when an admin issues a partnership invitation. The CTA opens the
+// chatbot wizard at `${APP_URL}/partner-onboarding/${token}` (handled
+// by the X-2 frontend). 14-day default expiry.
+// ---------------------------------------------------------------------------
+export async function sendPartnerInvitationEmail(
+  env: Env,
+  to: string,
+  recipientName: string,
+  adminName: string,
+  link: string,
+  personalMessage: string,
+): Promise<boolean> {
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+    console.error('[EMAIL] Gmail credentials missing — partner invitation not sent');
+    return false;
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const greet = recipientName ? `Hi ${recipientName.split(' ')[0]},` : 'Hi,';
+    const noteBlock = personalMessage
+      ? `<tr><td style="padding:0 32px 8px;"><div style="background:#faf5ff;border-left:3px solid #7c3aed;border-radius:8px;padding:14px 16px;color:#4b5563;font-size:14px;line-height:1.55;white-space:pre-wrap;">${escapeHtml(personalMessage)}</div></td></tr>`
+      : '';
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
+<tr><td align="center">
+<table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
+<tr><td style="padding:32px 32px 20px;border-bottom:1px solid #f3f4f6;">
+  <table cellpadding="0" cellspacing="0"><tr>
+    <td style="vertical-align:middle;padding-right:10px;">
+      <img src="https://axal.vc/axal-mark.png" alt="Axal VC" width="36" height="36" style="display:block;border:0;border-radius:8px;" />
+    </td>
+    <td style="vertical-align:middle;">
+      <span style="font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.01em;">Axal VC</span>
+      <div style="font-size:11px;color:#9ca3af;margin-top:2px;">Partner Network</div>
+    </td>
+  </tr></table>
+</td></tr>
+<tr><td style="padding:28px 32px 0;">
+  <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">You're invited to partner with Axal VC</h1>
+  <p style="font-size:14px;color:#6b7280;margin:0 0 18px;line-height:1.6;">${greet}</p>
+  <p style="font-size:14px;color:#374151;margin:0 0 18px;line-height:1.65;">
+    ${escapeHtml(adminName)} has invited you to join the Axal VC partner network. We work with venture partners,
+    operating partners, deal scouts, and capital providers to help our portfolio ship faster. The link below
+    opens a short chatbot that profiles your interests, returns 1–3 partnership structures tailored to you,
+    and walks you through electronic signature.
+  </p>
+</td></tr>
+${noteBlock}
+<tr><td style="padding:0 32px;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:8px 0 24px;">
+    <a href="${link}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:16px 32px;border-radius:14px;">Start partner onboarding</a>
+  </td></tr></table>
+</td></tr>
+<tr><td style="padding:0 32px 32px;">
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:16px 18px;">
+    <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">Or paste this link into your browser:</p>
+    <a href="${link}" style="color:#2563eb;word-break:break-all;font-size:12px;">${link}</a>
+  </div>
+  <p style="font-size:11px;color:#9ca3af;margin:20px 0 0;line-height:1.6;">
+    This link is unique to you and expires in 14 days. If you didn't expect this invitation,
+    you can safely ignore the email — we won't send a follow-up.
+  </p>
+</td></tr>
+</table></td></tr></table></body></html>`;
+    const noteText = personalMessage ? `\n\n${personalMessage}\n\n` : '\n\n';
+    const text = `${greet}\n\n${adminName} has invited you to join the Axal VC partner network.${noteText}Open the partner onboarding chatbot here: ${link}\n\nThis link expires in 14 days.\n\n— Axal VC`;
+    const subject = `You're invited to partner with Axal VC`;
+    const rawEmail = buildRawEmail(to, subject, html, text, 'Axal VC <noreply@axal.vc>');
+    const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+    if (!res.ok) {
+      const err: any = await res.json().catch(() => ({}));
+      console.error('[EMAIL] Partner invitation send failed:', err);
+      return false;
+    }
+    return true;
+  } catch (e: any) {
+    console.error(`[EMAIL] Partner invitation failed for ${to}: ${e?.message || 'Unknown error'}`);
+    return false;
+  }
+}
+
 export async function sendReferralInviteEmail(
   env: Env,
   to: string,
