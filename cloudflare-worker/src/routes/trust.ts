@@ -130,10 +130,17 @@ trust.post('/intro/request', async (c) => {
     return c.json({ error: 'envelope_creation_failed', message: (e as Error).message }, 500);
   }
   await upsertPairwiseNda(c.env, founderUserId, investor.id, env.envelope_uuid);
+  // SECURITY: never leak founder/Axal signing tokens back to the
+  // requesting investor — they would be able to sign as all three
+  // parties via the public /api/legal/esign/sign/:token endpoint and
+  // fraudulently activate the pairwise NDA. The founder + Axal links
+  // are delivered only via email (sendAgreementAssignedEmail) inside
+  // createThreeWayNdaEnvelope. The investor receives ONLY their own
+  // signing URL here (also separately emailed).
   return c.json({
     status: 'envelope_issued',
     envelope_uuid: env.envelope_uuid,
-    signing_urls: env.signing_urls,
+    signing_url: env.signing_urls.investor,
   });
 });
 

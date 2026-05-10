@@ -682,6 +682,25 @@ esign.post('/sign/:token', async (c) => {
     }, 403);
   }
 
+  // Task #3 (Y-1) — signer-identity enforcement. When the recipient
+  // row is linked to an Axal account (`esign_recipients.user_id IS NOT
+  // NULL`), the caller MUST be authenticated as that user. This blocks
+  // the attack where an investor who issued a 3-way NDA (and thus
+  // technically holds the envelope_uuid) can never sign as the founder
+  // or Axal counter-signer just by guessing/sniffing those tokens.
+  // Tokens for non-account signers (e.g. one-off external counsel
+  // emails with no user_id) keep working with anonymous bearer access.
+  if (rec.user_id) {
+    const { getCurrentUser } = await import('../auth');
+    const caller = await getCurrentUser(c);
+    if (!caller || caller.id !== rec.user_id) {
+      return c.json({
+        error: 'You must be signed in as the intended recipient to complete this signature.',
+        code: 'signer_identity_mismatch',
+      }, 403);
+    }
+  }
+
   const ip = clientIp(c.req.raw);
   const ua = c.req.header('user-agent') || '';
   const signedAt = new Date().toISOString();
