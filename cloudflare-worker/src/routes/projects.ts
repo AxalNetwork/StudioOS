@@ -160,8 +160,14 @@ async function createProjectHandler(c: any) {
         payload: { project_id: project.id },
         eventType: 'auto_push:project_created',
       });
+      // Task #4 — mirror to Salesforce when active.
+      schedulePush({
+        c, user: { id: ownerUserId } as User, providerKey: 'salesforce',
+        payload: { project_id: project.id },
+        eventType: 'auto_push:project_created',
+      });
     }
-  } catch (e) { console.warn('[projects] hubspot project-create hook failed', e); }
+  } catch (e) { console.warn('[projects] crm project-create hook failed', e); }
 
   return c.json(project, 201);
 }

@@ -234,10 +234,22 @@ export default function IntegrationsPage() {
                       {it.config.pipeline_label && <span>pipeline: {it.config.pipeline_label}</span>}
                     </div>
                   )}
+                  {it.provider_key === 'salesforce' && it.config && (
+                    <div className="text-[11px] text-gray-500 mt-2 flex flex-wrap gap-x-3 gap-y-0.5">
+                      <span>{it.config.is_sandbox ? 'Sandbox' : 'Production'}</span>
+                      {it.config.username && <span>{it.config.username}</span>}
+                      {it.config.organization_id && <span>org #{it.config.organization_id}</span>}
+                    </div>
+                  )}
                   <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
                     {it.provider_key === 'hubspot' && (
                       <button onClick={() => setConfigFor(it)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center gap-1 px-2 py-1">
                         <PieChart size={12} /> Pipeline
+                      </button>
+                    )}
+                    {it.provider_key === 'salesforce' && (
+                      <button onClick={() => setConfigFor(it)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center gap-1 px-2 py-1">
+                        <PieChart size={12} /> Mapping
                       </button>
                     )}
                     <button onClick={() => openLogs(it)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center gap-1 px-2 py-1">
@@ -317,11 +329,19 @@ export default function IntegrationsPage() {
         />
       )}
 
-      {configFor && (
+      {configFor && configFor.provider_key === 'hubspot' && (
         <HubspotConfigModal
           integration={configFor}
           onClose={() => setConfigFor(null)}
           onSaved={async () => { setConfigFor(null); await refresh(); showToast('Pipeline saved.'); }}
+        />
+      )}
+
+      {configFor && configFor.provider_key === 'salesforce' && (
+        <SalesforceConfigModal
+          integration={configFor}
+          onClose={() => setConfigFor(null)}
+          onSaved={async () => { setConfigFor(null); await refresh(); showToast('Mapping saved.'); }}
         />
       )}
 
@@ -435,6 +455,7 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
   const [webhookSecret, setWebhookSecret] = useState('');
   const [displayName, setDisplayName] = useState(existing?.display_name || provider.display_name);
   const [configText, setConfigText] = useState(existing?.config ? JSON.stringify(existing.config, null, 2) : '');
+  const [sfSandbox, setSfSandbox] = useState(false);
   const [err, setErr] = useState('');
   const tierLocked = !bypassesTier && provider.tier_locked;
 
@@ -458,7 +479,8 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
   const startOauth = async () => {
     setErr('');
     try {
-      const res = await api.integrationsOauthStart(provider.key);
+      const params = provider.key === 'salesforce' ? { sandbox: sfSandbox ? '1' : '' } : {};
+      const res = await api.integrationsOauthStart(provider.key, params);
       if (res.authorize_url) window.location.href = res.authorize_url;
     } catch (e) {
       setErr(e.message);
@@ -500,8 +522,22 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
             {provider.auth_type === 'oauth2' && !existing && (
               <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-xs text-gray-700 dark:text-gray-300">
                 <p className="mb-2">{provider.display_name} uses OAuth — sign in to authorize StudioOS:</p>
+                {provider.key === 'salesforce' && (
+                  <div className="mb-3 flex items-center gap-3 text-xs">
+                    <span className="text-gray-700 dark:text-gray-300">Org type:</span>
+                    <label className="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="radio" name="sf_env" checked={!sfSandbox} onChange={() => setSfSandbox(false)} />
+                      Production
+                    </label>
+                    <label className="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="radio" name="sf_env" checked={sfSandbox} onChange={() => setSfSandbox(true)} />
+                      Sandbox
+                    </label>
+                  </div>
+                )}
                 <button type="button" onClick={startOauth} className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-1.5 rounded inline-flex items-center gap-1.5">
                   <ExternalLink size={12} /> Continue with {provider.display_name}
+                  {provider.key === 'salesforce' && sfSandbox && <span className="ml-1 opacity-80">(Sandbox)</span>}
                 </button>
                 {provider.supports_pat && (
                   <p className="mt-2 text-[11px] text-gray-500">
@@ -710,6 +746,153 @@ function HubspotConfigModal({ integration, onClose, onSaved }) {
                 Empty entries fall back to the built-in defaults (appointmentscheduled / qualifiedtobuy / presentationscheduled / closedwon / closedlost).
               </p>
             </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={onClose} className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700">Cancel</button>
+              <button
+                onClick={onSave}
+                disabled={saving}
+                className="text-sm px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1"
+              >
+                <Check size={14} /> {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────── Salesforce stage + field mapping
+
+const SF_OBJECTS = [
+  { key: 'opportunity', label: 'Opportunity' },
+  { key: 'account',     label: 'Account' },
+  { key: 'contact',     label: 'Contact' },
+];
+
+function SalesforceConfigModal({ integration, onClose, onSaved }) {
+  useEscapeClose(onClose);
+  const [loading, setLoading] = useState(true);
+  const [stages, setStages] = useState([]);
+  const [stageMap, setStageMap] = useState(integration?.config?.stage_map || {});
+  const [fieldMap, setFieldMap] = useState(integration?.config?.field_map || null);
+  const [defaults, setDefaults] = useState(null);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [stagesRes, fieldsRes] = await Promise.all([
+          api.integrationsAction(integration.uid, 'list_stages').catch(() => null),
+          api.integrationsAction(integration.uid, 'list_field_map').catch(() => null),
+        ]);
+        if (!alive) return;
+        setStages(stagesRes?.result?.stages || []);
+        const fm = fieldsRes?.result?.field_map || null;
+        const def = fieldsRes?.result?.defaults || null;
+        if (fm && !fieldMap) setFieldMap(fm);
+        setDefaults(def);
+      } catch (e) {
+        if (alive) setError(e.message || 'Failed to load Salesforce metadata');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [integration.uid]);
+
+  const setStage = (studio, sfName) => setStageMap(m => ({ ...m, [studio]: sfName }));
+  const effectiveFieldMap = fieldMap || defaults || { opportunity: {}, account: {}, contact: {} };
+  const updateField = (obj, studioKey, sfField) => {
+    setFieldMap(m => {
+      const base = m || defaults || { opportunity: {}, account: {}, contact: {} };
+      return { ...base, [obj]: { ...(base[obj] || {}), [studioKey]: sfField } };
+    });
+  };
+
+  const onSave = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const patch = { stage_map: stageMap };
+      if (fieldMap) patch.field_map = fieldMap;
+      await api.integrationsPatchConfig(integration.uid, patch);
+      onSaved?.();
+    } catch (e) {
+      setError(e.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-5" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100">Salesforce field mapping</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"><X size={18} /></button>
+        </div>
+        {loading ? (
+          <div className="text-sm text-gray-500 py-6 text-center">Loading metadata…</div>
+        ) : (
+          <div className="space-y-5">
+            {error && <div className="text-sm text-red-600 flex items-center gap-2"><AlertCircle size={14} /> {error}</div>}
+            <div>
+              <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Map StudioOS deal status → Opportunity StageName</div>
+              <div className="space-y-2">
+                {STUDIO_STAGES.map(s => (
+                  <div key={s} className="flex items-center gap-2">
+                    <div className="w-20 text-xs text-gray-600 dark:text-gray-400 capitalize">{s}</div>
+                    <select
+                      value={stageMap[s] || ''}
+                      onChange={e => setStage(s, e.target.value)}
+                      className="flex-1 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-1.5"
+                    >
+                      <option value="">— use default —</option>
+                      {stages.map(st => (
+                        <option key={st.value} value={st.value}>{st.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-gray-500 mt-2">
+                Defaults: Prospecting / Qualification / Proposal / Closed Won / Closed Lost.
+              </p>
+            </div>
+
+            <div>
+              <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Field mapping (StudioOS → Salesforce)</div>
+              <div className="space-y-3">
+                {SF_OBJECTS.map(obj => (
+                  <div key={obj.key} className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+                    <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">{obj.label}</div>
+                    <div className="space-y-1.5">
+                      {Object.keys(effectiveFieldMap[obj.key] || {}).map(studioKey => (
+                        <div key={studioKey} className="flex items-center gap-2 text-xs">
+                          <div className="w-28 text-gray-600 dark:text-gray-400 truncate">{studioKey}</div>
+                          <span className="text-gray-400">→</span>
+                          <input
+                            value={effectiveFieldMap[obj.key]?.[studioKey] || ''}
+                            onChange={e => updateField(obj.key, studioKey, e.target.value)}
+                            className="flex-1 text-xs font-mono rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 py-1"
+                            placeholder="SF field API name"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-gray-500 mt-2">
+                Custom fields ending in <code>__c</code> that don't exist on your org are skipped automatically; standard fields must match exact API names.
+              </p>
+            </div>
+
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={onClose} className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700">Cancel</button>
               <button

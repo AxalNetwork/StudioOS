@@ -829,7 +829,16 @@ integrations.get('/oauth/:provider/start', async (c) => {
   // single-use; we hand it to the provider as the OAuth `state` param so
   // the callback can replay both userId and PKCE verifier.
   const pkce = await buildPkce();
-  const state = await issueOauthState(c.env, user.id, provider, pkce.verifier, { challenge: pkce.challenge });
+  // Provider-specific extras carried through OAuth round-trip via state.
+  // Salesforce uses `sandbox=1` to pick test.salesforce.com vs login; the
+  // callback recovers it from state.extra and passes through to connect()
+  // so we never trust the query string at callback time.
+  const extra: Record<string, unknown> = { challenge: pkce.challenge };
+  if (provider === 'salesforce') {
+    const sb = c.req.query('sandbox');
+    extra.is_sandbox = sb === '1' || sb === 'true';
+  }
+  const state = await issueOauthState(c.env, user.id, provider, pkce.verifier, extra);
   const url = await impl.buildAuthorizeUrl(c, user, state);
   return c.json({ ok: true, authorize_url: url, state, pkce_method: pkce.method });
 });
@@ -871,7 +880,7 @@ integrations.get('/oauth/:provider/callback', async (c) => {
     const result = await impl.connect(c, user, {
       oauth_code: code,
       oauth_state: state,
-      config: { pkce_verifier: consumed.pkce_verifier ?? undefined },
+      config: { pkce_verifier: consumed.pkce_verifier ?? undefined, ...consumed.extra },
     });
     const sql = getSQL(c.env);
     try {

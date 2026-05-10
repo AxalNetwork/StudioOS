@@ -10,10 +10,12 @@ CREATE TABLE IF NOT EXISTS founders (
     domain_expertise TEXT,
     experience_years INTEGER NOT NULL DEFAULT 0,
     bio TEXT,
+    sf_contact_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_founders_email ON founders(email);
+CREATE INDEX IF NOT EXISTS idx_founders_sf_contact ON founders(sf_contact_id);
 
 CREATE TABLE IF NOT EXISTS partners (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -178,11 +180,14 @@ CREATE TABLE IF NOT EXISTS projects (
     use_of_funds TEXT,
     hubspot_company_id TEXT,
     hubspot_primary_contact_id TEXT,
+    sf_account_id TEXT,
+    sf_primary_contact_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name);
+CREATE INDEX IF NOT EXISTS idx_projects_sf_account ON projects(sf_account_id);
 
 CREATE TABLE IF NOT EXISTS score_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -293,11 +298,13 @@ CREATE TABLE IF NOT EXISTS deals (
     notes TEXT,
     amount REAL,
     hubspot_deal_id TEXT,
+    sf_opportunity_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_deals_project ON deals(project_id);
+CREATE INDEX IF NOT EXISTS idx_deals_sf_opp ON deals(sf_opportunity_id);
 
 CREATE TABLE IF NOT EXISTS lp_investors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

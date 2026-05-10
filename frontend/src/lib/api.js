@@ -560,7 +560,10 @@ export const api = {
   // POST /notify-me is the preferred public surface; /waitlist is the admin/list view.
   integrationsWaitlistJoin: (data) => request('/integrations/notify-me', { method: 'POST', body: JSON.stringify(data) }),
   integrationsWaitlistLeave: (provider) => request(`/integrations/notify-me/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
-  integrationsOauthStart: (provider) => request(`/integrations/oauth/${encodeURIComponent(provider)}/start`),
+  integrationsOauthStart: (provider, params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([_, v]) => v != null && v !== '')).toString();
+    return request(`/integrations/oauth/${encodeURIComponent(provider)}/start${q ? `?${q}` : ''}`);
+  },
   // Task #2 — HubSpot pipeline picker + arbitrary provider actions.
   integrationsAction: (uid, name, body) => request(
     `/integrations/${encodeURIComponent(uid)}/action/${encodeURIComponent(name)}`,

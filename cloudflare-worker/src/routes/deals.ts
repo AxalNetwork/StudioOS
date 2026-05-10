@@ -122,8 +122,14 @@ deals.put('/:id', async (c) => {
           payload: { deal_id: id },
           eventType: 'auto_push:deal_stage_change',
         });
+        // Task #4 — mirror to Salesforce when active. Same payload shape.
+        schedulePush({
+          c, user: founderUser, providerKey: 'salesforce',
+          payload: { deal_id: id },
+          eventType: 'auto_push:deal_stage_change',
+        });
       }
-    } catch (e) { console.warn('[deals] hubspot stage-change hook failed', e); }
+    } catch (e) { console.warn('[deals] crm stage-change hook failed', e); }
   }
 
   await sql.end();
