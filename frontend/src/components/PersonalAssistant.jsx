@@ -114,7 +114,10 @@ export default function PersonalAssistant({ user }) {
   // worker flips to 1 at the end of role-detection onboarding (see
   // routes/onboarding.ts). Until that flips the user shouldn't see the
   // launcher at all.
-  if (!user || user.assistant_enabled === 0 || user.assistant_enabled === false) return null;
+  // Fail-closed: only render when the flag is explicitly enabled. Any
+  // missing/0/false value hides the launcher so a payload without the
+  // field can't accidentally expose the assistant pre-onboarding.
+  if (!user || user.assistant_enabled !== 1) return null;
   return <PersonalAssistantPanel user={user} />;
 }
 
