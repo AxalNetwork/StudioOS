@@ -40,6 +40,7 @@ import {
   previewApiKey,
   type CredentialBlob,
 } from '../integrations/secrets';
+import { buildPkce, issueOauthState, consumeOauthState } from '../integrations/oauth';
 
 const integrations = new Hono<{ Bindings: Env }>();
 
@@ -209,6 +210,7 @@ integrations.post('/connect', async (c) => {
     return c.json({
       error: 'provider_coming_soon',
       message: `${desc.display_name} isn't available yet — join the waitlist to be notified.`,
+      notify_me_url: `/api/integrations/notify-me`,
     }, 409);
   }
 
@@ -222,9 +224,10 @@ integrations.post('/connect', async (c) => {
   const impl = getProviderImpl(key);
   if (!impl) {
     return c.json({
-      error: 'provider_not_implemented',
-      message: `${desc.display_name} is rolling out — implementation lands in a follow-up release.`,
-    }, 501);
+      error: 'provider_rolling_out',
+      message: `${desc.display_name} is rolling out — please check back shortly.`,
+      retry_after_seconds: 86400,
+    }, 503, { 'Retry-After': '86400' });
   }
 
   let result;
@@ -363,7 +366,7 @@ integrations.post('/:uid/sync', async (c) => {
 
   const impl = getProviderImpl(row.provider_key);
   if (!impl?.sync) {
-    return c.json({ error: 'sync_not_supported', message: 'This provider has no sync action.' }, 501);
+    return c.json({ error: 'sync_not_supported', message: 'This provider has no sync action.' }, 422);
   }
   try {
     const out = await impl.sync(c, user, row);
@@ -402,7 +405,7 @@ integrations.post('/:uid/push', async (c) => {
 
   const impl = getProviderImpl(row.provider_key);
   if (!impl?.push) {
-    return c.json({ error: 'push_not_supported', message: 'This provider has no push action.' }, 501);
+    return c.json({ error: 'push_not_supported', message: 'This provider has no push action.' }, 422);
   }
 
   const payload = await c.req.json().catch(() => ({}));
@@ -441,7 +444,19 @@ integrations.get('/:uid/logs', async (c) => {
     'SELECT id, direction, event_type, status, http_status, request_summary, response_summary, external_id, payload_json, created_at ' +
     'FROM integration_logs WHERE integration_id = ? ORDER BY datetime(created_at) DESC LIMIT ?',
   ).bind(row.id, limit).all();
-  const items = (rows.results || []).map((r: any) => ({
+  interface LogRow {
+    id: number;
+    direction: string;
+    event_type: string;
+    status: string;
+    http_status: number | null;
+    request_summary: string | null;
+    response_summary: string | null;
+    external_id: string | null;
+    payload_json: string | null;
+    created_at: string;
+  }
+  const items = ((rows.results || []) as unknown as LogRow[]).map(r => ({
     id: r.id,
     direction: r.direction,
     event_type: r.event_type,
@@ -507,11 +522,14 @@ integrations.post('/webhook/:provider/:uid', async (c) => {
 
   const impl = getProviderImpl(provider);
   if (!impl?.webhook) {
+    // Without a handler we simply ack and store the (redacted) payload so
+    // ops can inspect via /:uid/logs. We deliberately do NOT 501 — the
+    // foundation accepts the inbound event for later replay.
     await logEvent(c.env, {
       integration_id: row.id, user_id: row.user_id, provider_key: provider,
       direction: 'inbound', event_type: 'webhook', status: 'ok',
-      response_summary: 'received (no handler)',
-      payload: safeJson(body, body.slice(0, 500)),
+      response_summary: 'received (no handler yet)',
+      payload: safeJson<unknown>(body, body.slice(0, 500)),
     });
     return c.json({ ok: true, accepted: true });
   }
@@ -609,6 +627,33 @@ integrations.get('/waitlist', async (c) => {
   return c.json({ ok: true, items: rows.results || [] });
 });
 
+// `notify-me` aliases — preferred public surface for the Coming Soon
+// "Notify me" button. `/waitlist` remains for admin/list use.
+integrations.post('/notify-me', async (c) => {
+  await ensureIntegrationsSchema(c.env);
+  const user = await requireAuth(c);
+  ensureRole(c, user);
+  const body = await c.req.json().catch(() => ({}));
+  const key = String(body?.provider_key || '').toLowerCase().trim();
+  const desc = getDescriptor(key);
+  if (!desc) return c.json({ error: 'unknown_provider' }, 404);
+  const notes = body?.notes ? String(body.notes).slice(0, 1000) : null;
+  await c.env.DB.prepare(
+    'INSERT INTO integration_waitlist (user_id, provider_key, notes) VALUES (?, ?, ?) ' +
+    'ON CONFLICT(user_id, provider_key) DO UPDATE SET notes = excluded.notes',
+  ).bind(user.id, key, notes).run();
+  return c.json({ ok: true, joined: true, provider_key: key });
+});
+
+integrations.delete('/notify-me/:provider', async (c) => {
+  await ensureIntegrationsSchema(c.env);
+  const user = await requireAuth(c);
+  ensureRole(c, user);
+  const key = c.req.param('provider').toLowerCase();
+  await c.env.DB.prepare('DELETE FROM integration_waitlist WHERE user_id = ? AND provider_key = ?').bind(user.id, key).run();
+  return c.json({ ok: true });
+});
+
 integrations.delete('/waitlist/:provider', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const user = await requireAuth(c);
@@ -638,12 +683,100 @@ integrations.get('/oauth/:provider/start', async (c) => {
   }
   const impl = getProviderImpl(provider);
   if (!impl?.buildAuthorizeUrl) {
-    return c.json({ error: 'provider_not_implemented', message: `${desc.display_name} OAuth flow ships in a follow-up release.` }, 501);
+    return c.json({
+      error: 'provider_rolling_out',
+      message: `${desc.display_name} OAuth flow is rolling out — please check back shortly.`,
+      retry_after_seconds: 86400,
+    }, 503, { 'Retry-After': '86400' });
   }
-  const stateBytes = crypto.getRandomValues(new Uint8Array(16));
-  const state = Array.from(stateBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  // PKCE + signed state. The state token is bound to (user, provider) and
+  // single-use; we hand it to the provider as the OAuth `state` param so
+  // the callback can replay both userId and PKCE verifier.
+  const pkce = await buildPkce();
+  const state = await issueOauthState(c.env, user.id, provider, pkce.verifier, { challenge: pkce.challenge });
   const url = await impl.buildAuthorizeUrl(c, user, state);
-  return c.json({ ok: true, authorize_url: url, state });
+  return c.json({ ok: true, authorize_url: url, state, pkce_method: pkce.method });
+});
+
+/**
+ * GET /api/integrations/oauth/:provider/callback
+ * Provider redirects the browser here after consent. We verify the signed
+ * state, hand the code + verifier off to /connect-style flow internally,
+ * and either redirect back to the Integrations page (?integration=ok) or
+ * surface an error fragment the page renders inline.
+ */
+integrations.get('/oauth/:provider/callback', async (c) => {
+  await ensureIntegrationsSchema(c.env);
+  const user = await requireAuth(c);
+  ensureRole(c, user);
+  const provider = c.req.param('provider').toLowerCase();
+  const desc = getDescriptor(provider);
+  const code = c.req.query('code') || '';
+  const state = c.req.query('state') || '';
+  const errorParam = c.req.query('error') || '';
+  if (errorParam) {
+    return c.redirect(`/integrations?oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(errorParam)}`);
+  }
+  if (!desc || desc.auth_type !== 'oauth2') {
+    return c.json({ error: 'oauth_not_supported' }, 404);
+  }
+  if (!code || !state) {
+    return c.json({ error: 'missing_code_or_state' }, 400);
+  }
+  const consumed = await consumeOauthState(c.env, user.id, provider, state);
+  if (!consumed) {
+    return c.json({ error: 'invalid_or_expired_state' }, 400);
+  }
+  const impl = getProviderImpl(provider);
+  if (!impl) {
+    return c.redirect(`/integrations?oauth=rolling_out&provider=${encodeURIComponent(provider)}`);
+  }
+  try {
+    const result = await impl.connect(c, user, {
+      oauth_code: code,
+      oauth_state: state,
+      config: { pkce_verifier: consumed.pkce_verifier ?? undefined },
+    });
+    const sql = getSQL(c.env);
+    try {
+      const existing = await c.env.DB.prepare(
+        'SELECT uid FROM integrations WHERE user_id = ? AND provider_key = ?',
+      ).bind(user.id, provider).first<{ uid: string }>();
+      const uid = existing?.uid || newUid();
+      const credsEnc = await encryptCredentials(c.env, uid, result.credentials);
+      if (existing) {
+        await c.env.DB.prepare(
+          "UPDATE integrations SET status = 'active', credentials_enc = ?, " +
+          'config_json = ?, capabilities_json = ?, scopes_json = ?, ' +
+          'external_account_id = ?, external_account_name = ?, last_error = NULL, ' +
+          'updated_at = CURRENT_TIMESTAMP WHERE uid = ?',
+        ).bind(
+          credsEnc,
+          JSON.stringify(result.config ?? {}),
+          JSON.stringify(result.capabilities ?? desc.capabilities),
+          JSON.stringify(result.scopes ?? []),
+          result.external_account_id ?? null, result.external_account_name ?? null,
+          uid,
+        ).run();
+      } else {
+        await c.env.DB.prepare(
+          'INSERT INTO integrations (uid, user_id, provider_key, display_name, status, auth_type, credentials_enc, config_json, capabilities_json, scopes_json, external_account_id, external_account_name) ' +
+          "VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)",
+        ).bind(
+          uid, user.id, provider, desc.display_name, desc.auth_type, credsEnc,
+          JSON.stringify(result.config ?? {}),
+          JSON.stringify(result.capabilities ?? desc.capabilities),
+          JSON.stringify(result.scopes ?? []),
+          result.external_account_id ?? null, result.external_account_name ?? null,
+        ).run();
+      }
+    } finally {
+      await sql.end();
+    }
+    return c.redirect(`/integrations?oauth=ok&provider=${encodeURIComponent(provider)}`);
+  } catch (e) {
+    return c.redirect(`/integrations?oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent((e as Error).message || 'callback_failed')}`);
+  }
 });
 
 export default integrations;

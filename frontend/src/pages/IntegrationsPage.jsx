@@ -160,12 +160,9 @@ export default function IntegrationsPage() {
     <div className="p-6 max-w-6xl mx-auto" data-density-target>
       <header className="flex items-start gap-3 mb-6">
         <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center"><Plug size={20} /></div>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Integrations</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Connect your CRM, legal providers, and data feeds. Push deals out, receive webhooks back.
-          </p>
-        </div>
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 leading-snug">
+          Integrations <span className="text-gray-500 dark:text-gray-400 font-normal">— Connect your CRM, legal providers, and data feeds. Push deals out, receive webhooks back.</span>
+        </h1>
       </header>
 
       {error && (
