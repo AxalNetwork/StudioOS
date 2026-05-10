@@ -234,12 +234,7 @@ export default function SettingsPage() {
 
         <div className="space-y-6">
           {safeActive === 'profile' && (
-            <>
-              <ProfileSection data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
-              <ProfileExtrasCard flash={flash} />
-              <JurisdictionsSection data={data} patch={patch} />
-              <RolePreferencesSection data={data} patch={patch} />
-            </>
+            <ProfileTabs data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
           )}
           {safeActive === 'account' && (
             <>
@@ -366,6 +361,426 @@ function Field({ label, hint, children }) {
 }
 
 const inputCls = 'w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500';
+
+// ---------- Task #16 — Profile sub-tabs (Personal / Corporate / Verification)
+
+const ENTITY_TYPE_OPTIONS = [
+  ['', '— select —'],
+  ['llc', 'LLC'],
+  ['c_corp', 'C-Corp'],
+  ['s_corp', 'S-Corp'],
+  ['b_corp', 'B-Corp'],
+  ['ltd', 'Ltd'],
+  ['plc', 'PLC'],
+  ['gmbh', 'GmbH'],
+  ['ug', 'UG'],
+  ['ag', 'AG'],
+  ['sa', 'SA'],
+  ['sas', 'SAS'],
+  ['sarl', 'SARL'],
+  ['bv', 'BV'],
+  ['nv', 'NV'],
+  ['spa', 'SpA'],
+  ['srl', 'Srl'],
+  ['ab', 'AB'],
+  ['as', 'AS'],
+  ['oy', 'Oy'],
+  ['pte_ltd', 'Pte Ltd'],
+  ['pty_ltd', 'Pty Ltd'],
+  ['kk', 'KK'],
+  ['gk', 'GK'],
+  ['sole_proprietorship', 'Sole proprietorship'],
+  ['partnership', 'Partnership'],
+  ['other', 'Other'],
+];
+
+function CompletionRing({ pct, hint }) {
+  const v = Math.max(0, Math.min(100, Number(pct) || 0));
+  const r = 22, c = 2 * Math.PI * r;
+  const off = c * (1 - v / 100);
+  return (
+    <div className="flex items-center gap-3">
+      <svg width="56" height="56" viewBox="0 0 56 56" className="flex-shrink-0">
+        <circle cx="28" cy="28" r={r} fill="none" stroke="currentColor" strokeWidth="5" className="text-gray-200 dark:text-gray-700" />
+        <circle cx="28" cy="28" r={r} fill="none" stroke="currentColor" strokeWidth="5"
+          strokeDasharray={c} strokeDashoffset={off} strokeLinecap="round"
+          transform="rotate(-90 28 28)"
+          className={v >= 80 ? 'text-emerald-500' : v >= 50 ? 'text-violet-500' : 'text-amber-500'} />
+        <text x="28" y="32" textAnchor="middle" fontSize="12" fontWeight="600" className="fill-gray-900 dark:fill-gray-100">{v}%</text>
+      </svg>
+      <div className="text-xs text-gray-600 dark:text-gray-400 leading-snug">{hint}</div>
+    </div>
+  );
+}
+
+function ProfileTabs({ data, onSaved, flash, patch }) {
+  const [sub, setSub] = useState('personal');
+  const [pct, setPct] = useState(0);
+  const tabs = [
+    { id: 'personal', label: 'Personal' },
+    { id: 'corporate', label: 'Corporate' },
+    { id: 'verification', label: 'Verification' },
+  ];
+  return (
+    <>
+      <div className="flex flex-wrap gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg w-fit">
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setSub(t.id)}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              sub === t.id ? 'bg-white dark:bg-gray-900 text-violet-700 shadow-sm font-medium' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}>{t.label}</button>
+        ))}
+      </div>
+      {sub === 'personal' && (
+        <>
+          <PersonalIdentityCard flash={flash} onPctChange={setPct} pct={pct} />
+          <ProfileSection data={data} onSaved={onSaved} flash={flash} patch={patch} />
+          <ProfileExtrasCard flash={flash} />
+          <JurisdictionsSection data={data} patch={patch} />
+          <RolePreferencesSection data={data} patch={patch} />
+        </>
+      )}
+      {sub === 'corporate' && <CorporateIdentityCard flash={flash} onPctChange={setPct} />}
+      {sub === 'verification' && <VerificationStubCard data={data} />}
+    </>
+  );
+}
+
+function PersonalIdentityCard({ flash, onPctChange }) {
+  const [row, setRow] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [taxIdInput, setTaxIdInput] = useState('');
+  const [phoneInput, setPhoneInput] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getPersonalProfile()
+      .then(r => { if (!cancelled) { setRow(r); onPctChange?.(r.profile_completion_pct || 0); } })
+      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load identity'); });
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const save = async (patch) => {
+    setBusy(true);
+    setFieldErrors({});
+    try {
+      const updated = await api.updatePersonalProfile(patch);
+      setRow(updated);
+      onPctChange?.(updated.profile_completion_pct || 0);
+      flash('Saved');
+      if ('tax_id_number' in patch) setTaxIdInput('');
+      if ('phone_e164' in patch) setPhoneInput('');
+    } catch (e) {
+      const field = e?.field;
+      if (field) setFieldErrors({ [field]: e.message });
+      flash(e.message || 'Failed to save', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (err) return <Card title="Identity"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!row) return <Card title="Identity"><div className="text-sm text-gray-500">Loading…</div></Card>;
+
+  const r = row;
+  const set = (k, v) => setRow({ ...r, [k]: v });
+  const onBlurSave = (k) => {
+    const v = r[k] ?? null;
+    if (v === '' || v === null) save({ [k]: null });
+    else save({ [k]: v });
+  };
+  const fe = (k) => fieldErrors[k] ? <span className="text-[11px] text-red-600 block mt-1">{fieldErrors[k]}</span> : null;
+
+  return (
+    <Card title="Identity"
+      description="Used to auto-fill contracts between you and Axal. Sensitive fields are encrypted at rest.">
+      <div className="mb-4">
+        <CompletionRing pct={r.profile_completion_pct}
+          hint="Fill in legal name, DOB, address, country and tax ID to unlock contract auto-fill." />
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="Full legal name">
+          <input value={r.full_legal_name || ''} onChange={e => set('full_legal_name', e.target.value)}
+            onBlur={() => onBlurSave('full_legal_name')} disabled={busy} className={inputCls} />
+        </Field>
+        <Field label="Date of birth" hint="Must be 18 or older.">
+          <input type="date" value={r.date_of_birth || ''} onChange={e => set('date_of_birth', e.target.value)}
+            onBlur={() => onBlurSave('date_of_birth')} disabled={busy} className={inputCls} />
+          {fe('date_of_birth')}
+        </Field>
+        <Field label="Nationality (ISO α-2)">
+          <input value={r.nationality || ''} maxLength={2}
+            onChange={e => set('nationality', e.target.value.toUpperCase())}
+            onBlur={() => onBlurSave('nationality')} disabled={busy} className={inputCls} placeholder="US" />
+          {fe('nationality')}
+        </Field>
+        <Field label="Tax residency (ISO α-2)">
+          <input value={r.tax_residency_country || ''} maxLength={2}
+            onChange={e => set('tax_residency_country', e.target.value.toUpperCase())}
+            onBlur={() => onBlurSave('tax_residency_country')} disabled={busy} className={inputCls} placeholder="US" />
+          {fe('tax_residency_country')}
+        </Field>
+        <Field label={`Tax ID${r.has_tax_id ? ' (saved · ••••' + (r.tax_id_last4 || '••••') + ')' : ''}`}
+          hint="Encrypted at rest. Type a new value to replace.">
+          <div className="flex gap-2">
+            <input value={taxIdInput} onChange={e => setTaxIdInput(e.target.value)}
+              disabled={busy} className={inputCls} placeholder={r.has_tax_id ? 'Replace…' : 'Enter…'} />
+            <button onClick={() => taxIdInput && save({ tax_id_number: taxIdInput })}
+              disabled={busy || !taxIdInput}
+              className="px-3 py-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg">Save</button>
+            {r.has_tax_id && (
+              <button onClick={() => save({ tax_id_number: null })} disabled={busy}
+                className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg">Clear</button>
+            )}
+          </div>
+          {fe('tax_id_number')}
+        </Field>
+        <Field label={`Phone${r.has_phone ? ' (saved · ••••' + (r.phone_last4 || '••••') + ')' : ''}`}
+          hint="E.164 format, e.g. +14155551234.">
+          <div className="flex gap-2">
+            <input value={phoneInput} onChange={e => setPhoneInput(e.target.value)}
+              disabled={busy} className={inputCls} placeholder={r.has_phone ? 'Replace…' : '+1…'} />
+            <button onClick={() => phoneInput && save({ phone_e164: phoneInput })}
+              disabled={busy || !phoneInput}
+              className="px-3 py-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg">Save</button>
+            {r.has_phone && (
+              <button onClick={() => save({ phone_e164: null })} disabled={busy}
+                className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg">Clear</button>
+            )}
+          </div>
+          {fe('phone_e164')}
+        </Field>
+      </div>
+      <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+        <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Address</h3>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Address line 1">
+            <input value={r.address_line1 || ''} onChange={e => set('address_line1', e.target.value)}
+              onBlur={() => onBlurSave('address_line1')} disabled={busy} className={inputCls} />
+          </Field>
+          <Field label="Address line 2">
+            <input value={r.address_line2 || ''} onChange={e => set('address_line2', e.target.value)}
+              onBlur={() => onBlurSave('address_line2')} disabled={busy} className={inputCls} />
+          </Field>
+          <Field label="City">
+            <input value={r.city || ''} onChange={e => set('city', e.target.value)}
+              onBlur={() => onBlurSave('city')} disabled={busy} className={inputCls} />
+          </Field>
+          <Field label="State / region">
+            <input value={r.state_or_region || ''} onChange={e => set('state_or_region', e.target.value)}
+              onBlur={() => onBlurSave('state_or_region')} disabled={busy} className={inputCls} />
+          </Field>
+          <Field label="Postal code">
+            <input value={r.postal_code || ''} onChange={e => set('postal_code', e.target.value)}
+              onBlur={() => onBlurSave('postal_code')} disabled={busy} className={inputCls} />
+            {fe('postal_code')}
+          </Field>
+          <Field label="Country (ISO α-2)">
+            <input value={r.country || ''} maxLength={2}
+              onChange={e => set('country', e.target.value.toUpperCase())}
+              onBlur={() => onBlurSave('country')} disabled={busy} className={inputCls} placeholder="US" />
+            {fe('country')}
+          </Field>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function CorporateIdentityCard({ flash }) {
+  const [row, setRow] = useState(null);
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [taxIdInput, setTaxIdInput] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [draftUbo, setDraftUbo] = useState({ name: '', nationality: '', ownership_pct: '' });
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getCorporateProfile()
+      .then(r => { if (!cancelled) setRow(r); })
+      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load corporate profile'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const save = async (patch) => {
+    setBusy(true);
+    setFieldErrors({});
+    try {
+      const updated = await api.updateCorporateProfile(patch);
+      setRow(updated);
+      flash('Saved');
+      if ('tax_id_number' in patch) setTaxIdInput('');
+      if ('ubos' in patch) setDraftUbo({ name: '', nationality: '', ownership_pct: '' });
+    } catch (e) {
+      const field = e?.field;
+      if (field) setFieldErrors({ [field]: e.message });
+      flash(e.message || 'Failed to save', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (err) return <Card title="Legal entity"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!row) return <Card title="Legal entity"><div className="text-sm text-gray-500">Loading…</div></Card>;
+
+  const r = row;
+  const set = (k, v) => setRow({ ...r, [k]: v });
+  const onBlurSave = (k) => {
+    const v = r[k] ?? null;
+    save({ [k]: v === '' ? null : v });
+  };
+  const fe = (k) => fieldErrors[k] ? <span className="text-[11px] text-red-600 block mt-1">{fieldErrors[k]}</span> : null;
+
+  const addUbo = () => {
+    const pct = Number(draftUbo.ownership_pct);
+    if (!draftUbo.name.trim() || !Number.isFinite(pct)) {
+      flash('UBO needs a name and a numeric ownership %', 'error');
+      return;
+    }
+    const next = [...(r.ubos || []), {
+      name: draftUbo.name.trim(),
+      nationality: draftUbo.nationality ? draftUbo.nationality.toUpperCase() : null,
+      ownership_pct: pct,
+      is_pep: false,
+    }];
+    save({ ubos: next });
+  };
+  const removeUbo = (i) => {
+    const next = (r.ubos || []).filter((_, idx) => idx !== i);
+    save({ ubos: next });
+  };
+
+  return (
+    <>
+      <Card title="Legal entity"
+        description="Used to identify your company on Axal-VC contracts. Leave blank if you operate as an individual.">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Entity name">
+            <input value={r.entity_name || ''} onChange={e => set('entity_name', e.target.value)}
+              onBlur={() => onBlurSave('entity_name')} disabled={busy} className={inputCls} />
+          </Field>
+          <Field label="Entity type">
+            <select value={r.entity_type || ''} onChange={e => { set('entity_type', e.target.value); save({ entity_type: e.target.value || null }); }}
+              disabled={busy} className={inputCls}>
+              {ENTITY_TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+            {fe('entity_type')}
+          </Field>
+          <Field label="Registration number" hint="Required when entity type is set.">
+            <input value={r.registration_number || ''} onChange={e => set('registration_number', e.target.value)}
+              onBlur={() => onBlurSave('registration_number')} disabled={busy} className={inputCls} />
+            {fe('registration_number')}
+          </Field>
+          <Field label="Registered country (ISO α-2)">
+            <input value={r.registered_country || ''} maxLength={2}
+              onChange={e => set('registered_country', e.target.value.toUpperCase())}
+              onBlur={() => onBlurSave('registered_country')} disabled={busy} className={inputCls} placeholder="US" />
+            {fe('registered_country')}
+          </Field>
+          <Field label={`Tax ID / EIN${r.has_tax_id ? ' (saved · ••••' + (r.tax_id_last4 || '••••') + ')' : ''}`}>
+            <div className="flex gap-2">
+              <input value={taxIdInput} onChange={e => setTaxIdInput(e.target.value)}
+                disabled={busy} className={inputCls} placeholder={r.has_tax_id ? 'Replace…' : 'Enter…'} />
+              <button onClick={() => taxIdInput && save({ tax_id_number: taxIdInput })}
+                disabled={busy || !taxIdInput}
+                className="px-3 py-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg">Save</button>
+              {r.has_tax_id && (
+                <button onClick={() => save({ tax_id_number: null })} disabled={busy}
+                  className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg">Clear</button>
+              )}
+            </div>
+            {fe('tax_id_number')}
+          </Field>
+        </div>
+        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+          <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Registered address</h3>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Field label="Address line 1"><input value={r.registered_address_line1 || ''} onChange={e => set('registered_address_line1', e.target.value)} onBlur={() => onBlurSave('registered_address_line1')} disabled={busy} className={inputCls} /></Field>
+            <Field label="Address line 2"><input value={r.registered_address_line2 || ''} onChange={e => set('registered_address_line2', e.target.value)} onBlur={() => onBlurSave('registered_address_line2')} disabled={busy} className={inputCls} /></Field>
+            <Field label="City"><input value={r.registered_city || ''} onChange={e => set('registered_city', e.target.value)} onBlur={() => onBlurSave('registered_city')} disabled={busy} className={inputCls} /></Field>
+            <Field label="State / region"><input value={r.registered_state || ''} onChange={e => set('registered_state', e.target.value)} onBlur={() => onBlurSave('registered_state')} disabled={busy} className={inputCls} /></Field>
+            <Field label="Postal code">
+              <input value={r.registered_postal || ''} onChange={e => set('registered_postal', e.target.value)} onBlur={() => onBlurSave('registered_postal')} disabled={busy} className={inputCls} />
+              {fe('registered_postal')}
+            </Field>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+          <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Signing authority</h3>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <Field label="Name"><input value={r.signing_authority_name || ''} onChange={e => set('signing_authority_name', e.target.value)} onBlur={() => onBlurSave('signing_authority_name')} disabled={busy} className={inputCls} /></Field>
+            <Field label="Title"><input value={r.signing_authority_title || ''} onChange={e => set('signing_authority_title', e.target.value)} onBlur={() => onBlurSave('signing_authority_title')} disabled={busy} className={inputCls} placeholder="CEO" /></Field>
+            <Field label="Email">
+              <input value={r.signing_authority_email || ''} onChange={e => set('signing_authority_email', e.target.value)} onBlur={() => onBlurSave('signing_authority_email')} disabled={busy} className={inputCls} placeholder="founder@…" />
+              {fe('signing_authority_email')}
+            </Field>
+          </div>
+        </div>
+      </Card>
+
+      <Card title="Ultimate beneficial owners (UBOs)"
+        description="List anyone with ≥25% ownership. We mark the entity as UBO-disclosed once at least one ≥25% holder is on file.">
+        <div className="space-y-2">
+          {(r.ubos || []).length === 0 && (
+            <div className="text-xs text-gray-500 dark:text-gray-400">No UBOs added yet.</div>
+          )}
+          {(r.ubos || []).map((u, i) => (
+            <div key={i} className="flex items-center gap-2 text-sm border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2">
+              <span className="font-medium text-gray-900 dark:text-gray-100 flex-1 truncate">{u.name}</span>
+              <span className="text-xs text-gray-500">{u.nationality || '—'}</span>
+              <span className="text-xs font-medium text-gray-700 dark:text-gray-300 w-16 text-right">{u.ownership_pct}%</span>
+              <button onClick={() => removeUbo(i)} disabled={busy}
+                className="text-xs text-red-600 hover:text-red-700"><X size={14} /></button>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 grid sm:grid-cols-[1fr_80px_100px_auto] gap-2">
+          <input value={draftUbo.name} onChange={e => setDraftUbo({ ...draftUbo, name: e.target.value })}
+            placeholder="Full name" className={inputCls} />
+          <input value={draftUbo.nationality} onChange={e => setDraftUbo({ ...draftUbo, nationality: e.target.value.toUpperCase() })}
+            maxLength={2} placeholder="ISO" className={inputCls} />
+          <input value={draftUbo.ownership_pct} onChange={e => setDraftUbo({ ...draftUbo, ownership_pct: e.target.value })}
+            type="number" min="0" max="100" step="0.01" placeholder="%" className={inputCls} />
+          <button onClick={addUbo} disabled={busy}
+            className="px-3 py-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg whitespace-nowrap">
+            <Plus size={12} className="inline" /> Add
+          </button>
+        </div>
+        {fe('ubos')}
+        <div className="mt-3 text-[11px] text-gray-500 dark:text-gray-400">
+          Status: {r.ubo_disclosed
+            ? <span className="text-emerald-600 font-medium">Disclosed (≥25% holder on file)</span>
+            : <span className="text-amber-600 font-medium">Pending — add a ≥25% holder.</span>}
+        </div>
+      </Card>
+    </>
+  );
+}
+
+function VerificationStubCard({ data }) {
+  const kyc = (data.kyc_status || 'not_started').toLowerCase();
+  const tone = kyc === 'approved' ? 'emerald' : kyc === 'pending' ? 'amber' : 'gray';
+  return (
+    <Card title="Verification"
+      description="Government ID and proof of address are managed in the KYC flow.">
+      <div className={`text-sm flex items-center gap-2 text-${tone}-700`}>
+        <ShieldCheck size={16} />
+        <span>KYC status: <span className="font-medium">{kyc.replace(/_/g, ' ')}</span></span>
+      </div>
+      <a href="/kyc" className="mt-3 inline-block text-sm text-violet-700 hover:text-violet-800">
+        Open KYC →
+      </a>
+      <div className="mt-4 text-[11px] text-gray-500 dark:text-gray-400">
+        Document upload, sanctions/PEP rechecks and high-risk-jurisdiction flags are
+        wired in a follow-up slice. The Identity and Legal entity blocks above are
+        already used to auto-fill contracts.
+      </div>
+    </Card>
+  );
+}
 
 function ProfileSection({ data, onSaved, flash, patch }) {
   const [name, setName] = useState(data.name || '');

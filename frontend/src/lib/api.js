@@ -76,6 +76,9 @@ async function request(path, options = {}) {
       const e = new Error(msg);
       e.status = res.status;
       e.data = detailObj || errorObj || err || null;
+      // Task #16 — surface per-field validation errors (e.g. ProfileValidationError)
+      // so form components can highlight the offending input.
+      e.field = (err && err.field) || (detailObj && detailObj.field) || (errorObj && errorObj.field) || null;
       // Task #6 — when the worker returns 402 `{error:'tier_required'}`, fan
       // out a custom event so PaywallModal opens automatically. Anything that
       // catches the throw afterwards still gets the structured error object.
@@ -148,6 +151,13 @@ export const api = {
     request('/auth/sms/verify-challenge', { method: 'POST', body: JSON.stringify({ email, session_info, code }) }),
   getMe: () => request('/auth/me'),
   health: () => request('/health'),
+
+  // Task #16 — Profile expansion (personal + corporate identity blocks).
+  getPersonalProfile: () => request('/settings/profile/personal'),
+  updatePersonalProfile: (patch) => request('/settings/profile/personal', { method: 'PUT', body: JSON.stringify(patch) }),
+  getCorporateProfile: () => request('/settings/profile/corporate'),
+  updateCorporateProfile: (patch) => request('/settings/profile/corporate', { method: 'PUT', body: JSON.stringify(patch) }),
+
   stats: () => request('/dashboard/stats'),
 
   listProjects: (status) => request(`/projects${status ? `?status=${status}` : ''}`),

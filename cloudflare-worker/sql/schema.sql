@@ -86,8 +86,56 @@ CREATE TABLE IF NOT EXISTS users (
     spinout_lab_week INTEGER NOT NULL DEFAULT 1,
     spinout_lab_started_at TEXT,
     is_incorporated INTEGER NOT NULL DEFAULT 0,
+    -- Task #16 — Profile expansion (personal identity).
+    -- PII columns are column-cipher v1 ciphertext (services/columnCipher.ts);
+    -- the *_last4 plaintext columns let lists render `••••1234` cheaply.
+    full_legal_name TEXT,
+    date_of_birth TEXT,
+    nationality TEXT,
+    tax_residency_country TEXT,
+    tax_id_number_enc TEXT,
+    tax_id_last4 TEXT,
+    phone_e164_enc TEXT,
+    phone_last4 TEXT,
+    address_line1 TEXT,
+    address_line2 TEXT,
+    city TEXT,
+    state_or_region TEXT,
+    postal_code TEXT,
+    country TEXT,
+    profile_completion_pct INTEGER DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Task #16 — Profile expansion (corporate block, one per user).
+CREATE TABLE IF NOT EXISTS corporate_profiles (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    entity_name TEXT,
+    entity_type TEXT,
+    registration_number TEXT,
+    tax_id_number_enc TEXT,
+    tax_id_last4 TEXT,
+    registered_country TEXT,
+    registered_address_line1 TEXT,
+    registered_address_line2 TEXT,
+    registered_city TEXT,
+    registered_state TEXT,
+    registered_postal TEXT,
+    signing_authority_name TEXT,
+    signing_authority_title TEXT,
+    signing_authority_email TEXT,
+    ubos_json TEXT NOT NULL DEFAULT '[]',
+    directors_json TEXT NOT NULL DEFAULT '[]',
+    insurance_carriers_json TEXT NOT NULL DEFAULT '[]',
+    ubo_disclosed INTEGER NOT NULL DEFAULT 0,
+    aml_high_risk_jurisdiction INTEGER NOT NULL DEFAULT 0,
+    sanctions_last_checked_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_corp_profiles_high_risk
+  ON corporate_profiles(aml_high_risk_jurisdiction)
+  WHERE aml_high_risk_jurisdiction = 1;
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_uid ON users(uid);

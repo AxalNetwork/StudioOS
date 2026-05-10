@@ -35,6 +35,15 @@ import {
   type UserSettingsPatch,
   type UserSettingsRow,
 } from '../services/userSettings';
+import {
+  ensureProfileExpansionSchema,
+  getPersonalProfile,
+  updatePersonalProfile,
+  getCorporateProfile,
+  updateCorporateProfile,
+  ProfileValidationError,
+} from '../services/profileExpansion';
+import { hashEmail } from '../util/hashEmail';
 
 const settings = new Hono<{ Bindings: Env }>();
 
@@ -871,6 +880,75 @@ settings.put('/profile', async (c) => {
     const row = await upsertUserSettings(c.env, user.id, patch);
     return c.json(pickProfile(row));
   } catch (e) { return handleSettingsError(c, e); }
+});
+
+// --- Profile / Personal + Corporate sub-routes (Task #16, slice 1) ---------
+//
+// Two new surfaces under /api/settings/profile/{personal,corporate}. The
+// existing /profile (above) keeps its UserSettings-row contract — locale,
+// timezone, pronouns, profile_slug. These new routes own the identity +
+// legal-entity blocks contracts depend on. PII (tax_id, phone) is stored
+// encrypted via services/columnCipher.ts; reads only ever return *_last4.
+async function recordProfileAudit(
+  env: Env, userId: number, email: string, action: string, summary: string,
+) {
+  try {
+    const sql = getSQL(env);
+    const actor = await hashEmail(email || '');
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+              VALUES (${action}, ${summary}, ${actor}, ${userId})`;
+    await sql.end();
+  } catch (e) {
+    console.error('[profile audit] failed', e);
+  }
+}
+
+function handleProfileError(c: Context<{ Bindings: Env }>, e: unknown) {
+  if (e instanceof ProfileValidationError) {
+    return c.json({ error: e.message, field: e.field }, e.status as any);
+  }
+  console.error('[profile expansion] update failed', e);
+  return c.json({ error: 'Update failed' }, 500);
+}
+
+settings.get('/profile/personal', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  const user = await requireAuth(c);
+  try { return c.json(await getPersonalProfile(c.env, user.id)); }
+  catch (e) { return handleProfileError(c, e); }
+});
+settings.put('/profile/personal', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  try {
+    const updated = await updatePersonalProfile(c.env, user.id, body);
+    await recordProfileAudit(
+      c.env, user.id, user.email, 'profile_personal_updated',
+      `Updated personal profile fields: ${Object.keys(body).join(', ') || '(none)'}`,
+    );
+    return c.json(updated);
+  } catch (e) { return handleProfileError(c, e); }
+});
+
+settings.get('/profile/corporate', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  const user = await requireAuth(c);
+  try { return c.json(await getCorporateProfile(c.env, user.id)); }
+  catch (e) { return handleProfileError(c, e); }
+});
+settings.put('/profile/corporate', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  try {
+    const updated = await updateCorporateProfile(c.env, user.id, body);
+    await recordProfileAudit(
+      c.env, user.id, user.email, 'profile_corporate_updated',
+      `Updated corporate profile fields: ${Object.keys(body).join(', ') || '(none)'}`,
+    );
+    return c.json(updated);
+  } catch (e) { return handleProfileError(c, e); }
 });
 
 // --- Privacy sub-route ------------------------------------------------------
