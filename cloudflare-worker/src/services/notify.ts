@@ -424,6 +424,82 @@ function renderDigestEmail(rows: OutboxRow[], cadence: 'daily' | 'weekly'): { su
   return { subject, body: lines.join('\n') };
 }
 
+/**
+ * Task #8 (Slack digest, 2026-05-10) — Block Kit renderer for the
+ * post-quiet-hours digest. Mirrors the email digest content (one bullet
+ * per buffered item) but compressed into Slack's section-block limits:
+ *  - mrkdwn `text` field is hard-capped at 3000 chars by Slack; we cap
+ *    at 20 visible items and tail with a "...and N more" line so very
+ *    chatty days don't break Slack delivery.
+ *  - Each item links to either the original `link` (absolute URL or
+ *    in-app path resolved against APP_URL) when present, otherwise the
+ *    in-app inbox at `/inbox`.
+ *  - Always renders an "Open inbox" action button as the primary CTA so
+ *    the user has one click back to the catch-up surface.
+ *  - Always returns a `text:` fallback for screen readers / push
+ *    previews (Slack rejects payloads with neither `text` nor `blocks`).
+ */
+function renderDigestSlackBlocks(
+  rows: OutboxRow[],
+  cadence: 'daily' | 'weekly',
+  appUrl: string,
+): Record<string, unknown> {
+  const root = appUrl.replace(/\/+$/, '');
+  const inboxUrl = `${root}/inbox`;
+  const escape = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const resolveLink = (raw: string | null): string => {
+    if (!raw) return inboxUrl;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+    return `${root}${raw.startsWith('/') ? '' : '/'}${raw}`;
+  };
+
+  const MAX_ITEMS = 20;
+  const visible = rows.slice(0, MAX_ITEMS);
+  const overflow = rows.length - visible.length;
+
+  const bullets = visible.map((r) => {
+    const title = escape(r.title || '(untitled update)');
+    const url = resolveLink(r.link);
+    const sub = r.body ? `\n      _${escape(r.body.replace(/\s+/g, ' ').slice(0, 180))}_` : '';
+    return `• <${url}|${title}>${sub}`;
+  });
+  if (overflow > 0) {
+    bullets.push(`_…and ${overflow} more — <${inboxUrl}|view all in your inbox>_`);
+  }
+  // 3000-char Slack section limit. If we overflow even after the cap,
+  // truncate the joined string and re-anchor the inbox link.
+  let bulletText = bullets.join('\n');
+  if (bulletText.length > 2900) {
+    bulletText = bulletText.slice(0, 2800).replace(/\n[^\n]*$/, '');
+    bulletText += `\n_Truncated — <${inboxUrl}|view all in your inbox>_`;
+  }
+
+  const headerText = `:envelope_with_arrow: Your ${cadence} Axal digest`;
+  const introText = `*${rows.length} update${rows.length === 1 ? '' : 's'}* buffered during your quiet hours over the last ${cadence === 'daily' ? '24 hours' : 'week'}.`;
+  const blocks: Array<Record<string, unknown>> = [
+    { type: 'header', text: { type: 'plain_text', text: headerText, emoji: true } },
+    { type: 'section', text: { type: 'mrkdwn', text: introText } },
+    { type: 'section', text: { type: 'mrkdwn', text: bulletText } },
+    {
+      type: 'actions',
+      elements: [{
+        type: 'button',
+        text: { type: 'plain_text', text: 'Open inbox', emoji: true },
+        url: inboxUrl,
+        style: 'primary',
+      }],
+    },
+    {
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `Axal StudioOS · _Manage in <${root}/settings/notifications|Notification settings>_` }],
+    },
+  ];
+  return {
+    text: `Your ${cadence} Axal digest — ${rows.length} update${rows.length === 1 ? '' : 's'}`,
+    blocks,
+  };
+}
+
 /** Walk every user with at least one pending outbox row, and — when
  *  their local time is the digest send slot — assemble + send a single
  *  email and mark the rows flushed. Idempotent: rows already flushed
@@ -512,6 +588,22 @@ export async function flushPendingDigests(env: Env, now: Date = new Date()): Pro
       sent += 1;
       totalRows += rows.length;
     } catch (e) { console.warn('[notify] outbox flush UPDATE failed', e); }
+
+    // Task #8 (Slack digest, 2026-05-10) — best-effort fan-out to the
+    // user's connected Slack webhook AFTER the email succeeds + rows
+    // are marked flushed. Slack delivery is intentionally NOT a gating
+    // condition for flushing: email is the primary digest channel
+    // (every digest user has an email); a transient Slack 5xx must not
+    // re-send tomorrow's email. Users without a connected Slack
+    // integration are a no-op (loadSlackWebhookForUser returns null).
+    try {
+      const { loadSlackWebhookForUser } = await import('../integrations/providers/slack');
+      const hook = await loadSlackWebhookForUser(env, u.user_id);
+      if (hook?.url) {
+        const appUrl = (env as { APP_URL?: string }).APP_URL || '';
+        await postSlackBlocks(hook.url, renderDigestSlackBlocks(rows, cadence, appUrl));
+      }
+    } catch (e) { console.warn('[notify] slack digest dispatch failed', e); }
   }
   return { scanned: users.length, sent, rows: totalRows };
 }
