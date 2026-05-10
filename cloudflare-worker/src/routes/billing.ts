@@ -332,6 +332,15 @@ billing.post('/investor/checkout', async (c) => {
     'metadata[plan]': plan,
     'metadata[investor_tier]': cfg.tier,
     'metadata[kind]': 'investor',
+    // Stripe Checkout metadata does NOT cascade to the underlying
+    // Subscription unless we also pass it via subscription_data[metadata].
+    // Webhook events for subscription.created/updated/deleted carry the
+    // Subscription object; without this, our `isInvestor`/`investor_tier`
+    // routing on those events silently no-ops.
+    'subscription_data[metadata][kind]': 'investor',
+    'subscription_data[metadata][user_id]': String(user.id),
+    'subscription_data[metadata][investor_tier]': cfg.tier,
+    'subscription_data[metadata][plan]': plan,
     client_reference_id: `investor:${user.id}`,
   };
   // Institutional supports invoice billing — let Stripe collect a card OR an
@@ -636,33 +645,43 @@ async function handleStripeEvent(
     }
     case 'customer.subscription.deleted': {
       const customer = obj.customer as string | null;
-      if (!customer) return;
+      const subId = obj.id as string | null;
+      if (!customer || !subId) return;
+      // Disambiguate by subscription_id so a customer with multiple Stripe
+      // subscriptions (e.g. MI Pro + Investor Pro on the same customer)
+      // only loses the entitlement that was actually cancelled.
       await env.DB.prepare(
         `UPDATE users SET mi_subscription_status = 'cancelled'
-         WHERE mi_stripe_customer_id = ?`
-      ).bind(customer).run();
+         WHERE mi_stripe_customer_id = ? AND mi_stripe_subscription_id = ?`
+      ).bind(customer, subId).run();
       // Task #6 — drop the founder tier back to free when the tier sub ends.
       await env.DB.prepare(
         `UPDATE users SET subscription_tier = 'free',
                            subscription_status = 'cancelled',
                            stripe_subscription_id = NULL
-         WHERE stripe_customer_id = ?`,
-      ).bind(customer).run();
+         WHERE stripe_customer_id = ? AND stripe_subscription_id = ?`,
+      ).bind(customer, subId).run();
       // Task #6 (W-1) — drop investor tier back to free on sub deletion,
-      // including any accepted seat colleagues.
-      await env.DB.prepare(
+      // including any accepted seat colleagues. Scoped by sub id so a
+      // founder-tier deletion doesn't clobber an active investor sub.
+      const downgraded = await env.DB.prepare(
         `UPDATE users SET investor_tier = 'free',
                            investor_subscription_status = 'cancelled',
                            investor_dealroom_max = ?,
                            investor_stripe_subscription_id = NULL
-         WHERE investor_stripe_customer_id = ?`,
-      ).bind(INVESTOR_QUOTAS.free.dealroom_max, customer).run();
-      await env.DB.prepare(
-        `UPDATE users SET investor_tier = 'free', investor_subscription_status = 'cancelled'
-         WHERE investor_seat_primary_user_id IN (
-           SELECT id FROM users WHERE investor_stripe_customer_id = ?
-         )`,
-      ).bind(customer).run();
+         WHERE investor_stripe_customer_id = ? AND investor_stripe_subscription_id = ?`,
+      ).bind(INVESTOR_QUOTAS.free.dealroom_max, customer, subId).run();
+      // Cascade to seat colleagues only when the investor sub itself was
+      // the one cancelled (downgraded.meta.changes > 0).
+      const changes = (downgraded?.meta?.changes ?? 0) as number;
+      if (changes > 0) {
+        await env.DB.prepare(
+          `UPDATE users SET investor_tier = 'free', investor_subscription_status = 'cancelled'
+           WHERE investor_seat_primary_user_id IN (
+             SELECT id FROM users WHERE investor_stripe_customer_id = ?
+           )`,
+        ).bind(customer).run();
+      }
       return;
     }
     default:
