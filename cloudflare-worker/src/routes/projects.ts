@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
+import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
 import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
 import { runFullScore } from '../services/scoring';
@@ -143,27 +144,16 @@ async function createProjectHandler(c: any) {
   // Re-index for semantic search. Best-effort — failure is non-fatal.
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'project', id: project.id }); } catch {}
 
-  // Task #2 — best-effort HubSpot company create. Looks up the creating user's
-  // active hubspot integration (if any) and pushes a company + primary contact.
-  // Fire-and-forget via executionCtx.waitUntil; failures are logged via the
-  // provider's own integration_logs writes.
+  // Task #2 — best-effort HubSpot company create. Hands off to the shared
+  // autopush helper so failures + summaries land in integration_logs and
+  // the work runs on executionCtx.waitUntil.
   try {
-    const userId = (user as { id: number }).id;
-    const integ = await c.env.DB.prepare(
-      "SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'hubspot' AND status = 'active' LIMIT 1",
-    ).bind(userId).first();
-    if (integ) {
-      const work = (async () => {
-        try {
-          const { getProviderImpl } = await import('../integrations/registry');
-          const impl = getProviderImpl('hubspot');
-          if (impl?.push) await impl.push(c, user as any, integ, { project_id: project.id });
-        } catch (e) {
-          console.warn('[projects] hubspot company create failed', (e as Error).message);
-        }
-      })();
-      c.executionCtx?.waitUntil?.(work);
-    }
+    const typedUser = user as User;
+    schedulePush({
+      c, user: typedUser, providerKey: 'hubspot',
+      payload: { project_id: project.id },
+      eventType: 'auto_push:project_created',
+    });
   } catch (e) { console.warn('[projects] hubspot project-create hook failed', e); }
 
   return c.json(project, 201);

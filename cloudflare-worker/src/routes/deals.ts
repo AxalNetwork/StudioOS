@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
-import type { IntegrationRow } from '../integrations/registry';
+import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
 import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
 
@@ -101,39 +101,27 @@ deals.put('/:id', async (c) => {
     }
   } catch (e) { console.warn('[deals] notify deal_stage_change failed', e); }
 
-  // Task #2 — best-effort HubSpot sync on stage change. Look up the founder's
-  // hubspot integration (if any) and push the deal. Fire-and-forget via
-  // executionCtx.waitUntil so the API response stays snappy; failures land in
-  // integration_logs via the provider's own logging path. We deliberately
-  // skip when `data.status` was not part of the patch.
+  // Task #2 — best-effort HubSpot sync on stage change. Resolve the
+  // founder's user_id from the deal, then hand off to `schedulePush` which
+  // fires the push on executionCtx.waitUntil AND writes an
+  // integration_logs row so "View logs" reflects every background push.
   if (data.status) {
     try {
-      const own2 = await sql`
+      const own2 = (await sql`
         SELECT f.user_id AS founder_user_id
         FROM deals d
         LEFT JOIN projects p ON p.id = d.project_id
         LEFT JOIN founders f ON f.id = p.founder_id
         WHERE d.id = ${id}
-      `;
-      const founderUserId = (own2[0] as any)?.founder_user_id as number | undefined;
+      `) as Array<{ founder_user_id: number | null }>;
+      const founderUserId = own2[0]?.founder_user_id ?? null;
       if (founderUserId) {
-        const integ = await c.env.DB.prepare(
-          "SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'hubspot' AND status = 'active' LIMIT 1",
-        ).bind(founderUserId).first<any>();
-        if (integ) {
-          const work = (async () => {
-            try {
-              const { getProviderImpl } = await import('../integrations/registry');
-              const impl = getProviderImpl('hubspot');
-              if (impl?.push) {
-                await impl.push(c, { id: founderUserId } as User, integ as IntegrationRow, { deal_id: id });
-              }
-            } catch (e) {
-              console.warn('[deals] hubspot push on stage change failed', (e as Error).message);
-            }
-          })();
-          c.executionCtx?.waitUntil?.(work);
-        }
+        const founderUser: User = { id: founderUserId } as User;
+        schedulePush({
+          c, user: founderUser, providerKey: 'hubspot',
+          payload: { deal_id: id },
+          eventType: 'auto_push:deal_stage_change',
+        });
       }
     } catch (e) { console.warn('[deals] hubspot stage-change hook failed', e); }
   }
