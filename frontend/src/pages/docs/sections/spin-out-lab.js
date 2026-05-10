@@ -17,6 +17,10 @@ export default {
         'Milestones are visible in the Lab sidebar; click any to see what’s required.',
         'You can re-enter the lab if you want to redo a week — it picks up where you left off.',
       ],
+      pitfalls: [
+        'Skipping milestones to unlock later weeks isn’t supported — every milestone gates the next.',
+        'Lab content is yours to keep, but cancelling the lab mid-week pauses unlocks until you re-enter.',
+      ],
       related: [
         { label: 'Choosing your path', href: '#getting-started/choosing-path' },
         { label: 'Graduating from the lab', href: '#spin-out-lab/graduating' },
@@ -35,6 +39,10 @@ export default {
       tips: [
         'Quality of interviews matters more than count — short, real conversations beat long surveys.',
         'Use the question prompts in Customer Discovery if you’re not sure what to ask.',
+      ],
+      pitfalls: [
+        'Logging your own assumptions instead of customer quotes inflates the confidence score and misleads later weeks.',
+        'Interviewing only friends-and-family produces sympathetic “yeses” that don’t survive Week 3 validation.',
       ],
       related: [
         { label: 'Customer Discovery', href: '#build/customer-discovery' },
@@ -55,6 +63,10 @@ export default {
         'Keep the OKR count low — 1 objective with 3 key results is plenty for a sprint.',
         'You can re-run brand variations until you’re happy; nothing is locked.',
       ],
+      pitfalls: [
+        'Picking a name before checking domain and trademark availability burns days of momentum later.',
+        'Over-scoping the roadmap creates a checklist no one can finish — cut to one objective.',
+      ],
       related: [
         { label: 'Roadmap', href: '#build/roadmap' },
         { label: 'Brand Builder', href: '#build/brand-builder' },
@@ -73,6 +85,10 @@ export default {
       tips: [
         'Don’t propose equity in the first conversation — focus on chemistry and complementary skills.',
         'When you’re ready to commit, run the Cofounder Agreement flow (legal section) to lock equity and vesting.',
+      ],
+      pitfalls: [
+        'Picking a co-founder for skills you can hire instead — if it’s not a partner relationship, hire it.',
+        'Skipping the NDA step before deep co-founder conversations leaves IP exposed.',
       ],
       related: [
         { label: 'Co-founder Match', href: '#validate-grow/cofounder-match' },
@@ -94,6 +110,10 @@ export default {
         'The compliance calendar auto-seeds standard events for your jurisdiction the moment you incorporate.',
         'Templates are starting points — your spin-out includes partner attorney review before signing.',
       ],
+      pitfalls: [
+        'Missing the 30-day 83(b) window is a permanent tax mistake — set the reminder the day shares are granted.',
+        'Setting the valuation cap without comparable data can leave money or dilution on the table; talk to the studio team first.',
+      ],
       related: [
         { label: 'Incorporation', href: '#legal/incorporation' },
         { label: 'Capital', href: '#capital/fundraise' },
@@ -113,6 +133,10 @@ export default {
       tips: [
         'You retain access to all lab content — nothing gets archived.',
         'Schedule a Demo Day session via Mentor Match to pressure-test your pitch before going to investors.',
+      ],
+      pitfalls: [
+        'Graduation does not start fundraising for you — head to Capital and assemble the round when you’re ready.',
+        'If the cap table didn’t populate after incorporation, contact support before issuing more shares.',
       ],
       related: [
         { label: 'Founder Portal', href: '#portals/founder' },

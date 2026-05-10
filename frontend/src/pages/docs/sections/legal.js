@@ -18,6 +18,10 @@ export default {
         'The Compliance calendar auto-seeds standard events for your jurisdiction the moment incorporation completes.',
         'Use the same legal name on the cap table and the formation docs — fixing mismatches later is painful.',
       ],
+      pitfalls: [
+        'Picking a state without nexus to your business can create surprise franchise-tax obligations later.',
+        'Authorising too few shares forces a costly amendment before your first option-pool grant.',
+      ],
       related: [
         { label: 'Cap Table', href: '#capital/cap-table' },
         { label: 'Compliance basics', href: '#legal/compliance' },
@@ -39,9 +43,38 @@ export default {
         'Don’t skip the NDA stage — it protects the conversation if you don’t end up signing the full agreement.',
         'Equity is rarely 50/50 forever — talk about cliff and acceleration before signing.',
       ],
+      pitfalls: [
+        'Signing without IP assignment can leave previous-employer IP claims unresolved.',
+        'Skipping the cliff gives away non-recoverable equity if a co-founder leaves in month two.',
+      ],
       related: [
         { label: 'Co-founder Match', href: '#validate-grow/cofounder-match' },
+        { label: 'NDA flows', href: '#legal/nda' },
         { label: 'Cap Table', href: '#capital/cap-table' },
+      ],
+    },
+    {
+      id: 'nda',
+      title: 'NDA flows',
+      overview:
+        "NDAs are required before any deep-context conversation: investor diligence, co-founder discussions, and partner engagements that touch sensitive IP. The platform issues mutual NDAs from a templated library, captures both signatures, and stores the executed copy with an audit trail.",
+      howto: [
+        'Open the deal, project, or co-founder match where the NDA is needed.',
+        'Click "Send NDA"; the wizard pre-fills both parties from the record.',
+        'Review terms (duration, scope, jurisdiction) and send.',
+        'Both sides sign in-browser; the executed PDF is stored against the deal/project.',
+      ],
+      tips: [
+        'Mutual NDAs are the default — request a one-way NDA only when you genuinely have nothing to disclose.',
+        'Keep duration tight (1–2 years) for the kinds of conversations a startup actually has.',
+      ],
+      pitfalls: [
+        'Insisting on an NDA before a first investor pitch is a yellow flag for most VCs — save it for diligence.',
+        'Editing the templated language without legal review can make the NDA harder to enforce.',
+      ],
+      related: [
+        { label: 'Cofounder Agreement', href: '#legal/cofounder-agreement' },
+        { label: 'Due Diligence', href: '#validate-grow/due-diligence' },
       ],
     },
     {
@@ -58,6 +91,10 @@ export default {
       tips: [
         'Use certified mail with return receipt — that’s your proof of timely filing.',
         'Talk to a tax advisor before filing if your stock has any meaningful value at grant.',
+      ],
+      pitfalls: [
+        'Missing the 30-day window cannot be undone — the election is permanently lost.',
+        'Filing without keeping a personal copy makes audit defence painful years later.',
       ],
       related: [
         { label: 'Cap Table', href: '#capital/cap-table' },
@@ -77,6 +114,10 @@ export default {
       tips: [
         'Delaware franchise tax is due March 1 every year — the most-missed deadline by far.',
         'Board meeting minutes don’t need to be elaborate; a one-page summary is fine.',
+      ],
+      pitfalls: [
+        'Marking an event complete without uploading proof leaves you without an audit trail.',
+        'Letting franchise tax lapse can void your good-standing certificate, which blocks fundraising.',
       ],
       related: [
         { label: 'Incorporation', href: '#legal/incorporation' },
@@ -98,6 +139,10 @@ export default {
         'Make sure ID photos are sharp and the full document is in frame — most rejections are blurry photos.',
         'Re-verification is required if your ID expires.',
       ],
+      pitfalls: [
+        'Using a screenshot of your ID instead of a real photo is the top rejection reason.',
+        'Submitting a different name than your bank account causes payout failures later.',
+      ],
       related: [
         { label: 'Privacy & data export', href: '#account/privacy' },
       ],
@@ -115,6 +160,10 @@ export default {
       tips: [
         'You can decline to sign with a reason — the originator gets notified.',
         'Signatures bind you legally; read the document before clicking.',
+      ],
+      pitfalls: [
+        'Clicking through without reading is a common, expensive mistake — every signed doc is binding.',
+        'Re-signing a previously signed doc creates a duplicate; check before re-sending.',
       ],
       related: [
         { label: 'Cofounder Agreement', href: '#legal/cofounder-agreement' },
@@ -134,6 +183,10 @@ export default {
       tips: [
         'Never sign a template without attorney review for anything money-related.',
         'Keep a versioned copy of every executed agreement under project documents.',
+      ],
+      pitfalls: [
+        'Modifying clauses without legal review can break enforceability — flag every change to the attorney.',
+        'Using a US template for a non-US jurisdiction usually requires a full rewrite, not a tweak.',
       ],
       related: [
         { label: 'ESign', href: '#legal/esign' },

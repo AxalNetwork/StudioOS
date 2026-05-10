@@ -18,9 +18,85 @@ export default {
         'Re-score after major milestones — first revenue, key hire, signed LOI — to track momentum.',
         'The dimension explanations call out what you’re missing so you know what to improve.',
       ],
+      pitfalls: [
+        'Tweaking inputs to chase a higher number instead of improving the underlying business is wasted effort — every score is signed and admins can see the input history.',
+        'A high Market score on a thin Team score still triggers studio review; balance matters more than peaks.',
+      ],
       related: [
+        { label: 'Scoring anti-cheat', href: '#validate-grow/scoring-integrity' },
         { label: 'Market Intelligence', href: '#validate-grow/market-intel' },
         { label: 'Pitch Deck', href: '#build/pitch-deck' },
+      ],
+    },
+    {
+      id: 'scoring-integrity',
+      title: 'Scoring integrity & anti-cheat',
+      overview:
+        "Every score is signed and time-stamped. The studio team can see when you re-scored, which inputs changed, and whether the change reflects real-world progress. Repeated input flips without supporting evidence flag the project for manual review.",
+      howto: [
+        'Re-score after a milestone, not before — back up changes with discovery notes, metrics, or signed contracts.',
+        'Use the Decision Journal to record why an input changed; it shows up next to the score history.',
+        'If a re-score is rejected by the studio team, you’ll see a banner with the reason and a link to fix it.',
+      ],
+      tips: [
+        'Stable, slowly improving scores read better to investors than spiky ones.',
+        'Scoring is one of many studio signals — milestones and metrics matter more for tier upgrades.',
+      ],
+      pitfalls: [
+        'Coordinating multiple accounts to inflate one project breaches the terms of service and is detectable.',
+        'Backdating inputs (“we had this all along”) without supporting evidence is treated as a re-score, not a correction.',
+      ],
+      related: [
+        { label: 'Scoring', href: '#validate-grow/scoring' },
+        { label: 'Trust Center', href: '#validate-grow/trust-center' },
+      ],
+    },
+    {
+      id: 'trust-center',
+      title: 'Trust Center',
+      overview:
+        "The Trust Center is the central place where founders, investors, partners, and admins see and manage trust signals: identity verification status, founder/company badges, references, and the documents that back each badge. Each role sees the tabs relevant to them.",
+      howto: [
+        'Open Trust Center from the sidebar.',
+        'Founders — review badges on your profile, upload supporting documents, and request verification.',
+        'Investors and partners — review a founder’s trust score and badges before opening a dealroom.',
+        'Admins — approve or revoke badges and resolve disputes.',
+      ],
+      tips: [
+        'Trust badges follow you across projects — you only have to verify once.',
+        'A higher trust score speeds up dealroom invites and reduces the diligence ask.',
+      ],
+      pitfalls: [
+        'Uploading low-resolution scans of supporting documents is the top cause of slow verification.',
+        'Revoked badges are visible to investors who saw them previously — keep your supporting docs current.',
+      ],
+      related: [
+        { label: 'Due Diligence', href: '#validate-grow/due-diligence' },
+        { label: 'NDA flows', href: '#legal/nda' },
+      ],
+    },
+    {
+      id: 'due-diligence',
+      title: 'Due Diligence',
+      overview:
+        "Due Diligence (DD) is the structured workflow investors, partners, mentors, and admins use to review a deal before committing. Founders never read a DD report on themselves; they upload requested documents and respond to questions raised in the DD checklist.",
+      howto: [
+        'Founders — open Due Diligence on your project to see open requests and upload requested docs.',
+        'Reviewers — open Due Diligence from the deal record; sign the NDA, then walk the checklist (financials, legal, team, IP, market).',
+        'Mark each checklist item with a verdict (pass / conditional / fail / not applicable) and notes.',
+        'Generate the DD report when the checklist is complete; it downloads as an encrypted PDF.',
+      ],
+      tips: [
+        'Front-load the documents the checklist asks for — every missing doc adds a week.',
+        'Use the comment thread on each checklist item to keep the conversation in one place.',
+      ],
+      pitfalls: [
+        'Skipping the NDA before the first checklist verdict is blocked — sign first or the verdict won’t save.',
+        'Rotating reviewers mid-DD without re-syncing notes loses context; keep the same lead reviewer where possible.',
+      ],
+      related: [
+        { label: 'Trust Center', href: '#validate-grow/trust-center' },
+        { label: 'NDA flows', href: '#legal/nda' },
       ],
     },
     {
@@ -38,9 +114,13 @@ export default {
         'Send a one-paragraph context note when you book — mentors prepare better with a clear ask.',
         'Capture the mentor’s feedback in your Decision Journal so you don’t lose it.',
       ],
+      pitfalls: [
+        'Booking without a calendar connected forces a manual ICS download — connect a calendar first.',
+        'No-shows count against your match score; cancel at least 24 hours ahead if you can’t make it.',
+      ],
       related: [
         { label: 'Office Hours', href: '#validate-grow/office-hours' },
-        { label: 'Settings → Integrations (calendar)', href: '#account/settings-overview' },
+        { label: 'Calendar (Google / Microsoft)', href: '#integrations/calendar' },
       ],
     },
     {
@@ -56,6 +136,10 @@ export default {
       tips: [
         'Slots fill fast on Mondays — book on Friday for the following week.',
         'Recurring problems? Convert to a full mentor booking instead.',
+      ],
+      pitfalls: [
+        'Showing up with five questions in a 15-minute slot wastes everyone’s time — book a full session if you need depth.',
+        'Booking back-to-back slots with the same host is rate-limited; spread them across hosts.',
       ],
       related: [
         { label: 'Mentors', href: '#validate-grow/mentors' },
@@ -77,8 +161,35 @@ export default {
         'Be honest about time commitment — mismatch here causes more breakups than equity.',
         'Try a paid trial project together before signing the agreement.',
       ],
+      pitfalls: [
+        'Picking a co-founder for technical skills you can hire is a common, expensive mistake.',
+        'Skipping the trial-project step locks two people into vesting that’s hard to unwind.',
+      ],
       related: [
         { label: 'Cofounder Agreement', href: '#legal/cofounder-agreement' },
+      ],
+    },
+    {
+      id: 'wellbeing',
+      title: 'Founder wellbeing',
+      overview:
+        "The Wellbeing tracker is a private, encrypted check-in (mood, sleep, stress, support) you can fill in weekly. Only you see the entries; the studio team sees aggregated, anonymized trends across the cohort.",
+      howto: [
+        'Open Wellbeing from the founder support group in the sidebar.',
+        'Take the 60-second weekly check-in.',
+        'Review your trend chart over the past 12 weeks.',
+        'If you flag distress, the platform offers a private link to schedule with the studio’s mental-health partner.',
+      ],
+      tips: [
+        'Set a weekly reminder — the value comes from a continuous trend, not single entries.',
+        'Use the “share with mentor” option only with people you trust to hold the data.',
+      ],
+      pitfalls: [
+        'Treating the check-in as a performance metric defeats it; honest entries beat optimistic ones.',
+        'The mental-health partner is the right resource for crisis support — don’t rely on chat or community channels.',
+      ],
+      related: [
+        { label: 'Mentors', href: '#validate-grow/mentors' },
       ],
     },
     {
@@ -94,6 +205,10 @@ export default {
       tips: [
         'Read the Friday digest if you only have time for one read per week.',
         'The conviction picks list highlights ideas the studio team is actively interested in.',
+      ],
+      pitfalls: [
+        'Tracking too many sectors makes the feed noisy — pick three to start.',
+        'Conviction picks are studio-internal signals, not investment recommendations.',
       ],
       related: [
         { label: 'Watchlist & Decision Journal', href: '#capital/investors' },

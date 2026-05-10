@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import Fuse from 'fuse.js';
 import {
-  BookOpen, Search, ChevronRight, X,
+  BookOpen, Search, ChevronRight, X, AlertTriangle,
   Compass, Rocket, Hammer, TrendingUp, DollarSign, Scale,
   Network, LayoutDashboard, UserCircle, LifeBuoy, FileText,
 } from 'lucide-react';
-import { SECTIONS, buildSearchIndex } from './sections';
+import { SECTIONS } from './sections';
+import { createDocsFuse, highlight, snippet } from '../../lib/docs/search';
 
 // Resolve the lucide icon name strings used in section manifests.
 const ICONS = {
@@ -16,43 +16,6 @@ const ICONS = {
 function SectionIcon({ name, ...rest }) {
   const Icon = ICONS[name] || FileText;
   return <Icon {...rest} />;
-}
-
-// Highlight every occurrence of `q` inside `text` (case-insensitive),
-// returning a JSX-friendly array. Used in search-result snippets.
-function highlight(text, q) {
-  if (!q) return text;
-  const lower = text.toLowerCase();
-  const ql = q.toLowerCase();
-  const out = [];
-  let cursor = 0;
-  let idx = lower.indexOf(ql, cursor);
-  let key = 0;
-  while (idx !== -1) {
-    if (idx > cursor) out.push(text.slice(cursor, idx));
-    out.push(
-      <mark key={key++} className="bg-yellow-200 text-gray-900 rounded px-0.5">
-        {text.slice(idx, idx + q.length)}
-      </mark>
-    );
-    cursor = idx + q.length;
-    idx = lower.indexOf(ql, cursor);
-  }
-  if (cursor < text.length) out.push(text.slice(cursor));
-  return out;
-}
-
-// Pull a short snippet of `text` around the first occurrence of `q`,
-// padded with ellipses. Falls back to the start of the text.
-function snippet(text, q, span = 140) {
-  if (!text) return '';
-  if (!q) return text.slice(0, span) + (text.length > span ? '…' : '');
-  const lower = text.toLowerCase();
-  const idx = lower.indexOf(q.toLowerCase());
-  if (idx === -1) return text.slice(0, span) + (text.length > span ? '…' : '');
-  const start = Math.max(0, idx - Math.floor(span / 3));
-  const end = Math.min(text.length, start + span);
-  return (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '');
 }
 
 function SubsectionView({ section, sub }) {
@@ -82,6 +45,17 @@ function SubsectionView({ section, sub }) {
           <h4 className="text-xs font-semibold uppercase tracking-wider text-violet-700 mb-2">Tips</h4>
           <ul className="list-disc list-outside pl-5 text-sm text-gray-700 space-y-1">
             {sub.tips.map((tip, i) => <li key={i} className="leading-relaxed">{tip}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {Array.isArray(sub.pitfalls) && sub.pitfalls.length > 0 && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-800 mb-2">
+            <AlertTriangle size={12} /> Common pitfalls
+          </h4>
+          <ul className="list-disc list-outside pl-5 text-sm text-gray-700 space-y-1">
+            {sub.pitfalls.map((p, i) => <li key={i} className="leading-relaxed">{p}</li>)}
           </ul>
         </div>
       )}
@@ -121,25 +95,12 @@ export default function DocsLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const contentRef = useRef(null);
+  const searchInputRef = useRef(null);
   const [query, setQuery] = useState('');
   const [activeAnchor, setActiveAnchor] = useState(`${SECTIONS[0].id}/${SECTIONS[0].subsections[0].id}`);
 
-  // Lazily build the fuse.js index over the manifest. Stable across
-  // renders; doesn't depend on the query.
-  const fuse = useMemo(() => {
-    const records = buildSearchIndex();
-    return new Fuse(records, {
-      keys: [
-        { name: 'subsectionTitle', weight: 0.5 },
-        { name: 'sectionTitle', weight: 0.2 },
-        { name: 'text', weight: 0.3 },
-      ],
-      threshold: 0.35,
-      includeMatches: false,
-      minMatchCharLength: 2,
-      ignoreLocation: true,
-    });
-  }, []);
+  // Lazily build the fuse.js index. Stable across renders.
+  const fuse = useMemo(() => createDocsFuse(), []);
 
   const trimmedQuery = query.trim();
   const searchResults = useMemo(() => {
@@ -147,16 +108,31 @@ export default function DocsLayout() {
     return fuse.search(trimmedQuery, { limit: 25 }).map(r => r.item);
   }, [fuse, trimmedQuery]);
 
+  // `/` keyboard shortcut focuses the search input — but only when
+  // the user is not already typing in another field.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== '/') return;
+      const t = e.target;
+      const tag = (t && t.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (t && t.isContentEditable)) return;
+      e.preventDefault();
+      const el = searchInputRef.current;
+      if (el) {
+        el.focus();
+        el.select?.();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Scroll-to-anchor on initial load and when the URL hash changes.
   useEffect(() => {
     const hash = decodeURIComponent(location.hash.replace(/^#/, ''));
     if (!hash) return;
-    // The element id contains a slash (e.g. `getting-started/onboarding`),
-    // so we use a data-anchor attribute lookup rather than getElementById
-    // (CSS.escape would also work, but querySelector is simpler here).
     const el = document.querySelector(`[data-anchor="${hash}"]`);
     if (el) {
-      // Defer to after layout so heights settle.
       requestAnimationFrame(() => el.scrollIntoView({ behavior: 'auto', block: 'start' }));
       setActiveAnchor(hash);
     }
@@ -191,6 +167,7 @@ export default function DocsLayout() {
 
   // Activated section in the rail derives from the activeAnchor's section prefix.
   const activeSectionId = activeAnchor.split('/')[0];
+  const activeSection = SECTIONS.find(s => s.id === activeSectionId) || SECTIONS[0];
 
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden -mx-6 -my-6">
@@ -204,10 +181,11 @@ export default function DocsLayout() {
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
+              ref={searchInputRef}
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search docs…"
+              placeholder="Search docs… (press /)"
               aria-label="Search documentation"
               className="w-full pl-8 pr-7 py-1.5 text-xs rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400"
             />
@@ -295,9 +273,7 @@ export default function DocsLayout() {
 
       {/* Main content */}
       <div ref={contentRef} className="flex-1 min-w-0 overflow-y-auto">
-        {/* Mobile: collapsed top search bar (rail hidden on small screens).
-            Lives INSIDE the main column so it doesn't become its own flex
-            child and squeeze the content into a sliver. */}
+        {/* Mobile: collapsed top search bar (rail hidden on small screens). */}
         <div className="lg:hidden sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-2">
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -324,38 +300,96 @@ export default function DocsLayout() {
               ))}
             </ul>
           )}
-        </div>
-        <div className="max-w-3xl mx-auto px-6 py-8">
-          <header className="mb-8">
-            <div className="flex items-center gap-2 text-violet-600 text-xs font-semibold uppercase tracking-widest mb-2">
-              <BookOpen size={14} /> Documentation
-            </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">StudioOS Documentation</h1>
-            <p className="text-sm text-gray-500">
-              Guides for founders, investors, partners, and mentors using the StudioOS platform.
-            </p>
-          </header>
-
-          {SECTIONS.map(section => (
-            <div key={section.id}>
-              <div
-                id={section.id}
-                data-anchor={`${section.id}/${section.subsections[0].id}`}
-                className="scroll-mt-20"
-              />
-              <div className="flex items-center gap-2 mt-2 mb-4 pb-2 border-b border-gray-200">
-                <SectionIcon name={section.icon} size={18} className="text-violet-600" />
-                <h2 className="text-2xl font-bold text-gray-900">{section.title}</h2>
-              </div>
-              {section.subsections.map(sub => (
-                <SubsectionView key={sub.id} section={section} sub={sub} />
+          {/* Mobile: section/subsection picker */}
+          <details className="mt-2">
+            <summary className="text-[11px] text-gray-600 cursor-pointer select-none">Browse all sections</summary>
+            <nav className="mt-2 max-h-72 overflow-y-auto bg-white border border-gray-200 rounded-md p-2">
+              {SECTIONS.map(section => (
+                <div key={section.id} className="mb-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 px-1 mb-0.5">{section.title}</div>
+                  <ul>
+                    {section.subsections.map(sub => (
+                      <li key={sub.id}>
+                        <button
+                          onClick={() => goToAnchor(`${section.id}/${sub.id}`)}
+                          className="w-full text-left text-[12px] px-2 py-1 rounded hover:bg-gray-100"
+                        >
+                          {sub.title}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ))}
-            </div>
-          ))}
+            </nav>
+          </details>
+        </div>
 
-          <footer className="mt-16 pt-6 border-t border-gray-200 text-xs text-gray-500">
-            Need help? Open a ticket from the Tickets page in the sidebar, or email <a className="text-violet-700 hover:underline" href="mailto:support@axal.vc">support@axal.vc</a>.
-          </footer>
+        <div className="flex max-w-6xl mx-auto">
+          <div className="max-w-3xl flex-1 min-w-0 px-6 py-8">
+            {/* Breadcrumbs */}
+            <nav aria-label="Breadcrumb" className="text-[11px] text-gray-500 mb-3 flex items-center gap-1.5">
+              <span>Documentation</span>
+              <ChevronRight size={11} />
+              <span className="text-gray-700 font-medium">{activeSection.title}</span>
+            </nav>
+
+            <header className="mb-8">
+              <div className="flex items-center gap-2 text-violet-600 text-xs font-semibold uppercase tracking-widest mb-2">
+                <BookOpen size={14} /> Documentation
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">StudioOS Documentation</h1>
+              <p className="text-sm text-gray-500">
+                Guides for founders, investors, partners, and mentors using the StudioOS platform.
+              </p>
+            </header>
+
+            {SECTIONS.map(section => (
+              <div key={section.id}>
+                <div
+                  id={section.id}
+                  data-anchor={`${section.id}/${section.subsections[0].id}`}
+                  className="scroll-mt-20"
+                />
+                <div className="flex items-center gap-2 mt-2 mb-4 pb-2 border-b border-gray-200">
+                  <SectionIcon name={section.icon} size={18} className="text-violet-600" />
+                  <h2 className="text-2xl font-bold text-gray-900">{section.title}</h2>
+                </div>
+                {section.subsections.map(sub => (
+                  <SubsectionView key={sub.id} section={section} sub={sub} />
+                ))}
+              </div>
+            ))}
+
+            <footer className="mt-16 pt-6 border-t border-gray-200 text-xs text-gray-500">
+              Need help? Open a ticket from the Tickets page in the sidebar, or email <a className="text-violet-700 hover:underline" href="mailto:support@axal.vc">support@axal.vc</a>.
+            </footer>
+          </div>
+
+          {/* "On this page" right rail — auto-built from the active section's subsections. */}
+          <aside className="hidden xl:block w-56 shrink-0 pl-4 pr-6 py-8 sticky top-0 self-start">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">On this page</div>
+            <ul className="space-y-1 border-l border-gray-200">
+              {activeSection.subsections.map(sub => {
+                const anchor = `${activeSection.id}/${sub.id}`;
+                const active = anchor === activeAnchor;
+                return (
+                  <li key={sub.id}>
+                    <button
+                      onClick={() => goToAnchor(anchor)}
+                      className={`w-full text-left text-[11.5px] pl-3 pr-1 py-1 -ml-px border-l ${
+                        active
+                          ? 'border-violet-500 text-violet-700 font-medium'
+                          : 'border-transparent text-gray-500 hover:text-gray-800'
+                      }`}
+                    >
+                      {sub.title}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </aside>
         </div>
       </div>
     </div>

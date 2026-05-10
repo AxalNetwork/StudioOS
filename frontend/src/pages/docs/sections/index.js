@@ -10,9 +10,12 @@ import build from './build';
 import validateGrow from './validate-grow';
 import capital from './capital';
 import legal from './legal';
+import partnerships from './partnerships';
 import network from './network';
 import portals from './portals';
+import integrations from './integrations';
 import account from './account';
+import admin from './admin';
 import troubleshooting from './troubleshooting';
 
 export const SECTIONS = [
@@ -22,15 +25,19 @@ export const SECTIONS = [
   validateGrow,
   capital,
   legal,
+  partnerships,
   network,
   portals,
+  integrations,
   account,
+  admin,
   troubleshooting,
 ];
 
-// Flat search corpus — one record per subsection. Includes a `text`
-// blob fuse.js can score against, plus the metadata the result list
-// renders (section title, subsection title, anchor).
+// Legacy in-manifest search index. Kept for backwards compatibility
+// with anything still importing buildSearchIndex from this module;
+// new callers should use `frontend/src/lib/docs/search.js` which
+// includes pitfalls and related-link labels in the corpus.
 export function buildSearchIndex() {
   const records = [];
   for (const section of SECTIONS) {
@@ -40,6 +47,7 @@ export function buildSearchIndex() {
         sub.overview || '',
         ...(sub.howto || []),
         ...(sub.tips || []),
+        ...(sub.pitfalls || []),
       ].join(' \n ');
       records.push({
         sectionId: section.id,

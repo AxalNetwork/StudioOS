@@ -17,6 +17,10 @@ export default {
         'You can change your role view later in Settings → Profile if you wear more than one hat.',
         'The dashboard widgets re-order based on the role and tier you’re on, so your first-screen experience is tailored.',
       ],
+      pitfalls: [
+        'Bookmarking a deep link before signing in lands you on the login page; sign in first, then re-open the link.',
+        'If the sidebar looks shorter than expected, you may be in a “View as” mode — exit it from the violet bar at the top.',
+      ],
       related: [
         { label: 'Account roles explained', href: '#getting-started/roles' },
         { label: 'Onboarding walkthrough', href: '#getting-started/onboarding' },
@@ -36,6 +40,10 @@ export default {
       tips: [
         'The lab gates features per week to keep you focused; the standard portal is open-ended.',
         'You can graduate the lab early by completing each week’s milestones — the system auto-exits when Week 4 is done.',
+      ],
+      pitfalls: [
+        'Starting the lab with an already-incorporated company can confuse the cap-table seeding step — pick the Existing Company path instead.',
+        'Switching paths mid-flight preserves your data but the sidebar will reshape; finish the current week before changing.',
       ],
       related: [
         { label: 'Spin-Out Lab overview', href: '#spin-out-lab/overview' },
@@ -58,9 +66,36 @@ export default {
         'A role change requires admin approval today — open a support ticket if you need one.',
         'Admins can impersonate any user from the Admin Console for support and debugging.',
       ],
+      pitfalls: [
+        'Multi-role accounts default to a single primary role; switching roles can hide data you expect to see.',
+        'Investor accounts cannot create projects — only Founder and Admin roles can.',
+      ],
       related: [
         { label: 'Settings → Profile', href: '#account/settings-overview' },
         { label: 'Founder Portal', href: '#portals/founder' },
+      ],
+    },
+    {
+      id: 'personas',
+      title: 'Personas (New Founder, Existing Company, Investor, Mentor)',
+      overview:
+        "Personas are tighter slices of a role that tune your dashboard, the Personal Advisor’s opening questions, and which “quick action” cards appear first. Founders pick between New Founder (idea stage) and Existing Company; Investors and Mentors each have one persona today.",
+      howto: [
+        'During onboarding, pick the persona that matches what you’re doing this quarter.',
+        'Re-open Settings → Profile → Re-run onboarding to switch personas later.',
+        'Your persona is what the Personal Advisor uses to pick its opening question bank.',
+      ],
+      tips: [
+        'Persona is independent of subscription tier — switching personas does not change your billing.',
+        'New Founder persona unlocks Spin-Out Lab nudges; Existing Company hides them.',
+      ],
+      pitfalls: [
+        'If the Advisor opens with the wrong question set, your persona is the likely cause — switch in Settings.',
+        'Switching personas does not retroactively change quick-action history; only the next session is affected.',
+      ],
+      related: [
+        { label: 'Personal Advisor', href: '#getting-started/personal-advisor' },
+        { label: 'Onboarding walkthrough', href: '#getting-started/onboarding' },
       ],
     },
     {
@@ -77,6 +112,10 @@ export default {
       tips: [
         'You can re-run onboarding any time from Settings → Profile → Re-run onboarding.',
         'Onboarding answers also drive the Mentor Match and Partner Match algorithms.',
+      ],
+      pitfalls: [
+        'Skipping the timezone step makes calendar invites land in UTC — set it before booking your first session.',
+        'Partial onboarding leaves your dashboard generic; finish the wizard for the personalized layout.',
       ],
       related: [
         { label: 'Inviting your team', href: '#getting-started/invite-team' },
@@ -97,9 +136,36 @@ export default {
         'Co-founder invites should use the Cofounder Match → Cofounder Agreement flow rather than a plain invite — it captures equity split and vesting at the same time.',
         'Advisor invites can be limited to read-only access to the deck, financial model, and metrics.',
       ],
+      pitfalls: [
+        'Invites expire after 7 days — re-send if it’s been longer.',
+        'Adding a co-founder via plain invite skips the equity-split capture; back-fill it on the cap table or via the Cofounder Agreement.',
+      ],
       related: [
         { label: 'Co-founder Match', href: '#validate-grow/cofounder-match' },
         { label: 'Cofounder Agreement', href: '#legal/cofounder-agreement' },
+      ],
+    },
+    {
+      id: 'personal-advisor',
+      title: 'Personal Advisor',
+      overview:
+        "The Personal Advisor is a chat-style helper on your dashboard that asks the right next question for your persona, links you to the matching tool, and drops you straight into the docs page that explains it. It does not give legal, tax, or investment advice.",
+      howto: [
+        'Open your dashboard — the Advisor sits where the persona tile used to be.',
+        'Pick one of the suggested questions, or type your own.',
+        'Follow the “Open this tool” or “Read more” links the Advisor surfaces.',
+      ],
+      tips: [
+        'The Advisor’s opening questions change with your persona — switch in Settings to see a different bank.',
+        'Use the Advisor as a roadmap: the suggested questions are usually the next thing worth doing.',
+      ],
+      pitfalls: [
+        'The Advisor is a guide, not a decision-maker — always cross-check legal and tax steps with the partner attorney or your accountant.',
+        'It does not see your private project data; it suggests features based on persona, not on your numbers.',
+      ],
+      related: [
+        { label: 'Personas', href: '#getting-started/personas' },
+        { label: 'Onboarding walkthrough', href: '#getting-started/onboarding' },
       ],
     },
   ],

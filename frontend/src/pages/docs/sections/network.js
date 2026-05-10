@@ -18,6 +18,10 @@ export default {
         'Read past reviews — they’re the best signal of fit.',
         'Get a quote in writing before starting; engagements track scope and price.',
       ],
+      pitfalls: [
+        'Starting work before the engagement is scoped and accepted leaves you without payment protection.',
+        'Picking on price alone — the cheapest legal or accounting work is rarely the cheapest in the long run.',
+      ],
       related: [
         { label: 'Partners & Co-marketing', href: '#network/partners' },
         { label: 'Public Directory', href: '#network/directory' },
@@ -37,8 +41,13 @@ export default {
         'Case studies are the highest-leverage co-marketing — they help the partner sell and build founder credibility.',
         'Set the publish date in advance so both sides can amplify on launch.',
       ],
+      pitfalls: [
+        'Co-marketing without a written scope leads to drift and missed deadlines — capture it in the engagement.',
+        'Forgetting to credit both sides on launch hurts the relationship more than the post helps.',
+      ],
       related: [
         { label: 'Marketplace', href: '#network/marketplace' },
+        { label: 'Partnerships overview', href: '#partnerships/overview' },
       ],
     },
     {
@@ -54,6 +63,10 @@ export default {
       tips: [
         'Visibility is real-time — toggling off removes you from the directory immediately.',
         'Email and personal contact details are never published, only your name, role, bio, and (optionally) social links.',
+      ],
+      pitfalls: [
+        'Picking a slug that conflicts with a brand can be reclaimed by the brand owner — pick something you control.',
+        'Going public before your profile is filled in leaves a sparse listing that hurts more than it helps.',
       ],
       related: [
         { label: 'Settings → Privacy', href: '#account/privacy' },
@@ -75,6 +88,10 @@ export default {
         'Personal intros convert ~10x better than generic share links — write a sentence or two.',
         'Earnings vest based on the referred user staying active; check the terms in Refer & Earn for the schedule.',
       ],
+      pitfalls: [
+        'Referring yourself with an alternate email is detected and forfeits earnings.',
+        'Sharing in spammy channels can get your link blacklisted by referees’ employers.',
+      ],
       related: [
         { label: 'Network Effects', href: '#network/effects' },
       ],
@@ -92,6 +109,10 @@ export default {
       tips: [
         'The best way to climb the leaderboard is to make great intros — quality, not quantity.',
         'Track value delivered (deals closed, hires made) so the studio can recognize top connectors.',
+      ],
+      pitfalls: [
+        'Mass-introducing without checking both sides want the intro hurts your score and your reputation.',
+        'Refusing to log accepted intros leaves your second-degree reach under-counted.',
       ],
       related: [
         { label: 'Refer & Earn', href: '#network/refer-earn' },

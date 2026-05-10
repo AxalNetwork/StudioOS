@@ -1,6 +1,9 @@
+// Section id stays "build" so existing AC-2 doc_anchors and PageExplainer
+// docPaths keep resolving; the user-facing title is "Core" per the new
+// information architecture.
 export default {
   id: 'build',
-  title: 'Build',
+  title: 'Core',
   icon: 'Hammer',
   subsections: [
     {
@@ -16,6 +19,10 @@ export default {
       tips: [
         'The Brief is the single-page summary investors and admins read first — keep it sharp.',
         'Activity is a read-only audit log; use it to catch up after a few days away.',
+      ],
+      pitfalls: [
+        'Creating multiple projects for variations of the same idea fragments your discovery data — use one project and pivot in place.',
+        'Removing yourself as a project member can lock you out; transfer ownership first.',
       ],
       related: [
         { label: 'Roadmap', href: '#build/roadmap' },
@@ -35,6 +42,10 @@ export default {
       tips: [
         'Tag pains consistently across interviews so the rollup can group them.',
         'Voice memos transcribed externally can be pasted into Notes — there’s no length limit.',
+      ],
+      pitfalls: [
+        'Inventing tags per interview defeats the rollup — pick a small vocabulary and re-use it.',
+        'Recording assumptions as quotes inflates the confidence score; quote what people actually said.',
       ],
       related: [
         { label: 'Roadmap', href: '#build/roadmap' },
@@ -56,6 +67,10 @@ export default {
         'Re-grade your KRs every Friday — green/yellow/red is enough; perfection is the enemy.',
         'Tasks closed on the Kanban roll up into the project Activity log automatically.',
       ],
+      pitfalls: [
+        'Defining KRs as activities (“build feature X”) instead of outcomes (“X paying users”) makes them useless for grading.',
+        'Carrying yesterday’s tasks into Doing every morning hides real blockers — keep WIP small.',
+      ],
       related: [
         { label: 'Metrics', href: '#capital/metrics' },
         { label: 'Customer Discovery', href: '#build/customer-discovery' },
@@ -76,6 +91,10 @@ export default {
         'Run 2–3 rounds before settling — the first round is rarely the best.',
         'Buy your domain before you tell anyone the name.',
       ],
+      pitfalls: [
+        'Skipping the trademark/domain check before announcing the name is the most common rebrand trigger.',
+        'Picking a clever name that doesn’t spell well over the phone hurts every sales call later.',
+      ],
       related: [
         { label: 'Pitch Deck', href: '#build/pitch-deck' },
       ],
@@ -95,9 +114,37 @@ export default {
         'Keep one core idea per slide — investors skim, they don’t read.',
         'The Financials and Roadmap slides pull live from those modules; update them once and the deck refreshes.',
       ],
+      pitfalls: [
+        'Editing live slides during an investor meeting causes layout pop — export to PDF and present the static copy.',
+        'Hidden slides still count for page numbering; un-hide before export if numbering matters.',
+      ],
       related: [
         { label: 'Brand Builder', href: '#build/brand-builder' },
         { label: 'Capital', href: '#capital/fundraise' },
+      ],
+    },
+    {
+      id: 'financial-model',
+      title: 'Financial Model Builder',
+      overview:
+        "The Financial Model Builder lets you assemble a 36-month projection (revenue lines, headcount, OpEx, runway) without spreadsheets. The model wires into your Pitch Deck and Metrics dashboards so investors see the same numbers you do.",
+      howto: [
+        'Open Financials on your project.',
+        'Add revenue lines (subscription, transaction, services) and assumptions (price, conversion, churn).',
+        'Add headcount roles with hire month and burdened cost.',
+        'Review the cash, runway, and ARR charts; export to CSV for your accountant.',
+      ],
+      tips: [
+        'Build a base, an upside, and a downside scenario — investors always ask.',
+        'Tie hires to revenue triggers (e.g. hire AE #2 at $50k MRR) instead of fixed dates.',
+      ],
+      pitfalls: [
+        'Forgetting payroll taxes and benefits understates burn by 25–35%.',
+        'Modelling churn as zero collapses to a flattering hockey stick that investors discount on sight.',
+      ],
+      related: [
+        { label: 'Metrics', href: '#capital/metrics' },
+        { label: 'Pitch Deck', href: '#build/pitch-deck' },
       ],
     },
   ],

@@ -1,6 +1,6 @@
 export default {
   id: 'account',
-  title: 'Account',
+  title: 'Account & Billing',
   icon: 'UserCircle',
   subsections: [
     {
@@ -14,7 +14,7 @@ export default {
         'Security — TOTP setup, recovery codes, active sessions, password-less login configuration.',
         'Notifications — per-channel email and in-app toggles plus quiet hours and digest cadence.',
         'Privacy — visibility (public / network / private), Public Directory opt-in, mentor discoverability.',
-        'Integrations — connected accounts (LinkedIn, Google, Microsoft) with disconnect controls.',
+        'Integrations — connected accounts (LinkedIn, Google, Microsoft, Slack, HubSpot, Salesforce, DocuSign) with disconnect controls.',
         'Billing — current plan, payment method, and invoices.',
         'Appearance — theme (light / dark / system), density, and sidebar default state.',
         'Developer — feature flags, search index re-sync, raw user object (admins only).',
@@ -23,15 +23,20 @@ export default {
         'Bookmark direct links to specific tabs (e.g. /settings/notifications) for fast access.',
         'Old links to /settings/jurisdictions, /email, /auth, and /role still work — they redirect to the new tabs.',
       ],
+      pitfalls: [
+        'Changing your email triggers a re-verification on the new address — keep the old inbox accessible until that completes.',
+        'Disconnecting an integration also revokes any in-flight syncs; reconnecting starts fresh.',
+      ],
       related: [
         { label: 'Notifications', href: '#account/notifications' },
         { label: 'Privacy & data export', href: '#account/privacy' },
         { label: 'Security (2FA, sessions)', href: '#account/security' },
+        { label: 'Appearance', href: '#account/appearance' },
       ],
     },
     {
       id: 'tiers',
-      title: 'Subscription tiers',
+      title: 'Subscription tiers (founders)',
       overview:
         "StudioOS has three commercial tiers tuned to where you are: Free for browsing and applying, Growth for active founders, and Studio for studio operators and committed LPs. Your tier determines which sidebar groups and features unlock.",
       howto: [
@@ -43,8 +48,60 @@ export default {
         'Tier upgrades take effect immediately; downgrades preserve your data but lock the gated features.',
         'Studio operators with a license get a branded instance and a custom domain.',
       ],
+      pitfalls: [
+        'Downgrading mid-fundraise can lock the dataroom view for invited investors — finish the round first.',
+        'Trial extensions are a one-time courtesy; plan to upgrade before the trial ends.',
+      ],
       related: [
         { label: 'Settings → Billing', href: '#account/settings-overview' },
+        { label: 'Investor billing & tiers', href: '#account/investor-billing' },
+        { label: 'Paywalls', href: '#account/paywalls' },
+      ],
+    },
+    {
+      id: 'investor-billing',
+      title: 'Investor billing & tiers',
+      overview:
+        "Investors have their own pricing tied to dealroom access, portfolio size, and Trust Center features. Limited-volume angels see a metered plan; institutional investors get an enterprise tier with no dealroom cap.",
+      howto: [
+        'Open Settings → Billing on an investor account.',
+        'Pick the plan that matches your active dealroom count and portfolio size.',
+        'Add a payment method; invoices appear in the same tab.',
+      ],
+      tips: [
+        'Cap-bumps are billed pro-rata — moving to a higher tier mid-month only charges the difference.',
+        'Institutional plans include export tooling; ask the studio if you need bulk extracts.',
+      ],
+      pitfalls: [
+        'Hitting your dealroom cap silently locks new invites — keep the cap above your active count.',
+        'A failed renewal downgrades you to a read-only investor view until the card is updated.',
+      ],
+      related: [
+        { label: 'Subscription tiers (founders)', href: '#account/tiers' },
+        { label: 'Paywalls', href: '#account/paywalls' },
+      ],
+    },
+    {
+      id: 'paywalls',
+      title: 'Paywalls — what unlocks at each tier',
+      overview:
+        "Paywalls show up as a friendly banner explaining what you’re trying to do and which tier unlocks it. They never silently fail; you can always preview the gated feature and upgrade in two clicks.",
+      howto: [
+        'When you hit a paywall, read the banner — it lists the exact tier and what it unlocks.',
+        'Click "Compare plans" to see the full grid before deciding.',
+        'Click "Upgrade" to switch tier and return to the same screen with the feature unlocked.',
+      ],
+      tips: [
+        'Some features (e.g. extra dealrooms) are metered add-ons rather than tier upgrades — the banner says which.',
+        'You can request a specific feature; the studio team prioritizes by demand.',
+      ],
+      pitfalls: [
+        'Refreshing the page mid-upgrade can re-trigger the paywall — wait for the upgrade confirmation toast.',
+        'Sharing a paywalled link with a free-tier teammate shows them the same paywall, not the feature.',
+      ],
+      related: [
+        { label: 'Subscription tiers (founders)', href: '#account/tiers' },
+        { label: 'Investor billing & tiers', href: '#account/investor-billing' },
       ],
     },
     {
@@ -61,6 +118,10 @@ export default {
       tips: [
         'Daily digests are great if you’re heads-down building — they give you one read per day instead of a stream.',
         'The notification bell shows unread items; clicking marks them read.',
+      ],
+      pitfalls: [
+        'Disabling all categories also disables security alerts; keep the Security category on at minimum.',
+        'Quiet hours apply to push only — urgent emails still arrive.',
       ],
       related: [
         { label: 'Settings overview', href: '#account/settings-overview' },
@@ -81,6 +142,10 @@ export default {
       tips: [
         'Export downloads as a single JSON file; keep it somewhere safe.',
         'Some records (signed contracts, capital call records) are preserved by law for 7 years even after deletion.',
+      ],
+      pitfalls: [
+        'Setting visibility to Private hides you from co-founder match results too — toggle Network if you still want introductions.',
+        'Export is a snapshot; later changes won’t appear without a re-export.',
       ],
       related: [
         { label: 'Public Directory', href: '#network/directory' },
@@ -103,8 +168,35 @@ export default {
         'Print or store recovery codes somewhere offline — losing both your device and your codes locks you out.',
         'If you change phones, regenerate TOTP from the new device before retiring the old one.',
       ],
+      pitfalls: [
+        'Storing recovery codes only in the same password manager as your TOTP defeats the purpose — keep one offline.',
+        'Signing out all sessions while travelling can lock you out of your live device — sign out individually.',
+      ],
       related: [
         { label: 'KYC', href: '#legal/kyc' },
+      ],
+    },
+    {
+      id: 'appearance',
+      title: 'Appearance (theme & density)',
+      overview:
+        "Appearance lets you switch between light, dark, and system themes, set the table/list density (compact, comfortable, cosy), and choose whether the sidebar starts collapsed.",
+      howto: [
+        'Open Settings → Appearance.',
+        'Pick a theme: Light, Dark, or System (follows your OS).',
+        'Pick a density: Compact (more rows visible), Comfortable (default), or Cosy (extra padding).',
+        'Toggle "Start sidebar collapsed" if you prefer the icon-only rail.',
+      ],
+      tips: [
+        'System theme follows your OS automatically — useful if you switch ambient lighting throughout the day.',
+        'Density affects tables and cards; typography stays at a comfortable reading size.',
+      ],
+      pitfalls: [
+        'Compact density can hide hover-only controls on small screens — use Comfortable on a phone.',
+        'Theme changes apply across all your sessions on the next page load.',
+      ],
+      related: [
+        { label: 'Settings overview', href: '#account/settings-overview' },
       ],
     },
     {
@@ -120,6 +212,10 @@ export default {
       tips: [
         'If you ever spot an action you didn’t take, change your TOTP immediately and contact support.',
         'Admins can see a wider audit log; yours is scoped to events involving your account.',
+      ],
+      pitfalls: [
+        'The actor field is stored as a hash for privacy — don’t expect to search by plain email.',
+        'Filtering to a small range can hide important context — widen the range when investigating.',
       ],
       related: [
         { label: 'Security', href: '#account/security' },

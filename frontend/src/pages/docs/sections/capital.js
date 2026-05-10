@@ -18,6 +18,10 @@ export default {
         'Build the dataroom before you start outreach — every day of delay loses momentum.',
         'Pick a hard close date and stick to it; rounds without deadlines drag for months.',
       ],
+      pitfalls: [
+        'Sharing the dataroom link in public channels removes the access trail; always share to a named investor.',
+        'Accepting commitments before counter-signing the SAFE leaves you exposed to renegotiation.',
+      ],
       related: [
         { label: 'Cap Table', href: '#capital/cap-table' },
         { label: 'Investors & Pipeline', href: '#capital/investors' },
@@ -36,6 +40,10 @@ export default {
       tips: [
         'Pipeline coverage of 5x your raise target is healthy; below 3x means more outreach.',
         'Send a weekly investor update — even rejections often turn into intros.',
+      ],
+      pitfalls: [
+        'Marking an investor as “committed” before the SAFE is signed inflates your pipeline number and misleads you.',
+        'Not logging passes denies you the pattern (e.g. five passes for the same reason → fix the pitch).',
       ],
       related: [
         { label: 'Capital (fundraise)', href: '#capital/fundraise' },
@@ -56,6 +64,10 @@ export default {
         'Always model the option pool refresh into the priced round — investors require it.',
         'Export to CSV for your attorney once a round closes; keep the platform copy as the source of truth.',
       ],
+      pitfalls: [
+        'Forgetting to add the option pool top-up before priced-round modelling understates founder dilution.',
+        'Issuing shares outside the platform without back-filling the cap table makes audits and exits painful.',
+      ],
       related: [
         { label: 'Capital', href: '#capital/fundraise' },
         { label: 'Section 83(b)', href: '#legal/section-83b' },
@@ -74,6 +86,10 @@ export default {
       tips: [
         'Reserve modeling matters more than initial check sizing — most fund returns come from doubling down on winners.',
         'Run the waterfall in advance of any exit so you can communicate proceeds clearly to LPs.',
+      ],
+      pitfalls: [
+        'Modelling reserves as a flat per-deal number ignores winner concentration; use a power-law assumption.',
+        'Waterfall outputs depend on assumed exit value — always run a base/upside/downside set.',
       ],
       related: [
         { label: 'Investor Portfolio Health', href: '#portals/portfolio-health' },
@@ -94,6 +110,10 @@ export default {
         'Buyer matching is anonymized — no email or exact amount is shared with the matching engine.',
         'Some shares are restricted by company bylaws — check the right-of-first-refusal clause first.',
       ],
+      pitfalls: [
+        'Listing shares that are still inside a lock-up window will be auto-rejected — check the lock-up date first.',
+        'Pricing far above the fair-value band sits unmatched; price near the band for a faster trade.',
+      ],
       related: [
         { label: 'Cap Table', href: '#capital/cap-table' },
       ],
@@ -111,6 +131,10 @@ export default {
       tips: [
         'Updating metrics monthly takes 5 minutes and pays back tenfold in investor confidence.',
         'Runway is auto-calculated from cash + monthly burn; double-check it after big spend changes.',
+      ],
+      pitfalls: [
+        'Skipping a month makes the trend chart unreliable — backfill or annotate the gap.',
+        'Adding too many custom KPIs makes the dashboard unreadable — keep it to five or fewer.',
       ],
       related: [
         { label: 'Roadmap', href: '#build/roadmap' },
