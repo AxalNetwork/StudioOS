@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
 import {
   PieChart as PieIcon, Trash2, Plus, Save, Download, RefreshCw, FileText, AlertCircle,
-  Lock, ExternalLink, CheckCircle2,
+  PencilOff, ExternalLink, CheckCircle2,
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -578,11 +578,11 @@ function SourceBadge({ source }) {
   if (source === 'carta') {
     return (
       <span
-        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200"
-        title="Read-only — synced from Carta"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200 cursor-not-allowed"
+        title="Edit in Carta — read-only here"
       >
         <CartaLogo size={10} /> Carta
-        <Lock size={9} className="ml-0.5" />
+        <PencilOff size={9} className="ml-0.5" />
       </span>
     );
   }
