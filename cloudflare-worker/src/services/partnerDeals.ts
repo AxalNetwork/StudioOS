@@ -419,6 +419,19 @@ export async function redeemPartnerReferralCode(
        FROM partner_deals WHERE referral_code = ? LIMIT 1`,
   ).bind(code).first();
   if (!deal || deal.status !== 'active') return null;
+  // Hard expiry enforcement: a deal whose term has passed must NOT
+  // grant new redemptions. Auto-transition the deal to 'expired' so
+  // future calls short-circuit on the status check above and the
+  // cron sweep is just a backstop.
+  const nowMs = Date.now();
+  if (deal.expires_at && new Date(deal.expires_at).getTime() <= nowMs) {
+    try {
+      await env.DB.prepare(
+        `UPDATE partner_deals SET status = 'expired' WHERE id = ? AND status = 'active'`,
+      ).bind(deal.id).run();
+    } catch { /* best-effort */ }
+    return null;
+  }
   if (Number(deal.user_id) === Number(newUserId)) return null; // self-redeem guard
   // Use the deal's remaining term (capped at expires_at) for the redeemer.
   const grantedUntil = deal.expires_at as string | null;
@@ -457,4 +470,109 @@ export async function redeemPartnerReferralCode(
   } catch (e) { console.warn('[partnerDeals] redemption insert failed', e); }
 
   return { partner_deal_id: Number(deal.id) };
+}
+
+/**
+ * Daily sweep — flip every partner_deal whose term has passed to
+ * status='expired' and revoke any tier grants whose status still
+ * reflects the partner grant (subscription_status='partner_grant'
+ * /'partner_referral'). Paying subscriptions that replaced a grant
+ * mid-term are NOT clobbered. Returns counts for cron logging.
+ */
+export async function expirePartnerDeals(env: Env): Promise<{
+  deals_expired: number;
+  founder_grants_revoked: number;
+  investor_grants_revoked: number;
+  redemptions_revoked: number;
+}> {
+  let dealsExpired = 0;
+  let founderRevoked = 0;
+  let investorRevoked = 0;
+  let redemptionsRevoked = 0;
+
+  // 1. Snapshot deals that need to be expired so we can revoke tiers
+  //    BEFORE we lose the granted_tier_* values from a status flip.
+  const dueRows: any = await env.DB.prepare(
+    `SELECT id, user_id, granted_tier_founder, granted_tier_investor
+       FROM partner_deals
+      WHERE status = 'active'
+        AND expires_at IS NOT NULL
+        AND datetime(expires_at) <= datetime('now')`,
+  ).all().catch(() => ({ results: [] }));
+  const due: any[] = (dueRows?.results || []) as any[];
+
+  for (const d of due) {
+    try {
+      const upd = await env.DB.prepare(
+        `UPDATE partner_deals SET status = 'expired' WHERE id = ? AND status = 'active'`,
+      ).bind(d.id).run();
+      if ((upd.meta?.changes || 0) === 0) continue;
+      dealsExpired += 1;
+
+      // Revoke tier on the partner themselves (only if their current
+      // tier still reflects this grant — paid upgrades are preserved).
+      if (d.user_id && d.granted_tier_founder) {
+        const r = await env.DB.prepare(
+          `UPDATE users SET subscription_tier = 'free',
+                              subscription_status = 'partner_expired',
+                              subscription_renews_at = NULL
+             WHERE id = ?
+               AND subscription_tier = ?
+               AND subscription_status = 'partner_grant'`,
+        ).bind(d.user_id, d.granted_tier_founder).run();
+        if ((r.meta?.changes || 0) > 0) founderRevoked += 1;
+      }
+      if (d.user_id && d.granted_tier_investor) {
+        const r = await env.DB.prepare(
+          `UPDATE users SET investor_tier = 'free',
+                              investor_subscription_status = 'partner_expired',
+                              investor_subscription_renews_at = NULL,
+                              investor_dealroom_max = 5
+             WHERE id = ?
+               AND investor_tier = ?
+               AND investor_subscription_status = 'partner_grant'`,
+        ).bind(d.user_id, d.granted_tier_investor).run();
+        if ((r.meta?.changes || 0) > 0) investorRevoked += 1;
+      }
+
+      // Revoke tier on every redeemer of this deal under the same
+      // "only-if-still-partner_referral" guard.
+      const reds: any = await env.DB.prepare(
+        `SELECT redeemed_by_user_id, granted_tier_founder, granted_tier_investor
+           FROM partner_referral_redemptions WHERE partner_deal_id = ?`,
+      ).bind(d.id).all().catch(() => ({ results: [] }));
+      for (const r of (reds?.results || []) as any[]) {
+        if (r.granted_tier_founder) {
+          const u = await env.DB.prepare(
+            `UPDATE users SET subscription_tier = 'free',
+                                subscription_status = 'partner_expired',
+                                subscription_renews_at = NULL
+               WHERE id = ?
+                 AND subscription_tier = ?
+                 AND subscription_status = 'partner_referral'`,
+          ).bind(r.redeemed_by_user_id, r.granted_tier_founder).run();
+          if ((u.meta?.changes || 0) > 0) redemptionsRevoked += 1;
+        }
+        if (r.granted_tier_investor) {
+          const u = await env.DB.prepare(
+            `UPDATE users SET investor_tier = 'free',
+                                investor_subscription_status = 'partner_expired',
+                                investor_subscription_renews_at = NULL,
+                                investor_dealroom_max = 5
+               WHERE id = ?
+                 AND investor_tier = ?
+                 AND investor_subscription_status = 'partner_referral'`,
+          ).bind(r.redeemed_by_user_id, r.granted_tier_investor).run();
+          if ((u.meta?.changes || 0) > 0) redemptionsRevoked += 1;
+        }
+      }
+    } catch (e) { console.warn('[partnerDeals] expire deal failed', d.id, e); }
+  }
+
+  return {
+    deals_expired: dealsExpired,
+    founder_grants_revoked: founderRevoked,
+    investor_grants_revoked: investorRevoked,
+    redemptions_revoked: redemptionsRevoked,
+  };
 }

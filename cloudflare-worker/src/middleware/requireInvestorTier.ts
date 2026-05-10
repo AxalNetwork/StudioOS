@@ -79,6 +79,13 @@ export function effectiveInvestorTier(user: InvestorUser | null | undefined): In
   if (!user) return 'free';
   const status = (user.investor_subscription_status ?? 'free').toLowerCase();
   if (status === 'past_due' || status === 'unpaid' || status === 'cancelled') return 'free';
+  // X-1: partner-granted/referred investor tiers expire at renews_at.
+  // Cron flips them to 'free'; this read-side check prevents stale
+  // sessions from sneaking past expiry between sweeps.
+  if (status === 'partner_grant' || status === 'partner_referral') {
+    const renews = user.investor_subscription_renews_at;
+    if (renews && new Date(renews).getTime() <= Date.now()) return 'free';
+  }
   const tier = (user.investor_tier ?? 'free').toLowerCase() as InvestorTier;
   return (TIER_RANK[tier] !== undefined ? tier : 'free');
 }

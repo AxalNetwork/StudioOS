@@ -605,6 +605,24 @@ export default {
             }
           } catch (e) { console.error('[cron] trust expiry failed', e); }
         }
+        // Task #8 (X-1) — daily partner deal expiry sweep at 04:40 UTC.
+        // Flips deals past their term to 'expired' and revokes tier
+        // grants on the partner + every redeemer (paid upgrades that
+        // replaced a grant are preserved by status guards). Idempotent.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 40) {
+          try {
+            const { expirePartnerDeals } = await import('./services/partnerDeals');
+            const r = await expirePartnerDeals(env);
+            if (r.deals_expired) {
+              console.info(
+                `[cron] partner deal expiry deals=${r.deals_expired} ` +
+                `founder_revoked=${r.founder_grants_revoked} ` +
+                `investor_revoked=${r.investor_grants_revoked} ` +
+                `redemptions_revoked=${r.redemptions_revoked}`,
+              );
+            }
+          } catch (e) { console.error('[cron] partner deal expiry failed', e); }
+        }
         // Task #6 (W-1) — daily investor trial downgrade at 04:25 UTC.
         // Idempotent: only flips users whose trial_ends_at is in the past
         // AND status='trialing'. Re-runs harmlessly when none are due.
