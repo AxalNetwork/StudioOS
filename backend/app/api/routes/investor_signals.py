@@ -1,0 +1,236 @@
+"""Dev-only port of the worker's /investor-signals + /investor-profile routes.
+
+The production aggregator runs in the Cloudflare Worker (k-anonymity ≥5,
+sector/stage/geo/ticket cells masked when below the threshold). This dev
+port keeps the same response shapes so the Market Intelligence "Axal
+Investor Signals" tab renders without 404s; profiles are stored as a JSON
+blob in a single-row helper table per user, and the snapshot endpoint
+always returns `snapshot: null` (no aggregator runs in dev).
+"""
+from __future__ import annotations
+
+import json
+from datetime import datetime
+from typing import Any, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlmodel import Session
+from sqlalchemy import text
+
+from backend.app.api.routes.auth import get_current_user
+from backend.app.database import get_session
+from backend.app.models.entities import User
+
+router = APIRouter()
+investor_profile = APIRouter(prefix="/investor-profile", tags=["investor-profile"])
+investor_signals = APIRouter(prefix="/investor-signals", tags=["investor-signals"])
+
+MIN_CELL_SIZE = 5
+
+SECTOR_OPTIONS = {
+    "ai_ml", "fintech", "climate", "biotech", "healthtech", "saas",
+    "consumer", "marketplace", "deeptech", "robotics", "crypto_web3",
+    "edtech", "proptech", "logistics", "cybersecurity", "developer_tools",
+    "media_content", "energy", "manufacturing", "agtech", "other",
+}
+STAGE_OPTIONS = {"pre_seed", "seed", "series_a", "series_b", "series_c_plus", "growth"}
+GEO_OPTIONS = {"north_america", "europe", "uk", "latam", "mena", "africa", "apac", "global"}
+TICKET_BANDS = {"<25k", "25-100k", "100-500k", "500k-2m", "2-10m", "10m+"}
+TICKET_RANGES = {
+    "<25k": (0, 25_000),
+    "25-100k": (25_000, 100_000),
+    "100-500k": (100_000, 500_000),
+    "500k-2m": (500_000, 2_000_000),
+    "2-10m": (2_000_000, 10_000_000),
+    "10m+": (10_000_000, 50_000_000),
+}
+
+_schema_ready = False
+
+
+def _ensure_schema(session: Session) -> None:
+    global _schema_ready
+    if _schema_ready:
+        return
+    try:
+        session.exec(text("""
+            CREATE TABLE IF NOT EXISTS investor_profiles_dev (
+                user_id INTEGER PRIMARY KEY,
+                payload TEXT NOT NULL DEFAULT '{}',
+                completed_at TIMESTAMP NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        session.commit()
+        _schema_ready = True
+    except Exception:
+        session.rollback()
+
+
+def _empty_profile(user_id: int) -> dict:
+    return {
+        "user_id": user_id,
+        "investor_type": None,
+        "sectors": [],
+        "stages": [],
+        "geos": [],
+        "ticket_band": None,
+        "ticket_min_usd": None,
+        "ticket_max_usd": None,
+        "thesis_text": None,
+        "thesis_keywords": [],
+        "contribute_to_signals": True,
+        "completed_at": None,
+        "updated_at": None,
+    }
+
+
+def _shape(payload: dict, completed_at: Optional[str], updated_at: Optional[str], user_id: int) -> dict:
+    base = _empty_profile(user_id)
+    base.update(payload or {})
+    base["completed_at"] = completed_at
+    base["updated_at"] = updated_at
+    return base
+
+
+def _load(session: Session, user_id: int) -> dict:
+    _ensure_schema(session)
+    row = session.exec(
+        text("SELECT payload, completed_at, updated_at FROM investor_profiles_dev WHERE user_id = :uid"),
+        params={"uid": user_id},
+    ).first()
+    if row is None:
+        return _shape({}, None, None, user_id)
+    m = dict(row._mapping)  # type: ignore[attr-defined]
+    try:
+        payload = json.loads(m.get("payload") or "{}")
+    except Exception:
+        payload = {}
+    return _shape(payload, m.get("completed_at"), m.get("updated_at"), user_id)
+
+
+def _filter_set(raw: Any, allowed: set[str]) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for v in raw:
+        if isinstance(v, str) and v in allowed and v not in out:
+            out.append(v)
+    return out
+
+
+def _extract_keywords(text_in: str) -> list[str]:
+    import re
+    words = re.findall(r"[a-z0-9]{3,}", (text_in or "").lower())
+    stop = {"the", "and", "for", "with", "are", "this", "that", "from", "but",
+            "not", "you", "our", "their", "they", "have", "has", "will", "can"}
+    seen: list[str] = []
+    for w in words:
+        if w in stop or w in seen:
+            continue
+        seen.append(w)
+        if len(seen) >= 20:
+            break
+    return seen
+
+
+@investor_profile.get("/me")
+def get_my_profile(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    return {"profile": _load(session, user.id)}
+
+
+@investor_profile.put("/me")
+def update_my_profile(payload: dict, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    _ensure_schema(session)
+    body = payload or {}
+    investor_type = body.get("investor_type")
+    if not isinstance(investor_type, str):
+        investor_type = None
+    else:
+        investor_type = investor_type[:32]
+    sectors = _filter_set(body.get("sectors"), SECTOR_OPTIONS)
+    stages = _filter_set(body.get("stages"), STAGE_OPTIONS)
+    geos = _filter_set(body.get("geos"), GEO_OPTIONS)
+    ticket_band = body.get("ticket_band") if body.get("ticket_band") in TICKET_BANDS else None
+    rng = TICKET_RANGES.get(ticket_band) if ticket_band else None
+    thesis_text = body.get("thesis_text")
+    if isinstance(thesis_text, str):
+        thesis_text = thesis_text[:2000].strip() or None
+    else:
+        thesis_text = None
+    contribute = True if body.get("contribute_to_signals") is None else bool(body.get("contribute_to_signals"))
+
+    is_complete = bool(investor_type and sectors and stages and ticket_band)
+    existing = _load(session, user.id)
+    completed_at = existing.get("completed_at") or (datetime.utcnow().isoformat(timespec="seconds") if is_complete else None)
+
+    next_payload = {
+        "user_id": user.id,
+        "investor_type": investor_type,
+        "sectors": sectors,
+        "stages": stages,
+        "geos": geos,
+        "ticket_band": ticket_band,
+        "ticket_min_usd": rng[0] if rng else None,
+        "ticket_max_usd": rng[1] if rng else None,
+        "thesis_text": thesis_text,
+        "thesis_keywords": _extract_keywords(thesis_text or ""),
+        "contribute_to_signals": contribute,
+    }
+    try:
+        session.exec(text("""
+            INSERT INTO investor_profiles_dev (user_id, payload, completed_at, updated_at)
+            VALUES (:uid, :payload, :completed_at, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id) DO UPDATE SET
+                payload = excluded.payload,
+                completed_at = excluded.completed_at,
+                updated_at = CURRENT_TIMESTAMP
+        """), params={"uid": user.id, "payload": json.dumps(next_payload), "completed_at": completed_at})
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise HTTPException(status_code=500, detail="Update failed")
+    return {"profile": _load(session, user.id)}
+
+
+@investor_profile.post("/me/opt-out")
+def opt_out(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    existing = _load(session, user.id)
+    existing_payload = {k: v for k, v in existing.items() if k not in ("completed_at", "updated_at")}
+    existing_payload["contribute_to_signals"] = False
+    _ensure_schema(session)
+    try:
+        session.exec(text("""
+            INSERT INTO investor_profiles_dev (user_id, payload, completed_at, updated_at)
+            VALUES (:uid, :payload, :completed_at, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id) DO UPDATE SET
+                payload = excluded.payload,
+                updated_at = CURRENT_TIMESTAMP
+        """), params={
+            "uid": user.id,
+            "payload": json.dumps(existing_payload),
+            "completed_at": existing.get("completed_at"),
+        })
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise HTTPException(status_code=500, detail="Opt-out failed")
+    return {"ok": True, "contribute_to_signals": False}
+
+
+@investor_signals.get("/latest")
+def latest_signals(user: User = Depends(get_current_user)):
+    # Dev backend has no aggregator; return the same empty shape the worker
+    # returns before its first cron run. The Market Intel UI handles this
+    # gracefully ("No snapshot yet — the aggregator runs every 6 hours").
+    _ = user
+    return {
+        "snapshot": None,
+        "message": "No snapshot computed yet — the dev backend does not run the aggregator.",
+        "min_cell_size": MIN_CELL_SIZE,
+        "trend": [],
+    }
+
+
+router.include_router(investor_profile)
+router.include_router(investor_signals)

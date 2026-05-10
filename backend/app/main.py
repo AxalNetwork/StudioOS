@@ -21,6 +21,7 @@ from backend.app.api.routes import (
     deals,
     funds,
     integrations,
+    investor_signals as _investor_signals,
     legal,
     liquidity,
     market_intel,
@@ -362,6 +363,7 @@ app.include_router(tickets.router, prefix="/api")
 app.include_router(deals.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(market_intel.router, prefix="/api")
+app.include_router(_investor_signals.router, prefix="/api")
 app.include_router(advisory.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
