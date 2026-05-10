@@ -831,7 +831,7 @@ function AppInner() {
       <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
       <Route path="/partners" element={guard(['admin', 'partner', 'investor'], <PartnersPage />)} />
       <Route path="/capital" element={guard(['admin', 'investor'], <CapitalPage />)} />
-      <Route path="/tickets" element={guard(['admin', 'founder', 'partner', 'investor'], <TicketsPage />)} />
+      <Route path="/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <TicketsPage />)} />
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'], <DealsPage />)} />
       <Route path="/market-intel" element={guard(['admin', 'partner', 'investor'], <MarketIntelPage />)} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
@@ -843,7 +843,7 @@ function AppInner() {
       <Route path="/cofounder" element={guard(['admin', 'founder'], <CofounderPage />)} />
       <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], <PortfolioHealthPage />)} />
       <Route path="/watchlist" element={guard(['admin', 'partner', 'investor'], <WatchlistJournalPage />)} />
-      <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor'], <ActivityPage />)} />
+      <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor'], <TrustCenterPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
@@ -866,7 +866,7 @@ function AppInner() {
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
       <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], <PartnerPortal />)} />
       <Route path="/docs" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <DocsPage />)} />
-      <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor'], <SettingsPage />)} />
+      <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SettingsPage />)} />
 
       {/* Task #53 — Public partner directory + profiles (no auth). The
           static /partners route below takes precedence over /partners/:slug
