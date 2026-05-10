@@ -161,7 +161,26 @@ export async function seedObligations(
   opts: { pruneStaleForRole?: boolean } = {},
 ): Promise<{ inserted: number; pruned: number }> {
   await ensureTrustSchema(env);
-  const defs = obligationsForRole(role);
+  const defs = obligationsForRole(role).map(d => ({ ...d }));
+  // Task #3 (Y-1) — investor KYB conditional on entity status.
+  // If the user has populated a corporate_profiles row (entity_type
+  // set), KYB becomes a hard requirement. The kyb_v1 def above is
+  // seeded as required:0 for individual investors; we flip it here
+  // for entity investors. Defensive: if corporate_profiles is missing
+  // (older deployments) we leave the default.
+  if (role === 'investor') {
+    let isEntity = false;
+    try {
+      const cp: any = await env.DB.prepare(
+        `SELECT entity_type FROM corporate_profiles WHERE user_id = ?`,
+      ).bind(userId).first().catch(() => null);
+      isEntity = !!(cp && cp.entity_type && String(cp.entity_type).trim());
+    } catch { /* corporate_profiles table not present yet */ }
+    if (isEntity) {
+      const kyb = defs.find(d => d.key === 'kyb_v1');
+      if (kyb) kyb.required = 1;
+    }
+  }
   let inserted = 0;
   for (const d of defs) {
     try {
@@ -381,16 +400,94 @@ export async function expireDueArtifacts(
 }
 
 /**
- * KYC / KYB provider resync — stub. Persona/Sumsub aren't connected in
- * production yet (see routes/kyc.ts which falls back to mock). When
- * they land, this function should:
- *   1. SELECT obligations WHERE obligation_key IN ('kyc_v1','kyb_v1')
- *      AND status IN ('in_review','pending')
- *   2. Fetch the latest provider verdict
- *   3. UPDATE status='satisfied', evidence_meta=<provider_ref>,
- *      expires_at=NOW + ttl when verdict='passed'.
- * For now it returns 0/0 so the cron gate stays harmless.
+ * KYC / KYB nightly reconciliation. Persona/Sumsub callbacks update
+ * `users.kyc_status` and `corporate_profiles.kyb_status` (when the
+ * provider is wired). This cron job materialises those provider
+ * verdicts into the canonical `legal_obligations` rows so the Trust
+ * Center / mask gate sees them.
+ *
+ * Algorithm (idempotent, safe to re-run):
+ *   1. KYC: any pending/in_review kyc_v1 row whose user.kyc_status
+ *      is 'approved' → flip to satisfied + 24mo expiry. If status
+ *      is 'rejected' → flip back to pending (re-required).
+ *   2. KYB: same flow against corporate_profiles.kyb_status.
+ *
+ * Returns counts for /api/admin diagnostics.
  */
-export async function resyncKycKyb(_env: Env): Promise<{ scanned: number; updated: number }> {
-  return { scanned: 0, updated: 0 };
+export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated: number }> {
+  await ensureTrustSchema(env);
+  const now = Date.now();
+  const kycExpiresAt = new Date(now + TTL_24_MO).toISOString();
+  let scanned = 0;
+  let updated = 0;
+
+  // -- KYC reconciliation ---------------------------------------------------
+  try {
+    const pendingKyc: any = await env.DB.prepare(
+      `SELECT lo.id AS oblig_id, lo.user_id, u.kyc_status
+         FROM legal_obligations lo
+         JOIN users u ON u.id = lo.user_id
+        WHERE lo.obligation_key = 'kyc_v1'
+          AND lo.status IN ('pending','in_review')`,
+    ).all().catch(() => ({ results: [] as any[] }));
+    const rows: any[] = pendingKyc?.results || [];
+    scanned += rows.length;
+    for (const r of rows) {
+      if (r.kyc_status === 'approved') {
+        const upd = await env.DB.prepare(
+          `UPDATE legal_obligations
+              SET status = 'satisfied',
+                  expires_at = ?,
+                  evidence_meta = COALESCE(evidence_meta, json_object('source','kyc_provider','synced_at',?)),
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?`,
+        ).bind(kycExpiresAt, new Date(now).toISOString(), r.oblig_id).run().catch(() => null);
+        if ((upd?.meta as any)?.changes) updated += 1;
+      } else if (r.kyc_status === 'rejected') {
+        const upd = await env.DB.prepare(
+          `UPDATE legal_obligations SET status = 'pending', updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND status != 'pending'`,
+        ).bind(r.oblig_id).run().catch(() => null);
+        if ((upd?.meta as any)?.changes) updated += 1;
+      }
+    }
+  } catch (e) {
+    console.error('[trust] resyncKycKyb KYC failed', e);
+  }
+
+  // -- KYB reconciliation (entity investors) --------------------------------
+  try {
+    const pendingKyb: any = await env.DB.prepare(
+      `SELECT lo.id AS oblig_id, lo.user_id, cp.kyb_status
+         FROM legal_obligations lo
+         LEFT JOIN corporate_profiles cp ON cp.user_id = lo.user_id
+        WHERE lo.obligation_key = 'kyb_v1'
+          AND lo.status IN ('pending','in_review')`,
+    ).all().catch(() => ({ results: [] as any[] }));
+    const rows: any[] = pendingKyb?.results || [];
+    scanned += rows.length;
+    for (const r of rows) {
+      if (r.kyb_status === 'approved') {
+        const upd = await env.DB.prepare(
+          `UPDATE legal_obligations
+              SET status = 'satisfied',
+                  expires_at = ?,
+                  evidence_meta = COALESCE(evidence_meta, json_object('source','kyb_provider','synced_at',?)),
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?`,
+        ).bind(kycExpiresAt, new Date(now).toISOString(), r.oblig_id).run().catch(() => null);
+        if ((upd?.meta as any)?.changes) updated += 1;
+      } else if (r.kyb_status === 'rejected') {
+        const upd = await env.DB.prepare(
+          `UPDATE legal_obligations SET status = 'pending', updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND status != 'pending'`,
+        ).bind(r.oblig_id).run().catch(() => null);
+        if ((upd?.meta as any)?.changes) updated += 1;
+      }
+    }
+  } catch (e) {
+    console.error('[trust] resyncKycKyb KYB failed', e);
+  }
+
+  return { scanned, updated };
 }

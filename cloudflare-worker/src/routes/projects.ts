@@ -71,8 +71,12 @@ projects.get('/:id', async (c) => {
   await sql.end();
   // Task #3 (Y-1) — investor view gets masked unless an active pairwise
   // NDA exists between this investor and the project's founder. Admins,
-  // partners, and the founder themselves bypass the mask.
-  if (user.role === 'investor' && founderUserId != null) {
+  // partners, and the founder themselves bypass the mask. ALWAYS run
+  // for the investor role (even when founder_user_id is unresolved) —
+  // maskFounderForInvestor is fail-closed and will mask the row when
+  // no founder linkage exists, preventing leakage on legacy projects
+  // with a missing users.founder_id mapping.
+  if (user.role === 'investor') {
     const { maskFounderForInvestor } = await import('../services/trust');
     const masked = await maskFounderForInvestor(
       c.env,
