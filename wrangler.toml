@@ -138,6 +138,19 @@ index_name = "axal-search"
 binding     = "FILES"
 bucket_name = "studioos-files"
 
+# ---------- Workers Analytics Engine ----------
+# Task #13 — write a data point per HTTP request from the observability
+# middleware (cloudflare-worker/src/middleware/observability.ts) so the
+# Admin Analytics Technical sub-tab can read true edge-level traffic and
+# latency, independent of D1's `system_metrics` table (which we still
+# write as a fallback for the historical period this dataset doesn't
+# cover yet). Reads via Cloudflare's GraphQL/SQL API are gated by
+# CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_AE_API_TOKEN secrets — when either
+# is missing, loadTechnical() falls back to D1.
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "studioos_requests"
+
 # ---------- Browser Rendering ----------
 # Powers true PDF generation for Admin Analytics exports
 # (cloudflare-worker/src/routes/monitoring_analytics.ts). Without this binding
@@ -247,6 +260,10 @@ index_name = "axal-search"
 [[env.production.r2_buckets]]
 binding     = "FILES"
 bucket_name = "studioos-files"
+
+[[env.production.analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "studioos_requests"
 
 [env.production.browser]
 binding = "BROWSER"

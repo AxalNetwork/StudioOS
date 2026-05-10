@@ -110,7 +110,107 @@ export interface OverviewReport {
   meta?: { reason: 'ok' | 'no_data' };
 }
 
+// Task #13 — fast historical read path. When the requested range ends
+// before today (UTC), every day in the window is fully captured in
+// `analytics_snapshots` (written by the 02:05 UTC cron). Reading from the
+// snapshot table is O(days) instead of O(activity_logs rows) and is the
+// only way the Overview sub-tab can stay <200ms once activity_logs grows.
+// Returns null when the table is missing, the window includes today, or
+// any day in the window has no snapshot row (so the live aggregate path
+// runs and the result reflects the in-flight day).
+async function loadOverviewFromSnapshots(
+  env: Env,
+  range: DateRange,
+  currency?: string | null,
+): Promise<OverviewReport | null> {
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  // If `to` is today or in the future, snapshots don't cover it.
+  if (range.to >= todayUtc) return null;
+  const sql = getSQL(env);
+  const disp = await displayContext(env, currency);
+  let snaps: SqlRow[];
+  try {
+    snaps = rows<SqlRow>(await sql`
+      SELECT snapshot_date, active_users, new_signups, total_users, paid_users,
+             total_requests, errors_5xx, p50_latency_ms, p95_latency_ms,
+             mrr_usd, arr_usd, churned_subscriptions
+      FROM analytics_snapshots
+      WHERE snapshot_date >= ${range.from} AND snapshot_date <= ${range.to}
+      ORDER BY snapshot_date ASC
+    `);
+  } catch {
+    // Table missing or malformed → fall through to live path.
+    return null;
+  }
+  if (snaps.length === 0) return null;
+  // Require contiguous coverage: every day in the window must have a row.
+  const expectDays = range.days;
+  if (snaps.length < expectDays) return null;
+
+  // Aggregate the snapshots. `active_users` is a unique-count, so a daily
+  // sum is an UPPER bound only — we surface the MAX day instead, which
+  // matches what users see on the daily chart and avoids inflating DAU.
+  let active = 0; let newSignups = 0; let totalRequests = 0; let errors5xx = 0;
+  let p50sum = 0; let p95sum = 0;
+  let mrrLatest = 0; let arrLatest = 0; let churned = 0;
+  let totalUsersLatest = 0; let paidUsersLatest = 0;
+  const dau: Array<{ day: string; active: number }> = [];
+  for (const r of snaps) {
+    const a = num(r.active_users);
+    if (a > active) active = a;
+    newSignups += num(r.new_signups);
+    totalRequests += num(r.total_requests);
+    errors5xx += num(r.errors_5xx);
+    p50sum += num(r.p50_latency_ms);
+    p95sum += num(r.p95_latency_ms);
+    churned += num(r.churned_subscriptions);
+    // MRR/ARR/totals are point-in-time stocks — last day in the window wins.
+    mrrLatest = num(r.mrr_usd);
+    arrLatest = num(r.arr_usd);
+    totalUsersLatest = num(r.total_users);
+    paidUsersLatest = num(r.paid_users);
+    dau.push({ day: str(r.snapshot_date), active: a });
+  }
+  const days = snaps.length;
+  const isEmpty = active === 0 && newSignups === 0 && totalRequests === 0;
+  return {
+    range: { from: range.from, to: range.to, days: range.days },
+    active_users: active,
+    new_signups: newSignups,
+    total_users: totalUsersLatest,
+    paid_users: paidUsersLatest,
+    conversion_to_paid_pct: totalUsersLatest > 0
+      ? Number(((paidUsersLatest / totalUsersLatest) * 100).toFixed(2))
+      : 0,
+    mrr_usd: mrrLatest,
+    arr_usd: arrLatest,
+    mrr: disp.conv(mrrLatest),
+    arr: disp.conv(arrLatest),
+    display_currency: disp.currency,
+    fx_as_of: disp.asOf,
+    churned_subscriptions: churned,
+    churn_rate_pct: paidUsersLatest > 0
+      ? Number(((churned / paidUsersLatest) * 100).toFixed(2))
+      : 0,
+    avg_session_minutes: 0, // not snapshotted; UI shows '—' on historical
+    p50_latency_ms: Math.round(p50sum / days),
+    p95_latency_ms: Math.round(p95sum / days),
+    error_rate_pct: totalRequests > 0
+      ? Number(((errors5xx / totalRequests) * 100).toFixed(2))
+      : 0,
+    total_requests: totalRequests,
+    top_pages: [], // not snapshotted; intentionally empty for historical
+    daily_active: dau,
+    meta: isEmpty ? { reason: 'no_data' } : { reason: 'ok' },
+  } as OverviewReport;
+}
+
 export async function loadOverview(env: Env, range: DateRange, currency?: string | null): Promise<OverviewReport> {
+  // Task #13 — prefer pre-computed snapshots for fully-historical windows.
+  // Falls back to live aggregation when the window includes today or any
+  // day is missing from `analytics_snapshots`.
+  const snap = await loadOverviewFromSnapshots(env, range, currency);
+  if (snap) return snap;
   const sql = getSQL(env);
   const priceMap = await loadPlanPriceMap(env);
   const disp = await displayContext(env, currency);
@@ -601,9 +701,72 @@ export interface TechnicalReport {
   meta?: { reason: 'ok' | 'no_data' };
 }
 
+// Task #13 — read true edge-level traffic + latency from Workers Analytics
+// Engine when both CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AE_API_TOKEN are
+// configured. Returns null when AE is unconfigured or the query fails so
+// the caller falls back to D1 `system_metrics`. Uses the SQL HTTP endpoint
+// (`api.cloudflare.com/.../analytics_engine/sql`) — see wrangler.toml's
+// `[[analytics_engine_datasets]]` block for the dataset name.
+async function loadTechnicalFromAnalyticsEngine(
+  env: Env,
+  range: DateRange,
+): Promise<TechnicalReport['by_route'] | null> {
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+  const token = env.CLOUDFLARE_AE_API_TOKEN;
+  if (!accountId || !token) return null;
+  // AE timestamps are stored in UTC; bound by range.from/to as date-only.
+  const sqlText = `
+    SELECT blob1 AS endpoint,
+           COUNT() AS hits,
+           AVG(double1) AS avg_latency_ms,
+           QUANTILEMERGE(0.5, double1) AS p50,
+           QUANTILEMERGE(0.95, double1) AS p95,
+           QUANTILEMERGE(0.99, double1) AS p99,
+           SUMIF(1, double2 >= 500) AS errors_5xx
+    FROM studioos_requests
+    WHERE timestamp >= toDateTime('${range.fromIso}')
+      AND timestamp <= toDateTime('${range.toIso}')
+    GROUP BY blob1
+    ORDER BY hits DESC
+    LIMIT 25
+  `.trim();
+  try {
+    const res = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/analytics_engine/sql`,
+      {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'text/plain' },
+        body: sqlText,
+      },
+    );
+    if (!res.ok) return null;
+    const json = await res.json() as { data?: Array<Record<string, unknown>> };
+    const data = Array.isArray(json.data) ? json.data : [];
+    if (data.length === 0) return null;
+    return data.map(r => {
+      const hits = num(r.hits as number);
+      const errs = num(r.errors_5xx as number);
+      return {
+        endpoint: str(r.endpoint as string),
+        hits,
+        avg_latency_ms: Math.round(num(r.avg_latency_ms as number)),
+        p50_ms: Math.round(num(r.p50 as number)),
+        p95_ms: Math.round(num(r.p95 as number)),
+        p99_ms: Math.round(num(r.p99 as number)),
+        errors_5xx: errs,
+        error_rate_pct: hits > 0 ? Number(((errs / hits) * 100).toFixed(2)) : 0,
+      };
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function loadTechnical(env: Env, range: DateRange): Promise<TechnicalReport> {
   const sql = getSQL(env);
-  const byRoute = rows<SqlRow>(await sql`
+  // Task #13 — try Analytics Engine first; D1 path is the fallback.
+  const aeByRoute = await loadTechnicalFromAnalyticsEngine(env, range);
+  const byRoute = aeByRoute ? null : rows<SqlRow>(await sql`
     SELECT json_extract(labels, '$.endpoint') AS endpoint,
            COUNT(*) AS hits,
            AVG(json_extract(labels, '$.latency_ms')) AS avg_latency,
@@ -612,28 +775,35 @@ export async function loadTechnical(env: Env, range: DateRange): Promise<Technic
     WHERE metric_name = 'request' AND timestamp >= ${range.fromIso} AND timestamp <= ${range.toIso}
     GROUP BY endpoint ORDER BY hits DESC LIMIT 25
   `);
-  const enriched: TechnicalReport['by_route'] = [];
-  for (const r of byRoute) {
-    const ep = str(r.endpoint);
-    const lats = rows<SqlRow>(await sql`
-      SELECT CAST(json_extract(labels, '$.latency_ms') AS REAL) AS l
-      FROM system_metrics
-      WHERE metric_name = 'request' AND json_extract(labels, '$.endpoint') = ${ep}
-        AND timestamp >= ${range.fromIso} AND timestamp <= ${range.toIso}
-      ORDER BY id DESC LIMIT 500
-    `);
-    const arr = lats.map(x => num(x.l)).filter(n => n > 0).sort((a, b) => a - b);
-    const p = (q: number) => arr.length === 0 ? 0 : Math.round(arr[Math.min(arr.length - 1, Math.floor(arr.length * q))]);
-    const hits = num(r.hits);
-    const errs = num(r.errors_5xx);
-    enriched.push({
-      endpoint: ep,
-      hits,
-      avg_latency_ms: Math.round(num(r.avg_latency)),
-      errors_5xx: errs,
-      error_rate_pct: hits > 0 ? Number(((errs / hits) * 100).toFixed(2)) : 0,
-      p50_ms: p(0.5), p95_ms: p(0.95), p99_ms: p(0.99),
-    });
+  let enriched: TechnicalReport['by_route'];
+  if (aeByRoute) {
+    // AE already returns p50/p95/p99 via QUANTILEMERGE — no per-route
+    // backfill query needed.
+    enriched = aeByRoute;
+  } else {
+    enriched = [];
+    for (const r of (byRoute as SqlRow[])) {
+      const ep = str(r.endpoint);
+      const lats = rows<SqlRow>(await sql`
+        SELECT CAST(json_extract(labels, '$.latency_ms') AS REAL) AS l
+        FROM system_metrics
+        WHERE metric_name = 'request' AND json_extract(labels, '$.endpoint') = ${ep}
+          AND timestamp >= ${range.fromIso} AND timestamp <= ${range.toIso}
+        ORDER BY id DESC LIMIT 500
+      `);
+      const arr = lats.map(x => num(x.l)).filter(n => n > 0).sort((a, b) => a - b);
+      const p = (q: number) => arr.length === 0 ? 0 : Math.round(arr[Math.min(arr.length - 1, Math.floor(arr.length * q))]);
+      const hits = num(r.hits);
+      const errs = num(r.errors_5xx);
+      enriched.push({
+        endpoint: ep,
+        hits,
+        avg_latency_ms: Math.round(num(r.avg_latency)),
+        errors_5xx: errs,
+        error_rate_pct: hits > 0 ? Number(((errs / hits) * 100).toFixed(2)) : 0,
+        p50_ms: p(0.5), p95_ms: p(0.95), p99_ms: p(0.99),
+      });
+    }
   }
   const queueDepth = await sql`SELECT COUNT(*) AS c FROM queue_jobs WHERE status = 'pending'`
     .then(r => rows<SqlRow>(r)).catch(() => [{ c: 0 } as SqlRow]);

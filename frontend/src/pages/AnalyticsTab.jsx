@@ -1475,14 +1475,12 @@ function ManagementSub({ range, currency, onExport, busy }) {
   const [err, setErr] = useState('');
   const [errStatus, setErrStatus] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Task #13 — single server-composed call (was 2 round-trips client-side).
   useEffect(() => {
     let alive = true;
     setOverview(null); setFinancial(null); setErr(''); setErrStatus(null);
-    Promise.all([
-      api.analyticsOverview(range.from, range.to, currency),
-      api.analyticsFinancial(range.from, range.to, currency),
-    ])
-      .then(([o, f]) => { if (alive) { setOverview(o); setFinancial(f); } })
+    api.analyticsManagement(range.from, range.to, currency)
+      .then(({ overview: o, financial: f }) => { if (alive) { setOverview(o); setFinancial(f); } })
       .catch(e => { if (alive) { setErr(e?.message || 'Failed to load'); setErrStatus(e?.status || null); } });
     return () => { alive = false; };
   }, [range.from, range.to, currency, reloadKey]);

@@ -114,6 +114,20 @@ export interface Env {
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.
   VECTORIZE?: VectorizeIndex;
+  // Task #13 — Workers Analytics Engine binding (`studioos_requests` dataset).
+  // observability middleware writes one data point per HTTP request so the
+  // Admin Analytics → Technical sub-tab can serve true edge-level traffic
+  // and latency. Reads via Cloudflare's GraphQL/SQL API are gated by the
+  // CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_AE_API_TOKEN secrets — when either
+  // is missing, `loadTechnical` falls back to D1 `system_metrics`. The
+  // binding is optional so unit-test envs and older deploys don't crash.
+  ANALYTICS?: AnalyticsEngineDataset;
+  // Task #13 — service token used to query Workers Analytics Engine via
+  // the Cloudflare GraphQL/SQL API. CLOUDFLARE_AE_API_TOKEN must scope
+  // `Account · Account Analytics · Read`. CLOUDFLARE_ACCOUNT_ID is the
+  // 32-hex account UUID. Both unset → `loadTechnical` reads from D1.
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_AE_API_TOKEN?: string;
 }
 
 // Cloudflare Queues message envelope (matches the body shape the producer sends).

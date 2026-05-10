@@ -26,6 +26,7 @@ import {
   reportToCsv, reportToHtml,
   signDownloadToken, verifyDownloadToken,
   planAuditToCsv, type PlanAuditRow,
+  backfillSnapshots,
 } from '../services/analyticsReports';
 import { ensureSubscriptionPlansSchema, listPlansFull, updatePlan, createPlan, deletePlan, PlanCreateError } from '../services/subscriptionPlans';
 
@@ -145,6 +146,33 @@ r.get('/technical', async (c) => {
   await requireAdmin(c);
   const p = tryParseRange(c); if ('err' in p) return p.err;
   return c.json(await loadTechnical(c.env, p.range));
+});
+
+// Task #13 — server-composed Management view: a single fetch returns
+// overview + financial + technical, so the Management sub-tab on the
+// frontend doesn't compose three round-trips client-side.
+r.get('/management', async (c) => {
+  await requireAdmin(c);
+  const p = tryParseRange(c); if ('err' in p) return p.err;
+  const ccy = c.req.query('currency');
+  const [overview, financial, technical] = await Promise.all([
+    loadOverview(c.env, p.range, ccy),
+    loadFinancial(c.env, p.range, ccy),
+    loadTechnical(c.env, p.range),
+  ]);
+  return c.json({ overview, financial, technical });
+});
+
+// Task #13 — admin-gated rebuild of the daily snapshot rollups. Useful
+// after a deploy that fixed a metric, or to backfill the table on first
+// rollout. `days` is clamped to 1..90 (max 90 ≈ 3 months in one call).
+r.post('/snapshots/backfill', async (c) => {
+  await requireAdmin(c);
+  let body: Record<string, unknown> = {};
+  try { body = (await c.req.json()) as Record<string, unknown>; } catch {}
+  const days = clampInt(String(body.days ?? '7'), 7, 1, 90);
+  const result = await backfillSnapshots(c.env, days);
+  return c.json({ ok: true, days_requested: days, ...result });
 });
 
 // ---------- recent exports ----------
@@ -483,44 +511,41 @@ r.post('/export', async (c) => {
   // Render
   let bodyStr = '';
   let pdfBytes: ArrayBuffer | null = null;
-  let contentType: string;
-  let ext: string;
+  let contentType = 'application/octet-stream';
+  let ext = 'bin';
 
   if (format === 'csv') {
     bodyStr = reportToCsv(report, data);
     contentType = 'text/csv; charset=utf-8';
     ext = 'csv';
   } else {
-    // PDF requires a Browser Rendering binding. We do NOT silently downgrade
-    // to HTML — return 503 so the caller can pick CSV instead and the audit
-    // record reflects the failure.
+    // Task #13 — PDF requested. Try Browser Rendering first; on missing
+    // binding OR render failure, fall back to a styled HTML artifact (so
+    // the export NEVER errors). The response's `format` field reflects
+    // the actual artifact served — the caller's UI shows whatever shipped.
     const html = reportToHtml(report, data, range);
     const browser = (c.env as unknown as { BROWSER?: BrowserBinding }).BROWSER;
-    if (!browser || typeof browser.fetch !== 'function') {
-      await writeAudit(c.env, {
-        adminId: admin.id, report, format: 'pdf_unavailable',
-        filtersJson, storageKey: null, downloadUrl: '',
-      });
-      return c.json({
-        detail: 'PDF rendering not configured: bind Cloudflare Browser Rendering as BROWSER, or export as CSV.',
-      }, 503);
+    let renderedAsPdf = false;
+    if (browser && typeof browser.fetch === 'function') {
+      try {
+        const res = await browser.fetch('https://browser.local/pdf', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ html }),
+        });
+        if (!res.ok) throw new Error(`browser rendering returned ${res.status}`);
+        pdfBytes = await res.arrayBuffer();
+        contentType = 'application/pdf';
+        ext = 'pdf';
+        renderedAsPdf = true;
+      } catch (e) {
+        console.warn('[analytics] PDF render failed, falling back to HTML:', (e as Error).message);
+      }
     }
-    try {
-      const res = await browser.fetch('https://browser.local/pdf', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ html }),
-      });
-      if (!res.ok) throw new Error(`browser rendering returned ${res.status}`);
-      pdfBytes = await res.arrayBuffer();
-      contentType = 'application/pdf';
-      ext = 'pdf';
-    } catch (e) {
-      await writeAudit(c.env, {
-        adminId: admin.id, report, format: 'pdf_failed',
-        filtersJson, storageKey: null, downloadUrl: '',
-      });
-      return c.json({ detail: `PDF rendering failed: ${(e as Error).message}` }, 502);
+    if (!renderedAsPdf) {
+      bodyStr = html;
+      contentType = 'text/html; charset=utf-8';
+      ext = 'html';
     }
   }
 

@@ -680,6 +680,10 @@ export const api = {
     _analyticsRead(`/monitoring/analytics/financial?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
   analyticsTechnical: (from, to) =>
     _analyticsRead(`/monitoring/analytics/technical?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
+  analyticsManagement: (from, to, currency = '') =>
+    _analyticsRead(`/monitoring/analytics/management?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
+  analyticsBackfillSnapshots: (days = 7) =>
+    request('/monitoring/analytics/snapshots/backfill', { method: 'POST', body: JSON.stringify({ days }) }),
   analyticsExport: (payload) =>
     request('/monitoring/analytics/export', { method: 'POST', body: JSON.stringify(payload) }),
   analyticsAudit: (limit = 25, action = 'analytics_export', opts = {}) => {

@@ -69,6 +69,27 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
           } catch (e) {
             console.error('system_metrics insert failed', e);
           }
+
+          // Task #13 — also write to Workers Analytics Engine when the
+          // ANALYTICS binding is present. This is the durable, low-cost
+          // edge-level telemetry the Admin Analytics Technical sub-tab
+          // reads from. Best-effort: never throw, never block the request.
+          try {
+            const ae = (env as unknown as { ANALYTICS?: AnalyticsEngineDataset }).ANALYTICS;
+            if (ae && typeof ae.writeDataPoint === 'function') {
+              ae.writeDataPoint({
+                // Indexes (cardinality-bounded; first one is the sampling key)
+                indexes: [path.slice(0, 96)],
+                // Blobs: free-form strings, ordered by analysis frequency
+                blobs: [path, method, role, String(status)],
+                // Doubles: numeric measurements
+                doubles: [latency, status, 1],
+              });
+            }
+          } catch (e) {
+            // AE writes can fail under load (token bucket); log only.
+            console.warn('analytics engine write failed', (e as Error).message);
+          }
         }
 
         // ---- write activity_logs row with latency / status ----
