@@ -1071,6 +1071,7 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
           envelopeId: res.esign.envelope_id,
           emailSent: !!res.esign.email_sent,
           signingUrl: res.esign.signing_url,
+          provider: res.esign.provider || 'native',
         });
         setTimeout(() => onSaved(), 2200);
       } else {
@@ -1270,14 +1271,19 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
             {esignFlash && (
               <div className="text-xs bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5 space-y-1">
                 <div className="font-semibold text-emerald-800 flex items-center gap-1.5">
-                  <Check size={12} /> eSignature envelope #{esignFlash.envelopeId} created
+                  <Check size={12} />
+                  {esignFlash.provider === 'docusign'
+                    ? <>DocuSign envelope sent (#{esignFlash.envelopeId})</>
+                    : <>eSignature envelope #{esignFlash.envelopeId} created</>}
                 </div>
                 <div className="text-emerald-700">
-                  {esignFlash.emailSent
-                    ? <>Email sent from <span className="font-mono">deal@axal.vc</span> to <span className="font-mono">{profile.email}</span>.</>
-                    : <>Envelope created — email delivery did not confirm. Share this link manually:</>}
+                  {esignFlash.provider === 'docusign'
+                    ? <>DocuSign emailed the agreement directly to <span className="font-mono">{profile.email}</span>. Status updates flow back into Axal automatically.</>
+                    : esignFlash.emailSent
+                      ? <>Email sent from <span className="font-mono">deal@axal.vc</span> to <span className="font-mono">{profile.email}</span>.</>
+                      : <>Envelope created — email delivery did not confirm. Share this link manually:</>}
                 </div>
-                {!esignFlash.emailSent && esignFlash.signingUrl && (
+                {esignFlash.provider !== 'docusign' && !esignFlash.emailSent && esignFlash.signingUrl && (
                   <a href={esignFlash.signingUrl} target="_blank" rel="noreferrer" className="text-violet-700 underline break-all">
                     {esignFlash.signingUrl}
                   </a>

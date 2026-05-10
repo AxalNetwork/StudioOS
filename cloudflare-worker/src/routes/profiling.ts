@@ -351,7 +351,7 @@ profiling.post('/admin/:email/verify', async (c) => {
   // pipeline: create an envelope, generate a magic link, email the recipient
   // from deal@axal.vc. Idempotent — skip if a non-final envelope already
   // exists for this (user, agreement_type) pair.
-  let esignResult: { envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean } | null = null;
+  let esignResult: { envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean; provider?: string } | null = null;
   if (newStatus === 'verified' && agreement_type) {
     try {
       const existing: any = await c.env.DB.prepare(
