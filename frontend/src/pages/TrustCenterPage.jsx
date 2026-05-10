@@ -294,7 +294,43 @@ function ObligationList({ obligations, emptyText, onStart }) {
 // ---------------------------------------------------------------------------
 // Agreements tab — pairwise NDAs touching the caller (both directions).
 // ---------------------------------------------------------------------------
-function AgreementsTab({ obligations, onStart }) {
+function PairwiseSignButton({ envelopeUuid }) {
+  const [state, setState] = useState('idle'); // idle | loading | unavailable
+  const [err, setErr] = useState(null);
+  async function go() {
+    setErr(null); setState('loading');
+    try {
+      const r = await api.trustMySigningUrl(envelopeUuid);
+      if (r?.signing_url) {
+        // Use a hard nav so the eSign page receives a clean route +
+        // can capture its own auth state.
+        window.location.assign(r.signing_url);
+        return;
+      }
+      setState('unavailable');
+    } catch (e) {
+      setErr(e?.message || 'Failed');
+      setState('idle');
+    }
+  }
+  if (state === 'unavailable') {
+    return <span className="text-[11px] text-slate-500">Already signed or expired</span>;
+  }
+  return (
+    <button
+      onClick={go}
+      disabled={state === 'loading'}
+      className="text-xs bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white px-2 py-1 rounded inline-flex items-center gap-1"
+      title="Open the signing page for this NDA"
+    >
+      {state === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+      Sign
+      {err && <span className="text-red-200 ml-1">·{err}</span>}
+    </button>
+  );
+}
+
+function AgreementsTab({ obligations, onStart, currentUserId }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
@@ -331,6 +367,12 @@ function AgreementsTab({ obligations, onStart }) {
               const validUntil = a.valid_until ? new Date(a.valid_until) : null;
               const expired = validUntil && validUntil.getTime() < Date.now();
               const display = expired ? 'expired' : a.status;
+              // Surface a Sign CTA whenever the envelope isn't fully
+              // active yet (status `issued` or `pending`) and isn't
+              // expired. The backend endpoint is the authority — it
+              // 404s for non-recipients and reports signed/expired,
+              // so this client check is just to avoid useless calls.
+              const canSign = !expired && a.status !== 'active' && !!a.nda_envelope_uuid;
               return (
                 <li key={a.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded px-3 py-2">
                   <div className="flex items-center gap-3 min-w-0">
@@ -345,7 +387,10 @@ function AgreementsTab({ obligations, onStart }) {
                       </div>
                     </div>
                   </div>
-                  <StatusPill status={display} />
+                  <div className="flex items-center gap-2">
+                    <StatusPill status={display} />
+                    {canSign && <PairwiseSignButton envelopeUuid={a.nda_envelope_uuid} />}
+                  </div>
                 </li>
               );
             })}

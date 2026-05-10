@@ -10,6 +10,33 @@ import {
   Sun, Moon, ChevronDown, Check,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
+import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
+
+// Task #4 (Y-2) — small reusable trust score on the profile surface so
+// the user can see their compliance posture without bouncing to the
+// dedicated Trust Center page. Falls back silently if the call fails.
+function ProfileTrustBadge() {
+  const [score, setScore] = useState(null);
+  const [missing, setMissing] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    api.trustMe()
+      .then(m => {
+        if (cancelled) return;
+        const obs = m?.obligations || [];
+        setScore(computeTrustScore(obs));
+        setMissing(obs.filter(o => o.required && o.status !== 'satisfied' && o.status !== 'waived').map(o => o.obligation_key));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  if (score == null) return null;
+  return (
+    <a href="/trust" className="no-underline" title="View your Trust Center">
+      <TrustScoreBadge size="sm" score={score} missing={missing} label="Trust" />
+    </a>
+  );
+}
 
 // ---------- Reference data --------------------------------------------------
 
@@ -891,6 +918,7 @@ function ProfileSection({ data, onSaved, flash, patch }) {
                 <User size={36} className="text-gray-400" />
               )}
             </div>
+            <ProfileTrustBadge />
             <button onClick={() => fileRef.current?.click()} disabled={busy}
               className="text-xs text-violet-700 hover:text-violet-800 flex items-center gap-1 disabled:opacity-50">
               <Camera size={12} /> {busy ? 'Uploading…' : 'Change'}

@@ -72,6 +72,41 @@ trust.get('/agreements', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /agreements/:envelope_uuid/my_signing_url — Task #4 (Y-2).
+// Returns the CALLER's own signing URL for an esign envelope they're a
+// recipient of. Used by the Trust Center "Sign" CTA so a founder/investor
+// can resume a pending pairwise NDA from inside the app instead of
+// hunting through email. SECURITY: only ever returns the caller's own
+// token — never another recipient's — and only while the caller's
+// recipient row is `pending` and the token is not expired. 404 in any
+// other case (including caller-not-a-recipient) so we don't leak the
+// existence of the envelope.
+// ---------------------------------------------------------------------------
+trust.get('/agreements/:envelope_uuid/my_signing_url', async (c) => {
+  const user = await requireAuth(c);
+  const envelopeUuid = c.req.param('envelope_uuid');
+  if (!envelopeUuid || envelopeUuid.length > 64) {
+    return c.json({ error: 'invalid_envelope' }, 400);
+  }
+  const row: any = await c.env.DB.prepare(
+    `SELECT r.signing_token, r.token_expires_at, r.status
+       FROM esign_recipients r
+       JOIN esign_envelopes e ON e.id = r.envelope_id
+      WHERE e.envelope_uuid = ? AND r.user_id = ?
+      LIMIT 1`,
+  ).bind(envelopeUuid, user.id).first();
+  if (!row) return c.json({ error: 'not_a_recipient' }, 404);
+  if (row.status === 'signed') return c.json({ status: 'signed' });
+  const exp = Date.parse(row.token_expires_at);
+  if (Number.isFinite(exp) && exp < Date.now()) return c.json({ status: 'expired' });
+  const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+  return c.json({
+    status: 'pending',
+    signing_url: `${appUrl}/esign/${row.signing_token}`,
+  });
+});
+
+// ---------------------------------------------------------------------------
 // POST /intro/request — investor asks for an intro to a founder.
 // Body: { founder_user_id }
 // Behaviour:

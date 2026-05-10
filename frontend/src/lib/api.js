@@ -986,6 +986,8 @@ export const api = {
   trustObligationStart: (key) =>
     request(`/trust/obligation/${encodeURIComponent(key)}/start`, { method: 'POST' }),
   trustSanctions: () => request('/trust/sanctions'),
+  trustMySigningUrl: (envelope_uuid) =>
+    request(`/trust/agreements/${encodeURIComponent(envelope_uuid)}/my_signing_url`),
   trustMatrix: (role) => request(`/trust/matrix${role ? `?role=${encodeURIComponent(role)}` : ''}`),
 
   getTrustSummary: () => request('/trust/summary'),
