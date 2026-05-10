@@ -86,6 +86,15 @@ trust.get('/score/:userId', async (c) => {
   const allowed = isSelf || caller.role === 'admin' || caller.role === 'partner' || caller.role === 'investor';
   if (!allowed) return c.json({ error: 'forbidden' }, 403);
   await ensureTrustSchema(c.env);
+  // Self-heal: seed any missing rows for the target's role so a
+  // legacy unseeded user doesn't return an optimistic 100. Mirrors
+  // the behaviour of /trust/me.
+  const targetRow: any = await c.env.DB.prepare(
+    `SELECT role FROM users WHERE id = ? LIMIT 1`,
+  ).bind(target).first();
+  if (targetRow?.role) {
+    await seedObligations(c.env, target, targetRow.role);
+  }
   const rows: any = await c.env.DB.prepare(
     `SELECT obligation_key, required, status FROM legal_obligations WHERE user_id = ?`,
   ).bind(target).all();
