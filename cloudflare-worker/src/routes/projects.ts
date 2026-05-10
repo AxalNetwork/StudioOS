@@ -386,7 +386,39 @@ projects.delete('/:id', async (c) => {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
-  await sql`DELETE FROM projects WHERE id = ${id}`;
+  // SQLite/D1 does not cascade by default and most child tables
+  // were created without ON DELETE CASCADE, so a bare DELETE FROM
+  // projects fails with FOREIGN KEY constraint violations once the
+  // project has any history (score snapshots, deal memos, financial
+  // models, milestones, etc.). Best-effort delete from every known
+  // dependent table first; per-table errors are swallowed so a
+  // missing optional table on a fresh DB doesn't abort the cascade.
+  const childTables = [
+    'score_snapshots', 'documents', 'deal_memos', 'deals',
+    'capital_calls', 'tickets', 'discovery_interviews', 'roadmap_okrs',
+    'fund_reserve_allocations', 'financial_models',
+    'compliance_events', 'cap_table_scenarios', 'founder_checkins',
+    'cap_table_holders', 'cap_table_securities', 'investor_introductions',
+    'project_milestones', 'project_week_progress', 'spinout_lab_milestones',
+    'project_health_signals', 'health_interventions', 'project_watchlist',
+    'project_metrics', 'sf_sync_log',
+  ];
+  for (const t of childTables) {
+    try { await c.env.DB.prepare(`DELETE FROM ${t} WHERE project_id = ?`).bind(id).run(); }
+    catch { /* table absent on this DB or different shape — fine */ }
+  }
+  // activity_logs has project_id on some installs but not others, and
+  // we want to keep audit history anyway → null it out instead.
+  try { await c.env.DB.prepare(`UPDATE activity_logs SET project_id = NULL WHERE project_id = ?`).bind(id).run(); } catch {}
+  try {
+    await sql`DELETE FROM projects WHERE id = ${id}`;
+  } catch (e) {
+    await sql.end();
+    console.error('[projects:delete] FK cascade still failed for project', id, (e as Error).message);
+    return c.json({
+      error: 'Could not delete project — it still has linked records. Please remove linked deals/contracts/milestones first.',
+    }, 409);
+  }
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_delete', { type: 'project', id }); } catch {}
   await sql.end();
   return c.json({ ok: true });
