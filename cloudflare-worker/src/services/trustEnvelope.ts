@@ -59,7 +59,7 @@ export async function createThreeWayNdaEnvelope(
     appUrl: string;
   },
 ): Promise<ThreeWayResult> {
-  const counterEmail = (env as any).AXAL_COUNTERSIGNER_EMAIL || 'legal@axal.vc';
+  const counterEmail = env.AXAL_COUNTERSIGNER_EMAIL || 'legal@axal.vc';
   const envelopeUuid = crypto.randomUUID();
   const tplBody = await renderLegalTemplate('nda_3way_founder_investor_axal_v1', {
     founder_name: opts.founder.name,

@@ -4,6 +4,7 @@ import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import { kvGetJSON, kvPutJSON, kvDelete, createL1 } from '../kv';
 import { clampDays } from '../util/pagination';
+import { maskFounderForInvestor } from '../services/trust';
 
 const dashboard = new Hono<{ Bindings: Env }>();
 
@@ -74,7 +75,12 @@ dashboard.get('/', async (c) => {
         ? sql`SELECT id, name, sector, stage, status, score, ai_decision, created_at FROM projects WHERE status NOT IN ('rejected', 'archived') ORDER BY created_at DESC LIMIT 12`
         : isFounder
           ? sql`SELECT id, name, sector, stage, status, score, ai_decision, created_at FROM projects WHERE submitted_by = ${user.id} AND status NOT IN ('rejected', 'archived') ORDER BY created_at DESC LIMIT 12`
-          : sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.score, p.ai_decision, p.created_at FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} WHERE p.status NOT IN ('rejected', 'archived') AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT 12`,
+          // Task #3 (Y-1) — investors get the founder_user_id JOIN so
+          // the Trust Center mask can null sensitive fields when no
+          // active pairwise NDA exists. Partners stay un-masked.
+          : isInvestor
+            ? sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.score, p.ai_decision, p.created_at, u.id AS founder_user_id FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} LEFT JOIN users u ON u.founder_id = p.founder_id WHERE p.status NOT IN ('rejected', 'archived') AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT 12`
+            : sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.score, p.ai_decision, p.created_at FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} WHERE p.status NOT IN ('rejected', 'archived') AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT 12`,
       [] as any[]),
     safeQuery('scoresMine', () => sql`
       SELECT ms.*, p.name as deal_name, p.sector, p.stage
@@ -165,6 +171,21 @@ dashboard.get('/', async (c) => {
 
   try { await sql.end(); } catch {}
 
+  // Task #3 (Y-1) — Trust Center mask. For investors only, run each
+  // proprietary-deal-flow row through maskFounderForInvestor so any
+  // founder/project payload is reduced to FOUNDER_PUBLIC_KEYS until
+  // the pairwise NDA is active. Fail-closed: rows whose
+  // founder_user_id couldn't be resolved are masked too.
+  let dealsMasked: any[] = deals as any[];
+  if (isInvestor) {
+    dealsMasked = await Promise.all(
+      (deals as any[]).map(row => maskFounderForInvestor(c.env, row, {
+        viewerRole: 'investor',
+        viewerUserId: user.id,
+      })),
+    );
+  }
+
   // Audit dashboard view (admins only, low volume)
   if (isAdmin) {
     try { await c.env.DB.prepare(`INSERT INTO shared_services_log (workflow_id, action_type, details, performed_by) VALUES (NULL, 'dashboard_view_admin', '{}', ?)`).bind(user.id).run(); } catch {}
@@ -194,7 +215,7 @@ dashboard.get('/', async (c) => {
       network_reach: networkReach,
       marketplace_available: parseInt((marketplaceCount as any)[0]?.n) || 0,
     },
-    proprietary_deal_flow: deals,
+    proprietary_deal_flow: dealsMasked,
     ai_scored_opportunities: scoresMine,
     syndication_tools: {
       open_syndicates: syndicatesAll,

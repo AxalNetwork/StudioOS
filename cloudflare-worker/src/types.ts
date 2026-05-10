@@ -71,6 +71,10 @@ export interface Env {
   // Kept distinct from KEK_PII so a key rotation on PII columns never
   // invalidates wellbeing rows.
   AXAL_ENCRYPTION_SECRET?: string;
+  // Task #3 (Y-1) — email of the Axal counter-signer that receives
+  // the third leg of the 3-way Founder/Investor/Axal NDA. Defaults to
+  // 'legal@axal.vc' when unset (see services/trustEnvelope.ts).
+  AXAL_COUNTERSIGNER_EMAIL?: string;
   // Task #33 — Cloudflare Access perimeter for /api/admin|monitoring|infra.
   // Both MUST be set in production for the gate to engage; either unset
   // means the middleware is a no-op (dev / preview).

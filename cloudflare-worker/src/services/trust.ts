@@ -165,10 +165,21 @@ export async function seedObligations(
   let inserted = 0;
   for (const d of defs) {
     try {
+      // Insert-or-reactivate. If a previous role-change waived this
+      // obligation (status='waived', required=0), the role flip back
+      // to a role that DOES need it must re-arm the row — otherwise
+      // the user would silently stay non-compliant. We reactivate by
+      // restoring the required flag and bumping waived/expired rows
+      // back to 'pending'. Already-satisfied rows are NOT downgraded.
       const r: any = await env.DB.prepare(
         `INSERT INTO legal_obligations (user_id, obligation_key, required, status)
          VALUES (?, ?, ?, 'pending')
-         ON CONFLICT(user_id, obligation_key) DO NOTHING
+         ON CONFLICT(user_id, obligation_key) DO UPDATE SET
+           required   = excluded.required,
+           status     = CASE WHEN legal_obligations.status IN ('waived','expired')
+                             THEN 'pending'
+                             ELSE legal_obligations.status END,
+           updated_at = CURRENT_TIMESTAMP
          RETURNING id`,
       ).bind(userId, d.key, d.required).first();
       if (r?.id) inserted += 1;
@@ -313,14 +324,22 @@ export async function maskFounderForInvestor<T extends FounderLikeRow>(
 ): Promise<T> {
   if (ctx.viewerRole !== 'investor') return row;
   const founderUserId = (row.founder_user_id ?? row.user_id) as number | null | undefined;
-  if (!founderUserId) return row;
-  if (await hasActivePairwiseNda(env, founderUserId, ctx.viewerUserId)) return row;
+  // Fail-closed: when we can't resolve a founder user_id (legacy
+  // unlinked rows, missing JOIN), mask the row instead of returning
+  // it raw. Only an explicit active pairwise NDA against a known
+  // founder unlocks the un-masked payload. This makes the mask
+  // robust to upstream query mistakes.
+  let unlocked = false;
+  if (founderUserId) {
+    unlocked = await hasActivePairwiseNda(env, founderUserId, ctx.viewerUserId);
+  }
+  if (unlocked) return row;
   const masked: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(row)) {
     masked[k] = FOUNDER_PUBLIC_KEYS.has(k) ? v : null;
   }
   masked.__masked = true;          // UI hint: render the "Sign NDA to unlock" banner
-  masked.__mask_reason = 'no_pairwise_nda';
+  masked.__mask_reason = founderUserId ? 'no_pairwise_nda' : 'founder_unresolved';
   return masked as T;
 }
 
