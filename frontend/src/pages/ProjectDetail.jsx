@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X, Database, Search, ExternalLink, AlertCircle } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
@@ -18,6 +18,7 @@ const weekLabels = {
 export default function ProjectDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { toast, showToast } = useToast();
   const [project, setProject] = useState(null);
@@ -42,6 +43,18 @@ export default function ProjectDetail() {
   };
 
   useEffect(load, [id]);
+
+  // Auto-open the slide-over when ProjectsPage navigates here with ?cb=1.
+  // Strips the param after opening so a refresh doesn't keep re-opening it.
+  useEffect(() => {
+    if (searchParams.get('cb') === '1' && project && !cbOpen && !cbTierLocked) {
+      setCbOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('cb');
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
 
   const advanceWeek = async () => {
     try {
@@ -79,6 +92,23 @@ export default function ProjectDetail() {
   const isOwner = !!user?.founder_id && project && project.founder_id === user.founder_id;
   const canEdit = isAdmin || isOwner;
   const canDelete = isAdmin || isOwner;
+  // Crunchbase enrichment is gated to growth-tier founders. Free-tier
+  // sees the button but clicking dispatches the global PaywallModal
+  // event ('studioos:tier_required'). Admin/elevated roles bypass.
+  const tier = (user?.tier || user?.subscription_plan || 'free').toLowerCase();
+  const isElevated = ['admin','partner','investor','mentor'].includes((user?.role || '').toLowerCase());
+  const cbTierLocked = !isElevated && tier !== 'growth' && tier !== 'studio';
+  const handleCbClick = () => {
+    if (cbTierLocked) {
+      try {
+        window.dispatchEvent(new CustomEvent('studioos:tier_required', {
+          detail: { required: 'growth', message: 'Crunchbase enrichment is a growth-tier feature.' },
+        }));
+      } catch {}
+      return;
+    }
+    setCbOpen(true);
+  };
 
   if (loading) return <div className="text-gray-600 text-center py-20">Loading...</div>;
   if (loadError) {
@@ -114,8 +144,16 @@ export default function ProjectDetail() {
               </button>
             )}
             {canEdit && (
-              <button onClick={() => setCbOpen(true)} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs text-gray-700" title="Look up on Crunchbase">
-                <Database size={12} /> Crunchbase
+              <button
+                onClick={handleCbClick}
+                className={`flex items-center gap-1 px-3 py-1.5 border rounded-lg text-xs ${
+                  cbTierLocked
+                    ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
+                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+                title={cbTierLocked ? 'Upgrade to growth — Crunchbase enrichment' : 'Look up on Crunchbase'}
+              >
+                <Database size={12} /> Crunchbase {cbTierLocked && <span className="text-[10px] font-semibold ml-1">UPGRADE</span>}
               </button>
             )}
             {project.playbook_week !== 'complete' && (
@@ -400,37 +438,48 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [notConnected, setNotConnected] = useState(false);
-  const [rateLimited, setRateLimited] = useState(false);
+  // 429 state — store the reset epoch so search input is disabled until
+  // the user can actually retry. Banner copy is the verbatim string the
+  // backend returns so it stays in sync with IntegrationsPage.
+  const [rateLimitedUntil, setRateLimitedUntil] = useState(0);
   const [applyingUuid, setApplyingUuid] = useState('');
+  const isRateLimited = rateLimitedUntil > Date.now();
 
   useEffect(() => {
+    if (isRateLimited) { setResults([]); return; }
     if (!q || q.trim().length < 2) { setResults([]); return; }
     const t = setTimeout(async () => {
-      setLoading(true); setErr(''); setNotConnected(false); setRateLimited(false);
+      setLoading(true); setErr(''); setNotConnected(false);
       try {
         const res = await api.crunchbaseSearch(q.trim(), 15);
         setResults(res?.results || []);
       } catch (e) {
         const msg = e?.message || '';
-        if (/not_connected/i.test(msg)) setNotConnected(true);
-        else if (/rate_limited|429/i.test(msg)) setRateLimited(true);
-        else setErr(msg || 'Search failed');
+        const code = e?.data?.error || '';
+        if (code === 'crunchbase_not_connected' || /not_connected/i.test(msg)) setNotConnected(true);
+        else if (code === 'crunchbase_rate_limited' || e?.status === 429) {
+          setRateLimitedUntil(Number(e?.data?.reset_epoch) || (Date.now() + 60 * 60 * 1000));
+        } else setErr(msg || 'Search failed');
         setResults([]);
       } finally { setLoading(false); }
     }, 350);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, isRateLimited]);
 
   const apply = async (snap) => {
     setApplyingUuid(snap.uuid); setErr('');
     try {
-      const res = await api.crunchbaseApply(project.id, { uuid: snap.uuid, snapshot: snap });
+      // Server-side lookup: send only uuid/permalink, never the snapshot
+      // body — backend re-fetches authoritative fields from Crunchbase.
+      const res = await api.crunchbaseApply(project.id, { uuid: snap.uuid });
       onApplied?.(res?.snapshot || snap);
       onClose();
     } catch (e) {
       const msg = e?.message || 'Apply failed';
-      if (/rate_limited|429/i.test(msg)) setRateLimited(true);
-      else onError?.(msg);
+      const code = e?.data?.error || '';
+      if (code === 'crunchbase_rate_limited' || e?.status === 429) {
+        setRateLimitedUntil(Number(e?.data?.reset_epoch) || (Date.now() + 60 * 60 * 1000));
+      } else onError?.(msg);
     } finally { setApplyingUuid(''); }
   };
 
@@ -453,7 +502,8 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
             <input
               autoFocus type="text" value={q} onChange={(e) => setQ(e.target.value)}
               placeholder="Company name…"
-              className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
+              disabled={isRateLimited}
+              className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
             />
           </div>
           {notConnected && (
@@ -466,13 +516,18 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
               </span>
             </div>
           )}
-          {rateLimited && (
+          {isRateLimited && (
             <div className="mt-3 text-xs px-3 py-2 rounded border border-amber-300 bg-amber-50 text-amber-800 flex items-start gap-1.5">
               <AlertCircle size={12} className="mt-0.5 shrink-0" />
-              <span>Crunchbase Basic daily limit reached for your API key (200 calls/day). Try again tomorrow.</span>
+              <span>
+                Crunchbase daily limit reached (Basic = 200 calls/day). Search will re-enable after the reset.
+                <span className="block mt-0.5 text-[11px] text-amber-700">
+                  Resumes at {new Date(rateLimitedUntil).toLocaleString()}.
+                </span>
+              </span>
             </div>
           )}
-          {err && !notConnected && !rateLimited && (
+          {err && !notConnected && !isRateLimited && (
             <div className="mt-3 text-xs text-red-600 flex items-center gap-1.5"><AlertCircle size={12} /> {err}</div>
           )}
         </div>
@@ -480,7 +535,7 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
           {loading ? (
             <div className="p-6 text-sm text-gray-500 text-center">Searching…</div>
           ) : results.length === 0 ? (
-            !notConnected && !rateLimited && (
+            !notConnected && !isRateLimited && (
               <div className="p-6 text-sm text-gray-500 text-center">
                 {q.trim().length < 2 ? 'Type at least 2 characters to search.' : 'No matches.'}
               </div>

@@ -12,6 +12,10 @@ export default function MarketIntelPage() {
   const [rounds, setRounds] = useState([]);
   const [benchmarks, setBenchmarks] = useState(null);
   const [conviction, setConviction] = useState([]);
+  // Portfolio enrichment — projects with a cached Crunchbase snapshot.
+  // Rendered on the Private Rounds tab so partners can see funding signals
+  // for their OWN portfolio alongside competitor rounds.
+  const [enriched, setEnriched] = useState([]);
   const [tab, setTab] = useState('pulse');
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -30,6 +34,28 @@ export default function MarketIntelPage() {
       setRounds(r.rounds || []);
       setBenchmarks(b);
       setConviction(c.high_conviction_plays || []);
+    }).catch(() => {});
+    // Best-effort: pull projects with a cached Crunchbase snapshot. Quietly
+    // no-ops for users without listProjects access (e.g. raw investor role).
+    api.listProjects().then((rows) => {
+      const list = (Array.isArray(rows) ? rows : [])
+        .filter((p) => p.crunchbase_uuid)
+        .map((p) => {
+          let snap = null;
+          try { snap = p.crunchbase_data_json ? JSON.parse(p.crunchbase_data_json) : null; } catch {}
+          return {
+            id: p.id,
+            name: p.name,
+            sector: p.sector,
+            image_url: snap?.image_url || null,
+            cb_url: snap?.cb_url || (snap?.permalink ? `https://www.crunchbase.com/organization/${snap.permalink}` : null),
+            total_funding: p.total_funding ?? snap?.funding_total_usd ?? null,
+            last_round: p.last_funding_round || (snap?.last_funding_type ? `${snap.last_funding_type}${snap.last_funding_at ? ` (${snap.last_funding_at})` : ''}` : null),
+            employee_count: p.employee_count || snap?.employee_range || null,
+            hq: p.hq || snap?.hq_location || null,
+          };
+        });
+      setEnriched(list);
     }).catch(() => {});
   }, []);
 
@@ -286,6 +312,43 @@ export default function MarketIntelPage() {
       {tab === 'private' && (
         <div className="space-y-4">
           <TabExplainer text="Private rounds = direct competitors' funding signals. Who just raised, at what stage, and at what valuation tells you whether the sector is heating up — and where your portfolio is mispriced." />
+          {enriched.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Portfolio funding (Crunchbase)</h3>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Projects with a Crunchbase snapshot. Use Project → Crunchbase to refresh.</p>
+                </div>
+                <span className="text-[10px] uppercase tracking-wider text-violet-600 font-semibold">{enriched.length} enriched</span>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {enriched.map((e) => (
+                  <Link key={e.id} to={`/projects/${e.id}`} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:border-violet-400 hover:bg-violet-50/30 transition-colors">
+                    {e.image_url ? (
+                      <img src={e.image_url} alt="" className="w-10 h-10 rounded object-cover bg-gray-100 shrink-0" loading="lazy" />
+                    ) : (
+                      <div className="w-10 h-10 rounded bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center text-xs font-semibold text-violet-700 shrink-0">
+                        {(e.name || '?').slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-gray-900 truncate">{e.name}</div>
+                      <div className="text-[11px] text-gray-500 truncate">
+                        {e.sector || '—'}{e.hq ? ` • ${e.hq}` : ''}
+                      </div>
+                      <div className="flex items-center gap-x-2 gap-y-0.5 mt-1 flex-wrap text-[11px]">
+                        {e.total_funding != null && (
+                          <span className="text-emerald-700 font-medium">${(e.total_funding / 1e6).toFixed(1)}M raised</span>
+                        )}
+                        {e.last_round && <span className="text-gray-600">{e.last_round}</span>}
+                        {e.employee_count && <span className="text-gray-500">{e.employee_count}</span>}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>

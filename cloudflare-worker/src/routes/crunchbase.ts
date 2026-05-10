@@ -23,6 +23,8 @@ import {
   findCompetitors,
   loadCrunchbaseKeyForUser,
   markCrunchbaseRateLimited,
+  mapToProjectFields,
+  crunchbaseResetEpoch,
   type CrunchbaseSnapshot,
 } from '../integrations/providers/crunchbase';
 
@@ -48,10 +50,14 @@ async function withConn<T>(c: Context<{ Bindings: Env }>, user: User, fn: (apiKe
   } catch (e) {
     if (e instanceof CrunchbaseRateLimited) {
       await markCrunchbaseRateLimited(c.env, conn.row, e.resetHint);
+      const resetEpoch = crunchbaseResetEpoch(e.resetHint);
       return c.json({
         error: 'crunchbase_rate_limited',
-        message: 'Crunchbase Basic daily limit reached for this API key. Try again tomorrow.',
+        // Verbatim banner copy expected by the UI — keep in sync with the
+        // amber banner in IntegrationsPage + the slide-over.
+        message: 'Crunchbase daily limit reached (Basic = 200 calls/day). Search will re-enable after the reset.',
         reset_hint: e.resetHint || null,
+        reset_epoch: resetEpoch,
       }, 429);
     }
     if (e instanceof CrunchbaseUnauthorized) {
@@ -102,17 +108,34 @@ crunchbase.post('/projects/:id/apply', async (c) => {
   const project = await loadProjectForWrite(c, user, projectId);
   if (!project) return c.json({ error: 'not_found_or_forbidden' }, 404);
 
-  const body = await c.req.json().catch(() => ({})) as { uuid?: string; permalink?: string; snapshot?: CrunchbaseSnapshot };
+  const body = await c.req.json().catch(() => ({})) as { uuid?: string; permalink?: string };
+  // Server-side lookup ONLY. The route deliberately does not accept a
+  // client-supplied snapshot — that would let any caller persist
+  // arbitrary unverified enrichment data onto a project row. The client
+  // sends a uuid/permalink and we re-fetch authoritative fields from
+  // Crunchbase before persisting.
   const lookupKey = String(body.uuid || body.permalink || '').trim();
-  if (!lookupKey && !body.snapshot) return c.json({ error: 'uuid_required' }, 400);
+  if (!lookupKey) return c.json({ error: 'uuid_required' }, 400);
 
   return await withConn(c, user, async (apiKey) => {
-    let snap: CrunchbaseSnapshot | null = body.snapshot && body.snapshot.uuid ? body.snapshot : null;
-    if (!snap) snap = await lookupOrganization(apiKey, lookupKey);
+    const snap = await lookupOrganization(apiKey, lookupKey);
     if (!snap) throw new Error('crunchbase_org_not_found');
+    const auto = mapToProjectFields(snap);
     await c.env.DB.prepare(
-      'UPDATE projects SET crunchbase_uuid = ?, crunchbase_data_json = ?, crunchbase_synced_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    ).bind(snap.uuid, JSON.stringify(snap), project.id).run();
+      `UPDATE projects SET
+         crunchbase_uuid = ?, crunchbase_data_json = ?, crunchbase_synced_at = CURRENT_TIMESTAMP,
+         founded_year = COALESCE(?, founded_year),
+         hq           = COALESCE(?, hq),
+         employee_count = COALESCE(?, employee_count),
+         last_funding_round = COALESCE(?, last_funding_round),
+         total_funding = COALESCE(?, total_funding),
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    ).bind(
+      snap.uuid, JSON.stringify(snap),
+      auto.founded_year, auto.hq, auto.employee_count, auto.last_funding_round, auto.total_funding,
+      project.id,
+    ).run();
 
     const actor = await hashEmail(user.email || '');
     try {

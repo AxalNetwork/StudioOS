@@ -116,6 +116,7 @@ export interface CrunchbaseSnapshot {
   uuid: string;
   permalink: string | null;
   name: string;
+  image_url: string | null;
   short_description: string | null;
   website: string | null;
   linkedin: string | null;
@@ -165,6 +166,7 @@ export function shapeOrg(entity: CbOrgEntity): CrunchbaseSnapshot {
     uuid: entity.uuid || id.uuid || '',
     permalink,
     name: id.value || (p.name as string) || '',
+    image_url: id.image_url || (p.image_url as string) || null,
     short_description: (p.short_description as string) || null,
     website: ((p.website as { value?: string } | undefined)?.value) || (p.website as string) || null,
     linkedin: ((p.linkedin as { value?: string } | undefined)?.value) || null,
@@ -247,12 +249,35 @@ async function getApiKey(env: Env, row: IntegrationRow): Promise<string> {
   return k;
 }
 
-/** Persist a normalized rate-limit marker on the row so the UI can render the daily-cap banner. */
+/**
+ * Persist a deterministic `rate_limited:<unix_epoch_ms>` marker on the row.
+ * The epoch is the moment the user can retry: x-ratelimit-reset (seconds
+ * since epoch) when present, else next UTC midnight (Crunchbase Basic
+ * resets daily). The IntegrationsPage banner + the project lookup
+ * slide-over both parse this suffix to render a "try again at HH:MM"
+ * message and to disable search until the timestamp passes.
+ */
+function computeResetEpoch(hint?: string): number {
+  if (hint) {
+    const n = Number(hint);
+    if (Number.isFinite(n) && n > 0) {
+      // Heuristic: values <1e10 are seconds, larger are ms.
+      return n < 1e10 ? Math.floor(n * 1000) : Math.floor(n);
+    }
+    const t = Date.parse(hint);
+    if (!Number.isNaN(t)) return t;
+  }
+  // Default — next UTC midnight (Crunchbase Basic daily reset).
+  const now = new Date();
+  const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0);
+  return next;
+}
+
 async function markRateLimited(env: Env, row: IntegrationRow, hint?: string): Promise<void> {
-  const tag = hint ? `rate_limited:${hint}` : 'rate_limited';
+  const epoch = computeResetEpoch(hint);
   await env.DB.prepare(
     'UPDATE integrations SET last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-  ).bind(tag, row.id).run();
+  ).bind(`rate_limited:${epoch}`, row.id).run();
 }
 
 async function clearRateLimited(env: Env, row: IntegrationRow): Promise<void> {
@@ -374,4 +399,36 @@ export async function loadCrunchbaseKeyForUser(env: Env, userId: number): Promis
   } catch { return null; }
 }
 
-export { markRateLimited as markCrunchbaseRateLimited };
+export { markRateLimited as markCrunchbaseRateLimited, computeResetEpoch as crunchbaseResetEpoch };
+
+/**
+ * Map a Crunchbase snapshot onto the denormalized `projects.*` columns
+ * the schema reserves for cached enrichment (founded_year, hq,
+ * employee_count, last_funding_round, total_funding). Used by the
+ * /apply route after a server-side lookup so the project list/grid
+ * surfaces don't have to JSON.parse `crunchbase_data_json` per row.
+ */
+export interface ProjectAutofill {
+  founded_year: number | null;
+  hq: string | null;
+  employee_count: string | null;
+  last_funding_round: string | null;
+  total_funding: number | null;
+}
+export function mapToProjectFields(snap: CrunchbaseSnapshot): ProjectAutofill {
+  let yr: number | null = null;
+  if (snap.founded_on) {
+    const m = String(snap.founded_on).match(/^(\d{4})/);
+    if (m) yr = Number(m[1]);
+  }
+  const lastRound = snap.last_funding_type
+    ? `${snap.last_funding_type}${snap.last_funding_at ? ` (${snap.last_funding_at})` : ''}`
+    : null;
+  return {
+    founded_year: yr,
+    hq: snap.hq_location,
+    employee_count: snap.employee_range,
+    last_funding_round: lastRound,
+    total_funding: snap.funding_total_usd,
+  };
+}

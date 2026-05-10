@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { Link } from 'react-router-dom';
-import { Plus, Search, ChevronDown, X, Trash2 } from 'lucide-react';
+import { Plus, Search, ChevronDown, X, Trash2, Database } from 'lucide-react';
 import { api } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
@@ -12,7 +12,7 @@ import { useToast } from '../components/useToast';
 
 // T24 — Single line per row with py-3.
 const PROJECT_ROW_HEIGHT = 52;
-const PROJECT_GRID = 'minmax(0, 2fr) minmax(0, 1fr) 110px 120px minmax(0, 1fr) 56px';
+const PROJECT_GRID = 'minmax(0, 2fr) minmax(0, 1fr) 110px 120px minmax(0, 1fr) 96px';
 
 export default function ProjectsPage() {
   const { user, refresh } = useAuth();
@@ -80,6 +80,28 @@ export default function ProjectsPage() {
   };
 
   const canDelete = (p) => isAdmin || (!!currentUser?.founder_id && p.founder_id === currentUser.founder_id);
+  const canEdit = canDelete; // matches ProjectDetail gating
+
+  // Row-level Crunchbase quick-entry. Free-tier founders see the button as an
+  // amber "UPGRADE" pill that fires the global tier-required event; everyone
+  // else navigates straight to ProjectDetail with `?cb=1` so the slide-over
+  // opens automatically.
+  const tier = (currentUser?.tier || currentUser?.subscription_plan || 'free').toLowerCase();
+  const isElevated = ['admin','partner','investor','mentor'].includes((currentUser?.role || '').toLowerCase());
+  const cbTierLocked = !isElevated && tier !== 'growth' && tier !== 'studio';
+  const onCbClick = (p, ev) => {
+    ev?.preventDefault?.();
+    ev?.stopPropagation?.();
+    if (cbTierLocked) {
+      try {
+        window.dispatchEvent(new CustomEvent('studioos:tier_required', {
+          detail: { required: 'growth', message: 'Crunchbase enrichment is a growth-tier feature.' },
+        }));
+      } catch {}
+      return;
+    }
+    window.location.assign(`/projects/${p.id}?cb=1`);
+  };
 
   const filtered = projects.filter(p =>
     !filter || p.name.toLowerCase().includes(filter.toLowerCase()) || p.sector?.toLowerCase().includes(filter.toLowerCase())
@@ -166,7 +188,25 @@ export default function ProjectsPage() {
                     <div className="px-5 py-3"><StatusBadge status={p.status} /></div>
                     <div className="px-5 py-3 hidden md:block"><WeekBadge week={p.playbook_week} /></div>
                     <div className="px-5 py-3 hidden md:block text-gray-600 capitalize truncate">{p.stage}</div>
-                    <div className="px-3 py-3 flex items-center justify-end">
+                    <div className="px-3 py-3 flex items-center justify-end gap-1">
+                      {canEdit(p) && (
+                        <button
+                          onClick={(ev) => onCbClick(p, ev)}
+                          className={`p-1.5 rounded transition-colors ${
+                            p.crunchbase_uuid ? 'text-violet-600 hover:bg-violet-50' :
+                            cbTierLocked ? 'text-amber-600 hover:bg-amber-50' :
+                            'text-gray-400 hover:text-violet-600 hover:bg-violet-50'
+                          }`}
+                          aria-label={`Crunchbase lookup for ${p.name}`}
+                          title={
+                            p.crunchbase_uuid ? 'Open Crunchbase profile' :
+                            cbTierLocked ? 'Upgrade to growth — Crunchbase lookup' :
+                            'Look up on Crunchbase'
+                          }
+                        >
+                          <Database size={14} />
+                        </button>
+                      )}
                       {canDelete(p) && (
                         <button
                           onClick={() => handleDelete(p)}

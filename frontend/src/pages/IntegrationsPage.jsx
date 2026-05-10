@@ -224,15 +224,30 @@ export default function IntegrationsPage() {
                         <div className="text-[11px] text-gray-500 mt-1">last synced {new Date(it.last_synced_at).toLocaleString()}</div>
                       )}
                       {it.last_error && (
-                        it.last_error.startsWith('rate_limited') ? (
-                          <div className="mt-2 text-[11px] flex items-start gap-1.5 px-2 py-1.5 rounded border border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-200">
-                            <AlertCircle size={11} className="mt-0.5 shrink-0" />
-                            <span>
-                              Daily API limit reached for this connection. New lookups will resume tomorrow.
-                              {it.provider_key === 'crunchbase' && ' Crunchbase Basic = 200 calls/day per key.'}
-                            </span>
-                          </div>
-                        ) : (
+                        it.last_error.startsWith('rate_limited') ? (() => {
+                          // last_error format: `rate_limited[:<epoch_ms>]`. The
+                          // epoch suffix is written by the Crunchbase provider
+                          // so the UI can render an exact reset time instead
+                          // of a vague "tomorrow".
+                          const tail = it.last_error.split(':')[1] || '';
+                          const epoch = Number(tail);
+                          const resetAt = Number.isFinite(epoch) && epoch > 0
+                            ? new Date(epoch).toLocaleString()
+                            : null;
+                          return (
+                            <div className="mt-2 text-[11px] flex items-start gap-1.5 px-2 py-1.5 rounded border border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-200">
+                              <AlertCircle size={11} className="mt-0.5 shrink-0" />
+                              <span>
+                                {it.provider_key === 'crunchbase'
+                                  ? 'Crunchbase daily limit reached (Basic = 200 calls/day). Search will re-enable after the reset.'
+                                  : 'Daily API limit reached for this connection. New lookups will resume after the reset.'}
+                                {resetAt && (
+                                  <span className="block mt-0.5 text-amber-700 dark:text-amber-300">Resumes at {resetAt}.</span>
+                                )}
+                              </span>
+                            </div>
+                          );
+                        })() : (
                           <div className="text-[11px] text-red-600 mt-1 flex items-center gap-1"><AlertCircle size={10} /> {it.last_error}</div>
                         )
                       )}

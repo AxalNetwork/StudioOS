@@ -40,6 +40,7 @@ export const SECTION_CATALOG: ReadonlyArray<SectionDef> = [
   { key: 'founder_integrity',title: 'Founder Background & Integrity',  weight: 1.5, applies_to: ['founder','mentor','investor'] },
   { key: 'product_tech',     title: 'Product & Technology Risk',       weight: 1.0, applies_to: ['project'] },
   { key: 'market_traction',  title: 'Market & Traction',               weight: 1.0, applies_to: ['project','founder'] },
+  { key: 'market_position',  title: 'Market Position & Competitors',   weight: 1.0, applies_to: ['project','founder'] },
   { key: 'compliance_aml',   title: 'Compliance / AML / Sanctions',    weight: 1.5, applies_to: ['project','founder','mentor','investor','partner'] },
   { key: 'reputation_press', title: 'Reputation & Press Signals',      weight: 0.75,applies_to: ['project','founder','mentor','investor','partner'] },
   { key: 'cyber_posture',    title: 'Cyber & Data Posture',            weight: 1.0, applies_to: ['project','partner'] },
@@ -73,7 +74,7 @@ export const CONNECTORS: ReadonlyArray<ConnectorMeta> = [
   { key: 'linkedin',       label: 'LinkedIn',               flag_env: 'DD_FLAG_LINKEDIN',       secret_env: 'LINKEDIN_API_KEY',default_section: 'founder_integrity' },
   { key: 'github',         label: 'GitHub',                 flag_env: 'DD_FLAG_GITHUB',         secret_env: 'GITHUB_PAT',     default_section: 'product_tech' },
   { key: 'whois_dns',      label: 'WHOIS / DNS',            flag_env: 'DD_FLAG_WHOIS_DNS',                                    default_section: 'cyber_posture' },
-  { key: 'crunchbase',     label: 'Crunchbase',             flag_env: 'DD_FLAG_CRUNCHBASE',     secret_env: 'CRUNCHBASE_API_KEY', default_section: 'market_traction' },
+  { key: 'crunchbase',     label: 'Crunchbase',             flag_env: 'DD_FLAG_CRUNCHBASE',     secret_env: 'CRUNCHBASE_API_KEY', default_section: 'market_position' },
 ];
 
 interface RawFinding {
@@ -170,7 +171,7 @@ function mockFindings(connector: ConnectorKey, subject: string): RawFinding[] {
         title: `Crunchbase profile lookup for "${subject}"`,
         detail: 'No live Crunchbase API key on env (CRUNCHBASE_API_KEY) — set the secret to surface funding history, employee range, and operating-status flags.',
         evidence_url: `https://www.crunchbase.com/textsearch?q=${encodeURIComponent(subject)}`,
-        section_key: 'market_traction',
+        section_key: 'market_position',
       }];
   }
 }
@@ -195,7 +196,7 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
               source_kind: 'crunchbase', severity: 'low',
               title: `No Crunchbase match for "${subject}"`,
               detail: 'Subject not found in Crunchbase Basic search index — verify legal name or check operating status.',
-              section_key: 'market_traction',
+              section_key: 'market_position',
             }],
           };
         }
@@ -215,8 +216,63 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
           subject_name: top.name,
           evidence_url: top.cb_url || undefined,
           evidence_excerpt: top.short_description || undefined,
-          section_key: 'market_traction',
+          section_key: 'market_position',
         });
+
+        // Rule: funding=null + domain registered → low (early-stage signal,
+        // worth flagging for diligence reviewers as "company exists but
+        // hasn't disclosed funding").
+        if ((top.funding_total_usd === null || top.funding_total_usd === undefined) && (top.website || top.linkedin)) {
+          findings.push({
+            source_kind: 'crunchbase', severity: 'low',
+            title: `${top.name} — domain registered, no disclosed funding`,
+            detail: `Crunchbase has ${top.website ? 'a website ('+top.website+')' : 'a LinkedIn page'} but no reported funding rounds. Confirm whether the company is bootstrapped or simply not tracked.`,
+            subject_name: top.name,
+            evidence_url: top.cb_url || undefined,
+            section_key: 'market_position',
+          });
+        }
+
+        // Rule: headcount delta vs prior snapshot for this case+connector.
+        // We look up the most recent prior dd_external_sources row for this
+        // subject and diff `num_employees_enum`. A drop from a higher band
+        // to a lower one is escalated to medium.
+        // Headcount delta vs prior snapshot: best-effort scan over the most
+        // recent prior dd_external_sources rows for this connector. We
+        // decrypt with the stored tuple ('dd_external_sources','raw_response_enc',id)
+        // — any decryption failure (key rotation / null blob) is silently
+        // skipped because the delta finding is purely additive.
+        try {
+          const prior = await env.DB.prepare(
+            "SELECT id, raw_response_enc FROM dd_external_sources WHERE source_kind = 'crunchbase' AND status = 'ok' ORDER BY id DESC LIMIT 5",
+          ).all<{ id: number; raw_response_enc: string | null }>();
+          for (const r of prior?.results || []) {
+            if (!r.raw_response_enc) continue;
+            const txt = await decryptColumn(env, 'dd_external_sources', 'raw_response_enc', r.id, r.raw_response_enc);
+            if (!txt) continue;
+            try {
+              const obj = JSON.parse(txt) as { employee_range?: string; uuid?: string };
+              if (!obj.employee_range || obj.uuid !== top.uuid) continue;
+              if (obj.employee_range !== top.employee_range) {
+                const ranks = ['c_00001_00010','c_00011_00050','c_00051_00100','c_00101_00250','c_00251_00500','c_00501_01000','c_01001_05000','c_05001_10000','c_10001_max'];
+                const a = ranks.indexOf(obj.employee_range || '');
+                const b = ranks.indexOf(top.employee_range || '');
+                const dropped = a >= 0 && b >= 0 && b < a;
+                findings.push({
+                  source_kind: 'crunchbase', severity: dropped ? 'medium' : 'info',
+                  title: `${top.name} — headcount band changed (${obj.employee_range} → ${top.employee_range})`,
+                  detail: dropped
+                    ? 'Headcount appears to have decreased between scans — possible layoffs or attrition. Confirm with founder.'
+                    : 'Headcount band shifted between scans.',
+                  subject_name: top.name,
+                  section_key: 'market_position',
+                });
+                break;
+              }
+            } catch { /* malformed prior — skip */ }
+          }
+        } catch { /* delta finding is best-effort */ }
+
         return { status: 'ok', records_count: 1, raw_response: top, findings };
       } catch (e) {
         return {

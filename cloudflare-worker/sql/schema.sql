@@ -185,6 +185,11 @@ CREATE TABLE IF NOT EXISTS projects (
     crunchbase_uuid TEXT,
     crunchbase_data_json TEXT,
     crunchbase_synced_at TEXT,
+    founded_year INTEGER,
+    hq TEXT,
+    employee_count TEXT,
+    last_funding_round TEXT,
+    total_funding REAL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
