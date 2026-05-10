@@ -509,7 +509,7 @@ function CreateInvitationModal({ onClose, onCreated, onError }) {
               )}
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Personal message (optional)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Notes (optional)</label>
               <textarea
                 rows={3}
                 value={message}
@@ -517,7 +517,11 @@ function CreateInvitationModal({ onClose, onCreated, onError }) {
                 placeholder="Hey — would love to bring you on as a partner…"
                 className="w-full px-3 py-2 text-sm rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500/40"
               />
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Shown to the partner inside the onboarding wizard.</p>
             </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+              <Clock size={12} /> Invitation link expires automatically after 14 days.
+            </p>
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={close} disabled={submitting}
                 className="px-4 py-2 text-sm rounded-md border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">

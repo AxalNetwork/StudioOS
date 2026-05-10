@@ -84,7 +84,7 @@ admin_partners.post('/invitations', async (c) => {
   ).first();
 
   const invitationId = Number(ins.id);
-  const link = `${appUrl(c.env)}/partner-onboarding/${token}`;
+  const link = `${appUrl(c.env)}/partners/onboard?token=${token}`;
   const emailSent = await sendPartnerInvitationEmail(
     c.env, email, name, admin.name || 'Axal VC', link, personalMessage,
   );
@@ -122,7 +122,7 @@ admin_partners.get('/invitations', async (c) => {
   const items = (rows.results || []).map((r: any) => ({
     ...r,
     allowed_deal_types: safeJsonArray(r.allowed_deal_types),
-    link: `${appUrl(c.env)}/partner-onboarding/${r.token}`,
+    link: `${appUrl(c.env)}/partners/onboard?token=${r.token}`,
     is_expired: new Date(r.expires_at).getTime() < Date.now(),
   }));
   return c.json({ items });
@@ -144,7 +144,7 @@ admin_partners.post('/invitations/:id/resend', async (c) => {
     `UPDATE partner_invitations SET expires_at = ?, status = 'sent' WHERE id = ?`,
   ).bind(newExpires, id).run();
 
-  const link = `${appUrl(c.env)}/partner-onboarding/${inv.token}`;
+  const link = `${appUrl(c.env)}/partners/onboard?token=${inv.token}`;
   const emailSent = await sendPartnerInvitationEmail(
     c.env, inv.recipient_email, inv.recipient_name || '',
     admin.name || 'Axal VC', link, inv.personal_message || '',
