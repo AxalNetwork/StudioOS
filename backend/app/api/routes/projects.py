@@ -1,6 +1,10 @@
 import json
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session, select
+from sqlalchemy import text
+
+logger = logging.getLogger("studioos.projects")
 from backend.app.database import get_session
 from backend.app.models.entities import Project, Founder, ScoreSnapshot, Deal, ActivityLog, User
 from backend.app.schemas.scoring import ProjectCreate, ProjectUpdate, FounderSubmitRequest
@@ -314,8 +318,37 @@ def delete_project(project_id: int, session: Session = Depends(get_session), adm
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    session.delete(project)
-    session.commit()
+    try:
+        dialect = session.bind.dialect.name if session.bind else ""
+        if dialect == "postgresql":
+            rows = session.execute(text(
+                """
+                SELECT tc.table_name, kcu.column_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                  ON tc.constraint_name = kcu.constraint_name
+                  AND tc.table_schema = kcu.table_schema
+                JOIN information_schema.constraint_column_usage ccu
+                  ON ccu.constraint_name = tc.constraint_name
+                  AND ccu.table_schema = tc.table_schema
+                WHERE tc.constraint_type = 'FOREIGN KEY'
+                  AND ccu.table_name = 'projects'
+                  AND ccu.column_name = 'id'
+                """
+            )).all()
+            for table, col in rows:
+                session.execute(
+                    text(f'DELETE FROM "{table}" WHERE "{col}" = :pid'),
+                    {"pid": project_id},
+                )
+        session.delete(project)
+        session.commit()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        session.rollback()
+        logger.exception("delete_project failed for id=%s: %s", project_id, exc)
+        raise HTTPException(status_code=500, detail=f"Failed to delete project: {exc}")
     return {"ok": True}
 
 
