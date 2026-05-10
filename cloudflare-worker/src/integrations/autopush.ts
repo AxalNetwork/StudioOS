@@ -8,52 +8,85 @@
  *      "View logs" reflects every background push, not just user-initiated
  *      sync/push calls.
  */
-import type { Context } from 'hono';
+import type { Context, ExecutionContext } from 'hono';
 import type { Env, User } from '../types';
 import type { IntegrationRow } from './registry';
 import { getProviderImpl } from './registry';
 
-interface AutoPushOpts {
-  c: Context<{ Bindings: Env }>;
+interface AutoPushBase {
   user: User;
   providerKey: string;
   payload: unknown;
-  /** Short event-type label written to integration_logs (e.g. 'auto_push:deal'). */
+  /** Short event-type label written to integration_logs (e.g. 'auto_push:deal_stage_change'). */
   eventType: string;
+}
+interface AutoPushFromContextOpts extends AutoPushBase {
+  c: Context<{ Bindings: Env }>;
+}
+interface AutoPushFromEnvOpts extends AutoPushBase {
+  env: Env;
+  executionCtx?: ExecutionContext;
 }
 
 /**
- * Look up the user's active integration for `providerKey` and push.
- * Always best-effort: catches every error and never throws to the caller.
- * Schedules the work on `executionCtx.waitUntil` when present.
+ * Context-flavour: schedule a background push from an HTTP route. Fires on
+ * `executionCtx.waitUntil` so the API response stays snappy. Always
+ * best-effort — never throws.
  */
-export function schedulePush(opts: AutoPushOpts): void {
-  const { c } = opts;
-  const work = runPush(opts).catch((e: unknown) => {
+export function schedulePush(opts: AutoPushFromContextOpts): void {
+  const work = runPushInternal({
+    env: opts.c.env,
+    user: opts.user,
+    providerKey: opts.providerKey,
+    payload: opts.payload,
+    eventType: opts.eventType,
+  }).catch((e: unknown) => {
     const msg = (e as Error)?.message || 'auto-push failed';
     console.warn(`[autopush:${opts.providerKey}] ${opts.eventType} failed: ${msg}`);
   });
-  if (c.executionCtx?.waitUntil) {
-    c.executionCtx.waitUntil(work);
+  if (opts.c.executionCtx?.waitUntil) {
+    opts.c.executionCtx.waitUntil(work);
   } else {
     void work;
   }
 }
 
-async function runPush(opts: AutoPushOpts): Promise<void> {
-  const { c, user, providerKey, payload, eventType } = opts;
-  const integ = await c.env.DB.prepare(
+/**
+ * Env-flavour: schedule a background push from a queue worker / cron / any
+ * non-Hono caller. Same logging guarantees as `schedulePush`.
+ */
+export function schedulePushFromEnv(opts: AutoPushFromEnvOpts): void {
+  const work = runPushInternal(opts).catch((e: unknown) => {
+    const msg = (e as Error)?.message || 'auto-push failed';
+    console.warn(`[autopush:${opts.providerKey}] ${opts.eventType} failed: ${msg}`);
+  });
+  if (opts.executionCtx?.waitUntil) {
+    opts.executionCtx.waitUntil(work);
+  } else {
+    void work;
+  }
+}
+
+interface RunPushArgs extends AutoPushBase { env: Env; }
+
+async function runPushInternal(args: RunPushArgs): Promise<void> {
+  const { env, user, providerKey, payload, eventType } = args;
+  const integ = await env.DB.prepare(
     "SELECT * FROM integrations WHERE user_id = ? AND provider_key = ? AND status = 'active' LIMIT 1",
   ).bind(user.id, providerKey).first<IntegrationRow>();
   if (!integ) return;
   const impl = getProviderImpl(providerKey);
   if (!impl?.push) return;
+  // Provider `push` signatures take a Hono Context, but in practice every
+  // shipping provider only reads `c.env`. Mirror the same env-stub pattern
+  // used by syncAllHubspotIntegrations / calendar.ts cron paths.
+  const stubCtx = { env } as unknown as Context<{ Bindings: Env }>;
   let summary = '';
   let externalId: string | null = null;
   let httpStatus: number | undefined;
   let status: 'ok' | 'error' = 'ok';
   try {
-    const out = await impl.push(c, user, integ, payload);
+    const out = await impl.push(stubCtx, user, integ, payload);
     summary = out.summary || `${eventType} ok`;
     externalId = (out.external_id as string | null | undefined) ?? null;
     httpStatus = out.http_status;
@@ -62,7 +95,7 @@ async function runPush(opts: AutoPushOpts): Promise<void> {
     summary = (e as Error)?.message?.slice(0, 500) || 'push threw';
   }
   try {
-    await c.env.DB.prepare(
+    await env.DB.prepare(
       'INSERT INTO integration_logs (integration_id, user_id, provider_key, direction, event_type, status, http_status, request_summary, response_summary, external_id, payload_json) ' +
       'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ).bind(

@@ -6,7 +6,7 @@
  * Each job's outcome is logged to system_metrics so the Infrastructure tab
  * can show throughput live.
  */
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { Jobs, QueueJob } from '../models/jobs';
 import { aiScoreDeal } from '../../ai-workers/scoring';
 import { aiTractionReview } from '../../ai-workers/traction';
@@ -101,6 +101,28 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       await env.DB.prepare(
         `UPDATE deals SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
       ).bind(stage, dealId).run();
+      // Task #2 — mirror queue-driven stage transitions to HubSpot in
+      // near-real-time so reconciliation isn't waiting on the 30-min cron.
+      // Best-effort; failures land in integration_logs via the autopush
+      // helper, never blocking the queue worker.
+      try {
+        const owner = await env.DB.prepare(
+          'SELECT f.user_id AS founder_user_id FROM deals d ' +
+          'LEFT JOIN projects p ON p.id = d.project_id ' +
+          'LEFT JOIN founders f ON f.id = p.founder_id WHERE d.id = ?',
+        ).bind(dealId).first<{ founder_user_id: number | null }>();
+        const founderUserId = owner?.founder_user_id ?? null;
+        if (founderUserId) {
+          const { schedulePushFromEnv } = await import('../integrations/autopush');
+          schedulePushFromEnv({
+            env, user: { id: founderUserId } as User, providerKey: 'hubspot',
+            payload: { deal_id: dealId },
+            eventType: 'auto_push:queue_pipeline_advance',
+          });
+        }
+      } catch (e) {
+        console.warn('[queue] pipeline_advance hubspot autopush failed', (e as Error).message);
+      }
       return;
     }
     case 'metrics_aggregation': {

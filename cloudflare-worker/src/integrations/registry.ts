@@ -115,6 +115,16 @@ export interface ProviderImpl {
    * body that the route forwards verbatim.
    */
   action?(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow, name: string, body: unknown): Promise<unknown>;
+  /**
+   * Provider-specific validation for `PATCH /api/integrations/:uid/config`.
+   * Throw a `Response` (4xx) or return `{ ok: false, error }` to reject the
+   * patch. Return `{ ok: true, patch }` to allow the (potentially
+   * normalised) patch through. Providers that don't implement this fall
+   * back to a plain shallow-merge.
+   */
+  validateConfig?(patch: Record<string, unknown>, existing: Record<string, unknown>):
+    | { ok: true; patch: Record<string, unknown> }
+    | { ok: false; error: string };
 }
 
 const PROVIDER_IMPLS: Map<string, ProviderImpl> = new Map();

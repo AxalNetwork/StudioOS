@@ -515,11 +515,26 @@ async function webhook(c: Context<{ Bindings: Env }>, row: IntegrationRow, body:
   })();
   if (!secret) throw new Error('webhook_unverified_no_client_secret');
   if (!ts || !sigHeader) throw new Error('webhook_signature_missing');
-  const url = new URL(c.req.url);
   const ageMs = Date.now() - Number(ts);
   if (!Number.isFinite(ageMs) || ageMs > 5 * 60 * 1000) throw new Error('webhook_timestamp_too_old');
-  const expected = await hmacBase64(secret, `${c.req.method}${url.toString()}${body}${ts}`);
-  if (!constantTimeEqual(expected, sigHeader)) throw new Error('webhook_signature_invalid');
+  // HubSpot v3 spec: HMAC-SHA256(client_secret, METHOD + REQUESTED_URI + body + timestamp).
+  // The "requested URI" is the exact URL as the HubSpot edge sent it,
+  // including scheme/host/path/query — i.e. the raw request URL string,
+  // NOT a re-parsed `new URL(...).toString()` (which can drop a trailing
+  // slash, re-encode unicode, or normalize default ports). Use `c.req.url`
+  // verbatim. We additionally try a second candidate with any stray
+  // fragment stripped, since some Cloudflare edges have been observed to
+  // forward `#…` in `req.url`; the spec excludes fragments.
+  const method = c.req.method;
+  const rawUrl = c.req.url;
+  const stripped = rawUrl.includes('#') ? rawUrl.slice(0, rawUrl.indexOf('#')) : rawUrl;
+  const candidates = stripped === rawUrl ? [rawUrl] : [rawUrl, stripped];
+  let matched = false;
+  for (const u of candidates) {
+    const expected = await hmacBase64(secret, `${method}${u}${body}${ts}`);
+    if (constantTimeEqual(expected, sigHeader)) { matched = true; break; }
+  }
+  if (!matched) throw new Error('webhook_signature_invalid');
 
   let events: HubSpotWebhookEvent[] = [];
   try {
@@ -622,6 +637,40 @@ function constantTimeEqual(a: string, b: string): boolean {
 
 // ───────────────────────────────────────────────────────────── side-effects
 
+/**
+ * Strict allowlist for `PATCH /api/integrations/:uid/config`. The pipeline
+ * picker only ever needs to write three keys; reject everything else so
+ * config_json doesn't drift into an arbitrary key/value bag over time.
+ */
+function validateConfig(
+  patch: Record<string, unknown>,
+  _existing: Record<string, unknown>,
+): { ok: true; patch: Record<string, unknown> } | { ok: false; error: string } {
+  const ALLOWED = new Set(['pipeline_id', 'pipeline_label', 'dealstage_map']);
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (!ALLOWED.has(k)) return { ok: false, error: `unknown_config_key: ${k}` };
+    if (k === 'pipeline_id' || k === 'pipeline_label') {
+      if (v !== null && typeof v !== 'string') return { ok: false, error: `${k}_must_be_string` };
+      if (typeof v === 'string' && v.length > 200) return { ok: false, error: `${k}_too_long` };
+      out[k] = v;
+    } else if (k === 'dealstage_map') {
+      if (v === null) { out[k] = null; continue; }
+      if (typeof v !== 'object' || Array.isArray(v)) return { ok: false, error: 'dealstage_map_must_be_object' };
+      const entries = Object.entries(v as Record<string, unknown>);
+      if (entries.length > 50) return { ok: false, error: 'dealstage_map_too_large' };
+      const norm: Record<string, string> = {};
+      for (const [stage, hsId] of entries) {
+        if (typeof stage !== 'string' || stage.length > 60) return { ok: false, error: 'dealstage_map_bad_key' };
+        if (typeof hsId !== 'string' || hsId.length > 200) return { ok: false, error: 'dealstage_map_bad_value' };
+        norm[stage] = hsId;
+      }
+      out[k] = norm;
+    }
+  }
+  return { ok: true, patch: out };
+}
+
 const impl: ProviderImpl = {
   key: PROVIDER_KEY,
   connect,
@@ -631,6 +680,7 @@ const impl: ProviderImpl = {
   webhook,
   disconnect,
   action,
+  validateConfig,
 };
 registerProvider(impl);
 void REGISTRY; // Static descriptor in registry.ts is the source of truth (status='live').

@@ -483,11 +483,18 @@ integrations.patch('/:uid/config', async (c) => {
   const isAdmin = (user.role || '').toLowerCase() === 'admin';
   const row = await loadRow(c.env, uid, user.id, isAdmin);
   if (!row) return c.json({ error: 'not_found' }, 404);
-  const patch = await c.req.json().catch(() => ({}));
-  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+  const rawPatch = await c.req.json().catch(() => ({}));
+  if (!rawPatch || typeof rawPatch !== 'object' || Array.isArray(rawPatch)) {
     return c.json({ error: 'invalid_config' }, 400);
   }
   const existing = safeJson<Record<string, unknown>>(row.config_json, {});
+  let patch = rawPatch as Record<string, unknown>;
+  const impl = getProviderImpl(row.provider_key);
+  if (impl?.validateConfig) {
+    const v = impl.validateConfig(patch, existing);
+    if (!v.ok) return c.json({ error: 'invalid_config', message: v.error }, 400);
+    patch = v.patch;
+  }
   const merged = { ...existing, ...patch };
   await c.env.DB.prepare(
     'UPDATE integrations SET config_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
