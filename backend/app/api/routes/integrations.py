@@ -288,6 +288,12 @@ def disconnect(
     _ensure_role(user)
     integ = _load_owned(session, uid, user)
     provider = integ.provider_name
+    # Remove child logs first to satisfy the FK constraint on integration_logs.
+    for log in session.exec(
+        select(IntegrationLog).where(IntegrationLog.integration_id == integ.id)
+    ).all():
+        session.delete(log)
+    session.flush()
     session.delete(integ)
     _audit(session, user.id, "integration.deleted", {"provider": provider, "uid": uid})
     session.commit()
@@ -423,3 +429,171 @@ async def receive_webhook(
     session.add(integ)
     session.commit()
     return {"ok": True, "received": True}
+
+
+# ---------------------------------------------------------------------------
+# Task #1 (Integrations Foundation) — provider waitlist / "notify me".
+# In dev we keep this in process memory so the UI's join/leave round-trips
+# work without a new table; it resets on backend restart.
+# ---------------------------------------------------------------------------
+_WAITLIST: dict[int, set[str]] = {}
+
+
+@router.get("/waitlist")
+def waitlist_list(user: User = Depends(get_current_user)):
+    _ensure_role(user)
+    keys = sorted(_WAITLIST.get(user.id, set()))
+    return {
+        "ok": True,
+        "items": [{"provider_key": k, "joined_at": None} for k in keys],
+    }
+
+
+class WaitlistJoinIn(BaseModel):
+    provider_key: str
+
+
+@router.post("/notify-me")
+def waitlist_join(
+    body: WaitlistJoinIn,
+    user: User = Depends(get_current_user),
+):
+    _ensure_role(user)
+    key = (body.provider_key or "").strip().lower()
+    if not key:
+        raise HTTPException(status_code=400, detail="provider_key is required")
+    _WAITLIST.setdefault(user.id, set()).add(key)
+    return {"ok": True, "provider_key": key, "joined": True}
+
+
+@router.delete("/notify-me/{provider}")
+def waitlist_leave(
+    provider: str,
+    user: User = Depends(get_current_user),
+):
+    _ensure_role(user)
+    key = (provider or "").strip().lower()
+    _WAITLIST.get(user.id, set()).discard(key)
+    return {"ok": True, "provider_key": key, "joined": False}
+
+
+# ---------------------------------------------------------------------------
+# OAuth start — production worker mints a signed-state URL and redirects
+# the user to the provider. In dev we return a stub URL so the UI can
+# render its "Continue with <Provider>" affordance without crashing.
+# ---------------------------------------------------------------------------
+@router.get("/oauth/{provider}/start")
+def oauth_start(
+    provider: str,
+    user: User = Depends(get_current_user),
+):
+    _ensure_role(user)
+    key = (provider or "").strip().lower()
+    if key not in PROVIDER_NAMES:
+        raise HTTPException(status_code=400, detail=f"Unknown provider '{provider}'")
+    return {
+        "ok": True,
+        "provider": key,
+        "url": f"https://axal.vc/api/integrations/oauth/{key}/start",
+        "dev_stub": True,
+        "message": (
+            "OAuth flows run in the production Cloudflare Worker. "
+            "Use API-key based connection in dev."
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Provider actions — generic surface for things like HubSpot's pipeline
+# picker. Returns deterministic stub data per (provider, action) so the
+# frontend modals render without HTTP errors in dev.
+# ---------------------------------------------------------------------------
+def _provider_action(integ: Integration, action: str, body: dict | None) -> dict:
+    provider = (integ.provider_name or "").lower()
+    name = (action or "").strip()
+    if provider == "hubspot" and name == "list_pipelines":
+        return {
+            "ok": True,
+            "pipelines": [
+                {
+                    "id": "default",
+                    "label": "Sales Pipeline",
+                    "stages": [
+                        {"id": "appointmentscheduled", "label": "Appointment scheduled"},
+                        {"id": "qualifiedtobuy", "label": "Qualified to buy"},
+                        {"id": "presentationscheduled", "label": "Presentation scheduled"},
+                        {"id": "decisionmakerboughtin", "label": "Decision-maker bought-in"},
+                        {"id": "contractsent", "label": "Contract sent"},
+                        {"id": "closedwon", "label": "Closed won"},
+                        {"id": "closedlost", "label": "Closed lost"},
+                    ],
+                }
+            ],
+        }
+    return {
+        "ok": True,
+        "provider": provider,
+        "action": name,
+        "result": None,
+        "dev_stub": True,
+    }
+
+
+@router.get("/{uid}/action/{name}")
+def action_get(
+    uid: str,
+    name: str,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_role(user)
+    integ = _load_owned(session, uid, user)
+    return _provider_action(integ, name, None)
+
+
+@router.post("/{uid}/action/{name}")
+async def action_post(
+    uid: str,
+    name: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_role(user)
+    integ = _load_owned(session, uid, user)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    return _provider_action(integ, name, body if isinstance(body, dict) else {})
+
+
+# ---------------------------------------------------------------------------
+# Config patch — merges JSON patch into the integration's config_json blob.
+# Used by the HubSpot pipeline picker to persist the chosen pipeline + the
+# per-stage dealstage map without re-entering the API key.
+# ---------------------------------------------------------------------------
+@router.patch("/{uid}/config")
+async def patch_config(
+    uid: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_role(user)
+    integ = _load_owned(session, uid, user)
+    try:
+        patch = await request.json()
+    except Exception:
+        patch = {}
+    if not isinstance(patch, dict):
+        raise HTTPException(status_code=400, detail="config patch must be a JSON object")
+    current = _safe_json_loads(integ.config_json, {}) or {}
+    current.update(patch)
+    integ.config_json = json.dumps(current)
+    integ.updated_at = datetime.utcnow()
+    session.add(integ)
+    _audit(session, user.id, "integration.config_update", {"uid": uid, "keys": list(patch.keys())})
+    session.commit()
+    session.refresh(integ)
+    return {"ok": True, "integration": _serialize(integ)}

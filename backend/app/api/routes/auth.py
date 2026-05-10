@@ -177,6 +177,12 @@ def get_current_user(authorization: Optional[str] = Header(None), session: Sessi
         min_iat = (row._mapping["jwt_min_iat"] if row else 0) or 0  # type: ignore[attr-defined]
     except Exception:
         # Column not migrated yet (cold backend before /settings was hit).
+        # Postgres aborts the transaction on a failed SELECT; roll back so
+        # subsequent queries in this request don't all return 500.
+        try:
+            session.rollback()
+        except Exception:
+            pass
         min_iat = 0
 
     token_iat = payload.get("iat")
@@ -215,7 +221,10 @@ def get_current_user(authorization: Optional[str] = Header(None), session: Sessi
             raise
         except Exception:
             # Table not migrated yet; fall through (iat check already passed).
-            pass
+            try:
+                session.rollback()
+            except Exception:
+                pass
 
     return user
 
