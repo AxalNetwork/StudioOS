@@ -474,11 +474,19 @@ export const api = {
   adminIssueContractShareLink: (uid, ttl_seconds = 300) =>
     request(`/admin/contracts/${uid}/download-url?ttl_seconds=${ttl_seconds}`, { method: 'POST' }),
   // Task #5 (Z) — Pairwise NDAs / Partner Deals tabs + Create-envelope wizard.
-  adminListPairwiseNdas: () => request('/admin/contracts/pairwise-ndas'),
-  adminListPartnerDeals: () => request('/admin/contracts/partner-deals'),
+  adminListPairwiseNdas: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/admin/contracts/pairwise-ndas${qs ? `?${qs}` : ''}`);
+  },
+  adminListPartnerDeals: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/admin/contracts/partner-deals${qs ? `?${qs}` : ''}`);
+  },
   adminListLegalTemplates: () => request('/admin/contracts/templates/legal'),
   adminSendEnvelope: (payload) =>
     request('/legal/esign/send', { method: 'POST', body: JSON.stringify(payload) }),
+  adminVoidContractWithReason: (uid, reason) =>
+    request(`/admin/contracts/${uid}/void`, { method: 'POST', body: JSON.stringify({ reason }) }),
   adminImpersonate: (userId) => request(`/admin/impersonate/${userId}`, { method: 'POST' }),
   // Task #7 — admin-managed OAuth client credentials per provider.
   adminListIntegrationKeys: () => request('/admin/integration-keys'),

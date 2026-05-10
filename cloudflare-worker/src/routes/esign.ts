@@ -220,11 +220,29 @@ export async function createAndSendEnvelope(
      * has no active DocuSign integration. Default 'native'.
      */
     viaProvider?: 'native' | 'docusign';
+    /**
+     * Task #5 (Z) v2 — Optional template merge fields. Tokens of the
+     * form `{{key}}` in the template body are replaced with the
+     * matching value before persistence. Applied keys are recorded in
+     * the audit log for traceability.
+     */
+    mergeFields?: Record<string, string>;
   }
 ): Promise<{ envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean; provider?: string } | null> {
   await ensureSchema(env);
 
   const tpl = buildTemplateBody(opts.documentType, opts.recipientName, opts.recipientEmail);
+  // Task #5 (Z) v2 — apply {{key}} substitution from `mergeFields`.
+  const appliedMergeKeys: string[] = [];
+  if (opts.mergeFields) {
+    for (const [k, v] of Object.entries(opts.mergeFields)) {
+      const re = new RegExp(`\\{\\{\\s*${k.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\s*\\}\\}`, 'g');
+      if (re.test(tpl.body)) {
+        tpl.body = tpl.body.replace(re, v);
+        appliedMergeKeys.push(k);
+      }
+    }
+  }
   const envelopeUuid = crypto.randomUUID();
   const bodySha = await sha256Hex(tpl.body);
 
@@ -368,7 +386,7 @@ export async function createAndSendEnvelope(
     signer_id: null, signer_email: opts.recipientEmail,
     action: emailSent ? 'email_sent' : 'email_failed',
     ip: 'system',
-    meta: { signing_url: signingUrl },
+    meta: { signing_url: signingUrl, merge_keys_applied: appliedMergeKeys },
   });
 
   return { envelope_id: envelopeId, envelope_uuid: envelopeUuid, signing_url: signingUrl, email_sent: emailSent, provider: 'native' };
@@ -388,6 +406,31 @@ esign.post('/send', async (c) => {
   const recipientName = String(body?.recipient_name || '').trim();
   const recipientUserId = body?.recipient_user_id ? Number(body.recipient_user_id) : null;
   const dealId = body?.deal_id ? Number(body.deal_id) : null;
+  // Task #5 (Z) v2 — `merge_fields` is an optional map of token →
+  // string substitutions applied to the static template body (e.g.
+  // `{{company_name}}`). Validate that it is a flat object of
+  // string|number values; reject silently-larger payloads to avoid
+  // log/audit blow-ups.
+  let mergeFields: Record<string, string> | undefined;
+  if (body?.merge_fields != null) {
+    if (typeof body.merge_fields !== 'object' || Array.isArray(body.merge_fields)) {
+      return c.json({ error: 'merge_fields must be a flat JSON object of string values' }, 400);
+    }
+    const entries = Object.entries(body.merge_fields);
+    if (entries.length > 50) return c.json({ error: 'merge_fields supports up to 50 keys' }, 400);
+    mergeFields = {};
+    for (const [k, v] of entries) {
+      if (!/^[A-Za-z0-9_\-.]{1,64}$/.test(k)) {
+        return c.json({ error: `merge_fields key "${k}" is invalid (alnum/_/-/. only, max 64 chars)` }, 400);
+      }
+      if (v == null) continue;
+      const sv = typeof v === 'number' ? String(v) : typeof v === 'string' ? v : null;
+      if (sv == null || sv.length > 1000) {
+        return c.json({ error: `merge_fields value for "${k}" must be string|number ≤ 1000 chars` }, 400);
+      }
+      mergeFields[k] = sv;
+    }
+  }
   // Canonical request field is `provider`; `via_provider` is kept as a
   // backwards-compat alias for any in-flight callers. Both accept
   // 'native' | 'docusign'.
@@ -420,6 +463,7 @@ esign.post('/send', async (c) => {
       dealId,
       appUrl: c.env.APP_URL || 'https://axal.vc',
       viaProvider,
+      mergeFields,
     });
   } catch (e) {
     // No-silent-fallback: surface explicit-DocuSign failures as 412

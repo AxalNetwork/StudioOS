@@ -184,6 +184,12 @@ interface UnifiedContract {
   // chip-filter by who's on the contract.
   doc_type_label?: string;
   party_roles?: ReadonlyArray<PartyRole>;
+  // Task #5 (Z) v2 — raw underlying status (for esign-source: the
+  // un-collapsed envelope status, e.g. `partially_signed`). The UI
+  // uses this together with `can_resend` to gate the resend button so
+  // it never appears for envelopes the backend would 400 on.
+  raw_status?: string;
+  can_resend?: boolean;
 }
 
 function decorateDocType<T extends UnifiedContract>(row: T): T {
@@ -216,6 +222,8 @@ function enrichDocRow(d: any, projectName: string | null, founderEmail: string |
     file_content_type: d.file_content_type ?? null,
     file_sha256: d.file_sha256 ?? null,
     source: 'documents',
+    raw_status: String(d.status || '').toLowerCase(),
+    can_resend: String(d.status || '').toLowerCase() === 'sent',
   };
 }
 
@@ -255,6 +263,8 @@ function enrichEsignRow(e: any): UnifiedContract {
     // Task #2 — surface the e-sign provider so the admin UI can render
     // a "DocuSign" badge alongside the existing "eSign" source pill.
     provider: e.provider || 'native',
+    raw_status: String(e.status || '').toLowerCase(),
+    can_resend: ['sent', 'viewed'].includes(String(e.status || '').toLowerCase()),
   };
 }
 
@@ -521,7 +531,7 @@ adminContracts.get('/:uid', async (c) => {
         `;
         if (pr[0]) { projName = pr[0].name; founderEmail = pr[0].founder_email; }
       }
-      return c.json(enrichDocRow(d, projName, founderEmail));
+      return c.json(decorateDocType(enrichDocRow(d, projName, founderEmail)));
     }
 
     // esign source — re-query with the recipient subselects so the detail
@@ -539,7 +549,29 @@ adminContracts.get('/:uid', async (c) => {
       FROM esign_envelopes e WHERE e.id = ${ref.row.id} LIMIT 1
     `;
     if (!envRows[0]) return c.json({ error: 'Contract not found' }, 404);
-    return c.json(enrichEsignRow(envRows[0]));
+    const detail = decorateDocType(enrichEsignRow(envRows[0]));
+    // Task #5 (Z) — surface DD linkage so the modal can render an
+    // "Open in DD" button. Best-effort: empty if column not yet
+    // present (migration 026 not applied).
+    try {
+      const f: any[] = await sql`
+        SELECT f.case_id, c.uid AS case_uid, COUNT(*) AS findings_count
+          FROM dd_findings f
+          JOIN dd_cases c ON c.id = f.case_id
+         WHERE f.esign_envelope_uuid = ${envRows[0].envelope_uuid || ''}
+           AND f.resolved_at IS NULL
+         GROUP BY f.case_id, c.uid
+         ORDER BY findings_count DESC LIMIT 1
+      `;
+      if (f[0]) {
+        (detail as any).dd_case_uid = f[0].case_uid;
+        (detail as any).dd_case_id = f[0].case_id;
+        (detail as any).dd_findings_count = Number(f[0].findings_count) || 0;
+      }
+    } catch (e) {
+      console.warn('[admin_contracts] dd link lookup skipped:', (e as Error).message);
+    }
+    return c.json(detail);
   } finally {
     await sql.end();
   }
@@ -554,10 +586,14 @@ adminContracts.post('/:uid/resend', async (c) => {
     const ref = await findContractByUid(sql, uid);
     if (!ref) return c.json({ error: 'Contract not found' }, 404);
 
+    // Task #5 (Z) — tighten resend to "sent / viewed only" per spec.
+    // For documents-source rows, only `sent` qualifies (legacy table
+    // never tracked viewed). For esign-source, allow `sent` + `viewed`.
     if (ref.source === 'documents') {
       const d = ref.row;
-      if (String(d.status).toLowerCase() === 'signed') {
-        return c.json({ error: 'Cannot resend a signed contract' }, 400);
+      const dStatus = String(d.status).toLowerCase();
+      if (dStatus !== 'sent') {
+        return c.json({ error: `Resend only allowed for status='sent' (current: ${dStatus})` }, 400);
       }
       await sql`UPDATE documents SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE uid = ${d.uid}`;
       await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_resent', ${`Admin ${adminUser.name} resent contract '${d.title}'`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
@@ -568,11 +604,9 @@ adminContracts.post('/:uid/resend', async (c) => {
     // esign source — re-email the pending recipient with their existing
     // signing URL. If their token has expired, mint a fresh 7-day token.
     const env = ref.row;
-    if (String(env.status).toLowerCase() === 'completed') {
-      return c.json({ error: 'Cannot resend a signed contract' }, 400);
-    }
-    if (String(env.status).toLowerCase() === 'rejected' || String(env.status).toLowerCase() === 'void') {
-      return c.json({ error: 'Cannot resend a voided contract' }, 400);
+    const eStatus = String(env.status).toLowerCase();
+    if (eStatus !== 'sent' && eStatus !== 'viewed') {
+      return c.json({ error: `Resend only allowed for status in ('sent','viewed') (current: ${eStatus})` }, 400);
     }
     const recRows: any[] = await sql`
       SELECT id, recipient_email, recipient_name, signing_token, token_expires_at
@@ -609,39 +643,91 @@ adminContracts.post('/:uid/resend', async (c) => {
 });
 
 // POST /api/admin/contracts/:uid/void — UNION dispatch.
+// Task #5 (Z): now requires a free-text `reason` (>=5 chars) and mirrors
+// the void into `dd_audit_log` when the envelope is referenced by any
+// open dd_findings row (so the diligence audit trail captures it).
 adminContracts.post('/:uid/void', async (c) => {
   // Task #6 — voiding a contract is irreversible from the recipient's POV
   // (their magic link stops working). Gate on TOTP step-up.
   await requireFactor(c, 'totp');
   const adminUser = await requireAdmin(c);
   const uid = c.req.param('uid') ?? '';
+  const body = await c.req.json().catch(() => ({} as any));
+  const reason = String(body?.reason || '').trim();
+  if (reason.length < 5) {
+    return c.json({ error: 'A void reason of at least 5 characters is required.' }, 400);
+  }
   const sql = getSQL(c.env);
   try {
     const ref = await findContractByUid(sql, uid);
     if (!ref) return c.json({ error: 'Contract not found' }, 404);
+
+    let envelopeUuid: string | null = null;
+    let envelopeTitle: string | null = null;
+    let projectId: number | null = null;
 
     if (ref.source === 'documents') {
       const d = ref.row;
       if (String(d.status).toLowerCase() === 'signed') {
         return c.json({ error: 'Cannot void a signed contract' }, 400);
       }
+      envelopeTitle = d.title || null;
+      projectId = d.project_id ?? null;
       await sql`UPDATE documents SET status = 'void', updated_at = CURRENT_TIMESTAMP WHERE uid = ${d.uid}`;
-      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_voided', ${`Admin ${adminUser.name} voided contract '${d.title}'`}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
-      const updated: any[] = await sql`SELECT * FROM documents WHERE uid = ${d.uid} LIMIT 1`;
-      return c.json({ ok: true, contract: enrichDocRow(updated[0], null, null) });
+      const detail = JSON.stringify({ uid: d.uid, title: d.title, reason });
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_voided', ${detail}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
+    } else {
+      // esign — mark envelope void + cancel any pending recipients so their
+      // magic links stop working. Audit row references envelope id, never
+      // the recipient email (T22.1 hashed-actor convention).
+      const env = ref.row;
+      if (String(env.status).toLowerCase() === 'completed') {
+        return c.json({ error: 'Cannot void a signed contract' }, 400);
+      }
+      envelopeUuid = env.envelope_uuid;
+      envelopeTitle = env.document_title;
+      await sql`UPDATE esign_envelopes SET status = 'void' WHERE id = ${env.id}`;
+      await sql`UPDATE esign_recipients SET status = 'rejected' WHERE envelope_id = ${env.id} AND status = 'pending'`;
+      const detail = JSON.stringify({
+        envelope_id: env.id, envelope_uuid: env.envelope_uuid,
+        title: env.document_title, reason,
+      });
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_voided', ${detail}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
     }
 
-    // esign — mark envelope void + cancel any pending recipients so their
-    // magic links stop working. Audit row references envelope id, never
-    // the recipient email (T22.1 hashed-actor convention).
-    const env = ref.row;
-    if (String(env.status).toLowerCase() === 'completed') {
-      return c.json({ error: 'Cannot void a signed contract' }, 400);
+    // Task #5 (Z) — mirror to dd_audit_log when this envelope is linked
+    // to any due-diligence findings. The link is via the new
+    // dd_findings.esign_envelope_uuid column (migration 026); when no
+    // matching findings exist we silently skip — there's no DD context
+    // to audit against.
+    if (envelopeUuid) {
+      try {
+        // Task #5 (Z) v2 — only mirror to dd_audit_log for OPEN findings
+        // (resolved_at IS NULL). Resolved findings are historical and
+        // shouldn't be re-touched by a contract void event.
+        const findings: any[] = await sql`
+          SELECT DISTINCT case_id FROM dd_findings
+           WHERE esign_envelope_uuid = ${envelopeUuid}
+             AND resolved_at IS NULL
+        `;
+        for (const row of findings) {
+          await c.env.DB.prepare(
+            `INSERT INTO dd_audit_log (case_id, actor_user_id, actor_email_hash, action, target_type, target_id)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            row.case_id, adminUser.id, await hashEmail(adminUser.email),
+            'contract_voided', 'envelope', null,
+          ).run();
+        }
+      } catch (e) {
+        // dd_findings may lack the column on environments where 026
+        // hasn't been applied — log and continue rather than fail the
+        // void.
+        console.warn('[admin_contracts] dd_audit_log mirror skipped:', (e as Error).message);
+      }
     }
-    await sql`UPDATE esign_envelopes SET status = 'void' WHERE id = ${env.id}`;
-    await sql`UPDATE esign_recipients SET status = 'rejected' WHERE envelope_id = ${env.id} AND status = 'pending'`;
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_voided', ${JSON.stringify({ envelope_id: env.id, envelope_uuid: env.envelope_uuid, title: env.document_title })}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
-    return c.json({ ok: true });
+
+    return c.json({ ok: true, reason });
   } finally {
     await sql.end();
   }
@@ -719,6 +805,11 @@ adminContracts.post('/:uid/download-url', async (c) => {
 // ---------------------------------------------------------------------------
 adminContracts.get('/pairwise-ndas', async (c) => {
   await requireAdmin(c);
+  // Task #5 (Z) — optional ?status= filter
+  // (pending|partially_signed|active|expired|revoked) and ?intermediary=
+  // filter (relation context, e.g. `axal`, `direct`, `<partner_uid>`).
+  const statusFilter = (c.req.query('status') || '').toLowerCase();
+  const intermediaryFilter = (c.req.query('intermediary') || '').toLowerCase();
   const sql = getSQL(c.env);
   try {
     let rows: any[] = [];
@@ -743,6 +834,8 @@ adminContracts.get('/pairwise-ndas', async (c) => {
       console.warn('[admin_contracts] pairwise_ndas query failed', e);
       return c.json({ items: [], note: 'pairwise_ndas table not present on this environment' });
     }
+    if (statusFilter) rows = rows.filter(r => String(r.status || '').toLowerCase() === statusFilter);
+    if (intermediaryFilter) rows = rows.filter(r => String(r.intermediary || '').toLowerCase() === intermediaryFilter);
     return c.json({ items: rows });
   } finally {
     await sql.end();
@@ -757,6 +850,8 @@ adminContracts.get('/pairwise-ndas', async (c) => {
 // ---------------------------------------------------------------------------
 adminContracts.get('/partner-deals', async (c) => {
   await requireAdmin(c);
+  // Task #5 (Z) — optional ?deal_type= filter chip.
+  const dealType = (c.req.query('deal_type') || '').toLowerCase();
   const sql = getSQL(c.env);
   try {
     let rows: any[] = [];
@@ -776,6 +871,7 @@ adminContracts.get('/partner-deals', async (c) => {
       // X-1 hasn't created the table yet on this environment.
       return c.json({ items: [], note: 'partner_deals table not yet present (X-1 backend pending)' });
     }
+    if (dealType) rows = rows.filter(r => String(r.deal_type || '').toLowerCase() === dealType);
     return c.json({ items: rows });
   } finally {
     await sql.end();
