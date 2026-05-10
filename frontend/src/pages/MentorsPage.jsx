@@ -355,6 +355,7 @@ export default function MentorsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Mentor directory</h1>
+        <PageExplainer pageKey="mentors" />
         <p className="text-sm text-gray-600 mt-1">
           Find an operator-mentor for office hours or 1:1 guidance. Bookings include
           two-sided reviews so quality compounds.

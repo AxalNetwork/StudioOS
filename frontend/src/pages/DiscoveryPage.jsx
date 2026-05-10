@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Trash2, MessageSquare, CheckCircle2, XCircle, HelpCircle, AlertCircle, Save, X, FolderPlus } from 'lucide-react';
 import { api } from '../lib/api';
@@ -167,6 +168,7 @@ export default function DiscoveryPage() {
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Customer Discovery</h1>
+        <PageExplainer pageKey="customer_discovery" />
           <p className="text-sm text-gray-500 mt-1">Mom-Test interview log. Each validated hypothesis lifts the traction signals score.</p>
         </div>
         <div className="flex gap-2">

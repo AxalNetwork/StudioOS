@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2, Globe2, CheckCircle2, Circle, Loader2, ArrowRight, ArrowLeft,
@@ -504,6 +505,7 @@ export default function IncorporatePage() {
           <Scale size={14} /> Jurisdiction Wizard
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Incorporate your company</h1>
+        <PageExplainer pageKey="incorporate" />
         <p className="text-sm text-gray-600 mt-1">
           Pick the right jurisdiction in five questions. We'll prep the founder document set and
           hand you off to a filing partner where one is supported.

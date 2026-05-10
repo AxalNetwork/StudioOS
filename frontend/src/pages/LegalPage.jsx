@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import {
   FileText, Plus, Building, Eye, ChevronDown, Shield, Users,
@@ -85,6 +86,7 @@ export default function LegalPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Legal & Compliance Engine</h1>
+        <PageExplainer pageKey="legal_templates" />
           <p className="text-sm text-gray-600">VC legal stack — GP governance, fund formation, portfolio execution, and regulatory compliance</p>
         </div>
         <button onClick={() => setShowGen(!showGen)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm font-medium text-white transition-colors">

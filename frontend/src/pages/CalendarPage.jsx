@@ -177,6 +177,7 @@ export default function CalendarPage() {
           <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
             <Calendar className="w-7 h-7 text-blue-600" /> Calendar
           </h1>
+        <PageExplainer pageKey="calendar" />
           <p className="text-sm text-slate-600 mt-1">
             Mentor sessions, IC meetings, and founder check-ins in one feed. Connect Google to sync to your personal calendar.
           </p>

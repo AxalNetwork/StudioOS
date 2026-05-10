@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { Link } from 'react-router-dom';
 import { Plus, Search, ChevronDown, X, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -89,6 +90,7 @@ export default function ProjectsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Projects</h1>
+        <PageExplainer pageKey="projects" />
           <p className="text-sm text-gray-600">Venture pipeline & 4-week playbook tracking</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white transition-colors">

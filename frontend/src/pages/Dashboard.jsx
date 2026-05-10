@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { Link } from 'react-router-dom';
 import {
   BarChart3, Zap, Users, DollarSign, Target, TrendingUp, Sparkles, Bell,
@@ -68,6 +69,7 @@ export default function Dashboard() {
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Welcome back, {user.name?.split(' ')[0] || user.email.split('@')[0]}</h1>
+        <PageExplainer pageKey="dashboard" />
             <RoleBadge role={user.role} />
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400">Here's your venture studio at a glance.</p>

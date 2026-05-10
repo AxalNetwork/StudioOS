@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { Link } from 'react-router-dom';
 import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe } from 'lucide-react';
 import { api } from '../lib/api';
@@ -140,6 +141,7 @@ export default function BrandBuilderPage() {
         <h1 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
           <Sparkles className="text-violet-600" size={22} /> Brand & Landing Page
         </h1>
+        <PageExplainer pageKey="brand_builder" />
         <p className="text-sm text-gray-600 mt-1">
           Go from idea to a public landing page + waitlist in one sitting.
         </p>

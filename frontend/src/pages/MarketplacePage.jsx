@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search, ShieldCheck, Star, Clock, MessageCircle, Send, X, Plus,
@@ -36,6 +37,7 @@ export default function MarketplacePage({ user }) {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Service Provider Marketplace</h1>
+        <PageExplainer pageKey="marketplace" />
         <p className="text-sm text-gray-500 mt-1">Vetted partners across legal, accounting, design, recruiting, fractional CFO, and GTM.</p>
       </div>
 

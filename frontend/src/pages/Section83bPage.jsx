@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar, Clock, Mail, Upload, CheckCircle2, AlertTriangle, FileText,
@@ -292,6 +293,7 @@ export default function Section83bPage() {
             <ArrowLeft size={12} /> Back to Incorporate
           </button>
           <h1 className="text-2xl font-bold text-gray-900">83(b) Election Tracker</h1>
+        <PageExplainer pageKey="section_83b" />
           <p className="text-sm text-gray-600 mt-1">
             30-day countdown, IRS mailing checklist, and certified-mail receipt upload.
           </p>

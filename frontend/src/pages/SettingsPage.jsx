@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { EXPLAINERS } from '../lib/explainers';
 import { useToast } from '../components/useToast';
 import {
   User, Globe, Mail, ShieldCheck, Bell, Lock, Briefcase, Users,
@@ -2595,7 +2596,80 @@ function AppearanceTab({ flash }) {
           })}
         </div>
       </Card>
+
+      <HelpExplainersCard flash={flash} />
     </>
+  );
+}
+
+// Task #15 — restore previously-dismissed page explainers.
+function HelpExplainersCard({ flash }) {
+  const [dismissed, setDismissed] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.getExplainersDismissed();
+      const list = Array.isArray(res?.dismissed) ? res.dismissed : [];
+      setDismissed(list);
+      try { localStorage.setItem('dismissed_explainers', JSON.stringify(list)); } catch {}
+      try { window.dispatchEvent(new CustomEvent('axal:explainers_synced')); } catch {}
+    } catch { /* noop */ }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const restore = async (key) => {
+    setBusy(true);
+    try {
+      const res = await api.restoreExplainer(key);
+      const list = Array.isArray(res?.dismissed) ? res.dismissed : [];
+      setDismissed(list);
+      try { localStorage.setItem('dismissed_explainers', JSON.stringify(list)); } catch {}
+      try { window.dispatchEvent(new CustomEvent('axal:explainers_synced')); } catch {}
+      flash(key === 'all' ? 'Restored all explainers' : 'Restored');
+    } catch (e) {
+      flash(e.message || 'Failed to restore', 'error');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Card title="Help & explainers"
+      description="Page explainers you've dismissed. Restore one to see it again on its page.">
+      {loading ? (
+        <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
+      ) : dismissed.length === 0 ? (
+        <div className="text-sm text-gray-500 dark:text-gray-400">Nothing dismissed yet.</div>
+      ) : (
+        <>
+          <div className="space-y-1">
+            {dismissed.map((key) => {
+              const entry = EXPLAINERS[key];
+              return (
+                <div key={key}
+                  className="flex items-center gap-2 text-sm border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2">
+                  <span className="flex-1 truncate text-gray-900 dark:text-gray-100">
+                    {entry ? entry.title : key}
+                  </span>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400 hidden sm:inline">{key}</span>
+                  <button onClick={() => restore(key)} disabled={busy}
+                    className="px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800">
+                    Restore
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3">
+            <button onClick={() => restore('all')} disabled={busy}
+              className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg">
+              Restore all
+            </button>
+          </div>
+        </>
+      )}
+    </Card>
   );
 }
 

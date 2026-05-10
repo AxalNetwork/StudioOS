@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { Network as NetworkIcon, Trophy, DollarSign, Users } from 'lucide-react';
 import { api } from '../lib/api';
 
@@ -106,6 +107,7 @@ export default function NetworkPage() {
         <NetworkIcon className="text-violet-600" size={24} />
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Referral Network</h1>
+        <PageExplainer pageKey="network" />
           <p className="text-sm text-gray-600">Interactive graph of your referral subtree. Edges show relationships; node size reflects commissions earned.</p>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { useSearchParams } from 'react-router-dom';
 import {
   Activity, AlertTriangle, ArrowUpRight, RefreshCw, ChevronDown,
@@ -223,6 +224,7 @@ export default function PortfolioHealthPage() {
             <Heart className="w-6 h-6 text-purple-600" />
             Portfolio health
           </h1>
+        <PageExplainer pageKey="portfolio_health" />
           <p className="text-sm text-slate-600 mt-1">
             Daily score per company from runway, growth, churn, and founder sentiment.
             {data?.as_of && <span className="ml-2 text-slate-400">As of {data.as_of}</span>}

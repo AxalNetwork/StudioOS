@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
 import {
@@ -213,6 +214,7 @@ export default function CapTablePage() {
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <PieIcon className="text-violet-600" /> Cap-Table Simulator
           </h1>
+        <PageExplainer pageKey="captable" />
           <p className="text-sm text-gray-500">
             Model SAFE notes, priced rounds, dilution, and exit waterfalls before you sign.
           </p>

@@ -951,6 +951,69 @@ settings.put('/profile/corporate', async (c) => {
   } catch (e) { return handleProfileError(c, e); }
 });
 
+// --- Page header explainers (Task #15) --------------------------------------
+//
+// `dismissed_explainers` is a JSON array of pageKey strings stored on
+// user_settings. The frontend's localStorage cache is overwritten from
+// the server on first authed page load — server is source of truth so
+// dismissals roam across devices.
+function readDismissedList(row: UserSettingsRow): string[] {
+  try {
+    const arr = JSON.parse(row.dismissed_explainers || '[]');
+    return Array.isArray(arr) ? arr.filter((s: unknown) => typeof s === 'string') : [];
+  } catch { return []; }
+}
+
+settings.get('/explainers', async (c) => {
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  const row = await getUserSettings(c.env, user.id);
+  return c.json({ dismissed: readDismissedList(row) });
+});
+
+settings.post('/explainer-dismissed', async (c) => {
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const key = typeof body?.page_key === 'string' ? body.page_key.trim().slice(0, 64) : '';
+  if (!key || !/^[a-z0-9_]+$/.test(key)) {
+    return c.json({ error: 'page_key is required (a-z, 0-9, _, ≤64 chars)' }, 400);
+  }
+  const row = await getUserSettings(c.env, user.id);
+  const next = Array.from(new Set([...readDismissedList(row), key]));
+  await c.env.DB.prepare(
+    `INSERT INTO user_settings (user_id, dismissed_explainers) VALUES (?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         dismissed_explainers = excluded.dismissed_explainers,
+         updated_at = CURRENT_TIMESTAMP`,
+  ).bind(user.id, JSON.stringify(next)).run();
+  return c.json({ dismissed: next });
+});
+
+settings.post('/explainer-restore', async (c) => {
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const raw = typeof body?.page_key === 'string' ? body.page_key.trim().slice(0, 64) : '';
+  const row = await getUserSettings(c.env, user.id);
+  const current = readDismissedList(row);
+  let next: string[];
+  if (raw === 'all') {
+    next = [];
+  } else if (raw && /^[a-z0-9_]+$/.test(raw)) {
+    next = current.filter((k) => k !== raw);
+  } else {
+    return c.json({ error: 'page_key must be a valid key or "all"' }, 400);
+  }
+  await c.env.DB.prepare(
+    `INSERT INTO user_settings (user_id, dismissed_explainers) VALUES (?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         dismissed_explainers = excluded.dismissed_explainers,
+         updated_at = CURRENT_TIMESTAMP`,
+  ).bind(user.id, JSON.stringify(next)).run();
+  return c.json({ dismissed: next });
+});
+
 // --- Privacy sub-route ------------------------------------------------------
 settings.get('/privacy', async (c) => {
   await ensureUserSettingsTable(c.env);

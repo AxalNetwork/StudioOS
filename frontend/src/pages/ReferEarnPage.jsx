@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { Link } from 'react-router-dom';
 import {
   Copy, Check, Users, DollarSign, Share2, ExternalLink, Network as NetworkIcon,
@@ -390,6 +391,7 @@ export default function ReferEarnPage() {
         <Share2 className="text-violet-600" size={24} />
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Refer & Earn</h1>
+        <PageExplainer pageKey="refer_earn" />
           <p className="text-sm text-gray-600">Invite founders, partners, and LPs. Earn commissions when they reach milestones.</p>
         </div>
       </div>

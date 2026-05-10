@@ -53,6 +53,7 @@ export default function CofounderPage() {
         <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
           <Users className="w-7 h-7 text-blue-600" /> Co-founder matching
         </h1>
+        <PageExplainer pageKey="cofounder_match" />
         <p className="text-sm text-slate-600 mt-1">
           Find a co-founder using mutual-interest reveal. Identities stay hidden until
           both sides express interest — at which point an NDA is auto-generated for

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { Link, useSearchParams } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid, Legend } from 'recharts';
 import { Save, Download, RefreshCw, AlertCircle, TrendingUp, Target, Wallet, Activity, FolderPlus, Plus } from 'lucide-react';
@@ -179,6 +180,7 @@ export default function FinancialsPage() {
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Financial Model</h1>
+        <PageExplainer pageKey="financials" />
           <p className="text-sm text-gray-500 mt-1">
             3-statement-style drivers feed runway, breakeven, and the capital category of the scoring engine.
           </p>

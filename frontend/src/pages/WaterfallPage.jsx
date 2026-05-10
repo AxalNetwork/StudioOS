@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import {
   Waves, Save, AlertTriangle, Bookmark, ArrowDownToLine, Calculator,
   TrendingUp, Users, DollarSign, Percent, Sparkles, Trash2, Upload,
@@ -222,6 +223,7 @@ export default function WaterfallPage() {
               Exit waterfall
               {busy && <span className="text-xs font-normal text-slate-400 animate-pulse">computing…</span>}
             </h1>
+        <PageExplainer pageKey="waterfall" />
             <p className="text-sm text-slate-600 mt-1.5 max-w-2xl">
               Model an exit at any value across the portfolio. European waterfall:
               <span className="text-slate-700 font-medium"> return of capital → preferred return → GP catch-up → carry split</span>.

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import {
   Layers, Save, RefreshCw, AlertTriangle, TrendingUp, Target, Bookmark,
   DollarSign, Percent, PiggyBank, Sparkles, Trash2, Upload, Building2,
@@ -277,6 +278,7 @@ export default function ReservesPage() {
               Reserve allocation
               {busy && <span className="text-xs font-normal text-slate-400 animate-pulse">computing…</span>}
             </h1>
+        <PageExplainer pageKey="reserves" />
             <p className="text-sm text-slate-600 mt-1.5 max-w-2xl">
               Drag follow-on dollars across portfolio companies. Live deployment, reserve ratio, and
               <span className="text-slate-700 font-medium"> IRR projection update as you type</span>.

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, ChevronDown, Info, Lightbulb, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -52,6 +53,7 @@ export default function MarketIntelPage() {
       <div className="flex items-end justify-between mb-4 flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Market Intelligence</h1>
+        <PageExplainer pageKey="market_intel" />
           <p className="text-sm text-gray-600">Signal-to-Action pipeline for competitive advantage</p>
         </div>
         {(tab === 'studio' ? benchmarks?.updated_at : pulseUpdatedAt) && (

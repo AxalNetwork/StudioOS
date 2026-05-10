@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import {
   TrendingUp, Briefcase, Sparkles, Plus, RefreshCw, Wallet, Tag, ShieldCheck, X, AlertTriangle,
 } from 'lucide-react';
@@ -241,6 +242,7 @@ export default function LiquidityPage({ currentUser }) {
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <TrendingUp size={22} className="text-violet-600" /> Liquidity & Exits
           </h1>
+        <PageExplainer pageKey="liquidity" />
           <p className="text-sm text-gray-600 mt-1">Secondary marketplace, AI valuations, and exit automation.</p>
         </div>
         <div className="flex items-center gap-2">

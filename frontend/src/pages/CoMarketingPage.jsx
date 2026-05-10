@@ -404,6 +404,7 @@ export default function CoMarketingPage({ user }) {
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <Megaphone size={22} /> Co-marketing
         </h1>
+        <PageExplainer pageKey="co_marketing" />
         <p className="text-sm text-gray-600 mt-1">
           Pitch a webinar, blog post, or podcast. Once approved by Axal, the platform helps
           run + distribute it, and inbound demand is attributed back to your partner profile.

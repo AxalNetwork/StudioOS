@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { reportError } from '../lib/log';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -181,6 +182,7 @@ export default function CofounderAgreementPage() {
           <span className="text-xs font-semibold uppercase tracking-wide">Incorporate</span>
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Co-Founder Agreement</h1>
+        <PageExplainer pageKey="cofounder_agreement" />
         <p className="text-sm text-gray-600 mt-1">
           Standardise the founder paperwork: vesting cliffs, IP assignment, decision rights, and exit/buyout.
         </p>

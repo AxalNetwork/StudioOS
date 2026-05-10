@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import { Users, Plus, Search, Copy, ChevronRight } from 'lucide-react';
 import { UserDetailModal } from './AdminPage';
@@ -53,6 +54,7 @@ export default function PartnersPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Partner Ecosystem</h1>
+        <PageExplainer pageKey="partners" />
           <p className="text-sm text-gray-600">Matchmaking, deal flow, and referral dashboard</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white">

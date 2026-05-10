@@ -76,6 +76,16 @@ export function SettingsProvider({ children }) {
     } finally {
       if (mountedRef.current) setLoading(false);
     }
+    // Task #15 — hydrate the page-explainer dismiss-list from the server.
+    // localStorage is a read cache; server is source of truth so dismissals
+    // roam across devices. Failure is silent (unauth / offline).
+    try {
+      const ex = await api.getExplainersDismissed();
+      if (!mountedRef.current) return;
+      const list = Array.isArray(ex?.dismissed) ? ex.dismissed : [];
+      try { localStorage.setItem('dismissed_explainers', JSON.stringify(list)); } catch {}
+      try { window.dispatchEvent(new CustomEvent('axal:explainers_synced')); } catch {}
+    } catch { /* noop */ }
   }, []);
 
   useEffect(() => {

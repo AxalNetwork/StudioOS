@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { MessageSquare, Plus, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
@@ -106,6 +107,7 @@ export default function CustomerDiscoveryPage() {
         <h1 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
           <MessageSquare className="text-violet-600" size={22} /> Customer Discovery
         </h1>
+        <PageExplainer pageKey="customer_discovery" />
         <p className="text-sm text-gray-600 mt-1">
           Log your customer conversations as you go. Three logged interviews
           unlocks the next week of the Spin-Out Lab.

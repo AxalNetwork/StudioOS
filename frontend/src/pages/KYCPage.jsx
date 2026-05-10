@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { safeReadJSON } from '../lib/storage';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Upload, AlertTriangle, CheckCircle2, Clock, XCircle, Loader2, Search, ChevronDown, X } from 'lucide-react';
@@ -121,6 +122,7 @@ export default function KYCPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Identity Verification (KYC / AML)</h1>
+        <PageExplainer pageKey="kyc" />
           <p className="text-sm text-gray-600 mt-1">Axal VC is required to verify the identity of every member before activating their account for capital, deal flow, or legal documents.</p>
         </div>
       </div>

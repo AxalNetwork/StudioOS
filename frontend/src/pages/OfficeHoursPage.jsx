@@ -279,6 +279,7 @@ export default function OfficeHoursPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Office hours</h1>
+        <PageExplainer pageKey="office_hours" />
         <p className="text-sm text-gray-600 mt-1">
           Publish bookable slots and manage incoming requests. After each session you can
           review the mentee — same as they review you.

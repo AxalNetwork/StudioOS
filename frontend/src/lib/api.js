@@ -152,6 +152,11 @@ export const api = {
   getMe: () => request('/auth/me'),
   health: () => request('/health'),
 
+  // Task #15 — Page header explainers (server-synced dismiss list).
+  getExplainersDismissed: () => request('/settings/explainers'),
+  dismissExplainer: (page_key) => request('/settings/explainer-dismissed', { method: 'POST', body: JSON.stringify({ page_key }) }),
+  restoreExplainer: (page_key) => request('/settings/explainer-restore', { method: 'POST', body: JSON.stringify({ page_key }) }),
+
   // Task #16 — Profile expansion (personal + corporate identity blocks).
   getPersonalProfile: () => request('/settings/profile/personal'),
   updatePersonalProfile: (patch) => request('/settings/profile/personal', { method: 'PUT', body: JSON.stringify(patch) }),

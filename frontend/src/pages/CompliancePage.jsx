@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { useNavigate } from 'react-router-dom';
 import {
   CalendarCheck, Clock, AlertTriangle, CheckCircle2, Plus, Loader2,
@@ -405,6 +406,7 @@ export default function CompliancePage() {
           <h1 className="text-2xl font-bold text-gray-900 inline-flex items-center gap-2">
             <CalendarCheck className="text-violet-600" /> Compliance Calendar
           </h1>
+        <PageExplainer pageKey="compliance" />
           <p className="mt-1 text-sm text-gray-600 max-w-2xl">
             Recurring obligations to keep your entity in good standing — auto-populated from your jurisdiction at incorporation.
             We'll ping you at 30, 14, 7 and 1 day before each deadline.

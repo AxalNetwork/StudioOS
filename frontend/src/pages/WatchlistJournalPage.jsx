@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { safeReadJSON } from '../lib/storage';
 import {
   Bookmark, BookOpen, Compass, Plus, Trash2, RefreshCw, X, Award, AlertTriangle,
@@ -677,6 +678,7 @@ export default function WatchlistJournalPage() {
           <Award className="w-5 h-5 text-purple-600" />
           Watchlist & Decision Journal
         </h1>
+        <PageExplainer pageKey="watchlist" />
         <p className="text-sm text-slate-500">Track deals you almost did. Write your thesis before the vote. Look back honestly.</p>
       </div>
 

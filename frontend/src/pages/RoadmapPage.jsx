@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Trash2, AlertCircle, Save, X, Target, ArrowRight, FolderPlus } from 'lucide-react';
 import { api } from '../lib/api';
@@ -129,6 +130,7 @@ export default function RoadmapPage() {
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Roadmap</h1>
+        <PageExplainer pageKey="roadmap" />
           <p className="text-sm text-gray-500 mt-1">Now / Next / Later kanban with OKR-style key results.</p>
         </div>
         <div className="flex gap-2">

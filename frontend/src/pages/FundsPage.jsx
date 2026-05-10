@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import {
   Banknote, FileText, RefreshCw, Plus, X, AlertTriangle, CheckCircle2,
   PieChart as PieIcon, TrendingUp, Wallet, Send, ScrollText,
@@ -571,6 +572,7 @@ export default function FundsPage({ currentUser }) {
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <Banknote size={22} className="text-violet-600" /> VC Funds
         </h1>
+        <PageExplainer pageKey="funds" />
         <p className="text-sm text-gray-600 mt-1">Fund operations, LPA management, capital calls and returns distribution.</p>
       </div>
 

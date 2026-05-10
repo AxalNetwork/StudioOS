@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { Link, useSearchParams } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { Plus, Trash2, AlertCircle, Save, X, Download, RefreshCw, TrendingUp, FolderPlus } from 'lucide-react';
@@ -180,6 +181,7 @@ export default function MetricsPage() {
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Metrics</h1>
+        <PageExplainer pageKey="metrics" />
           <p className="text-sm text-gray-500 mt-1">Snapshot MRR, ARR, CAC, LTV, churn. Feeds users + revenue traction signals.</p>
         </div>
         <div className="flex gap-2">

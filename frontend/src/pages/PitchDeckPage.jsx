@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { reportError } from '../lib/log';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -170,6 +171,7 @@ export default function PitchDeckPage() {
           <h1 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
             <Sparkles className="text-violet-600" size={22} /> Pitch Deck Builder
           </h1>
+        <PageExplainer pageKey="pitch_deck" />
           <p className="text-sm text-gray-600 mt-1">
             Generate a 10-slide deck from your project + scoring data, edit each slide, and share a one-time tokenized link with investors.
           </p>

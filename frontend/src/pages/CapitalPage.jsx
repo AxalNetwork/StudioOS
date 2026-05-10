@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import { DollarSign, TrendingUp, Users, Plus, ChevronDown } from 'lucide-react';
 
@@ -57,6 +58,7 @@ export default function CapitalPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Capital & Investment Ops</h1>
+        <PageExplainer pageKey="capital" />
           <p className="text-sm text-gray-600">Portfolio performance, LP management, and capital calls</p>
         </div>
         <button onClick={() => setShowCallForm(!showCallForm)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white">

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import { Target, ChevronDown, ChevronUp, Play, FileText, ShieldCheck, AlertTriangle, Lock, HelpCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
@@ -109,6 +110,7 @@ export default function ScoringPage() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Diligence & Scoring Engine</h1>
+        <PageExplainer pageKey="scoring" />
         <p className="text-sm text-gray-600">100-Point Startup Scoring Algorithm — The Brain</p>
       </div>
 

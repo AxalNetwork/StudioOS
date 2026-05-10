@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PageExplainer from '../components/PageExplainer';
 import { safeReadJSON } from '../lib/storage';
 import { Heart, Lock, Phone, Users, BookOpen, MessageCircle, ExternalLink, AlertTriangle, BarChart3 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -357,6 +358,7 @@ export default function WellbeingPage() {
         <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
           <Heart className="w-6 h-6 text-rose-500" /> Founder Wellbeing
         </h1>
+        <PageExplainer pageKey="wellbeing" />
         <div className="mt-4 rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
           Wellbeing data is private to founders and admin operators. Investors do not have access.
         </div>

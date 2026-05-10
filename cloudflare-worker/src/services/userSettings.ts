@@ -35,6 +35,8 @@ export interface UserSettingsRow {
   density: Density;
   sidebar_default: SidebarDefault;
   feature_flags: string;
+  // Task #15 — JSON array of pageKey strings the user has dismissed.
+  dismissed_explainers: string;
   updated_at: string;
 }
 
@@ -56,6 +58,7 @@ const DEFAULT_ROW = {
   density: 'comfy' as Density,
   sidebar_default: 'expanded' as SidebarDefault,
   feature_flags: '{}',
+  dismissed_explainers: '[]',
 };
 
 let migrated = false;
@@ -82,12 +85,19 @@ export async function ensureUserSettings(env: Env): Promise<void> {
         density TEXT DEFAULT 'comfy',
         sidebar_default TEXT DEFAULT 'expanded',
         feature_flags TEXT DEFAULT '{}',
+        dismissed_explainers TEXT NOT NULL DEFAULT '[]',
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
     ).run();
     try {
       await env.DB.prepare(
         `CREATE INDEX IF NOT EXISTS idx_user_settings_slug ON user_settings(profile_slug) WHERE profile_slug IS NOT NULL`,
+      ).run();
+    } catch {}
+    // Task #15 — additive column for existing rows (idempotent ALTER).
+    try {
+      await env.DB.prepare(
+        `ALTER TABLE user_settings ADD COLUMN dismissed_explainers TEXT NOT NULL DEFAULT '[]'`,
       ).run();
     } catch {}
     migrated = true;
