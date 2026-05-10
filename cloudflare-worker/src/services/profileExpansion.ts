@@ -297,6 +297,7 @@ export interface UboEntry {
 }
 
 export interface CorporateProfileRead {
+  profile_completion_pct: number;
   entity_name: string | null;
   entity_type: string | null;
   registration_number: string | null;
@@ -348,8 +349,15 @@ export async function getCorporateProfile(env: Env, userId: number): Promise<Cor
   const row = await env.DB.prepare(
     `SELECT * FROM corporate_profiles WHERE user_id = ?`,
   ).bind(userId).first<any>();
+  // Always include profile_completion_pct so legal-entity GET/PUT
+  // responses meet the AE-1 contract (returned on every relevant PUT).
+  const userPct = await env.DB.prepare(
+    `SELECT profile_completion_pct AS pct FROM users WHERE id = ?`,
+  ).bind(userId).first<{ pct: number | null }>();
+  const profile_completion_pct = Number(userPct?.pct || 0);
   if (!row) {
     return {
+      profile_completion_pct,
       entity_name: null, entity_type: null, registration_number: null,
       tax_id_last4: null, has_tax_id: false,
       registered_country: null, registered_address_line1: null, registered_address_line2: null,
@@ -361,6 +369,7 @@ export async function getCorporateProfile(env: Env, userId: number): Promise<Cor
     };
   }
   return {
+    profile_completion_pct,
     entity_name: row.entity_name || null,
     entity_type: row.entity_type || null,
     registration_number: row.registration_number || null,
@@ -529,10 +538,12 @@ export async function updateCorporateProfile(
           `SELECT registration_number FROM corporate_profiles WHERE user_id = ?`,
         ).bind(userId).first<{registration_number:string|null}>())?.registration_number ?? null;
   if (effectiveEntityType && !effectiveRegNumber) {
+    // AE-1: validation failures must be 400 with field-level details so
+    // the Settings UI can inline next to the offending input.
     throw new ProfileValidationError(
       'registration_number is required when entity_type is set',
       'registration_number',
-      422,
+      400,
     );
   }
 

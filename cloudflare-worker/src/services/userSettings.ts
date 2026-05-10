@@ -139,7 +139,8 @@ export interface UserSettingsPatch {
 }
 
 const ALLOWED_LOCALES = new Set(['en', 'fr', 'es', 'pt']);
-const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])?$/;
+// AE-1: slug is 3–32 chars, lowercase alphanumeric + hyphen.
+const SLUG_RE = /^[a-z0-9-]{3,32}$/;
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function asInt(v: unknown): number {
@@ -185,8 +186,19 @@ function buildUpdates(patch: UserSettingsPatch): Array<[string, unknown]> {
   const push = (col: string, val: unknown) => updates.push([col, val]);
 
   if (patch.timezone !== undefined) {
-    const tz = String(patch.timezone || '').slice(0, 64);
-    if (!tz) throw new SettingsValidationError('timezone cannot be empty');
+    const tz = String(patch.timezone || '').slice(0, 64).trim();
+    if (!tz) throw new SettingsValidationError('timezone cannot be empty', 400, 'timezone');
+    // AE-1: enforce IANA-valid timezones (Intl.supportedValuesOf when
+    // available, runtime probe otherwise). Same helper /quiet_hours_tz
+    // already uses below — silently accepting "Mars/Olympus" here would
+    // poison digest scheduling and quiet-hour computations.
+    if (!isValidTimeZone(tz)) {
+      throw new SettingsValidationError(
+        'Pick a valid IANA timezone (e.g. America/New_York).',
+        400,
+        'timezone',
+      );
+    }
     push('timezone', tz);
   }
   if (patch.locale !== undefined) {
@@ -204,7 +216,11 @@ function buildUpdates(patch: UserSettingsPatch): Array<[string, unknown]> {
     } else {
       const slug = String(patch.profile_slug).toLowerCase().trim();
       if (!SLUG_RE.test(slug)) {
-        throw new SettingsValidationError('profile_slug must be 2-40 chars, lowercase alphanumeric or hyphen');
+        throw new SettingsValidationError(
+          'profile_slug must be 3-32 chars, lowercase alphanumeric or hyphen',
+          400,
+          'profile_slug',
+        );
       }
       push('profile_slug', slug);
     }

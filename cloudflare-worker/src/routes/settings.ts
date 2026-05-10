@@ -185,10 +185,33 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
       AND confirm_expires_at > datetime('now')
     ORDER BY requested_at DESC LIMIT 1
   `;
+  // AE-1: surface a placeholder integrations array on the root payload
+  // so the Settings shell can render an empty state if the dedicated
+  // /api/settings/integrations call later fails. Looked up best-effort —
+  // any DB failure (e.g. table not yet created in a fresh env) is
+  // swallowed to `[]` rather than 500'ing the entire /settings page.
+  let integrationsList: Array<{ provider: string; connected: boolean }> = [];
+  try {
+    const safeOne = async (q: () => Promise<any[]>): Promise<boolean> => {
+      try { const r = await q(); return r.length > 0; } catch { return false; }
+    };
+    const linkedin = await safeOne(() => sql`SELECT 1 FROM linkedin_oauth_tokens WHERE user_id = ${user.id} LIMIT 1`);
+    const google = await safeOne(() => sql`SELECT 1 FROM google_oauth_tokens WHERE user_id = ${user.id} LIMIT 1`);
+    const microsoft = await safeOne(() => sql`SELECT 1 FROM microsoft_oauth_tokens WHERE user_id = ${user.id} LIMIT 1`);
+    integrationsList = [
+      { provider: 'linkedin', connected: linkedin },
+      { provider: 'google', connected: google },
+      { provider: 'outlook', connected: microsoft },
+    ];
+  } catch (e) {
+    console.warn('[settings] root integrations lookup failed (returning []):', (e as Error).message);
+    integrationsList = [];
+  }
   await sql.end();
   if (rows.length === 0) return c.json({ error: 'User not found' }, 404);
   const u = rows[0];
   return c.json({
+    integrations: integrationsList,
     id: u.id,
     uid: u.uid,
     email: u.email,
@@ -913,7 +936,14 @@ async function recordProfileAudit(
 
 function handleProfileError(c: Context<{ Bindings: Env }>, e: unknown) {
   if (e instanceof ProfileValidationError) {
-    return c.json({ error: e.message, field: e.field }, e.status as any);
+    // AE-1: mirror handleSettingsError envelope so the UI can inline
+    // {errors: {field: msg}} the same way for both validators.
+    const body: Record<string, unknown> = { error: e.message };
+    if (e.field) {
+      body.field = e.field;
+      body.errors = { [e.field]: e.message };
+    }
+    return c.json(body, e.status as any);
   }
   console.error('[profile expansion] update failed', e);
   return c.json({ error: 'Update failed' }, 500);
