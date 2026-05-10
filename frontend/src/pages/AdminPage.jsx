@@ -1983,7 +1983,8 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
               {doc && <StatusPill status={doc.status} />}
             </div>
             <div className="text-xs text-gray-500">
-              {doc?.doc_type} {doc?.template_name ? `· ${doc.template_name}` : ''}
+              {doc?.doc_type_label || NEW_DOC_TYPE_LABELS[doc?.doc_type] || doc?.doc_type}
+              {doc?.template_name ? ` · ${doc.template_name}` : ''}
             </div>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>

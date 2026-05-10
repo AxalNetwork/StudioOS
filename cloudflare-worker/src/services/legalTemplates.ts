@@ -68,3 +68,39 @@ export async function renderLegalTemplate(
 }
 
 export const ALL_TEMPLATE_KEYS: LegalTemplateKey[] = Object.keys(TEMPLATES) as LegalTemplateKey[];
+
+/**
+ * Task #5 (Z) v3 — Map the public `doc_type` string surfaced by the
+ * admin "Create envelope" wizard (and stored on
+ * `esign_envelopes.document_type`) to the canonical Y-1 template key.
+ * Keep this in sync with `LEGAL_TEMPLATE_CATALOG` in
+ * cloudflare-worker/src/routes/admin_contracts.ts and the W/X/Y doc
+ * type labels emitted by the wizard.
+ *
+ * Returns null when no Y-1 template matches; callers should fall back
+ * to the legacy `buildTemplateBody` path in that case (e.g. legacy
+ * `Subscription Booklet & LPA` style document_type values used by the
+ * older profile flows).
+ */
+const DOC_TYPE_TO_TEMPLATE_KEY: Record<string, LegalTemplateKey> = {
+  tos_v1:                                 'tos_v1',
+  privacy_v1:                             'privacy_v1',
+  founder_nda_v1:                         'founder_nda_v1',
+  founder_nda_axal:                       'founder_nda_v1',
+  investor_nda_axal:                      'investor_nda_v1',
+  investor_nda_v1:                        'investor_nda_v1',
+  mentor_nda_axal:                        'mentor_nda_v1',
+  mentor_nda_v1:                          'mentor_nda_v1',
+  mentor_engagement_disclaimer:           'mentor_disclaimer_v1',
+  mentor_disclaimer_v1:                   'mentor_disclaimer_v1',
+  accreditation_v1:                       'accreditation_v1',
+  partner_services:                       'partner_msa_v1',
+  partner_msa_v1:                         'partner_msa_v1',
+  nda_3way_founder_investor_axal:         'nda_3way_founder_investor_axal_v1',
+  nda_3way_founder_investor_axal_v1:      'nda_3way_founder_investor_axal_v1',
+};
+
+export function templateKeyForDocType(docType: string | null | undefined): LegalTemplateKey | null {
+  if (!docType) return null;
+  return DOC_TYPE_TO_TEMPLATE_KEY[docType] ?? null;
+}

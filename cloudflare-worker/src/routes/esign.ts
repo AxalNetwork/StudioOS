@@ -231,15 +231,40 @@ export async function createAndSendEnvelope(
 ): Promise<{ envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean; provider?: string } | null> {
   await ensureSchema(env);
 
-  const tpl = buildTemplateBody(opts.documentType, opts.recipientName, opts.recipientEmail);
-  // Task #5 (Z) v2 — apply {{key}} substitution from `mergeFields`.
+  // Task #5 (Z) v3 — Prefer the Y-1 markdown templates when the
+  // `document_type` maps to a known LegalTemplateKey
+  // (templateKeyForDocType). This covers the new W/X/Y doc types
+  // (investor_nda_axal, mentor_nda_axal, partner_services, …) so the
+  // admin wizard sends real legal templates rather than the legacy
+  // `buildTemplateBody` placeholder fallback.
+  const { templateKeyForDocType, renderLegalTemplate } = await import('../services/legalTemplates');
+  const tplKey = templateKeyForDocType(opts.documentType);
+  let tpl: AgreementTemplate;
   const appliedMergeKeys: string[] = [];
-  if (opts.mergeFields) {
-    for (const [k, v] of Object.entries(opts.mergeFields)) {
-      const re = new RegExp(`\\{\\{\\s*${k.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\s*\\}\\}`, 'g');
-      if (re.test(tpl.body)) {
-        tpl.body = tpl.body.replace(re, v);
-        appliedMergeKeys.push(k);
+  if (tplKey) {
+    // Y-1 markdown — `renderLegalTemplate` already does {{key}}
+    // substitution. We always seed a sane set of default merge values
+    // (recipient_name/email + effective_date) and let the caller
+    // override any of them via `mergeFields`.
+    const merge: Record<string, string> = {
+      recipient_name: opts.recipientName || '',
+      recipient_email: opts.recipientEmail,
+      counterparty_name: opts.recipientName || opts.recipientEmail,
+      effective_date: new Date().toISOString().slice(0, 10),
+      ...(opts.mergeFields || {}),
+    };
+    const body = await renderLegalTemplate(tplKey, merge);
+    tpl = { title: opts.documentType, body };
+    if (opts.mergeFields) appliedMergeKeys.push(...Object.keys(opts.mergeFields));
+  } else {
+    tpl = buildTemplateBody(opts.documentType, opts.recipientName, opts.recipientEmail);
+    if (opts.mergeFields) {
+      for (const [k, v] of Object.entries(opts.mergeFields)) {
+        const re = new RegExp(`\\{\\{\\s*${k.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\s*\\}\\}`, 'g');
+        if (re.test(tpl.body)) {
+          tpl.body = tpl.body.replace(re, v);
+          appliedMergeKeys.push(k);
+        }
       }
     }
   }
