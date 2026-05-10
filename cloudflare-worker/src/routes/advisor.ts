@@ -104,16 +104,23 @@ function personaFor(user: User): Persona {
   return 'unknown';
 }
 
-// Build the working bank. The 3-question role-detector
-// (primary / organization / headline) runs ONLY when users.role is
-// null — once a role is set the conversation pivots straight into
-// the persona bank. Hydration in /start additionally pre-marks any
-// detector questions whose answers already live on the users row so
-// users who set role via /signup never see the detector.
+// Build the working bank. ROLE_DETECTOR (primary / organization /
+// headline — three questions) is always prepended so that a user
+// starting from null `users.role` is taken through all three
+// detector questions before the conversation pivots to their
+// persona bank. Critically, this still holds AFTER the writeRouter
+// flips users.role on `role_detect.primary` — the next two detector
+// questions remain in the bank ahead of the persona questions and
+// nextUnansweredQuestion() picks them up first.
+//
+// For users whose role + organization + headline are already set on
+// the users row (e.g. signup wizard or back-fill), hydration in
+// /start pre-marks every detector question as answered, so they
+// skip the detector entirely and start in their persona bank.
 function workingBankFor(user: User): Question[] {
   const persona = personaFor(user);
   if (persona === 'unknown') return ROLE_DETECTOR;
-  return bankFor(persona);
+  return [...ROLE_DETECTOR, ...bankFor(persona)];
 }
 
 // ---------------------------------------------------------------------------
