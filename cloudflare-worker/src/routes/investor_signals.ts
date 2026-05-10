@@ -1,13 +1,12 @@
 /**
  * Task #4 — Investor Signals + profiling chatbot.
  *
- * Endpoints:
- *   GET  /api/investor-profile/me      — fetch caller's profile (or empty shell)
- *   PUT  /api/investor-profile/me      — upsert profile from chatbot (any role
- *                                         may save; aggregation only counts
- *                                         users with role=investor)
- *   POST /api/investor-profile/me/opt-out  — convenience: flip contribute=0
- *   GET  /api/investor-signals/latest  — most recent anonymised snapshot
+ * Endpoints (split into two Hono apps so each path lives at the correct
+ * top-level base — see index.ts):
+ *   GET  /api/investor-profile/me        — fetch caller's profile (or empty shell)
+ *   PUT  /api/investor-profile/me        — upsert profile from chatbot
+ *   POST /api/investor-profile/me/opt-out — convenience: flip contribute=0
+ *   GET  /api/investor-signals/latest    — most recent anonymised snapshot
  *
  * Aggregation runs from the worker cron (see index.ts) every 6h. Cells with
  * fewer than MIN_CELL_SIZE (=5) contributors are reported as
@@ -19,7 +18,8 @@ import { requireAuth } from '../auth';
 import { getSQL } from '../db';
 import { hashEmail } from '../util/hashEmail';
 
-const investorSignals = new Hono<{ Bindings: Env }>();
+export const investorProfile = new Hono<{ Bindings: Env }>();
+export const investorSignals = new Hono<{ Bindings: Env }>();
 
 export const MIN_CELL_SIZE = 5;
 const TICKET_BANDS = ['<$10k', '$10k-$50k', '$50k-$250k', '$250k-$1M', '$1M+'] as const;
@@ -171,7 +171,7 @@ function shapeProfile(row: ProfileRow) {
   };
 }
 
-investorSignals.get('/profile/me', async (c) => {
+investorProfile.get('/me', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const row = await c.env.DB.prepare(
@@ -180,7 +180,7 @@ investorSignals.get('/profile/me', async (c) => {
   return c.json({ profile: shapeProfile(row || emptyProfile(user.id)) });
 });
 
-investorSignals.put('/profile/me', async (c) => {
+investorProfile.put('/me', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   let body: any;
@@ -244,7 +244,7 @@ investorSignals.put('/profile/me', async (c) => {
   return c.json({ profile: shapeProfile(row || emptyProfile(user.id)) });
 });
 
-investorSignals.post('/profile/me/opt-out', async (c) => {
+investorProfile.post('/me/opt-out', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   await c.env.DB.prepare(
@@ -256,7 +256,7 @@ investorSignals.post('/profile/me/opt-out', async (c) => {
   return c.json({ ok: true, contribute_to_signals: false });
 });
 
-investorSignals.get('/signals/latest', async (c) => {
+investorSignals.get('/latest', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   // Investor Signals are visible to every authenticated role — the data is
@@ -320,6 +320,48 @@ interface AggregateRow {
   ticket_min_usd: number | null;
   ticket_max_usd: number | null;
   thesis_keywords_json: string;
+}
+
+// Step 4 requirement: median + IQR ticket size per (sector × stage) bucket.
+// Each profile contributes its (min, max) ticket to every bucket formed by
+// the cross-product of its sectors and stages. Cells below MIN_CELL_SIZE are
+// returned with `n: null, reason: 'insufficient_data'`.
+function buildSectorStageTicketStats(rows: AggregateRow[]) {
+  const buckets = new Map<string, { sector: string; stage: string; mins: number[]; maxs: number[] }>();
+  const safeArr = (s: string): string[] => { try { const j = JSON.parse(s); return Array.isArray(j) ? j : []; } catch { return []; } };
+  for (const r of rows) {
+    if (typeof r.ticket_min_usd !== 'number' || typeof r.ticket_max_usd !== 'number') continue;
+    const sectors = safeArr(r.sectors_json);
+    const stages  = safeArr(r.stages_json);
+    for (const sector of sectors) {
+      if (!SECTOR_OPTIONS.includes(sector)) continue;
+      for (const stage of stages) {
+        if (!STAGE_OPTIONS.includes(stage)) continue;
+        const key = `${sector}\u241E${stage}`;
+        let b = buckets.get(key);
+        if (!b) { b = { sector, stage, mins: [], maxs: [] }; buckets.set(key, b); }
+        b.mins.push(r.ticket_min_usd);
+        b.maxs.push(r.ticket_max_usd);
+      }
+    }
+  }
+  return [...buckets.values()].map(b => {
+    const n = Math.min(b.mins.length, b.maxs.length);
+    if (n < MIN_CELL_SIZE) {
+      return { sector: b.sector, stage: b.stage, n: null, reason: 'insufficient_data' as const };
+    }
+    b.mins.sort((a, c) => a - c);
+    b.maxs.sort((a, c) => a - c);
+    return {
+      sector: b.sector,
+      stage: b.stage,
+      n,
+      median_min: quantile(b.mins, 0.5),
+      median_max: quantile(b.maxs, 0.5),
+      iqr_min: { p25: quantile(b.mins, 0.25), p75: quantile(b.mins, 0.75) },
+      iqr_max: { p25: quantile(b.maxs, 0.25), p75: quantile(b.maxs, 0.75) },
+    };
+  });
 }
 
 function pct(n: number, total: number): number {
@@ -412,11 +454,14 @@ export async function aggregateInvestorSignals(env: Env): Promise<{ n_total: num
     iqr_max: { p25: quantile(tickMaxs, 0.25), p75: quantile(tickMaxs, 0.75) },
   } : { n: null, reason: 'insufficient_data' as const };
 
+  const ticket_stats_by_sector_stage = buildSectorStageTicketStats(rows);
+
   const payload = {
     n_total,
     min_cell_size: MIN_CELL_SIZE,
     sectors, stages, geos, ticket_bands,
     ticket_stats,
+    ticket_stats_by_sector_stage,
     thesis_keywords,
     options: {
       sectors: SECTOR_OPTIONS,
@@ -444,4 +489,7 @@ export async function aggregateInvestorSignals(env: Env): Promise<{ n_total: num
   };
 }
 
+// Backward-compat: legacy callers that used /api/investor-signals/profile/me*
+// or /api/investor-profile/profile/me* (pre-2026-05-10 paths) still work.
+investorSignals.route('/profile', investorProfile);
 export default investorSignals;

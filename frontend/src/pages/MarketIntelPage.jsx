@@ -459,7 +459,19 @@ function InvestorSignalsTab() {
     } catch { return ''; }
   })();
   const isInvestor = role === 'investor';
-  const showReprompt = isInvestor && profile && !profile.completed_at;
+  // One-time reprompt: persist dismissal in localStorage so existing
+  // investors who have not finished the chatbot are nudged once per device,
+  // not on every visit. Cleared automatically once they complete the
+  // profile (completed_at flips truthy).
+  const REPROMPT_KEY = 'investor_signals_reprompt_dismissed_v1';
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem(REPROMPT_KEY) === '1'; } catch { return false; }
+  });
+  const showReprompt = isInvestor && profile && !profile.completed_at && !dismissed;
+  const dismissReprompt = () => {
+    try { localStorage.setItem(REPROMPT_KEY, '1'); } catch {}
+    setDismissed(true);
+  };
 
   if (loading) {
     return <div className="text-sm text-gray-500 py-12 text-center">Loading anonymized investor signals…</div>;
@@ -478,9 +490,14 @@ function InvestorSignalsTab() {
           <div className="flex-1 text-sm text-gray-700">
             <div className="font-semibold text-gray-900 mb-1">Help shape this dashboard</div>
             <p className="mb-2">You haven&apos;t finished the investor profiling chatbot yet. Spend 90 seconds answering 6 questions to be included in the next anonymized snapshot.</p>
-            <Link to="/onboarding/investor" className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-md bg-violet-600 text-white hover:bg-violet-700">
-              Open profiling chatbot
-            </Link>
+            <div className="flex gap-2">
+              <Link to="/onboarding/investor" className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-md bg-violet-600 text-white hover:bg-violet-700">
+                Open profiling chatbot
+              </Link>
+              <button onClick={dismissReprompt} className="text-xs font-medium px-3 py-1.5 rounded-md text-gray-700 hover:bg-violet-100">
+                Don&apos;t remind me
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -503,6 +520,8 @@ function InvestorSignalsTab() {
           <SignalsBars title="Stages" cells={snap.stages} />
           <SignalsBars title="Geographies" cells={snap.geos} />
           <SignalsBars title="Ticket size distribution" cells={snap.ticket_bands} />
+
+          <SectorStageTicketTable buckets={snap.ticket_stats_by_sector_stage || []} />
 
           <ThesisCloud keywords={snap.thesis_keywords || []} />
 
@@ -558,6 +577,50 @@ function SignalsBars({ title, cells }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function SectorStageTicketTable({ buckets }) {
+  const visible = (buckets || []).filter(b => b.n != null);
+  if (!buckets.length) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="text-sm font-semibold text-gray-900 mb-3">Average ticket by sector × stage</div>
+        <div className="text-xs text-gray-500 italic">No data yet.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 overflow-x-auto">
+      <div className="text-sm font-semibold text-gray-900 mb-3">Average ticket by sector × stage</div>
+      {visible.length === 0 && (
+        <div className="text-xs text-gray-500 italic mb-2">Insufficient data — no sector × stage cell met the k=5 threshold yet.</div>
+      )}
+      {visible.length > 0 && (
+        <table className="min-w-full text-xs">
+          <thead className="text-gray-500">
+            <tr>
+              <th className="text-left py-2 pr-3 font-medium">Sector</th>
+              <th className="text-left py-2 pr-3 font-medium">Stage</th>
+              <th className="text-right py-2 pr-3 font-medium">n</th>
+              <th className="text-right py-2 pr-3 font-medium">Median ticket</th>
+              <th className="text-right py-2 pr-3 font-medium">IQR (low)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 text-gray-700">
+            {visible.map((b, i) => (
+              <tr key={i}>
+                <td className="py-2 pr-3">{b.sector}</td>
+                <td className="py-2 pr-3">{b.stage}</td>
+                <td className="py-2 pr-3 text-right">{b.n}</td>
+                <td className="py-2 pr-3 text-right">{fmtUsd(b.median_min)} – {fmtUsd(b.median_max)}</td>
+                <td className="py-2 pr-3 text-right text-gray-500">{fmtUsd(b.iqr_min?.p25)} – {fmtUsd(b.iqr_min?.p75)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
