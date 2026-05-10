@@ -394,11 +394,15 @@ async function loadConversation(env: Env, user: User, convUid: string): Promise<
 }
 
 async function loadMessages(env: Env, conversationId: number, limit = 40): Promise<AnthropicMessage[]> {
+  // Want the LAST `limit` rows ordered ASC. Easiest in SQLite is to
+  // pull ORDER BY id DESC LIMIT N then reverse — earlier ASC LIMIT was
+  // a bug that returned the OLDEST window and dropped recent context.
   const rows = await env.DB.prepare(
-    "SELECT role, content, meta_json FROM assistant_messages WHERE conversation_id = ? ORDER BY id ASC LIMIT ?"
+    "SELECT role, content, meta_json FROM assistant_messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?"
   ).bind(conversationId, limit).all<{ role: string; content: string; meta_json: string | null }>();
+  const ordered = (rows.results || []).slice().reverse();
   const out: AnthropicMessage[] = [];
-  for (const r of rows.results || []) {
+  for (const r of ordered) {
     if (r.role === 'user') {
       out.push({ role: 'user', content: r.content });
     } else if (r.role === 'assistant') {
@@ -415,11 +419,20 @@ async function loadMessages(env: Env, conversationId: number, limit = 40): Promi
       out.push({ role: 'assistant', content: blocks.length ? blocks : (r.content || '') });
     } else if (r.role === 'tool') {
       // Stored tool result; replay as a user-role tool_result block.
+      // Re-wrap in <tool_result>…</tool_result> on replay to preserve
+      // the trust boundary set by the system prompt — the live tool
+      // loop wraps before persistence too, but historical rows might
+      // pre-date that change, so wrap-if-not-already keeps both safe
+      // and idempotent.
       const meta = r.meta_json ? safeJson<{ tool_use_id: string }>(r.meta_json) : null;
       if (meta?.tool_use_id) {
+        const raw = r.content || '';
+        const wrapped = /^<tool_result>[\s\S]*<\/tool_result>$/.test(raw)
+          ? raw
+          : `<tool_result>${sanitiseToolText(raw)}</tool_result>`;
         out.push({
           role: 'user',
-          content: [{ type: 'tool_result', tool_use_id: meta.tool_use_id, content: r.content }],
+          content: [{ type: 'tool_result', tool_use_id: meta.tool_use_id, content: wrapped }],
         });
       }
     }

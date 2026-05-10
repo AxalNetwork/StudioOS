@@ -3,6 +3,7 @@ import { safeReadJSON } from './lib/storage';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
+import PersonalAssistant from './components/PersonalAssistant';
 import SpinoutLabListener from './components/SpinoutLabListener';
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
@@ -863,6 +864,15 @@ function AppInner() {
   );
 }
 
+// Mount the assistant at the auth-shell level so it persists across
+// route changes (Task #5: "pinned… persistent across pages"). The
+// component itself fail-closes when assistant_enabled !== 1, so it's
+// safe to render for unauthenticated users too.
+function GlobalAssistantMount() {
+  const { user } = useAuth();
+  return <PersonalAssistant user={user} />;
+}
+
 export default function App() {
   // T20 — AuthProvider must be inside <BrowserRouter> (it uses
   // useLocation to throttle /me re-syncs to one per route change).
@@ -872,6 +882,7 @@ export default function App() {
       <SettingsProvider>
         <AppInner />
         <SpinoutLabListener />
+        <GlobalAssistantMount />
       </SettingsProvider>
     </AuthProvider>
   );
