@@ -1,89 +1,107 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Shield, LogIn, MessageSquare, KeyRound } from 'lucide-react';
+import { ArrowLeft, Shield, LogIn, MessageSquare } from 'lucide-react';
 import { api } from '../lib/api';
 
-// Task #6 — Login is now a 3-step flow:
-//   1. Email   →  GET /auth/factors  →  decide which factor(s) the user has
-//   2. Picker  →  if both TOTP+SMS are enrolled, let the user choose; if only
-//                 one, skip straight to its input
-//   3. Verify  →  POST /auth/login  (TOTP) or /auth/sms/verify-challenge (SMS)
+// Single-page sign-in: email + authenticator code + Cloudflare Turnstile,
+// all visible at once. SMS is a fallback link that reveals the SMS code
+// field inline on the same page — we never navigate to a "step 2".
 //
-// TOTP remains the recommended/default factor (it's pre-selected in the
-// picker). SMS-only sessions cannot reach impersonation, billing, contract
-// void or DD report generation — those are gated server-side via
-// requireFactor('totp'). The login UI surfaces this constraint via copy
-// only ("TOTP is required for billing and admin actions") so users with
-// both factors enrolled understand why they may be re-prompted later.
+// Turnstile is REQUIRED here (matches /register). It must never be removed.
+// Backend `/api/auth/login` verifies the token via verifyTurnstile() and
+// fails closed in production when the secret is unset.
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
+
 export default function LoginPage() {
-  const [step, setStep] = useState('email');           // email | choose | totp | sms
   const [email, setEmail] = useState('');
-  const [factors, setFactors] = useState({ totp: false, sms: false, sms_available: false });
   const [totpCode, setTotpCode] = useState('');
+  const [smsMode, setSmsMode] = useState(false);     // false = TOTP, true = SMS code field shown
   const [smsCode, setSmsCode] = useState('');
   const [smsLast4, setSmsLast4] = useState('');
   const [smsSession, setSmsSession] = useState(null);
+  const [turnstileToken, setTurnstileToken] = useState('');
   const [loading, setLoading] = useState(false);
+  const [smsLoading, setSmsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const continueFromEmail = async () => {
-    if (!email.trim()) { setError('Enter your email to continue.'); return; }
-    setLoading(true); setError('');
-    try {
-      const res = await api.authFactors(email.trim());
-      const f = { totp: !!res.totp, sms: !!res.sms, sms_available: !!res.sms_available };
-      setFactors(f);
-      // No SMS available on the server, or only TOTP enrolled → straight to TOTP.
-      if (!f.sms || !f.sms_available) { setStep('totp'); return; }
-      // Only SMS enrolled → straight to SMS challenge.
-      if (!f.totp) { await startSms(); return; }
-      // Both enrolled → picker.
-      setStep('choose');
-    } catch (e) {
-      // Don't reveal account existence — fall through to TOTP and let the
-      // login endpoint return its generic "Invalid credentials" if needed.
-      setStep('totp');
-    } finally {
-      setLoading(false);
+  // ---- Turnstile widget lifecycle (mirrors RegisterPage) ----
+  const turnstileRef = useRef(null);
+  const turnstileWidgetId = useRef(null);
+
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !turnstileRef.current) return;
+    if (typeof window.turnstile === 'undefined') {
+      // Cap polling at 50 attempts (~10s) so a blocked Turnstile script
+      // doesn't leak intervals.
+      let attempts = 0;
+      const interval = setInterval(() => {
+        attempts += 1;
+        if (typeof window.turnstile !== 'undefined' && turnstileRef.current) {
+          clearInterval(interval);
+          renderTurnstile();
+        } else if (attempts >= 50) {
+          clearInterval(interval);
+        }
+      }, 200);
+      return () => clearInterval(interval);
+    }
+    renderTurnstile();
+
+    function renderTurnstile() {
+      if (turnstileWidgetId.current !== null) {
+        try { window.turnstile.remove(turnstileWidgetId.current); } catch {}
+      }
+      turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: (token) => setTurnstileToken(token),
+        'expired-callback': () => setTurnstileToken(''),
+        theme: 'light',
+      });
+    }
+
+    return () => {
+      if (turnstileWidgetId.current !== null) {
+        try { window.turnstile.remove(turnstileWidgetId.current); } catch {}
+        turnstileWidgetId.current = null;
+      }
+    };
+  }, []);
+
+  const resetTurnstile = () => {
+    if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
+      try { window.turnstile.reset(turnstileWidgetId.current); } catch {}
+      setTurnstileToken('');
     }
   };
 
-  const startSms = async () => {
-    setLoading(true); setError('');
-    try {
-      const res = await api.smsStartChallenge(email.trim(), null);
-      if (!res.session_info) {
-        // Account doesn't exist or no SMS enrolled — surface a generic msg
-        // and let the user try TOTP instead.
-        setError('We couldn\'t text you. Try your authenticator code instead.');
-        if (factors.totp) setStep('totp');
-        return;
-      }
-      setSmsSession(res.session_info);
-      setSmsLast4(res.last4 || '');
-      setStep('sms');
-    } catch (e) {
-      setError(e?.message || 'Could not send SMS. Try again or use your authenticator.');
-    } finally {
-      setLoading(false);
+  // ---- Submit ----
+  const validateCommon = () => {
+    if (!email.trim()) { setError('Enter your email.'); return false; }
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      setError('Please complete the verification challenge.');
+      return false;
     }
+    return true;
   };
 
   const verifyTotp = async () => {
+    if (!validateCommon()) return;
     if (totpCode.length !== 6) { setError('Enter the 6-digit code from your authenticator.'); return; }
     setLoading(true); setError('');
     try {
-      const res = await api.login({ email: email.trim(), totp_code: totpCode });
+      const res = await api.login({ email: email.trim(), totp_code: totpCode, turnstileToken });
       if (!res?.token || !res?.user) throw new Error('Invalid response from server.');
       localStorage.setItem('token', res.token);
       localStorage.setItem('user', JSON.stringify(res.user));
       window.location.href = 'https://axal.vc';
     } catch (e) {
       setError(e?.message || 'Sign in failed.');
+      resetTurnstile();
     } finally { setLoading(false); }
   };
 
   const verifySms = async () => {
+    if (!validateCommon()) return;
     if (smsCode.length !== 6) { setError('Enter the 6-digit code we just sent.'); return; }
     setLoading(true); setError('');
     try {
@@ -94,12 +112,31 @@ export default function LoginPage() {
       window.location.href = 'https://axal.vc';
     } catch (e) {
       setError(e?.message || 'Sign in failed.');
+      resetTurnstile();
     } finally { setLoading(false); }
   };
 
-  const reset = () => {
-    setStep('email'); setTotpCode(''); setSmsCode(''); setSmsSession(null); setSmsLast4(''); setError('');
+  const startSms = async () => {
+    if (!email.trim()) { setError('Enter your email first, then we can text you a code.'); return; }
+    setSmsLoading(true); setError('');
+    try {
+      const res = await api.smsStartChallenge(email.trim(), null);
+      if (!res?.session_info) {
+        setError("We couldn't text you. Try your authenticator code instead.");
+        return;
+      }
+      setSmsSession(res.session_info);
+      setSmsLast4(res.last4 || '');
+      setSmsMode(true);
+      setSmsCode('');
+    } catch (e) {
+      setError(e?.message || 'Could not send SMS. Try again or use your authenticator.');
+    } finally {
+      setSmsLoading(false);
+    }
   };
+
+  const submit = () => (smsMode ? verifySms() : verifyTotp());
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center px-4">
@@ -111,114 +148,91 @@ export default function LoginPage() {
         <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <img src="/axal-mark.png" alt="Axal VC" className="h-10 w-10 rounded-lg object-contain flex-shrink-0" />
-            <span style={{fontFamily:"'Space Grotesk', sans-serif"}} className="text-lg font-bold text-gray-900">Axal VC</span>
+            <span style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-lg font-bold text-gray-900">Axal VC</span>
           </div>
 
           <h2 className="text-xl font-bold text-gray-900 mb-1">Welcome Back</h2>
           <p className="text-sm text-gray-600 mb-6">
-            {step === 'email' && 'Sign in with your email and a verification code.'}
-            {step === 'choose' && 'Choose how you want to verify.'}
-            {step === 'totp' && 'Enter the 6-digit code from your authenticator app.'}
-            {step === 'sms' && (smsLast4
-              ? <>We just sent a code to <span className="font-mono">•••• {smsLast4}</span>.</>
-              : 'Enter the 6-digit code we just sent.')}
+            Sign in with your email and a verification code.
           </p>
 
           {error && (
             <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{error}</div>
           )}
 
-          {step === 'email' && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs text-gray-600 block mb-1">Email</label>
-                <input type="email" value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && continueFromEmail()}
-                  placeholder="john@company.com"
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm" />
-              </div>
-              <button onClick={continueFromEmail} disabled={loading || !email}
-                className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white flex items-center justify-center gap-2">
-                {loading ? 'Checking…' : <>Continue <LogIn size={14} /></>}
-              </button>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs text-gray-600 block mb-1">Email</label>
+              <input type="email" value={email} autoComplete="email"
+                onChange={e => setEmail(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && submit()}
+                placeholder="john@company.com"
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm" />
             </div>
-          )}
 
-          {step === 'choose' && (
-            <div className="space-y-3">
-              <button onClick={() => setStep('totp')}
-                className="w-full text-left border border-violet-300 bg-violet-50 hover:bg-violet-100 rounded-lg px-4 py-3 flex items-start gap-3">
-                <KeyRound size={16} className="text-violet-700 mt-0.5" />
-                <div>
-                  <div className="text-sm font-medium text-gray-900">Authenticator app (recommended)</div>
-                  <div className="text-xs text-gray-600">Use the 6-digit code from Google Authenticator, Authy, 1Password, etc.</div>
-                </div>
-              </button>
-              <button onClick={startSms} disabled={loading}
-                className="w-full text-left border border-gray-300 hover:border-gray-400 rounded-lg px-4 py-3 flex items-start gap-3 disabled:opacity-50">
-                <MessageSquare size={16} className="text-gray-700 mt-0.5" />
-                <div>
-                  <div className="text-sm font-medium text-gray-900">Text me a code (SMS)</div>
-                  <div className="text-xs text-gray-600">{loading ? 'Sending…' : 'We\'ll send a 6-digit code to your verified phone.'}</div>
-                </div>
-              </button>
-              <button onClick={reset} className="text-xs text-gray-500 hover:text-gray-700 mt-1">← Use a different email</button>
-            </div>
-          )}
-
-          {step === 'totp' && (
-            <div className="space-y-4">
+            {!smsMode ? (
               <div>
                 <label className="text-xs text-gray-600 block mb-1">Authenticator code</label>
-                <input type="text" value={totpCode}
+                <input type="text" value={totpCode} inputMode="numeric" autoComplete="one-time-code"
                   onChange={e => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  onKeyDown={e => e.key === 'Enter' && verifyTotp()}
+                  onKeyDown={e => e.key === 'Enter' && submit()}
                   placeholder="000000" maxLength={6}
                   className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-2xl text-center tracking-[0.5em] font-mono" />
-                <p className="text-[10px] text-gray-500 mt-1">If you've lost your authenticator, enter a recovery code instead.</p>
+                <p className="text-[10px] text-gray-500 mt-1">
+                  6-digit code from Google Authenticator, Authy, 1Password, etc. Recovery codes also work here.
+                </p>
               </div>
-              <button onClick={verifyTotp} disabled={loading || totpCode.length !== 6}
-                className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white">
-                {loading ? 'Signing in…' : 'Sign in'}
-              </button>
-              {factors.sms && factors.sms_available && (
-                <button onClick={startSms} disabled={loading}
-                  className="w-full text-xs text-gray-600 hover:text-gray-900 underline">
-                  Use SMS instead
-                </button>
-              )}
-              <button onClick={reset} className="block w-full text-xs text-gray-500 hover:text-gray-700">← Use a different email</button>
-            </div>
-          )}
-
-          {step === 'sms' && (
-            <div className="space-y-4">
+            ) : (
               <div>
                 <label className="text-xs text-gray-600 block mb-1">SMS code</label>
-                <input type="text" value={smsCode}
+                <input type="text" value={smsCode} inputMode="numeric" autoComplete="one-time-code"
                   onChange={e => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  onKeyDown={e => e.key === 'Enter' && verifySms()}
+                  onKeyDown={e => e.key === 'Enter' && submit()}
                   placeholder="000000" maxLength={6}
                   className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-2xl text-center tracking-[0.5em] font-mono" />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  {smsLast4
+                    ? <>We just sent a code to <span className="font-mono">•••• {smsLast4}</span>.</>
+                    : 'Enter the 6-digit code we just sent.'}
+                </p>
               </div>
-              <button onClick={verifySms} disabled={loading || smsCode.length !== 6}
-                className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white">
-                {loading ? 'Verifying…' : 'Verify & sign in'}
-              </button>
-              <button onClick={startSms} disabled={loading}
-                className="w-full text-xs text-gray-600 hover:text-gray-900 underline">
-                Resend code
-              </button>
-              {factors.totp && (
-                <button onClick={() => setStep('totp')} className="w-full text-xs text-gray-500 hover:text-gray-700">
-                  Use my authenticator instead
+            )}
+
+            {/* Cloudflare Turnstile — required. Do not remove. */}
+            {TURNSTILE_SITE_KEY && (
+              <div ref={turnstileRef} className="flex justify-center" />
+            )}
+
+            <button onClick={submit}
+              disabled={loading || (TURNSTILE_SITE_KEY && !turnstileToken) || (smsMode ? smsCode.length !== 6 : totpCode.length !== 6)}
+              className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white flex items-center justify-center gap-2">
+              {loading ? 'Signing in…' : <>Sign in <LogIn size={14} /></>}
+            </button>
+
+            {/* SMS fallback — inline link, never a separate page. */}
+            <div className="flex items-center justify-between text-xs">
+              {!smsMode ? (
+                <button type="button" onClick={startSms} disabled={smsLoading}
+                  className="text-gray-600 hover:text-violet-700 underline disabled:opacity-50 flex items-center gap-1">
+                  <MessageSquare size={12} />
+                  {smsLoading ? 'Sending…' : 'Text me a code instead'}
                 </button>
+              ) : (
+                <>
+                  <button type="button" onClick={() => { setSmsMode(false); setSmsCode(''); setError(''); }}
+                    className="text-gray-600 hover:text-violet-700 underline">
+                    Use authenticator instead
+                  </button>
+                  <button type="button" onClick={startSms} disabled={smsLoading}
+                    className="text-gray-600 hover:text-violet-700 underline disabled:opacity-50">
+                    {smsLoading ? 'Sending…' : 'Resend code'}
+                  </button>
+                </>
               )}
             </div>
-          )}
+          </div>
 
-          <div className="flex items-start gap-2 bg-violet-50 rounded-lg p-3 mt-4 border border-violet-300">
+          <div className="flex items-start gap-2 bg-violet-50 rounded-lg p-3 mt-5 border border-violet-300">
             <Shield size={14} className="text-violet-600 shrink-0 mt-0.5" />
             <p className="text-[10px] text-violet-700">
               Your authenticator app stays the recommended factor. Billing changes, impersonation and other sensitive actions still require an authenticator code.

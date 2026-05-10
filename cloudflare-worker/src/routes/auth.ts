@@ -450,8 +450,34 @@ auth.post('/setup-totp', safe('setup-totp', 'Could not set up authenticator. Ple
 auth.post('/login', safe('login', 'Login failed. Please try again in a moment, or contact support if the problem persists.', async (c) => {
   const parsed = await readJson(c);
   if (!parsed.ok) return parsed.res;
-  const { email, totp_code } = parsed.body;
+  const { email, totp_code, turnstileToken } = parsed.body;
   if (!email || !totp_code) return c.json({ error: 'Email and TOTP code required' }, 400);
+
+  // Cloudflare Turnstile — bot-protect the password-equivalent factor on
+  // login (mirrors /register). verifyTurnstile() fails CLOSED in
+  // production when TURNSTILE_SECRET_KEY is missing and fails OPEN in
+  // dev/preview so local sign-in still works without the secret.
+  const clientIp = c.req.header('cf-connecting-ip') || undefined;
+  const turnstileOk = await verifyTurnstile(c.env, turnstileToken, clientIp);
+  if (!turnstileOk) {
+    try {
+      const emailHash = await hashEmail(email);
+      let ipBucket = 'unknown';
+      if (clientIp) {
+        if (clientIp.includes(':')) ipBucket = clientIp.split(':').slice(0, 3).join(':') + '::/48';
+        else ipBucket = clientIp.split('.').slice(0, 3).join('.') + '.0/24';
+      }
+      const sql = getSQL(c.env);
+      await sql`INSERT INTO activity_logs (action, details, actor)
+                VALUES ('turnstile_failed',
+                        ${`login attempt blocked: email_hash=${emailHash} ip_bucket=${ipBucket}`},
+                        ${ipBucket})`;
+      await sql.end();
+    } catch (e) {
+      console.error('[AUTH] failed to log turnstile failure on login', e);
+    }
+    return c.json({ error: 'Bot verification failed. Please try again.' }, 403);
+  }
 
   const allowed = await checkRateLimit(c.env, `login:${email.toLowerCase()}`, 5, 300);
   if (!allowed) return c.json({ error: 'Too many attempts. Try again in 5 minutes.' }, 429);
