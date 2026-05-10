@@ -1029,13 +1029,33 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
 
   const [esignFlash, setEsignFlash] = useState(null);
   const [viaDocusign, setViaDocusign] = useState(false);
-  // Tier-gate: DocuSign is a Studio-tier integration. The verify modal
-  // is only reachable by admins, who are unscoped by tier — so we render
-  // the toggle whenever this modal mounts. The backend in
-  // routes/esign.ts:createAndSendEnvelope still no-ops the docusign
-  // path when no active integration is connected and falls back to
-  // native, so the UI never silently fails for non-Studio plans.
-  const docusignAvailable = true;
+  // Real availability check — DocuSign is a Studio-tier provider AND
+  // requires an active connected integration on the calling admin's
+  // account. We hit `/api/integrations` once on mount and look for a
+  // `provider_key === 'docusign'` row with `status === 'active'`. The
+  // backend `/esign/send` is the source of truth (Studio 402 + 412
+  // when not connected) — this UI gate just prevents the admin from
+  // selecting a doomed option.
+  const [docusignAvailable, setDocusignAvailable] = useState(false);
+  const [docusignReason, setDocusignReason] = useState('checking');
+  useEffect(() => {
+    let alive = true;
+    api.integrationsList()
+      .then((rows) => {
+        if (!alive) return;
+        const list = Array.isArray(rows) ? rows : (rows?.integrations || rows?.items || []);
+        const ds = list.find((r) => (r.provider_key || r.provider) === 'docusign' && r.status === 'active');
+        setDocusignAvailable(!!ds);
+        setDocusignReason(ds ? 'ok' : 'not_connected');
+      })
+      .catch(() => { if (alive) { setDocusignAvailable(false); setDocusignReason('error'); } });
+    return () => { alive = false; };
+  }, []);
+  // If DocuSign is unavailable, force the toggle off so we never POST
+  // provider='docusign' against a backend that will 412.
+  useEffect(() => {
+    if (!docusignAvailable && viaDocusign) setViaDocusign(false);
+  }, [docusignAvailable, viaDocusign]);
   const submit = async (status) => {
     setSaving(true);
     setError('');
@@ -1044,7 +1064,7 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
         agreement_type: agreement,
         admin_notes: notes,
         status,
-        via_provider: viaDocusign && docusignAvailable ? 'docusign' : 'native',
+        provider: viaDocusign && docusignAvailable ? 'docusign' : 'native',
       });
       if (res?.esign?.envelope_id) {
         setEsignFlash({
@@ -1239,7 +1259,11 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
             ) : (
               <div className="flex items-start gap-2 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-600">
                 <span className="font-semibold text-gray-700">Send via DocuSign</span>
-                <span className="ml-auto text-gray-500">Studio plan required</span>
+                <span className="ml-auto text-gray-500">
+                  {docusignReason === 'checking' ? 'Checking…'
+                    : docusignReason === 'not_connected' ? <>Not connected — <a href="/integrations" className="underline">connect DocuSign</a></>
+                    : 'Unavailable'}
+                </span>
               </div>
             )}
             {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}

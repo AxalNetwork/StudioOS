@@ -315,11 +315,24 @@ export async function createAndSendEnvelope(
       }
     } catch (e) {
       // Caller explicitly asked for DocuSign — do NOT silently fall
-      // back to native. Strip upstream error bodies (recipient PII)
-      // and re-throw a typed error the route handler maps to a 412.
-      const msg = (e as Error).message || 'unknown';
-      const cls = msg.split(':')[0]?.slice(0, 80) || 'docusign_failed';
+      // back to native. Roll back the orphan `esign_envelopes` row we
+      // pre-inserted (otherwise the next send would hit the
+      // status-IN-('sent','partially_signed') idempotency predicate
+      // and return a stale row), preserve the typed `docusign_*`
+      // prefix, and surface a route-mappable error.
+      try {
+        await env.DB.prepare(
+          `DELETE FROM esign_envelopes WHERE id = ? AND status = 'sent' AND provider = 'native'`,
+        ).bind(envelopeId).run();
+      } catch {}
+      const raw = (e as Error).message || 'unknown';
+      const cls = raw.split(':')[0]?.slice(0, 80) || 'docusign_failed';
       console.warn('[esign] docusign send failed (explicit provider, no fallback):', cls);
+      // Preserve the original typed prefix when present
+      // (`docusign_not_connected`, `docusign_no_account`, …) so the
+      // route handler can return the right HTTP status; only wrap
+      // truly-anonymous failures.
+      if (cls.startsWith('docusign_')) throw new Error(cls);
       throw new Error(`docusign_send_failed: ${cls}`);
     }
   }
@@ -412,8 +425,11 @@ esign.post('/send', async (c) => {
     if (msg.startsWith('docusign_not_connected')) {
       return c.json({ error: 'docusign_not_connected', message: 'No active DocuSign integration for the calling admin.' }, 412);
     }
-    if (msg.startsWith('docusign_send_failed')) {
-      return c.json({ error: 'docusign_send_failed', message: 'DocuSign rejected the send request — check the integration credentials and retry.' }, 502);
+    if (msg.startsWith('docusign_')) {
+      // All other typed DocuSign failures (provider rejection, no
+      // account access, etc.) — 502 with the typed code so the UI
+      // can render an appropriate retry/connect-help affordance.
+      return c.json({ error: msg.split(':')[0], message: 'DocuSign rejected the send request — check the integration credentials and retry.' }, 502);
     }
     throw e;
   }
