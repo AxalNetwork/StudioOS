@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
+import type { IntegrationRow } from '../integrations/registry';
 import { getSQL } from '../db';
 import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
 
@@ -122,14 +123,11 @@ deals.put('/:id', async (c) => {
         if (integ) {
           const work = (async () => {
             try {
-              const { default: hsImpl } = await import('../integrations/providers/hubspot') as any;
-              // The module side-effect-registers; we need the impl from the registry.
               const { getProviderImpl } = await import('../integrations/registry');
               const impl = getProviderImpl('hubspot');
               if (impl?.push) {
-                await impl.push(c, { id: founderUserId } as any, integ, { deal_id: id });
+                await impl.push(c, { id: founderUserId } as User, integ as IntegrationRow, { deal_id: id });
               }
-              void hsImpl; // silence unused-default lint
             } catch (e) {
               console.warn('[deals] hubspot push on stage change failed', (e as Error).message);
             }

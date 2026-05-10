@@ -535,9 +535,17 @@ async function webhook(c: Context<{ Bindings: Env }>, row: IntegrationRow, body:
       const config = row.config_json ? safeParse(row.config_json) : {};
       const map = loadDealstageMap(config);
       if (ev.propertyName === 'dealstage' && ev.propertyValue) {
+        // Tenant scoping: HubSpot object IDs are NOT globally unique across
+        // portals, so a webhook event must only ever mutate the deal owned
+        // by the same user as the integration row that received it. Mirror
+        // the inbound-sync join (deals→projects→founders) and require
+        // `founders.user_id = row.user_id`.
         const local = await c.env.DB.prepare(
-          'SELECT id, status FROM deals WHERE hubspot_deal_id = ?',
-        ).bind(String(ev.objectId)).first<{ id: number; status: string }>();
+          'SELECT d.id, d.status FROM deals d ' +
+          'LEFT JOIN projects p ON p.id = d.project_id ' +
+          'LEFT JOIN founders f ON f.id = p.founder_id ' +
+          'WHERE d.hubspot_deal_id = ? AND f.user_id = ?',
+        ).bind(String(ev.objectId), row.user_id).first<{ id: number; status: string }>();
         if (local) {
           const next = hubspotStageToStudio(map, ev.propertyValue);
           if (next && next !== local.status) {
