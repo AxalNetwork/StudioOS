@@ -24,6 +24,7 @@ import { decodeJwt } from 'jose';
 import { getSQL } from '../db';
 import { requireAuth, hashToken, generateToken } from '../auth';
 import { hasTotpConfigured, loadTotp, persistNewTotpEnrolment } from '../services/authTotp';
+import { hasSmsConfigured, loadSms, getUserFactors, setUserFactor } from '../services/authSms';
 import { putHeadshotFromDataUri, getHeadshot } from '../services/r2';
 import { sendVerificationEmail } from '../services/email';
 import {
@@ -492,6 +493,7 @@ settings.post('/totp/repair', async (c) => {
   const newTotp = new TOTP({ issuer: 'Axal VC StudioOS', label: user.email, secret });
   const newSecret = secret.base32;
   await persistNewTotpEnrolment(c.env, user.id, newSecret, totpRow.recoveryHashes);
+  try { await setUserFactor(c.env, user.id, 'totp'); } catch {}
   // Invalidate existing sessions — the user is about to scan a new QR.
   const nowSec = Math.floor(Date.now() / 1000);
   await sql`UPDATE users SET jwt_min_iat = ${nowSec} WHERE id = ${user.id}`;
@@ -961,11 +963,20 @@ settings.get('/security', async (c) => {
     try { return (JSON.parse(rows[0].totp_recovery_codes || '[]') || []).length; }
     catch { return 0; }
   })();
+  // Task #6 — surface the unified factor list + SMS summary so the Security
+  // tab can render the SMS panel + last-4 without a second round-trip. We
+  // intentionally NEVER return the full phone number — only the trailing 4.
+  const smsRow = await loadSms(c.env, user.id);
+  const factors = await getUserFactors(c.env, user.id);
   return c.json({
     email_verified: !!rows[0].email_verified,
     totp_configured: !!rows[0].totp_configured,
     totp_recovery_codes_remaining: remaining,
     active_sessions: Number(sessions[0]?.active || 0),
+    sms_configured: !!smsRow,
+    sms_last4: smsRow?.last4 || null,
+    sms_country: smsRow?.country || null,
+    tfa_methods: factors,
   });
 });
 

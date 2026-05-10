@@ -7,6 +7,8 @@ import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clear
 import { sendVerificationEmail } from '../services/email';
 import { verifyTurnstile } from '../services/turnstile';
 import { persistNewTotpEnrolment, loadTotp, updateRecoveryHashes, markTotpUsed, hasTotpConfigured, clearTotp } from '../services/authTotp';
+import { setUserFactor } from '../services/authSms';
+import smsRoutes from './auth_sms';
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -423,6 +425,10 @@ auth.post('/setup-totp', safe('setup-totp', 'Could not set up authenticator. Ple
   // now derived from `hasTotpConfigured(env, userId)` (auth_totp row
   // presence) at every call site.
   await persistNewTotpEnrolment(c.env, user.id, totpSecret, recoveryHashes);
+  // Task #6 — keep tfa_methods in lock-step with the auth_totp row so the
+  // factor-discovery endpoint and SettingsPage Security tab both see TOTP
+  // immediately. Best-effort; older DBs without the column silently no-op.
+  try { await setUserFactor(c.env, user.id, 'totp'); } catch {}
   await sql`UPDATE users SET totp_recovery_codes = ${JSON.stringify(recoveryHashes)}, verification_token = NULL, verification_token_expires = NULL WHERE id = ${user.id}`;
   await sql.end();
 
@@ -500,8 +506,14 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   const ua = (c.req.header('user-agent') || '').slice(0, 500);
   const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
   try {
-    await sql2`INSERT INTO user_sessions (user_id, jti, user_agent, ip)
-              VALUES (${user.id}, ${jti}, ${ua || null}, ${ip || null})`;
+    // Task #6 — record the factor that minted this session so requireFactor()
+    // can step-up gate high-risk routes. Recovery-code logins are tracked
+    // distinctly from real TOTP — they DO NOT count as "totp" for step-up
+    // purposes, so an attacker holding a printed code can't escalate to
+    // impersonation/billing/contract-void without re-arming TOTP.
+    const sessionFactor = usedRecoveryCode ? 'recovery' : 'totp';
+    await sql2`INSERT INTO user_sessions (user_id, jti, user_agent, ip, factor)
+              VALUES (${user.id}, ${jti}, ${ua || null}, ${ip || null}, ${sessionFactor})`;
   } catch {
     // Table not migrated yet; the JWT still works (auth.ts skips the check).
   }
@@ -662,5 +674,11 @@ auth.post('/verify-totp', safe('verify-totp', 'Could not verify your code. Pleas
   const valid = totp.validate({ token: totp_code, window: 1 }) !== null;
   return c.json({ valid });
 }));
+
+// Task #6 — mount SMS 2FA endpoints (and the /factors discovery endpoint)
+// onto the same /api/auth prefix. Kept in a separate file (auth_sms.ts)
+// so this router stays small and the SMS surface can be lifted out for
+// independent rate-limit / observability tuning later.
+auth.route('/', smsRoutes);
 
 export default auth;

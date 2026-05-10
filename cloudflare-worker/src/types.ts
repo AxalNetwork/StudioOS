@@ -76,6 +76,24 @@ export interface Env {
   // means the middleware is a no-op (dev / preview).
   CF_ACCESS_TEAM_DOMAIN?: string;   // e.g. "axal.cloudflareaccess.com"
   CF_ACCESS_AUD?: string;           // Application AUD tag from the Access dashboard
+  // Task #6 — Google Cloud Identity Platform / Firebase Phone Auth.
+  // GCIP_API_KEY is the Web API key for the Identity Platform project;
+  // when unset, the SMS 2FA endpoints return 503 and the SettingsPage /
+  // LoginPage hide their SMS surfaces. SMS_COUNTRY_ALLOWLIST is a CSV
+  // of ISO-3166 alpha-2 country codes (default: see services/authSms.ts).
+  // GCIP_RECAPTCHA_TOKEN_FALLBACK is a dev/smoke-test escape hatch so
+  // start-enrollment can succeed without a browser-minted reCAPTCHA.
+  GCIP_API_KEY?: string;
+  GCIP_RECAPTCHA_TOKEN_FALLBACK?: string;
+  // Task #6 — GCIP admin credentials for the disable flow. The Identity
+  // Toolkit Admin REST endpoint requires a service-account OAuth2 bearer;
+  // operators provision it as a secret. Project id is the GCP project that
+  // owns the Identity Platform tenant. When either is absent the disable
+  // path still wipes local state but logs a "skipped upstream delete"
+  // warning so it's visible in observability.
+  GCIP_PROJECT_ID?: string;
+  GCIP_ADMIN_BEARER_TOKEN?: string;
+  SMS_COUNTRY_ALLOWLIST?: string;
   AI?: any;
   // R2 bucket for KYC documents and other large/private blobs.
   // Optional so unit-test envs without R2 bindings still type-check.

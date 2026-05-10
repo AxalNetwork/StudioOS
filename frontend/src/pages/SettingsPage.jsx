@@ -530,6 +530,156 @@ function EmailSection({ data, flash, reload }) {
   );
 }
 
+// Task #6 — SMS 2FA panel. Only renders the enrolment UI when the worker
+// reports `sms_available=true` (GCIP API key configured); otherwise falls
+// back to a quiet "not available" notice so single-tenant deployments
+// without GCIP don't see a broken form. Phone numbers are stored encrypted
+// at rest server-side; the UI only ever sees the last 4 digits.
+function SmsPanel({ data, flash }) {
+  const [status, setStatus] = useState(null);
+  const [step, setStep] = useState('idle');           // idle | enroll | verify
+  const [country, setCountry] = useState('US');
+  const [phone, setPhone] = useState('');
+  const [session, setSession] = useState(null);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    try { setStatus(await api.smsStatus()); }
+    catch { setStatus({ configured: false, sms_available: false }); }
+  };
+  useEffect(() => { refresh(); }, []);
+
+  const start = async () => {
+    if (!/^\+[1-9]\d{6,14}$/.test(phone)) {
+      flash('Phone must be E.164 format, e.g. +14155551234.', 'error'); return;
+    }
+    setBusy(true);
+    try {
+      const res = await api.smsStartEnrollment(phone, country, null);
+      setSession(res.session_info);
+      setStep('verify');
+      flash('Verification code sent.');
+    } catch (e) {
+      flash(e?.message || 'Could not send verification code.', 'error');
+    } finally { setBusy(false); }
+  };
+
+  const confirm = async () => {
+    if (code.length !== 6) return;
+    setBusy(true);
+    try {
+      await api.smsConfirmEnrollment(session, code);
+      flash('SMS 2FA enabled.');
+      setStep('idle'); setPhone(''); setCode(''); setSession(null);
+      await refresh();
+    } catch (e) {
+      flash(e?.message || 'Verification failed.', 'error');
+    } finally { setBusy(false); }
+  };
+
+  const disable = async () => {
+    if (!data.totp_configured) {
+      flash('Configure your authenticator first — every account must keep at least one 2FA method.', 'error');
+      return;
+    }
+    if (!window.confirm('Remove SMS as a sign-in method?')) return;
+    setBusy(true);
+    try {
+      await api.smsDisable();
+      flash('SMS 2FA disabled.');
+      await refresh();
+    } catch (e) {
+      flash(e?.message || 'Could not disable SMS.', 'error');
+    } finally { setBusy(false); }
+  };
+
+  if (!status) {
+    return <Card title="SMS as a backup factor" description="Loading…"><div className="text-sm text-gray-500">…</div></Card>;
+  }
+  if (!status.sms_available) {
+    return (
+      <Card title="SMS as a backup factor" description="SMS-based sign-in is not enabled on this server.">
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          Ask an administrator to provision Google Cloud Identity Platform credentials to turn this on.
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card
+      title="SMS as a backup factor"
+      description="Add a phone number so you can sign in with a one-time text message if you lose access to your authenticator app."
+    >
+      <div className="text-xs text-amber-800 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300 border border-amber-200 dark:border-amber-900 rounded-lg p-3 mb-3">
+        <strong>SIM-swap warning:</strong> SMS is less secure than your authenticator app — anyone who takes over your phone number can use it to sign in.
+        Billing changes, impersonation and other sensitive actions will always still require your authenticator code.
+      </div>
+
+      {status.configured && step === 'idle' && (
+        <div className="space-y-3">
+          <div className="text-sm text-gray-700 dark:text-gray-300">
+            Status: <span className="text-emerald-700 font-medium">Enrolled</span>
+            <span className="text-gray-500 dark:text-gray-400"> · ending in {status.last4} ({status.country})</span>
+          </div>
+          <button onClick={disable} disabled={busy}
+            className="px-4 py-2 border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50 rounded-lg text-sm font-medium">
+            {busy ? 'Removing…' : 'Remove SMS factor'}
+          </button>
+        </div>
+      )}
+
+      {!status.configured && step === 'idle' && (
+        <button onClick={() => setStep('enroll')}
+          className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">
+          Add a phone number
+        </button>
+      )}
+
+      {step === 'enroll' && (
+        <div className="space-y-3">
+          <Field label="Country (ISO 2-letter, e.g. US, GB, CA)">
+            <input value={country} onChange={e => setCountry(e.target.value.toUpperCase().slice(0, 2))}
+              className={inputCls} maxLength={2} />
+          </Field>
+          <Field label="Phone (E.164 format, including +)">
+            <input value={phone} onChange={e => setPhone(e.target.value.replace(/[^\d+]/g, '').slice(0, 16))}
+              placeholder="+14155551234" className={`${inputCls} font-mono`} />
+          </Field>
+          <div className="flex gap-2">
+            <button onClick={start} disabled={busy || !phone || country.length !== 2}
+              className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium">
+              {busy ? 'Sending…' : 'Send verification code'}
+            </button>
+            <button onClick={() => { setStep('idle'); setPhone(''); }}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 'verify' && (
+        <div className="space-y-3">
+          <div className="text-sm text-gray-700 dark:text-gray-300">Enter the 6-digit code we just texted to your phone.</div>
+          <div className="flex gap-2">
+            <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="000000" inputMode="numeric"
+              className={`${inputCls} font-mono text-center tracking-widest`} />
+            <button onClick={confirm} disabled={busy || code.length !== 6}
+              className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium whitespace-nowrap">
+              {busy ? 'Verifying…' : 'Confirm'}
+            </button>
+          </div>
+          <button onClick={() => { setStep('enroll'); setCode(''); setSession(null); }}
+            className="text-xs text-gray-500 hover:text-gray-700">Use a different number</button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function AuthSection({ data, flash }) {
   const [code, setCode] = useState('');
   const [qrPayload, setQrPayload] = useState(null);
@@ -725,6 +875,8 @@ function AuthSection({ data, flash }) {
           </div>
         )}
       </Card>
+
+      <SmsPanel data={data} flash={flash} />
 
       <Card title="Active sessions" description="See every device with an active session and revoke individual ones — or sign everything out at once.">
         {sessionsErr && <div className="text-sm text-red-600 mb-3">{sessionsErr}</div>}

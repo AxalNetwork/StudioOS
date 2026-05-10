@@ -14,7 +14,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, requireAuth } from '../auth';
+import { requireAdmin, requireAuth, requireFactor } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken, verifyAndConsumeToken } from '../services/signedDownload';
 import { notify } from '../services/notify';
@@ -531,6 +531,12 @@ dd.post('/cases/:uid/recompute', async (c) => {
 // ---------- report generation + share ----------
 
 dd.post('/cases/:uid/report', async (c) => {
+  // Task #6 — DD reports embed sensitive verdicts and signed download
+  // tokens are 5-minute single-use; gate the MINT on TOTP step-up so a
+  // SMS-only session can never produce or distribute a report URL. The
+  // /reports/download/:token GET stays unauth-by-token; this is the
+  // chokepoint that controls who can hand out tokens in the first place.
+  await requireFactor(c, 'totp');
   const cs = await getCaseByUid(c.env, c.req.param('uid'));
   if (!cs) return c.json({ error: 'Case not found' }, 404);
   let user: AppUser;

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, requireFactor } from '../auth';
 import { ensureMiPaywallSchema, MI_PRO_PRODUCTS, userHasMiPro } from '../middleware/miAccess';
 import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
 import { upsertPlanFromStripeSubscription } from '../services/subscriptionPlans';
@@ -56,6 +56,10 @@ async function stripeCall<T>(env: Env, path: string, body: Record<string, string
 }
 
 billing.post('/mi-pro/checkout', async (c) => {
+  // Task #6 — billing changes are step-up: SMS-only sessions are denied
+  // and must re-authenticate with TOTP before they can mint a Stripe
+  // Checkout session.
+  await requireFactor(c, 'totp');
   const user = (await requireAuth(c)) as MiUser;
   await ensureMiPaywallSchema(c.env);
   const body = await c.req.json().catch(() => ({} as { plan?: string }));
@@ -106,6 +110,9 @@ billing.post('/mi-pro/checkout', async (c) => {
 });
 
 billing.post('/mi-pro/portal', async (c) => {
+  // Task #6 — Stripe Customer Portal is the cancel/upgrade surface; gate
+  // it on TOTP step-up so a stolen SMS factor can never reach billing.
+  await requireFactor(c, 'totp');
   const user = (await requireAuth(c)) as MiUser;
   if (!user.mi_stripe_customer_id) return c.json({ error: 'no_subscription' }, 400);
   const appUrl = c.env.APP_URL || 'http://localhost:5000';

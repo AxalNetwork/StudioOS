@@ -112,6 +112,21 @@ export const api = {
   confirmVerifyEmail: (data) => request('/auth/confirm-verify-email', { method: 'POST', body: JSON.stringify(data) }),
   resendVerification: (data) => request('/auth/resend-verification', { method: 'POST', body: JSON.stringify(data) }),
   setupTotp: (data) => request('/auth/setup-totp', { method: 'POST', body: JSON.stringify(data) }),
+  // Task #6 — SMS 2FA (Google Cloud Identity Platform / Firebase Phone Auth).
+  // Discovery is unauth (rate-limited per IP). All other endpoints follow the
+  // same cookie-auth path as the rest of `api.*` and never echo the full
+  // phone number — only the last 4 digits.
+  authFactors: (email) => request(`/auth/factors?email=${encodeURIComponent(email)}`),
+  smsStatus: () => request('/auth/sms/status'),
+  smsStartEnrollment: (phone, country, recaptcha_token) =>
+    request('/auth/sms/start-enrollment', { method: 'POST', body: JSON.stringify({ phone, country, recaptcha_token }) }),
+  smsConfirmEnrollment: (session_info, code) =>
+    request('/auth/sms/confirm-enrollment', { method: 'POST', body: JSON.stringify({ session_info, code }) }),
+  smsDisable: () => request('/auth/sms/disable', { method: 'POST' }),
+  smsStartChallenge: (email, recaptcha_token) =>
+    request('/auth/sms/start-challenge', { method: 'POST', body: JSON.stringify({ email, recaptcha_token }) }),
+  smsVerifyChallenge: (email, session_info, code) =>
+    request('/auth/sms/verify-challenge', { method: 'POST', body: JSON.stringify({ email, session_info, code }) }),
   getMe: () => request('/auth/me'),
   health: () => request('/health'),
   stats: () => request('/dashboard/stats'),

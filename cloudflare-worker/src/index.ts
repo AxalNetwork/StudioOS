@@ -36,6 +36,7 @@ import users from './routes/users';
 import marketIntel from './routes/market_intel';
 import { investorProfile, investorSignals, aggregateInvestorSignals } from './routes/investor_signals';
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
+import { runTotpRemediation } from './services/totpRemediation';
 import advisory from './routes/advisory';
 import activity from './routes/activity';
 import admin from './routes/admin';
@@ -337,6 +338,7 @@ const AUTH_ERROR_STATUSES: Record<string, 401 | 403> = {
   'Admin required': 403,
   Forbidden: 403,
   'KYC required': 403,
+  'TOTP required': 403,
 };
 
 app.onError((err: any, c) => {
@@ -524,6 +526,22 @@ export default {
             console.info(`[cron] assistant retention sweep deleted_free=${r.deleted_free} deleted_paid=${r.deleted_paid}`);
           } catch (e) {
             console.error('[cron] assistant retention sweep failed', e);
+          }
+        }
+        // Task #6 — daily TOTP remediation backstop at 04:20 UTC. The
+        // canonical trigger is the admin /maintenance/totp-remediation
+        // endpoint run at deploy time; this cron is the belt-and-braces
+        // sweep that catches anything missed (e.g. users created between
+        // the deploy and the manual run). Idempotent — short-circuits
+        // immediately when no legacy rows remain.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
+          try {
+            const r = await runTotpRemediation(env);
+            if (r.scanned || r.migrated || r.failed) {
+              console.info(`[cron] totp remediation scanned=${r.scanned} migrated=${r.migrated} emailed=${r.emailed} failed=${r.failed}`);
+            }
+          } catch (e) {
+            console.error('[cron] totp remediation failed', e);
           }
         }
       } finally {

@@ -3,7 +3,8 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { hashEmail } from '../util/hashEmail';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, createJWT, hashToken } from '../auth';
+import { requireAdmin, createJWT, hashToken, requireFactor } from '../auth';
+import { runTotpRemediation } from '../services/totpRemediation';
 
 const admin = new Hono<{ Bindings: Env }>();
 
@@ -354,7 +355,24 @@ admin.post('/users/:user_id/resend-verification', async (c) => {
   return c.json({ ok: true, already_verified: false, emailed });
 });
 
+// Task #6 — deploy-time TOTP remediation. Operators run this immediately
+// after a deploy that ships the new auth_totp/auth_sms schema; it migrates
+// every legacy base32 secret out of users.password_hash, sets
+// password_reset_required, and emails each affected user a forced-reset
+// link. Idempotent — repeated invocations over a clean DB are no-ops.
+// Also wired into the daily 04:20 UTC cron as a backup.
+admin.post('/maintenance/totp-remediation', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireAdmin(c);
+  const result = await runTotpRemediation(c.env);
+  return c.json({ ok: true, ...result });
+});
+
 admin.post('/impersonate/:userId', async (c) => {
+  // Task #6 — impersonation is a high-risk step-up. The admin's current
+  // session must have authenticated with TOTP (not SMS, not a recovery
+  // code). requireFactor throws 'TOTP required' (→403) otherwise.
+  await requireFactor(c, 'totp');
   const adminUser = await requireAdmin(c);
   const userId = parseInt(c.req.param('userId'));
   const sql = getSQL(c.env);

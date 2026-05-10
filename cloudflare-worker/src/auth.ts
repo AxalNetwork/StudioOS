@@ -238,6 +238,44 @@ export function canViewPartnerDemand(user: User | null | undefined): boolean {
   return !!user && (user.role === 'admin' || user.role === 'partner');
 }
 
+/**
+ * Task #6 — Step-up factor enforcement.
+ *
+ * `requireFactor(c, 'totp')` resolves the JWT's `jti` to its row in
+ * `user_sessions` and asserts the session's `factor` column matches.
+ * High-risk routes (admin impersonation, billing checkout/portal, contract
+ * void, DD report generation) call this so a session that only authenticated
+ * via SMS can never reach them — TOTP is always required for these surfaces
+ * regardless of which factors the user has enrolled.
+ *
+ * Throws 'TOTP required' (mapped to 403 by the global error handler).
+ * Sessions whose `factor` is NULL (pre-Task-#6 mint or impersonation Bearer
+ * tokens that never created a session row) fail closed: the user must
+ * sign back in with TOTP to step up.
+ */
+export async function requireFactor(
+  c: Context<{ Bindings: Env }>,
+  factor: 'totp',
+): Promise<User> {
+  const user = await requireAuth(c);
+  const token = extractJwt(c);
+  if (!token) throw new Error('TOTP required');
+  let jti: string | undefined;
+  try { jti = (await decodeJWT(c.env, token))?.jti as string | undefined; } catch {}
+  if (!jti) throw new Error('TOTP required');
+  try {
+    const row = await c.env.DB.prepare(
+      'SELECT factor FROM user_sessions WHERE jti = ? AND user_id = ?'
+    ).bind(jti, user.id).first<{ factor: string | null }>();
+    if (!row || row.factor !== factor) throw new Error('TOTP required');
+  } catch (e) {
+    if ((e as Error).message === 'TOTP required') throw e;
+    // user_sessions table missing or query failure → fail closed.
+    throw new Error('TOTP required');
+  }
+  return user;
+}
+
 export async function requireApprovedKyc(c: Context<{ Bindings: Env }>): Promise<User> {
   const user = await requireAuth(c);
   if (user.role === 'admin') return user;
