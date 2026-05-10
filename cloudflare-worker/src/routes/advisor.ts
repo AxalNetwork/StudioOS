@@ -124,9 +124,29 @@ function workingBankFor(user: User): Question[] {
   return bankFor(persona);
 }
 
-// IDs of the three detector questions, used by /answer to keep the
-// detector active mid-onboarding even after users.role flips.
+// IDs of the three detector questions. Used to keep the detector
+// active mid-onboarding even after writeRouter flips users.role.
 const DETECTOR_IDS: string[] = ROLE_DETECTOR.map((q) => q.id);
+
+// Shared bank-selection logic used by /start, /answer, and /skip
+// so detector-pending behaviour is consistent everywhere.
+//
+// AC-1: when `users.role` was null at the start of onboarding the
+// 3-question detector must complete in full before pivoting to the
+// persona bank — even across skips and resume/reload. We detect
+// "mid-onboarding" by looking at the current conversation's
+// answered set: if any detector question is answered AND any is
+// still missing, the user is mid-detector and we re-prepend
+// ROLE_DETECTOR. Otherwise the bank collapses to the persona bank
+// (or, for a still-unknown role, to the detector alone).
+function selectBank(user: User, answered: Set<string>): Question[] {
+  const persona = personaFor(user);
+  const detectorAnswered = DETECTOR_IDS.filter((id) => answered.has(id)).length;
+  const detectorPending = detectorAnswered > 0 && detectorAnswered < DETECTOR_IDS.length;
+  if (persona === 'unknown') return ROLE_DETECTOR;
+  if (detectorPending) return [...ROLE_DETECTOR, ...bankFor(persona)];
+  return bankFor(persona);
+}
 
 // ---------------------------------------------------------------------------
 // Conversation helpers.
@@ -291,15 +311,22 @@ advisor.post('/start', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
 
-  const bank = workingBankFor(user);
   let conv = await getActiveConversation(c.env, user);
   if (!conv) {
-    const firstQ = bank[0] || null;
-    conv = await createConversation(c.env, user, bank.length, firstQ?.id || null);
+    // For a brand-new conversation there are no prior answers, so
+    // selectBank reduces to the workingBankFor result for sizing.
+    const initialBank = workingBankFor(user);
+    const firstQ = initialBank[0] || null;
+    conv = await createConversation(c.env, user, initialBank.length, firstQ?.id || null);
     if (firstQ) await recordMessage(c.env, conv.id, 'assistant', firstQ.prompt, firstQ.id);
   }
 
+  // Resume path: derive the answered set from the conversation
+  // first, then pick the bank — this guarantees that if the user
+  // answered `role_detect.primary`, closed the tab, and came back,
+  // the detector triplet is still served before the persona bank.
   const answered = await effectiveAnsweredSet(c.env, user, conv.id);
+  const bank = selectBank(user, answered);
   const next = nextUnansweredQuestion(bank, answered);
 
   // Refresh counts now that hydration may have inserted new rows.
@@ -445,19 +472,7 @@ advisor.post('/answer', async (c) => {
   }
 
   const answered = await effectiveAnsweredSet(c.env, liveUser, conv.id);
-  // Enforce the full 3-question detector for null-role onboarding:
-  // even after writeRouter flips users.role on `role_detect.primary`,
-  // keep the detector ahead of the persona bank until
-  // `role_detect.organization` and `role_detect.headline` are also
-  // recorded in advisor_answers. For users whose role was already
-  // set when /start ran, the conversation never accumulated detector
-  // answers, so this path collapses cleanly to the persona bank.
-  const detectorPending =
-    DETECTOR_IDS.some((id) => answered.has(id)) &&
-    DETECTOR_IDS.some((id) => !answered.has(id));
-  const bank = detectorPending
-    ? [...ROLE_DETECTOR, ...bankFor(personaFor(liveUser))]
-    : workingBankFor(liveUser);
+  const bank = selectBank(liveUser, answered);
   const next = nextUnansweredQuestion(bank, answered);
   await refreshCounts(c.env, conv.id, next?.id || null);
 
@@ -554,8 +569,11 @@ advisor.post('/skip', async (c) => {
   await recordAnswer(c.env, conv, user, q.id, '', { status: 'skipped' });
   await recordMessage(c.env, conv.id, 'user', '(skipped)', q.id);
 
-  const bank = workingBankFor(user);
-  const answered = await answeredQuestionIds(c.env, conv.id);
+  // Use the shared selectBank helper so skipping detector question
+  // 2 does not let the user jump into the persona bank before
+  // detector question 3 is served.
+  const answered = await effectiveAnsweredSet(c.env, user, conv.id);
+  const bank = selectBank(user, answered);
   const next = nextUnansweredQuestion(bank, answered);
   await refreshCounts(c.env, conv.id, next?.id || null);
   if (!next) {
