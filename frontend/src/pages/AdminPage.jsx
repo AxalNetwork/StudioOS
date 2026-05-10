@@ -224,10 +224,6 @@ export default function AdminPage({ onImpersonate }) {
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'personas' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
           <Sparkles size={14} className="inline mr-1.5" /> Personas
         </button>
-        <Link to="/admin/due-diligence"
-          className="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors border-transparent text-gray-600 hover:text-gray-900">
-          <ShieldAlert size={14} className="inline mr-1.5" /> Due Diligence
-        </Link>
       </div>
 
       {tab === 'contracts' && <ContractsPanel />}

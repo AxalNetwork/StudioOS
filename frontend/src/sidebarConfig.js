@@ -44,6 +44,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'admin', label: 'Admin', items: [
       { to: '/admin', icon: Shield, label: 'Admin Console' },
+      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
     ]},
     { key: 'core', label: 'Core', items: [
@@ -196,6 +197,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'legal', label: 'Legal & Compliance', items: [
       { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
       { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
@@ -237,6 +239,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'legal', label: 'Legal & Compliance', items: [
       { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
       { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
@@ -255,6 +258,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'engagements', label: 'Engagements', items: [
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/mentors', icon: UserCircle, label: 'Mentor Directory' },
+      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
     ]},
     { key: 'account', label: 'Account', items: [
