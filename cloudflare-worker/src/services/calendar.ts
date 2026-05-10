@@ -259,7 +259,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'mentor_booking' | 'partner_office_hour';
+  kind: 'ic_meeting' | 'founder_checkin' | 'mentor_booking' | 'partner_office_hour' | 'calendly_event';
   source_id: number;
   source_uid: string;
   title: string;
@@ -462,6 +462,50 @@ async function partnerOfficeHourEvents(env: Env, userId: number, isAdmin: boolea
   }
 }
 
+// Task #3 — Calendly events surfaced in the unified calendar. Read from
+// the local `calendar_events` projection table written by the Calendly
+// provider's webhook + sync. Visibility: requester only (admin sees all).
+async function calendlyEvents(env: Env, userId: number, isAdmin: boolean,
+                              fromIso: string, toIso: string): Promise<CalendarEvent[]> {
+  try {
+    const where = isAdmin
+      ? "source = 'calendly' AND start_at >= ? AND start_at <= ?"
+      : "source = 'calendly' AND user_id = ? AND start_at >= ? AND start_at <= ?";
+    const stmt = isAdmin
+      ? env.DB.prepare(`SELECT * FROM calendar_events WHERE ${where}`).bind(fromIso, toIso)
+      : env.DB.prepare(`SELECT * FROM calendar_events WHERE ${where}`).bind(userId, fromIso, toIso);
+    const res = await stmt.all<{
+      id: number; uid: string; user_id: number; external_uri: string;
+      title: string | null; start_at: string; end_at: string; status: string;
+      location_kind: string | null; location_uri: string | null;
+      organizer_email: string | null; invitee_email: string | null;
+      invitee_name: string | null; notes: string | null;
+    }>();
+    return (res.results || []).map(r => ({
+      id: `calendly_event:${r.id}`,
+      kind: 'calendly_event',
+      source_id: r.id,
+      source_uid: r.uid,
+      title: r.title || 'Calendly meeting',
+      start_at: r.start_at,
+      end_at: r.end_at,
+      status: r.status,
+      location_kind: (r.location_kind as any) || 'video',
+      location_uri: r.location_uri,
+      organizer_email: r.organizer_email,
+      attendees: [
+        ...(r.organizer_email ? [{ email: r.organizer_email, name: null, role: 'organizer' as const }] : []),
+        ...(r.invitee_email ? [{ email: r.invitee_email, name: r.invitee_name, role: 'invitee' as const }] : []),
+      ],
+      notes: r.notes,
+      project_id: null,
+    }));
+  } catch (e) {
+    if (isMissingTableError(e)) return [];
+    throw e;
+  }
+}
+
 export async function fetchUserEvents(
   env: Env, userId: number, role: string, fromIso: string, toIso: string,
   kinds?: string[],
@@ -470,13 +514,14 @@ export async function fetchUserEvents(
   const wanted = new Set(
     kinds && kinds.length
       ? kinds
-      : ['mentor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour'],
+      : ['mentor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour', 'calendly_event'],
   );
   const out: CalendarEvent[] = [];
   if (wanted.has('mentor_booking')) out.push(...await mentorBookingEvents(env, userId, isAdmin, fromIso, toIso));
   if (wanted.has('ic_meeting')) out.push(...await icEvents(env, userId, isAdmin, fromIso, toIso));
   if (wanted.has('founder_checkin')) out.push(...await checkinEvents(env, userId, isAdmin, fromIso, toIso));
   if (wanted.has('partner_office_hour')) out.push(...await partnerOfficeHourEvents(env, userId, isAdmin, fromIso, toIso));
+  if (wanted.has('calendly_event')) out.push(...await calendlyEvents(env, userId, isAdmin, fromIso, toIso));
   out.sort((a, b) => a.start_at.localeCompare(b.start_at));
   return out;
 }

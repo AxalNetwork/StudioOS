@@ -57,6 +57,8 @@ import integrations from './routes/integrations';
 // `registerProvider({ key: 'hubspot', ... })` runs at boot so the route
 // layer in routes/integrations.ts can dispatch to it.
 import { syncAllHubspotIntegrations } from './integrations/providers/hubspot';
+// Task #3 — Calendly provider. Side-effect import so registerProvider() runs at boot.
+import { syncAllCalendlyIntegrations } from './integrations/providers/calendly';
 import network from './routes/network';
 import networkfx from './routes/networkfx';
 import profiling from './routes/profiling';
@@ -560,6 +562,19 @@ export default {
             }
           } catch (e) {
             console.error('[cron] hubspot sync failed', e);
+          }
+        }
+        // Task #3 — Calendly 15-minute reconcile. Webhooks deliver real-time
+        // booking events; this is the safety-net for portals where webhooks
+        // are dropped or disabled.
+        if (now.getUTCMinutes() % 15 === 0) {
+          try {
+            const r = await syncAllCalendlyIntegrations(env);
+            if (r.scanned > 0) {
+              console.info(`[cron] calendly sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
+            }
+          } catch (e) {
+            console.error('[cron] calendly sync failed', e);
           }
         }
         // Task #14 — flush pending digest emails. Cheap on idle ticks

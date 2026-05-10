@@ -503,6 +503,35 @@ CREATE TABLE IF NOT EXISTS integration_waitlist (
 );
 CREATE INDEX IF NOT EXISTS idx_integration_waitlist_provider ON integration_waitlist(provider_key);
 
+-- Task #3 — Calendly integration. Unified projection table for events
+-- pulled in from external scheduling providers (Calendly first; future
+-- Cal.com / SavvyCal fit the same shape). Read by services/calendar.ts
+-- for kind='calendly_event'. Idempotent on (source, external_uri).
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid             TEXT    NOT NULL UNIQUE,
+  user_id         INTEGER NOT NULL,
+  source          TEXT    NOT NULL,
+  external_uri    TEXT    NOT NULL,
+  external_id     TEXT,
+  title           TEXT,
+  start_at        TEXT    NOT NULL,
+  end_at          TEXT    NOT NULL,
+  status          TEXT    NOT NULL DEFAULT 'scheduled',
+  location_kind   TEXT,
+  location_uri    TEXT,
+  organizer_email TEXT,
+  invitee_email   TEXT,
+  invitee_name    TEXT,
+  notes           TEXT,
+  raw_json        TEXT,
+  created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(source, external_uri)
+);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_user_time   ON calendar_events(user_id, start_at);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_source_status ON calendar_events(source, status);
+
 -- Task #2 — HubSpot integration. Indexes for the inline external-id columns
 -- declared in `projects` and `deals` above (also in migration 017).
 CREATE INDEX IF NOT EXISTS idx_deals_hubspot ON deals(hubspot_deal_id);

@@ -12,11 +12,13 @@ import { Calendar, Download, RefreshCw, Link as LinkIcon, X, Plus, Clock, Users 
 import { api } from '../lib/api';
 
 const KIND_LABEL = {
+  calendly_event: 'Calendly',
   mentor_booking: 'Mentor session',
   ic_meeting: 'IC meeting',
   founder_checkin: 'Founder check-in',
 };
 const KIND_COLOR = {
+  calendly_event: 'bg-sky-100 text-sky-700 border-sky-200',
   mentor_booking: 'bg-amber-100 text-amber-700 border-amber-200',
   ic_meeting: 'bg-purple-100 text-purple-700 border-purple-200',
   founder_checkin: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -291,6 +293,7 @@ export default function CalendarPage() {
           ['mentor_booking', 'Mentor sessions'],
           ['ic_meeting', 'IC meetings'],
           ['founder_checkin', 'Check-ins'],
+          ['calendly_event', 'Calendly'],
         ].map(([k, l]) => (
           <button key={k} onClick={() => setFilter(k)}
                   className={`text-sm px-3 py-1 rounded-full border ${filter === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'}`}>

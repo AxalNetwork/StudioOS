@@ -35,6 +35,12 @@ export interface ProviderDescriptor {
   icon?: string;
   /** OAuth scopes requested when auth_type='oauth2'. */
   oauth_scopes?: string[];
+  /**
+   * When true, the connect modal renders BOTH the OAuth button AND the
+   * api_key input — the provider's `connect()` accepts whichever the
+   * caller supplies. Used by Calendly (PAT or OAuth).
+   */
+  supports_pat?: boolean;
 }
 
 /**
@@ -125,6 +131,26 @@ export interface ProviderImpl {
   validateConfig?(patch: Record<string, unknown>, existing: Record<string, unknown>):
     | { ok: true; patch: Record<string, unknown> }
     | { ok: false; error: string };
+  /**
+   * Optional provider-specific webhook signature verifier. Returns true on
+   * a valid signature. When omitted, the route layer falls back to its
+   * default `sha256=hex` HMAC over the raw body. Implement this for
+   * providers that use a non-standard signature format (Calendly's
+   * `t=...,v1=...` Stripe-style, etc.). The `headers` argument is the raw
+   * inbound Headers — providers that need a header other than
+   * `X-Axal-Signature` (e.g. `Calendly-Webhook-Signature`) read it here.
+   */
+  verifyWebhook?(secret: string, body: string, headers: Headers):
+    Promise<boolean> | boolean;
+  /**
+   * Optional fire-and-forget hook called by the route layer **after** a
+   * fresh connect (or reconnect) has been persisted. The route invokes
+   * this through `executionCtx.waitUntil`, so failures are non-fatal and
+   * never block the HTTP response. Used by Calendly to immediately
+   * provision its webhook subscription + run a first sync — without it,
+   * the user faces a 15-minute "dead period" before bookings show up.
+   */
+  postConnect?(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow): Promise<void>;
 }
 
 const PROVIDER_IMPLS: Map<string, ProviderImpl> = new Map();
@@ -163,14 +189,18 @@ export const REGISTRY: ProviderDescriptor[] = [
     key: 'calendly',
     display_name: 'Calendly',
     integration_type: 'scheduling',
-    description: 'Embed your Calendly availability across mentor matching and partner office hours.',
-    status: 'coming_soon',
+    description: 'Embed your Calendly availability across mentor matching and partner office hours; bookings flow into your StudioOS calendar.',
+    // Task #3 — flipped to 'live' on 2026-05-10. Provider module is
+    // side-effect imported from index.ts so the registerProvider() call
+    // runs at boot.
+    status: 'live',
     tier: 'free',
     auth_type: 'oauth2',
-    capabilities: ['Embed scheduling', 'Pull bookings'],
+    capabilities: ['Embed scheduling', 'Pull bookings', 'Cancellation sync', 'Personal Access Token'],
     docs_url: 'https://developer.calendly.com/api-docs',
     icon: 'Calendar',
     oauth_scopes: ['default'],
+    supports_pat: true,
   },
   {
     key: 'salesforce',
@@ -339,6 +369,7 @@ export function publicDescriptor(p: ProviderDescriptor) {
     capabilities: p.capabilities,
     docs_url: p.docs_url,
     icon: p.icon ?? null,
+    supports_pat: !!p.supports_pat,
     has_implementation: PROVIDER_IMPLS.has(p.key),
   };
 }

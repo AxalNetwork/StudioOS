@@ -503,11 +503,22 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
                 <button type="button" onClick={startOauth} className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-1.5 rounded inline-flex items-center gap-1.5">
                   <ExternalLink size={12} /> Continue with {provider.display_name}
                 </button>
+                {provider.supports_pat && (
+                  <p className="mt-2 text-[11px] text-gray-500">
+                    Or paste a Personal Access Token below — useful if your workspace blocks third-party OAuth apps.
+                  </p>
+                )}
               </div>
             )}
             {provider.auth_type === 'api_key' && (
               <Field label={existing ? 'New API key (leave blank to keep current)' : 'API key'}>
                 <input type="password" className={inputCls} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={existing?.api_key_preview || ''} required={!existing} />
+              </Field>
+            )}
+            {provider.auth_type === 'oauth2' && provider.supports_pat && !existing && (
+              <Field label="Personal Access Token (optional)">
+                <input type="password" className={inputCls} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="cal_pat_..." autoComplete="off" />
+                <p className="text-[11px] text-gray-500 mt-1">Generate one in {provider.display_name} → Integrations → API & Webhooks.</p>
               </Field>
             )}
             <Field label="Webhook secret (optional)">
@@ -519,7 +530,7 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
             </Field>
             <div className="flex items-center justify-end gap-2 pt-2">
               <button type="button" onClick={onClose} className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 px-4 py-2">Cancel</button>
-              {provider.auth_type !== 'oauth2' || existing ? (
+              {provider.auth_type !== 'oauth2' || existing || (provider.supports_pat && apiKey) ? (
                 <button type="submit" disabled={busy} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
                   {busy ? 'Saving…' : (existing ? 'Update' : 'Connect')}
                 </button>

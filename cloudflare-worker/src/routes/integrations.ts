@@ -318,6 +318,20 @@ integrations.post('/connect', async (c) => {
         'INSERT INTO activity_logs (user_id, actor, action, details) VALUES (?, ?, ?, ?)',
       ).bind(user.id, actorHash, existing ? 'integration_reconnected' : 'integration_connected', JSON.stringify({ provider_key: key })).run();
     } catch { /* activity_logs may not exist in some schemas */ }
+
+    // Provider-specific post-connect hook (Calendly uses this to provision
+    // its webhook subscription + run a first sync immediately, eliminating
+    // the otherwise-15-minute "dead period" after connect). Fire-and-forget
+    // via waitUntil so failures don't block the HTTP response.
+    if (impl.postConnect) {
+      try {
+        c.executionCtx.waitUntil(
+          impl.postConnect(c, user, row).catch((e: Error) => {
+            console.warn(`[integrations] postConnect failed for ${key}:`, e.message);
+          }),
+        );
+      } catch { /* executionCtx may be missing in some test contexts */ }
+    }
   }
 
   await sql.end();
@@ -588,9 +602,20 @@ integrations.post('/webhook/:provider/:uid', async (c) => {
       });
       return c.json({ error: 'missing_signature' }, 401);
     }
-    const expected = await hmacHex(secret, body);
-    const provided = signature.replace(/^sha256=/i, '').trim().toLowerCase();
-    if (!constantTimeEqual(provided, expected)) {
+    // Provider-specific verifier wins when present (Calendly uses a
+    // Stripe-style `t=...,v1=...` format that the default check can't
+    // express). Fall back to the default `sha256=hex` HMAC otherwise.
+    const implForVerify = getProviderImpl(provider);
+    let valid: boolean;
+    if (implForVerify?.verifyWebhook) {
+      try { valid = await implForVerify.verifyWebhook(secret, body, c.req.raw.headers); }
+      catch { valid = false; }
+    } else {
+      const expected = await hmacHex(secret, body);
+      const provided = signature.replace(/^sha256=/i, '').trim().toLowerCase();
+      valid = constantTimeEqual(provided, expected);
+    }
+    if (!valid) {
       await logEvent(c.env, {
         integration_id: row.id, user_id: row.user_id, provider_key: provider,
         direction: 'inbound', event_type: 'webhook', status: 'error',
@@ -864,6 +889,17 @@ integrations.get('/oauth/:provider/callback', async (c) => {
             'INSERT INTO activity_logs (user_id, actor, action, details) VALUES (?, ?, ?, ?)',
           ).bind(user.id, actorHash, existing ? 'integration_reconnected' : 'integration_connected', JSON.stringify({ provider_key: provider, source: 'oauth_callback' })).run();
         } catch { /* activity_logs may not exist in some schemas */ }
+
+        // Same post-connect hook as the JSON /connect path.
+        if (impl.postConnect) {
+          try {
+            c.executionCtx.waitUntil(
+              impl.postConnect(c, user, row).catch((e: Error) => {
+                console.warn(`[integrations] postConnect (oauth_callback) failed for ${provider}:`, e.message);
+              }),
+            );
+          } catch { /* executionCtx may be missing in some test contexts */ }
+        }
       }
     } finally {
       await sql.end();
