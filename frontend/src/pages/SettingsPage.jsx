@@ -2894,8 +2894,69 @@ function InvestorBillingPanel({ data, flash }) {
         </div>
       </Card>
 
+      <Card title="Compare plans" description="What you get at each tier.">
+        <InvestorROITable currentTier={tier} />
+      </Card>
+
       {tier === 'institutional' && <InvestorSeatsCard flash={flash} cap={seatCap} onChange={refresh} />}
     </>
+  );
+}
+
+// Task #7 (W-2) — ROI comparison table reused by Settings > Billing.
+// Mirrors the matrix on /pricing/investor so investors see the same
+// feature breakdown without leaving the settings page.
+const INVESTOR_ROI_ROWS = [
+  { feature: 'Pipeline browse + AI scoring',     free: '✓', pro: '✓',  inst: '✓' },
+  { feature: 'Warm intros / quarter',            free: '3', pro: '25', inst: '100' },
+  { feature: 'Deal rooms (concurrent)',          free: '1', pro: '5',  inst: 'Unlimited' },
+  { feature: 'Calendar bookings with founders',  free: '—', pro: '✓',  inst: '✓' },
+  { feature: 'Market Intelligence — exports',    free: '—', pro: '✓',  inst: '✓' },
+  { feature: 'Co-invest discovery',              free: '—', pro: '—',  inst: '✓' },
+  { feature: 'Carta sync (write)',               free: '—', pro: '—',  inst: '✓' },
+  { feature: 'LP reporting + peer benchmarks',   free: '—', pro: '—',  inst: '✓' },
+  { feature: 'Founder reference checks',         free: '—', pro: '✓',  inst: '✓' },
+  { feature: 'Colleague seats included',         free: '0', pro: '0',  inst: '4' },
+];
+
+function InvestorROITable({ currentTier }) {
+  const cellCls = (col) => {
+    const active =
+      (col === 'free' && currentTier === 'free') ||
+      (col === 'pro' && currentTier === 'professional') ||
+      (col === 'inst' && currentTier === 'institutional');
+    return `text-center px-3 py-2 ${active ? 'font-semibold text-gray-900 dark:text-gray-100 bg-violet-50/40 dark:bg-violet-900/10' : 'text-gray-700 dark:text-gray-200'}`;
+  };
+  const headCls = (col) => {
+    const active =
+      (col === 'free' && currentTier === 'free') ||
+      (col === 'pro' && currentTier === 'professional') ||
+      (col === 'inst' && currentTier === 'institutional');
+    return `text-center font-medium px-3 py-2 ${active ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-300'}`;
+  };
+  return (
+    <div className="overflow-x-auto -mx-1">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 dark:bg-gray-800/60">
+          <tr>
+            <th className="text-left font-medium text-gray-600 dark:text-gray-300 px-3 py-2">Capability</th>
+            <th className={headCls('free')}>Free</th>
+            <th className={headCls('pro')}>Professional</th>
+            <th className={headCls('inst')}>Institutional</th>
+          </tr>
+        </thead>
+        <tbody>
+          {INVESTOR_ROI_ROWS.map((r) => (
+            <tr key={r.feature} className="border-t border-gray-100 dark:border-gray-800">
+              <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{r.feature}</td>
+              <td className={cellCls('free')}>{r.free}</td>
+              <td className={cellCls('pro')}>{r.pro}</td>
+              <td className={cellCls('inst')}>{r.inst}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

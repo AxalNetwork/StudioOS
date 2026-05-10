@@ -384,6 +384,13 @@ billing.get('/investor/status', async (c) => {
   await ensureInvestorPaywallSchema(c.env);
   const tier = effectiveInvestorTier(user);
   const quotas = INVESTOR_QUOTAS[tier];
+  // Task #7 (W-2) — surface live deal-room usage so the frontend quota bar
+  // can render used/cap. Source of truth is the same table the
+  // `/api/deals/:id/dealroom/join` endpoint counts against.
+  const dealroomRow = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM investor_dealroom_members WHERE investor_user_id = ?`
+  ).bind(user.id).first<{ n: number }>().catch(() => null);
+  const dealroomUsed = Number(dealroomRow?.n ?? 0);
   return c.json({
     tier,
     raw_tier: user.investor_tier ?? 'free',
@@ -395,6 +402,7 @@ billing.get('/investor/status', async (c) => {
       intros_per_quarter: quotas.intros_per_quarter,
       intros_used: user.investor_quota_intros_used ?? 0,
       dealroom_max: quotas.dealroom_max,
+      dealroom_used: dealroomUsed,
       seats: quotas.seats,
       seat_count: user.investor_seat_count ?? 0,
     },

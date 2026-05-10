@@ -58,12 +58,10 @@ export default function InvestorQuotaBars({ user }) {
   const introsUsed = intros?.used ?? billing?.quotas?.intros_used ?? 0;
   const introsCap = intros?.cap ?? billing?.quotas?.intros_per_quarter ?? 3;
   const dealroomCap = billing?.quotas?.dealroom_max ?? 1;
-  // Active deal rooms used isn't carried on /investor/status today, so we
-  // surface "—" with the cap. Backend already enforces the cap on join; the
-  // bar is informational. Updating the count requires a future endpoint
-  // (see follow-ups) — until then we render the cap so investors know what
-  // they're paying for.
-  const dealroomsUsed = billing?.quotas?.dealroom_used ?? null;
+  // Worker /api/billing/investor/status now returns `dealroom_used` (count of
+  // rows in investor_dealroom_members for this user). Falls back to 0 when
+  // the field is absent (older worker version) so the bar still renders.
+  const dealroomsUsed = billing?.quotas?.dealroom_used ?? 0;
 
   return (
     <div data-card className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 mb-4">
@@ -91,10 +89,10 @@ export default function InvestorQuotaBars({ user }) {
           <Handshake size={14} className="text-violet-600 dark:text-violet-300 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
             <Bar
-              used={dealroomsUsed ?? 0}
+              used={dealroomsUsed}
               cap={dealroomCap}
-              label="Deal rooms"
-              hint={dealroomsUsed == null ? 'Per-account cap on concurrent deal rooms.' : null}
+              label="Active deal rooms"
+              hint={dealroomCap >= 100000 ? 'No cap on your plan.' : null}
             />
           </div>
         </div>
