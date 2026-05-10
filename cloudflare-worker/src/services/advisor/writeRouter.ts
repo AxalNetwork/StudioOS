@@ -143,6 +143,26 @@ function parseList(s: string): string[] {
   return s.split(',').map(t => t.trim()).filter(Boolean);
 }
 
+// Lazy partial-unique indexes for the AC-2 founder bank "slot"
+// upserts (discovery interviews + roadmap OKRs). Scoped via
+// `WHERE col LIKE 'advisor:%'` so they never collide with
+// user-typed values in the same column. Created once per isolate.
+let _slotIndexesReady = false;
+async function ensureAdvisorSlotIndexes(env: Env): Promise<void> {
+  if (_slotIndexesReady) return;
+  try {
+    await env.DB.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS uniq_discovery_advisor_slot ON discovery_interviews(project_id, interviewee_role) WHERE interviewee_role LIKE 'advisor:%'",
+    );
+    await env.DB.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS uniq_roadmap_okrs_advisor_slot ON roadmap_okrs(project_id, quarter) WHERE quarter LIKE 'advisor:%'",
+    );
+    _slotIndexesReady = true;
+  } catch (e) {
+    console.error('[advisor] slot indexes:', (e as Error).message);
+  }
+}
+
 async function tierForInvestorThesis(env: Env, user: User): Promise<{ ok: boolean; upgrade_link?: string }> {
   // The free tier writes the basic profile but the long-form `thesis`
   // text is part of the Investor Pro paywall (W-1, see billing.ts).
@@ -217,6 +237,189 @@ export async function routeAnswer(
     }
     const ctx = await ensureFounderProject(env, user);
     if (!ctx) return { status: 'failed', error: 'could not resolve founder project' };
+
+    // ---- AC-2: discovery interviews (≥3) -----------------------------
+    // Each (interviewN.name, interviewN.pains) pair maps to one
+    // discovery_interviews row tagged with `interviewee_role =
+    // 'advisor:interviewN'`. We declare a partial UNIQUE index over
+    // `(project_id, interviewee_role)` scoped to advisor slots, so
+    // ON CONFLICT upserts are atomic — concurrent submissions can
+    // never duplicate the same slot. The partial WHERE clause
+    // protects pre-existing rows that may share interviewee_role
+    // values like "Designer" across different projects.
+    const discoveryMatch = /^founder\.discovery\.interview([1-3])\.(name|pains)$/.exec(questionId);
+    if (discoveryMatch) {
+      const slot = `advisor:interview${discoveryMatch[1]}`;
+      const field = discoveryMatch[2]; // 'name' | 'pains'
+      await ensureAdvisorSlotIndexes(env);
+      const nowIso = new Date().toISOString();
+      try {
+        if (field === 'name') {
+          await env.DB.prepare(
+            `INSERT INTO discovery_interviews
+               (project_id, interviewee_name, interviewee_role, interview_date,
+                notes, hypotheses_json, pains_json, created_at, updated_at)
+             VALUES (?, ?, ?, ?, '', '[]', '[]', ?, ?)
+             ON CONFLICT(project_id, interviewee_role)
+               WHERE interviewee_role LIKE 'advisor:%'
+             DO UPDATE SET interviewee_name = excluded.interviewee_name,
+                           updated_at = excluded.updated_at`,
+          ).bind(ctx.project_id, value, slot, nowIso.slice(0, 10), nowIso, nowIso).run();
+        } else {
+          // pains_json is an array; we store the free-text answer as
+          // the single first element so existing /api/progress/discovery
+          // readers (which expect a JSON array) don't choke.
+          const painsJson = JSON.stringify([value]);
+          await env.DB.prepare(
+            `INSERT INTO discovery_interviews
+               (project_id, interviewee_name, interviewee_role, interview_date,
+                notes, hypotheses_json, pains_json, created_at, updated_at)
+             VALUES (?, '(unnamed)', ?, ?, ?, '[]', ?, ?, ?)
+             ON CONFLICT(project_id, interviewee_role)
+               WHERE interviewee_role LIKE 'advisor:%'
+             DO UPDATE SET pains_json = excluded.pains_json,
+                           notes = excluded.notes,
+                           updated_at = excluded.updated_at`,
+          ).bind(ctx.project_id, slot, nowIso.slice(0, 10), value, painsJson, nowIso, nowIso).run();
+        }
+        const row = await env.DB.prepare(
+          `SELECT id FROM discovery_interviews WHERE project_id = ? AND interviewee_role = ?`,
+        ).bind(ctx.project_id, slot).first<{ id: number }>();
+        return {
+          status: 'saved',
+          saved_to: {
+            table: 'discovery_interviews',
+            column: field === 'name' ? 'interviewee_name' : 'pains_json',
+            id: row?.id,
+            page_url: '/build/discovery',
+          },
+        };
+      } catch (e) {
+        return { status: 'failed', error: (e as Error).message };
+      }
+    }
+
+    // ---- AC-2: roadmap OKRs (≥3) -------------------------------------
+    // Each objective lands as one roadmap_okrs row tagged in
+    // `quarter` with `advisor:q1_objN`. Same pattern as discovery —
+    // a partial UNIQUE index scoped to advisor slots gives us
+    // atomic upsert without colliding with existing user-created
+    // rows whose `quarter` is set to a normal label like 'Q1 2026'.
+    const okrMatch = /^founder\.okrs\.q1_objective([1-3])$/.exec(questionId);
+    if (okrMatch) {
+      const slot = `advisor:q1_obj${okrMatch[1]}`;
+      await ensureAdvisorSlotIndexes(env);
+      const nowIso = new Date().toISOString();
+      try {
+        await env.DB.prepare(
+          `INSERT INTO roadmap_okrs
+             (project_id, objective, key_results_json, kanban_status, quarter, sort_order, created_at, updated_at)
+           VALUES (?, ?, '[]', 'now', ?, ?, ?, ?)
+           ON CONFLICT(project_id, quarter)
+             WHERE quarter LIKE 'advisor:%'
+           DO UPDATE SET objective = excluded.objective,
+                         updated_at = excluded.updated_at`,
+        ).bind(ctx.project_id, value, slot, Number(okrMatch[1]), nowIso, nowIso).run();
+        const row = await env.DB.prepare(
+          `SELECT id FROM roadmap_okrs WHERE project_id = ? AND quarter = ?`,
+        ).bind(ctx.project_id, slot).first<{ id: number }>();
+        return {
+          status: 'saved',
+          saved_to: { table: 'roadmap_okrs', column: 'objective', id: row?.id, page_url: '/build/roadmap' },
+        };
+      } catch (e) {
+        return { status: 'failed', error: (e as Error).message };
+      }
+    }
+
+    // ---- AC-2: brand basics (landing_pages) --------------------------
+    if (questionId === 'founder.brand.tagline' || questionId === 'founder.brand.theme_color') {
+      const col = questionId === 'founder.brand.tagline' ? 'tagline' : 'theme_color';
+      // theme_color must be a 6-digit hex; reject otherwise.
+      if (col === 'theme_color' && !/^#[0-9a-fA-F]{6}$/.test(value)) {
+        return { status: 'failed', error: 'theme_color must be a 6-digit hex like #7c3aed' };
+      }
+      try {
+        // Lazy-create the landing_pages table (mirrors routes/brand.ts
+        // ensureSchema) so this works on dev/SQLite without a prior
+        // brand-page open.
+        await env.DB.exec(
+          "CREATE TABLE IF NOT EXISTS landing_pages (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL UNIQUE, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, tagline TEXT, headline TEXT, subheadline TEXT, cta_text TEXT DEFAULT 'Join the waitlist', logo_url TEXT, logo_svg TEXT, theme_color TEXT DEFAULT '#7c3aed', published INTEGER DEFAULT 0, views_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))",
+        );
+        const proj = await env.DB.prepare(`SELECT name FROM projects WHERE id = ?`).bind(ctx.project_id).first<{ name: string }>();
+        const baseName = (proj?.name || 'page').replace(/[^a-z0-9-]+/gi, '-').toLowerCase().slice(0, 40) || 'page';
+        const tail = Math.random().toString(36).slice(2, 8);
+        const slug = `${baseName}-${tail}`;
+        const existing = await env.DB.prepare(`SELECT id FROM landing_pages WHERE project_id = ?`).bind(ctx.project_id).first<{ id: number }>();
+        if (existing?.id) {
+          await env.DB.prepare(
+            `UPDATE landing_pages SET ${col} = ?, updated_at = datetime('now') WHERE id = ?`,
+          ).bind(value, existing.id).run();
+          return { status: 'saved', saved_to: { table: 'landing_pages', column: col, id: existing.id, page_url: '/build/brand' } };
+        }
+        await env.DB.prepare(
+          `INSERT INTO landing_pages (project_id, slug, name, ${col}) VALUES (?, ?, ?, ?)`,
+        ).bind(ctx.project_id, slug, proj?.name || 'My Startup', value).run();
+        return { status: 'saved', saved_to: { table: 'landing_pages', column: col, id: ctx.project_id, page_url: '/build/brand' } };
+      } catch (e) {
+        return { status: 'failed', error: (e as Error).message };
+      }
+    }
+
+    // ---- AC-2: deck-draft seed (pitch_decks) -------------------------
+    if (questionId === 'founder.deck.problem' || questionId === 'founder.deck.market') {
+      const slideKey = questionId === 'founder.deck.problem' ? 'Problem' : 'Market';
+      try {
+        await env.DB.exec(
+          "CREATE TABLE IF NOT EXISTS pitch_decks (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1, slides TEXT NOT NULL, title TEXT, is_current INTEGER DEFAULT 1, created_by INTEGER, created_at TEXT DEFAULT (datetime('now')))",
+        );
+        const cur = await env.DB.prepare(
+          `SELECT id, slides FROM pitch_decks WHERE project_id = ? AND is_current = 1 ORDER BY version DESC LIMIT 1`,
+        ).bind(ctx.project_id).first<{ id: number; slides: string }>();
+        let slides: Record<string, string> = {};
+        if (cur?.slides) {
+          try {
+            const parsed = JSON.parse(cur.slides);
+            // Existing decks may store slides as an array of objects
+            // ([{title,body}, …]) — convert to the keyed map we use
+            // here so subsequent merges are deterministic.
+            if (Array.isArray(parsed)) {
+              for (const s of parsed) {
+                if (s && typeof s.title === 'string') slides[s.title] = String(s.body ?? '');
+              }
+            } else if (parsed && typeof parsed === 'object') {
+              slides = parsed as Record<string, string>;
+            }
+          } catch { /* malformed slides — overwrite */ }
+        }
+        slides[slideKey] = value;
+        const slidesJson = JSON.stringify(slides);
+        if (cur?.id) {
+          await env.DB.prepare(`UPDATE pitch_decks SET slides = ? WHERE id = ?`).bind(slidesJson, cur.id).run();
+          return { status: 'saved', saved_to: { table: 'pitch_decks', column: 'slides', id: cur.id, page_url: '/build/deck' } };
+        }
+        const ins = await env.DB.prepare(
+          `INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by) VALUES (?, 1, ?, ?, 1, ?)`,
+        ).bind(ctx.project_id, slidesJson, 'Draft', user.id).run();
+        const newId = Number((ins as { meta?: { last_row_id?: number } }).meta?.last_row_id || 0);
+        return { status: 'saved', saved_to: { table: 'pitch_decks', column: 'slides', id: newId || undefined, page_url: '/build/deck' } };
+      } catch (e) {
+        return { status: 'failed', error: (e as Error).message };
+      }
+    }
+
+    // ---- AC-2: Spin-Out Lab Week-1 review milestone ------------------
+    if (questionId === 'founder.spinout.week1_review') {
+      try {
+        await env.DB.prepare(
+          `INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key)
+             VALUES (?, 1, 'week1_reviewed')`,
+        ).bind(user.id).run();
+        return { status: 'saved', saved_to: { table: 'spinout_lab_milestones', column: 'milestone_key', id: user.id, page_url: '/spin-out-lab' } };
+      } catch (e) {
+        return { status: 'failed', error: (e as Error).message };
+      }
+    }
     // Side-effect (best-effort): a freshly-created project counts as
     // the Spin-Out Lab "project_created" milestone. Fired once on
     // first project rename so the lab unlocks Week-2 features
