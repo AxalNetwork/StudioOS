@@ -104,6 +104,10 @@ export interface OverviewReport {
   p50_latency_ms: number; p95_latency_ms: number; error_rate_pct: number; total_requests: number;
   top_pages: Array<{ endpoint: string; hits: number }>;
   daily_active: Array<{ day: string; active: number }>;
+  // Task #13 — `reason: 'no_data'` when the entire window has zero traffic
+  // and zero signups; the UI uses this to show a clean empty pill instead
+  // of a wall of zero-stat cards that look like a load failure.
+  meta?: { reason: 'ok' | 'no_data' };
 }
 
 export async function loadOverview(env: Env, range: DateRange, currency?: string | null): Promise<OverviewReport> {
@@ -184,11 +188,16 @@ export async function loadOverview(env: Env, range: DateRange, currency?: string
   const total = num(reqRollup[0]?.total);
   const errors5xx = num(reqRollup[0]?.errors_5xx);
   const churnedC = num(churned[0]?.c);
+  const activeC = num(active[0]?.c);
+  const newC = num(newSignups[0]?.c);
+  // Task #13 — explicit no-data marker so the UI can render an empty
+  // pill instead of zero-stat cards that look like a load failure.
+  const isEmpty = activeC === 0 && newC === 0 && total === 0;
 
   return {
     range: { from: range.from, to: range.to, days: range.days },
-    active_users: num(active[0]?.c),
-    new_signups: num(newSignups[0]?.c),
+    active_users: activeC,
+    new_signups: newC,
     total_users: totalU,
     paid_users: paidU,
     conversion_to_paid_pct: Number(conversion.toFixed(2)),
@@ -207,7 +216,8 @@ export async function loadOverview(env: Env, range: DateRange, currency?: string
     total_requests: total,
     top_pages: topPagesRaw.map(r => ({ endpoint: str(r.endpoint), hits: num(r.hits) })),
     daily_active: dauRaw.map(r => ({ day: str(r.day), active: num(r.active) })),
-  };
+    meta: isEmpty ? { reason: 'no_data' } : { reason: 'ok' },
+  } as OverviewReport;
 }
 
 export async function loadCohorts(env: Env, granularity: 'week' | 'month', metric: 'retention' | 'revenue') {
@@ -388,6 +398,8 @@ export interface FinancialReport {
   // Task #5 — assistant cost rollup (optional so old serialised reports
   // without this field still type-check on the consumer side).
   assistant_cost?: AssistantCostReport;
+  // Task #13 — see OverviewReport.meta.
+  meta?: { reason: 'ok' | 'no_data' };
 }
 
 export async function loadFinancial(env: Env, range: DateRange, currency?: string | null): Promise<FinancialReport> {
@@ -467,6 +479,9 @@ export async function loadFinancial(env: Env, range: DateRange, currency?: strin
     };
   });
   const arrUsd = totalMrr * 12;
+  // Task #13 — no-data marker mirrors loadOverview so the Financial sub-tab
+  // can render an empty pill instead of a wall of $0 cards.
+  const isEmpty = totalMrr === 0 && newMrr === 0 && churnMrr === 0 && breakdown.length === 0;
   return {
     range: { from: range.from, to: range.to },
     total_mrr_usd: totalMrr,
@@ -483,7 +498,8 @@ export async function loadFinancial(env: Env, range: DateRange, currency?: strin
     mrr_breakdown_by_tier: breakdown,
     ltv_by_cohort: ltvByCohort,
     assistant_cost: await loadAssistantCost(env, range, disp.conv),
-  };
+    meta: isEmpty ? { reason: 'no_data' } : { reason: 'ok' },
+  } as FinancialReport;
 }
 
 // Task #5 — Personal-assistant cost rollup. Surfaced inside the financial
@@ -581,6 +597,8 @@ export interface TechnicalReport {
   slow_queries: Array<{ endpoint: string; p95_ms: number; hits: number }>;
   queue_depth: number; dlq_count: number;
   top_errors: Array<{ endpoint: string; status_code: number; message: string; c: number }>;
+  // Task #13 — see OverviewReport.meta.
+  meta?: { reason: 'ok' | 'no_data' };
 }
 
 export async function loadTechnical(env: Env, range: DateRange): Promise<TechnicalReport> {
@@ -636,6 +654,9 @@ export async function loadTechnical(env: Env, range: DateRange): Promise<Technic
     .sort((a, b) => b.p95_ms - a.p95_ms)
     .slice(0, 10)
     .map(r => ({ endpoint: r.endpoint, p95_ms: r.p95_ms, hits: r.hits }));
+  // Task #13 — no-data marker for the Technical sub-tab. Queue/DLQ depth
+  // is steady-state infra so we only key on traffic + errors.
+  const isEmpty = enriched.length === 0 && topErrorsRaw.length === 0;
   return {
     range: { from: range.from, to: range.to },
     by_route: enriched,
@@ -649,7 +670,8 @@ export async function loadTechnical(env: Env, range: DateRange): Promise<Technic
       message: str(r.message),
       c: num(r.c),
     })),
-  };
+    meta: isEmpty ? { reason: 'no_data' } : { reason: 'ok' },
+  } as TechnicalReport;
 }
 
 // ---------- CSV / HTML rendering ----------
@@ -970,4 +992,111 @@ export async function verifyDownloadToken(env: Env, token: string): Promise<{ ke
     if (Math.floor(Date.now() / 1000) > Number(expStr)) return null;
     return { key: storageKey };
   } catch { return null; }
+}
+
+// ---------------------------------------------------------------------------
+// Task #13 — daily analytics snapshot writer.
+//
+// Cron entry-point: index.ts `scheduled()` calls `writeDailySnapshot(env)`
+// once per day at 02:05 UTC. The function picks "yesterday" in UTC, computes
+// the same Overview + Financial numbers in USD, and INSERT OR REPLACEs the
+// row keyed on `snapshot_date`. Idempotent — re-runs overwrite, never dup.
+//
+// Read path: Overview/Financial endpoints live-compute today, but the UI
+// can fetch this table directly for any historical comparison without
+// re-walking activity_logs / system_metrics (which the nightly cleanup
+// prunes). Backfill is a thin loop wrapper that walks N days backward.
+// ---------------------------------------------------------------------------
+
+function isoDay(d: Date): string {
+  // YYYY-MM-DD in UTC. `toISOString().slice(0,10)` is exactly that.
+  return d.toISOString().slice(0, 10);
+}
+
+export async function writeDailySnapshot(
+  env: Env,
+  forDay?: string,
+  source: 'cron' | 'backfill' | 'manual' = 'cron',
+): Promise<{ snapshot_date: string; written: boolean; reason?: string }> {
+  // Self-heal: migration 012 might not have been applied to the remote DB
+  // yet. The boot-time migration sweep doesn't include this file, so create
+  // the table on first write. Idempotent — IF NOT EXISTS.
+  const sql = getSQL(env);
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS analytics_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        snapshot_date TEXT NOT NULL,
+        active_users INTEGER NOT NULL DEFAULT 0,
+        new_signups INTEGER NOT NULL DEFAULT 0,
+        total_users INTEGER NOT NULL DEFAULT 0,
+        paid_users INTEGER NOT NULL DEFAULT 0,
+        total_requests INTEGER NOT NULL DEFAULT 0,
+        errors_5xx INTEGER NOT NULL DEFAULT 0,
+        p50_latency_ms INTEGER NOT NULL DEFAULT 0,
+        p95_latency_ms INTEGER NOT NULL DEFAULT 0,
+        mrr_usd REAL NOT NULL DEFAULT 0,
+        arr_usd REAL NOT NULL DEFAULT 0,
+        new_mrr_usd REAL NOT NULL DEFAULT 0,
+        churn_mrr_usd REAL NOT NULL DEFAULT 0,
+        churned_subscriptions INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        source TEXT NOT NULL DEFAULT 'cron',
+        UNIQUE(snapshot_date)
+      )
+    `;
+  } catch (e) {
+    return { snapshot_date: forDay || '', written: false, reason: `schema:${(e as Error).message}` };
+  }
+
+  // "Yesterday" by default — today is still in flight and would skew.
+  const day = forDay || isoDay(new Date(Date.now() - 86400 * 1000));
+  const fromIso = `${day} 00:00:00`;
+  const toIso = `${day} 23:59:59`;
+  const range: DateRange = { from: day, to: day, days: 1, fromIso, toIso };
+
+  try {
+    const overview = await loadOverview(env, range, 'USD');
+    const financial = await loadFinancial(env, range, 'USD');
+
+    await sql`
+      INSERT OR REPLACE INTO analytics_snapshots (
+        snapshot_date,
+        active_users, new_signups, total_users, paid_users,
+        total_requests, errors_5xx, p50_latency_ms, p95_latency_ms,
+        mrr_usd, arr_usd, new_mrr_usd, churn_mrr_usd, churned_subscriptions,
+        source
+      ) VALUES (
+        ${day},
+        ${overview.active_users}, ${overview.new_signups}, ${overview.total_users}, ${overview.paid_users},
+        ${overview.total_requests},
+        ${Math.round(overview.total_requests * (overview.error_rate_pct / 100))},
+        ${overview.p50_latency_ms}, ${overview.p95_latency_ms},
+        ${financial.total_mrr_usd}, ${financial.arr_usd}, ${financial.new_mrr_usd}, ${financial.churn_mrr_usd},
+        ${overview.churned_subscriptions},
+        ${source}
+      )
+    `;
+    return { snapshot_date: day, written: true };
+  } catch (e) {
+    return { snapshot_date: day, written: false, reason: (e as Error).message };
+  }
+}
+
+// Convenience for admin "rebuild last N days" — used by the optional
+// `/api/monitoring/analytics/snapshots/backfill` route. Stops on first
+// hard failure to keep the surface honest.
+export async function backfillSnapshots(
+  env: Env,
+  days: number,
+): Promise<{ written: number; skipped: number; days: string[] }> {
+  const written: string[] = [];
+  let skipped = 0;
+  const today = new Date();
+  for (let i = 1; i <= Math.max(1, Math.min(365, days)); i++) {
+    const d = new Date(today.getTime() - i * 86400 * 1000);
+    const r = await writeDailySnapshot(env, isoDay(d), 'backfill');
+    if (r.written) written.push(r.snapshot_date); else skipped++;
+  }
+  return { written: written.length, skipped, days: written };
 }

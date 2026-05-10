@@ -38,13 +38,21 @@ function rangeFromUrl() {
 }
 // Task #13 — inline error card with a retry button. Used by every sub-tab
 // so a transient failure never strands the user with a red toast they
-// can't recover from.
-function RetryCard({ message, onRetry }) {
+// can't recover from. The headline format is the contracted shape:
+//   "Couldn't load <tab> (<status>) — Retry"
+// — `tab` and `status` are surfaced in the headline so admins can tell
+// at a glance which surface failed and whether it's a 4xx (their
+// permissions) vs a 5xx (transient infra).
+function RetryCard({ tab, status, message, onRetry }) {
+  const headline = tab
+    ? `Couldn't load ${tab}${status ? ` (${status})` : ''}`
+    : (message || 'Failed to load.');
   return (
     <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700 flex items-start gap-2">
       <AlertTriangle size={14} className="mt-0.5 shrink-0" />
       <div className="flex-1 min-w-0">
-        <div className="break-words">{message || 'Failed to load.'}</div>
+        <div className="break-words font-medium">{headline}</div>
+        {tab && message && <div className="break-words text-xs text-red-600/90 mt-0.5">{message}</div>}
         {onRetry && (
           <button
             onClick={onRetry}
@@ -134,21 +142,23 @@ function ExportButtons({ onExport, busy }) {
 function RecentExports({ refreshKey }) {
   const [items, setItems] = useState([]);
   const [err, setErr] = useState('');
+  const [errStatus, setErrStatus] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let alive = true;
-    setErr('');
+    setErr(''); setErrStatus(null);
     api.analyticsAudit(10)
-      .then(r => { if (alive) { setItems(r.items || []); setErr(''); } })
-      .catch(e => { if (alive) setErr(e?.message || 'Failed to load'); });
+      .then(r => { if (alive) { setItems(r.items || []); setErr(''); setErrStatus(null); } })
+      .catch(e => { if (alive) { setErr(e?.message || 'Failed to load'); setErrStatus(e?.status || null); } });
     return () => { alive = false; };
-  }, [refreshKey]);
+  }, [refreshKey, reloadKey]);
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4 mt-4">
       <div className="flex items-center justify-between mb-2">
         <div className="text-sm font-semibold text-gray-900">Recent Exports</div>
         <span className="text-xs text-gray-500">{items.length} item(s)</span>
       </div>
-      {err && <div className="text-xs text-red-600">{err}</div>}
+      {err && <RetryCard tab="recent exports" status={errStatus} message={err} onRetry={() => setReloadKey(k => k + 1)} />}
       {items.length === 0 ? (
         <div className="text-xs text-gray-400 text-center py-3">No exports yet.</div>
       ) : (
@@ -204,23 +214,27 @@ function FxBadge({ code, asOf }) {
 function OverviewSub({ range, anonymized, currency, onExport, busy }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
+  const [errStatus, setErrStatus] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let alive = true;
-    setData(null); setErr('');
+    setData(null); setErr(''); setErrStatus(null);
     api.analyticsOverview(range.from, range.to, currency)
       .then(d => { if (alive) setData(d); })
-      .catch(e => { if (alive) setErr(e?.message || 'Failed to load'); });
+      .catch(e => { if (alive) { setErr(e?.message || 'Failed to load'); setErrStatus(e?.status || null); } });
     return () => { alive = false; };
   }, [range.from, range.to, currency, reloadKey]);
-  if (err) return <RetryCard message={err} onRetry={() => setReloadKey(k => k + 1)} />;
+  if (err) return <RetryCard tab="overview" status={errStatus} message={err} onRetry={() => setReloadKey(k => k + 1)} />;
   if (!data) return <div className="text-sm text-gray-500 py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" /> Loading…</div>;
   const num = (v) => Number(v || 0);
   const ccy = data.display_currency || 'USD';
   const mrr = data.mrr ?? data.mrr_usd;
   const arr = data.arr ?? data.arr_usd;
   const totalReq = num(data.total_requests);
-  const isEmpty = num(data.active_users) === 0 && num(data.new_signups) === 0 && totalReq === 0;
+  // Backend may set meta.reason='no_data' explicitly; fall back to a
+  // local heuristic for older payloads that pre-date that field.
+  const isEmpty = data.meta?.reason === 'no_data'
+    || (num(data.active_users) === 0 && num(data.new_signups) === 0 && totalReq === 0);
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -277,6 +291,7 @@ function UsersSub({ anonymized, onExport, busy, onFiltersChange }) {
   const [tier, setTier] = useState('');
   const [offset, setOffset] = useState(0);
   const [err, setErr] = useState('');
+  const [errStatus, setErrStatus] = useState(null);
   const [drillId, setDrillId] = useState(null);
   const sorter = useSort();
   const limit = 25;
@@ -284,12 +299,14 @@ function UsersSub({ anonymized, onExport, busy, onFiltersChange }) {
     if (onFiltersChange) onFiltersChange({ search, role, tier, limit, offset });
   }, [search, role, tier, offset, onFiltersChange]);
   const load = useCallback(() => {
-    setErr('');
+    let alive = true;
+    setErr(''); setErrStatus(null);
     api.analyticsUsers({ search, role, tier, limit, offset })
-      .then(setData)
-      .catch(e => setErr(e?.message || 'Failed to load'));
+      .then(d => { if (alive) setData(d); })
+      .catch(e => { if (alive) { setErr(e?.message || 'Failed to load'); setErrStatus(e?.status || null); } });
+    return () => { alive = false; };
   }, [search, role, tier, offset]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { return load(); }, [load]);
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -316,7 +333,7 @@ function UsersSub({ anonymized, onExport, busy, onFiltersChange }) {
         </div>
         <ExportButtons onExport={onExport} busy={busy} />
       </div>
-      {err && <div className="text-xs text-red-600">{err}</div>}
+      {err && <RetryCard tab="users" status={errStatus} message={err} onRetry={load} />}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-600">
@@ -374,9 +391,16 @@ function UsersSub({ anonymized, onExport, busy, onFiltersChange }) {
 function UserDrillDown({ id, anonymized, onClose }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
+  const [errStatus, setErrStatus] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    api.analyticsUser(id).then(setData).catch(e => setErr(e?.message || 'Failed'));
-  }, [id]);
+    let alive = true;
+    setData(null); setErr(''); setErrStatus(null);
+    api.analyticsUser(id)
+      .then(d => { if (alive) setData(d); })
+      .catch(e => { if (alive) { setErr(e?.message || 'Failed'); setErrStatus(e?.status || null); } });
+    return () => { alive = false; };
+  }, [id, reloadKey]);
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -385,7 +409,7 @@ function UserDrillDown({ id, anonymized, onClose }) {
           <button onClick={onClose} className="text-gray-500 hover:text-gray-800 text-sm">Close</button>
         </div>
         <div className="p-4 space-y-3 text-xs">
-          {err && <div className="text-red-600">{err}</div>}
+          {err && <RetryCard tab="user detail" status={errStatus} message={err} onRetry={() => setReloadKey(k => k + 1)} />}
           {!data && !err && <div className="text-gray-500">Loading…</div>}
           {data && (
             <>
@@ -1192,17 +1216,18 @@ function PlanAuditHistory({ refreshKey }) {
 function FinancialSub({ range, currency, onExport, busy }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
+  const [errStatus, setErrStatus] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let alive = true;
-    setData(null); setErr('');
+    setData(null); setErr(''); setErrStatus(null);
     api.analyticsFinancial(range.from, range.to, currency)
       .then(d => { if (alive) setData(d); })
-      .catch(e => { if (alive) setErr(e?.message || 'Failed'); });
+      .catch(e => { if (alive) { setErr(e?.message || 'Failed'); setErrStatus(e?.status || null); } });
     return () => { alive = false; };
   }, [range.from, range.to, currency, reloadKey]);
   const onPlanChanged = () => setReloadKey(k => k + 1);
-  if (err) return <div className="space-y-4"><RetryCard message={err} onRetry={() => setReloadKey(k => k + 1)} /><PlanCatalog onChanged={onPlanChanged} /><PlanAuditHistory refreshKey={reloadKey} /></div>;
+  if (err) return <div className="space-y-4"><RetryCard tab="financial" status={errStatus} message={err} onRetry={() => setReloadKey(k => k + 1)} /><PlanCatalog onChanged={onPlanChanged} /><PlanAuditHistory refreshKey={reloadKey} /></div>;
   if (!data) return <div className="space-y-4"><div className="text-sm text-gray-500 py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" /> Loading…</div><PlanCatalog onChanged={onPlanChanged} /><PlanAuditHistory refreshKey={reloadKey} /></div>;
   const ccy = data.display_currency || 'USD';
   const totalMrr = data.total_mrr ?? data.total_mrr_usd;
@@ -1215,6 +1240,8 @@ function FinancialSub({ range, currency, onExport, busy }) {
         <FxBadge code={ccy} asOf={data.fx_as_of} />
         <ExportButtons onExport={onExport} busy={busy} />
       </div>
+      {(data.meta?.reason === 'no_data'
+        || (Number(totalMrr || 0) === 0 && Number(newMrr || 0) === 0 && (data.mrr_breakdown_by_tier?.length || 0) === 0)) && <EmptyPill />}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label={`Total MRR (${ccy})`} value={fmtMoney(totalMrr, ccy)} />
         <Stat label={`ARR (${ccy})`} value={fmtMoney(arr, ccy)} />
@@ -1340,25 +1367,29 @@ function FinancialSub({ range, currency, onExport, busy }) {
 function TechnicalSub({ range, onExport, busy }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
+  const [errStatus, setErrStatus] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let alive = true;
-    setData(null); setErr('');
+    setData(null); setErr(''); setErrStatus(null);
     api.analyticsTechnical(range.from, range.to)
       .then(d => { if (alive) setData(d); })
-      .catch(e => { if (alive) setErr(e?.message || 'Failed'); });
+      .catch(e => { if (alive) { setErr(e?.message || 'Failed'); setErrStatus(e?.status || null); } });
     return () => { alive = false; };
   }, [range.from, range.to, reloadKey]);
-  if (err) return <RetryCard message={err} onRetry={() => setReloadKey(k => k + 1)} />;
+  if (err) return <RetryCard tab="technical" status={errStatus} message={err} onRetry={() => setReloadKey(k => k + 1)} />;
   if (!data) return <div className="text-sm text-gray-500 py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" /> Loading…</div>;
   return <TechnicalView data={data} onExport={onExport} busy={busy} />;
 }
 
 function TechnicalView({ data, onExport, busy }) {
   const routeSorter = useSort({ key: 'hits', dir: 'desc' });
+  const isEmpty = data?.meta?.reason === 'no_data'
+    || ((data?.by_route?.length || 0) === 0 && (data?.top_errors?.length || 0) === 0);
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end"><ExportButtons onExport={onExport} busy={busy} /></div>
+      {isEmpty && <EmptyPill />}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Queue depth" value={data.queue_depth} />
         <Stat label="DLQ" value={data.dlq_count} />
@@ -1442,22 +1473,23 @@ function ManagementSub({ range, currency, onExport, busy }) {
   const [overview, setOverview] = useState(null);
   const [financial, setFinancial] = useState(null);
   const [err, setErr] = useState('');
+  const [errStatus, setErrStatus] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let alive = true;
-    setOverview(null); setFinancial(null); setErr('');
+    setOverview(null); setFinancial(null); setErr(''); setErrStatus(null);
     Promise.all([
       api.analyticsOverview(range.from, range.to, currency),
       api.analyticsFinancial(range.from, range.to, currency),
     ])
       .then(([o, f]) => { if (alive) { setOverview(o); setFinancial(f); } })
-      .catch(e => { if (alive) setErr(e?.message || 'Failed to load'); });
+      .catch(e => { if (alive) { setErr(e?.message || 'Failed to load'); setErrStatus(e?.status || null); } });
     return () => { alive = false; };
   }, [range.from, range.to, currency, reloadKey]);
   const ccy = financial?.display_currency || overview?.display_currency || 'USD';
   const m$ = (n) => fmtMoney(n, ccy);
   const num = (v) => Number(v || 0);
-  if (err) return <RetryCard message={err} onRetry={() => setReloadKey(k => k + 1)} />;
+  if (err) return <RetryCard tab="management" status={errStatus} message={err} onRetry={() => setReloadKey(k => k + 1)} />;
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end"><ExportButtons onExport={onExport} busy={busy} /></div>

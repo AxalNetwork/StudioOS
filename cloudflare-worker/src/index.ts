@@ -37,6 +37,7 @@ import marketIntel from './routes/market_intel';
 import { investorProfile, investorSignals, aggregateInvestorSignals } from './routes/investor_signals';
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import { runTotpRemediation } from './services/totpRemediation';
+import { writeDailySnapshot } from './services/analyticsReports';
 import advisory from './routes/advisory';
 import activity from './routes/activity';
 import admin from './routes/admin';
@@ -542,6 +543,23 @@ export default {
             }
           } catch (e) {
             console.error('[cron] totp remediation failed', e);
+          }
+        }
+        // Task #13 — daily analytics snapshot at 02:05 UTC. Captures
+        // yesterday's Overview + Financial rollup into `analytics_snapshots`
+        // (USD baseline) so admin historical comparisons survive the
+        // nightly system_metrics cleanup. Idempotent on re-run via the
+        // table's UNIQUE(snapshot_date) constraint.
+        if (now.getUTCHours() === 2 && now.getUTCMinutes() === 5) {
+          try {
+            const r = await writeDailySnapshot(env);
+            if (r.written) {
+              console.info(`[cron] analytics snapshot written for ${r.snapshot_date}`);
+            } else if (r.reason) {
+              console.error(`[cron] analytics snapshot skipped for ${r.snapshot_date}: ${r.reason}`);
+            }
+          } catch (e) {
+            console.error('[cron] analytics snapshot failed', e);
           }
         }
       } finally {
