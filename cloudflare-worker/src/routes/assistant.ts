@@ -85,9 +85,15 @@ async function ensureSchema(env: Env): Promise<void> {
     // because SQLite/D1 has no ADD COLUMN IF NOT EXISTS.
     try {
       const cols = await env.DB.prepare("PRAGMA table_info(users)").all<{ name: string }>();
-      const has = (cols.results || []).some(r => r.name === 'assistant_enabled');
-      if (!has) {
+      const names = new Set((cols.results || []).map(r => r.name));
+      if (!names.has('assistant_enabled')) {
         try { await env.DB.exec("ALTER TABLE users ADD COLUMN assistant_enabled INTEGER NOT NULL DEFAULT 0"); } catch {}
+      }
+      // Admin opt-in for the 5-year retention bucket. Same lazy-add
+      // pattern as assistant_enabled — kept in code so dev D1 boots clean
+      // before the migration is applied to remote.
+      if (!names.has('assistant_retain_history')) {
+        try { await env.DB.exec("ALTER TABLE users ADD COLUMN assistant_retain_history INTEGER NOT NULL DEFAULT 0"); } catch {}
       }
     } catch {}
     _schemaReady = true;
@@ -472,9 +478,22 @@ assistant.post('/message', async (c) => {
     const uid = newUid();
     const model = pickModel(user, userText);
     const seedTitle = userText.slice(0, 60);
+    // Stamp the extended-retention bucket at creation time off the
+    // user-level admin opt-in flag. Sweep then keys off this column —
+    // see sweepExpiredConversations() below. Gated to admins so a
+    // non-admin row with a stray flag still falls back to the standard
+    // free/paid TTLs.
+    let extended = 0;
+    if (user.role === 'admin') {
+      try {
+        const u = await c.env.DB.prepare('SELECT assistant_retain_history FROM users WHERE id = ?')
+          .bind(user.id).first<{ assistant_retain_history: number | null }>();
+        if (u && u.assistant_retain_history === 1) extended = 1;
+      } catch { /* column missing → treat as 0 */ }
+    }
     await c.env.DB.prepare(
-      "INSERT INTO assistant_conversations (uid, user_id, title, model_default) VALUES (?, ?, ?, ?)"
-    ).bind(uid, user.id, seedTitle || 'New conversation', model).run();
+      "INSERT INTO assistant_conversations (uid, user_id, title, model_default, extended_retention) VALUES (?, ?, ?, ?, ?)"
+    ).bind(uid, user.id, seedTitle || 'New conversation', model, extended).run();
     conv = await loadConversation(c.env, user, uid);
     if (!conv) return c.json({ error: 'failed to create conversation' }, 500);
   }
@@ -782,13 +801,19 @@ assistant.post('/feedback', async (c) => {
 // ---------------------------------------------------------------------------
 export async function sweepExpiredConversations(env: Env): Promise<{ deleted_free: number; deleted_paid: number }> {
   await ensureSchema(env);
+  // Source-of-truth for "keep longer" is BOTH the per-conversation
+  // extended_retention flag AND the user-level admin opt-in flag — that
+  // way flipping the user pref applies to existing rows on the next
+  // sweep without needing a row-level backfill (the explicit /retention
+  // PATCH below also backfills for immediate consistency).
+  const KEEP = "(c.extended_retention = 1 OR COALESCE(u.assistant_retain_history, 0) = 1)";
   // Free tier (no active subscription, not extended) → 90 days.
   const free = await env.DB.prepare(
-    "DELETE FROM assistant_conversations WHERE extended_retention = 0 AND updated_at < datetime('now','-90 days') AND user_id IN (SELECT id FROM users WHERE COALESCE(mi_subscription_status,'') != 'active')"
+    "DELETE FROM assistant_conversations WHERE id IN (SELECT c.id FROM assistant_conversations c JOIN users u ON u.id = c.user_id WHERE NOT " + KEEP + " AND c.updated_at < datetime('now','-90 days') AND COALESCE(u.mi_subscription_status,'') != 'active')"
   ).run().catch(() => null);
   // Paid tier → 1 year.
   const paid = await env.DB.prepare(
-    "DELETE FROM assistant_conversations WHERE extended_retention = 0 AND updated_at < datetime('now','-1 year') AND user_id IN (SELECT id FROM users WHERE COALESCE(mi_subscription_status,'') = 'active')"
+    "DELETE FROM assistant_conversations WHERE id IN (SELECT c.id FROM assistant_conversations c JOIN users u ON u.id = c.user_id WHERE NOT " + KEEP + " AND c.updated_at < datetime('now','-1 year') AND COALESCE(u.mi_subscription_status,'') = 'active')"
   ).run().catch(() => null);
   // Extended retention (admin opt-in) → 5 years hard ceiling.
   await env.DB.prepare(
@@ -804,6 +829,37 @@ assistant.post('/retention/sweep', async (c) => {
   await requireAdmin(c);
   const r = await sweepExpiredConversations(c.env);
   return c.json({ ok: true, ...r });
+});
+
+// Admin opt-in toggle for the 5-year retention bucket. Flips the
+// user-level flag AND backfills extended_retention on every existing
+// conversation owned by that admin so the change takes effect without
+// waiting for new conversations.
+assistant.get('/retention/preference', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  if (user.role !== 'admin') return c.json({ extended: false, eligible: false });
+  try {
+    const row = await c.env.DB.prepare('SELECT assistant_retain_history FROM users WHERE id = ?')
+      .bind(user.id).first<{ assistant_retain_history: number | null }>();
+    return c.json({ extended: !!(row && row.assistant_retain_history === 1), eligible: true });
+  } catch {
+    return c.json({ extended: false, eligible: true });
+  }
+});
+
+assistant.post('/retention/preference', async (c) => {
+  const user = await requireAdmin(c);
+  await ensureSchema(c.env);
+  const body = await c.req.json().catch(() => ({})) as { extended?: boolean };
+  const extended = body.extended ? 1 : 0;
+  await c.env.DB.prepare('UPDATE users SET assistant_retain_history = ? WHERE id = ?')
+    .bind(extended, user.id).run();
+  // Backfill existing conversations so the change is immediate, not
+  // deferred to the next /message create.
+  await c.env.DB.prepare('UPDATE assistant_conversations SET extended_retention = ? WHERE user_id = ?')
+    .bind(extended, user.id).run();
+  return c.json({ ok: true, extended: !!extended });
 });
 
 export default assistant;

@@ -66,3 +66,6 @@ CREATE TABLE IF NOT EXISTS assistant_feedback (
 -- COLUMN, so re-running this file produces "duplicate column" — that's
 -- expected and idempotent for our boot helper, which catches it.
 ALTER TABLE users ADD COLUMN assistant_enabled INTEGER NOT NULL DEFAULT 0;
+-- Admin-only opt-in for the 5-year retention bucket. Defaults off so no
+-- regular user is silently held longer than the paid-tier 1y window.
+ALTER TABLE users ADD COLUMN assistant_retain_history INTEGER NOT NULL DEFAULT 0;

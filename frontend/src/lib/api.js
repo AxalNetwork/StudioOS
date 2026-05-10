@@ -236,6 +236,9 @@ export const api = {
       request(`/assistant/conversations/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
     feedback: (message_id, rating, comment) =>
       request('/assistant/feedback', { method: 'POST', body: JSON.stringify({ message_id, rating, comment }) }),
+    getRetention: () => request('/assistant/retention/preference'),
+    setRetention: (extended) =>
+      request('/assistant/retention/preference', { method: 'POST', body: JSON.stringify({ extended: !!extended }) }),
   },
   optOutInvestorSignals: () => request('/investor-profile/me/opt-out', { method: 'POST' }),
   getInvestorSignals: () => request('/investor-signals/latest'),
