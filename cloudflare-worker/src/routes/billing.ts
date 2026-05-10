@@ -3,6 +3,13 @@ import type { Env, User } from '../types';
 import { requireAuth, requireFactor } from '../auth';
 import { ensureMiPaywallSchema, MI_PRO_PRODUCTS, userHasMiPro } from '../middleware/miAccess';
 import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
+import {
+  ensureInvestorPaywallSchema,
+  effectiveInvestorTier,
+  INVESTOR_QUOTAS,
+  type InvestorTier,
+  type InvestorUser,
+} from '../middleware/requireInvestorTier';
 import { upsertPlanFromStripeSubscription } from '../services/subscriptionPlans';
 
 // Epic 6 — Market Intel Pro billing surface.
@@ -271,11 +278,149 @@ billing.all('/tier/dev-upgrade', async (c) => {
   return c.json({ ok: true, tier, renews_at: renewsAt });
 });
 
+// ---------------------------------------------------------------------------
+// Task #6 (W-1) — Investor paywall checkout / portal / status / dev-upgrade.
+// Distinct customer + subscription columns from MI Pro and from founder-tier
+// so an investor can carry independent billing state. Free → Professional
+// ($149/mo or yearly) → Institutional ($599/mo or yearly).
+// ---------------------------------------------------------------------------
+
+const INVESTOR_PLAN_TO_PRICE: Record<string, { tier: InvestorTier; envKey: keyof Env }> = {
+  investor_pro_monthly:  { tier: 'professional',  envKey: 'STRIPE_PRICE_INVESTOR_PRO_MONTHLY'  as keyof Env },
+  investor_pro_yearly:   { tier: 'professional',  envKey: 'STRIPE_PRICE_INVESTOR_PRO_YEARLY'   as keyof Env },
+  investor_inst_monthly: { tier: 'institutional', envKey: 'STRIPE_PRICE_INVESTOR_INST_MONTHLY' as keyof Env },
+  investor_inst_yearly:  { tier: 'institutional', envKey: 'STRIPE_PRICE_INVESTOR_INST_YEARLY'  as keyof Env },
+};
+
+function isValidInvestorPlan(p: unknown): p is keyof typeof INVESTOR_PLAN_TO_PRICE {
+  return typeof p === 'string' && Object.prototype.hasOwnProperty.call(INVESTOR_PLAN_TO_PRICE, p);
+}
+
+billing.post('/investor/checkout', async (c) => {
+  // Step-up to TOTP, mirrors mi-pro/checkout — billing surfaces never run on
+  // SMS-only sessions.
+  await requireFactor(c, 'totp');
+  const user = (await requireAuth(c)) as InvestorUser;
+  await ensureInvestorPaywallSchema(c.env);
+  if (user.role !== 'investor' && user.role !== 'admin') {
+    return c.json({ error: 'investor_only' }, 403);
+  }
+  const body = await c.req.json().catch(() => ({} as { plan?: string }));
+  const plan = body.plan;
+  if (!isValidInvestorPlan(plan)) return c.json({ error: 'invalid_plan' }, 400);
+
+  const cfg = INVESTOR_PLAN_TO_PRICE[plan];
+  const stripeKey = c.env.STRIPE_SECRET_KEY;
+  const priceId = (c.env as unknown as Record<string, unknown>)[cfg.envKey] as string | undefined;
+  const appUrl = c.env.APP_URL || 'http://localhost:5000';
+
+  // Dev fallback — flips the user into the requested tier without Stripe.
+  if (!stripeKey || !priceId) {
+    return c.json({
+      url: `${appUrl}/api/billing/investor/dev-upgrade?plan=${plan}`,
+      dev: true,
+    });
+  }
+
+  const params: Record<string, string> = {
+    mode: 'subscription',
+    'line_items[0][price]': priceId,
+    'line_items[0][quantity]': '1',
+    success_url: `${appUrl}/settings?tab=billing&investor_upgraded=1`,
+    cancel_url: `${appUrl}/settings?tab=billing&investor_cancelled=1`,
+    'metadata[user_id]': String(user.id),
+    'metadata[plan]': plan,
+    'metadata[investor_tier]': cfg.tier,
+    'metadata[kind]': 'investor',
+    client_reference_id: `investor:${user.id}`,
+  };
+  // Institutional supports invoice billing — let Stripe collect a card OR an
+  // invoice address depending on the price config; we don't force a payment
+  // method here.
+  if (cfg.tier === 'institutional') {
+    params['payment_method_collection'] = 'if_required';
+  }
+  if (user.investor_stripe_customer_id) {
+    params.customer = user.investor_stripe_customer_id;
+  } else {
+    params.customer_email = user.email;
+  }
+
+  try {
+    const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params);
+    return c.json({ url: session.url, session_id: session.id });
+  } catch (e) {
+    return c.json({ error: 'checkout_failed', detail: (e as Error).message }, 502);
+  }
+});
+
+billing.post('/investor/portal', async (c) => {
+  await requireFactor(c, 'totp');
+  const user = (await requireAuth(c)) as InvestorUser;
+  if (!user.investor_stripe_customer_id) return c.json({ error: 'no_subscription' }, 400);
+  const appUrl = c.env.APP_URL || 'http://localhost:5000';
+  try {
+    const session = await stripeCall<{ url: string }>(c.env, '/billing_portal/sessions', {
+      customer: user.investor_stripe_customer_id,
+      return_url: `${appUrl}/settings?tab=billing`,
+    });
+    return c.json({ url: session.url });
+  } catch (e) {
+    return c.json({ error: 'portal_failed', detail: (e as Error).message }, 502);
+  }
+});
+
+billing.get('/investor/status', async (c) => {
+  const user = (await requireAuth(c)) as InvestorUser;
+  await ensureInvestorPaywallSchema(c.env);
+  const tier = effectiveInvestorTier(user);
+  const quotas = INVESTOR_QUOTAS[tier];
+  return c.json({
+    tier,
+    raw_tier: user.investor_tier ?? 'free',
+    status: user.investor_subscription_status ?? 'free',
+    trial_ends_at: user.investor_trial_ends_at ?? null,
+    renews_at: user.investor_subscription_renews_at ?? null,
+    has_customer: !!user.investor_stripe_customer_id,
+    quotas: {
+      intros_per_quarter: quotas.intros_per_quarter,
+      intros_used: user.investor_quota_intros_used ?? 0,
+      dealroom_max: quotas.dealroom_max,
+      seats: quotas.seats,
+      seat_count: user.investor_seat_count ?? 0,
+    },
+  });
+});
+
+billing.all('/investor/dev-upgrade', async (c) => {
+  if (c.env.STRIPE_SECRET_KEY) return c.json({ error: 'not_found' }, 404);
+  const user = (await requireAuth(c)) as InvestorUser;
+  await ensureInvestorPaywallSchema(c.env);
+  const url = new URL(c.req.url);
+  const plan = url.searchParams.get('plan') ?? 'investor_pro_monthly';
+  if (!isValidInvestorPlan(plan)) return c.json({ error: 'invalid_plan' }, 400);
+  const cfg = INVESTOR_PLAN_TO_PRICE[plan];
+  const renewsAt = new Date(Date.now() + 30 * 86400 * 1000).toISOString();
+  await c.env.DB.prepare(
+    `UPDATE users SET investor_tier = ?,
+                       investor_subscription_status = 'active',
+                       investor_subscription_renews_at = ?,
+                       investor_dealroom_max = ?
+     WHERE id = ?`,
+  ).bind(cfg.tier, renewsAt, INVESTOR_QUOTAS[cfg.tier].dealroom_max, user.id).run();
+  if (c.req.method === 'GET') {
+    const appUrl = c.env.APP_URL || 'http://localhost:5000';
+    return c.redirect(`${appUrl}/settings?tab=billing&investor_upgraded=1`);
+  }
+  return c.json({ ok: true, tier: cfg.tier, renews_at: renewsAt });
+});
+
 // Stripe webhook. Signature verification is required when STRIPE_WEBHOOK_SECRET
 // is set; in dev with no secret we accept the body as-is so local testing works.
 billing.post('/stripe/webhook', async (c) => {
   await ensureMiPaywallSchema(c.env);
   await ensureTierSchema(c.env);
+  await ensureInvestorPaywallSchema(c.env);
   const raw = await c.req.text();
   const sig = c.req.header('stripe-signature') ?? '';
   const secret = c.env.STRIPE_WEBHOOK_SECRET;
@@ -319,16 +464,32 @@ async function handleStripeEvent(
   const meta = (obj.metadata as Record<string, string> | undefined) ?? {};
   const isTier = meta.kind === 'tier'
     || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('tier:'));
+  const isInvestor = meta.kind === 'investor'
+    || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('investor:'));
 
   switch (event.type) {
     case 'checkout.session.completed': {
       const userId = Number(meta.user_id ??
         (typeof obj.client_reference_id === 'string'
-          ? (obj.client_reference_id as string).replace(/^tier:/, '')
+          ? (obj.client_reference_id as string).replace(/^(tier|investor):/, '')
           : obj.client_reference_id));
       const customer = obj.customer as string | null;
       const subscription = obj.subscription as string | null;
       if (!userId) return;
+      if (isInvestor) {
+        const investorTier: InvestorTier = (meta.investor_tier === 'institutional')
+          ? 'institutional' : 'professional';
+        const dealroomMax = INVESTOR_QUOTAS[investorTier].dealroom_max;
+        await env.DB.prepare(
+          `UPDATE users SET investor_tier = ?,
+                             investor_subscription_status = 'active',
+                             investor_dealroom_max = ?,
+                             investor_stripe_customer_id = COALESCE(?, investor_stripe_customer_id),
+                             investor_stripe_subscription_id = COALESCE(?, investor_stripe_subscription_id)
+           WHERE id = ?`,
+        ).bind(investorTier, dealroomMax, customer, subscription, userId).run();
+        return;
+      }
       if (isTier) {
         const tier = (meta.tier === 'growth' || meta.tier === 'studio') ? meta.tier : 'growth';
         await env.DB.prepare(
@@ -358,6 +519,39 @@ async function handleStripeEvent(
         ? new Date(Number(obj.current_period_end) * 1000).toISOString()
         : null;
       if (!customer) return;
+      // Investor mirror — only touches users whose investor_stripe_customer_id matches.
+      const invTier: InvestorTier | null = isInvestor && meta.investor_tier === 'institutional'
+        ? 'institutional'
+        : isInvestor && meta.investor_tier === 'professional'
+          ? 'professional'
+          : null;
+      if (invTier) {
+        await env.DB.prepare(
+          `UPDATE users SET investor_tier = ?,
+                             investor_subscription_status = ?,
+                             investor_subscription_renews_at = ?,
+                             investor_dealroom_max = ?,
+                             investor_stripe_subscription_id = ?
+           WHERE investor_stripe_customer_id = ?`,
+        ).bind(invTier, status, periodEnd, INVESTOR_QUOTAS[invTier].dealroom_max, obj.id as string, customer).run();
+        // Cascade tier change to accepted seat colleagues.
+        await env.DB.prepare(
+          `UPDATE users SET investor_tier = ?, investor_subscription_status = ?
+           WHERE investor_seat_primary_user_id IN (
+             SELECT id FROM users WHERE investor_stripe_customer_id = ?
+           )`,
+        ).bind(invTier, status, customer).run();
+      } else if (isInvestor) {
+        // Investor sub event without explicit metadata.tier — only run when
+        // we know it's an investor event (avoid clobbering rows that share
+        // a stripe_customer_id with an unrelated founder subscription).
+        await env.DB.prepare(
+          `UPDATE users SET investor_subscription_status = ?,
+                             investor_subscription_renews_at = ?,
+                             investor_stripe_subscription_id = ?
+           WHERE investor_stripe_customer_id = ?`,
+        ).bind(status, periodEnd, obj.id as string, customer).run();
+      }
       // Tier-side update: only touches users whose stripe_customer_id matches.
       // Tier metadata may be on the subscription's `metadata.tier`; if absent
       // we leave subscription_tier alone (keeps the value set by checkout).
@@ -453,6 +647,21 @@ async function handleStripeEvent(
                            subscription_status = 'cancelled',
                            stripe_subscription_id = NULL
          WHERE stripe_customer_id = ?`,
+      ).bind(customer).run();
+      // Task #6 (W-1) — drop investor tier back to free on sub deletion,
+      // including any accepted seat colleagues.
+      await env.DB.prepare(
+        `UPDATE users SET investor_tier = 'free',
+                           investor_subscription_status = 'cancelled',
+                           investor_dealroom_max = ?,
+                           investor_stripe_subscription_id = NULL
+         WHERE investor_stripe_customer_id = ?`,
+      ).bind(INVESTOR_QUOTAS.free.dealroom_max, customer).run();
+      await env.DB.prepare(
+        `UPDATE users SET investor_tier = 'free', investor_subscription_status = 'cancelled'
+         WHERE investor_seat_primary_user_id IN (
+           SELECT id FROM users WHERE investor_stripe_customer_id = ?
+         )`,
       ).bind(customer).run();
       return;
     }

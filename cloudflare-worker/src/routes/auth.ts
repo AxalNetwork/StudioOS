@@ -238,6 +238,22 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   }
 
   const [user] = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${name}, ${role || 'partner'}, false) RETURNING *`;
+  // Task #6 (W-1) — investor signups get a 14-day Professional trial.
+  // Cron in index.ts at 04:25 UTC downgrades expired trials to free.
+  if (role === 'investor') {
+    try {
+      const { ensureInvestorPaywallSchema } = await import('../middleware/requireInvestorTier');
+      await ensureInvestorPaywallSchema(c.env);
+      const trialEnds = new Date(Date.now() + 14 * 86400 * 1000).toISOString();
+      await c.env.DB.prepare(
+        `UPDATE users SET investor_tier = 'professional',
+                           investor_subscription_status = 'trialing',
+                           investor_trial_ends_at = ?,
+                           investor_dealroom_max = 5
+         WHERE id = ?`
+      ).bind(trialEnds, user.id).run();
+    } catch (e) { console.error('[auth] investor trial init failed', e); }
+  }
   // Task #3 (Y-1) — Trust Center: seed role-conditional obligations the
   // moment the account exists. Idempotent (UNIQUE on user_id+key) so a
   // second pass from /me self-heals if this throws.

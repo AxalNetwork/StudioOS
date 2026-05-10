@@ -8,6 +8,13 @@ const deals = new Hono<{ Bindings: Env }>();
 
 deals.get('/', async (c) => {
   const user = await requireAuth(c);
+  // Task #6 (W-1) — investor paywall: free investors can't browse the
+  // global deal list. Founders still see only their own (IDOR guard below).
+  if (user.role === 'investor') {
+    const { ensureInvestorTier } = await import('../middleware/requireInvestorTier');
+    try { ensureInvestorTier(user, 'professional'); }
+    catch (resp) { if (resp instanceof Response) return resp; throw resp; }
+  }
   const status = c.req.query('status');
   const sql = getSQL(c.env);
   const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';

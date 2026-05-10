@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { getLiveQuotes, getMarketHeadlines } from '../services/market-data';
+import { ensureInvestorTier, type InvestorUser } from '../middleware/requireInvestorTier';
 
 const marketIntel = new Hono<{ Bindings: Env }>();
 
@@ -120,6 +121,44 @@ marketIntel.get('/competitive-intelligence', (c) => {
     studio_benchmarks: STUDIO_BENCHMARKS,
     market_pulse: MARKET_PULSE,
     updated_at: new Date().toISOString(),
+  });
+});
+
+// Task #6 (W-1) — Market Intelligence export. Free investors get a paywall;
+// Professional+ (and admin/partner/mentor bypass) can pull a CSV of the
+// current Market Pulse + private rounds. Founders see this surface but
+// behind the founder-tier gate (Studio); they never hit this gate because
+// the route is only mounted under investor auth in practice.
+marketIntel.get('/export', async (c) => {
+  const user = (await requireAuth(c)) as InvestorUser;
+  // Investors must hold Professional+. Other roles (admin/partner/mentor)
+  // bypass the gate inside ensureInvestorTier; founders aren't expected here.
+  if (user.role === 'investor') {
+    ensureInvestorTier(user, 'professional');
+  }
+  const fmt = (c.req.query('format') || 'csv').toLowerCase();
+  const rows = MARKET_PULSE.map((s) => ({
+    sector: s.sector, multiple: s.multiple, sentiment: s.sentiment,
+    technographic_signal: s.technographic_signal,
+    hiring_surge: s.hiring_surge,
+    gap_opportunity: s.gap_opportunity,
+  }));
+  if (fmt === 'json') {
+    return c.json({ exported_at: new Date().toISOString(), rows });
+  }
+  // Tiny inline CSV writer — Market Intel ships a much richer export in AA-2.
+  const headers = Object.keys(rows[0] || { sector: '' });
+  const esc = (v: unknown) => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [headers.join(',')];
+  for (const r of rows) lines.push(headers.map((h) => esc((r as Record<string, unknown>)[h])).join(','));
+  return new Response(lines.join('\n'), {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="market-intel-${new Date().toISOString().slice(0, 10)}.csv"`,
+    },
   });
 });
 

@@ -59,6 +59,13 @@ export interface Env {
   // Task #6 — founder subscription tier price ids (Stripe).
   STRIPE_PRICE_GROWTH?: string;
   STRIPE_PRICE_STUDIO?: string;
+  // Task #6 (W-1) — investor paywall price ids. Institutional supports
+  // invoice billing so callers can also flip status via admin tooling
+  // when no card is on file.
+  STRIPE_PRICE_INVESTOR_PRO_MONTHLY?: string;
+  STRIPE_PRICE_INVESTOR_PRO_YEARLY?: string;
+  STRIPE_PRICE_INVESTOR_INST_MONTHLY?: string;
+  STRIPE_PRICE_INVESTOR_INST_YEARLY?: string;
   // Task #33 — Master keys for column-level cipher (PII / financial / cap-table)
   // and for one-time signed R2 download URLs. Both MUST be ≥32 bytes in
   // production. Generate via `openssl rand -hex 32`. Provision per env via

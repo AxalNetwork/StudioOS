@@ -101,6 +101,10 @@ import spinoutLabRoutes from './routes/spinout_lab';
 // portfolio_health/references/comarketing/company/needs/insights routers.
 import mentorsRoutes from './routes/mentors';
 import partnerOfficeHoursRoutes from './routes/partner_office_hours';
+// Task #6 (W-1) — investor paywall surfaces.
+import introductionsRoutes from './routes/introductions';
+import investorSeatsRoutes, { downgradeExpiredInvestorTrials } from './routes/investor_seats';
+import { requireInvestorTier } from './middleware/requireInvestorTier';
 import watchlistRoutes from './routes/watchlist';
 import journalRoutes from './routes/journal';
 import portfolioRoutes from './routes/portfolio';
@@ -337,6 +341,18 @@ app.route('/api/spinout-lab', spinoutLabRoutes);
 // T13 — Mentors + Partner Office Hours.
 app.route('/api/mentors', mentorsRoutes);
 app.route('/api/partner-office-hours', partnerOfficeHoursRoutes);
+
+// Task #6 (W-1) — investor paywall: introductions (quota-gated) + seats
+// (Institutional). Tier gates on pipeline-browse / deals-browse for investors
+// run inside the route handlers (founder ownership reads still work for
+// non-investor callers).
+app.route('/api/introductions', introductionsRoutes);
+app.route('/api/investor-seats', investorSeatsRoutes);
+// Investor Professional gate on browsing the deal pipeline + global deal list.
+// Bypass roles (admin/partner/mentor) and founders are exempt inside the
+// middleware; investors must hold Professional+.
+app.use('/api/pipeline', requireInvestorTier('professional'));
+app.use('/api/pipeline/*', requireInvestorTier('professional'));
 // T14 — Watchlist (incl. /api/antiportfolio), Decision Journal, Portfolio Health,
 // Reference Checks. watchlistRoutes mounts both /watchlist and /antiportfolio so
 // it sits at the /api root.
@@ -565,6 +581,19 @@ export default {
               console.info(`[cron] trust kyc resync scanned=${k.scanned} updated=${k.updated}`);
             }
           } catch (e) { console.error('[cron] trust expiry failed', e); }
+        }
+        // Task #6 (W-1) — daily investor trial downgrade at 04:25 UTC.
+        // Idempotent: only flips users whose trial_ends_at is in the past
+        // AND status='trialing'. Re-runs harmlessly when none are due.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 25) {
+          try {
+            const r = await downgradeExpiredInvestorTrials(env);
+            if (r.scanned) {
+              console.info(`[cron] investor trial downgrade scanned=${r.scanned} downgraded=${r.downgraded}`);
+            }
+          } catch (e) {
+            console.error('[cron] investor trial downgrade failed', e);
+          }
         }
         // Task #5 — daily assistant retention sweep at 04:10 UTC. Drops
         // conversations past their tier's TTL (90d free / 1y paid /
