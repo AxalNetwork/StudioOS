@@ -654,7 +654,12 @@ export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<
             `SELECT tagline, theme_color FROM landing_pages WHERE project_id = ?`,
           ).bind(proj.id).first<{ tagline: string | null; theme_color: string | null }>().catch(() => null);
           if (lp?.tagline) answered.add('founder.brand.tagline');
-          if (lp?.theme_color && lp.theme_color.toLowerCase() !== '#7c3aed') answered.add('founder.brand.theme_color');
+          // theme_color is non-null on every landing_pages row (the
+          // table default is '#7c3aed'). We treat the question as
+          // answered whenever a row exists with a non-empty value —
+          // including the default — so a founder who intentionally
+          // accepts the default purple isn't re-prompted on restart.
+          if (lp?.theme_color) answered.add('founder.brand.theme_color');
         } catch { /* landing_pages may not exist */ }
 
         // Deck-draft seed: mark Problem / Market answered when the
