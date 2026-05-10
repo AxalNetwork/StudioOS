@@ -217,6 +217,8 @@ export default function SettingsPage() {
         </div>
       )}
 
+      <ProfileCompletionBanner onJump={() => setActive('profile')} />
+
       <div className="grid lg:grid-cols-[200px_1fr] gap-6">
         <div className="lg:hidden mb-2">
           <SectionDropdown sections={sections} active={safeActive} onChange={setActive} />
@@ -417,6 +419,58 @@ function CompletionRing({ pct, hint }) {
   );
 }
 
+// AE-2 — Top-of-Settings completion banner. Pulls `profile_completion_pct`
+// from /profile/identity (which always carries the freshly-recomputed
+// percentage from the AE-1 helpers) and lists the unfilled required
+// fields so the user knows exactly what to fill next. Silent on error
+// (anonymous / network) — the banner is decorative, not blocking.
+const REQUIRED_PROFILE_FIELDS = [
+  ['full_legal_name', 'Full legal name'],
+  ['date_of_birth', 'Date of birth'],
+  ['nationality', 'Nationality'],
+  ['tax_residency_country', 'Tax residency'],
+  ['has_tax_id', 'Tax ID'],
+  ['address_line1', 'Address'],
+  ['city', 'City'],
+  ['postal_code', 'Postal code'],
+  ['country', 'Country'],
+];
+function ProfileCompletionBanner({ onJump }) {
+  const [row, setRow] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.getIdentitySettings()
+      .then(r => { if (!cancelled) setRow(r); })
+      .catch(() => { /* silent — banner is optional */ });
+    const onSaved = () => {
+      api.getIdentitySettings()
+        .then(r => { if (!cancelled) setRow(r); })
+        .catch(() => {});
+    };
+    window.addEventListener('axal:profile_saved', onSaved);
+    return () => { cancelled = true; window.removeEventListener('axal:profile_saved', onSaved); };
+  }, []);
+  if (!row) return null;
+  const pct = Number(row.profile_completion_pct || 0);
+  const missing = REQUIRED_PROFILE_FIELDS.filter(([k]) => {
+    const v = row[k];
+    return !v || (k === 'has_tax_id' && !row.has_tax_id);
+  }).map(([, label]) => label);
+  if (pct >= 100) return null;
+  return (
+    <div data-card className="mb-6 bg-violet-50/60 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-xl px-5 py-4 flex items-start gap-4">
+      <CompletionRing pct={pct} hint={
+        missing.length === 0
+          ? <span>Profile complete — nice.</span>
+          : <span>
+              Still missing: <span className="font-medium text-gray-800 dark:text-gray-200">{missing.slice(0, 4).join(', ')}{missing.length > 4 ? `, +${missing.length - 4} more` : ''}</span>.
+              <button onClick={onJump} className="ml-2 underline text-violet-700 dark:text-violet-300 hover:no-underline">Jump to Profile</button>
+            </span>
+      } />
+    </div>
+  );
+}
+
 function ProfileTabs({ data, onSaved, flash, patch }) {
   const [sub, setSub] = useState('personal');
   const [pct, setPct] = useState(0);
@@ -473,13 +527,17 @@ function PersonalIdentityCard({ flash, onPctChange }) {
       const updated = await api.updatePersonalProfile(patch);
       setRow(updated);
       onPctChange?.(updated.profile_completion_pct || 0);
+      try { window.dispatchEvent(new CustomEvent('axal:profile_saved')); } catch {}
       flash('Saved');
       if ('tax_id_number' in patch) setTaxIdInput('');
       if ('phone_e164' in patch) setPhoneInput('');
     } catch (e) {
-      const field = e?.field;
-      if (field) setFieldErrors({ [field]: e.message });
-      flash(e.message || 'Failed to save', 'error');
+      // AE-2: prefer the field-errors map; only flash a toast when the
+      // error is genuinely whole-form (no field metadata).
+      const errsMap = e?.data?.errors;
+      if (errsMap && typeof errsMap === 'object') setFieldErrors(errsMap);
+      else if (e?.field) setFieldErrors({ [e.field]: e.message });
+      if (!e?.field && !errsMap) flash(e.message || 'Failed to save', 'error');
     } finally {
       setBusy(false);
     }
@@ -593,7 +651,7 @@ function PersonalIdentityCard({ flash, onPctChange }) {
   );
 }
 
-function CorporateIdentityCard({ flash }) {
+function CorporateIdentityCard({ flash, onPctChange }) {
   const [row, setRow] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -603,25 +661,37 @@ function CorporateIdentityCard({ flash }) {
 
   useEffect(() => {
     let cancelled = false;
-    api.getCorporateProfile()
-      .then(r => { if (!cancelled) setRow(r); })
+    // AE-2: prefer the /legal-entity alias which always returns
+    // `profile_completion_pct` so the parent ring & top banner stay
+    // in sync without a second round-trip.
+    api.getLegalEntity()
+      .then(r => { if (!cancelled) { setRow(r); onPctChange?.(r.profile_completion_pct || 0); } })
       .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load corporate profile'); });
     return () => { cancelled = true; };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async (patch) => {
     setBusy(true);
     setFieldErrors({});
     try {
-      const updated = await api.updateCorporateProfile(patch);
+      const updated = await api.updateLegalEntity(patch);
       setRow(updated);
+      onPctChange?.(updated.profile_completion_pct || 0);
+      // Notify the top-of-Settings banner to re-fetch.
+      try { window.dispatchEvent(new CustomEvent('axal:profile_saved')); } catch {}
       flash('Saved');
       if ('tax_id_number' in patch) setTaxIdInput('');
       if ('ubos' in patch) setDraftUbo({ name: '', nationality: '', ownership_pct: '' });
     } catch (e) {
-      const field = e?.field;
-      if (field) setFieldErrors({ [field]: e.message });
-      flash(e.message || 'Failed to save', 'error');
+      // AE-2: surface field-level errors inline. The AE-1 envelope is
+      // `{error, field, errors:{[field]: msg}}` — prefer the map form
+      // when present (multi-field), fall back to single-field shape.
+      const errsMap = e?.data?.errors;
+      if (errsMap && typeof errsMap === 'object') setFieldErrors(errsMap);
+      else if (e?.field) setFieldErrors({ [e.field]: e.message });
+      // Only flash a toast when the error has no field — pure inline
+      // otherwise, per AE-2 acceptance ("never a generic toast").
+      if (!e?.field && !errsMap) flash(e.message || 'Failed to save', 'error');
     } finally {
       setBusy(false);
     }

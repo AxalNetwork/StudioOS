@@ -163,6 +163,18 @@ export const api = {
   getCorporateProfile: () => request('/settings/profile/corporate'),
   updateCorporateProfile: (patch) => request('/settings/profile/corporate', { method: 'PUT', body: JSON.stringify(patch) }),
 
+  // AE-1 (Task #1) — tabbed Settings aliases. /identity merges
+  // user_settings (timezone/locale/pronouns/profile_slug + display_name +
+  // headline) with personal-profile fields (full_legal_name/DOB/
+  // nationality). /details is the address+phone+tax slice of the personal
+  // profile. /legal-entity is the corporate-profile alias.
+  getIdentitySettings: () => request('/settings/profile/identity'),
+  updateIdentitySettings: (patch) => request('/settings/profile/identity', { method: 'PUT', body: JSON.stringify(patch) }),
+  getProfileDetails: () => request('/settings/profile/details'),
+  updateProfileDetails: (patch) => request('/settings/profile/details', { method: 'PUT', body: JSON.stringify(patch) }),
+  getLegalEntity: () => request('/settings/profile/legal-entity'),
+  updateLegalEntity: (patch) => request('/settings/profile/legal-entity', { method: 'PUT', body: JSON.stringify(patch) }),
+
   stats: () => request('/dashboard/stats'),
 
   listProjects: (status) => request(`/projects${status ? `?status=${status}` : ''}`),
