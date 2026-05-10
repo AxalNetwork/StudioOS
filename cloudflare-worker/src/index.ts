@@ -70,6 +70,8 @@ import { syncAllDocusignIntegrations } from './integrations/providers/docusign';
 // Side-effect import so registerProvider() runs at boot. No cron/sync —
 // Slack is send-only, driven by services/notify.ts.
 import './integrations/providers/slack';
+import './integrations/providers/crunchbase';
+import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import networkfx from './routes/networkfx';
 import profiling from './routes/profiling';
@@ -311,6 +313,7 @@ app.route('/api/dashboard', dashboard);
 app.route('/api/matches', matches);
 app.route('/api/settings', settings);
 app.route('/api/integrations', integrations);
+app.route('/api/crunchbase', crunchbaseRoutes);
 app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/linkedin', linkedinRoutes);

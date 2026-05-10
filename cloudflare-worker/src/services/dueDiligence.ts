@@ -53,7 +53,8 @@ export function sectionsFor(subjectType: DDSubjectType): SectionDef[] {
 
 export type ConnectorKey =
   | 'opencorporates' | 'sec_edgar' | 'sanctions_ofac'
-  | 'newsapi' | 'gdelt' | 'linkedin' | 'github' | 'whois_dns';
+  | 'newsapi' | 'gdelt' | 'linkedin' | 'github' | 'whois_dns'
+  | 'crunchbase';
 
 export interface ConnectorMeta {
   key: ConnectorKey;
@@ -72,6 +73,7 @@ export const CONNECTORS: ReadonlyArray<ConnectorMeta> = [
   { key: 'linkedin',       label: 'LinkedIn',               flag_env: 'DD_FLAG_LINKEDIN',       secret_env: 'LINKEDIN_API_KEY',default_section: 'founder_integrity' },
   { key: 'github',         label: 'GitHub',                 flag_env: 'DD_FLAG_GITHUB',         secret_env: 'GITHUB_PAT',     default_section: 'product_tech' },
   { key: 'whois_dns',      label: 'WHOIS / DNS',            flag_env: 'DD_FLAG_WHOIS_DNS',                                    default_section: 'cyber_posture' },
+  { key: 'crunchbase',     label: 'Crunchbase',             flag_env: 'DD_FLAG_CRUNCHBASE',     secret_env: 'CRUNCHBASE_API_KEY', default_section: 'market_traction' },
 ];
 
 interface RawFinding {
@@ -162,6 +164,14 @@ function mockFindings(connector: ConnectorKey, subject: string): RawFinding[] {
         detail: seed % 4 === 0 ? 'Domain registered <12mo ago; SPF present, DMARC missing.' : 'Domain >24mo old; SPF + DMARC present.',
         section_key: 'cyber_posture',
       }];
+    case 'crunchbase':
+      return [{
+        source_kind: connector, severity: 'info',
+        title: `Crunchbase profile lookup for "${subject}"`,
+        detail: 'No live Crunchbase API key on env (CRUNCHBASE_API_KEY) — set the secret to surface funding history, employee range, and operating-status flags.',
+        evidence_url: `https://www.crunchbase.com/textsearch?q=${encodeURIComponent(subject)}`,
+        section_key: 'market_traction',
+      }];
   }
 }
 
@@ -169,7 +179,54 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
   if (!isFlagged(env, connector.flag_env)) {
     return { status: 'disabled', records_count: 0, raw_response: null, findings: [] };
   }
-  // Live calls would dispatch here based on connector.key. For now emit
+  // Live: Crunchbase Basic API (env-keyed for the DD pipeline so admin
+  // scans don't depend on the case owner's per-user key).
+  if (connector.key === 'crunchbase') {
+    const apiKey = (env as unknown as Record<string, string | undefined>).CRUNCHBASE_API_KEY || '';
+    if (apiKey) {
+      try {
+        const { searchOrganizations } = await import('../integrations/providers/crunchbase');
+        const hits = await searchOrganizations(apiKey, subject, 1);
+        const top = hits[0];
+        if (!top) {
+          return {
+            status: 'ok', records_count: 0, raw_response: { matches: 0, subject },
+            findings: [{
+              source_kind: 'crunchbase', severity: 'low',
+              title: `No Crunchbase match for "${subject}"`,
+              detail: 'Subject not found in Crunchbase Basic search index — verify legal name or check operating status.',
+              section_key: 'market_traction',
+            }],
+          };
+        }
+        const findings: RawFinding[] = [];
+        const opStatus = (top.operating_status || '').toLowerCase();
+        const sevForStatus: RawFinding['severity'] = opStatus === 'closed' ? 'high' : opStatus === 'active' ? 'info' : 'medium';
+        findings.push({
+          source_kind: 'crunchbase', severity: sevForStatus,
+          title: `Crunchbase: ${top.name} — ${top.operating_status || 'status unknown'}`,
+          detail: [
+            top.short_description || '',
+            top.hq_location ? `HQ: ${top.hq_location}.` : '',
+            top.employee_range ? `Headcount band: ${top.employee_range}.` : '',
+            top.funding_total_usd ? `Total funding: $${(top.funding_total_usd / 1e6).toFixed(2)}M across ${top.num_funding_rounds || '?'} rounds.` : 'No reported funding.',
+            top.last_funding_type && top.last_funding_at ? `Last round: ${top.last_funding_type} (${top.last_funding_at}).` : '',
+          ].filter(Boolean).join(' '),
+          subject_name: top.name,
+          evidence_url: top.cb_url || undefined,
+          evidence_excerpt: top.short_description || undefined,
+          section_key: 'market_traction',
+        });
+        return { status: 'ok', records_count: 1, raw_response: top, findings };
+      } catch (e) {
+        return {
+          status: 'error', records_count: 0, raw_response: null, findings: [],
+          error_message: (e as Error).message || 'crunchbase_failed',
+        };
+      }
+    }
+  }
+  // Live calls for other connectors would dispatch here. For now emit
   // the deterministic stub so the dashboard always has data — the
   // contract for the live path stays identical.
   const findings = mockFindings(connector.key, subject);

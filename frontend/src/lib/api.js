@@ -546,6 +546,15 @@ export const api = {
   adminResendVerification: (userId) => request(`/admin/users/${userId}/resend-verification`, { method: 'POST' }),
 
   integrationsAvailable: () => request('/integrations/available'),
+  // Crunchbase enrichment (Task #3, 2026-05-10) — growth tier, requires
+  // an active Crunchbase integration on the calling user's account.
+  crunchbaseSearch: (q, limit = 10) =>
+    request(`/crunchbase/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  crunchbaseApply: (projectId, payload) =>
+    request(`/crunchbase/projects/${projectId}/apply`, { method: 'POST', body: JSON.stringify(payload) }),
+  crunchbaseCompetitors: (projectId, limit = 10) =>
+    request(`/crunchbase/projects/${projectId}/competitors?limit=${limit}`),
+
   integrationsList: () => request('/integrations'),
   integrationsConnect: (data) => request('/integrations/connect', { method: 'POST', body: JSON.stringify(data) }),
   integrationsDisconnect: (uid) => request(`/integrations/${encodeURIComponent(uid)}`, { method: 'DELETE' }),

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X, Database, Search, ExternalLink, AlertCircle } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from '../components/useToast';
@@ -26,6 +26,7 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [editing, setEditing] = useState(false);
+  const [cbOpen, setCbOpen] = useState(false);
 
   const load = () => {
     setLoadError('');
@@ -112,6 +113,11 @@ export default function ProjectDetail() {
                 <Pencil size={12} /> Edit
               </button>
             )}
+            {canEdit && (
+              <button onClick={() => setCbOpen(true)} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs text-gray-700" title="Look up on Crunchbase">
+                <Database size={12} /> Crunchbase
+              </button>
+            )}
             {project.playbook_week !== 'complete' && (
               <button onClick={advanceWeek} className="flex items-center gap-1 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 rounded-lg text-xs text-white">
                 <ChevronRight size={12} /> Advance Week
@@ -135,6 +141,32 @@ export default function ProjectDetail() {
           </div>
         </div>
       </div>
+
+      {cbOpen && (
+        <CrunchbaseLookupSlideOver
+          project={project}
+          onClose={() => setCbOpen(false)}
+          onApplied={(snap) => {
+            setProject((p) => ({
+              ...p,
+              crunchbase_uuid: snap.uuid,
+              crunchbase_data_json: JSON.stringify(snap),
+              crunchbase_synced_at: snap.fetched_at,
+            }));
+            showToast({ kind: 'success', msg: `Applied "${snap.name}" from Crunchbase` });
+          }}
+          onError={(msg) => showToast({ kind: 'error', msg })}
+        />
+      )}
+
+      {project.crunchbase_uuid && (() => {
+        let snap = null;
+        try { snap = project.crunchbase_data_json ? JSON.parse(project.crunchbase_data_json) : null; } catch {}
+        if (!snap) return null;
+        return (
+          <CrunchbaseProfileCard project={project} snap={snap} canEdit={canEdit} />
+        );
+      })()}
 
       {editing && (
         <EditProjectModal
@@ -246,6 +278,250 @@ export default function ProjectDetail() {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function CrunchbaseProfileCard({ project, snap, canEdit }) {
+  const [comps, setComps] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(null);
+  const [open, setOpen] = useState(false);
+
+  const loadCompetitors = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const res = await api.crunchbaseCompetitors(project.id, 10);
+      setComps(res?.competitors || []);
+      setOpen(true);
+    } catch (e) {
+      const code = e?.data?.error || '';
+      if (code === 'crunchbase_not_connected') setErr('Crunchbase isn\'t connected. Connect it from Settings → Integrations.');
+      else if (code === 'crunchbase_unauthorized') setErr('Crunchbase rejected the stored API key — reconnect from Settings → Integrations.');
+      else if (e?.status === 429) setErr('Crunchbase Basic daily limit reached (200 calls/day). Try again tomorrow.');
+      else setErr(e?.message || 'Failed to load competitors');
+      setOpen(true);
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+            <Database size={14} className="text-violet-600" /> Crunchbase profile
+            {snap.cb_url && (
+              <a href={snap.cb_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-1">
+                open <ExternalLink size={10} />
+              </a>
+            )}
+          </h3>
+          <div className="text-sm text-gray-900 mt-1 font-medium">{snap.name}</div>
+          {snap.short_description && <div className="text-xs text-gray-700 mt-1">{snap.short_description}</div>}
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          {snap.fetched_at && (
+            <div className="text-[10px] text-gray-500 whitespace-nowrap">synced {new Date(snap.fetched_at).toLocaleDateString()}</div>
+          )}
+          {canEdit && (
+            <button
+              onClick={loadCompetitors}
+              disabled={loading}
+              className="text-[11px] px-2 py-1 rounded border border-violet-300 text-violet-700 hover:bg-violet-50 disabled:opacity-60"
+            >
+              {loading ? 'Loading…' : 'Find competitors'}
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-xs">
+        <CbStat label="Headcount" value={snap.employee_range} />
+        <CbStat label="Total funding" value={snap.funding_total_usd ? `$${(snap.funding_total_usd / 1e6).toFixed(2)}M` : '—'} />
+        <CbStat label="Last round" value={snap.last_funding_type ? `${snap.last_funding_type}${snap.last_funding_at ? ` (${snap.last_funding_at})` : ''}` : '—'} />
+        <CbStat label="Status" value={snap.operating_status || '—'} />
+      </div>
+      {(snap.category_groups?.length || snap.categories?.length) ? (
+        <div className="flex flex-wrap gap-1 mt-3">
+          {(snap.category_groups || []).slice(0, 6).map(c => (
+            <span key={`g-${c}`} className="text-[10px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700">{c}</span>
+          ))}
+          {(snap.categories || []).slice(0, 6).map(c => (
+            <span key={`c-${c}`} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{c}</span>
+          ))}
+        </div>
+      ) : null}
+      {open && (
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-semibold text-gray-700">Possible competitors (sector heuristic)</div>
+            <button onClick={() => setOpen(false)} className="text-[11px] text-gray-500 hover:text-gray-700">hide</button>
+          </div>
+          {err && <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">{err}</div>}
+          {!err && comps && comps.length === 0 && (
+            <div className="text-xs text-gray-500">No competitor matches found in Crunchbase Basic.</div>
+          )}
+          {!err && comps && comps.length > 0 && (
+            <ul className="space-y-1.5">
+              {comps.map(c => (
+                <li key={c.uuid} className="flex items-center justify-between gap-2 text-xs">
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-900 truncate">{c.name}</div>
+                    {c.short_description && <div className="text-gray-600 truncate">{c.short_description}</div>}
+                  </div>
+                  {c.cb_url && (
+                    <a href={c.cb_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-1 whitespace-nowrap">
+                      open <ExternalLink size={10} />
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CbStat({ label, value }) {
+  return (
+    <div>
+      <div className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</div>
+      <div className="text-xs text-gray-900 font-medium mt-0.5 truncate">{value || '—'}</div>
+    </div>
+  );
+}
+
+function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
+  useEscapeClose(onClose);
+  const [q, setQ] = useState(project?.name || '');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  const [notConnected, setNotConnected] = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
+  const [applyingUuid, setApplyingUuid] = useState('');
+
+  useEffect(() => {
+    if (!q || q.trim().length < 2) { setResults([]); return; }
+    const t = setTimeout(async () => {
+      setLoading(true); setErr(''); setNotConnected(false); setRateLimited(false);
+      try {
+        const res = await api.crunchbaseSearch(q.trim(), 15);
+        setResults(res?.results || []);
+      } catch (e) {
+        const msg = e?.message || '';
+        if (/not_connected/i.test(msg)) setNotConnected(true);
+        else if (/rate_limited|429/i.test(msg)) setRateLimited(true);
+        else setErr(msg || 'Search failed');
+        setResults([]);
+      } finally { setLoading(false); }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const apply = async (snap) => {
+    setApplyingUuid(snap.uuid); setErr('');
+    try {
+      const res = await api.crunchbaseApply(project.id, { uuid: snap.uuid, snapshot: snap });
+      onApplied?.(res?.snapshot || snap);
+      onClose();
+    } catch (e) {
+      const msg = e?.message || 'Apply failed';
+      if (/rate_limited|429/i.test(msg)) setRateLimited(true);
+      else onError?.(msg);
+    } finally { setApplyingUuid(''); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex" role="dialog" aria-label="Look up on Crunchbase">
+      <div className="flex-1 bg-black/40" onClick={onClose} />
+      <div className="w-full max-w-xl bg-white shadow-xl flex flex-col h-full">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <Database size={16} className="text-violet-600" /> Look up on Crunchbase
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">Search and attach a Crunchbase company snapshot to this project.</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X size={18} /></button>
+        </div>
+        <div className="px-5 py-3 border-b border-gray-100">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              autoFocus type="text" value={q} onChange={(e) => setQ(e.target.value)}
+              placeholder="Company name…"
+              className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
+            />
+          </div>
+          {notConnected && (
+            <div className="mt-3 text-xs px-3 py-2 rounded border border-amber-300 bg-amber-50 text-amber-800 flex items-start gap-1.5">
+              <AlertCircle size={12} className="mt-0.5 shrink-0" />
+              <span>
+                Crunchbase isn't connected.{' '}
+                <Link to="/settings/integrations" className="underline font-medium">Connect from Settings → Integrations</Link>{' '}
+                to enable enrichment.
+              </span>
+            </div>
+          )}
+          {rateLimited && (
+            <div className="mt-3 text-xs px-3 py-2 rounded border border-amber-300 bg-amber-50 text-amber-800 flex items-start gap-1.5">
+              <AlertCircle size={12} className="mt-0.5 shrink-0" />
+              <span>Crunchbase Basic daily limit reached for your API key (200 calls/day). Try again tomorrow.</span>
+            </div>
+          )}
+          {err && !notConnected && !rateLimited && (
+            <div className="mt-3 text-xs text-red-600 flex items-center gap-1.5"><AlertCircle size={12} /> {err}</div>
+          )}
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="p-6 text-sm text-gray-500 text-center">Searching…</div>
+          ) : results.length === 0 ? (
+            !notConnected && !rateLimited && (
+              <div className="p-6 text-sm text-gray-500 text-center">
+                {q.trim().length < 2 ? 'Type at least 2 characters to search.' : 'No matches.'}
+              </div>
+            )
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {results.map((r) => (
+                <li key={r.uuid} className="px-5 py-3 hover:bg-gray-50">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-medium text-gray-900 truncate">{r.name}</div>
+                        {r.cb_url && (
+                          <a href={r.cb_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-0.5">
+                            <ExternalLink size={10} />
+                          </a>
+                        )}
+                      </div>
+                      {r.short_description && (
+                        <div className="text-xs text-gray-600 mt-0.5 line-clamp-2">{r.short_description}</div>
+                      )}
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[11px] text-gray-500">
+                        {r.hq_location && <span>{r.hq_location}</span>}
+                        {r.employee_range && <span>{r.employee_range}</span>}
+                        {r.funding_total_usd ? <span>${(r.funding_total_usd / 1e6).toFixed(1)}M raised</span> : null}
+                        {r.operating_status && <span>{r.operating_status}</span>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => apply(r)}
+                      disabled={!!applyingUuid}
+                      className="shrink-0 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg text-xs text-white font-medium"
+                    >
+                      {applyingUuid === r.uuid ? 'Applying…' : 'Apply'}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );

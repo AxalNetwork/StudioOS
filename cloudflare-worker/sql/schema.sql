@@ -182,12 +182,16 @@ CREATE TABLE IF NOT EXISTS projects (
     hubspot_primary_contact_id TEXT,
     sf_account_id TEXT,
     sf_primary_contact_id TEXT,
+    crunchbase_uuid TEXT,
+    crunchbase_data_json TEXT,
+    crunchbase_synced_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name);
 CREATE INDEX IF NOT EXISTS idx_projects_sf_account ON projects(sf_account_id);
+CREATE INDEX IF NOT EXISTS idx_projects_crunchbase_uuid ON projects(crunchbase_uuid);
 
 CREATE TABLE IF NOT EXISTS score_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
