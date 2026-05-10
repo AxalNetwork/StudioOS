@@ -1,0 +1,591 @@
+Confirmed — the Worker only has the single `/api/settings` GET and a few specific sub-endpoints. Most "Not found" errors come from the UI calling sub-routes that don't exist. Here are the prompts.
+
+---
+
+## Replit Prompt AB — Bird's-eye view
+
+```
+Three workstreams, run in parallel.
+
+  1. PERSONAL ADVISOR CHATBOT  (Prompt AC)
+     A persistent dashboard chatbot that profiles every persona (New
+     Founder, Existing Founder, Investor, Mentor, Partner) through a
+     wide-ranging Q&A and writes the answers back into the right pages
+     (Projects, Pipeline, Cofounder Agreement, Cap Table, Investor
+     thesis, Mentor profile, Partner deal, etc.). Acts as a tutor —
+     explains what each feature is for, links to docs when unsure.
+     Replaces the standalone "Tell us about yourself" panel.
+
+  2. DOCUMENTATION FULL UPDATE  (Prompt AD)
+     Rewrite Documentation to cover every feature shipped since the
+     last pass: Spin-Out Lab, paywalls (founder + investor), Trust
+     Center, Due Diligence, Integrations, Personal Advisor chatbot,
+     Partner deal engine, Market Intelligence sources, NDA flows,
+     scoring anti-cheat, and the new Settings sections.
+
+  3. FIX SETTINGS  (Prompt AE)
+     Almost every Settings sub-section currently returns "Not found" or
+     500. Land all the missing endpoints, fix the Integrations 500, and
+     wire the UI to the real shapes.
+
+Order
+  AE first (unblocks profile data the chatbot needs).
+  AC and AD in parallel after AE merges.
+```
+
+---
+
+## Replit Prompt AC — Personal Advisor chatbot (auto-fills pages, persona-aware)
+
+```
+Objective
+  Replace the dashboard "Tell us about yourself" panel with a persistent
+  Personal Advisor chatbot. It profiles each persona, answers questions
+  about features, and *writes* the answers back into the right pages so
+  users don't have to fill them manually. Acts as a tutor: every answer
+  triggers a short explainer for the feature being filled, with a "More
+  in Docs →" link. Tier and role aware: only suggests features the user
+  can use; for paywalled features, explains the value and offers
+  upgrade.
+
+Personas + question banks (one file per persona,
+                          frontend/src/lib/advisor/banks/)
+  newFounder.ts
+    - About you: name, location, time-zone, working FT/PT, prior ventures
+    - Idea: 1-line problem, who hurts most, current solution, your wedge
+    - Customer: target ICP (segment, size, geo), willingness to pay
+    - Discovery: existing interviews, key quotes
+    - Roadmap: top 3 outcomes for 90 days, top 3 deliverables this week
+    - Team: any cofounder candidates? skill gaps?
+    - Brand: working name, tagline, palette, voice
+    - Deck: elevator pitch, why-now
+    - Spin-Out Lab progress: which week milestones to unlock now
+  existingFounder.ts
+    - Company facts: legal name, entity, country, registration #, fiscal
+      year-end, employees, website
+    - Cap table: founders, vesting, options pool size, last round
+    - Financials: MRR, burn, runway, last 3 months revenue
+    - Pipeline: top 5 deals/customers and stages
+    - Compliance: incorporated where, 83(b) filed?, IP assignments
+    - Capital: amount raising, valuation cap or pre-money, target close
+    - Roadmap: quarterly OKRs
+    - Mentors needed: which expertise gaps
+  investor.ts
+    - Firm facts: name, role, AUM, fund vehicle, geos, sectors, stage
+    - Thesis: one-line, allergies, must-haves
+    - Tickets: typical, follow-on capacity, lead/follow
+    - Pipeline: quarter target, current sourcing channels
+    - Co-invest preferences, syndicate vs solo
+    - Watchlist: sectors to flag opportunities for
+  mentor.ts
+    - Expertise tags, sectors, stages, weekly capacity hours
+    - Comp preference: pro-bono, equity, cash, mixed
+    - Calendar provider, timezones served, languages
+    - Topics willing/unwilling to advise on
+  partner.ts
+    - Firm, role, services offered or capital available
+    - Deal type interest (equity/services/revshare/capital — Prompt X)
+    - Conflicts of interest disclosures
+    - Deal-flow channels they bring
+
+Tutor layer (every persona)
+  Each question carries:
+    {
+      id, label, type: 'text'|'textarea'|'number'|'currency'|'select'|
+                        'multiselect'|'date'|'range'|'toggle'|'file',
+      explainer: short copy "Why we ask",
+      doc_anchor:  '/docs#section/...',
+      page_target: which page+field this answer fills,
+      tier_required?: 'free'|'growth'|'studio'|'investor_pro'|...,
+      validate: zod schema,
+      followups?: question[] (conditional branches)
+    }
+
+Auto-fill engine
+  cloudflare-worker/src/routes/advisor.ts
+    POST /api/advisor/start              → creates conversation + returns
+                                            persona-specific opening
+                                            question, hydrated with any
+                                            existing data already on
+                                            file (so the chatbot doesn't
+                                            re-ask).
+    POST /api/advisor/answer
+       body { conversation_id, question_id, value }
+       → { saved_to: [{ table, column, row_id }], next_question, hint? }
+       Persists the value via a write-router that knows which page+field
+       maps to which D1 column (one map per persona). All writes go
+       through the existing per-resource auth (founder can only write
+       her own project, investor can only write his own profile, etc.).
+    POST /api/advisor/skip { conversation_id, question_id }
+    POST /api/advisor/explain { topic } → tutor response w/ doc link
+    GET  /api/advisor/progress  → completion ring per page
+    GET  /api/advisor/conversations/:id
+
+  Write-router examples:
+    newFounder.idea.problem      → projects.problem_statement (current
+                                      project for this user, auto-create
+                                      if none)
+    newFounder.customer.icp      → projects.target_icp_json
+    newFounder.discovery.interviews → discovery_interviews rows
+    newFounder.roadmap.okrs       → roadmap_okrs rows
+    existingFounder.financials.mrr→ score_evidence + projects.mrr_usd
+    investor.thesis.allergies    → investor_profiles.allergies_text
+    mentor.expertise.tags         → mentor_profiles.tags_json
+    partner.deal_type             → partner_profiles + partner_deals.draft
+
+  Side-effects:
+    - When the answer would unlock a Spin-Out Lab milestone, the engine
+      calls /api/spinout-lab/milestone automatically.
+    - When an answer fills a contract merge-field (Prompt U), the
+      contract auto-fill cache is refreshed.
+    - When an answer is for a paywalled feature, the chatbot explains
+      the feature anyway and offers an upgrade link instead of writing.
+
+Tutor mode
+  At any time the user can type "explain X" or click an "?" beside the
+  current question. The chatbot calls /api/advisor/explain with the
+  current topic and returns:
+    - One-paragraph explanation
+    - Why it matters in the user's persona context
+    - "Open the page to see it" deep link
+    - "Read more in docs" deep link
+
+Frontend
+  frontend/src/components/advisor/PersonalAdvisor.jsx
+    - Pinned to the dashboard header column where the old
+      "Tell us about yourself" lived.
+    - Persistent: minimisable to a floating bubble; full-screen on
+      mobile.
+    - Shows a per-page completion ring on the right rail with deep
+      links into pages.
+    - Streaming responses (SSE) for reply latency under 1s.
+  frontend/src/lib/advisor/router.js
+    - Client-side mirror of the write-router for optimistic UI updates.
+  frontend/src/lib/advisor/persona.js
+    - Picks the bank by user.role + spinout_lab_active.
+  frontend/src/pages/Dashboard.jsx
+    - Mounts <PersonalAdvisor /> in the slot previously occupied by
+      "Tell us about yourself".
+
+Schema
+  CREATE TABLE advisor_conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    persona TEXT NOT NULL,
+    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_message_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE advisor_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL,
+    role TEXT NOT NULL,                 -- 'system','user','assistant','tool'
+    content TEXT NOT NULL,
+    question_id TEXT,
+    written_path TEXT,                   -- e.g. 'projects.problem_statement#42'
+    model TEXT, latency_ms INTEGER,
+    token_in INTEGER, token_out INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE advisor_answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    persona TEXT NOT NULL,
+    question_id TEXT NOT NULL,
+    value_json TEXT,
+    written_path TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, question_id)
+  );
+
+LLM details
+  - Model default: claude-haiku-4-5-20251001 for Q&A, claude-sonnet-4-6
+    for "explain" mode.
+  - Prompt caching on system prompt + question bank (≥1024 tokens) →
+    fast first-token latency.
+  - Tool-use to call writeAnswer(...), explainTopic(...), openPage(...).
+  - Server filters tool-result content for prompt injection before
+    re-prompting.
+
+Privacy
+  - Never includes other users' PII in system prompt.
+  - Refuses destructive actions (delete, void). Suggests + deep-links
+    instead.
+  - Stripe / Plaid / Crunchbase API responses pulled inside server-side
+    tools, never sent through the LLM verbatim if they include PII.
+
+Persona detection
+  If users.role is null on first run (brand new account), the chatbot
+  starts with a 3-question role detector that sets users.role and the
+  Spin-Out Lab flag if applicable, then pivots to the persona bank.
+  This subsumes the current "Tell us about yourself" panel entirely.
+
+Acceptance
+  - New Founder finishing the bank has a populated Project, ≥3
+    discovery interviews, ≥3 OKRs, brand basics, a deck draft seed,
+    and Spin-Out Lab Week 1 milestone unlocked — without opening any
+    of those pages manually.
+  - Existing Founder finishing their bank has corporate profile, cap
+    table seeds, financial figures with evidence prompts, and
+    quarterly OKRs filled.
+  - Investor finishing the bank has investor_profiles populated and
+    the Market Intel Investor Signals contributor flag set.
+  - Mentor / Partner banks fill their respective profile rows.
+  - Asking "what's a SAFE?" returns a tutor reply with a docs link.
+  - Tier-locked answers don't write; instead show the feature
+    explanation and an upgrade button.
+  - Streaming, persistence, deep-links and minimise/restore all work.
+```
+
+---
+
+## Replit Prompt AD — Documentation full rewrite for current product
+
+```
+Objective
+  Replace frontend/src/pages/DocsPage.jsx contents with a documentation
+  set covering everything shipped recently. End-user audience only. Do
+  not mention the GitHub repository. Do not include API/SDK references
+  (the API is not ready). Add an in-page search.
+
+Required structure (left rail nav; one .jsx per top-level section under
+                    frontend/src/pages/docs/sections/):
+
+  GETTING STARTED
+    What is StudioOS — the venture studio + VC operating system
+    Choosing your path — Spin-Out Lab vs. Existing Company
+    Account roles — Founder, Investor, Mentor, Partner, Admin
+    First login walk-through
+    Personal Advisor — using the chatbot tutor on the dashboard
+    Inviting your team
+
+  SPIN-OUT LAB (30-day sprint)
+    Overview & how unlocks work
+    Week 1: Idea & Problem Validation
+    Week 2: Solution Design & Roadmap
+    Week 3: Validation & Co-founder
+    Week 4: Incorporation & Capital
+    Graduating from the Lab
+
+  CORE
+    Projects
+    Pipeline (deal pipeline)
+    Customer Discovery
+    Roadmap (OKRs + Kanban)
+    Brand Builder
+    Pitch Deck
+
+  VALIDATE & GROW
+    Diligence & Scoring Engine — how scoring works + evidence-required
+                                  inputs (anti-cheat)
+    Mentors & booking sessions
+    Office Hours
+    Co-founder Match
+    Market Intelligence — sources, sector compass, investor signals
+
+  CAPITAL & FINANCE
+    Capital (fundraise)
+    Investors & Pipeline (investor view)
+    Cap Table
+    Funds, Reserves, Waterfall
+    Liquidity events
+
+  LEGAL & COMPLIANCE
+    Trust Center overview — what your role needs
+    KYC for Investors
+    KYB for entities
+    Accreditation flows
+    NDAs explained — platform NDAs and Founder ↔ Investor 3-way NDAs
+    Incorporation
+    Cofounder Agreement
+    Section 83(b) elections
+    Compliance basics
+    KYC (founder side, when triggered)
+    ESign — native vs DocuSign
+
+  PARTNERSHIPS
+    Becoming an Axal Venture Partner
+    Deal types — Equity / Services / Deal Sourcing / Capital
+    Referral codes & redemption
+    Partner Portal
+
+  NETWORK
+    Marketplace
+    Partners & Co-marketing
+    Public Directory
+    Refer & Earn
+    Network Effects
+
+  PORTAL EXPERIENCES
+    Founder Portal
+    Investor Portfolio Health
+    Partner Portal
+    Mentor Engagements
+
+  INTEGRATIONS
+    Overview — CRM, legal, data feeds (no GitHub mention)
+    HubSpot, Calendly, Salesforce, Carta, Crunchbase, Slack,
+    DocuSign, Affinity — one page each, with what's Live vs Beta vs
+    Coming Soon, prerequisites, and step-by-step connect
+
+  ACCOUNT & BILLING
+    Settings overview — Profile, Identity, Legal Entity, Security,
+    Notifications, Privacy, Integrations, Appearance, Billing,
+    Developer
+    Subscription tiers — Founders (Free / Growth / Studio)
+    Subscription tiers — Investors (Free / Professional / Institutional)
+    Notifications & quiet hours
+    Privacy & data export
+    Two-factor authentication — TOTP and SMS
+    Sessions and devices
+    Activity log
+
+  ADMIN (admin role only)
+    Admin Console — All Contracts, Users, Personas
+    Monitoring & Observability
+    User Analytics — Overview, Users, Financial, Technical, Management
+    Due Diligence module — running a case end-to-end
+    Partner Invitations
+    Trust Center oversight
+    Infrastructure tab
+
+  TROUBLESHOOTING
+    My projects don't appear
+    Customer Discovery is empty
+    Roadmap returned Not Found (legacy)
+    Calendar not syncing
+    Billing & invoice issues
+    "Not found" errors in Settings (legacy)
+    NDA pending — what to do
+    Integration disconnected — how to reconnect
+    Contact support
+
+Each section's page must follow:
+  - 1-paragraph overview
+  - "How to use it" steps
+  - 2-3 tips
+  - Common pitfalls
+  - "Related features" links
+
+Implementation
+  frontend/src/pages/docs/DocsLayout.jsx
+    Left rail with collapsible groups, in-page search input,
+    breadcrumbs, "On this page" right rail (auto-built from h2/h3).
+  frontend/src/pages/docs/sections/*.jsx
+    One file per top-level section. Each exports an array of
+    sub-pages keyed by anchor.
+  frontend/src/pages/docs/index.js
+    Manifest used by left rail and search.
+  frontend/src/lib/docs/search.js
+    Fuse.js client-side index across all section content.
+
+Search
+  - Indexes every paragraph, list item, and code block.
+  - Highlights matched terms in the result snippet.
+  - Keyboard shortcut "/" focuses the search input.
+  - Results deep-link to the anchor.
+
+Anchors + linking
+  - Every h2 has an id matching the path used by the explainer
+    components (Prompt S). E.g. /docs#core/projects matches the
+    explainer's `doc: 'core/projects'`.
+  - When the user clicks "Learn more" on a page header explainer,
+    they land on the right anchor.
+
+Constraints
+  - No mention of GitHub, repos, branches, PRs, or developer-facing
+    plumbing.
+  - No API / SDK / curl examples.
+  - Plain language, no jargon without a one-line definition.
+
+Acceptance
+  - Every section above renders.
+  - Search returns hits across all pages.
+  - Anchor links from explainer components and the chatbot resolve.
+  - Mobile layout: left rail collapses to a top sheet.
+  - Lighthouse perf ≥ 90, content audit shows zero GitHub mentions.
+```
+
+---
+
+## Replit Prompt AE — Fix every broken Settings sub-section
+
+```
+Objective
+  Settings is full of "Not found" errors and the Integrations panel
+  throws "Internal server error". Every sub-section listed below must
+  return real data, persist real changes, and never display a generic
+  toast. Land the missing Worker endpoints, fix the Integrations 500,
+  and tighten the UI error handling.
+
+Sub-sections to fix
+  Profile > Identity                     → "Not found"
+  Profile > Profile details              → "Not found"
+  Profile > Legal entity                 → "Not found"
+  Notifications > Digest & quiet hours   → "Not found"
+  Privacy > Visibility                    → "Not found"
+  Integrations panel                      → "Internal server error"
+  Developer (admin only)                  → "Not found"
+  Appearance > Theme / Density / Sidebar → "Not found"
+
+Worker work (cloudflare-worker/src/routes/settings.ts unless noted)
+
+  1. Schema: extend ensureSchema() with all columns referenced by the
+     UI but missing in D1:
+       SETTINGS_USER_COLUMNS additions:
+         ['display_name', 'TEXT'],
+         ['headline', 'TEXT'],
+         ['bio', 'TEXT'],                 -- already
+         ['pronouns', 'TEXT'],
+         ['timezone', "TEXT DEFAULT 'UTC'"],
+         ['locale', "TEXT DEFAULT 'en'"],
+         ['profile_slug', 'TEXT'],
+         ['full_legal_name', 'TEXT'],
+         ['date_of_birth', 'TEXT'],
+         ['nationality', 'TEXT'],
+         ['tax_residency_country', 'TEXT'],
+         ['tax_id_number_ciphertext', 'TEXT'],
+         ['tax_id_last4', 'TEXT'],
+         ['phone_e164_ciphertext', 'TEXT'],
+         ['phone_last4', 'TEXT'],
+         ['address_line1', 'TEXT'],
+         ['address_line2', 'TEXT'],
+         ['city', 'TEXT'],
+         ['state_or_region', 'TEXT'],
+         ['postal_code', 'TEXT'],
+         ['country', 'TEXT'],
+         ['profile_completion_pct', 'INTEGER DEFAULT 0'],
+         ['digest_frequency', "TEXT DEFAULT 'weekly'"],
+         ['quiet_hours_start', 'TEXT'],
+         ['quiet_hours_end', 'TEXT'],
+         ['quiet_hours_tz', "TEXT DEFAULT 'UTC'"],
+         ['visibility', "TEXT DEFAULT 'network'"],
+         ['show_in_directory', 'INTEGER DEFAULT 1'],
+         ['discoverable', 'INTEGER DEFAULT 1'],
+         ['theme', "TEXT DEFAULT 'system'"],
+         ['density', "TEXT DEFAULT 'comfy'"],
+         ['sidebar_default', "TEXT DEFAULT 'expanded'"],
+         ['dismissed_explainers', "TEXT DEFAULT '[]'"],
+     PLUS the corporate_profiles table from earlier prompt (idempotent
+     CREATE IF NOT EXISTS).
+
+  2. Endpoints (Zod-validated; encrypted columns via Prompt B cipher
+     when secret-class):
+       GET  /api/settings/profile/identity
+       PUT  /api/settings/profile/identity
+            body: full_legal_name, date_of_birth, nationality, phone,
+                  tax_residency_country, tax_id_number, address_line1,
+                  address_line2, city, state_or_region, postal_code,
+                  country
+            Encrypts tax_id, phone; stores last4 unencrypted.
+       GET  /api/settings/profile/details
+       PUT  /api/settings/profile/details
+            body: display_name, headline, bio, pronouns, timezone,
+                  locale, profile_slug
+            profile_slug must be globally unique.
+       GET  /api/settings/profile/legal-entity
+       PUT  /api/settings/profile/legal-entity
+            body: full corporate_profiles shape from earlier prompt.
+       GET  /api/settings/notifications
+       PUT  /api/settings/notifications
+            body: categories, digest_frequency,
+                  quiet_hours_start, quiet_hours_end, quiet_hours_tz
+       GET  /api/settings/privacy
+       PUT  /api/settings/privacy
+            body: visibility ('public'|'network'|'private'),
+                  show_in_directory, discoverable
+       GET  /api/settings/appearance
+       PUT  /api/settings/appearance
+            body: theme ('system'|'light'|'dark'),
+                  density ('comfy'|'compact'),
+                  sidebar_default ('expanded'|'collapsed')
+       GET  /api/settings/developer        (admin only)
+       PUT  /api/settings/developer        (admin only)
+            body: feature_flags (json), debug_logging (bool)
+       GET  /api/settings/integrations     → reuses /api/integrations
+                                              with same shape, no 500
+       Recompute profile_completion_pct on every relevant PUT and
+       return it in the response.
+
+  3. Integrations 500 fix
+     Likely cause is the stub returning 501 in cloudflare-worker/src/
+     routes/integrations.ts when the Settings panel hits write
+     endpoints.
+     Replace 501 returns with structured 200 responses for the
+     Settings read paths and proper 4xx for unsupported writes (NOT
+     5xx). Specifically:
+       GET  /api/integrations           → returns [] for users with
+                                          none, never throws.
+       GET  /api/integrations/available → returns the catalogue with
+                                          coming-soon flags from
+                                          Prompt H (or the existing
+                                          stub catalogue if H not
+                                          merged).
+     Wrap getRootSettings() to swallow integration-listing errors:
+     log them, return integrations: [] in the root payload so the
+     panel always renders.
+
+  4. Validation
+     - country / nationality / tax_residency_country: ISO 3166-1 alpha-2
+     - timezone: validate against Intl.supportedValuesOf('timeZone')
+     - locale: validate against a small allow-list ['en','fr','es','pt']
+     - quiet_hours_start/end: /^\d{2}:\d{2}$/
+     - profile_slug: /^[a-z0-9-]{3,32}$/, unique
+     - postal_code: light per-country regex
+     Return 400 with field-level errors, never 500.
+
+Frontend (frontend/src/pages/SettingsPage.jsx)
+  - Convert each broken sub-section into a small async component that
+    GETs its own endpoint on mount and PUTs on save.
+  - Inline error UI ONLY; never console.error → toast generic.
+  - Loading skeleton while data fetches.
+  - Profile main tab gets sub-tabs: Identity / Profile details /
+    Legal entity / Verification (from earlier prompt — show even if
+    KYB/KYC not connected, with "Coming soon" stub).
+  - Notifications tab: digest dropdown, quiet-hours time + tz picker,
+    category matrix.
+  - Privacy tab: radio group + two toggles + "Export my data" button.
+  - Appearance tab: theme select (uses live ThemeContext), density
+    select (applies tailwind density class on body), sidebar default
+    select (drives initial collapse state).
+  - Developer tab (admin only): feature-flag list with toggles,
+    debug logging switch.
+  - Integrations tab: connected list + available catalogue (reuses
+    Prompt H components if available; otherwise simple cards).
+
+Theme + density + sidebar_default applied globally
+  frontend/src/lib/SettingsContext.jsx
+    On login, fetch GET /api/settings/appearance and apply:
+      - theme: toggle `dark` class on <html>
+      - density: data-density attribute on <body>
+      - sidebar_default: initial collapsed state
+    On change, optimistically apply + PUT.
+
+Profile completeness ring
+  Recomputes server-side on every profile PUT and is included in the
+  GET /api/settings response. Surfaced at the top of Settings:
+  "Profile complete: 78%" with a list of missing required fields.
+
+Acceptance
+  - Every sub-section listed in Objective renders without "Not found"
+    and persists changes across reload.
+  - Integrations panel renders an empty state instead of "Internal
+    server error" for users with no integrations.
+  - Theme, density, and sidebar_default apply globally and persist.
+  - Developer tab visible only to admins.
+  - profile_completion_pct visible and updates live.
+  - Validation errors surfaced inline, never as a 500.
+  - All new columns added via ensureSchema; existing rows backfilled
+    with defaults.
+```
+
+---
+
+## Order
+
+```
+Phase 1 (foundation)   : AE  (unblocks the chatbot's write-router)
+Phase 2 (parallel)     : AC  Personal Advisor chatbot
+                         AD  Documentation rewrite
+```
+
+Each is self-contained. Want me to draft the question banks per persona (so Replit just plugs them in), the docs section copy templates, or the migration that recomputes `profile_completion_pct` next?
