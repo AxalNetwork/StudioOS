@@ -14,11 +14,20 @@ async function listProjectsHandler(c: any) {
   const sql = getSQL(c.env);
   const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
   // IDOR guard: founders can only see their OWN projects.
+  // Task #3 (Y-1) — investor list rows JOIN to users so we can per-row
+  // mask via maskFounderForInvestor (no active pairwise NDA → public
+  // fields only). Other roles keep the legacy SELECT shape.
   let rows: any;
   if (isPrivileged) {
-    rows = status
-      ? await sql`SELECT * FROM projects WHERE status = ${status} ORDER BY created_at DESC`
-      : await sql`SELECT * FROM projects ORDER BY created_at DESC`;
+    if (user.role === 'investor') {
+      rows = status
+        ? await sql`SELECT p.*, u.id AS founder_user_id FROM projects p LEFT JOIN users u ON u.founder_id = p.founder_id WHERE p.status = ${status} ORDER BY p.created_at DESC`
+        : await sql`SELECT p.*, u.id AS founder_user_id FROM projects p LEFT JOIN users u ON u.founder_id = p.founder_id ORDER BY p.created_at DESC`;
+    } else {
+      rows = status
+        ? await sql`SELECT * FROM projects WHERE status = ${status} ORDER BY created_at DESC`
+        : await sql`SELECT * FROM projects ORDER BY created_at DESC`;
+    }
   } else {
     if (!user.founder_id) { await sql.end(); return c.json([]); }
     rows = status
@@ -26,6 +35,13 @@ async function listProjectsHandler(c: any) {
       : await sql`SELECT * FROM projects WHERE founder_id = ${user.founder_id} ORDER BY created_at DESC`;
   }
   await sql.end();
+  if (user.role === 'investor') {
+    const { maskFounderForInvestor } = await import('../services/trust');
+    const masked = await Promise.all(
+      (rows as any[]).map((p) => maskFounderForInvestor(c.env, p, { viewerRole: 'investor', viewerUserId: user.id })),
+    );
+    return c.json(masked);
+  }
   return c.json(rows);
 }
 
@@ -45,11 +61,26 @@ projects.get('/:id', async (c) => {
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
   let founder = null;
+  let founderUserId: number | null = null;
   if (project.founder_id) {
     const f = await sql`SELECT * FROM founders WHERE id = ${project.founder_id}`;
     if (f.length > 0) founder = f[0];
+    const u = await sql`SELECT id FROM users WHERE founder_id = ${project.founder_id} LIMIT 1`;
+    if (u.length > 0) founderUserId = u[0].id;
   }
   await sql.end();
+  // Task #3 (Y-1) — investor view gets masked unless an active pairwise
+  // NDA exists between this investor and the project's founder. Admins,
+  // partners, and the founder themselves bypass the mask.
+  if (user.role === 'investor' && founderUserId != null) {
+    const { maskFounderForInvestor } = await import('../services/trust');
+    const masked = await maskFounderForInvestor(
+      c.env,
+      { ...project, founder, founder_user_id: founderUserId },
+      { viewerRole: 'investor', viewerUserId: user.id },
+    );
+    return c.json(masked);
+  }
   return c.json({ ...project, founder });
 });
 

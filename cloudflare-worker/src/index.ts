@@ -54,6 +54,8 @@ import pipeline from './routes/pipeline';
 import search from './routes/search';
 import kyc from './routes/kyc';
 import esign from './routes/esign';
+import trust from './routes/trust';
+import { expireDueArtifacts as expireTrustArtifacts, resyncKycKyb } from './services/trust';
 import integrations from './routes/integrations';
 // Task #2 — HubSpot provider. Side-effect import: the module's top-level
 // `registerProvider({ key: 'hubspot', ... })` runs at boot so the route
@@ -302,6 +304,8 @@ app.route('/api/decks', decks);
 // this route renders the page for un-authenticated visitors.
 app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug')));
 app.route('/api/kyc', kyc);
+// Task #3 (Y-1) — Trust Center: per-role obligations + 3-way NDA flow.
+app.route('/api/trust', trust);
 // Frontend (`frontend/src/lib/api.js`) calls `/api/legal/esign/...` — mount
 // the esign router under that path, NOT `/api/esign`. Mounting it inside
 // `/api/legal` would be cleaner but `legal.ts` is its own router, so we just
@@ -544,6 +548,23 @@ export default {
           } catch (e) {
             console.error('[cron] investor_signals aggregation failed', e);
           }
+        }
+        // Task #3 (Y-1) — nightly Trust Center housekeeping at 04:35 UTC:
+        // expires past-due `legal_obligations` (TTL elapsed) and pairwise
+        // NDAs past their `valid_until`, then runs the KYC/KYB resync stub
+        // (no-op until Persona/Sumsub are wired). All side-effects are
+        // idempotent so re-runs after a missed minute are safe.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 35) {
+          try {
+            const r = await expireTrustArtifacts(env);
+            if (r.obligations_expired || r.ndas_expired) {
+              console.info(`[cron] trust expiry obligations=${r.obligations_expired} ndas=${r.ndas_expired}`);
+            }
+            const k = await resyncKycKyb(env);
+            if (k.scanned) {
+              console.info(`[cron] trust kyc resync scanned=${k.scanned} updated=${k.updated}`);
+            }
+          } catch (e) { console.error('[cron] trust expiry failed', e); }
         }
         // Task #5 — daily assistant retention sweep at 04:10 UTC. Drops
         // conversations past their tier's TTL (90d free / 1y paid /

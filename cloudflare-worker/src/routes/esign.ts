@@ -758,8 +758,19 @@ esign.post('/sign/:token', async (c) => {
     // Best-effort; never blocks the sign API.
     if (wonRace) try {
       const envelopeRow = await c.env.DB.prepare(
-        `SELECT user_id, document_title, envelope_uuid FROM esign_envelopes WHERE id = ?`
-      ).bind(rec.envelope_id).first<{ user_id: number | null; document_title: string | null; envelope_uuid: string }>();
+        `SELECT user_id, document_title, envelope_uuid, document_type FROM esign_envelopes WHERE id = ?`
+      ).bind(rec.envelope_id).first<{ user_id: number | null; document_title: string | null; envelope_uuid: string; document_type: string | null }>();
+      // Task #3 (Y-1) — Trust Center hook: when a 3-way Founder ↔ Investor
+      // ↔ Axal NDA reaches `completed`, flip the matching `pairwise_ndas`
+      // row to `active` and stamp a 12-month `valid_until`. Without this,
+      // the maskFounderForInvestor gate would keep returning masked rows
+      // forever even though all three parties have signed.
+      if (envelopeRow?.document_type === 'nda_3way_v1' && envelopeRow.envelope_uuid) {
+        try {
+          const { activatePairwiseNda } = await import('../services/trust');
+          await activatePairwiseNda(c.env, envelopeRow.envelope_uuid);
+        } catch (e) { console.warn('[esign] activatePairwiseNda failed', e); }
+      }
       if (envelopeRow?.user_id) {
         const { notify } = await import('../services/notify');
         await notify(c.env, {

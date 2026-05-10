@@ -238,6 +238,13 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   }
 
   const [user] = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${name}, ${role || 'partner'}, false) RETURNING *`;
+  // Task #3 (Y-1) — Trust Center: seed role-conditional obligations the
+  // moment the account exists. Idempotent (UNIQUE on user_id+key) so a
+  // second pass from /me self-heals if this throws.
+  try {
+    const { seedObligations } = await import('../services/trust');
+    await seedObligations(c.env, user.id, role || 'partner');
+  } catch (e) { console.error('[auth] trust seed failed', e); }
   // T22.1 — PII redaction: details no longer carries the plaintext name +
   // email; actor stores an email_hash instead of the email itself. The
   // user_id FK is the canonical link back to the account row when joins

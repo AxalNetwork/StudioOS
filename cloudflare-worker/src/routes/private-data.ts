@@ -74,11 +74,29 @@ privateData.get('/portfolio/metrics', async (c) => {
     const deals = user.partner_id ? await sql`SELECT d.*, p.name as project_name, p.sector FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.partner_id = ${user.partner_id} ORDER BY d.created_at DESC` : [];
     const committed = await sql`SELECT COALESCE(SUM(commitment_amount), 0) as total FROM limited_partners`;
     const called = await sql`SELECT COALESCE(SUM(invested_amount), 0) as total FROM limited_partners`;
-    const portfolio = await sql`SELECT * FROM projects WHERE status IN ('spinout', 'active', 'tier_1', 'tier_2')`;
+    // Task #3 (Y-1) — pull founder_user_id alongside each portfolio
+    // project so maskFounderForInvestor() can gate sensitive fields per
+    // investor↔founder pair. Investors with no active pairwise NDA see
+    // only {id, name, sector, stage, headline}; founders/admins/partners
+    // are unaffected (mask is a no-op outside the investor role).
+    const portfolioRaw = await sql`
+      SELECT p.*, u.id AS founder_user_id
+        FROM projects p
+        LEFT JOIN users u ON u.founder_id = p.founder_id
+       WHERE p.status IN ('spinout', 'active', 'tier_1', 'tier_2')`;
     await sql.end();
+    let portfolio: any[] = portfolioRaw as any[];
+    if (user.role === 'investor') {
+      const { maskFounderForInvestor } = await import('../services/trust');
+      portfolio = await Promise.all(
+        portfolioRaw.map((p: any) => maskFounderForInvestor(c.env, p, { viewerRole: 'investor', viewerUserId: user.id })),
+      );
+    }
+    // (re-open inside metrics calc below — `portfolio` is the masked list)
+    const portfolioCount = portfolio.length;
 
     const tvpi = Number(called[0].total) > 0 ? Math.round(Number(committed[0].total) / Number(called[0].total) * 100) / 100 : 0;
-    return c.json({ role: roleLabel, deals, total_deals: deals.length, active_deals: deals.filter((d: any) => ['applied', 'scored', 'active'].includes(d.status)).length, fund_metrics: { total_committed: Number(committed[0].total), total_called: Number(called[0].total), tvpi, portfolio_companies: portfolio.length }, portfolio });
+    return c.json({ role: roleLabel, deals, total_deals: deals.length, active_deals: deals.filter((d: any) => ['applied', 'scored', 'active'].includes(d.status)).length, fund_metrics: { total_committed: Number(committed[0].total), total_called: Number(called[0].total), tvpi, portfolio_companies: portfolioCount }, portfolio });
   }
 
   const allProjects = await sql`SELECT * FROM projects`;

@@ -429,6 +429,14 @@ admin.patch('/users/:userId/role', async (c) => {
   const oldRole = rows[0].role;
   await sql`UPDATE users SET role = ${role} WHERE id = ${userId}`;
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'partner', id: userId }); } catch {}
+  // Task #3 (Y-1) — re-seed Trust Center obligations for the new role.
+  // pruneStaleForRole=true marks obligations no longer required (e.g.
+  // investor-only KYC after demotion to partner) as `waived` instead of
+  // deleting them, preserving the audit trail.
+  try {
+    const { seedObligations } = await import('../services/trust');
+    await seedObligations(c.env, userId, role, { pruneStaleForRole: true });
+  } catch (e) { console.error('[admin] trust re-seed failed', e); }
   // Epic 11 — actor on both rows is email_hash, never the plaintext.
   const roleAdminHash = await hashEmail(adminUser.email);
   const roleTargetHash = await hashEmail(rows[0].email);
