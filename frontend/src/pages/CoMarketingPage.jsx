@@ -10,6 +10,7 @@ import {
   Megaphone, Send, CheckCircle, XCircle, Loader2, Globe, Copy, Plus, BarChart3,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import PageExplainer from '../components/PageExplainer';
 
 const ASSET_TYPES = ['webinar', 'blog', 'podcast', 'event', 'newsletter', 'other'];
 
