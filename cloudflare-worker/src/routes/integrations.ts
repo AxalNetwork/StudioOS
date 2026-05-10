@@ -770,11 +770,35 @@ integrations.get('/oauth/:provider/callback', async (c) => {
           result.external_account_id ?? null, result.external_account_name ?? null,
         ).run();
       }
+      const row = await loadRow(c.env, uid, user.id, false);
+      if (row) {
+        await logEvent(c.env, {
+          integration_id: row.id, user_id: user.id, provider_key: provider,
+          direction: 'inbound', event_type: 'oauth_callback', status: 'ok',
+          response_summary: existing ? 'OAuth re-consent succeeded.' : 'OAuth consent granted; connection established.',
+          external_id: result.external_account_id ?? null,
+        });
+        try {
+          const actorHash = await hashEmail(user.email);
+          await c.env.DB.prepare(
+            'INSERT INTO activity_logs (user_id, actor, action, details) VALUES (?, ?, ?, ?)',
+          ).bind(user.id, actorHash, existing ? 'integration_reconnected' : 'integration_connected', JSON.stringify({ provider_key: provider, source: 'oauth_callback' })).run();
+        } catch { /* activity_logs may not exist in some schemas */ }
+      }
     } finally {
       await sql.end();
     }
     return c.redirect(`/integrations?oauth=ok&provider=${encodeURIComponent(provider)}`);
   } catch (e) {
+    // Best-effort failure log — we may not have an integrations row to
+    // attach to (the connect threw before insert), so skip integration_logs
+    // and only emit a best-effort activity_logs row.
+    try {
+      const actorHash = await hashEmail(user.email);
+      await c.env.DB.prepare(
+        'INSERT INTO activity_logs (user_id, actor, action, details) VALUES (?, ?, ?, ?)',
+      ).bind(user.id, actorHash, 'integration_oauth_failed', JSON.stringify({ provider_key: provider, message: (e as Error).message?.slice(0, 200) })).run();
+    } catch { /* non-fatal */ }
     return c.redirect(`/integrations?oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent((e as Error).message || 'callback_failed')}`);
   }
 });
