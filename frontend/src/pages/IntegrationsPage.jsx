@@ -1,45 +1,67 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Plug, Plus, RefreshCw, Trash2, FileText, X, AlertCircle, Check,
-  ExternalLink, Webhook, Database, Scale, Building2, Shield,
+  ExternalLink, Webhook, Database, Shield, Calendar, Cloud, PieChart,
+  MessageSquare, PenTool, Network, Building2, Lock, Bell, Sparkles,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
+import { safeReadJSON } from '../lib/storage';
 
-const TYPE_ICONS = {
-  crm: Building2,
-  legal_provider: Scale,
-  data_feed: Database,
-  custom: Webhook,
+const ICON_MAP = {
+  Building2, Calendar, Cloud, PieChart, MessageSquare, PenTool, Database,
+  Network, Webhook, Plug,
+};
+
+const TIER_PILL = {
+  free:   { label: 'Free',   cls: 'bg-gray-100 text-gray-700 border border-gray-200' },
+  growth: { label: 'Growth', cls: 'bg-violet-50 text-violet-700 border border-violet-200' },
+  studio: { label: 'Studio', cls: 'bg-amber-50 text-amber-700 border border-amber-200' },
 };
 
 const STATUS_PILL = {
-  active: 'bg-emerald-100 text-emerald-700',
-  paused: 'bg-amber-100 text-amber-700',
-  error: 'bg-red-100 text-red-700',
+  active:       'bg-emerald-100 text-emerald-700',
+  paused:       'bg-amber-100 text-amber-700',
+  error:        'bg-red-100 text-red-700',
+  disconnected: 'bg-gray-100 text-gray-600',
 };
 
+const BYPASS_ROLES = new Set(['admin', 'partner', 'investor', 'mentor']);
+
+function ProviderIcon({ name, size = 18 }) {
+  const Icon = ICON_MAP[name] || Plug;
+  return <Icon size={size} />;
+}
+
 export default function IntegrationsPage() {
-  const [available, setAvailable] = useState([]);
-  const [items, setItems] = useState([]);
+  const [providers, setProviders] = useState([]);     // registry, includes tier_locked
+  const [items, setItems] = useState([]);             // user's connections
+  const [waitlist, setWaitlist] = useState([]);       // user's waitlist entries
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [connectFor, setConnectFor] = useState(null); // provider object
-  const [logsFor, setLogsFor] = useState(null);       // integration object
+  const [connectFor, setConnectFor] = useState(null);
+  const [logsFor, setLogsFor] = useState(null);
   const [logs, setLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
-  // T19 — useToast hook handles cleanup on unmount, replacing the previous
-  // inline `setTimeout(() => setToast(''), 2500)` that leaked.
   const { toast, showToast } = useToast(2500);
+
+  const me = safeReadJSON('user') || {};
+  const role = (me.role || '').toLowerCase();
+  const bypassesTier = BYPASS_ROLES.has(role);
 
   const refresh = async () => {
     try {
       setError('');
-      const [av, mine] = await Promise.all([api.integrationsAvailable(), api.integrationsList()]);
-      setAvailable(av.providers || []);
+      const [av, mine, wl] = await Promise.all([
+        api.integrationsAvailable(),
+        api.integrationsList(),
+        api.integrationsWaitlist().catch(() => ({ items: [] })),
+      ]);
+      setProviders(av.providers || []);
       setItems(mine.items || []);
+      setWaitlist(wl.items || []);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -57,7 +79,9 @@ export default function IntegrationsPage() {
       await refresh();
       showToast('Integration connected.');
     } catch (e) {
-      setError(e.message);
+      // 402 path is auto-handled by api.js (PaywallModal opens). Surface
+      // the message inside the modal for everything else.
+      if (e.status !== 402) setError(e.message);
     } finally {
       setBusy(false);
     }
@@ -68,7 +92,9 @@ export default function IntegrationsPage() {
       await api.integrationsSync(uid);
       await refresh();
       showToast('Sync triggered.');
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      if (e.status !== 402) setError(e.message);
+    }
   };
 
   const onDisconnect = async (uid) => {
@@ -94,23 +120,53 @@ export default function IntegrationsPage() {
     }
   };
 
+  const onJoinWaitlist = async (provider) => {
+    try {
+      await api.integrationsWaitlistJoin({ provider_key: provider.key });
+      await refresh();
+      showToast(`We'll let you know when ${provider.display_name} is ready.`);
+    } catch (e) { setError(e.message); }
+  };
+
+  const onLeaveWaitlist = async (provider) => {
+    try {
+      await api.integrationsWaitlistLeave(provider.key);
+      await refresh();
+      showToast('Removed from waitlist.');
+    } catch (e) { setError(e.message); }
+  };
+
   const connectedByProvider = useMemo(() => {
-    const map = {};
-    for (const it of items) map[it.provider_name] = it;
-    return map;
+    const m = {};
+    for (const it of items) m[it.provider_key] = it;
+    return m;
   }, [items]);
 
-  if (loading) return <div className="p-6 text-sm text-gray-500">Loading…</div>;
+  const waitlistKeys = useMemo(() => new Set(waitlist.map(w => w.provider_key)), [waitlist]);
+
+  const sections = useMemo(() => {
+    const live = [];
+    const coming = [];
+    for (const p of providers) {
+      if (p.status === 'coming_soon' || !p.has_implementation) coming.push(p);
+      else live.push(p);
+    }
+    return { live, coming };
+  }, [providers]);
+
+  if (loading) return <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Loading…</div>;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <Plug className="text-violet-600" size={24} />
+    <div className="p-6 max-w-6xl mx-auto" data-density-target>
+      <header className="flex items-start gap-3 mb-6">
+        <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center"><Plug size={20} /></div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Integrations</h1>
-          <p className="text-sm text-gray-600">Connect your CRM, legal providers, and data feeds. Push deals out, receive webhooks back.</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Integrations</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Connect your CRM, legal providers, and data feeds. Push deals out, receive webhooks back.
+          </p>
         </div>
-      </div>
+      </header>
 
       {error && (
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2 flex items-center gap-2">
@@ -124,29 +180,46 @@ export default function IntegrationsPage() {
         </div>
       )}
 
-      {/* Connected list */}
-      <section className="mb-8">
-        <h2 className="text-sm font-semibold text-gray-900 mb-3">Your connections</h2>
+      {/* Connected */}
+      <section className="mb-10">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+          Connected <span className="text-xs font-normal text-gray-500">({items.length})</span>
+        </h2>
         {items.length === 0 ? (
-          <div className="bg-white border border-dashed border-gray-300 rounded-xl p-8 text-center text-sm text-gray-500">
-            No integrations connected yet. Pick a provider below to get started.
+          <div className="bg-white dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            No integrations connected yet. Pick one from the marketplace below to get started.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {items.map(it => {
-              const Icon = TYPE_ICONS[it.integration_type] || Plug;
+              const desc = providers.find(p => p.key === it.provider_key);
               return (
-                <div key={it.uid} className="bg-white border border-gray-200 rounded-xl p-4">
+                <div key={it.uid} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center"><Icon size={18} /></div>
+                    <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
+                      <ProviderIcon name={desc?.icon} />
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="font-medium text-gray-900 truncate">{it.display_name || it.provider_name}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="font-medium text-gray-900 dark:text-gray-100 truncate">{it.display_name || it.provider_key}</div>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded ${STATUS_PILL[it.status] || 'bg-gray-100 text-gray-600'}`}>{it.status}</span>
+                        {desc?.tier && desc.tier !== 'free' && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${TIER_PILL[desc.tier].cls}`}>{TIER_PILL[desc.tier].label}</span>
+                        )}
                       </div>
-                      <div className="text-xs text-gray-500 mt-0.5">{it.integration_type.replace('_', ' ')}</div>
+                      <div className="text-xs text-gray-500 mt-0.5 capitalize">{(it.integration_type || '').replace(/_/g, ' ')}</div>
                       {it.api_key_preview && (
                         <div className="text-[11px] text-gray-500 font-mono mt-1">key: {it.api_key_preview}</div>
+                      )}
+                      {it.external_account_name && (
+                        <div className="text-[11px] text-gray-500 mt-1">account: {it.external_account_name}</div>
+                      )}
+                      {!!(it.capabilities || []).length && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {it.capabilities.map(cap => (
+                            <span key={cap} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">{cap}</span>
+                          ))}
+                        </div>
                       )}
                       {it.last_synced_at && (
                         <div className="text-[11px] text-gray-500 mt-1">last synced {new Date(it.last_synced_at).toLocaleString()}</div>
@@ -156,8 +229,8 @@ export default function IntegrationsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-gray-100">
-                    <button onClick={() => openLogs(it)} className="text-xs text-gray-600 hover:text-gray-900 flex items-center gap-1 px-2 py-1">
+                  <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                    <button onClick={() => openLogs(it)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center gap-1 px-2 py-1">
                       <FileText size={12} /> Logs
                     </button>
                     <button onClick={() => onSync(it.uid)} className="text-xs text-violet-600 hover:text-violet-700 flex items-center gap-1 px-2 py-1">
@@ -174,49 +247,60 @@ export default function IntegrationsPage() {
         )}
       </section>
 
-      {/* Marketplace */}
-      <section className="mb-8">
-        <h2 className="text-sm font-semibold text-gray-900 mb-3">Marketplace</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {available.map(p => {
-            const Icon = TYPE_ICONS[p.integration_type] || Plug;
-            const connected = !!connectedByProvider[p.provider_name];
-            return (
-              <div key={p.provider_name} className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col">
-                <div className="flex items-start gap-3 mb-2">
-                  <div className="w-10 h-10 rounded-lg bg-gray-50 text-gray-700 flex items-center justify-center"><Icon size={18} /></div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-900">{p.display_name}</div>
-                    <div className="text-[11px] text-gray-500 uppercase tracking-wide">{p.integration_type.replace('_', ' ')}</div>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-600 flex-1">{p.description}</p>
-                <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-                  {p.docs_url ? (
-                    <a href={p.docs_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-gray-500 hover:text-violet-600 flex items-center gap-1">
-                      Docs <ExternalLink size={10} />
-                    </a>
-                  ) : <span />}
-                  <button
-                    onClick={() => setConnectFor(p)}
-                    className={`text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${connected ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-violet-600 text-white hover:bg-violet-700'}`}
-                  >
-                    {connected ? <><RefreshCw size={12} /> Update</> : <><Plus size={12} /> Connect</>}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      {/* Available marketplace */}
+      <section className="mb-10">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Available</h2>
+        {sections.live.length === 0 ? (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 text-sm text-gray-500 text-center">
+            All current providers are still rolling out — see Coming Soon below.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {sections.live.map(p => (
+              <ProviderCard
+                key={p.key}
+                provider={p}
+                connected={!!connectedByProvider[p.key]}
+                bypassesTier={bypassesTier}
+                onConnect={() => setConnectFor(p)}
+              />
+            ))}
+          </div>
+        )}
         <p className="text-[11px] text-gray-500 mt-3 flex items-center gap-1">
-          <Shield size={11} /> All API keys and webhook secrets are encrypted at rest.
+          <Shield size={11} /> All API keys, OAuth tokens, and webhook secrets are encrypted at rest with AES-GCM.
         </p>
+      </section>
+
+      {/* Coming Soon */}
+      <section className="mb-10">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+          <Sparkles size={14} className="text-violet-500" /> Coming soon
+        </h2>
+        {sections.coming.length === 0 ? (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 text-sm text-gray-500 text-center">
+            Nothing on the horizon yet — check back soon.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {sections.coming.map(p => (
+              <ComingSoonCard
+                key={p.key}
+                provider={p}
+                joined={waitlistKeys.has(p.key)}
+                onJoin={() => onJoinWaitlist(p)}
+                onLeave={() => onLeaveWaitlist(p)}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       {connectFor && (
         <ConnectModal
           provider={connectFor}
-          existing={connectedByProvider[connectFor.provider_name]}
+          existing={connectedByProvider[connectFor.key]}
+          bypassesTier={bypassesTier}
           onClose={() => setConnectFor(null)}
           onSubmit={onConnect}
           busy={busy}
@@ -235,13 +319,106 @@ export default function IntegrationsPage() {
   );
 }
 
-function ConnectModal({ provider, existing, onClose, onSubmit, busy }) {
+function ProviderCard({ provider, connected, bypassesTier, onConnect }) {
+  const tierLocked = !bypassesTier && provider.tier_locked;
+  const beta = provider.status === 'beta';
+  return (
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col">
+      <div className="flex items-start gap-3 mb-2">
+        <div className="w-10 h-10 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 flex items-center justify-center">
+          <ProviderIcon name={provider.icon} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="font-medium text-gray-900 dark:text-gray-100">{provider.display_name}</div>
+            {beta && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">Beta</span>}
+            {!bypassesTier && provider.tier !== 'free' && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded ${TIER_PILL[provider.tier].cls}`}>{TIER_PILL[provider.tier].label}</span>
+            )}
+          </div>
+          <div className="text-[11px] text-gray-500 uppercase tracking-wide capitalize">{provider.integration_type.replace(/_/g, ' ')}</div>
+        </div>
+      </div>
+      <p className="text-xs text-gray-600 dark:text-gray-400 flex-1">{provider.description}</p>
+      {!!provider.capabilities?.length && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {provider.capabilities.map(cap => (
+            <span key={cap} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">{cap}</span>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+        {provider.docs_url ? (
+          <a href={provider.docs_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-gray-500 hover:text-violet-600 flex items-center gap-1">
+            Docs <ExternalLink size={10} />
+          </a>
+        ) : <span />}
+        <button
+          onClick={onConnect}
+          className={`text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${
+            connected ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200'
+            : tierLocked ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+            : 'bg-violet-600 text-white hover:bg-violet-700'
+          }`}
+        >
+          {connected ? <><RefreshCw size={12} /> Update</>
+            : tierLocked ? <><Lock size={12} /> Upgrade to connect</>
+            : <><Plus size={12} /> Connect</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ComingSoonCard({ provider, joined, onJoin, onLeave }) {
+  return (
+    <div className="bg-white dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-4 flex flex-col opacity-90">
+      <div className="flex items-start gap-3 mb-2">
+        <div className="w-10 h-10 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 flex items-center justify-center">
+          <ProviderIcon name={provider.icon} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="font-medium text-gray-900 dark:text-gray-100">{provider.display_name}</div>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200">Soon</span>
+            {provider.tier !== 'free' && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded ${TIER_PILL[provider.tier].cls}`}>{TIER_PILL[provider.tier].label}</span>
+            )}
+          </div>
+          <div className="text-[11px] text-gray-500 uppercase tracking-wide capitalize">{provider.integration_type.replace(/_/g, ' ')}</div>
+        </div>
+      </div>
+      <p className="text-xs text-gray-600 dark:text-gray-400 flex-1">{provider.description}</p>
+      {!!provider.capabilities?.length && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {provider.capabilities.map(cap => (
+            <span key={cap} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">{cap}</span>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center justify-end mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+        {joined ? (
+          <button onClick={onLeave} className="text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 flex items-center gap-1.5">
+            <Check size={12} /> On the waitlist
+          </button>
+        ) : (
+          <button onClick={onJoin} className="text-xs font-medium px-3 py-1.5 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 flex items-center gap-1.5">
+            <Bell size={12} /> Notify me
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, busy }) {
   useEscapeClose(onClose);
   const [apiKey, setApiKey] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [displayName, setDisplayName] = useState(existing?.display_name || provider.display_name);
   const [configText, setConfigText] = useState(existing?.config ? JSON.stringify(existing.config, null, 2) : '');
   const [err, setErr] = useState('');
+  const tierLocked = !bypassesTier && provider.tier_locked;
 
   const submit = (e) => {
     e.preventDefault();
@@ -252,8 +429,7 @@ function ConnectModal({ provider, existing, onClose, onSubmit, busy }) {
       catch { setErr('Config must be valid JSON.'); return; }
     }
     onSubmit({
-      provider_name: provider.provider_name,
-      integration_type: provider.integration_type,
+      provider_key: provider.key,
       display_name: displayName,
       api_key: apiKey || undefined,
       webhook_secret: webhookSecret || undefined,
@@ -261,42 +437,78 @@ function ConnectModal({ provider, existing, onClose, onSubmit, busy }) {
     });
   };
 
-  const inputCls = "w-full text-sm border border-gray-200 rounded-md px-3 py-2 focus:ring-2 focus:ring-violet-100 focus:border-violet-300 outline-none";
+  const startOauth = async () => {
+    setErr('');
+    try {
+      const res = await api.integrationsOauthStart(provider.key);
+      if (res.authorize_url) window.location.href = res.authorize_url;
+    } catch (e) {
+      setErr(e.message);
+    }
+  };
+
+  const inputCls = "w-full text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:ring-2 focus:ring-violet-100 focus:border-violet-300 outline-none";
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-900">
           <div>
-            <h3 className="font-semibold text-gray-900">{existing ? 'Update' : 'Connect'} {provider.display_name}</h3>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">{existing ? 'Update' : 'Connect'} {provider.display_name}</h3>
             <p className="text-xs text-gray-500">{provider.description}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
         </div>
-        <form onSubmit={submit} className="p-5 space-y-4">
-          {err && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{err}</div>}
-          <Field label="Display name">
-            <input className={inputCls} value={displayName} onChange={e => setDisplayName(e.target.value)} />
-          </Field>
-          {provider.auth_type === 'api_key' && (
-            <Field label={existing ? 'New API key (leave blank to keep current)' : 'API key'}>
-              <input type="password" className={inputCls} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={existing?.api_key_preview || ''} required={!existing} />
-            </Field>
-          )}
-          <Field label="Webhook secret (optional)">
-            <input type="password" className={inputCls} value={webhookSecret} onChange={e => setWebhookSecret(e.target.value)} placeholder={existing?.has_webhook_secret ? '••••••••' : ''} />
-            <p className="text-[11px] text-gray-500 mt-1">Used to validate inbound webhooks at <code className="bg-gray-100 px-1 rounded">/api/integrations/webhook/{provider.provider_name}/{'{uid}'}</code> using HMAC-SHA256 in the <code className="bg-gray-100 px-1 rounded">X-Axal-Signature</code> header.</p>
-          </Field>
-          <Field label="Config (JSON, optional)">
-            <textarea rows={4} className={`${inputCls} font-mono text-xs`} value={configText} onChange={e => setConfigText(e.target.value)} placeholder='{"portal_id": "12345"}' />
-          </Field>
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="text-sm text-gray-600 hover:text-gray-900 px-4 py-2">Cancel</button>
-            <button type="submit" disabled={busy} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
-              {busy ? 'Saving…' : (existing ? 'Update' : 'Connect')}
-            </button>
+        {tierLocked ? (
+          <div className="p-5">
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900">
+              <Lock size={16} className="mt-0.5" />
+              <div>
+                <div className="font-medium">{TIER_PILL[provider.tier].label} plan required</div>
+                <p className="text-xs text-amber-800 mt-1">Upgrade your subscription to connect {provider.display_name}.</p>
+              </div>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-300 px-4 py-2">Close</button>
+              <a href="/billing" className="bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-lg">View plans</a>
+            </div>
           </div>
-        </form>
+        ) : (
+          <form onSubmit={submit} className="p-5 space-y-4">
+            {err && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{err}</div>}
+            <Field label="Display name">
+              <input className={inputCls} value={displayName} onChange={e => setDisplayName(e.target.value)} />
+            </Field>
+            {provider.auth_type === 'oauth2' && !existing && (
+              <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-xs text-gray-700 dark:text-gray-300">
+                <p className="mb-2">{provider.display_name} uses OAuth — sign in to authorize StudioOS:</p>
+                <button type="button" onClick={startOauth} className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-1.5 rounded inline-flex items-center gap-1.5">
+                  <ExternalLink size={12} /> Continue with {provider.display_name}
+                </button>
+              </div>
+            )}
+            {provider.auth_type === 'api_key' && (
+              <Field label={existing ? 'New API key (leave blank to keep current)' : 'API key'}>
+                <input type="password" className={inputCls} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={existing?.api_key_preview || ''} required={!existing} />
+              </Field>
+            )}
+            <Field label="Webhook secret (optional)">
+              <input type="password" className={inputCls} value={webhookSecret} onChange={e => setWebhookSecret(e.target.value)} placeholder={existing?.has_webhook_secret ? '••••••••' : ''} />
+              <p className="text-[11px] text-gray-500 mt-1">Used to validate inbound webhooks at <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">/api/integrations/webhook/{provider.key}/{'{uid}'}</code> using HMAC-SHA256 in the <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">X-Axal-Signature</code> header.</p>
+            </Field>
+            <Field label="Config (JSON, optional)">
+              <textarea rows={4} className={`${inputCls} font-mono text-xs`} value={configText} onChange={e => setConfigText(e.target.value)} placeholder='{"portal_id": "12345"}' />
+            </Field>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button type="button" onClick={onClose} className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 px-4 py-2">Cancel</button>
+              {provider.auth_type !== 'oauth2' || existing ? (
+                <button type="submit" disabled={busy} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
+                  {busy ? 'Saving…' : (existing ? 'Update' : 'Connect')}
+                </button>
+              ) : null}
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -306,10 +518,10 @@ function LogsModal({ integration, logs, loading, onClose }) {
   useEscapeClose(onClose);
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-gray-900">Logs — {integration.display_name || integration.provider_name}</h3>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Logs — {integration.display_name || integration.provider_key}</h3>
             <p className="text-xs text-gray-500">Most recent activity (newest first).</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
@@ -321,8 +533,8 @@ function LogsModal({ integration, logs, loading, onClose }) {
             <div className="p-6 text-sm text-gray-500 text-center">No log entries yet.</div>
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 sticky top-0">
-                <tr className="text-left text-xs text-gray-600">
+              <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
+                <tr className="text-left text-xs text-gray-600 dark:text-gray-300">
                   <th className="px-4 py-2 font-medium">When</th>
                   <th className="px-4 py-2 font-medium">Direction</th>
                   <th className="px-4 py-2 font-medium">Event</th>
@@ -330,18 +542,18 @@ function LogsModal({ integration, logs, loading, onClose }) {
                   <th className="px-4 py-2 font-medium">Summary</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {logs.map(l => (
                   <tr key={l.id} className="align-top">
                     <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">{new Date(l.created_at).toLocaleString()}</td>
                     <td className="px-4 py-2 text-xs">
-                      <span className={`px-1.5 py-0.5 rounded ${l.direction === 'inbound' ? 'bg-blue-100 text-blue-700' : 'bg-violet-100 text-violet-700'}`}>{l.direction}</span>
+                      <span className={`px-1.5 py-0.5 rounded ${l.direction === 'inbound' ? 'bg-blue-100 text-blue-700' : l.direction === 'outbound' ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-700'}`}>{l.direction}</span>
                     </td>
-                    <td className="px-4 py-2 text-xs font-mono text-gray-700">{l.event_type}</td>
+                    <td className="px-4 py-2 text-xs font-mono text-gray-700 dark:text-gray-300">{l.event_type}</td>
                     <td className="px-4 py-2 text-xs">
                       <span className={`px-1.5 py-0.5 rounded ${l.status === 'ok' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{l.status}</span>
                     </td>
-                    <td className="px-4 py-2 text-xs text-gray-600">{l.response_summary || '—'}</td>
+                    <td className="px-4 py-2 text-xs text-gray-600 dark:text-gray-400">{l.response_summary || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -356,7 +568,7 @@ function LogsModal({ integration, logs, loading, onClose }) {
 function Field({ label, children }) {
   return (
     <label className="block">
-      <div className="text-xs font-medium text-gray-700 mb-1">{label}</div>
+      <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</div>
       {children}
     </label>
   );

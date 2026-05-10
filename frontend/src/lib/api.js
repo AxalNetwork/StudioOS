@@ -548,6 +548,11 @@ export const api = {
     const q = new URLSearchParams(Object.entries(params).filter(([_, v]) => v != null && v !== '')).toString();
     return request(`/integrations/${encodeURIComponent(uid)}/logs${q ? `?${q}` : ''}`);
   },
+  // Task #1 (Integrations Foundation) — waitlist + OAuth start helpers.
+  integrationsWaitlist: () => request('/integrations/waitlist'),
+  integrationsWaitlistJoin: (data) => request('/integrations/waitlist', { method: 'POST', body: JSON.stringify(data) }),
+  integrationsWaitlistLeave: (provider) => request(`/integrations/waitlist/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
+  integrationsOauthStart: (provider) => request(`/integrations/oauth/${encodeURIComponent(provider)}/start`),
 
   searchSemantic: (q, type, limit = 10, grouped = false) => {
     const params = new URLSearchParams({ q });
