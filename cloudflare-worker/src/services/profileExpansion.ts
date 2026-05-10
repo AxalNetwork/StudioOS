@@ -17,15 +17,29 @@ import { encryptColumn, decryptColumn, last4 } from './columnCipher';
 
 // --- Reference data ---------------------------------------------------------
 
-// ISO 3166-1 alpha-2 set used for input validation. Kept conservative — we
-// only need to reject obvious garbage; downstream KYC verifies the actual
-// document. Mirrors the curated list in frontend/src/pages/SettingsPage.jsx.
+// Full ISO 3166-1 alpha-2 set (249 codes, current as of the ISO online
+// browsing platform). Used for input validation only — downstream KYC
+// verifies the actual document. We accept every assigned alpha-2 code so
+// that global users (CN, GH, JM, etc.) aren't rejected at the Settings
+// form. Anything outside this set is treated as garbage.
 const ISO_ALPHA2 = new Set([
-  'US','CA','GB','IE','DE','FR','NL','CH','LU','ES','IT','SE','NO','DK','FI',
-  'EE','AE','SA','IL','IN','SG','HK','JP','KR','AU','NZ','BR','MX','KY','BM',
-  'VG','PT','BE','AT','PL','CZ','GR','HU','RO','BG','HR','SK','SI','LT','LV',
-  'IS','MT','CY','TR','ZA','NG','KE','EG','MA','AR','CL','CO','PE','UY','VE',
-  'TW','MY','TH','PH','ID','VN','PK','BD','LK','RU','UA',
+  'AD','AE','AF','AG','AI','AL','AM','AO','AQ','AR','AS','AT','AU','AW','AX',
+  'AZ','BA','BB','BD','BE','BF','BG','BH','BI','BJ','BL','BM','BN','BO','BQ',
+  'BR','BS','BT','BV','BW','BY','BZ','CA','CC','CD','CF','CG','CH','CI','CK',
+  'CL','CM','CN','CO','CR','CU','CV','CW','CX','CY','CZ','DE','DJ','DK','DM',
+  'DO','DZ','EC','EE','EG','EH','ER','ES','ET','FI','FJ','FK','FM','FO','FR',
+  'GA','GB','GD','GE','GF','GG','GH','GI','GL','GM','GN','GP','GQ','GR','GS',
+  'GT','GU','GW','GY','HK','HM','HN','HR','HT','HU','ID','IE','IL','IM','IN',
+  'IO','IQ','IR','IS','IT','JE','JM','JO','JP','KE','KG','KH','KI','KM','KN',
+  'KP','KR','KW','KY','KZ','LA','LB','LC','LI','LK','LR','LS','LT','LU','LV',
+  'LY','MA','MC','MD','ME','MF','MG','MH','MK','ML','MM','MN','MO','MP','MQ',
+  'MR','MS','MT','MU','MV','MW','MX','MY','MZ','NA','NC','NE','NF','NG','NI',
+  'NL','NO','NP','NR','NU','NZ','OM','PA','PE','PF','PG','PH','PK','PL','PM',
+  'PN','PR','PS','PT','PW','PY','QA','RE','RO','RS','RU','RW','SA','SB','SC',
+  'SD','SE','SG','SH','SI','SJ','SK','SL','SM','SN','SO','SR','SS','ST','SV',
+  'SX','SY','SZ','TC','TD','TF','TG','TH','TJ','TK','TL','TM','TN','TO','TR',
+  'TT','TV','TW','TZ','UA','UG','UM','US','UY','UZ','VA','VC','VE','VG','VI',
+  'VN','VU','WF','WS','YE','YT','ZA','ZM','ZW',
 ]);
 
 // Light per-country postal regexes. Anything not listed is accepted as long
