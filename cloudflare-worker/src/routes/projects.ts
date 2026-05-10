@@ -144,16 +144,23 @@ async function createProjectHandler(c: any) {
   // Re-index for semantic search. Best-effort — failure is non-fatal.
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'project', id: project.id }); } catch {}
 
-  // Task #2 — best-effort HubSpot company create. Hands off to the shared
-  // autopush helper so failures + summaries land in integration_logs and
-  // the work runs on executionCtx.waitUntil.
+  // Task #2 — best-effort HubSpot company create. Resolve the founder's
+  // user_id from `projects.founder_id` (NOT the acting user), so when an
+  // admin or partner creates a project on behalf of a founder, the push
+  // runs against the founder's HubSpot integration row, not the actor's.
   try {
-    const typedUser = user as User;
-    schedulePush({
-      c, user: typedUser, providerKey: 'hubspot',
-      payload: { project_id: project.id },
-      eventType: 'auto_push:project_created',
-    });
+    const ownerRow = await c.env.DB.prepare(
+      'SELECT user_id FROM founders WHERE id = ?',
+    ).bind(founderId).first();
+    const owner = ownerRow as { user_id: number | null } | null;
+    const ownerUserId = owner?.user_id ?? null;
+    if (ownerUserId) {
+      schedulePush({
+        c, user: { id: ownerUserId } as User, providerKey: 'hubspot',
+        payload: { project_id: project.id },
+        eventType: 'auto_push:project_created',
+      });
+    }
   } catch (e) { console.warn('[projects] hubspot project-create hook failed', e); }
 
   return c.json(project, 201);
