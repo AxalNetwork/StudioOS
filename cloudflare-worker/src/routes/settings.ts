@@ -41,6 +41,7 @@ import {
   updatePersonalProfile,
   getCorporateProfile,
   updateCorporateProfile,
+  computeMissingRequiredFields,
   ProfileValidationError,
 } from '../services/profileExpansion';
 import { hashEmail } from '../util/hashEmail';
@@ -994,7 +995,11 @@ const DETAILS_PERSONAL_KEYS = [
   'address_line1','address_line2','city','state_or_region','postal_code','country',
 ] as const;
 
-function pickIdentity(personal: Awaited<ReturnType<typeof getPersonalProfile>>, settingsRow: UserSettingsRow) {
+function pickIdentity(
+  personal: Awaited<ReturnType<typeof getPersonalProfile>>,
+  settingsRow: UserSettingsRow,
+  corporate: Awaited<ReturnType<typeof getCorporateProfile>>,
+) {
   return {
     display_name: personal.display_name,
     headline: personal.headline,
@@ -1006,6 +1011,10 @@ function pickIdentity(personal: Awaited<ReturnType<typeof getPersonalProfile>>, 
     date_of_birth: personal.date_of_birth,
     nationality: personal.nationality,
     profile_completion_pct: personal.profile_completion_pct,
+    // AE-2: backend-authoritative "what to fill next" list. Mirrors the
+    // same field set computeCompletionPct uses, so the Settings top
+    // banner never disagrees with the ring percentage.
+    missing_required_fields: computeMissingRequiredFields(personal, corporate),
   };
 }
 
@@ -1031,11 +1040,12 @@ settings.get('/profile/identity', async (c) => {
   await ensureUserSettingsTable(c.env);
   const user = await requireAuth(c);
   try {
-    const [p, s] = await Promise.all([
+    const [p, s, corp] = await Promise.all([
       getPersonalProfile(c.env, user.id),
       getUserSettings(c.env, user.id),
+      getCorporateProfile(c.env, user.id),
     ]);
-    return c.json(pickIdentity(p, s));
+    return c.json(pickIdentity(p, s, corp));
   } catch (e) { return handleProfileError(c, e); }
 });
 settings.put('/profile/identity', async (c) => {
@@ -1065,7 +1075,8 @@ settings.put('/profile/identity', async (c) => {
         `Updated identity fields: ${Object.keys(body).join(', ') || '(none)'}`,
       );
     }
-    return c.json(pickIdentity(pRow, sRow));
+    const corp = await getCorporateProfile(c.env, user.id);
+    return c.json(pickIdentity(pRow, sRow, corp));
   } catch (e) {
     if (e instanceof SettingsValidationError) return handleSettingsError(c, e);
     return handleProfileError(c, e);

@@ -419,49 +419,35 @@ function CompletionRing({ pct, hint }) {
   );
 }
 
-// AE-2 — Top-of-Settings completion banner. Pulls `profile_completion_pct`
-// from /profile/identity (which always carries the freshly-recomputed
-// percentage from the AE-1 helpers) and lists the unfilled required
-// fields so the user knows exactly what to fill next. Silent on error
-// (anonymous / network) — the banner is decorative, not blocking.
-const REQUIRED_PROFILE_FIELDS = [
-  ['full_legal_name', 'Full legal name'],
-  ['date_of_birth', 'Date of birth'],
-  ['nationality', 'Nationality'],
-  ['tax_residency_country', 'Tax residency'],
-  ['has_tax_id', 'Tax ID'],
-  ['address_line1', 'Address'],
-  ['city', 'City'],
-  ['postal_code', 'Postal code'],
-  ['country', 'Country'],
-];
+// AE-2 — Top-of-Settings completion banner. The `/profile/identity`
+// endpoint returns BOTH `profile_completion_pct` AND the authoritative
+// `missing_required_fields` array (computed server-side with the same
+// rules as the percentage), so the banner can never drift from the
+// ring. Silent on error (anonymous / network) — banner is decorative,
+// not blocking.
 function ProfileCompletionBanner({ onJump }) {
   const [row, setRow] = useState(null);
   useEffect(() => {
     let cancelled = false;
-    api.getIdentitySettings()
+    const load = () => api.getIdentitySettings()
       .then(r => { if (!cancelled) setRow(r); })
-      .catch(() => { /* silent — banner is optional */ });
-    const onSaved = () => {
-      api.getIdentitySettings()
-        .then(r => { if (!cancelled) setRow(r); })
-        .catch(() => {});
-    };
+      .catch(() => { /* silent */ });
+    load();
+    const onSaved = () => load();
     window.addEventListener('axal:profile_saved', onSaved);
     return () => { cancelled = true; window.removeEventListener('axal:profile_saved', onSaved); };
   }, []);
   if (!row) return null;
   const pct = Number(row.profile_completion_pct || 0);
-  const missing = REQUIRED_PROFILE_FIELDS.filter(([k]) => {
-    const v = row[k];
-    return !v || (k === 'has_tax_id' && !row.has_tax_id);
-  }).map(([, label]) => label);
   if (pct >= 100) return null;
+  const missing = Array.isArray(row.missing_required_fields)
+    ? row.missing_required_fields.map(m => m?.label).filter(Boolean)
+    : [];
   return (
     <div data-card className="mb-6 bg-violet-50/60 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-xl px-5 py-4 flex items-start gap-4">
       <CompletionRing pct={pct} hint={
         missing.length === 0
-          ? <span>Profile complete — nice.</span>
+          ? <span>A few more fields to unlock contract auto-fill.</span>
           : <span>
               Still missing: <span className="font-medium text-gray-800 dark:text-gray-200">{missing.slice(0, 4).join(', ')}{missing.length > 4 ? `, +${missing.length - 4} more` : ''}</span>.
               <button onClick={onJump} className="ml-2 underline text-violet-700 dark:text-violet-300 hover:no-underline">Jump to Profile</button>

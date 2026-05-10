@@ -611,6 +611,51 @@ const CORPORATE_FIELDS: Array<keyof CorporateProfileRead> = [
   'signing_authority_name','signing_authority_title',
 ];
 
+// AE-2: shared "what's missing" labels keyed by the field name. Mirrors
+// the same rules as `computeCompletionPct` so the Settings banner never
+// drifts from the ring percentage. Corporate fields are only listed
+// once the user has begun filling the corporate block.
+const PERSONAL_FIELD_LABELS: Record<string, string> = {
+  display_name: 'Display name',
+  full_legal_name: 'Full legal name',
+  date_of_birth: 'Date of birth',
+  nationality: 'Nationality',
+  tax_residency_country: 'Tax residency',
+  address_line1: 'Address',
+  city: 'City',
+  postal_code: 'Postal code',
+  country: 'Country',
+  has_tax_id: 'Tax ID',
+  has_phone: 'Phone',
+};
+const CORPORATE_FIELD_LABELS: Record<string, string> = {
+  entity_name: 'Entity name',
+  entity_type: 'Entity type',
+  registration_number: 'Registration number',
+  registered_country: 'Registered country',
+  signing_authority_name: 'Signing authority name',
+  signing_authority_title: 'Signing authority title',
+  ubo_disclosed: 'UBO disclosure',
+};
+export function computeMissingRequiredFields(
+  personal: PersonalProfileRead, corporate: CorporateProfileRead,
+): Array<{ field: string; label: string; section: 'personal' | 'corporate' }> {
+  const missing: Array<{ field: string; label: string; section: 'personal' | 'corporate' }> = [];
+  for (const f of PERSONAL_FIELDS) {
+    if (!personal[f]) missing.push({ field: String(f), label: PERSONAL_FIELD_LABELS[String(f)] || String(f), section: 'personal' });
+  }
+  if (!personal.has_tax_id) missing.push({ field: 'has_tax_id', label: PERSONAL_FIELD_LABELS.has_tax_id, section: 'personal' });
+  if (!personal.has_phone) missing.push({ field: 'has_phone', label: PERSONAL_FIELD_LABELS.has_phone, section: 'personal' });
+  const corpStarted = !!(corporate.entity_name || corporate.entity_type);
+  if (corpStarted) {
+    for (const f of CORPORATE_FIELDS) {
+      if (!corporate[f]) missing.push({ field: String(f), label: CORPORATE_FIELD_LABELS[String(f)] || String(f), section: 'corporate' });
+    }
+    if (!corporate.ubo_disclosed) missing.push({ field: 'ubo_disclosed', label: CORPORATE_FIELD_LABELS.ubo_disclosed, section: 'corporate' });
+  }
+  return missing;
+}
+
 export function computeCompletionPct(personal: PersonalProfileRead, corporate: CorporateProfileRead): number {
   let filled = 0;
   let total = PERSONAL_FIELDS.length + 2;       // +2 for has_tax_id and has_phone
