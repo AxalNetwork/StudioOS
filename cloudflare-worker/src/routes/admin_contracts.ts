@@ -35,7 +35,69 @@ export const CONTRACT_DOC_TYPES: ReadonlySet<string> = new Set([
   'lpa', 'ppm', 'subscription', 'mgmt_company',
   'safe', 'term_sheet', 'bylaws', 'equity_split', 'ip_license', 'spa', 'voting_rights',
   'form_adv', 'aml_kyc', 'section_83b',
+  // Task #5 (Z) — surface every new envelope type from W (investor subs),
+  // X (partner deals), and Y (NDAs/templates). Adding the doc_type here
+  // makes Admin > Contracts pick the row up via the union view, render a
+  // friendly label, and include it in stats / template usage counts.
+  'investor_nda_axal', 'mentor_nda_axal', 'mentor_engagement_disclaimer',
+  'partner_nda_nonsolicit', 'partner_equity', 'partner_services',
+  'partner_revshare', 'partner_capital', 'partner_custom',
+  'finders_fee_intro_agreement', 'nda_3way_founder_investor_axal',
+  'ip_background_schedule', 'data_access_acknowledgment_admin',
+  'investor_subscription_pro', 'investor_subscription_inst',
 ]);
+
+// Task #5 (Z) — Party-role classification for filter chips. Drives the
+// "by party role" filter in the Admin > Contracts list. A doc may belong
+// to multiple roles (e.g. a 3-way NDA touches founder + investor + axal);
+// the filter matches if the doc's role set CONTAINS the requested role.
+type PartyRole = 'founder' | 'investor' | 'mentor' | 'partner' | 'axal';
+export const DOC_TYPE_PARTY_ROLES: Record<string, ReadonlyArray<PartyRole>> = {
+  // founder-only (incorporation, IP, equity)
+  bylaws: ['founder', 'axal'],
+  equity_split: ['founder'],
+  ip_license: ['founder', 'axal'],
+  ip_background_schedule: ['founder', 'axal'],
+  spa: ['founder', 'investor', 'axal'],
+  voting_rights: ['founder', 'investor'],
+  section_83b: ['founder'],
+  // investor-facing
+  lpa: ['investor', 'axal'],
+  ppm: ['investor', 'axal'],
+  subscription: ['investor', 'axal'],
+  investor_subscription_pro: ['investor', 'axal'],
+  investor_subscription_inst: ['investor', 'axal'],
+  investor_nda_axal: ['investor', 'axal'],
+  // mentor
+  mentor_nda_axal: ['mentor', 'axal'],
+  mentor_engagement_disclaimer: ['mentor', 'axal'],
+  // partner
+  partner_nda_nonsolicit: ['partner', 'axal'],
+  partner_equity: ['partner', 'axal'],
+  partner_services: ['partner', 'axal'],
+  partner_revshare: ['partner', 'axal'],
+  partner_capital: ['partner', 'axal'],
+  partner_custom: ['partner', 'axal'],
+  // pairwise + intro
+  nda_3way_founder_investor_axal: ['founder', 'investor', 'axal'],
+  finders_fee_intro_agreement: ['investor', 'partner', 'axal'],
+  // platform / governance / admin
+  data_access_acknowledgment_admin: ['axal'],
+  operating_agreement: ['axal'],
+  carried_interest: ['axal'],
+  ic_charter: ['axal'],
+  service_agreement: ['axal'],
+  mgmt_company: ['axal'],
+  safe: ['founder', 'investor'],
+  term_sheet: ['founder', 'investor'],
+  form_adv: ['axal'],
+  aml_kyc: ['axal'],
+};
+
+function partyRolesFor(docType: string | null | undefined): ReadonlyArray<PartyRole> {
+  if (!docType) return [];
+  return DOC_TYPE_PARTY_ROLES[docType] || [];
+}
 
 const TEMPLATES: Record<string, { title: string; layer: string }> = {
   operating_agreement: { title: 'Operating Agreement (LLC)', layer: 'gp' },
@@ -56,6 +118,23 @@ const TEMPLATES: Record<string, { title: string; layer: string }> = {
   form_adv: { title: 'Form ADV / Investment Adviser Registration', layer: 'compliance' },
   aml_kyc: { title: 'AML/KYC Policy', layer: 'compliance' },
   section_83b: { title: 'Section 83(b) Election', layer: 'compliance' },
+  // Task #5 (Z) — friendly labels for the 15 new doc types. Layer
+  // mirrors the natural grouping in Admin > Contracts > Templates.
+  investor_nda_axal: { title: 'Investor NDA (Axal)', layer: 'fund' },
+  mentor_nda_axal: { title: 'Mentor NDA (Axal)', layer: 'gp' },
+  mentor_engagement_disclaimer: { title: 'Mentor Engagement Disclaimer', layer: 'gp' },
+  partner_nda_nonsolicit: { title: 'Partner NDA + Non-Solicit', layer: 'gp' },
+  partner_equity: { title: 'Partner Equity Deal', layer: 'gp' },
+  partner_services: { title: 'Partner Services Agreement', layer: 'gp' },
+  partner_revshare: { title: 'Partner Revenue-Share Deal', layer: 'gp' },
+  partner_capital: { title: 'Partner Capital Deal', layer: 'gp' },
+  partner_custom: { title: 'Partner Custom Deal', layer: 'gp' },
+  finders_fee_intro_agreement: { title: "Finder's Fee / Intro Agreement", layer: 'gp' },
+  nda_3way_founder_investor_axal: { title: '3-Way NDA (Founder ↔ Investor ↔ Axal)', layer: 'portfolio' },
+  ip_background_schedule: { title: 'IP Background Schedule', layer: 'portfolio' },
+  data_access_acknowledgment_admin: { title: 'Data Access Acknowledgment (Admin)', layer: 'compliance' },
+  investor_subscription_pro: { title: 'Investor Subscription — Pro Tier', layer: 'fund' },
+  investor_subscription_inst: { title: 'Investor Subscription — Institutional Tier', layer: 'fund' },
 };
 
 function daysBetween(a: any, b: any): number | null {
@@ -100,6 +179,18 @@ interface UnifiedContract {
   // signing flow; 'docusign' = routed through DocuSign. Always 'native'
   // for documents-source rows.
   provider?: 'native' | 'docusign';
+  // Task #5 (Z) — friendly label + party-role tags so the admin UI can
+  // render `Investor NDA (Axal)` instead of `investor_nda_axal` and
+  // chip-filter by who's on the contract.
+  doc_type_label?: string;
+  party_roles?: ReadonlyArray<PartyRole>;
+}
+
+function decorateDocType<T extends UnifiedContract>(row: T): T {
+  const dt = row.doc_type || '';
+  row.doc_type_label = TEMPLATES[dt]?.title || dt || 'Unknown';
+  row.party_roles = partyRolesFor(dt);
+  return row;
 }
 
 function enrichDocRow(d: any, projectName: string | null, founderEmail: string | null): UnifiedContract {
@@ -186,7 +277,7 @@ async function loadEsignContracts(sql: ReturnType<typeof getSQL>): Promise<Unifi
     FROM esign_envelopes e
     ORDER BY e.created_at DESC
   `;
-  return rows.map(enrichEsignRow);
+  return rows.map(r => decorateDocType(enrichEsignRow(r)));
 }
 
 // Pull every legacy `documents` row that hasn't been ported to esign yet.
@@ -224,7 +315,7 @@ async function loadDocumentsContracts(sql: ReturnType<typeof getSQL>): Promise<U
 
   return docs.map(d => {
     const p = d.project_id ? projectMap.get(d.project_id) : null;
-    return enrichDocRow(d, p?.name || null, p?.founder_email || null);
+    return decorateDocType(enrichDocRow(d, p?.name || null, p?.founder_email || null));
   });
 }
 
@@ -254,6 +345,10 @@ adminContracts.get('/', async (c) => {
   // 'native' so the filter naturally hides them when 'docusign' is
   // selected.
   const provider = (c.req.query('provider') || '').toLowerCase();
+  // Task #5 (Z) — `party_role` filter chip
+  // (founder|investor|mentor|partner|axal). Matches if the doc's
+  // role set contains the requested role.
+  const partyRole = (c.req.query('party_role') || '').toLowerCase() as PartyRole | '';
   const limit = Math.min(parseInt(c.req.query('limit') || '50', 10) || 50, 500);
   const offset = parseInt(c.req.query('offset') || '0', 10) || 0;
 
@@ -266,6 +361,9 @@ adminContracts.get('/', async (c) => {
     if (projectId) rows = rows.filter(r => r.project_id === parseInt(projectId));
     if (provider === 'native' || provider === 'docusign') {
       rows = rows.filter(r => (r.provider || 'native') === provider);
+    }
+    if (partyRole && ['founder', 'investor', 'mentor', 'partner', 'axal'].includes(partyRole)) {
+      rows = rows.filter(r => (r.party_roles || []).includes(partyRole as PartyRole));
     }
     if (q) {
       rows = rows.filter(r =>
@@ -611,6 +709,106 @@ adminContracts.post('/:uid/download-url', async (c) => {
   const r = await mintContractDownload(c);
   if (r.error) return r.error;
   return c.json(r.ok);
+});
+
+// ---------------------------------------------------------------------------
+// Task #5 (Z) — Pairwise NDAs tab.
+// Surfaces the founder ↔ investor NDA pairs from `pairwise_ndas`
+// (created by Y-1) joined to user emails on both sides + the underlying
+// envelope for "Open contract" deep-links.
+// ---------------------------------------------------------------------------
+adminContracts.get('/pairwise-ndas', async (c) => {
+  await requireAdmin(c);
+  const sql = getSQL(c.env);
+  try {
+    let rows: any[] = [];
+    try {
+      rows = await sql`
+        SELECT p.id, p.party_a_user_id, p.party_b_user_id, p.intermediary,
+               p.nda_envelope_uuid, p.status, p.valid_until,
+               p.created_at, p.updated_at,
+               ua.email AS party_a_email, ua.name AS party_a_name,
+               ub.email AS party_b_email, ub.name AS party_b_name,
+               e.envelope_uuid AS envelope_uuid, e.status AS envelope_status
+          FROM pairwise_ndas p
+          LEFT JOIN users ua ON ua.id = p.party_a_user_id
+          LEFT JOIN users ub ON ub.id = p.party_b_user_id
+          LEFT JOIN esign_envelopes e ON e.envelope_uuid = p.nda_envelope_uuid
+         ORDER BY p.created_at DESC
+         LIMIT 500
+      `;
+    } catch (e) {
+      // Table may not be present yet on older deployments — surface
+      // empty rather than 500 so the tab renders an "empty state".
+      console.warn('[admin_contracts] pairwise_ndas query failed', e);
+      return c.json({ items: [], note: 'pairwise_ndas table not present on this environment' });
+    }
+    return c.json({ items: rows });
+  } finally {
+    await sql.end();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Task #5 (Z) — Partner Deals tab.
+// Surfaces the X-1 `partner_deals` table (deal type, term, granted tiers,
+// status, redemption count). Returns an empty list — gracefully — until
+// X-1 lands the table so this endpoint is safe to ship now.
+// ---------------------------------------------------------------------------
+adminContracts.get('/partner-deals', async (c) => {
+  await requireAdmin(c);
+  const sql = getSQL(c.env);
+  try {
+    let rows: any[] = [];
+    try {
+      rows = await sql`
+        SELECT d.id, d.partner_user_id, d.deal_type, d.term_months,
+               d.granted_tiers, d.status, d.created_at, d.updated_at,
+               u.email AS partner_email, u.name AS partner_name,
+               (SELECT COUNT(*) FROM partner_deal_redemptions r
+                 WHERE r.deal_id = d.id) AS redemption_count
+          FROM partner_deals d
+          LEFT JOIN users u ON u.id = d.partner_user_id
+         ORDER BY d.created_at DESC
+         LIMIT 500
+      `;
+    } catch (e) {
+      // X-1 hasn't created the table yet on this environment.
+      return c.json({ items: [], note: 'partner_deals table not yet present (X-1 backend pending)' });
+    }
+    return c.json({ items: rows });
+  } finally {
+    await sql.end();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Task #5 (Z) — Legal templates catalog.
+// Lists the static markdown templates shipped under
+// `cloudflare-worker/src/templates/legal/*.md` so the admin
+// "Create envelope" wizard can pick from them. Templates ARE NOT
+// rendered server-side here (the wizard just needs key/title/doc_type
+// to pre-fill the e-sign send form).
+// ---------------------------------------------------------------------------
+const LEGAL_TEMPLATE_CATALOG: ReadonlyArray<{
+  key: string;
+  doc_type: string;
+  title: string;
+}> = [
+  { key: 'tos_v1',                            doc_type: 'tos_v1',                            title: 'Terms of Service v1' },
+  { key: 'privacy_v1',                        doc_type: 'privacy_v1',                        title: 'Privacy Policy v1' },
+  { key: 'founder_nda_v1',                    doc_type: 'founder_nda_v1',                    title: 'Founder Mutual NDA v1' },
+  { key: 'investor_nda_v1',                   doc_type: 'investor_nda_axal',                 title: 'Investor NDA (Axal) v1' },
+  { key: 'mentor_nda_v1',                     doc_type: 'mentor_nda_axal',                   title: 'Mentor NDA (Axal) v1' },
+  { key: 'mentor_disclaimer_v1',              doc_type: 'mentor_engagement_disclaimer',     title: 'Mentor Engagement Disclaimer v1' },
+  { key: 'accreditation_v1',                  doc_type: 'accreditation_v1',                  title: 'Accreditation Attestation v1' },
+  { key: 'partner_msa_v1',                    doc_type: 'partner_services',                  title: 'Partner Services / MSA v1' },
+  { key: 'nda_3way_founder_investor_axal_v1', doc_type: 'nda_3way_founder_investor_axal',   title: '3-Way NDA (Founder ↔ Investor ↔ Axal) v1' },
+];
+
+adminContracts.get('/templates/legal', async (c) => {
+  await requireAdmin(c);
+  return c.json({ items: LEGAL_TEMPLATE_CATALOG });
 });
 
 export default adminContracts;

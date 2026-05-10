@@ -1346,36 +1346,75 @@ function fmtDate(iso) {
   try { return new Date(iso).toLocaleString(); } catch { return iso; }
 }
 
+// Task #5 (Z) — Friendly labels for the 15 new doc_types W/X/Y emit.
+// Used as a fallback if the backend omits `doc_type_label`. Must stay
+// in sync with `TEMPLATES` in cloudflare-worker/src/routes/admin_contracts.ts.
+const NEW_DOC_TYPE_LABELS = {
+  investor_nda_axal: 'Investor NDA (Axal)',
+  mentor_nda_axal: 'Mentor NDA (Axal)',
+  mentor_engagement_disclaimer: 'Mentor Engagement Disclaimer',
+  partner_nda_nonsolicit: 'Partner NDA + Non-Solicit',
+  partner_equity: 'Partner Equity Deal',
+  partner_services: 'Partner Services Agreement',
+  partner_revshare: 'Partner Revenue-Share Deal',
+  partner_capital: 'Partner Capital Deal',
+  partner_custom: 'Partner Custom Deal',
+  finders_fee_intro_agreement: "Finder's Fee / Intro Agreement",
+  nda_3way_founder_investor_axal: '3-Way NDA (Founder ↔ Investor ↔ Axal)',
+  ip_background_schedule: 'IP Background Schedule',
+  data_access_acknowledgment_admin: 'Data Access Acknowledgment (Admin)',
+  investor_subscription_pro: 'Investor Subscription — Pro',
+  investor_subscription_inst: 'Investor Subscription — Institutional',
+};
+const PARTY_ROLE_OPTIONS = [
+  ['', 'All parties'],
+  ['founder', 'Founder'],
+  ['investor', 'Investor'],
+  ['mentor', 'Mentor'],
+  ['partner', 'Partner'],
+  ['axal', 'Axal'],
+];
+
 export function ContractsPanel() {
   const [stats, setStats] = useState(null);
   const [items, setItems] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [pairwise, setPairwise] = useState([]);
+  const [partnerDeals, setPartnerDeals] = useState([]);
+  const [partnerDealsNote, setPartnerDealsNote] = useState('');
   const [loading, setLoading] = useState(true);
-  const [sub, setSub] = useState('all'); // all | pending | signed | templates
+  const [sub, setSub] = useState('all'); // all | pending | signed | templates | pairwise | partner
   const [q, setQ] = useState('');
   const [docType, setDocType] = useState('');
   const [providerFilter, setProviderFilter] = useState(''); // '' | 'native' | 'docusign'
+  const [partyRole, setPartyRole] = useState(''); // '' | founder | investor | mentor | partner | axal
   const [openContract, setOpenContract] = useState(null);
+  const [showNewEnvelope, setShowNewEnvelope] = useState(false);
 
   const statusFilter = sub === 'pending' ? 'sent' : sub === 'signed' ? 'signed' : '';
+  const isListSub = sub === 'all' || sub === 'pending' || sub === 'signed';
 
   const reload = async () => {
     setLoading(true);
     try {
-      const [s, list, tpls] = await Promise.all([
+      const [s, list, tpls, pw, pd] = await Promise.all([
         api.adminContractStats().catch(() => null),
-        sub === 'templates' ? Promise.resolve({ items: [] }) : api.adminListContracts({ status: statusFilter, doc_type: docType, provider: providerFilter, q, limit: 200 }),
+        isListSub ? api.adminListContracts({ status: statusFilter, doc_type: docType, provider: providerFilter, party_role: partyRole, q, limit: 200 }) : Promise.resolve({ items: [] }),
         sub === 'templates' ? api.adminContractTemplates().catch(() => []) : Promise.resolve(null),
+        sub === 'pairwise' ? api.adminListPairwiseNdas().catch(() => ({ items: [] })) : Promise.resolve(null),
+        sub === 'partner' ? api.adminListPartnerDeals().catch(() => ({ items: [], note: 'Failed to load.' })) : Promise.resolve(null),
       ]);
       setStats(s);
       setItems(list?.items || []);
       if (tpls) setTemplates(tpls);
+      if (pw) setPairwise(pw.items || []);
+      if (pd) { setPartnerDeals(pd.items || []); setPartnerDealsNote(pd.note || ''); }
     } catch (e) {
       reportError('AdminPage:loadContracts', e);
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [sub, statusFilter, docType, providerFilter]);
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [sub, statusFilter, docType, providerFilter, partyRole]);
 
   const onSearch = (e) => { e.preventDefault(); reload(); };
 
@@ -1409,11 +1448,13 @@ export function ContractsPanel() {
       </div>
 
       {/* Sub-tabs */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
         {[
           ['all',       'All Contracts'],
           ['pending',   'Sent / Pending'],
           ['signed',    'Signed'],
+          ['pairwise',  'Pairwise NDAs'],
+          ['partner',   'Partner Deals'],
           ['templates', 'Templates'],
         ].map(([k, label]) => (
           <button key={k} onClick={() => setSub(k)}
@@ -1421,13 +1462,16 @@ export function ContractsPanel() {
             {label}
           </button>
         ))}
-        <button onClick={reload} className="ml-auto text-xs text-gray-500 hover:text-violet-600 flex items-center gap-1">
+        <button onClick={() => setShowNewEnvelope(true)} className="ml-auto text-xs px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium flex items-center gap-1">
+          <Send size={12} /> New envelope
+        </button>
+        <button onClick={reload} className="text-xs text-gray-500 hover:text-violet-600 flex items-center gap-1">
           <RefreshCw size={12} /> Refresh
         </button>
       </div>
 
-      {/* Filters (hidden on Templates) */}
-      {sub !== 'templates' && (
+      {/* Filters (only on the contract-list sub-tabs) */}
+      {isListSub && (
         <form onSubmit={onSearch} className="flex flex-wrap items-center gap-2 mb-4">
           <div className="relative flex-1 min-w-[240px]">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -1438,7 +1482,13 @@ export function ContractsPanel() {
           <select value={docType} onChange={e => setDocType(e.target.value)}
             className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
             <option value="">All types</option>
-            {docTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+            {docTypeOptions.map(t => <option key={t} value={t}>{NEW_DOC_TYPE_LABELS[t] || t}</option>)}
+          </select>
+          {/* Task #5 (Z) — party-role filter chip set. */}
+          <select value={partyRole} onChange={e => setPartyRole(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white"
+            title="Filter by which party the contract touches">
+            {PARTY_ROLE_OPTIONS.map(([k, lbl]) => <option key={k} value={k}>{lbl}</option>)}
           </select>
           {/* Task #2 — provider filter chip. Lets admins separate
               DocuSign-routed envelopes from in-house ones at a glance. */}
@@ -1462,6 +1512,10 @@ export function ContractsPanel() {
         <div className="text-center text-gray-500 py-12 text-sm">Loading…</div>
       ) : sub === 'templates' ? (
         <TemplatesGrid templates={templates} />
+      ) : sub === 'pairwise' ? (
+        <PairwiseNdasTable rows={pairwise} onOpen={(uid) => uid && setOpenContract({ uid })} />
+      ) : sub === 'partner' ? (
+        <PartnerDealsTable rows={partnerDeals} note={partnerDealsNote} />
       ) : items.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm">
           {sub === 'pending' && 'No contracts are currently awaiting signature. New sends will appear here within a few seconds.'}
@@ -1482,6 +1536,195 @@ export function ContractsPanel() {
           onChanged={() => { setOpenContract(null); reload(); }}
         />
       )}
+
+      {showNewEnvelope && (
+        <NewEnvelopeWizard onClose={() => setShowNewEnvelope(false)} onSent={() => { setShowNewEnvelope(false); reload(); }} />
+      )}
+    </div>
+  );
+}
+
+// Task #5 (Z) — Pairwise NDAs tab. Lists every founder ↔ investor NDA
+// pair from `pairwise_ndas`, joined to user emails on both sides.
+// Clicking the envelope link opens the existing ContractDetailModal.
+function PairwiseNdasTable({ rows, onOpen }) {
+  if (!rows || rows.length === 0) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm">
+        No pairwise NDAs on record yet. Investor intro requests create a pair here once the founder accepts.
+      </div>
+    );
+  }
+  const STATUS_PILLS = {
+    pending: 'bg-amber-100 text-amber-700',
+    partially_signed: 'bg-amber-100 text-amber-700',
+    active: 'bg-emerald-100 text-emerald-700',
+    expired: 'bg-gray-100 text-gray-600',
+    revoked: 'bg-red-100 text-red-700',
+  };
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 text-xs text-gray-600">
+          <tr>
+            <th className="text-left px-4 py-2.5 font-medium">Founder</th>
+            <th className="text-left px-4 py-2.5 font-medium">Investor</th>
+            <th className="text-center px-4 py-2.5 font-medium">Status</th>
+            <th className="text-left px-4 py-2.5 font-medium">Valid Until</th>
+            <th className="text-left px-4 py-2.5 font-medium">Last Activity</th>
+            <th className="text-right px-4 py-2.5 font-medium">Envelope</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.id} className="border-t border-gray-100">
+              <td className="px-4 py-3"><div className="text-gray-900">{r.party_a_name || '—'}</div><div className="text-xs text-gray-500">{r.party_a_email || `user #${r.party_a_user_id}`}</div></td>
+              <td className="px-4 py-3"><div className="text-gray-900">{r.party_b_name || '—'}</div><div className="text-xs text-gray-500">{r.party_b_email || `user #${r.party_b_user_id}`}</div></td>
+              <td className="px-4 py-3 text-center">
+                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${STATUS_PILLS[r.status] || 'bg-gray-100 text-gray-600'}`}>{r.status}</span>
+              </td>
+              <td className="px-4 py-3 text-xs text-gray-600">{fmtDate(r.valid_until) || '—'}</td>
+              <td className="px-4 py-3 text-xs text-gray-600">{fmtDate(r.updated_at)}</td>
+              <td className="px-4 py-3 text-right">
+                {r.envelope_uuid ? (
+                  <button onClick={() => onOpen(r.envelope_uuid)} className="text-xs text-violet-700 hover:text-violet-900 font-medium">Open contract</button>
+                ) : <span className="text-xs text-gray-400">—</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Task #5 (Z) — Partner Deals tab. The X-1 backend creates `partner_deals`
+// rows; this surface lists them. Until X-1 lands the backend returns
+// {items:[], note:"..."} which we render as a friendly empty state.
+function PartnerDealsTable({ rows, note }) {
+  if (!rows || rows.length === 0) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm">
+        No partner deals on record yet.
+        {note && <div className="mt-2 text-[11px] text-gray-400">{note}</div>}
+      </div>
+    );
+  }
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 text-xs text-gray-600">
+          <tr>
+            <th className="text-left px-4 py-2.5 font-medium">Partner</th>
+            <th className="text-left px-4 py-2.5 font-medium">Deal Type</th>
+            <th className="text-center px-4 py-2.5 font-medium">Term</th>
+            <th className="text-left px-4 py-2.5 font-medium">Granted Tiers</th>
+            <th className="text-center px-4 py-2.5 font-medium">Redemptions</th>
+            <th className="text-center px-4 py-2.5 font-medium">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.id} className="border-t border-gray-100">
+              <td className="px-4 py-3"><div className="text-gray-900">{r.partner_name || '—'}</div><div className="text-xs text-gray-500">{r.partner_email}</div></td>
+              <td className="px-4 py-3 text-gray-700">{r.deal_type}</td>
+              <td className="px-4 py-3 text-center text-gray-600">{r.term_months ? `${r.term_months}mo` : '—'}</td>
+              <td className="px-4 py-3 text-xs text-gray-600">{r.granted_tiers || '—'}</td>
+              <td className="px-4 py-3 text-center text-gray-700">{r.redemption_count ?? 0}</td>
+              <td className="px-4 py-3 text-center"><span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{r.status}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Task #5 (Z) — Admin "Create envelope" wizard.
+// Picks one of the legal templates from /admin/contracts/templates/legal,
+// collects recipient + (optional) deal_id, and POSTs to the existing
+// /api/legal/esign/send route which mints + emails the envelope.
+function NewEnvelopeWizard({ onClose, onSent }) {
+  useEscapeClose(onClose);
+  const [templates, setTemplates] = useState([]);
+  const [docType, setDocType] = useState('');
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [recipientName, setRecipientName] = useState('');
+  const [dealId, setDealId] = useState('');
+  const [provider, setProvider] = useState('native');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    api.adminListLegalTemplates()
+      .then(r => { setTemplates(r.items || []); if (r.items?.[0]) setDocType(r.items[0].doc_type); })
+      .catch(e => setErr(e.message));
+  }, []);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!docType || !recipientEmail) { setErr('Template and recipient email are required.'); return; }
+    setBusy(true); setErr('');
+    try {
+      await api.adminSendEnvelope({
+        document_type: docType,
+        recipient_email: recipientEmail.trim().toLowerCase(),
+        recipient_name: recipientName.trim() || undefined,
+        deal_id: dealId ? Number(dealId) : undefined,
+        provider,
+      });
+      onSent();
+    } catch (ex) { setErr(ex.message); setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-2"><Send size={16} className="text-emerald-600" /><h3 className="font-semibold text-gray-900">New envelope (admin)</h3></div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+        </div>
+        <form onSubmit={submit} className="px-5 py-4 space-y-3">
+          {err && <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-2 rounded">{err}</div>}
+          <label className="block">
+            <span className="text-xs font-semibold text-gray-700">Template</span>
+            <select value={docType} onChange={e => setDocType(e.target.value)} required
+              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white">
+              {templates.length === 0 && <option value="">Loading…</option>}
+              {templates.map(t => <option key={t.key} value={t.doc_type}>{t.title}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-gray-700">Recipient email</span>
+            <input type="email" required value={recipientEmail} onChange={e => setRecipientEmail(e.target.value)}
+              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" />
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-gray-700">Recipient name (optional)</span>
+            <input value={recipientName} onChange={e => setRecipientName(e.target.value)}
+              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" />
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-gray-700">Linked deal_id (optional)</span>
+            <input type="number" value={dealId} onChange={e => setDealId(e.target.value)}
+              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" />
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-gray-700">Provider</span>
+            <select value={provider} onChange={e => setProvider(e.target.value)}
+              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white">
+              <option value="native">Native (in-app signing)</option>
+              <option value="docusign">DocuSign (Studio tier)</option>
+            </select>
+          </label>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg">Cancel</button>
+            <button type="submit" disabled={busy} className="px-3 py-2 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-1.5">
+              {busy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Send envelope
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
