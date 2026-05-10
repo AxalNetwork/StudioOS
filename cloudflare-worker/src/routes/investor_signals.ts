@@ -150,21 +150,27 @@ function emptyProfile(userId: number): ProfileRow {
   };
 }
 
+function safeJsonArray(s: string): string[] {
+  try {
+    const j: unknown = JSON.parse(s);
+    return Array.isArray(j) ? j.map(x => String(x)) : [];
+  } catch {
+    return [];
+  }
+}
+
 function shapeProfile(row: ProfileRow) {
-  const safeJson = (s: string, fallback: any) => {
-    try { return JSON.parse(s); } catch { return fallback; }
-  };
   return {
     user_id: row.user_id,
     investor_type: row.investor_type,
-    sectors: safeJson(row.sectors_json, []),
-    stages: safeJson(row.stages_json, []),
-    geos: safeJson(row.geos_json, []),
+    sectors: safeJsonArray(row.sectors_json),
+    stages: safeJsonArray(row.stages_json),
+    geos: safeJsonArray(row.geos_json),
     ticket_band: row.ticket_band,
     ticket_min_usd: row.ticket_min_usd,
     ticket_max_usd: row.ticket_max_usd,
     thesis_text: row.thesis_text,
-    thesis_keywords: safeJson(row.thesis_keywords_json, []),
+    thesis_keywords: safeJsonArray(row.thesis_keywords_json),
     contribute_to_signals: !!row.contribute_to_signals,
     completed_at: row.completed_at,
     updated_at: row.updated_at,
@@ -180,11 +186,21 @@ investorProfile.get('/me', async (c) => {
   return c.json({ profile: shapeProfile(row || emptyProfile(user.id)) });
 });
 
+interface ProfileUpsertBody {
+  investor_type?: unknown;
+  sectors?: unknown;
+  stages?: unknown;
+  geos?: unknown;
+  ticket_band?: unknown;
+  thesis_text?: unknown;
+  contribute_to_signals?: unknown;
+}
+
 investorProfile.put('/me', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
-  let body: any;
-  try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  let body: ProfileUpsertBody;
+  try { body = await c.req.json<ProfileUpsertBody>(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
 
   const investor_type = typeof body.investor_type === 'string'
     ? body.investor_type.slice(0, 32) : null;
@@ -276,8 +292,13 @@ investorSignals.get('/latest', async (c) => {
       min_cell_size: MIN_CELL_SIZE,
     });
   }
-  let payload: any = {};
-  try { payload = JSON.parse(latest.payload_json); } catch {}
+  let payload: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(latest.payload_json);
+    if (parsed && typeof parsed === 'object') {
+      payload = parsed as Record<string, unknown>;
+    }
+  } catch { /* ignore malformed payloads — fall back to empty */ }
   // Trend: pull n_total from up to ~30d of past snapshots.
   const trendRows = await c.env.DB.prepare(
     `SELECT computed_at, n_total FROM investor_signals_snapshots
@@ -322,13 +343,24 @@ interface AggregateRow {
   thesis_keywords_json: string;
 }
 
+interface SectorStageBucketStats {
+  sector: string;
+  stage: string;
+  n: number | null;
+  median_min?: number | null;
+  median_max?: number | null;
+  iqr_min?: { p25: number | null; p75: number | null };
+  iqr_max?: { p25: number | null; p75: number | null };
+  reason?: 'insufficient_data';
+}
+
 // Step 4 requirement: median + IQR ticket size per (sector × stage) bucket.
 // Each profile contributes its (min, max) ticket to every bucket formed by
 // the cross-product of its sectors and stages. Cells below MIN_CELL_SIZE are
 // returned with `n: null, reason: 'insufficient_data'`.
-function buildSectorStageTicketStats(rows: AggregateRow[]) {
+function buildSectorStageTicketStats(rows: AggregateRow[]): SectorStageBucketStats[] {
   const buckets = new Map<string, { sector: string; stage: string; mins: number[]; maxs: number[] }>();
-  const safeArr = (s: string): string[] => { try { const j = JSON.parse(s); return Array.isArray(j) ? j : []; } catch { return []; } };
+  const safeArr = (s: string): string[] => safeJsonArray(s);
   for (const r of rows) {
     if (typeof r.ticket_min_usd !== 'number' || typeof r.ticket_max_usd !== 'number') continue;
     const sectors = safeArr(r.sectors_json);
@@ -407,7 +439,7 @@ export async function aggregateInvestorSignals(env: Env): Promise<{ n_total: num
   const tickMins: number[] = [];
   const tickMaxs: number[] = [];
 
-  const safeArr = (s: string): string[] => { try { const j = JSON.parse(s); return Array.isArray(j) ? j : []; } catch { return []; } };
+  const safeArr = (s: string): string[] => safeJsonArray(s);
 
   for (const r of rows) {
     for (const s of safeArr(r.sectors_json)) sectorCounts.set(s, (sectorCounts.get(s) || 0) + 1);
@@ -483,9 +515,10 @@ export async function aggregateInvestorSignals(env: Env): Promise<{ n_total: num
                           ORDER BY computed_at DESC LIMIT 200)`,
     ).run();
   } catch {}
+  const meta = ins.meta as { last_row_id?: number } | undefined;
   return {
     n_total,
-    snapshot_id: (ins.meta as any)?.last_row_id ?? null,
+    snapshot_id: meta?.last_row_id ?? null,
   };
 }
 
