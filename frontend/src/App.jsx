@@ -291,6 +291,7 @@ function SidebarNav({ groups, role, onNavigate, user }) {
                 <NavLink
                   key={to}
                   to={to}
+                  end
                   onClick={onNavigate}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
