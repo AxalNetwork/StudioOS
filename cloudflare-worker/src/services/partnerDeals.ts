@@ -304,10 +304,52 @@ export async function activatePartnerDealOnSignature(
     }
   } catch (e) { console.warn('[partnerDeals] DD case open failed', (e as Error).message); }
 
-  // Seed Trust Center obligations for partner role.
+  // Seed Trust Center obligations for partner role + deal-conditional
+  // legal obligations. The base seeder only handles tos_v1/privacy_v1
+  // for the partner role; the X-1 spec requires:
+  //   • partner_msa_v1 — always required (the deal we just signed)
+  //   • kyb_v1         — always required (entity verification)
+  //   • kyc_v1         — required ONLY for capital_partnership
+  //   • accreditation_v1 — required ONLY for capital_partnership
+  // Non-capital deals get rows seeded with required=0/status='waived'
+  // so the Trust Center surface still shows "n/a" rather than hiding
+  // the obligation entirely (auditable trail).
   try {
-    const { seedObligations } = await import('./trust');
+    const { seedObligations, ensureTrustSchema } = await import('./trust');
     await seedObligations(env, userId, 'partner');
+    await ensureTrustSchema(env);
+    const isCapital = deal.deal_type === 'capital_partnership';
+    const dealConditional: Array<{ key: string; required: 0 | 1 }> = [
+      { key: 'partner_msa_v1', required: 1 },
+      { key: 'kyb_v1',         required: 1 },
+      { key: 'kyc_v1',           required: isCapital ? 1 : 0 },
+      { key: 'accreditation_v1', required: isCapital ? 1 : 0 },
+    ];
+    for (const o of dealConditional) {
+      // partner_msa_v1 is satisfied by THIS envelope; KYB and the
+      // capital-only rows start as 'pending'. Non-capital rows get
+      // required=0 / status='waived' so reviewers see them as n/a.
+      const initialStatus = o.key === 'partner_msa_v1'
+        ? 'satisfied'
+        : (o.required ? 'pending' : 'waived');
+      const evidenceUuid = o.key === 'partner_msa_v1'
+        ? (await env.DB.prepare(`SELECT envelope_uuid FROM esign_envelopes WHERE id = ?`).bind(envelopeId).first() as any)?.envelope_uuid || null
+        : null;
+      try {
+        await env.DB.prepare(
+          `INSERT INTO legal_obligations (user_id, obligation_key, required, status, evidence_envelope_uuid)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(user_id, obligation_key) DO UPDATE SET
+             required   = excluded.required,
+             status     = CASE WHEN excluded.status = 'satisfied' THEN 'satisfied'
+                               WHEN legal_obligations.status = 'satisfied' THEN 'satisfied'
+                               WHEN excluded.required = 0 THEN 'waived'
+                               ELSE legal_obligations.status END,
+             evidence_envelope_uuid = COALESCE(excluded.evidence_envelope_uuid, legal_obligations.evidence_envelope_uuid),
+             updated_at = CURRENT_TIMESTAMP`,
+        ).bind(userId, o.key, o.required, initialStatus, evidenceUuid).run();
+      } catch (e) { console.warn('[partnerDeals] obligation seed failed', o.key, e); }
+    }
   } catch (e) { console.warn('[partnerDeals] trust seed failed', e); }
 
   // Send confirmation email + in-app notify.
