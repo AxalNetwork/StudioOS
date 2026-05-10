@@ -124,11 +124,11 @@ crunchbase.post('/projects/:id/apply', async (c) => {
     await c.env.DB.prepare(
       `UPDATE projects SET
          crunchbase_uuid = ?, crunchbase_data_json = ?, crunchbase_synced_at = CURRENT_TIMESTAMP,
-         founded_year = COALESCE(?, founded_year),
-         hq           = COALESCE(?, hq),
-         employee_count = COALESCE(?, employee_count),
-         last_funding_round = COALESCE(?, last_funding_round),
-         total_funding = COALESCE(?, total_funding),
+         founded_year = ?,
+         hq           = ?,
+         employee_count = ?,
+         last_funding_round = ?,
+         total_funding = ?,
          updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     ).bind(

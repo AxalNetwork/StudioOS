@@ -535,23 +535,37 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
               {results.map((r) => (
                 <li key={r.uuid} className="px-5 py-3 hover:bg-gray-50">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <div className="text-sm font-medium text-gray-900 truncate">{r.name}</div>
-                        {r.cb_url && (
-                          <a href={r.cb_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-0.5">
-                            <ExternalLink size={10} />
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      {r.image_url ? (
+                        <img src={r.image_url} alt="" className="w-10 h-10 rounded object-cover bg-gray-100 shrink-0" loading="lazy" />
+                      ) : (
+                        <div className="w-10 h-10 rounded bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center text-[10px] font-semibold text-violet-700 shrink-0">
+                          {(r.name || '?').slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-medium text-gray-900 truncate">{r.name}</div>
+                          {r.cb_url && (
+                            <a href={r.cb_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-0.5">
+                              <ExternalLink size={10} />
+                            </a>
+                          )}
+                        </div>
+                        {r.website && (
+                          <a href={r.website} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline truncate block">
+                            {r.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
                           </a>
                         )}
-                      </div>
-                      {r.short_description && (
-                        <div className="text-xs text-gray-600 mt-0.5 line-clamp-2">{r.short_description}</div>
-                      )}
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[11px] text-gray-500">
-                        {r.hq_location && <span>{r.hq_location}</span>}
-                        {r.employee_range && <span>{r.employee_range}</span>}
-                        {r.funding_total_usd ? <span>${(r.funding_total_usd / 1e6).toFixed(1)}M raised</span> : null}
-                        {r.operating_status && <span>{r.operating_status}</span>}
+                        {r.short_description && (
+                          <div className="text-xs text-gray-600 mt-0.5 line-clamp-2">{r.short_description}</div>
+                        )}
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[11px] text-gray-500">
+                          {r.hq_location && <span>{r.hq_location}</span>}
+                          {r.employee_range && <span>{r.employee_range}</span>}
+                          {r.funding_total_usd ? <span>${(r.funding_total_usd / 1e6).toFixed(1)}M raised</span> : null}
+                          {r.operating_status && <span>{r.operating_status}</span>}
+                        </div>
                       </div>
                     </div>
                     <button
