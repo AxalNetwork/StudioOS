@@ -15,19 +15,47 @@ import { useToast } from '../components/useToast';
  * (/partner-onboarding/:token) or query (?token=).
  */
 
-const CHAT_QUESTIONS = [
-  { key: 'full_name', q: "What's your full legal name?", placeholder: 'Jane Doe' },
-  { key: 'organization', q: 'Which firm or organization are you with? (optional)', placeholder: 'Acme Capital, or "Independent"' },
-  { key: 'role_title', q: 'What role/title best describes you? (optional)', placeholder: 'Managing Partner, Operating Partner, GC…' },
-  { key: 'expertise', q: 'In one or two lines, what are you world-class at?', placeholder: 'B2B SaaS GTM, fintech regulation, deep-tech IP…', textarea: true },
-  { key: 'sectors', q: 'Which sectors do you focus on?', placeholder: 'AI, Climate, Healthcare, Fintech…' },
-  { key: 'geography', q: 'Geography you cover? (optional)', placeholder: 'NYC + East Coast, EU, Global…' },
-  { key: 'capacity_per_month', q: 'How much time can you commit per month? (optional)', placeholder: '5–10 hours / month' },
-  { key: 'capital_capacity_usd', q: 'If relevant, what capital could you commit / introduce? (USD, optional)', placeholder: '250000', numeric: true },
-  { key: 'motivation', q: 'Why do you want to partner with Axal?', placeholder: 'What you hope to build/learn/contribute', textarea: true },
-  { key: 'prior_deals', q: 'Notable prior deals or engagements? (optional)', placeholder: 'Brief list, links welcome', textarea: true },
-  { key: 'linkedin_url', q: 'LinkedIn URL? (optional)', placeholder: 'https://linkedin.com/in/…' },
+// Task #9 (X-2) — Adaptive question bank.
+//
+// Each question carries a `requires` set: if non-null, the question is
+// only asked when one of the listed deal-types appears in the
+// invitation's `allowed_deal_types`. The result is a 6–10 question
+// flow per spec: 6 always-on core questions + up to 4 conditional
+// follow-ups (capacity for service/equity, capital for capital deals,
+// prior deals for revshare, motivation as a universal close).
+const QUESTION_BANK = [
+  // Core (always asked — 6)
+  { key: 'full_name', q: "What's your full legal name?", placeholder: 'Jane Doe', requires: null },
+  { key: 'organization', q: 'Which firm or organization are you with? (optional)', placeholder: 'Acme Capital, or "Independent"', requires: null },
+  { key: 'role_title', q: 'What role/title best describes you? (optional)', placeholder: 'Managing Partner, Operating Partner, GC…', requires: null },
+  { key: 'expertise', q: 'In one or two lines, what are you world-class at?', placeholder: 'B2B SaaS GTM, fintech regulation, deep-tech IP…', textarea: true, requires: null },
+  { key: 'sectors', q: 'Which sectors do you focus on?', placeholder: 'AI, Climate, Healthcare, Fintech…', requires: null },
+  { key: 'linkedin_url', q: 'LinkedIn URL? (optional)', placeholder: 'https://linkedin.com/in/…', requires: null },
+  // Conditional (asked only when relevant to admin-allowed deal types)
+  { key: 'geography', q: 'Geography you cover? (optional)', placeholder: 'NYC + East Coast, EU, Global…',
+    requires: ['equity_partnership', 'services_partnership', 'capital_partnership'] },
+  { key: 'capacity_per_month', q: 'How much time can you commit per month?', placeholder: '5–10 hours / month',
+    requires: ['equity_partnership', 'services_partnership'] },
+  { key: 'capital_capacity_usd', q: 'What capital could you commit / introduce? (USD)', placeholder: '250000', numeric: true,
+    requires: ['capital_partnership', 'deal_sourcing_revshare'] },
+  { key: 'prior_deals', q: 'Notable prior deals or engagements? (optional)', placeholder: 'Brief list, links welcome', textarea: true,
+    requires: ['deal_sourcing_revshare', 'capital_partnership', 'equity_partnership'] },
+  // Universal close (always asked)
+  { key: 'motivation', q: 'Why do you want to partner with Axal?', placeholder: 'What you hope to build/learn/contribute', textarea: true, requires: null },
 ];
+
+// Hard contract: produce 6–10 questions. The bank has 7 unconditional
+// questions; conditional ones are added only when their `requires`
+// intersects the admin's allow-list. If `allowed_deal_types` is empty
+// (bad/missing data) we fall back to the 7 unconditional core only —
+// never the full bank — so the partner is never asked irrelevant
+// questions and the flow never exceeds 10.
+const MAX_QUESTIONS = 10;
+function pickQuestionsFor(allowedDealTypes) {
+  const allowed = new Set(Array.isArray(allowedDealTypes) ? allowedDealTypes : []);
+  const picked = QUESTION_BANK.filter(q => !q.requires || (allowed.size > 0 && q.requires.some(t => allowed.has(t))));
+  return picked.slice(0, MAX_QUESTIONS);
+}
 
 function classNames(...xs) { return xs.filter(Boolean).join(' '); }
 
@@ -51,6 +79,15 @@ export default function PartnerOnboardPage() {
   const [draft, setDraft] = useState('');
   const [profileDone, setProfileDone] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // Adaptive question list — recomputed when invitation loads so the
+  // chatbot only asks 6–10 questions relevant to the admin-selected
+  // deal types (capital question only when capital deal-types are on
+  // the allow-list, etc.).
+  const chatQuestions = useMemo(
+    () => pickQuestionsFor(invitation?.allowed_deal_types),
+    [invitation],
+  );
 
   // proposals
   const [proposals, setProposals] = useState([]);
@@ -89,7 +126,7 @@ export default function PartnerOnboardPage() {
         // Hydrate progress: if a profile already exists, mark profile step done.
         if (r.profile) {
           setProfileDone(true);
-          setStepIdx(CHAT_QUESTIONS.length);
+          setStepIdx(chatQuestions.length);
         }
         if (r.deal && r.deal.proposal) {
           setSelectedDeal(r.deal);
@@ -118,14 +155,15 @@ export default function PartnerOnboardPage() {
   useEffect(() => {
     if (!invitation || profileDone) return;
     if (chatTurns.length > 0) return;
+    if (chatQuestions.length === 0) return; // adaptive list not ready
     const greeting = invitation.personal_message
       ? `${invitation.personal_message}\n\n— ${adminName}`
-      : `Hi${invitation.recipient_name ? ' ' + invitation.recipient_name : ''}, welcome! I'll ask a few quick questions so we can draft the right partnership for you.`;
+      : `Hi${invitation.recipient_name ? ' ' + invitation.recipient_name : ''}, welcome! I'll ask ${chatQuestions.length} quick questions so we can draft the right partnership for you.`;
     setChatTurns([
       { role: 'bot', text: greeting },
-      { role: 'bot', text: CHAT_QUESTIONS[0].q },
+      { role: 'bot', text: chatQuestions[0].q },
     ]);
-  }, [invitation, profileDone, chatTurns.length, adminName]);
+  }, [invitation, profileDone, chatTurns.length, adminName, chatQuestions]);
 
   useEffect(() => {
     if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -137,8 +175,8 @@ export default function PartnerOnboardPage() {
     let qIdx = 0;
     for (const t of chatTurns) {
       if (t.role !== 'user') continue;
-      if (qIdx >= CHAT_QUESTIONS.length) break;
-      const def = CHAT_QUESTIONS[qIdx];
+      if (qIdx >= chatQuestions.length) break;
+      const def = chatQuestions[qIdx];
       if (t.text && t.text.toLowerCase() !== 'skip') {
         if (def.numeric) {
           const n = Number(String(t.text).replace(/[^\d.]/g, ''));
@@ -158,11 +196,11 @@ export default function PartnerOnboardPage() {
     // (which races the next render and reads stale `draft`).
     const value = (typeof override === 'string' ? override : draft).trim();
     if (!value) return;
-    if (stepIdx >= CHAT_QUESTIONS.length) return;
+    if (stepIdx >= chatQuestions.length) return;
     const newTurns = [...chatTurns, { role: 'user', text: value }];
     const nextIdx = stepIdx + 1;
-    if (nextIdx < CHAT_QUESTIONS.length) {
-      newTurns.push({ role: 'bot', text: CHAT_QUESTIONS[nextIdx].q });
+    if (nextIdx < chatQuestions.length) {
+      newTurns.push({ role: 'bot', text: chatQuestions[nextIdx].q });
     } else {
       newTurns.push({ role: 'bot', text: 'Thanks! Saving your profile…' });
     }
@@ -170,7 +208,7 @@ export default function PartnerOnboardPage() {
     setDraft('');
     setStepIdx(nextIdx);
 
-    if (nextIdx >= CHAT_QUESTIONS.length) {
+    if (nextIdx >= chatQuestions.length) {
       // Build profile and POST
       setSavingProfile(true);
       try {
@@ -179,8 +217,8 @@ export default function PartnerOnboardPage() {
         let qIdx = 0;
         for (const t of newTurns) {
           if (t.role !== 'user') continue;
-          if (qIdx >= CHAT_QUESTIONS.length) break;
-          const def = CHAT_QUESTIONS[qIdx];
+          if (qIdx >= chatQuestions.length) break;
+          const def = chatQuestions[qIdx];
           if (t.text && t.text.toLowerCase() !== 'skip') {
             if (def.numeric) {
               const n = Number(String(t.text).replace(/[^\d.]/g, ''));
@@ -204,7 +242,7 @@ export default function PartnerOnboardPage() {
   };
 
   const skipQuestion = () => {
-    if (stepIdx >= CHAT_QUESTIONS.length) return;
+    if (stepIdx >= chatQuestions.length) return;
     sendMessage('skip');
   };
 
@@ -354,10 +392,10 @@ export default function PartnerOnboardPage() {
               {savingProfile && <ChatBubble role="bot" text={<span className="inline-flex items-center gap-2 text-gray-500"><Loader2 size={12} className="animate-spin" /> Saving profile…</span>} />}
               <div ref={chatEndRef} />
             </div>
-            {stepIdx < CHAT_QUESTIONS.length && (
+            {stepIdx < chatQuestions.length && (
               <div className="mt-4">
                 <ChatComposer
-                  step={CHAT_QUESTIONS[stepIdx]}
+                  step={chatQuestions[stepIdx]}
                   draft={draft}
                   setDraft={setDraft}
                   onSend={sendMessage}
@@ -637,8 +675,9 @@ function ProposalCard({ proposal, selected, busy, onSelect, disabled }) {
 
 function ProposalSummary({ proposal, compact }) {
   const terms = proposal.terms || {};
+  const excerpt = proposal.contract_excerpt;
   return (
-    <div className={classNames(compact ? 'text-xs' : 'text-sm', 'space-y-1')}>
+    <div className={classNames(compact ? 'text-xs' : 'text-sm', 'space-y-2')}>
       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
         {Object.entries(terms).map(([k, v]) => (
           <div key={k} className="flex justify-between gap-2">
@@ -647,6 +686,22 @@ function ProposalSummary({ proposal, compact }) {
           </div>
         ))}
       </dl>
+      {excerpt && (
+        // Task #9 (X-2) — sample contract excerpt so the partner sees the
+        // binding clauses BEFORE the e-sign envelope is generated. Full
+        // agreement is rendered inside the e-sign provider; this is a
+        // plain-text preview so consent is informed.
+        <div className={classNames(
+          'mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-900',
+          compact ? 'text-[11px] leading-snug' : 'text-xs leading-relaxed',
+        )}>
+          <div className="flex items-center gap-1 font-semibold uppercase tracking-wider text-[10px] mb-1">
+            <FileSignature size={11} /> Sample contract excerpt
+          </div>
+          <p className="whitespace-pre-wrap font-mono">{excerpt}</p>
+          <p className="text-[10px] text-amber-700 mt-1 not-italic">Full agreement is presented inside the e-sign envelope before signature.</p>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 pt-2 text-[11px]">
         {proposal.granted_tier_founder && (
           <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">Founder: {proposal.granted_tier_founder}</span>

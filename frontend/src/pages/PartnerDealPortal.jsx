@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Handshake, Copy, Loader2, AlertTriangle, CheckCircle2, Clock,
-  Users, ShieldAlert, RefreshCw, Sparkles,
+  Users, ShieldAlert, RefreshCw, Sparkles, ListChecks, Circle, CircleDot,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
@@ -16,7 +16,7 @@ export default function PartnerDealPortal() {
   const { user } = useAuth();
   const { toast, showToast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState({ deal: null, redemptions_count: 0, redemptions: [] });
+  const [data, setData] = useState({ deal: null, redemptions_count: 0, redemptions: [], next_milestones: [] });
   const [err, setErr] = useState(null);
 
   const load = useCallback(async () => {
@@ -142,6 +142,20 @@ export default function PartnerDealPortal() {
             )}
           </Card>
 
+          {/* Task #9 (X-2) — Next milestones panel: signature → tier
+              activation → first referral → renewal. Computed server-side
+              so the partner always sees what's done, what's pending, and
+              what's coming up. */}
+          {Array.isArray(data.next_milestones) && data.next_milestones.length > 0 && (
+            <Card title="Next milestones" icon={<ListChecks size={15} className="text-violet-600" />}>
+              <ol className="space-y-2">
+                {data.next_milestones.map((m) => (
+                  <Milestone key={m.id} milestone={m} />
+                ))}
+              </ol>
+            </Card>
+          )}
+
           <Card title={`Recent redemptions (${data.redemptions_count})`} icon={<Users size={15} className="text-violet-600" />}>
             {data.redemptions.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">
@@ -256,6 +270,31 @@ function StatusPill({ status }) {
     <span className={`text-xs font-medium px-3 py-1 rounded-full ${map[status] || 'bg-gray-100 text-gray-600'}`}>
       {String(status).replace(/_/g, ' ')}
     </span>
+  );
+}
+
+function Milestone({ milestone }) {
+  const { title, hint, status, due } = milestone;
+  const styles = {
+    done: { icon: <CheckCircle2 size={16} />, ring: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-300', label: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', text: 'Done' },
+    pending: { icon: <CircleDot size={16} />, ring: 'text-amber-600 bg-amber-100 dark:bg-amber-900/40 dark:text-amber-300', label: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300', text: 'Action needed' },
+    upcoming: { icon: <Circle size={16} />, ring: 'text-gray-400 bg-gray-100 dark:bg-gray-800 dark:text-gray-500', label: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400', text: 'Upcoming' },
+  };
+  const s = styles[status] || styles.upcoming;
+  return (
+    <li className="flex items-start gap-3">
+      <span className={`mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full ${s.ring}`}>
+        {s.icon}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium text-gray-900 dark:text-gray-100 text-sm">{title}</span>
+          <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${s.label}`}>{s.text}</span>
+          {due && <span className="text-xs text-gray-500">due {new Date(due).toLocaleDateString()}</span>}
+        </div>
+        {hint && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{hint}</p>}
+      </div>
+    </li>
   );
 }
 

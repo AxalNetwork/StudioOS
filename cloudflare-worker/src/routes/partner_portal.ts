@@ -46,10 +46,79 @@ portal.get('/my-deal', async (c) => {
       ORDER BY prr.redeemed_at DESC LIMIT 50`,
   ).bind(deal.id).all();
 
+  // Task #9 (X-2) — derive concrete next milestones for the portal UI.
+  // Each entry is independently displayable: { id, title, hint,
+  // status: 'done'|'pending'|'upcoming', due? }. The frontend renders
+  // them in a dedicated panel so the partner always sees what to do
+  // next + what's been earned.
+  const redemptionsCount = Number(redCountRow?.n || 0);
+  const milestones: Array<{ id: string; title: string; hint?: string; status: 'done' | 'pending' | 'upcoming'; due?: string }> = [];
+  const status = String(deal.status || '');
+  // Signature: only "done" when the lifecycle moved past signing
+  // (active / expired / terminated). proposed / awaiting_signature
+  // are "pending"; voided is also "pending" (envelope was cancelled
+  // and partner cannot proceed without admin re-issuance).
+  const signed = status === 'active' || status === 'expired' || status === 'terminated';
+  milestones.push({
+    id: 'signature',
+    title: 'Signature complete',
+    status: signed ? 'done' : 'pending',
+    hint: signed
+      ? 'Your e-signature is on file.'
+      : status === 'voided'
+      ? 'The signing envelope was voided. Ask your admin to issue a new invitation.'
+      : status === 'awaiting_signature'
+      ? 'Open the envelope from your inbox to activate your tier benefits.'
+      : 'Select a proposal and send it for e-signature to proceed.',
+  });
+  // Activation: "done" only when active; "upcoming" while still pre-
+  // signature; "pending" only for terminal-but-recoverable states.
+  let activationStatus: 'done' | 'pending' | 'upcoming';
+  if (status === 'active') activationStatus = 'done';
+  else if (status === 'proposed' || status === 'awaiting_signature') activationStatus = 'upcoming';
+  else activationStatus = 'pending';
+  milestones.push({
+    id: 'activation',
+    title: 'Tier activation',
+    status: activationStatus,
+    hint: status === 'active' && (deal.granted_tier_founder || deal.granted_tier_investor)
+      ? `Granted: ${[deal.granted_tier_founder && `founder=${deal.granted_tier_founder}`, deal.granted_tier_investor && `investor=${deal.granted_tier_investor}`].filter(Boolean).join(', ')}`
+      : status === 'expired'
+      ? 'Tier benefits ended when your term expired. Contact your admin to renew.'
+      : status === 'terminated'
+      ? 'Tier benefits were revoked when this partnership was terminated.'
+      : status === 'voided'
+      ? 'Activation requires a fresh invitation from your admin.'
+      : 'Tier benefits activate the moment your signature is recorded.',
+  });
+  milestones.push({
+    id: 'first_referral',
+    title: 'First referral redemption',
+    status: redemptionsCount > 0 ? 'done' : 'upcoming',
+    hint: redemptionsCount > 0
+      ? `${redemptionsCount} ${redemptionsCount === 1 ? 'person has' : 'people have'} redeemed your code.`
+      : 'Share your referral code with a founder or investor — they unlock their tier instantly when they register.',
+  });
+  if (deal.expires_at && status !== 'voided' && status !== 'terminated') {
+    const expiresMs = new Date(deal.expires_at).getTime();
+    const now = Date.now();
+    const daysLeft = Math.round((expiresMs - now) / (1000 * 60 * 60 * 24));
+    milestones.push({
+      id: 'renewal',
+      title: daysLeft > 0 ? 'Renewal window' : 'Renewal due',
+      status: daysLeft > 30 ? 'upcoming' : 'pending',
+      due: deal.expires_at,
+      hint: daysLeft > 0
+        ? `Term ends in ${daysLeft} day${daysLeft === 1 ? '' : 's'} — your admin will reach out 30 days before expiry.`
+        : 'Your term has ended. Contact your admin to renew.',
+    });
+  }
+
   return c.json({
     deal: { ...deal, proposal: safeJsonObject(deal.proposal_json), proposal_json: undefined },
-    redemptions_count: Number(redCountRow?.n || 0),
+    redemptions_count: redemptionsCount,
     redemptions: redemptions.results || [],
+    next_milestones: milestones,
   });
 });
 

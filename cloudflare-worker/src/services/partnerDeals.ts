@@ -36,6 +36,14 @@ export interface PartnerProposalDraft {
   granted_tier_founder: string | null;
   granted_tier_investor: string | null;
   term_months: number;
+  /**
+   * Task #9 (X-2) — short excerpt of the binding contract clauses the
+   * partner will sign at finalize time. Surfaced in the proposal card +
+   * review screen so the partner has informed consent BEFORE the e-sign
+   * envelope is sent. Plain-text, ~3-6 lines; full contract is rendered
+   * inside the e-sign envelope itself.
+   */
+  contract_excerpt: string;
 }
 
 export interface PartnerProfileInput {
@@ -81,6 +89,9 @@ export function buildProposals(
         granted_tier_founder: 'founder_pro',
         granted_tier_investor: 'professional',
         term_months: 24,
+        contract_excerpt:
+          'EQUITY PARTNERSHIP AGREEMENT — Partner shall receive 0.5%–2.0% equity in Axal Management LLC, vesting over 48 months with a 12-month cliff. Partner shall provide ' +
+          (profile.capacity_per_month || '5–10') + ' hours per month of venture-partner services. Either party may terminate for cause on 30 days written notice. Unvested equity reverts on termination.',
       });
     } else if (t === 'services_partnership') {
       out.push({
@@ -95,6 +106,8 @@ export function buildProposals(
         granted_tier_founder: 'founder_pro',
         granted_tier_investor: null,
         term_months: 12,
+        contract_excerpt:
+          'SERVICES PARTNERSHIP AGREEMENT — Partner agrees to deliver a minimum of two (2) Statement-of-Work engagements per calendar year for Axal portfolio companies. Compensation per SOW (cash and/or 0.1%–0.5% equity-for-services). Partner is an independent contractor; no employment relationship is created. IP assignment per individual SOW.',
       });
     } else if (t === 'deal_sourcing_revshare') {
       out.push({
@@ -109,6 +122,8 @@ export function buildProposals(
         granted_tier_founder: 'founder_pro',
         granted_tier_investor: 'professional',
         term_months: 12,
+        contract_excerpt:
+          'DEAL SOURCING & REVENUE SHARE AGREEMENT — Partner shall earn 5% of Axal management fees on founder-sourced deals closed within 365 days of introduction, and 10% of management fees on LP capital introduced. Attribution determined by Partner\'s unique referral code. Payments quarterly in arrears. Term auto-renews unless cancelled 60 days prior.',
       });
     } else if (t === 'capital_partnership') {
       const tier = capital >= 1_000_000 ? 'institutional' : 'professional';
@@ -124,6 +139,8 @@ export function buildProposals(
         granted_tier_founder: 'founder_pro',
         granted_tier_investor: tier,
         term_months: 24,
+        contract_excerpt:
+          'CAPITAL PARTNERSHIP AGREEMENT — Partner commits ' + (capital ? '$' + capital.toLocaleString() : 'a minimum of $250,000') + ' across Axal-sponsored vehicles over 24 months. Partner receives pro-rata co-invest rights on all SPVs ≥ $500k and a 50% management-fee offset on capital sourced from Partner\'s network. Subject to KYC, accreditation verification, and execution of vehicle-specific subscription docs.',
       });
     } else {
       out.push({
@@ -134,6 +151,8 @@ export function buildProposals(
         granted_tier_founder: 'founder_pro',
         granted_tier_investor: null,
         term_months: 12,
+        contract_excerpt:
+          'CUSTOM PARTNERSHIP AGREEMENT — Bespoke terms to be drafted by Axal counsel. Outline: ' + (profile.motivation || 'see attached SOW') + '. Final binding terms will be presented inside the e-sign envelope before signature.',
       });
     }
   }
