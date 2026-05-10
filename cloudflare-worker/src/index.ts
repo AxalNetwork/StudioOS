@@ -61,6 +61,8 @@ import { syncAllHubspotIntegrations } from './integrations/providers/hubspot';
 import { syncAllCalendlyIntegrations } from './integrations/providers/calendly';
 // Task #4 — Salesforce provider. Side-effect import so registerProvider() runs at boot.
 import { syncAllSalesforceIntegrations } from './integrations/providers/salesforce';
+// Task #5 — Carta provider. Side-effect import so registerProvider() runs at boot.
+import { syncAllCartaIntegrations } from './integrations/providers/carta';
 import network from './routes/network';
 import networkfx from './routes/networkfx';
 import profiling from './routes/profiling';
@@ -590,6 +592,18 @@ export default {
             }
           } catch (e) {
             console.error('[cron] salesforce sync failed', e);
+          }
+        }
+        // Task #5 — Carta cap-table sync every 6 hours at HH:00 (00/06/12/18 UTC).
+        // Cron fires every minute; gate on hour%6==0 + minute==0.
+        if (now.getUTCHours() % 6 === 0 && now.getUTCMinutes() === 0) {
+          try {
+            const r = await syncAllCartaIntegrations(env);
+            if (r.scanned > 0) {
+              console.info(`[cron] carta sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
+            }
+          } catch (e) {
+            console.error('[cron] carta sync failed', e);
           }
         }
         // Task #14 — flush pending digest emails. Cheap on idle ticks

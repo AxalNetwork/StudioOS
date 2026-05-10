@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
 import {
   PieChart as PieIcon, Trash2, Plus, Save, Download, RefreshCw, FileText, AlertCircle,
+  Lock, ExternalLink, CheckCircle2,
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -85,8 +86,31 @@ export default function CapTablePage() {
   // `setTimeout(() => setSavedFlash(''), 1500)` that leaked on quick navigation.
   const { toast: savedFlash, showToast: setSavedFlash } = useToast(1500);
 
+  // Task #5 — Live cap table (Carta-synced) state. Fetched once on mount;
+  // a manual "Refresh" button re-pulls. Banner shows last-sync age.
+  const [live, setLive] = useState(null);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [liveError, setLiveError] = useState(null);
+
   useEffect(() => { loadScenarios(); }, []);
   useEffect(() => { runSim(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { loadLive(); }, []);
+
+  async function loadLive() {
+    setLiveLoading(true); setLiveError(null);
+    try {
+      const r = await api.liveCapTable();
+      setLive(r);
+    } catch (e) {
+      // 401/403 simply means "not signed in" or "no access"; don't surface
+      // a noisy banner for the unauthenticated case (the rest of the page
+      // handles auth). 404 means the route isn't deployed yet — silent.
+      if (e?.status && e.status !== 404 && e.status !== 401 && e.status !== 403) {
+        setLiveError("Couldn't load your live cap table. Please retry.");
+      }
+    }
+    setLiveLoading(false);
+  }
 
   async function loadScenarios() {
     try {
@@ -264,6 +288,13 @@ export default function CapTablePage() {
           <ul className="list-disc pl-5">{errors.map((e, i) => <li key={i}>{e}</li>)}</ul>
         </div>
       )}
+
+      <LiveCapTablePanel
+        live={live}
+        loading={liveLoading}
+        error={liveError}
+        onRefresh={loadLive}
+      />
 
       <div className="grid grid-cols-12 gap-4">
         {/* -------- LEFT: inputs -------- */}
@@ -511,4 +542,190 @@ async function downloadCsv(uid, name) {
   a.href = url; a.download = `captable-${name || 'scenario'}.csv`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+// ───────────────────────────────────────────────────────── Task #5 — Live Cap Table
+
+function timeAgo(iso) {
+  if (!iso) return null;
+  const t = Date.parse(iso.replace(' ', 'T') + (iso.endsWith('Z') ? '' : 'Z'));
+  if (!Number.isFinite(t)) return null;
+  const mins = Math.max(0, Math.floor((Date.now() - t) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+function CartaLogo({ size = 14 }) {
+  // Lightweight inline mark — Lucide PieChart wedge tinted Carta-orange.
+  // Avoids shipping a third-party brand SVG asset.
+  return (
+    <span
+      className="inline-flex items-center justify-center"
+      title="Synced from Carta"
+      aria-label="Synced from Carta"
+      style={{ width: size + 4, height: size + 4 }}
+    >
+      <PieIcon size={size} className="text-orange-600" />
+    </span>
+  );
+}
+
+function SourceBadge({ source }) {
+  if (source === 'carta') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200"
+        title="Read-only — synced from Carta"
+      >
+        <CartaLogo size={10} /> Carta
+        <Lock size={9} className="ml-0.5" />
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+      Manual
+    </span>
+  );
+}
+
+function LiveCapTablePanel({ live, loading, error, onRefresh }) {
+  const connected = !!live?.connected;
+  const holders = live?.holders || [];
+  const securities = live?.securities || [];
+  const cartaHolders = holders.filter(h => h.source === 'carta');
+  const ago = timeAgo(live?.last_synced_at);
+
+  // Hide entirely when there's nothing to show: not connected AND no
+  // historical Carta-sourced rows (i.e. user has never used the integration).
+  // Show a slim banner when connected, or when manual rows exist after a
+  // disconnect (so the founder still has a "Connect Carta" upsell entry).
+  if (!loading && !connected && holders.length === 0 && !error) {
+    return (
+      <div className="mb-4 bg-white border border-dashed border-gray-300 rounded-lg p-4 text-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-start gap-2">
+            <CartaLogo size={18} />
+            <div>
+              <div className="font-semibold text-gray-900">Live cap table</div>
+              <div className="text-gray-500 text-xs mt-0.5">
+                Connect Carta on the Integrations page to mirror your real cap table here.
+              </div>
+            </div>
+          </div>
+          <a
+            href="/integrations"
+            className="text-xs text-violet-700 hover:underline inline-flex items-center gap-1"
+          >
+            Connect Carta <ExternalLink size={12} />
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div className={`px-4 py-3 flex items-center justify-between gap-3 ${connected ? 'bg-orange-50 border-b border-orange-100' : 'bg-gray-50 border-b border-gray-200'}`}>
+        <div className="flex items-start gap-2">
+          <CartaLogo size={18} />
+          <div>
+            <div className="font-semibold text-gray-900 flex items-center gap-2">
+              Live cap table
+              {connected && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+                  <CheckCircle2 size={12} /> Connected
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-gray-600 mt-0.5">
+              {connected ? (
+                <>
+                  Synced from Carta{live?.issuer_name ? ` · ${live.issuer_name}` : ''}
+                  {ago ? <> — last sync <span className="font-medium">{ago}</span></> : <> — awaiting first sync</>}
+                </>
+              ) : (
+                <>Not connected — historical rows shown as manual.</>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-50"
+          >
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
+          </button>
+          <a
+            href="/integrations"
+            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 inline-flex items-center gap-1"
+          >
+            Manage <ExternalLink size={12} />
+          </a>
+        </div>
+      </div>
+
+      {error && (
+        <div className="px-4 py-2 text-xs text-rose-700 bg-rose-50 border-b border-rose-100 flex items-center gap-1">
+          <AlertCircle size={12} /> {error}
+        </div>
+      )}
+      {connected && live?.last_error && (
+        <div className="px-4 py-2 text-xs text-amber-800 bg-amber-50 border-b border-amber-100 flex items-center gap-1">
+          <AlertCircle size={12} /> Last sync reported: {live.last_error}
+        </div>
+      )}
+
+      {holders.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-gray-500 bg-gray-50">
+                <th className="text-left px-4 py-2">Holder</th>
+                <th className="text-left px-2 py-2">Class</th>
+                <th className="text-right px-2 py-2">Shares</th>
+                <th className="text-right px-2 py-2">Ownership %</th>
+                <th className="text-left px-4 py-2">Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {holders.slice(0, 50).map((h) => (
+                <tr key={h.id} className={`border-t border-gray-100 ${h.source === 'carta' ? 'bg-orange-50/30' : ''}`}>
+                  <td className="px-4 py-1.5">
+                    <div className="font-medium text-gray-900">{h.name}</div>
+                    {h.email && <div className="text-[11px] text-gray-500">{h.email}</div>}
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-600 text-xs">{h.security_type || '—'}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{Number(h.shares || 0).toLocaleString()}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{Number(h.ownership_pct || 0).toFixed(2)}%</td>
+                  <td className="px-4 py-1.5"><SourceBadge source={h.source} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {holders.length > 50 && (
+            <div className="px-4 py-2 text-xs text-gray-500 border-t border-gray-100">
+              Showing 50 of {holders.length} holders.
+            </div>
+          )}
+          {securities.length > 0 && (
+            <div className="px-4 py-2 text-xs text-gray-500 border-t border-gray-100">
+              {securities.length} share class{securities.length === 1 ? '' : 'es'} synced
+              ({cartaHolders.length} holder row{cartaHolders.length === 1 ? '' : 's'} sourced from Carta).
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="px-4 py-6 text-sm text-gray-500 text-center">
+          {loading ? 'Loading live cap table…' : 'No holders synced yet. The first sync runs within 6 hours of connecting.'}
+        </div>
+      )}
+    </div>
+  );
 }

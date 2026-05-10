@@ -929,6 +929,8 @@ export const api = {
   deleteCapTableScenario: (uid) =>
     request(`/captable/scenarios/${uid}`, { method: 'DELETE' }),
   exportCapTableCsvUrl: (uid) => `/api/captable/scenarios/${uid}/export.csv`,
+  // Task #5 — live cap table (Carta-synced + manually-promoted rows).
+  liveCapTable: () => request('/captable/live'),
 
   // ---------- Task #6 — Founder subscription tier (FREE / GROWTH / STUDIO) ----------
   // 402 `tier_required` responses are auto-handled by `request` above (it

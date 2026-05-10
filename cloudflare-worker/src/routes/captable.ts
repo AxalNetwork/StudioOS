@@ -192,4 +192,62 @@ captable.get('/scenarios/:uid/export.csv', async (c) => {
   });
 });
 
+/**
+ * Task #5 — Live cap table (Carta-synced or manually-promoted rows).
+ *
+ * Returns the user's `cap_table_holders` + `cap_table_securities` plus the
+ * Carta integration's last sync timestamp + connection state so the
+ * CapTablePage can render a banner ("Synced from Carta — last sync N min ago")
+ * and a read-only badge on Carta-sourced rows.
+ *
+ * Read-only — admin sees own rows only here (their privileged read of other
+ * tenants is intentionally NOT exposed at this surface).
+ */
+captable.get('/live', async (c) => {
+  const user = await requireAuth(c);
+  const integration = await c.env.DB.prepare(
+    "SELECT uid, status, last_synced_at, external_account_name, last_error FROM integrations WHERE provider_key = 'carta' AND user_id = ? ORDER BY id DESC LIMIT 1",
+  ).bind(user.id).first<{ uid: string; status: string; last_synced_at: string | null; external_account_name: string | null; last_error: string | null }>();
+
+  const holdersRes = await c.env.DB.prepare(
+    'SELECT id, name, email, security_type, shares, ownership_pct, source, carta_stakeholder_id, carta_security_id, updated_at ' +
+    'FROM cap_table_holders WHERE user_id = ? ORDER BY shares DESC, name ASC LIMIT 500',
+  ).bind(user.id).all<{
+    id: number; name: string; email: string | null; security_type: string | null;
+    shares: number | null; ownership_pct: number | null; source: string;
+    carta_stakeholder_id: string | null; carta_security_id: string | null; updated_at: string;
+  }>();
+  const securitiesRes = await c.env.DB.prepare(
+    'SELECT id, name, share_class, shares_authorized, shares_issued, source, carta_id, updated_at ' +
+    'FROM cap_table_securities WHERE user_id = ? ORDER BY name ASC LIMIT 200',
+  ).bind(user.id).all<{
+    id: number; name: string; share_class: string | null;
+    shares_authorized: number | null; shares_issued: number | null;
+    source: string; carta_id: string | null; updated_at: string;
+  }>();
+
+  const holders = holdersRes.results || [];
+  const securities = securitiesRes.results || [];
+
+  // Recompute ownership % off the live total so disconnected/manual rows
+  // and Carta-sourced rows share the same denominator.
+  const totalShares = holders.reduce((s, h) => s + (Number(h.shares) || 0), 0);
+  const enriched = holders.map((h) => ({
+    ...h,
+    ownership_pct: totalShares > 0 ? ((Number(h.shares) || 0) / totalShares) * 100 : 0,
+  }));
+
+  return c.json({
+    connected: !!integration && integration.status === 'active',
+    integration_uid: integration?.uid || null,
+    provider: 'carta',
+    issuer_name: integration?.external_account_name || null,
+    last_synced_at: integration?.last_synced_at || null,
+    last_error: integration?.last_error || null,
+    total_shares: totalShares,
+    holders: enriched,
+    securities,
+  });
+});
+
 export default captable;
