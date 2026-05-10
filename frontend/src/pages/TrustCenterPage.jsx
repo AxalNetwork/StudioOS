@@ -429,22 +429,19 @@ function SanctionsTab() {
 // Tab definitions — role-gated.
 // ---------------------------------------------------------------------------
 function tabsForRole(role, obligations) {
+  // Authoritative source: the obligation matrix returned by /api/trust/me.
+  // We surface a tab only if the canonical role matrix actually has
+  // an obligation that lives under it. This keeps tabs in sync with
+  // backend `obligationsForRole()` instead of duplicating the matrix
+  // client-side. Sanctions remains role-gated (admin only) since it
+  // isn't represented as an obligation.
   const tabs = [{ key: 'overview', label: 'Overview', icon: Globe }];
-  const has = (key) => obligations.some(o => o.obligation_key === key);
-
-  if (has('kyc_v1') || role === 'founder' || role === 'investor' || role === 'partner') {
-    tabs.push({ key: 'identity', label: 'Identity', icon: IdCard });
-  }
-  if (has('kyb_v1') || role === 'partner' || role === 'investor') {
-    tabs.push({ key: 'entity', label: 'Entity (KYB)', icon: Building2 });
-  }
-  if (has('accreditation_v1') || role === 'investor') {
-    tabs.push({ key: 'accreditation', label: 'Accreditation', icon: BadgeCheck });
-  }
+  const has = (tabKey) => obligations.some(o => OBLIGATION_META[o.obligation_key]?.tab === tabKey);
+  if (has('identity'))      tabs.push({ key: 'identity',      label: 'Identity',         icon: IdCard });
+  if (has('entity'))        tabs.push({ key: 'entity',        label: 'Entity (KYB)',     icon: Building2 });
+  if (has('accreditation')) tabs.push({ key: 'accreditation', label: 'Accreditation',    icon: BadgeCheck });
   tabs.push({ key: 'agreements', label: 'Agreements', icon: FileSignature });
-  if (role === 'admin') {
-    tabs.push({ key: 'sanctions', label: 'Sanctions', icon: Search });
-  }
+  if (role === 'admin') tabs.push({ key: 'sanctions', label: 'Sanctions', icon: Search });
   return tabs;
 }
 

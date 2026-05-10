@@ -5,6 +5,25 @@ import {
   Briefcase, Target, Star, Users, DollarSign,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import TrustScoreBadge from '../components/TrustScoreBadge';
+
+// Task #4 (Y-2) — admin / partner / investor viewers see the profile
+// owner's trust score next to their identity badge. Other roles + the
+// unauthenticated public never see it (the backend 403s and we render
+// nothing). Self-view is also allowed.
+function ProfileTrustBadge({ userId }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!userId) return;
+    api.trustScore(userId)
+      .then(d => { if (!cancelled) setData(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [userId]);
+  if (!data) return null;
+  return <TrustScoreBadge size="sm" score={data.score} missing={data.missing} label="Trust" />;
+}
 
 // Brand icons were removed in lucide-react v1; inline minimal SVGs instead.
 const Linkedin = ({ size = 14 }) => (
@@ -266,6 +285,7 @@ export default function PublicProfilePage() {
                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${styles.bg} ${styles.text} ${styles.ring}`}>
                       <Sparkles size={12} /> {styles.label}
                     </span>
+                    {p.user_id && <ProfileTrustBadge userId={p.user_id} />}
                   </div>
                   <p className="mt-0.5 font-mono text-xs text-gray-400">@{p.handle}</p>
                   {p.bio && <p className="mt-3 whitespace-pre-line text-sm text-gray-700">{p.bio}</p>}

@@ -72,6 +72,34 @@ trust.get('/agreements', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /score/:userId — Task #4 (Y-2).
+// Returns {score, missing[]} for any user. Readable by:
+//   - the user themselves (self),
+//   - admins, partners, investors (since they review founders/peers).
+// Founders cannot see other founders' scores.
+// ---------------------------------------------------------------------------
+trust.get('/score/:userId', async (c) => {
+  const caller = await requireAuth(c);
+  const target = Number(c.req.param('userId'));
+  if (!Number.isInteger(target) || target <= 0) return c.json({ error: 'invalid_user' }, 400);
+  const isSelf = caller.id === target;
+  const allowed = isSelf || caller.role === 'admin' || caller.role === 'partner' || caller.role === 'investor';
+  if (!allowed) return c.json({ error: 'forbidden' }, 403);
+  await ensureTrustSchema(c.env);
+  const rows: any = await c.env.DB.prepare(
+    `SELECT obligation_key, required, status FROM legal_obligations WHERE user_id = ?`,
+  ).bind(target).all();
+  const obligations = (rows?.results || []) as any[];
+  const required = obligations.filter(o => o.required);
+  const satisfied = required.filter(o => o.status === 'satisfied' || o.status === 'waived').length;
+  const score = required.length === 0 ? 100 : Math.round((satisfied / required.length) * 100);
+  const missing = required
+    .filter(o => o.status !== 'satisfied' && o.status !== 'waived')
+    .map(o => o.obligation_key);
+  return c.json({ user_id: target, score, missing, required_total: required.length });
+});
+
+// ---------------------------------------------------------------------------
 // GET /agreements/:envelope_uuid/my_signing_url — Task #4 (Y-2).
 // Returns the CALLER's own signing URL for an esign envelope they're a
 // recipient of. Used by the Trust Center "Sign" CTA so a founder/investor
