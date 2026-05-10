@@ -1207,6 +1207,56 @@ function FinancialSub({ range, currency, onExport, busy }) {
           </tbody>
         </table>
       </div>
+      {/* Task #5 — assistant cost rollup. Optional; absent on older
+          serialised reports or when the assistant_conversations table
+          doesn't exist yet. */}
+      {data.assistant_cost && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="text-sm font-semibold text-gray-900 mb-2">Personal assistant cost ({ccy})</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+            <Stat label="Conversations" value={String(data.assistant_cost.total_conversations || 0)} />
+            <Stat label="Messages" value={String(data.assistant_cost.total_messages || 0)} />
+            <Stat label={`Total cost (${ccy})`} value={fmtMoney(data.assistant_cost.total_cost ?? data.assistant_cost.total_cost_usd, ccy)} />
+            <Stat label={`Avg / conversation (${ccy})`} value={fmtMoney(data.assistant_cost.avg_cost_per_conversation ?? data.assistant_cost.avg_cost_per_conversation_usd, ccy)} />
+          </div>
+          {(data.assistant_cost.cost_by_model || []).length > 0 && (
+            <table className="w-full text-xs mb-2">
+              <thead className="text-gray-500">
+                <tr><th className="text-left py-1">Model</th><th className="text-right">Messages</th><th className="text-right">Cost ({ccy})</th></tr>
+              </thead>
+              <tbody>
+                {data.assistant_cost.cost_by_model.map((r, i) => (
+                  <tr key={i} className="border-t border-gray-100">
+                    <td className="py-1 font-mono">{r.model}</td>
+                    <td className="text-right">{r.messages}</td>
+                    <td className="text-right">{fmtMoney(r.cost ?? r.cost_usd, ccy)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {(data.assistant_cost.top_conversations || []).length > 0 && (
+            <>
+              <div className="text-xs text-gray-500 mt-2 mb-1">Top conversations by cost</div>
+              <table className="w-full text-xs">
+                <thead className="text-gray-500">
+                  <tr><th className="text-left py-1">Title</th><th className="text-right">User</th><th className="text-right">Msgs</th><th className="text-right">Cost ({ccy})</th></tr>
+                </thead>
+                <tbody>
+                  {data.assistant_cost.top_conversations.map((c) => (
+                    <tr key={c.uid} className="border-t border-gray-100">
+                      <td className="py-1 truncate max-w-[260px]" title={c.title}>{c.title}</td>
+                      <td className="text-right">#{c.user_id}</td>
+                      <td className="text-right">{c.messages}</td>
+                      <td className="text-right">{fmtMoney(c.cost ?? c.cost_usd, ccy)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+      )}
       <div className="bg-white border border-gray-200 rounded-xl p-4">
         <div className="text-sm font-semibold text-gray-900 mb-2">LTV by signup cohort ({ccy})</div>
         <table className="w-full text-xs">

@@ -626,6 +626,11 @@ auth.get('/me', async (c) => {
     linkedin_sub: (user as any).linkedin_sub || null,
     linkedin_email: (user as any).linkedin_email || null,
     linkedin_name: (user as any).linkedin_name || null,
+    // Task #5 — gate the dashboard personal-assistant launcher. Onboarding
+    // /complete flips this to 1 once role detection is done. NULL on rows
+    // that pre-date the migration; coerce to 0 so the UI hides the launcher
+    // until the user has actually completed onboarding.
+    assistant_enabled: ((user as any).assistant_enabled ?? 0) ? 1 : 0,
   });
 });
 

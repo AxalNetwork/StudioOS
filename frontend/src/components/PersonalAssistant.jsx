@@ -110,6 +110,15 @@ const STARTER_BY_ROLE = {
 };
 
 export default function PersonalAssistant({ user }) {
+  // Gate the entire component on the per-user enable flag, which the
+  // worker flips to 1 at the end of role-detection onboarding (see
+  // routes/onboarding.ts). Until that flips the user shouldn't see the
+  // launcher at all.
+  if (!user || user.assistant_enabled === 0 || user.assistant_enabled === false) return null;
+  return <PersonalAssistantPanel user={user} />;
+}
+
+function PersonalAssistantPanel({ user }) {
   const [open, setOpen] = useState(() => {
     try { return localStorage.getItem(STORAGE_OPEN) === '1'; } catch { return false; }
   });
@@ -181,9 +190,13 @@ export default function PersonalAssistant({ user }) {
     } catch {}
   }, [currentUid]);
 
+  const roleLabel = useMemo(() => {
+    const r = role || 'founder';
+    return r.charAt(0).toUpperCase() + r.slice(1);
+  }, [role]);
   const greeting = useMemo(() => (
-    `Hi ${firstName} — I'm your StudioOS assistant. Here are a few things I can help you with right now:`
-  ), [firstName]);
+    `Hi ${firstName} — I'm your StudioOS assistant for ${roleLabel}s. Here are a few things I can help you with right now:`
+  ), [firstName, roleLabel]);
 
   const starters = STARTER_BY_ROLE[role] || STARTER_BY_ROLE.founder;
 

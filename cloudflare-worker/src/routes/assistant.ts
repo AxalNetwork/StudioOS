@@ -193,6 +193,14 @@ const FEATURE_CATALOG: FeatureEntry[] = [
     url: '/monitoring?tab=analytics', label: 'Admin Analytics', roles: ['admin'] },
 ];
 
+// Anthropic prompt-caching breakpoint on the LAST tool definition. The
+// cached prefix covers the whole `tools` array (system + tools are billed
+// at cache-read rates after the first call in a 5-min window).
+const TOOL_DEFS_CACHED: Array<ToolDef & { cache_control?: { type: 'ephemeral' } }> =
+  TOOL_DEFS.map((t, i) =>
+    i === TOOL_DEFS.length - 1 ? { ...t, cache_control: { type: 'ephemeral' as const } } : t,
+  );
+
 function featuresForRole(role: string): FeatureEntry[] {
   return FEATURE_CATALOG.filter(f => f.roles.includes(role));
 }
@@ -348,7 +356,12 @@ async function anthropicCall(env: Env, opts: {
       max_tokens: 1024,
       system: opts.system,
       messages: opts.messages,
-      tools: TOOL_DEFS,
+      // Tool definitions are cache-annotated on the last tool — Anthropic
+      // caches the entire `tools` array up to and including the last
+      // cache_control breakpoint, so a single marker on tools[N-1] is
+      // enough. Combined with the cache_control on the system prompt, the
+      // bulk of every prompt is served from cache after the first turn.
+      tools: TOOL_DEFS_CACHED,
       stream: opts.stream,
     }),
   });
@@ -430,6 +443,22 @@ assistant.post('/message', async (c) => {
 
   if (!c.env.ANTHROPIC_API_KEY) {
     return c.json({ error: 'assistant not configured' }, 503);
+  }
+
+  // Server-side enable check. Mirrors the frontend gating so a user who
+  // hasn't completed onboarding (or whose admin disabled it) can't reach
+  // the assistant by hitting the API directly. Wrapped in try/catch
+  // because the column is created lazily on legacy DBs.
+  try {
+    const row = await c.env.DB.prepare('SELECT assistant_enabled FROM users WHERE id = ?')
+      .bind(user.id).first<{ assistant_enabled: number | null }>();
+    if (row && row.assistant_enabled !== 1) {
+      return c.json({ error: 'assistant not enabled for this user' }, 403);
+    }
+  } catch {
+    // Column missing → fall through (lazy-created by ensureSchema above on
+    // first-ever assistant use; existing logged-in users get the default
+    // enable on next /onboarding/complete).
   }
 
   const body = await c.req.json().catch(() => null) as { conversation_uid?: string; message?: string } | null;
