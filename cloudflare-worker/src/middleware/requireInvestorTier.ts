@@ -87,8 +87,11 @@ export function userMeetsInvestorTier(user: User | null | undefined, required: I
   if (!user) return false;
   if (BYPASS_ROLES.has(String(user.role))) return true;
   if (required === 'free') return true;
-  // Investor surfaces are investor-only; reject founders explicitly.
-  if (user.role !== 'investor') return false;
+  // Tier gate is investor-specific: only enforce when caller IS an investor.
+  // Other roles (founder, etc.) are passed through so shared surfaces like
+  // /api/deals (founder writes own deals) keep working. Investor-only routes
+  // such as /api/introductions still gate with their own role check.
+  if (user.role !== 'investor') return true;
   return investorTierCovers(effectiveInvestorTier(user as InvestorUser), required);
 }
 

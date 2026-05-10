@@ -249,6 +249,25 @@ for (const p of STUDIO_PREFIXES) {
   app.use(`${p}/*`, requireTier('studio'));
 }
 
+// Task #6 (W-1) — Investor paywall gates. Mounted BEFORE the route table so
+// the middleware always wraps the handlers. The middleware is a no-op for
+// non-investor callers (admin/partner/mentor bypass; founder/etc. pass
+// through unchanged) and only enforces tier when caller.role === 'investor'.
+const INVESTOR_PRO_PREFIXES = [
+  '/api/pipeline',
+  '/api/deals',
+  '/api/calendar',
+  '/api/market-intel',
+];
+for (const p of INVESTOR_PRO_PREFIXES) {
+  app.use(p, requireInvestorTier('professional'));
+  app.use(`${p}/*`, requireInvestorTier('professional'));
+}
+// Institutional-only surfaces: co-invest discovery + dealroom Carta-write
+// (general /api/captable POST is still founder/admin; this guards investor
+// callers specifically). LP reporting + benchmarks ship in AC-1.
+app.use('/api/matches/co-invest', requireInvestorTier('institutional'));
+
 app.route('/api/scoring', scoring);
 app.route('/api/projects', projects);
 app.route('/api/legal', legal);
@@ -343,16 +362,10 @@ app.route('/api/mentors', mentorsRoutes);
 app.route('/api/partner-office-hours', partnerOfficeHoursRoutes);
 
 // Task #6 (W-1) — investor paywall: introductions (quota-gated) + seats
-// (Institutional). Tier gates on pipeline-browse / deals-browse for investors
-// run inside the route handlers (founder ownership reads still work for
-// non-investor callers).
+// (Institutional). Tier gates for pipeline/deals/calendar/market-intel are
+// applied above (mounted before the route table to wrap all handlers).
 app.route('/api/introductions', introductionsRoutes);
 app.route('/api/investor-seats', investorSeatsRoutes);
-// Investor Professional gate on browsing the deal pipeline + global deal list.
-// Bypass roles (admin/partner/mentor) and founders are exempt inside the
-// middleware; investors must hold Professional+.
-app.use('/api/pipeline', requireInvestorTier('professional'));
-app.use('/api/pipeline/*', requireInvestorTier('professional'));
 // T14 — Watchlist (incl. /api/antiportfolio), Decision Journal, Portfolio Health,
 // Reference Checks. watchlistRoutes mounts both /watchlist and /antiportfolio so
 // it sits at the /api root.

@@ -8,13 +8,6 @@ const deals = new Hono<{ Bindings: Env }>();
 
 deals.get('/', async (c) => {
   const user = await requireAuth(c);
-  // Task #6 (W-1) — investor paywall: free investors can't browse the
-  // global deal list. Founders still see only their own (IDOR guard below).
-  if (user.role === 'investor') {
-    const { ensureInvestorTier } = await import('../middleware/requireInvestorTier');
-    try { ensureInvestorTier(user, 'professional'); }
-    catch (resp) { if (resp instanceof Response) return resp; throw resp; }
-  }
   const status = c.req.query('status');
   const sql = getSQL(c.env);
   const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
@@ -142,6 +135,80 @@ deals.put('/:id', async (c) => {
 
   await sql.end();
   return c.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Task #6 (W-1) — Investor dealroom membership with per-tier cap.
+// Free      — 1 dealroom
+// Professional — 5 dealrooms
+// Institutional — unlimited (1_000_000 sentinel)
+// On overflow returns 402 with code:'quota_dealrooms_exhausted' so the
+// frontend can show the upgrade modal.
+// ---------------------------------------------------------------------------
+import {
+  ensureInvestorPaywallSchema,
+  effectiveInvestorTier,
+  INVESTOR_QUOTAS,
+  type InvestorUser,
+} from '../middleware/requireInvestorTier';
+
+deals.post('/:id/dealroom/join', async (c) => {
+  const user = (await requireAuth(c)) as InvestorUser;
+  await ensureInvestorPaywallSchema(c.env);
+  if (user.role !== 'investor') return c.json({ error: 'investor_only' }, 403);
+  const dealId = Number(c.req.param('id'));
+  if (!Number.isFinite(dealId)) return c.json({ error: 'bad_id' }, 400);
+
+  // Idempotent join — if already a member, just return ok.
+  const existing = await c.env.DB.prepare(
+    `SELECT 1 AS x FROM investor_dealroom_members
+     WHERE investor_user_id = ? AND deal_id = ?`
+  ).bind(user.id, dealId).first<{ x: number }>();
+  if (existing) return c.json({ ok: true, already_member: true });
+
+  const tier = effectiveInvestorTier(user);
+  const cap = INVESTOR_QUOTAS[tier].dealroom_max;
+  const cnt = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM investor_dealroom_members WHERE investor_user_id = ?`
+  ).bind(user.id).first<{ n: number }>();
+  const used = Number(cnt?.n ?? 0);
+  if (used >= cap) {
+    return c.json(
+      {
+        error: 'quota_exceeded',
+        code: 'quota_dealrooms_exhausted',
+        message: `You have joined the maximum of ${cap} dealroom${cap === 1 ? '' : 's'} on the ${tier} plan.`,
+        used,
+        cap,
+        tier,
+        upgrade_to: tier === 'free' ? 'professional' : 'institutional',
+        checkout_path: '/api/billing/investor/checkout',
+      },
+      402,
+    );
+  }
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO investor_dealroom_members (investor_user_id, deal_id) VALUES (?, ?)`
+    ).bind(user.id, dealId).run();
+  } catch (e) {
+    if (/UNIQUE/i.test((e as Error).message || '')) {
+      return c.json({ ok: true, already_member: true });
+    }
+    throw e;
+  }
+  return c.json({ ok: true, used: used + 1, cap, tier });
+});
+
+deals.delete('/:id/dealroom/leave', async (c) => {
+  const user = await requireAuth(c);
+  if (user.role !== 'investor') return c.json({ error: 'investor_only' }, 403);
+  const dealId = Number(c.req.param('id'));
+  if (!Number.isFinite(dealId)) return c.json({ error: 'bad_id' }, 400);
+  await c.env.DB.prepare(
+    `DELETE FROM investor_dealroom_members WHERE investor_user_id = ? AND deal_id = ?`
+  ).bind(user.id, dealId).run();
+  return c.json({ ok: true });
 });
 
 export default deals;
