@@ -173,6 +173,7 @@ export async function activatePartnerDealOnSignature(
 ): Promise<{ activated: boolean; partner_deal_id: number; user_id: number | null } | null> {
   const deal: any = await env.DB.prepare(
     `SELECT pd.*, pi.recipient_email, pi.recipient_name, pi.invited_by_user_id,
+            pi.status AS invitation_status, pi.expires_at AS invitation_expires_at,
             pp.full_name, pp.organization, pp.role_title, pp.expertise
        FROM partner_deals pd
        JOIN partner_invitations pi ON pi.id = pd.invitation_id
@@ -182,6 +183,33 @@ export async function activatePartnerDealOnSignature(
   if (!deal) return null;
   if (deal.status === 'active') {
     return { activated: false, partner_deal_id: deal.id, user_id: deal.user_id };
+  }
+  // Invitation revocation/expiry must block activation even if the
+  // recipient still has a stale signing token in their inbox. The
+  // admin revoke path also voids the envelope, but check here too —
+  // belt-and-braces — so any race or missed envelope void can't slip
+  // a deal through.
+  if (deal.invitation_status === 'revoked') {
+    try {
+      await env.DB.prepare(
+        `UPDATE partner_deals SET status = 'voided' WHERE id = ? AND status != 'active'`,
+      ).bind(deal.id).run();
+    } catch { /* best-effort */ }
+    console.warn('[partnerDeals] activation blocked — invitation revoked', { deal_id: deal.id });
+    return { activated: false, partner_deal_id: deal.id, user_id: null };
+  }
+  if (deal.invitation_expires_at &&
+      new Date(deal.invitation_expires_at).getTime() <= Date.now()) {
+    try {
+      await env.DB.prepare(
+        `UPDATE partner_invitations SET status = 'expired' WHERE id = ? AND status NOT IN ('signed','revoked')`,
+      ).bind(deal.invitation_id).run();
+      await env.DB.prepare(
+        `UPDATE partner_deals SET status = 'voided' WHERE id = ? AND status != 'active'`,
+      ).bind(deal.id).run();
+    } catch { /* best-effort */ }
+    console.warn('[partnerDeals] activation blocked — invitation expired', { deal_id: deal.id });
+    return { activated: false, partner_deal_id: deal.id, user_id: null };
   }
 
   // Ensure partner user exists. Match by email (case-insensitive). If found,

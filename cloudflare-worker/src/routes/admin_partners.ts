@@ -169,10 +169,47 @@ admin_partners.post('/invitations/:id/revoke', async (c) => {
   if ((upd.meta?.changes || 0) === 0) {
     return c.json({ error: 'Cannot revoke (already signed, already revoked, or not found)' }, 409);
   }
+
+  // Proactively invalidate any downstream signing path. If the
+  // recipient already finalized a proposal, an envelope exists with
+  // a long-lived signing token in their inbox; flip both the deal
+  // and the envelope/recipient to a non-completable state so the
+  // stale token can't activate the deal post-revocation. Activation
+  // also re-checks invitation status as belt-and-braces.
+  let voidedDeals = 0;
+  let voidedEnvelopes = 0;
+  try {
+    const dr = await c.env.DB.prepare(
+      `UPDATE partner_deals SET status = 'voided'
+         WHERE invitation_id = ?
+           AND status IN ('proposed','awaiting_signature')`,
+    ).bind(id).run();
+    voidedDeals = dr.meta?.changes || 0;
+
+    const envIds: any = await c.env.DB.prepare(
+      `SELECT envelope_id FROM partner_deals
+         WHERE invitation_id = ? AND envelope_id IS NOT NULL`,
+    ).bind(id).all().catch(() => ({ results: [] }));
+    for (const row of (envIds?.results || []) as any[]) {
+      try {
+        const er = await c.env.DB.prepare(
+          `UPDATE esign_envelopes SET status = 'voided'
+             WHERE id = ? AND status NOT IN ('completed','voided')`,
+        ).bind(row.envelope_id).run();
+        if ((er.meta?.changes || 0) > 0) voidedEnvelopes += 1;
+        await c.env.DB.prepare(
+          `UPDATE esign_recipients SET status = 'declined'
+             WHERE envelope_id = ? AND status NOT IN ('signed','declined')`,
+        ).bind(row.envelope_id).run().catch(() => {});
+      } catch (e) { console.warn('[admin_partners] void envelope failed', row.envelope_id, e); }
+    }
+  } catch (e) { console.warn('[admin_partners] revoke cascade failed', e); }
+
   await logAdminAction(c.env, admin.id, admin.email, 'partner_invitation_revoked', {
     invitation_id: id, reason,
+    voided_deals: voidedDeals, voided_envelopes: voidedEnvelopes,
   });
-  return c.json({ ok: true });
+  return c.json({ ok: true, voided_deals: voidedDeals, voided_envelopes: voidedEnvelopes });
 });
 
 // ---------- Deals ----------
