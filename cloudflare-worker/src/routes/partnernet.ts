@@ -358,21 +358,65 @@ partnernet.get('/summary', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
-  const [summary] = await sql`SELECT * FROM partner_summary WHERE id = ${user.id}`;
-  if (!summary) { await sql.end(); return c.json({ error: 'Not found' }, 404); }
-  // Cached recompute (5-min TTL) — keeps hot read path cheap
-  const newScore = await recomputeNetworkScore(c.env, user.id);
-  if (newScore != null) summary.network_score = newScore;
+  try {
+    let summary: any = null;
+    try {
+      const rows = await sql`SELECT * FROM partner_summary WHERE id = ${user.id}`;
+      summary = (rows as any[])[0] || null;
+    } catch (e: any) {
+      console.error('partnernet /summary view query failed:', e?.message);
+    }
+    // Fallback: build a minimal summary directly from users when the view
+    // query 500s (legacy schema drift on D1) or returns no row.
+    if (!summary) {
+      try {
+        summary = await c.env.DB.prepare(
+          `SELECT id, email, name, role, kyc_status, partner_since, total_earnings, network_score, verified_badges, last_active FROM users WHERE id = ?`
+        ).bind(user.id).first();
+      } catch (e: any) {
+        console.error('partnernet /summary users fallback failed:', e?.message);
+      }
+    }
+    if (!summary) {
+      summary = {
+        id: user.id, email: (user as any).email, name: (user as any).name,
+        role: (user as any).role, network_score: 0, total_earnings: 0,
+        verified_badges: '[]', active_relationships: 0, network_reach: 0,
+        lifetime_earnings_cents: 0,
+      };
+    }
 
-  const recentActivity = await sql`SELECT id, action_type, entity_type, entity_id, created_at FROM activity_logs WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 10`;
-  const stats = await sql`SELECT stat_date, action_count, earnings_cents FROM activity_stats WHERE user_id = ${user.id} AND stat_date >= date('now', '-7 days') ORDER BY stat_date`;
-  await sql.end();
-  return c.json({
-    ...summary,
-    verified_badges: safeJson(summary.verified_badges, [] as string[]),
-    recent_activity: recentActivity,
-    daily_stats_7d: stats,
-  });
+    // Cached recompute (5-min TTL) — keeps hot read path cheap. Already
+    // swallows its own errors and returns null on failure.
+    const newScore = await recomputeNetworkScore(c.env, user.id);
+    if (newScore != null) summary.network_score = newScore;
+
+    let recentActivity: any[] = [];
+    try {
+      recentActivity = await sql`SELECT id, action_type, entity_type, entity_id, created_at FROM activity_logs WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 10` as any[];
+    } catch (e: any) {
+      console.error('partnernet /summary recent_activity failed:', e?.message);
+    }
+
+    let stats: any[] = [];
+    try {
+      stats = await sql`SELECT stat_date, action_count, earnings_cents FROM activity_stats WHERE user_id = ${user.id} AND stat_date >= date('now', '-7 days') ORDER BY stat_date` as any[];
+    } catch (e: any) {
+      console.error('partnernet /summary daily_stats failed:', e?.message);
+    }
+
+    await sql.end();
+    return c.json({
+      ...summary,
+      verified_badges: safeJson(summary.verified_badges, [] as string[]),
+      recent_activity: recentActivity,
+      daily_stats_7d: stats,
+    });
+  } catch (e: any) {
+    console.error('partnernet /summary fatal:', e?.message);
+    try { await sql.end(); } catch {}
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 // Leaderboard exposes emails + earnings → admin-only
