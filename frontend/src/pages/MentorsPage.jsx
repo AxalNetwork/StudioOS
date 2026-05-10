@@ -64,7 +64,32 @@ function MentorCard({ mentor, onOpen }) {
       {!mentor.accepting_bookings && (
         <div className="mt-2 text-[11px] text-amber-700">Not accepting bookings right now</div>
       )}
+      {mentor.user_id && <CalendlyCTA userId={mentor.user_id} />}
     </button>
+  );
+}
+
+// Task #3 — Calendly inline CTA. Renders only when the target user has
+// connected Calendly + configured a booking URL via Settings → Integrations.
+// Falls back to silent absence (404 → null) so the mentor card stays clean.
+function CalendlyCTA({ userId }) {
+  const [link, setLink] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    api.publicCalendlyBooking(userId).then((r) => { if (alive) setLink(r); }).catch(() => {});
+    return () => { alive = false; };
+  }, [userId]);
+  if (!link?.booking_url) return null;
+  return (
+    <a
+      href={link.booking_url}
+      target="_blank"
+      rel="noreferrer noopener"
+      onClick={(e) => e.stopPropagation()}
+      className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-medium text-sky-700 bg-sky-50 border border-sky-200 hover:bg-sky-100 rounded px-2 py-1"
+    >
+      <Calendar size={12} /> Book via Calendly
+    </a>
   );
 }
 

@@ -144,6 +144,30 @@ function rowToPublic(row: IntegrationRow, credPreview: string | null) {
  * tier-locked. The frontend uses this to render the three-section page
  * (Connected / Available / Coming Soon) and the tier pills.
  */
+// ───────────────────────────────────────────────────────────── public lookup
+// Task #3 — read-only Calendly booking URL lookup for any user. No auth:
+// Calendly scheduling URLs are inherently public (the user generates them
+// for sharing). Returns 404 if the user hasn't connected Calendly or hasn't
+// configured a `booking_url`. Used by Mentor cards + Partner profile pages
+// to render a "Book via Calendly" CTA that opens their availability page.
+integrations.get('/public/calendly/:userId', async (c) => {
+  await ensureIntegrationsSchema(c.env);
+  const userId = parseInt(c.req.param('userId'), 10);
+  if (!Number.isFinite(userId) || userId <= 0) return c.json({ error: 'invalid_user' }, 400);
+  const row = await c.env.DB.prepare(
+    "SELECT config_json FROM integrations WHERE user_id = ? AND provider_key = 'calendly' AND status = 'active'",
+  ).bind(userId).first<{ config_json: string | null }>();
+  if (!row) return c.json({ error: 'not_connected' }, 404);
+  let cfg: Record<string, unknown> = {};
+  try { cfg = row.config_json ? JSON.parse(row.config_json) : {}; } catch { cfg = {}; }
+  const url = (cfg.default_event_type_uri as string) || (cfg.booking_url as string) || (cfg.scheduling_url as string) || '';
+  if (!url || !/^https?:\/\//.test(url)) return c.json({ error: 'no_booking_url' }, 404);
+  return c.json({
+    booking_url: url,
+    event_type_name: (cfg.default_event_type_name as string) || null,
+  });
+});
+
 integrations.get('/available', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const user = await requireAuth(c);
@@ -577,7 +601,14 @@ integrations.post('/webhook/:provider/:uid', async (c) => {
   if (!row) return c.json({ error: 'not_found' }, 404);
 
   const body = await c.req.text();
-  const signature = c.req.header('x-axal-signature') || c.req.header('x-hub-signature-256') || c.req.header('x-signature') || null;
+  // Generic signature header — providers with non-standard formats
+  // (e.g. Calendly's `Calendly-Webhook-Signature`) implement
+  // `verifyWebhook` and read their own header from `headers` instead.
+  const implForHeader = getProviderImpl(provider);
+  const signature = c.req.header('x-axal-signature')
+    || c.req.header('x-hub-signature-256')
+    || c.req.header('x-signature')
+    || (implForHeader?.verifyWebhook ? 'provider-verified' : null);
 
   // HMAC verification when a webhook_secret is configured. We compute the
   // SHA-256 HMAC over the raw body and compare with constant-time equality.

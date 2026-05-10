@@ -371,6 +371,13 @@ export const api = {
     return request(`/marketplace/public/partners${q.length ? `?${new URLSearchParams(q)}` : ''}`);
   },
   publicGetPartner: (slug) => request(`/marketplace/public/partners/${encodeURIComponent(slug)}`),
+  // Task #3 — public Calendly booking URL lookup. Returns null on 404
+  // (provider not connected or no booking_url configured).
+  publicCalendlyBooking: (userId) =>
+    request(`/integrations/public/calendly/${userId}`).catch((e) => {
+      if (e?.status === 404) return null;
+      throw e;
+    }),
   // Task #55 — public profile page (/u/:handle), unauthenticated.
   publicGetUserByHandle: (handle) => request(`/public/u/${encodeURIComponent(handle)}`),
   setPartnerFeatured: (partnerId, body) => request(`/marketplace/providers/${partnerId}/featured`, {

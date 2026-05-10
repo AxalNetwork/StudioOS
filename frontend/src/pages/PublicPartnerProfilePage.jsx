@@ -1,9 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Star, ShieldCheck, Clock, Globe, Sparkles, CheckCircle2,
+  ArrowLeft, Star, ShieldCheck, Clock, Globe, Sparkles, CheckCircle2, Calendar,
 } from 'lucide-react';
 import { api } from '../lib/api';
+
+// Task #3 — Calendly inline CTA. Public read-only lookup; renders only
+// when the partner has connected Calendly + configured a booking URL.
+function CalendlyCTA({ userId }) {
+  const [link, setLink] = useState(null);
+  useEffect(() => {
+    if (!userId) return undefined;
+    let alive = true;
+    api.publicCalendlyBooking(userId).then((r) => { if (alive) setLink(r); }).catch(() => {});
+    return () => { alive = false; };
+  }, [userId]);
+  if (!link?.booking_url) return null;
+  return (
+    <a
+      href={link.booking_url}
+      target="_blank"
+      rel="noreferrer noopener"
+      className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
+    >
+      <Calendar size={14} /> Book via Calendly
+    </a>
+  );
+}
 
 function Stars({ value, size = 16 }) {
   return (
@@ -141,9 +164,12 @@ export default function PublicPartnerProfilePage() {
                   <CheckCircle2 size={14} className="text-emerald-600" />
                   {p.completed_engagements} completed engagement{p.completed_engagements === 1 ? '' : 's'}
                 </span>
-                <Link to="/register" className="ml-auto rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700">
-                  Engage this partner
-                </Link>
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  {p.user_id && <CalendlyCTA userId={p.user_id} />}
+                  <Link to="/register" className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700">
+                    Engage this partner
+                  </Link>
+                </div>
               </div>
             </div>
 

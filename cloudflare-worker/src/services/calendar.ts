@@ -490,7 +490,7 @@ async function calendlyEvents(env: Env, userId: number, isAdmin: boolean,
       start_at: r.start_at,
       end_at: r.end_at,
       status: r.status,
-      location_kind: (r.location_kind as any) || 'video',
+      location_kind: r.location_kind || 'video',
       location_uri: r.location_uri,
       organizer_email: r.organizer_email,
       attendees: [
