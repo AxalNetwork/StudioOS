@@ -382,6 +382,8 @@ _BACKOFFICE_DEPS = [_Depends(require_cf_access)]
 app.include_router(admin.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
 app.include_router(private_data.router, prefix="/api")
 app.include_router(monitoring.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
+from backend.app.api.routes import monitoring_analytics as _monitoring_analytics
+app.include_router(_monitoring_analytics.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
 from backend.app.api.routes import infra as _infra
 app.include_router(_infra.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
 from backend.app.api.routes import admin_contracts as _admin_contracts
