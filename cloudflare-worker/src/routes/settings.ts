@@ -939,6 +939,153 @@ settings.put('/profile/personal', async (c) => {
   } catch (e) { return handleProfileError(c, e); }
 });
 
+// --- Profile / Identity + Details + Legal-entity aliases (Task #25, AE-1) --
+//
+// Three named projections over the same underlying data the `/profile/personal`
+// + `/profile/corporate` routes already own. The Settings UI is split into
+// these three tabs, so the API mirrors that grouping; each surface validates
+// only the keys it owns and never silently drops siblings.
+//
+//   identity      — display_name, headline, pronouns, profile_slug, timezone,
+//                   locale  + full_legal_name, date_of_birth, nationality
+//   details       — address_line1/2, city, state_or_region, postal_code,
+//                   country, phone_e164, tax_residency_country, tax_id_number
+//   legal-entity  — alias of /profile/corporate (entity + signing authority + UBOs)
+//
+// PII (tax_id, phone) is encrypted at rest via columnCipher inside
+// updatePersonalProfile / updateCorporateProfile — we never see plaintext on
+// the read path. profile_completion_pct is recomputed inside those helpers
+// and returned in every response.
+const IDENTITY_PERSONAL_KEYS = ['display_name','headline','full_legal_name','date_of_birth','nationality'] as const;
+const IDENTITY_SETTINGS_KEYS = ['pronouns','profile_slug','timezone','locale'] as const;
+const DETAILS_PERSONAL_KEYS = [
+  'tax_residency_country','tax_id_number','phone_e164',
+  'address_line1','address_line2','city','state_or_region','postal_code','country',
+] as const;
+
+function pickIdentity(personal: Awaited<ReturnType<typeof getPersonalProfile>>, settingsRow: UserSettingsRow) {
+  return {
+    display_name: personal.display_name,
+    headline: personal.headline,
+    pronouns: settingsRow.pronouns,
+    profile_slug: settingsRow.profile_slug,
+    timezone: settingsRow.timezone,
+    locale: settingsRow.locale,
+    full_legal_name: personal.full_legal_name,
+    date_of_birth: personal.date_of_birth,
+    nationality: personal.nationality,
+    profile_completion_pct: personal.profile_completion_pct,
+  };
+}
+
+function pickDetails(personal: Awaited<ReturnType<typeof getPersonalProfile>>) {
+  return {
+    tax_residency_country: personal.tax_residency_country,
+    tax_id_last4: personal.tax_id_last4,
+    has_tax_id: personal.has_tax_id,
+    phone_last4: personal.phone_last4,
+    has_phone: personal.has_phone,
+    address_line1: personal.address_line1,
+    address_line2: personal.address_line2,
+    city: personal.city,
+    state_or_region: personal.state_or_region,
+    postal_code: personal.postal_code,
+    country: personal.country,
+    profile_completion_pct: personal.profile_completion_pct,
+  };
+}
+
+settings.get('/profile/identity', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  try {
+    const [p, s] = await Promise.all([
+      getPersonalProfile(c.env, user.id),
+      getUserSettings(c.env, user.id),
+    ]);
+    return c.json(pickIdentity(p, s));
+  } catch (e) { return handleProfileError(c, e); }
+});
+settings.put('/profile/identity', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  await ensureUserSettingsTable(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const personalPatch: Record<string, unknown> = {};
+  for (const k of IDENTITY_PERSONAL_KEYS) if (k in body) personalPatch[k] = (body as any)[k];
+  const settingsPatch: UserSettingsPatch = {};
+  for (const k of IDENTITY_SETTINGS_KEYS) {
+    if (k in body) (settingsPatch as any)[k] = (body as any)[k];
+  }
+  try {
+    // Validate the user_settings half FIRST — its errors are field-level
+    // and cheap; running personal updates first would commit a half-write
+    // before the settings validation rejects.
+    const sRow = Object.keys(settingsPatch).length
+      ? await upsertUserSettings(c.env, user.id, settingsPatch)
+      : await getUserSettings(c.env, user.id);
+    const pRow = Object.keys(personalPatch).length
+      ? await updatePersonalProfile(c.env, user.id, personalPatch)
+      : await getPersonalProfile(c.env, user.id);
+    if (Object.keys(personalPatch).length) {
+      await recordProfileAudit(
+        c.env, user.id, user.email, 'profile_identity_updated',
+        `Updated identity fields: ${Object.keys(body).join(', ') || '(none)'}`,
+      );
+    }
+    return c.json(pickIdentity(pRow, sRow));
+  } catch (e) {
+    if (e instanceof SettingsValidationError) return handleSettingsError(c, e);
+    return handleProfileError(c, e);
+  }
+});
+
+settings.get('/profile/details', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  const user = await requireAuth(c);
+  try { return c.json(pickDetails(await getPersonalProfile(c.env, user.id))); }
+  catch (e) { return handleProfileError(c, e); }
+});
+settings.put('/profile/details', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const patch: Record<string, unknown> = {};
+  for (const k of DETAILS_PERSONAL_KEYS) if (k in body) patch[k] = (body as any)[k];
+  try {
+    const updated = await updatePersonalProfile(c.env, user.id, patch);
+    await recordProfileAudit(
+      c.env, user.id, user.email, 'profile_details_updated',
+      `Updated address/contact fields: ${Object.keys(patch).join(', ') || '(none)'}`,
+    );
+    return c.json(pickDetails(updated));
+  } catch (e) { return handleProfileError(c, e); }
+});
+
+// /profile/legal-entity is a thin alias of /profile/corporate so the
+// Settings UI tab name and the URL stay in lock-step. Mutations and the
+// audit-log row keep the existing 'profile_corporate_updated' action.
+settings.get('/profile/legal-entity', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  const user = await requireAuth(c);
+  try { return c.json(await getCorporateProfile(c.env, user.id)); }
+  catch (e) { return handleProfileError(c, e); }
+});
+settings.put('/profile/legal-entity', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  try {
+    const updated = await updateCorporateProfile(c.env, user.id, body);
+    await recordProfileAudit(
+      c.env, user.id, user.email, 'profile_corporate_updated',
+      `Updated legal-entity fields: ${Object.keys(body).join(', ') || '(none)'}`,
+    );
+    return c.json(updated);
+  } catch (e) { return handleProfileError(c, e); }
+});
+
 settings.get('/profile/corporate', async (c) => {
   await ensureProfileExpansionSchema(c.env);
   const user = await requireAuth(c);

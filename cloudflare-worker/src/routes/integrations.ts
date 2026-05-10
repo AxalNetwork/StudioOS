@@ -196,9 +196,21 @@ const listMine = async (c: Context<{ Bindings: Env }>) => {
   ) as IntegrationRow[];
   // Decrypt only enough to render a 4-char preview; bulk-decrypt is fine
   // because each row's blob is small and the page lists are short.
+  // Per-row decrypt with isolation: a single unreadable credential blob
+  // (e.g. the worker is missing AXAL_ENCRYPTION_SECRET, or the row was
+  // written under a rotated key) must not nuke the entire integrations
+  // panel with a 500. The row still renders; the api_key_preview is null
+  // and the UI surfaces a "credentials unreadable — reconnect" hint via
+  // the existing `last_error` channel.
   const items = await Promise.all(rows.map(async r => {
-    const creds = await decryptCredentials(c.env, r.uid, r.credentials_enc);
-    return rowToPublic(r, previewApiKey(creds));
+    let preview: string | null = null;
+    try {
+      const creds = await decryptCredentials(c.env, r.uid, r.credentials_enc);
+      preview = previewApiKey(creds);
+    } catch (e) {
+      console.warn('[integrations] decrypt preview failed for', r.uid, (e as Error).message);
+    }
+    return rowToPublic(r, preview);
   }));
   return c.json({ ok: true, items });
 };

@@ -142,6 +142,8 @@ function validatePhone(v: unknown): string | null {
 // --- Personal block ---------------------------------------------------------
 
 export interface PersonalProfileRead {
+  display_name: string | null;
+  headline: string | null;
   full_legal_name: string | null;
   date_of_birth: string | null;
   nationality: string | null;
@@ -160,6 +162,8 @@ export interface PersonalProfileRead {
 }
 
 export interface PersonalProfilePatch {
+  display_name?: string | null;
+  headline?: string | null;
   full_legal_name?: string | null;
   date_of_birth?: string | null;
   nationality?: string | null;
@@ -175,6 +179,7 @@ export interface PersonalProfilePatch {
 }
 
 const PERSONAL_COLUMNS = [
+  'display_name','headline',
   'full_legal_name','date_of_birth','nationality','tax_residency_country',
   'tax_id_number_enc','tax_id_last4','phone_e164_enc','phone_last4',
   'address_line1','address_line2','city','state_or_region','postal_code',
@@ -187,6 +192,8 @@ export async function getPersonalProfile(env: Env, userId: number): Promise<Pers
     .bind(userId).first<any>();
   if (!row) throw new ProfileValidationError('User not found', null, 404);
   return {
+    display_name: row.display_name || null,
+    headline: row.headline || null,
     full_legal_name: row.full_legal_name || null,
     date_of_birth: row.date_of_birth || null,
     nationality: row.nationality || null,
@@ -222,6 +229,8 @@ export async function updatePersonalProfile(
     : (await env.DB.prepare(`SELECT country FROM users WHERE id = ?`).bind(userId).first<{country:string|null}>())?.country || null;
 
   const updates: Array<[string, unknown]> = [];
+  if ('display_name' in patch) updates.push(['display_name', trimOrNull(patch.display_name, 100)]);
+  if ('headline' in patch) updates.push(['headline', trimOrNull(patch.headline, 200)]);
   if ('full_legal_name' in patch) updates.push(['full_legal_name', trimOrNull(patch.full_legal_name)]);
   if ('date_of_birth' in patch) updates.push(['date_of_birth', validateDob(patch.date_of_birth)]);
   if ('nationality' in patch) updates.push(['nationality', optionalIsoCountry(patch.nationality, 'nationality')]);
@@ -566,7 +575,7 @@ export async function decryptPersonalSecret(
 // the ring before save lands. If you change the weights, also bump the
 // docs in the Profile sub-tab so users understand what unlocks contracts.
 const PERSONAL_FIELDS: Array<keyof PersonalProfileRead> = [
-  'full_legal_name','date_of_birth','nationality','tax_residency_country',
+  'display_name','full_legal_name','date_of_birth','nationality','tax_residency_country',
   'address_line1','city','postal_code','country',
 ];
 
@@ -598,6 +607,8 @@ let migrated = false;
 export async function ensureProfileExpansionSchema(env: Env): Promise<void> {
   if (migrated) return;
   const cols: Array<[string, string]> = [
+    ['display_name', 'TEXT'],
+    ['headline', 'TEXT'],
     ['full_legal_name', 'TEXT'],
     ['date_of_birth', 'TEXT'],
     ['nationality', 'TEXT'],

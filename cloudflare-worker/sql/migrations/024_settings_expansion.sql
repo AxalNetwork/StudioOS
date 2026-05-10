@@ -1,0 +1,33 @@
+-- Task #1 (AE-1) — Settings expansion · header fields.
+--
+-- Adds `display_name` and `headline` to `users`. Every other column the
+-- expanded /settings UI references already exists from prior migrations:
+--   - 002_user_settings.sql      → user_settings (theme, density, sidebar,
+--                                  timezone, locale, pronouns, profile_slug,
+--                                  visibility, show_in_directory, discoverable,
+--                                  digest_frequency, notif_categories_*,
+--                                  quiet_hours_*, feature_flags,
+--                                  dismissed_explainers)
+--   - 015_profile_expansion.sql  → users (full_legal_name, date_of_birth,
+--                                  nationality, tax_residency_country,
+--                                  tax_id_number_enc, tax_id_last4,
+--                                  phone_e164_enc, phone_last4, address_line1/2,
+--                                  city, state_or_region, postal_code, country,
+--                                  profile_completion_pct) + corporate_profiles
+--
+-- The two columns below back the new GET/PUT /api/settings/profile/identity
+-- surface (display name + tagline). They are runtime-mirrored in
+-- services/profileExpansion.ts::ensureProfileExpansionSchema so dev SQLite
+-- and existing remote D1 isolates pick them up without manual intervention.
+--
+-- Apply via:
+--   wrangler d1 execute studioos-db --remote --env="" \
+--     --file=cloudflare-worker/sql/migrations/024_settings_expansion.sql
+--
+-- Re-runs of this file will fail with "duplicate column name" — that is
+-- expected and harmless. The runtime ensureProfileExpansionSchema swallows
+-- the same error on isolate boot, so the worker never depends on this file
+-- being run exactly once.
+
+ALTER TABLE users ADD COLUMN display_name TEXT;
+ALTER TABLE users ADD COLUMN headline TEXT;
