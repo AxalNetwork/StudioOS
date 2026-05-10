@@ -100,6 +100,22 @@ async function request(path, options = {}) {
   }
 }
 
+// Task #13 — analytics read helper. Auto-retries once on 5xx (transient
+// worker cold-start / D1 hiccup) with a 1s backoff. Never retries 4xx —
+// those are deterministic (auth, bad range, etc) and the caller should
+// surface them. Network errors (no `status`) get one retry too.
+async function _analyticsRead(path) {
+  try {
+    return await request(path);
+  } catch (e) {
+    const status = e?.status;
+    const transient = !status || status >= 500;
+    if (!transient) throw e;
+    await new Promise(r => setTimeout(r, 1000));
+    return await request(path);
+  }
+}
+
 export const api = {
   register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
   login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
@@ -648,19 +664,22 @@ export const api = {
   monitoringThroughput: () => request('/monitoring/throughput'),
   monitoringCleanup: () => request('/monitoring/cleanup', { method: 'POST' }),
 
-  // ---------- Monitoring → Analytics (admin, Task #3) ----------
+  // ---------- Monitoring → Analytics (admin, Task #3 / Task #13) ----------
+  // Task #13 — analytics reads auto-retry once on 5xx with a 1s backoff so
+  // a transient D1 hiccup or worker cold-start doesn't surface as a red
+  // error card. The retry is bounded to GET reads only (no side effects).
   analyticsOverview: (from, to, currency = '') =>
-    request(`/monitoring/analytics/overview?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
-  analyticsCurrencies: () => request('/monitoring/analytics/currencies'),
+    _analyticsRead(`/monitoring/analytics/overview?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
+  analyticsCurrencies: () => _analyticsRead('/monitoring/analytics/currencies'),
   analyticsCohorts: (metric = 'retention', granularity = 'week') =>
-    request(`/monitoring/analytics/cohorts?metric=${metric}&granularity=${granularity}`),
+    _analyticsRead(`/monitoring/analytics/cohorts?metric=${metric}&granularity=${granularity}`),
   analyticsUsers: ({ role = '', tier = '', search = '', limit = 50, offset = 0 } = {}) =>
-    request(`/monitoring/analytics/users?role=${encodeURIComponent(role)}&tier=${encodeURIComponent(tier)}&search=${encodeURIComponent(search)}&limit=${limit}&offset=${offset}`),
-  analyticsUser: (id) => request(`/monitoring/analytics/user/${id}`),
+    _analyticsRead(`/monitoring/analytics/users?role=${encodeURIComponent(role)}&tier=${encodeURIComponent(tier)}&search=${encodeURIComponent(search)}&limit=${limit}&offset=${offset}`),
+  analyticsUser: (id) => _analyticsRead(`/monitoring/analytics/user/${id}`),
   analyticsFinancial: (from, to, currency = '') =>
-    request(`/monitoring/analytics/financial?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
+    _analyticsRead(`/monitoring/analytics/financial?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
   analyticsTechnical: (from, to) =>
-    request(`/monitoring/analytics/technical?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
+    _analyticsRead(`/monitoring/analytics/technical?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
   analyticsExport: (payload) =>
     request('/monitoring/analytics/export', { method: 'POST', body: JSON.stringify(payload) }),
   analyticsAudit: (limit = 25, action = 'analytics_export', opts = {}) => {
@@ -673,7 +692,7 @@ export const api = {
     if (opts.admin_q) params.set('admin_q', opts.admin_q);
     if (opts.from) params.set('from', opts.from);
     if (opts.to) params.set('to', opts.to);
-    return request(`/monitoring/analytics/audit?${params.toString()}`);
+    return _analyticsRead(`/monitoring/analytics/audit?${params.toString()}`);
   },
   // Task #20 — Stream the Plan change history CSV for the active filters.
   // Returns a Blob + filename so the caller can trigger a download.
@@ -703,7 +722,7 @@ export const api = {
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
   },
-  analyticsListPlans: () => request('/monitoring/analytics/plans'),
+  analyticsListPlans: () => _analyticsRead('/monitoring/analytics/plans'),
   analyticsCreatePlan: (payload) =>
     request('/monitoring/analytics/plans', { method: 'POST', body: JSON.stringify(payload) }),
   analyticsUpdatePlan: (planId, patch) =>

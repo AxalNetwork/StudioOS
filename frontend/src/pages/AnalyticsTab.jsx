@@ -23,6 +23,47 @@ function defaultRange() {
   const from = new Date(to.getTime() - 30 * 86400 * 1000);
   return { from: isoDate(from), to: isoDate(to) };
 }
+// Task #13 — read ?from=&to= off the URL on first paint so deep-links
+// from emails/Slack land on the same window the sender saw. Falls back
+// to the rolling 30-day default when either bound is missing or invalid.
+function rangeFromUrl() {
+  if (typeof window === 'undefined') return defaultRange();
+  try {
+    const qp = new URLSearchParams(window.location.search || '');
+    const f = qp.get('from'); const t = qp.get('to');
+    const ok = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    if (ok(f) && ok(t) && f <= t) return { from: f, to: t };
+  } catch {}
+  return defaultRange();
+}
+// Task #13 — inline error card with a retry button. Used by every sub-tab
+// so a transient failure never strands the user with a red toast they
+// can't recover from.
+function RetryCard({ message, onRetry }) {
+  return (
+    <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700 flex items-start gap-2">
+      <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="break-words">{message || 'Failed to load.'}</div>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            className="mt-1.5 text-xs px-2 py-1 rounded border border-red-300 bg-white hover:bg-red-50 text-red-700 inline-flex items-center gap-1"
+          >
+            <RefreshCw size={11} /> Retry
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+function EmptyPill({ label = 'No data for this range' }) {
+  return (
+    <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-3 py-1 inline-block">
+      {label}
+    </div>
+  );
+}
 function maskEmail(e, id) { return `user#${id || '?'}`; }
 function maskName(_n, id) { return `User ${id || '?'}`; }
 
@@ -95,8 +136,9 @@ function RecentExports({ refreshKey }) {
   const [err, setErr] = useState('');
   useEffect(() => {
     let alive = true;
+    setErr('');
     api.analyticsAudit(10)
-      .then(r => { if (alive) setItems(r.items || []); })
+      .then(r => { if (alive) { setItems(r.items || []); setErr(''); } })
       .catch(e => { if (alive) setErr(e?.message || 'Failed to load'); });
     return () => { alive = false; };
   }, [refreshKey]);
@@ -162,32 +204,39 @@ function FxBadge({ code, asOf }) {
 function OverviewSub({ range, anonymized, currency, onExport, busy }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
+    let alive = true;
     setData(null); setErr('');
     api.analyticsOverview(range.from, range.to, currency)
-      .then(setData)
-      .catch(e => setErr(e?.message || 'Failed to load'));
-  }, [range.from, range.to, currency]);
-  if (err) return <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2"><AlertTriangle size={14} className="inline mr-1" /> {err}</div>;
+      .then(d => { if (alive) setData(d); })
+      .catch(e => { if (alive) setErr(e?.message || 'Failed to load'); });
+    return () => { alive = false; };
+  }, [range.from, range.to, currency, reloadKey]);
+  if (err) return <RetryCard message={err} onRetry={() => setReloadKey(k => k + 1)} />;
   if (!data) return <div className="text-sm text-gray-500 py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" /> Loading…</div>;
+  const num = (v) => Number(v || 0);
   const ccy = data.display_currency || 'USD';
   const mrr = data.mrr ?? data.mrr_usd;
   const arr = data.arr ?? data.arr_usd;
+  const totalReq = num(data.total_requests);
+  const isEmpty = num(data.active_users) === 0 && num(data.new_signups) === 0 && totalReq === 0;
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <FxBadge code={ccy} asOf={data.fx_as_of} />
         <ExportButtons onExport={onExport} busy={busy} />
       </div>
+      {isEmpty && <EmptyPill />}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat label="Active users" value={data.active_users.toLocaleString()} sub={`Last ${data.range.days}d`} />
-        <Stat label="New signups" value={data.new_signups.toLocaleString()} />
-        <Stat label="Conversion" value={`${data.conversion_to_paid_pct}%`} sub={`${data.paid_users}/${data.total_users}`} />
+        <Stat label="Active users" value={num(data.active_users).toLocaleString()} sub={`Last ${data.range?.days ?? '—'}d`} />
+        <Stat label="New signups" value={num(data.new_signups).toLocaleString()} />
+        <Stat label="Conversion" value={`${num(data.conversion_to_paid_pct)}%`} sub={`${num(data.paid_users)}/${num(data.total_users)}`} />
         <Stat label={`MRR (${ccy})`} value={fmtMoney(mrr, ccy)} sub={`ARR ${fmtMoney(arr, ccy)}`} />
-        <Stat label="Churn" value={`${data.churn_rate_pct}%`} sub={`${data.churned_subscriptions} sub(s)`} />
-        <Stat label="Avg session" value={`${data.avg_session_minutes}m`} />
-        <Stat label="P50 / P95 latency" value={`${data.p50_latency_ms} / ${data.p95_latency_ms}ms`} sub={`${data.total_requests.toLocaleString()} req`} />
-        <Stat label="Error rate" value={`${data.error_rate_pct}%`} />
+        <Stat label="Churn" value={`${num(data.churn_rate_pct)}%`} sub={`${num(data.churned_subscriptions)} sub(s)`} />
+        <Stat label="Avg session" value={`${num(data.avg_session_minutes)}m`} />
+        <Stat label="P50 / P95 latency" value={`${num(data.p50_latency_ms)} / ${num(data.p95_latency_ms)}ms`} sub={`${totalReq.toLocaleString()} req`} />
+        <Stat label="Error rate" value={`${num(data.error_rate_pct)}%`} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white border border-gray-200 rounded-xl p-4">
@@ -1145,11 +1194,15 @@ function FinancialSub({ range, currency, onExport, busy }) {
   const [err, setErr] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
+    let alive = true;
     setData(null); setErr('');
-    api.analyticsFinancial(range.from, range.to, currency).then(setData).catch(e => setErr(e?.message || 'Failed'));
+    api.analyticsFinancial(range.from, range.to, currency)
+      .then(d => { if (alive) setData(d); })
+      .catch(e => { if (alive) setErr(e?.message || 'Failed'); });
+    return () => { alive = false; };
   }, [range.from, range.to, currency, reloadKey]);
   const onPlanChanged = () => setReloadKey(k => k + 1);
-  if (err) return <div className="space-y-4"><div className="text-sm text-red-600">{err}</div><PlanCatalog onChanged={onPlanChanged} /><PlanAuditHistory refreshKey={reloadKey} /></div>;
+  if (err) return <div className="space-y-4"><RetryCard message={err} onRetry={() => setReloadKey(k => k + 1)} /><PlanCatalog onChanged={onPlanChanged} /><PlanAuditHistory refreshKey={reloadKey} /></div>;
   if (!data) return <div className="space-y-4"><div className="text-sm text-gray-500 py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" /> Loading…</div><PlanCatalog onChanged={onPlanChanged} /><PlanAuditHistory refreshKey={reloadKey} /></div>;
   const ccy = data.display_currency || 'USD';
   const totalMrr = data.total_mrr ?? data.total_mrr_usd;
@@ -1287,11 +1340,16 @@ function FinancialSub({ range, currency, onExport, busy }) {
 function TechnicalSub({ range, onExport, busy }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
+    let alive = true;
     setData(null); setErr('');
-    api.analyticsTechnical(range.from, range.to).then(setData).catch(e => setErr(e?.message || 'Failed'));
-  }, [range.from, range.to]);
-  if (err) return <div className="text-sm text-red-600">{err}</div>;
+    api.analyticsTechnical(range.from, range.to)
+      .then(d => { if (alive) setData(d); })
+      .catch(e => { if (alive) setErr(e?.message || 'Failed'); });
+    return () => { alive = false; };
+  }, [range.from, range.to, reloadKey]);
+  if (err) return <RetryCard message={err} onRetry={() => setReloadKey(k => k + 1)} />;
   if (!data) return <div className="text-sm text-gray-500 py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" /> Loading…</div>;
   return <TechnicalView data={data} onExport={onExport} busy={busy} />;
 }
@@ -1383,14 +1441,23 @@ function TechnicalView({ data, onExport, busy }) {
 function ManagementSub({ range, currency, onExport, busy }) {
   const [overview, setOverview] = useState(null);
   const [financial, setFinancial] = useState(null);
+  const [err, setErr] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
+    let alive = true;
+    setOverview(null); setFinancial(null); setErr('');
     Promise.all([
       api.analyticsOverview(range.from, range.to, currency),
       api.analyticsFinancial(range.from, range.to, currency),
-    ]).then(([o, f]) => { setOverview(o); setFinancial(f); }).catch(() => {});
-  }, [range.from, range.to, currency]);
+    ])
+      .then(([o, f]) => { if (alive) { setOverview(o); setFinancial(f); } })
+      .catch(e => { if (alive) setErr(e?.message || 'Failed to load'); });
+    return () => { alive = false; };
+  }, [range.from, range.to, currency, reloadKey]);
   const ccy = financial?.display_currency || overview?.display_currency || 'USD';
   const m$ = (n) => fmtMoney(n, ccy);
+  const num = (v) => Number(v || 0);
+  if (err) return <RetryCard message={err} onRetry={() => setReloadKey(k => k + 1)} />;
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end"><ExportButtons onExport={onExport} busy={busy} /></div>
@@ -1398,12 +1465,12 @@ function ManagementSub({ range, currency, onExport, busy }) {
         <div className="text-sm font-semibold text-gray-900 mb-2">Executive summary · {range.from} → {range.to}</div>
         {overview && financial ? (
           <ul className="text-sm text-gray-700 space-y-1">
-            <li><strong>{overview.active_users.toLocaleString()}</strong> active users · <strong>{overview.new_signups.toLocaleString()}</strong> new signups · <strong>{overview.conversion_to_paid_pct}%</strong> paid conversion</li>
+            <li><strong>{num(overview.active_users).toLocaleString()}</strong> active users · <strong>{num(overview.new_signups).toLocaleString()}</strong> new signups · <strong>{num(overview.conversion_to_paid_pct)}%</strong> paid conversion</li>
             <li><strong>{m$(financial.total_mrr ?? financial.total_mrr_usd)}</strong> total MRR · <strong>{m$(financial.arr ?? financial.arr_usd)}</strong> ARR · new {m$(financial.new_mrr ?? financial.new_mrr_usd)} / churn {m$(financial.churn_mrr ?? financial.churn_mrr_usd)} <span className="text-xs text-gray-500">({ccy}{financial.fx_as_of ? ` · FX ${String(financial.fx_as_of).slice(0,10)}` : ''})</span></li>
-            <li>Reliability: P50 <strong>{overview.p50_latency_ms}ms</strong> · P95 <strong>{overview.p95_latency_ms}ms</strong> · error rate <strong>{overview.error_rate_pct}%</strong></li>
-            <li>Engagement: avg session <strong>{overview.avg_session_minutes} min</strong> · churn rate <strong>{overview.churn_rate_pct}%</strong></li>
+            <li>Reliability: P50 <strong>{num(overview.p50_latency_ms)}ms</strong> · P95 <strong>{num(overview.p95_latency_ms)}ms</strong> · error rate <strong>{num(overview.error_rate_pct)}%</strong></li>
+            <li>Engagement: avg session <strong>{num(overview.avg_session_minutes)} min</strong> · churn rate <strong>{num(overview.churn_rate_pct)}%</strong></li>
           </ul>
-        ) : <div className="text-sm text-gray-500">Loading…</div>}
+        ) : <div className="text-sm text-gray-500"><RefreshCw size={13} className="inline animate-spin mr-1.5" /> Loading…</div>}
       </div>
     </div>
   );
@@ -1411,7 +1478,19 @@ function ManagementSub({ range, currency, onExport, busy }) {
 
 export default function AnalyticsTab() {
   const [sub, setSub] = useState('overview');
-  const [range, setRange] = useState(defaultRange());
+  const [range, setRange] = useState(() => rangeFromUrl());
+  // Task #13 — keep ?from=&to= in sync with the picker so the URL is the
+  // canonical share-link. Uses replaceState (no history pollution) and
+  // preserves any other query params (e.g. ?tab=analytics).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('from', range.from);
+      url.searchParams.set('to', range.to);
+      window.history.replaceState({}, '', url.toString());
+    } catch {}
+  }, [range.from, range.to]);
   const [anonymized, setAnonymized] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [auditKey, setAuditKey] = useState(0);
