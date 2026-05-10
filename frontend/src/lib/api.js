@@ -220,6 +220,12 @@ export const api = {
   studioBenchmarks: () => request('/market-intel/studio-benchmarks'),
   competitiveIntelligence: () => request('/market-intel/competitive-intelligence'),
 
+  // Task #4 — Investor Signals + profiling chatbot
+  getInvestorProfile: () => request('/investor-profile/profile/me'),
+  saveInvestorProfile: (data) => request('/investor-profile/profile/me', { method: 'PUT', body: JSON.stringify(data) }),
+  optOutInvestorSignals: () => request('/investor-profile/profile/me/opt-out', { method: 'POST' }),
+  getInvestorSignals: () => request('/investor-signals/signals/latest'),
+
   // Task #26 — Financial Model Builder
   getFinancialModel: (projectId) => request(`/financials/${projectId}`),
   saveFinancialModel: (projectId, assumptions) => request(`/financials/${projectId}`, { method: 'PUT', body: JSON.stringify({ assumptions }) }),

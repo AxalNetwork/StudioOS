@@ -34,6 +34,7 @@ import tickets from './routes/tickets';
 import deals from './routes/deals';
 import users from './routes/users';
 import marketIntel from './routes/market_intel';
+import investorSignals, { aggregateInvestorSignals } from './routes/investor_signals';
 import advisory from './routes/advisory';
 import activity from './routes/activity';
 import admin from './routes/admin';
@@ -191,6 +192,8 @@ app.route('/api/tickets', tickets);
 app.route('/api/deals', deals);
 app.route('/api/users', users);
 app.route('/api/market-intel', marketIntel);
+app.route('/api/investor-profile', investorSignals);
+app.route('/api/investor-signals', investorSignals);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
 // Task #33 — Cloudflare Access perimeter on the most sensitive route groups.
@@ -464,6 +467,17 @@ export default {
         // Runs at 14:00 UTC so US/EU admins see it in the morning.
         if (now.getUTCHours() === 14 && now.getUTCMinutes() === 0) {
           try { await Jobs.enqueue(env, 'flagged_score_digest', {}); } catch {}
+        }
+        // Task #4 — Investor Signals aggregation every 6h at HH:05.
+        // Cron fires every minute; gate on hour%6==0 + minute==5 so the
+        // aggregator runs four times a day (00:05, 06:05, 12:05, 18:05 UTC).
+        if (now.getUTCHours() % 6 === 0 && now.getUTCMinutes() === 5) {
+          try {
+            const r = await aggregateInvestorSignals(env);
+            console.info(`[cron] investor_signals aggregated n_total=${r.n_total} snapshot_id=${r.snapshot_id}`);
+          } catch (e) {
+            console.error('[cron] investor_signals aggregation failed', e);
+          }
         }
       } finally {
         try {

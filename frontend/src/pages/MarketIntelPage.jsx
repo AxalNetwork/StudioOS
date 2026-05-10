@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, ChevronDown, Info, Lightbulb } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, ChevronDown, Info, Lightbulb, Users } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 
 export default function MarketIntelPage() {
@@ -43,6 +44,7 @@ export default function MarketIntelPage() {
     { key: 'private', label: 'Private Rounds', icon: Building2 },
     { key: 'conviction', label: 'High Conviction', icon: TrendingUp },
     { key: 'studio', label: 'Studio Benchmarks', icon: BarChart3 },
+    { key: 'investor_signals', label: 'Axal Investor Signals', icon: Users },
   ];
 
   return (
@@ -338,6 +340,8 @@ export default function MarketIntelPage() {
         </div>
       )}
 
+      {tab === 'investor_signals' && <InvestorSignalsTab />}
+
       {tab === 'studio' && benchmarks && (
         <div className="space-y-6">
           <TabExplainer text="How our studio is performing against the targets we set with LPs. Operations metrics measure speed; decision-gate metrics measure judgment; post-spin-out metrics measure outcomes." />
@@ -413,6 +417,205 @@ export default function MarketIntelPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------- Axal Investor Signals (Task #4) ----------------------------------
+// Pulls the most recent k-anonymized snapshot. Cells with n<5 render as
+// "Insufficient data". Investors who haven't completed the chatbot see a
+// one-time prompt linking them back to the profiling flow.
+function InvestorSignalsTab() {
+  const [snap, setSnap] = useState(null);
+  const [trend, setTrend] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      api.getInvestorSignals().catch(e => ({ _err: e })),
+      api.getInvestorProfile().catch(() => ({ profile: null })),
+    ]).then(([s, p]) => {
+      if (cancelled) return;
+      if (s && s._err) {
+        setErr(s._err.message || 'Failed to load Investor Signals');
+      } else {
+        setSnap(s?.snapshot || null);
+        setTrend(s?.trend || []);
+      }
+      setProfile(p?.profile || null);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const role = (() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || 'null');
+      return String(u?.role || '').toLowerCase();
+    } catch { return ''; }
+  })();
+  const isInvestor = role === 'investor';
+  const showReprompt = isInvestor && profile && !profile.completed_at;
+
+  if (loading) {
+    return <div className="text-sm text-gray-500 py-12 text-center">Loading anonymized investor signals…</div>;
+  }
+  if (err) {
+    return <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{err}</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <TabExplainer text="What investors across Axal are actively looking for, anonymized to k≥5. Cells where fewer than 5 investors share an answer are hidden as 'Insufficient data'." />
+
+      {showReprompt && (
+        <div className="bg-violet-50 border border-violet-200 rounded-lg p-4 flex items-start gap-3">
+          <Users size={18} className="text-violet-600 shrink-0 mt-0.5" />
+          <div className="flex-1 text-sm text-gray-700">
+            <div className="font-semibold text-gray-900 mb-1">Help shape this dashboard</div>
+            <p className="mb-2">You haven&apos;t finished the investor profiling chatbot yet. Spend 90 seconds answering 6 questions to be included in the next anonymized snapshot.</p>
+            <Link to="/onboarding/investor" className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-md bg-violet-600 text-white hover:bg-violet-700">
+              Open profiling chatbot
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {!snap && (
+        <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-sm text-gray-500">
+          No snapshot yet — the aggregator runs every 6 hours. Check back soon.
+        </div>
+      )}
+
+      {snap && (
+        <>
+          <div className="grid md:grid-cols-3 gap-4">
+            <SignalsKPI label="Investors contributing" value={snap.n_total ?? 'Insufficient data'} sub={`Last computed ${new Date(snap.computed_at).toLocaleString()}`} />
+            <SignalsKPI label="Min cell size (k-anonymity)" value={snap.min_cell_size} sub="Cells below this threshold are hidden" />
+            <SignalsKPI label="Median ticket" value={snap.ticket_stats?.median_min != null ? `${fmtUsd(snap.ticket_stats.median_min)} – ${fmtUsd(snap.ticket_stats.median_max)}` : 'Insufficient data'} sub={snap.ticket_stats?.iqr_min ? `IQR ${fmtUsd(snap.ticket_stats.iqr_min.p25)} – ${fmtUsd(snap.ticket_stats.iqr_min.p75)}` : ''} />
+          </div>
+
+          <SignalsBars title="Sectors of interest" cells={snap.sectors} />
+          <SignalsBars title="Stages" cells={snap.stages} />
+          <SignalsBars title="Geographies" cells={snap.geos} />
+          <SignalsBars title="Ticket size distribution" cells={snap.ticket_bands} />
+
+          <ThesisCloud keywords={snap.thesis_keywords || []} />
+
+          {trend.length > 1 && <TrendStrip trend={trend} />}
+        </>
+      )}
+    </div>
+  );
+}
+
+function fmtUsd(n) {
+  if (n == null) return '—';
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  if (n >= 1_000) return `$${Math.round(n / 1_000)}k`;
+  return `$${n}`;
+}
+
+function SignalsKPI({ label, value, sub }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="text-[10px] text-gray-600 uppercase tracking-wider mb-1">{label}</div>
+      <div className="text-2xl font-bold text-gray-900">{value ?? '—'}</div>
+      {sub && <div className="text-[11px] text-gray-500 mt-1">{sub}</div>}
+    </div>
+  );
+}
+
+function SignalsBars({ title, cells }) {
+  const visible = (cells || []).filter(c => c.n != null);
+  const maxN = visible.reduce((m, c) => Math.max(m, c.n || 0), 1);
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-gray-900 mb-3">{title}</div>
+      {visible.length === 0 && (
+        <div className="text-xs text-gray-500 italic">Insufficient data — no cell met the k=5 threshold yet.</div>
+      )}
+      <div className="space-y-2">
+        {(cells || []).map(c => {
+          const insufficient = c.n == null;
+          const widthPct = insufficient ? 0 : Math.round(((c.n || 0) / maxN) * 100);
+          return (
+            <div key={c.label} className="flex items-center gap-3">
+              <div className="w-32 text-xs text-gray-700 truncate" title={c.label}>{c.label}</div>
+              <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
+                {!insufficient && (
+                  <div className="h-full bg-violet-500" style={{ width: `${widthPct}%` }} />
+                )}
+              </div>
+              <div className="w-32 text-right text-xs text-gray-600">
+                {insufficient ? <span className="italic text-gray-400">Insufficient data</span> : `${c.n} (${c.pct}%)`}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ThesisCloud({ keywords }) {
+  if (!keywords || !keywords.length) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="text-sm font-semibold text-gray-900 mb-3">Thesis cloud</div>
+        <div className="text-xs text-gray-500 italic">No keyword reached the k=5 threshold yet.</div>
+      </div>
+    );
+  }
+  const max = keywords[0].n;
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-gray-900 mb-3">Thesis cloud</div>
+      <div className="flex flex-wrap gap-2 items-baseline">
+        {keywords.map(k => {
+          const scale = 0.85 + 0.9 * (k.n / max);
+          return (
+            <span
+              key={k.keyword}
+              className="text-violet-700"
+              style={{ fontSize: `${scale}rem` }}
+              title={`${k.n} investors`}
+            >
+              {k.keyword}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TrendStrip({ trend }) {
+  const max = trend.reduce((m, t) => Math.max(m, t.n || 0), 1);
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="text-sm font-semibold text-gray-900 mb-3">30-day participation trend</div>
+      <div className="flex items-end gap-1 h-20">
+        {trend.map((t, i) => {
+          const h = Math.max(2, Math.round(((t.n || 0) / max) * 100));
+          return (
+            <div
+              key={i}
+              className="flex-1 bg-violet-200 rounded-t"
+              style={{ height: `${h}%` }}
+              title={`${new Date(t.at).toLocaleDateString()}: ${t.n} contributors`}
+            />
+          );
+        })}
+      </div>
+      <div className="flex justify-between text-[10px] text-gray-500 mt-1">
+        <span>{trend[0] && new Date(trend[0].at).toLocaleDateString()}</span>
+        <span>{trend[trend.length - 1] && new Date(trend[trend.length - 1].at).toLocaleDateString()}</span>
+      </div>
     </div>
   );
 }

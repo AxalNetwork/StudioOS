@@ -1,11 +1,19 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import OnboardingWizard, { TextField, TextArea, ChoiceField, MultiChoiceField } from '../components/OnboardingWizard';
+import { api } from '../lib/api';
 
 // Phase 0.2 / Task #23 — Investor onboarding wizard.
-// Collects: accreditation, check size, sector / stage focus, LP intent.
+// Task #4 (2026-05-10) — extended into a 6-step profiling chatbot whose
+// answers are also persisted to /api/investor-profile/me on finish so they
+// flow into the anonymized "Axal Investor Signals" aggregate.
 export default function OnboardingInvestorPage() {
   const navigate = useNavigate();
+
+  const SECTORS = ['AI/ML','Climate','Fintech','Healthtech','Consumer','Enterprise SaaS','Crypto','Bio','Defense','Robotics','Energy'];
+  const STAGES = ['Pre-seed','Seed','Series A','Series B+','Growth'];
+  const GEOS = ['North America','Europe','LATAM','APAC','MENA','Africa'];
+  const TICKETS = ['<$10k', '$10k-$50k', '$50k-$250k', '$250k-$1M', '$1M+'];
 
   const steps = [
     {
@@ -53,28 +61,80 @@ export default function OnboardingInvestorPage() {
       ),
     },
     {
-      key: 'thesis',
-      title: 'Check size & focus',
+      key: 'check',
+      title: 'Check size & stage',
+      validate: (v) => (!v.check_size ? 'Pick a typical check size' : (!v.stages?.length ? 'Select at least one stage' : null)),
       render: ({ values, set }) => (
         <div className="space-y-4">
           <ChoiceField
             label="Typical check size per deal"
-            options={['<$10k', '$10k – $50k', '$50k – $250k', '$250k – $1M', '$1M+']}
+            options={TICKETS}
             value={values.check_size}
             onChange={(x) => set('check_size', x)}
           />
           <MultiChoiceField
             label="Stages you invest in"
-            options={['Pre-seed', 'Seed', 'Series A', 'Series B+', 'Growth']}
+            options={STAGES}
             value={values.stages}
             onChange={(x) => set('stages', x)}
           />
+        </div>
+      ),
+    },
+    {
+      key: 'sectors',
+      title: 'Sectors of interest',
+      description: 'Pick the areas you actively look at — we use these to surface relevant deals and to compute the anonymized Axal Investor Signals heatmap.',
+      validate: (v) => (!v.sectors?.length ? 'Select at least one sector' : null),
+      render: ({ values, set }) => (
+        <div className="space-y-4">
           <MultiChoiceField
-            label="Sectors of interest"
-            options={['AI/ML', 'Climate', 'Fintech', 'Healthtech', 'Consumer', 'Enterprise SaaS', 'Crypto', 'Bio', 'Defense']}
+            label="Sectors"
+            options={SECTORS}
             value={values.sectors}
             onChange={(x) => set('sectors', x)}
           />
+        </div>
+      ),
+    },
+    {
+      key: 'geo',
+      title: 'Where do you invest?',
+      description: 'Pick all regions where you actively deploy capital.',
+      validate: (v) => (!v.geos?.length ? 'Select at least one region' : null),
+      render: ({ values, set }) => (
+        <div className="space-y-4">
+          <MultiChoiceField
+            label="Regions"
+            options={GEOS}
+            value={values.geos}
+            onChange={(x) => set('geos', x)}
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'thesis',
+      title: 'Your thesis in one paragraph',
+      description: 'A few sentences on what you look for. Words you mention may surface (anonymized, only if 5+ investors say the same thing) in the public thesis cloud.',
+      render: ({ values, set }) => (
+        <div className="space-y-4">
+          <TextArea
+            label="Investment thesis"
+            value={values.thesis_text}
+            onChange={(x) => set('thesis_text', x)}
+            placeholder="e.g. Pre-seed founders building AI-native infrastructure for vertical SaaS markets. Bias toward technical founders with prior exit."
+            rows={5}
+          />
+          <label className="flex items-center gap-3 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={values.contribute_to_signals !== false}
+              onChange={(e) => set('contribute_to_signals', e.target.checked)}
+              className="w-4 h-4 text-violet-600 rounded"
+            />
+            Contribute my answers (fully anonymized, k≥5) to the Axal Investor Signals dashboard. You can change this later in Settings → Privacy.
+          </label>
         </div>
       ),
     },
@@ -107,13 +167,34 @@ export default function OnboardingInvestorPage() {
     },
   ];
 
+  const handleFinish = async (values) => {
+    // Mirror the chatbot answers to the investor-profile endpoint so they
+    // feed the anonymized Axal Investor Signals aggregate. Failure must
+    // never block onboarding completion — it's a soft enrichment.
+    try {
+      await api.saveInvestorProfile({
+        investor_type: values.investor_type || null,
+        sectors: values.sectors || [],
+        stages: values.stages || [],
+        geos: values.geos || [],
+        ticket_band: values.check_size || null,
+        thesis_text: values.thesis_text || null,
+        contribute_to_signals: values.contribute_to_signals !== false,
+      });
+    } catch {
+      // Surfacing this in the wizard would be confusing; the user can
+      // re-save anytime from Settings → Privacy.
+    }
+    navigate('/dashboard');
+  };
+
   return (
     <div className="py-8">
       <OnboardingWizard
         flow="investor"
         steps={steps}
         finishLabel="See deal flow"
-        onFinish={() => navigate('/dashboard')}
+        onFinish={handleFinish}
       />
     </div>
   );

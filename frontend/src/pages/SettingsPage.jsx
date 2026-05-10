@@ -257,6 +257,7 @@ export default function SettingsPage() {
           {safeActive === 'privacy' && (
             <>
               <PrivacyCoreCard flash={flash} />
+              <InvestorSignalsContributionCard flash={flash} role={data?.role} />
               <PrivacySection data={data} patch={patch} flash={flash} reload={() => api.getSettings().then(setData)} hideAccountDelete />
             </>
           )}
@@ -1669,6 +1670,79 @@ function PrivacyCoreCard({ flash }) {
             className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
           Allow mentors and founders to discover me for matching
         </label>
+      </div>
+    </Card>
+  );
+}
+
+// Task #4 — Investor Signals contribution toggle. Lives in Privacy because
+// the data is fully anonymized (k≥5) but users may still want to opt out.
+// Opting out flips contribute_to_signals=0; the next 6h aggregation cron
+// will exclude this user automatically.
+function InvestorSignalsContributionCard({ flash, role }) {
+  const [profile, setProfile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getInvestorProfile()
+      .then(r => { if (!cancelled) setProfile(r.profile); })
+      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const toggle = async (next) => {
+    if (!profile) return;
+    setBusy(true);
+    try {
+      const r = await api.saveInvestorProfile({
+        investor_type: profile.investor_type,
+        sectors: profile.sectors,
+        stages: profile.stages,
+        geos: profile.geos,
+        ticket_band: profile.ticket_band,
+        thesis_text: profile.thesis_text,
+        contribute_to_signals: next,
+      });
+      setProfile(r.profile);
+      flash(next ? 'Now contributing to Investor Signals' : 'Opted out — your data will be removed within 6 hours');
+    } catch (e) {
+      flash(e.message || 'Failed to save', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Hide entirely from non-investor accounts that have never filled out a
+  // profile (no value to surface). Investors always see it.
+  const isInvestor = String(role || '').toLowerCase() === 'investor';
+  if (!isInvestor && !profile?.completed_at) return null;
+
+  if (err) return <Card title="Investor Signals"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!profile) return <Card title="Investor Signals"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
+
+  const completed = !!profile.completed_at;
+  return (
+    <Card
+      title="Anonymized Investor Signals"
+      description="Your sector, stage, geography, ticket size and thesis can power the platform-wide Axal Investor Signals dashboard. We only ever publish a cell when at least 5 investors share the same answer."
+    >
+      <div className="space-y-3">
+        {!completed && (
+          <div className="text-xs text-gray-600 dark:text-gray-400 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-md px-3 py-2">
+            You haven&apos;t finished the investor profiling chatbot yet. <a href="/onboarding/investor" className="text-violet-600 hover:underline">Complete it now</a> to be included.
+          </div>
+        )}
+        <label className="flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200">
+          <input type="checkbox" checked={!!profile.contribute_to_signals} disabled={busy}
+            onChange={e => toggle(e.target.checked)}
+            className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
+          Contribute my answers to anonymized Investor Signals (k ≥ 5)
+        </label>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Opting out removes your contribution within 6 hours, the next time the aggregator runs.
+        </p>
       </div>
     </Card>
   );
