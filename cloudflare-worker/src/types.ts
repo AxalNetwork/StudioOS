@@ -128,6 +128,11 @@ export interface Env {
   // 32-hex account UUID. Both unset → `loadTechnical` reads from D1.
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_AE_API_TOKEN?: string;
+  // Task #2 — HubSpot OAuth app credentials. When unset, /oauth/start for
+  // hubspot returns 503 and the connect modal surfaces the error inline.
+  // Provision via `wrangler secret put HUBSPOT_CLIENT_ID --env=production`.
+  HUBSPOT_CLIENT_ID?: string;
+  HUBSPOT_CLIENT_SECRET?: string;
 }
 
 // Cloudflare Queues message envelope (matches the body shape the producer sends).

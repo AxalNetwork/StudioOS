@@ -142,6 +142,30 @@ async function createProjectHandler(c: any) {
   await sql.end();
   // Re-index for semantic search. Best-effort — failure is non-fatal.
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'project', id: project.id }); } catch {}
+
+  // Task #2 — best-effort HubSpot company create. Looks up the creating user's
+  // active hubspot integration (if any) and pushes a company + primary contact.
+  // Fire-and-forget via executionCtx.waitUntil; failures are logged via the
+  // provider's own integration_logs writes.
+  try {
+    const userId = (user as { id: number }).id;
+    const integ = await c.env.DB.prepare(
+      "SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'hubspot' AND status = 'active' LIMIT 1",
+    ).bind(userId).first();
+    if (integ) {
+      const work = (async () => {
+        try {
+          const { getProviderImpl } = await import('../integrations/registry');
+          const impl = getProviderImpl('hubspot');
+          if (impl?.push) await impl.push(c, user as any, integ, { project_id: project.id });
+        } catch (e) {
+          console.warn('[projects] hubspot company create failed', (e as Error).message);
+        }
+      })();
+      c.executionCtx?.waitUntil?.(work);
+    }
+  } catch (e) { console.warn('[projects] hubspot project-create hook failed', e); }
+
   return c.json(project, 201);
 }
 

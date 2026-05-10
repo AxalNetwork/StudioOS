@@ -45,6 +45,8 @@ export default function IntegrationsPage() {
   const [logsFor, setLogsFor] = useState(null);
   const [logs, setLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  // Task #2 — HubSpot pipeline picker modal target.
+  const [configFor, setConfigFor] = useState(null);
   const { toast, showToast } = useToast(2500);
 
   const me = safeReadJSON('user') || {};
@@ -226,7 +228,18 @@ export default function IntegrationsPage() {
                       )}
                     </div>
                   </div>
+                  {it.provider_key === 'hubspot' && it.config && (it.config.portal_id || it.config.pipeline_label) && (
+                    <div className="text-[11px] text-gray-500 mt-2 flex flex-wrap gap-x-3 gap-y-0.5">
+                      {it.config.portal_id && <span>portal #{it.config.portal_id}</span>}
+                      {it.config.pipeline_label && <span>pipeline: {it.config.pipeline_label}</span>}
+                    </div>
+                  )}
                   <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                    {it.provider_key === 'hubspot' && (
+                      <button onClick={() => setConfigFor(it)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center gap-1 px-2 py-1">
+                        <PieChart size={12} /> Pipeline
+                      </button>
+                    )}
                     <button onClick={() => openLogs(it)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center gap-1 px-2 py-1">
                       <FileText size={12} /> Logs
                     </button>
@@ -301,6 +314,14 @@ export default function IntegrationsPage() {
           onClose={() => setConnectFor(null)}
           onSubmit={onConnect}
           busy={busy}
+        />
+      )}
+
+      {configFor && (
+        <HubspotConfigModal
+          integration={configFor}
+          onClose={() => setConfigFor(null)}
+          onSaved={async () => { setConfigFor(null); await refresh(); showToast('Pipeline saved.'); }}
         />
       )}
 
@@ -568,5 +589,129 @@ function Field({ label, children }) {
       <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</div>
       {children}
     </label>
+  );
+}
+
+// ─────────────────────────────────────────────── HubSpot pipeline picker
+
+const STUDIO_STAGES = ['applied', 'scored', 'active', 'funded', 'rejected'];
+
+function HubspotConfigModal({ integration, onClose, onSaved }) {
+  useEscapeClose(onClose);
+  const [loading, setLoading] = useState(true);
+  const [pipelines, setPipelines] = useState([]);
+  const [pipelineId, setPipelineId] = useState(integration?.config?.pipeline_id || 'default');
+  const [stageMap, setStageMap] = useState(integration?.config?.dealstage_map || {});
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await api.integrationsAction(integration.uid, 'list_pipelines');
+        if (!alive) return;
+        setPipelines(res?.result?.pipelines || []);
+      } catch (e) {
+        if (alive) setError(e.message || 'Failed to load pipelines');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [integration.uid]);
+
+  const selected = pipelines.find(p => p.id === pipelineId);
+  const stages = (selected?.stages || []).slice().sort((a, b) => a.order - b.order);
+
+  const onSelectPipeline = (id) => {
+    setPipelineId(id);
+    // Reset map when pipeline changes — old stage IDs won't exist on a different pipeline.
+    if (id !== integration?.config?.pipeline_id) setStageMap({});
+  };
+
+  const setStage = (studio, hubspotId) => setStageMap(m => ({ ...m, [studio]: hubspotId }));
+
+  const onSave = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      await api.integrationsPatchConfig(integration.uid, {
+        pipeline_id: pipelineId,
+        pipeline_label: selected?.label || pipelineId,
+        dealstage_map: stageMap,
+      });
+      onSaved?.();
+    } catch (e) {
+      setError(e.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-lg w-full p-5" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100">HubSpot pipeline</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"><X size={18} /></button>
+        </div>
+        {loading ? (
+          <div className="text-sm text-gray-500 py-6 text-center">Loading pipelines…</div>
+        ) : error ? (
+          <div className="text-sm text-red-600 flex items-center gap-2"><AlertCircle size={14} /> {error}</div>
+        ) : (
+          <div className="space-y-4">
+            <Field label="Pipeline">
+              <select
+                value={pipelineId}
+                onChange={e => onSelectPipeline(e.target.value)}
+                className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2"
+              >
+                {pipelines.map(p => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+                {!pipelines.find(p => p.id === pipelineId) && (
+                  <option value={pipelineId}>{pipelineId} (current)</option>
+                )}
+              </select>
+            </Field>
+            <div>
+              <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Map StudioOS stages → HubSpot</div>
+              <div className="space-y-2">
+                {STUDIO_STAGES.map(s => (
+                  <div key={s} className="flex items-center gap-2">
+                    <div className="w-20 text-xs text-gray-600 dark:text-gray-400 capitalize">{s}</div>
+                    <select
+                      value={stageMap[s] || ''}
+                      onChange={e => setStage(s, e.target.value)}
+                      className="flex-1 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-1.5"
+                    >
+                      <option value="">— use default —</option>
+                      {stages.map(st => (
+                        <option key={st.id} value={st.id}>{st.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-gray-500 mt-2">
+                Empty entries fall back to the built-in defaults (appointmentscheduled / qualifiedtobuy / presentationscheduled / closedwon / closedlost).
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={onClose} className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700">Cancel</button>
+              <button
+                onClick={onSave}
+                disabled={saving}
+                className="text-sm px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1"
+              >
+                <Check size={14} /> {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

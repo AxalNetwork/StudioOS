@@ -107,6 +107,14 @@ export interface ProviderImpl {
   disconnect?(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow): Promise<void>;
   /** OAuth flows: build the authorize URL the browser is redirected to. */
   buildAuthorizeUrl?(c: Context<{ Bindings: Env }>, user: User, state: string): Promise<string>;
+  /**
+   * Provider-specific named actions exposed to the UI via
+   * `GET|POST /api/integrations/:uid/action/:name`. Used for things like
+   * `list_pipelines` (HubSpot pipeline picker) or `list_workspaces` (Slack)
+   * that don't fit the generic sync/push surface. Returns an arbitrary JSON
+   * body that the route forwards verbatim.
+   */
+  action?(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow, name: string, body: unknown): Promise<unknown>;
 }
 
 const PROVIDER_IMPLS: Map<string, ProviderImpl> = new Map();

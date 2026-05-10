@@ -100,6 +100,46 @@ deals.put('/:id', async (c) => {
     }
   } catch (e) { console.warn('[deals] notify deal_stage_change failed', e); }
 
+  // Task #2 — best-effort HubSpot sync on stage change. Look up the founder's
+  // hubspot integration (if any) and push the deal. Fire-and-forget via
+  // executionCtx.waitUntil so the API response stays snappy; failures land in
+  // integration_logs via the provider's own logging path. We deliberately
+  // skip when `data.status` was not part of the patch.
+  if (data.status) {
+    try {
+      const own2 = await sql`
+        SELECT f.user_id AS founder_user_id
+        FROM deals d
+        LEFT JOIN projects p ON p.id = d.project_id
+        LEFT JOIN founders f ON f.id = p.founder_id
+        WHERE d.id = ${id}
+      `;
+      const founderUserId = (own2[0] as any)?.founder_user_id as number | undefined;
+      if (founderUserId) {
+        const integ = await c.env.DB.prepare(
+          "SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'hubspot' AND status = 'active' LIMIT 1",
+        ).bind(founderUserId).first<any>();
+        if (integ) {
+          const work = (async () => {
+            try {
+              const { default: hsImpl } = await import('../integrations/providers/hubspot') as any;
+              // The module side-effect-registers; we need the impl from the registry.
+              const { getProviderImpl } = await import('../integrations/registry');
+              const impl = getProviderImpl('hubspot');
+              if (impl?.push) {
+                await impl.push(c, { id: founderUserId } as any, integ, { deal_id: id });
+              }
+              void hsImpl; // silence unused-default lint
+            } catch (e) {
+              console.warn('[deals] hubspot push on stage change failed', (e as Error).message);
+            }
+          })();
+          c.executionCtx?.waitUntil?.(work);
+        }
+      }
+    } catch (e) { console.warn('[deals] hubspot stage-change hook failed', e); }
+  }
+
   await sql.end();
   return c.json(updated);
 });

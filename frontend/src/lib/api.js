@@ -554,6 +554,15 @@ export const api = {
   integrationsWaitlistJoin: (data) => request('/integrations/notify-me', { method: 'POST', body: JSON.stringify(data) }),
   integrationsWaitlistLeave: (provider) => request(`/integrations/notify-me/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
   integrationsOauthStart: (provider) => request(`/integrations/oauth/${encodeURIComponent(provider)}/start`),
+  // Task #2 — HubSpot pipeline picker + arbitrary provider actions.
+  integrationsAction: (uid, name, body) => request(
+    `/integrations/${encodeURIComponent(uid)}/action/${encodeURIComponent(name)}`,
+    body ? { method: 'POST', body: JSON.stringify(body) } : { method: 'GET' },
+  ),
+  integrationsPatchConfig: (uid, patch) => request(
+    `/integrations/${encodeURIComponent(uid)}/config`,
+    { method: 'PATCH', body: JSON.stringify(patch) },
+  ),
 
   searchSemantic: (q, type, limit = 10, grouped = false) => {
     const params = new URLSearchParams({ q });

@@ -53,6 +53,10 @@ import search from './routes/search';
 import kyc from './routes/kyc';
 import esign from './routes/esign';
 import integrations from './routes/integrations';
+// Task #2 — HubSpot provider. Side-effect import: the module's top-level
+// `registerProvider({ key: 'hubspot', ... })` runs at boot so the route
+// layer in routes/integrations.ts can dispatch to it.
+import { syncAllHubspotIntegrations } from './integrations/providers/hubspot';
 import network from './routes/network';
 import networkfx from './routes/networkfx';
 import profiling from './routes/profiling';
@@ -543,6 +547,19 @@ export default {
             }
           } catch (e) {
             console.error('[cron] totp remediation failed', e);
+          }
+        }
+        // Task #2 — HubSpot 30-minute reconcile. Drift between StudioOS
+        // deal stages and HubSpot pipelines gets picked up here even when
+        // webhooks are dropped. Cron fires every minute; gate on minute % 30.
+        if (now.getUTCMinutes() % 30 === 0) {
+          try {
+            const r = await syncAllHubspotIntegrations(env);
+            if (r.scanned > 0) {
+              console.info(`[cron] hubspot sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
+            }
+          } catch (e) {
+            console.error('[cron] hubspot sync failed', e);
           }
         }
         // Task #14 — flush pending digest emails. Cheap on idle ticks

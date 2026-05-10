@@ -428,6 +428,79 @@ integrations.post('/:uid/push', async (c) => {
   }
 });
 
+// ───────────────────────────────────────────────────────────────────── action / config
+
+/**
+ * Provider-specific named actions, e.g. `list_pipelines` for the HubSpot
+ * pipeline picker. The provider impl decides what payload to return.
+ * Tier-gated identically to /sync + /push.
+ */
+async function actionHandler(c: Context<{ Bindings: Env }>) {
+  await ensureIntegrationsSchema(c.env);
+  const user = await requireAuth(c);
+  ensureRole(c, user);
+  const uid = c.req.param('uid') || '';
+  const name = c.req.param('name') || '';
+  const isAdmin = (user.role || '').toLowerCase() === 'admin';
+  const row = await loadRow(c.env, uid, user.id, isAdmin);
+  if (!row) return c.json({ error: 'not_found' }, 404);
+
+  const desc = getDescriptor(row.provider_key);
+  if (desc && desc.tier !== 'free') ensureTier(user, desc.tier as 'growth' | 'studio');
+
+  const impl = getProviderImpl(row.provider_key);
+  if (!impl?.action) {
+    return c.json({ error: 'action_not_supported' }, 422);
+  }
+  let body: unknown = null;
+  if (c.req.method === 'POST') body = await c.req.json().catch(() => ({}));
+  try {
+    const out = await impl.action(c, user, row, name, body);
+    return c.json({ ok: true, action: name, result: out });
+  } catch (e) {
+    const msg = (e as Error).message || 'action failed';
+    await logEvent(c.env, {
+      integration_id: row.id, user_id: user.id, provider_key: row.provider_key,
+      direction: 'outbound', event_type: `action:${name}`, status: 'error',
+      response_summary: msg,
+    });
+    return c.json({ error: 'action_failed', message: msg }, 502);
+  }
+}
+integrations.get('/:uid/action/:name', actionHandler);
+integrations.post('/:uid/action/:name', actionHandler);
+
+/**
+ * PATCH /:uid/config — shallow-merge into config_json. Used by the HubSpot
+ * pipeline picker to persist the chosen pipeline + dealstage map. Only the
+ * connection's owner (or admin) may update.
+ */
+integrations.patch('/:uid/config', async (c) => {
+  await ensureIntegrationsSchema(c.env);
+  const user = await requireAuth(c);
+  ensureRole(c, user);
+  const uid = c.req.param('uid') || '';
+  const isAdmin = (user.role || '').toLowerCase() === 'admin';
+  const row = await loadRow(c.env, uid, user.id, isAdmin);
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  const patch = await c.req.json().catch(() => ({}));
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+    return c.json({ error: 'invalid_config' }, 400);
+  }
+  const existing = safeJson<Record<string, unknown>>(row.config_json, {});
+  const merged = { ...existing, ...patch };
+  await c.env.DB.prepare(
+    'UPDATE integrations SET config_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+  ).bind(JSON.stringify(merged), row.id).run();
+  await logEvent(c.env, {
+    integration_id: row.id, user_id: user.id, provider_key: row.provider_key,
+    direction: 'internal', event_type: 'config_update', status: 'ok',
+    response_summary: `keys: ${Object.keys(patch).join(',')}`,
+    payload: patch,
+  });
+  return c.json({ ok: true, config: merged });
+});
+
 // ───────────────────────────────────────────────────────────────────── logs
 
 integrations.get('/:uid/logs', async (c) => {

@@ -176,6 +176,8 @@ CREATE TABLE IF NOT EXISTS projects (
     cost_to_mvp REAL,
     funding_needed REAL,
     use_of_funds TEXT,
+    hubspot_company_id TEXT,
+    hubspot_primary_contact_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -290,6 +292,7 @@ CREATE TABLE IF NOT EXISTS deals (
     status TEXT NOT NULL DEFAULT 'applied' CHECK (status IN ('applied', 'scored', 'active', 'funded', 'rejected')),
     notes TEXT,
     amount REAL,
+    hubspot_deal_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -499,3 +502,8 @@ CREATE TABLE IF NOT EXISTS integration_waitlist (
   UNIQUE(user_id, provider_key)
 );
 CREATE INDEX IF NOT EXISTS idx_integration_waitlist_provider ON integration_waitlist(provider_key);
+
+-- Task #2 — HubSpot integration. Indexes for the inline external-id columns
+-- declared in `projects` and `deals` above (also in migration 017).
+CREATE INDEX IF NOT EXISTS idx_deals_hubspot ON deals(hubspot_deal_id);
+CREATE INDEX IF NOT EXISTS idx_projects_hubspot_company ON projects(hubspot_company_id);
