@@ -63,7 +63,11 @@ export default function LockedFounderCard({
   return (
     <div className="bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-4">
       <div className="flex items-start gap-3">
-        <div className="shrink-0 w-10 h-10 rounded-lg bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+        <div
+          className="shrink-0 w-10 h-10 rounded-lg bg-slate-200 dark:bg-slate-700 flex items-center justify-center"
+          title="NDA required to unlock — request an intro to view the full profile and deal materials."
+          aria-label="Locked: NDA required to unlock"
+        >
           <Lock size={18} className="text-slate-600 dark:text-slate-300" />
         </div>
         <div className="flex-1 min-w-0">
