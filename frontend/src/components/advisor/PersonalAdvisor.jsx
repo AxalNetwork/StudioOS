@@ -36,7 +36,7 @@ import { api } from '../../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
 import { useAuth } from '../../hooks/useAuthSync';
 import { useEscapeClose } from '../useEscapeClose';
-import { pickPersonaBank } from '../../lib/advisor/persona';
+import { pickPersonaBank, isSpinoutLabActive } from '../../lib/advisor/persona';
 import { predictTarget, pagesForBank, pageLabel } from '../../lib/advisor/router';
 
 const STORAGE_KEY = 'advisor:state';
@@ -148,6 +148,12 @@ export default function PersonalAdvisor() {
     try {
       const r = await api.advisor.answer(conversationId, qid, value);
       // Server is the source of truth — reconcile.
+      // Only `saved` answers belong in the per-page ring tally; roll
+      // back the optimistic add for any other terminal status so the
+      // ring doesn't overstate completion.
+      if (r.status !== 'saved') {
+        setAnsweredIds((ids) => ids.filter((x) => x !== qid));
+      }
       if (r.status === 'paywalled') {
         setMessages((m) => [...m, {
           role: 'assistant',
@@ -177,6 +183,15 @@ export default function PersonalAdvisor() {
       const r = await api.advisor.skip(conversationId, question.id);
       const next = r.next || r.next_question || null;
       setQuestion(next);
+      // Reconcile progress so the header / bubble percentage doesn't
+      // drift after a skip. The skip endpoint returns the same
+      // `progress` envelope shape as /answer; fall back to a fresh
+      // /progress fetch if the server hasn't included it.
+      if (r.progress) {
+        setProgress(r.progress);
+      } else {
+        try { const p = await api.advisor.progress(); setProgress(p); } catch { /* non-fatal */ }
+      }
       if (next) setMessages((m) => [...m, { role: 'assistant', content: next.prompt, question_id: next.id }]);
     } catch (e) {
       setMessages((m) => [...m, { role: 'assistant', content: `Error: ${e?.message || 'skip failed'}` }]);
@@ -276,7 +291,10 @@ export default function PersonalAdvisor() {
       if (role === 'investor') return 'investor';
       if (role === 'mentor') return 'mentor';
       if (role === 'partner') return 'partner';
-      if (role === 'founder') return user?.spinout_lab_week ? 'newFounder' : 'existingFounder';
+      // Reuse the shared persona dispatcher's spin-out-lab rule so
+      // graduated/incorporated founders don't get mis-grouped into
+      // the New Founder bank for ring purposes.
+      if (role === 'founder') return isSpinoutLabActive(user) ? 'newFounder' : 'existingFounder';
       return null;
     })();
     return bankName ? pagesForBank(bankName) : [];
