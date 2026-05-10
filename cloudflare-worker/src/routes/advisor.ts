@@ -58,10 +58,9 @@ import { routeAnswer, hydrateAlreadyAnswered, type WriteResult } from '../servic
 
 const advisor = new Hono<{ Bindings: Env }>();
 
-// LLM model used for /explain. Per AC-1 we use Sonnet for the explain
-// surface so concept walkthroughs match the depth of the broader
-// in-app assistant. Override via ANTHROPIC_EXPLAIN_MODEL env var.
-const EXPLAIN_MODEL_DEFAULT = 'claude-sonnet-4-5-20250929';
+// LLM model used for /explain. AC-1 specifies claude-sonnet-4-6 for
+// the explain surface; overridable via ANTHROPIC_EXPLAIN_MODEL.
+const EXPLAIN_MODEL_DEFAULT = 'claude-sonnet-4-6';
 const EXPLAIN_MAX_TOKENS = 512;
 
 // ---------------------------------------------------------------------------
@@ -104,19 +103,21 @@ function personaFor(user: User): Persona {
   return 'unknown';
 }
 
-// Build the working bank. ROLE_DETECTOR (primary / organization /
-// headline — three questions) is always prepended so that a user
-// starting from null `users.role` is taken through all three
-// detector questions before the conversation pivots to their
-// persona bank. Critically, this still holds AFTER the writeRouter
-// flips users.role on `role_detect.primary` — the next two detector
-// questions remain in the bank ahead of the persona questions and
-// nextUnansweredQuestion() picks them up first.
+// Build the working bank. The 3-question role-detector
+// (primary / organization / headline) is always prepended so a
+// brand-new user with `users.role = null` is taken through ALL three
+// detector questions before the conversation pivots into the persona
+// bank — even after writeRouter flips users.role on
+// `role_detect.primary`, the remaining two detector questions stay
+// ahead of the persona questions in the bank.
 //
-// For users whose role + organization + headline are already set on
-// the users row (e.g. signup wizard or back-fill), hydration in
-// /start pre-marks every detector question as answered, so they
-// skip the detector entirely and start in their persona bank.
+// Users who already have role + organization + headline populated on
+// the users row (e.g. set during signup or back-filled via
+// /settings) get every detector question pre-marked as answered by
+// hydrateAlreadyAnswered() in /start, so they skip the detector
+// entirely and land directly in their persona bank. That keeps the
+// "detector runs only when role is null" contract while still
+// guaranteeing the full 3-question sequence for null-role users.
 function workingBankFor(user: User): Question[] {
   const persona = personaFor(user);
   if (persona === 'unknown') return ROLE_DETECTOR;
@@ -134,8 +135,18 @@ interface ConversationRow {
 }
 
 async function getActiveConversation(env: Env, user: User): Promise<ConversationRow | null> {
+  // Active = currently in-progress conversation. /start re-uses an
+  // active row; if all are complete it kicks off a new one.
   return await env.DB.prepare(
     "SELECT * FROM advisor_conversations WHERE user_id = ? AND state = 'active' ORDER BY id DESC LIMIT 1",
+  ).bind(user.id).first<ConversationRow>();
+}
+
+async function getLatestConversation(env: Env, user: User): Promise<ConversationRow | null> {
+  // Latest of any state — used by /progress so completed users still
+  // see 100% on the dashboard ring instead of falling back to zero.
+  return await env.DB.prepare(
+    "SELECT * FROM advisor_conversations WHERE user_id = ? ORDER BY id DESC LIMIT 1",
   ).bind(user.id).first<ConversationRow>();
 }
 
@@ -552,18 +563,23 @@ advisor.get('/progress', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const bank = workingBankFor(user);
-  const conv = await getActiveConversation(c.env, user);
+  // Use the LATEST conversation regardless of state so the dashboard
+  // ring keeps showing 100% / complete after the user finishes the
+  // questionnaire instead of resetting to zero.
+  const conv = await getLatestConversation(c.env, user);
   if (!conv) {
     return c.json({
-      persona: personaFor(user), conversation_uid: null,
+      persona: personaFor(user),
+      conversation_id: null, conversation_uid: null,
       total: bank.length, answered: 0, skipped: 0, percent: 0, complete: false,
     });
   }
-  const total = bank.length;
+  const total = Number(conv.total_questions || bank.length);
   const answered = Number(conv.answered_count || 0);
   const skipped = Number(conv.skipped_count || 0);
   return c.json({
     persona: personaFor(user),
+    conversation_id: conv.uid,
     conversation_uid: conv.uid,
     total, answered, skipped,
     percent: total > 0 ? Math.round(((answered + skipped) / total) * 100) : 100,
