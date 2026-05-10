@@ -41,6 +41,16 @@ seats.get('/', async (c) => {
 
 seats.post('/invite', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
+  // Only the Institutional *primary buyer* can invite. Seat colleagues
+  // (rows with investor_seat_primary_user_id set) inherit the tier but
+  // MUST NOT be able to issue further invites — otherwise they could
+  // multiply seats beyond purchased entitlement.
+  if (user.investor_seat_primary_user_id != null && user.role !== 'admin') {
+    return c.json({
+      error: 'forbidden',
+      message: 'Seat colleagues cannot invite additional seats. Ask the account owner.',
+    }, 403);
+  }
   if (effectiveInvestorTier(user) !== 'institutional' && user.role !== 'admin') {
     return c.json({
       error: 'investor_tier_required',
@@ -110,12 +120,24 @@ seats.post('/accept', async (c) => {
   }
 
   // Mirror primary's tier onto the seat user so paywall checks pass.
-  // Cascade is also re-applied on webhook tier changes / trial downgrades.
+  // Fail-CLOSED: if the primary row is missing, or no longer Institutional,
+  // or has lapsed (cancelled/past_due/unpaid), reject the acceptance — a
+  // stale invite must never grant paid access on its own.
   const primary = await c.env.DB.prepare(
     `SELECT investor_tier, investor_subscription_status FROM users WHERE id = ?`
   ).bind(seat.primary_user_id).first<{ investor_tier: string | null; investor_subscription_status: string | null }>();
-  const inheritedTier = primary?.investor_tier ?? 'institutional';
-  const inheritedStatus = primary?.investor_subscription_status ?? 'active';
+  if (!primary) return c.json({ error: 'primary_unavailable' }, 410);
+  const primaryTier = (primary.investor_tier ?? 'free').toLowerCase();
+  const primaryStatus = (primary.investor_subscription_status ?? 'free').toLowerCase();
+  const lapsed = primaryStatus === 'cancelled' || primaryStatus === 'past_due' || primaryStatus === 'unpaid';
+  if (primaryTier !== 'institutional' || lapsed) {
+    return c.json({
+      error: 'primary_not_institutional',
+      message: 'The inviting account is no longer on an active Institutional plan.',
+    }, 410);
+  }
+  const inheritedTier = primaryTier;
+  const inheritedStatus = primaryStatus;
   await c.env.DB.prepare(
     `UPDATE investor_seats SET seat_user_id = ?, accepted_at = CURRENT_TIMESTAMP,
                                 invite_token = NULL
