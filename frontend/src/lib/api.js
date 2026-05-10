@@ -52,7 +52,10 @@ async function request(path, options = {}) {
       if (res.status === 401 && !path.startsWith('/auth/')) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        const currentPath = window.location.pathname;
+        if (currentPath !== '/login' && currentPath !== '/register' && currentPath !== '/verify-email') {
+          window.location.href = '/login';
+        }
         throw new Error('Session expired');
       }
       const err = await res.json().catch(() => ({}));
