@@ -385,11 +385,15 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
     const type = (sh.type || '').toLowerCase() || null;
     const holdings = securitiesByStakeholder.get(sh.id) || [];
     if (holdings.length === 0) {
+      // Empty-string sentinel (NOT NULL) for `carta_security_id` because
+      // SQLite/D1 UNIQUE indexes treat NULLs as distinct — using NULL
+      // here would re-insert (duplicate) the holder row on every sync.
+      // Reconcile already uses `|| ''` to recompute the same key.
       seenHolderKeys.add(`${sh.id}:`);
       try {
         await c.env.DB.prepare(
           'INSERT INTO cap_table_holders (user_id, name, email, security_type, shares, source, carta_stakeholder_id, carta_security_id) ' +
-          "VALUES (?, ?, ?, ?, 0, 'carta', ?, NULL) " +
+          "VALUES (?, ?, ?, ?, 0, 'carta', ?, '') " +
           'ON CONFLICT(user_id, carta_stakeholder_id, carta_security_id) WHERE carta_stakeholder_id IS NOT NULL DO UPDATE SET ' +
           "name = excluded.name, email = excluded.email, security_type = excluded.security_type, source = 'carta', updated_at = CURRENT_TIMESTAMP",
         ).bind(row.user_id, name, email, type, sh.id).run();
@@ -523,9 +527,23 @@ async function postConnect(c: Context<{ Bindings: Env }>, user: User, row: Integ
     // layer right before postConnect fires).
     const fresh = await c.env.DB.prepare('SELECT * FROM integrations WHERE id = ?')
       .bind(row.id).first<IntegrationRow>();
-    if (fresh) await sync(c, user, fresh);
+    if (fresh) {
+      await sync(c, user, fresh);
+      // sync() itself does NOT touch `integrations.last_synced_at` —
+      // the route layer (and the cron) wrap it. postConnect bypasses
+      // both, so update it here so the UI banner flips from "awaiting
+      // first sync" to "synced N min ago" without waiting on cron.
+      await c.env.DB.prepare(
+        "UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ?",
+      ).bind(row.id).run();
+    }
   } catch (e) {
     console.warn('[carta] postConnect first sync:', (e as Error).message);
+    try {
+      await c.env.DB.prepare(
+        "UPDATE integrations SET last_error = ? WHERE id = ?",
+      ).bind(((e as Error).message || 'first_sync_failed').slice(0, 500), row.id).run();
+    } catch { /* swallow — the cron will retry */ }
   }
 }
 
