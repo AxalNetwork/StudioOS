@@ -217,6 +217,23 @@ export async function routeAnswer(
     }
     const ctx = await ensureFounderProject(env, user);
     if (!ctx) return { status: 'failed', error: 'could not resolve founder project' };
+    // Side-effect (best-effort): a freshly-created project counts as
+    // the Spin-Out Lab "project_created" milestone. Fired once on
+    // first project rename so the lab unlocks Week-2 features
+    // without the founder having to re-trigger from the lab page.
+    // INSERT OR IGNORE is idempotent — see routes/spinout_lab.ts.
+    if (questionId === 'founder.project.name') {
+      try {
+        await env.DB.prepare(
+          `INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key)
+             VALUES (?, 1, 'project_created')`,
+        ).bind(user.id).run();
+      } catch { /* milestones table may not exist on legacy dev DBs */ }
+    }
+    // Side-effect (best-effort): bump projects.updated_at on every
+    // founder write so the e-sign contract auto-fill (which keys its
+    // merge-field cache on `updated_at`) reflects fresh values on
+    // the next /api/esign/contracts/:id/send call.
     // Column targets reflect the projects schema actually shipped in
     // D1 (see migrations 001-022). There is no `short_pitch` /
     // `traction_summary` — the closest fits are `description` and

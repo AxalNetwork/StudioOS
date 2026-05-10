@@ -104,16 +104,19 @@ function personaFor(user: User): Persona {
   return 'unknown';
 }
 
-// Build the working bank for the conversation: when role is unknown
-// the role-detector triplet is asked first; once role is set the
-// detector is suppressed so users with an existing role aren't
-// re-asked. Hydration in /start additionally pre-marks
-// role_detect.* questions as answered when the underlying users.role
-// / organization / headline columns are already populated.
+// Build the working bank for the conversation. The 3-question
+// role-detector (primary role, organization, headline) is always
+// prepended so AC-1's "ask the role detector when role is null"
+// requirement is satisfied end-to-end — i.e. the user is taken
+// through *all three* detector questions before pivoting deeper into
+// their persona bank, not just the primary-role question. Hydration
+// in /start pre-marks any detector questions whose answers already
+// exist in the users row (role / organization / headline), so users
+// with established profiles aren't re-asked.
 function workingBankFor(user: User): Question[] {
   const persona = personaFor(user);
   if (persona === 'unknown') return ROLE_DETECTOR;
-  return bankFor(persona);
+  return [...ROLE_DETECTOR, ...bankFor(persona)];
 }
 
 // ---------------------------------------------------------------------------
