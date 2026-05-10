@@ -745,9 +745,35 @@ esign.post('/sign/:token', async (c) => {
   const allSigned = (remaining?.n || 0) === 0;
 
   if (allSigned) {
-    await c.env.DB.prepare(
-      `UPDATE esign_envelopes SET status = 'completed', signed_r2_key = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?`
+    // Task #1 (Slack, 2026-05-10) — gate the completion UPDATE on a
+    // not-yet-completed status so concurrent final signers don't both
+    // observe `remaining=0` and double-fire the contract_signed notify.
+    // `meta.changes` reflects the real row count touched; only the winner
+    // proceeds to dispatch the notification.
+    const upd = await c.env.DB.prepare(
+      `UPDATE esign_envelopes SET status = 'completed', signed_r2_key = ?, completed_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status != 'completed'`
     ).bind(signedKey, rec.envelope_id).run();
+    const wonRace = ((upd as any)?.meta?.changes ?? 0) > 0;
+    // Best-effort; never blocks the sign API.
+    if (wonRace) try {
+      const env: any = await c.env.DB.prepare(
+        `SELECT user_id, document_title, envelope_uuid FROM esign_envelopes WHERE id = ?`
+      ).bind(rec.envelope_id).first();
+      if (env?.user_id) {
+        const { notify } = await import('../services/notify');
+        await notify(c.env, {
+          userId: Number(env.user_id),
+          type: 'contract_signed',
+          title: `Contract fully signed: ${env.document_title || 'Agreement'}`,
+          body: `All counterparties have signed. The executed PDF is available in your Legal vault.`,
+          link: '/legal',
+          payload: { envelope_uuid: env.envelope_uuid },
+          channels: ['in_app', 'email', 'slack'],
+          category: 'contract_signed',
+        });
+      }
+    } catch (e) { console.warn('[esign] notify contract_signed failed', e); }
   } else {
     await c.env.DB.prepare(
       `UPDATE esign_envelopes SET status = 'partially_signed', signed_r2_key = ? WHERE id = ?`

@@ -95,7 +95,8 @@ deals.put('/:id', async (c) => {
           body: 'A partner updated the deal stage on your project.',
           link: '/deals',
           payload: { deal_id: updated.id, status: updated.status },
-          channels: ['in_app', 'email'],
+          channels: ['in_app', 'email', 'slack'],
+          category: 'deal_stage_change',
         });
       }
     }

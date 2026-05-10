@@ -137,13 +137,64 @@ function resolveChannels(prefs: Record<string, any>, type: string, requested: No
   return out;
 }
 
-async function postSlack(webhook: string, text: string): Promise<void> {
+/**
+ * Task #1 (Slack, 2026-05-10) — Block Kit renderer for the 5 spec'd
+ * trigger events (contract_signed, deal_stage_change, mentor_session_booked,
+ * score_generated, dd_report_ready). Unknown event types fall through to a
+ * plain section block so any future notify() call still delivers something
+ * useful instead of silently dropping the Slack channel.
+ */
+function buildSlackBlocks(args: NotifyArgs, appUrl: string): Record<string, unknown> {
+  const link = args.link
+    ? (args.link.startsWith('http') ? args.link : `${appUrl.replace(/\/+$/, '')}${args.link}`)
+    : null;
+  const HEADERS: Record<string, string> = {
+    contract_signed: ':inbox_tray: Contract signed',
+    deal_stage_change: ':twisted_rightwards_arrows: Deal stage updated',
+    mentor_session_booked: ':calendar: Mentor session booked',
+    score_generated: ':bar_chart: New score generated',
+    dd_report_ready: ':page_facing_up: Due diligence report ready',
+  };
+  const headerText = HEADERS[args.type] || ':bell: Axal update';
+  const blocks: Array<Record<string, unknown>> = [
+    { type: 'header', text: { type: 'plain_text', text: headerText, emoji: true } },
+    { type: 'section', text: { type: 'mrkdwn', text: `*${args.title}*${args.body ? `\n${args.body}` : ''}` } },
+  ];
+  if (link) {
+    blocks.push({
+      type: 'actions',
+      elements: [{
+        type: 'button',
+        text: { type: 'plain_text', text: 'Open in Axal', emoji: true },
+        url: link,
+        style: 'primary',
+      }],
+    });
+  }
+  blocks.push({
+    type: 'context',
+    elements: [{ type: 'mrkdwn', text: `Axal StudioOS · _Manage in <${appUrl.replace(/\/+$/, '')}/settings/notifications|Notification settings>_` }],
+  });
+  // `text` fallback is required by Slack for screen readers / push previews.
+  return {
+    text: `${args.title}${args.body ? ` — ${args.body}` : ''}`,
+    blocks,
+  };
+}
+
+async function postSlackBlocks(webhook: string, payload: Record<string, unknown>): Promise<void> {
   try {
-    await fetch(webhook, {
+    const res = await fetch(webhook, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(payload),
     });
+    if (!res.ok) {
+      // Deliberately do NOT log the response body — Slack error responses
+      // can echo the webhook URL or `team`/`channel` context, which would
+      // leak per-user webhook material into centralized logs.
+      console.warn('[notify] slack non-2xx', res.status);
+    }
   } catch (e) {
     console.warn('[notify] slack failed', e);
   }
@@ -287,11 +338,34 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
       }
     }
 
+    // Task #1 (Slack, 2026-05-10) — load the per-user incoming-webhook
+    // URL from the integrations table (legacy global env.SLACK_WEBHOOK_URL
+    // fallback removed — broadcasting every user's notifications to one
+    // shared channel was a privacy footgun). Quiet hours suppresses Slack
+    // the same as email; critical categories bypass. Per-category opt-in
+    // map (`notif_categories_slack`) is consulted when the call carries a
+    // category — uncategorised/critical sends always go through.
     if (resolved.includes('slack')) {
       const skipSlack = quiet && !isCritical;
       if (!skipSlack) {
-        const hook = (env as any).SLACK_WEBHOOK_URL;
-        if (hook) await postSlack(hook, `*${args.title}*\n${args.body || ''}\n${args.link || ''}`);
+        let categoryAllowed = true;
+        if (args.category && !isCritical) {
+          try {
+            const map = JSON.parse(settings?.notif_categories_slack || '{}') as Record<string, boolean>;
+            // Default-on: only an explicit `false` suppresses.
+            if (map[args.category] === false) categoryAllowed = false;
+          } catch { /* fall through allowed */ }
+        }
+        if (categoryAllowed) {
+          try {
+            const { loadSlackWebhookForUser } = await import('../integrations/providers/slack');
+            const hook = await loadSlackWebhookForUser(env, args.userId);
+            if (hook?.url) {
+              const appUrl = (env as any).APP_URL || '';
+              await postSlackBlocks(hook.url, buildSlackBlocks(args, appUrl));
+            }
+          } catch (e) { console.warn('[notify] slack lookup failed', e); }
+        }
       }
     }
 

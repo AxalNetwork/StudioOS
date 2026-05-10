@@ -849,7 +849,20 @@ integrations.get('/oauth/:provider/start', async (c) => {
     extra.is_demo = d === undefined ? true : (d === '1' || d === 'true');
   }
   const state = await issueOauthState(c.env, user.id, provider, pkce.verifier, extra);
-  const url = await impl.buildAuthorizeUrl(c, user, state);
+  // Provider impls may throw `<provider>_oauth_unconfigured: ...` when the
+  // server-side OAuth client secrets are missing. Translate that into a
+  // controlled 503 so the UI can render an actionable message instead of
+  // a generic 500. (Task #1, 2026-05-10 — Slack relies on this path.)
+  let url: string;
+  try {
+    url = await impl.buildAuthorizeUrl(c, user, state);
+  } catch (e) {
+    const msg = (e as Error).message || '';
+    if (/_oauth_unconfigured/.test(msg)) {
+      return c.json({ error: 'oauth_unconfigured', provider, message: 'This integration is not yet configured on the server. Please contact your administrator.' }, 503);
+    }
+    throw e;
+  }
   return c.json({ ok: true, authorize_url: url, state, pkce_method: pkce.method });
 });
 

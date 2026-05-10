@@ -232,14 +232,17 @@ export const REGISTRY: ProviderDescriptor[] = [
     key: 'slack',
     display_name: 'Slack',
     integration_type: 'messaging',
-    description: 'Receive deal-flow alerts, weekly digests, and assistant prompts in Slack.',
-    status: 'coming_soon',
+    description: 'Receive deal-flow alerts and assistant prompts in your chosen Slack channel.',
+    // Task #1 (2026-05-10) — flipped to 'beta' (free tier). One-way
+    // Worker→Slack via incoming-webhook OAuth. Provider module is
+    // side-effect imported from index.ts so registerProvider() runs at boot.
+    status: 'beta',
     tier: 'free',
     auth_type: 'oauth2',
-    capabilities: ['Channel notifications', 'DM digests', 'Slash commands'],
-    docs_url: 'https://api.slack.com/apps',
+    capabilities: ['Channel notifications', 'Block Kit messages', 'Quiet-hours aware'],
+    docs_url: 'https://api.slack.com/messaging/webhooks',
     icon: 'MessageSquare',
-    oauth_scopes: ['chat:write', 'channels:read', 'users:read'],
+    oauth_scopes: ['incoming-webhook'],
   },
   {
     key: 'docusign',

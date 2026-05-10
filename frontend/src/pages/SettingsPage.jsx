@@ -1356,6 +1356,28 @@ function AuthSection({ data, flash }) {
 
 function NotificationsSection({ data, patch }) {
   const prefs = data.notification_prefs || {};
+  // Task #1 (Slack, 2026-05-10) — Slack column is gated on whether the
+  // signed-in user has an active Slack integration. We poll the
+  // integrations list once on mount; on failure we treat Slack as
+  // disconnected (fail-closed — never invite the user to toggle a
+  // channel that won't deliver).
+  const [slackConnected, setSlackConnected] = React.useState(false);
+  React.useEffect(() => {
+    let cancelled = false;
+    api.integrationsList().then(res => {
+      if (cancelled) return;
+      const items = Array.isArray(res?.items) ? res.items : (Array.isArray(res) ? res : []);
+      setSlackConnected(items.some(i => i.provider_key === 'slack' && i.status === 'active'));
+    }).catch(() => { if (!cancelled) setSlackConnected(false); });
+    return () => { cancelled = true; };
+  }, []);
+  const channels = React.useMemo(() => NOTIFICATION_CHANNELS.map(c => {
+    if (c.key !== 'slack') return c;
+    return slackConnected
+      ? c
+      : { ...c, disabled: true, hint: 'Connect Slack first' };
+  }), [slackConnected]);
+
   const setEvent = (eventKey, channel, value) => {
     const cur = { ...(prefs[eventKey] || {}) };
     cur[channel] = value;
@@ -1373,12 +1395,17 @@ function NotificationsSection({ data, patch }) {
         <thead>
           <tr className="border-b border-gray-200 dark:border-gray-700">
             <th className="text-left px-2 py-2 text-xs text-gray-500 dark:text-gray-400 font-medium">Event</th>
-            {NOTIFICATION_CHANNELS.map(c => (
+            {channels.map(c => (
               <th key={c.key}
                 className="text-center px-2 py-2 text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider"
                 title={c.disabled ? c.hint : undefined}>
                 {c.label}
-                {c.disabled && (
+                {c.key === 'slack' && !slackConnected && (
+                  <div className="text-[10px] normal-case font-normal text-violet-500 tracking-normal">
+                    <a href="/settings/integrations" className="hover:underline">Connect Slack</a>
+                  </div>
+                )}
+                {c.disabled && c.key !== 'slack' && (
                   <div className="text-[10px] normal-case font-normal text-gray-400 tracking-normal">
                     {c.hint}
                   </div>
@@ -1391,7 +1418,7 @@ function NotificationsSection({ data, patch }) {
           {events.map(ev => (
             <tr key={ev.key} className="border-b border-gray-100 dark:border-gray-800">
               <td className="px-2 py-2 text-gray-800 dark:text-gray-200">{ev.label}</td>
-              {NOTIFICATION_CHANNELS.map(c => {
+              {channels.map(c => {
                 const checked = !!prefs[ev.key]?.[c.key];
                 return (
                   <td key={c.key} className="text-center px-2 py-2">
@@ -2448,7 +2475,7 @@ function IntegrationsTab({ flash }) {
                 </button>
               ) : !acct.connected ? (
                 <span className="text-xs text-gray-400">
-                  {acct.provider === 'slack' ? 'Coming soon' : 'Connect from the relevant page'}
+                  {acct.provider === 'slack' ? 'Connect from the Integrations marketplace' : 'Connect from the relevant page'}
                 </span>
               ) : null}
             </div>

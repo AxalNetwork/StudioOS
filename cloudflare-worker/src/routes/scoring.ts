@@ -306,7 +306,8 @@ scoring.post('/score', async (c) => {
           body: `Tier: ${result.tier || newStatus}.${reviewStatus === 'flagged' ? ' Pending admin review.' : ''}`,
           link: `/projects/${projectId}`,
           payload: { snapshot_id: snapshot.id, total_score: result.total_score, tier: result.tier },
-          channels: ['in_app', 'email'],
+          channels: ['in_app', 'email', 'slack'],
+          category: 'score_generated',
         });
       }
     }

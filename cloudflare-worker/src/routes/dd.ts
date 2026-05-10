@@ -670,7 +670,8 @@ dd.post('/cases/:uid/report/share', async (c) => {
       type: 'dd_report_ready',
       title: `Your due diligence report is available`,
       body: `Axal has completed a DD review for ${cs.subject_label}. Reach out to your partner to discuss the findings.`,
-      channels: ['in_app','email'],
+      channels: ['in_app','email','slack'],
+      category: 'dd_report_ready',
     }).catch(() => null);
     await audit(c.env, Number(cs.id), user, 'report_shared_with_founder', { type: 'user', id: founderUserId });
     return c.json({ ok: true });

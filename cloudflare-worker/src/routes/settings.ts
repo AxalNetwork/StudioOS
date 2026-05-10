@@ -823,12 +823,17 @@ function pickAppearance(row: UserSettingsRow) {
 function pickNotifications(row: UserSettingsRow) {
   let email: Record<string, boolean> = {};
   let inapp: Record<string, boolean> = {};
+  let slack: Record<string, boolean> = {};
   try { email = JSON.parse(row.notif_categories_email || '{}'); } catch {}
   try { inapp = JSON.parse(row.notif_categories_inapp || '{}'); } catch {}
+  // Task #1 (Slack, 2026-05-10) — per-event opt-in map; default-on
+  // (notify.ts treats absence as allowed and only suppresses on explicit `false`).
+  try { slack = JSON.parse((row as any).notif_categories_slack || '{}'); } catch {}
   return {
     digest_frequency: row.digest_frequency,
     notif_categories_email: email,
     notif_categories_inapp: inapp,
+    notif_categories_slack: slack,
     quiet_hours_start: row.quiet_hours_start,
     quiet_hours_end: row.quiet_hours_end,
     quiet_hours_tz: row.quiet_hours_tz,
@@ -1079,6 +1084,7 @@ settings.put('/notifications', async (c) => {
   if ('digest_frequency' in body) patch.digest_frequency = body.digest_frequency;
   if ('notif_categories_email' in body) patch.notif_categories_email = body.notif_categories_email;
   if ('notif_categories_inapp' in body) patch.notif_categories_inapp = body.notif_categories_inapp;
+  if ('notif_categories_slack' in body) patch.notif_categories_slack = body.notif_categories_slack;
   if ('quiet_hours_start' in body) patch.quiet_hours_start = body.quiet_hours_start;
   if ('quiet_hours_end' in body) patch.quiet_hours_end = body.quiet_hours_end;
   if ('quiet_hours_tz' in body) patch.quiet_hours_tz = body.quiet_hours_tz;

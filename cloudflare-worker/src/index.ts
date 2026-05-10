@@ -65,6 +65,10 @@ import { syncAllSalesforceIntegrations } from './integrations/providers/salesfor
 import { syncAllCartaIntegrations } from './integrations/providers/carta';
 // Task #2 — DocuSign provider. Side-effect import so registerProvider() runs at boot.
 import { syncAllDocusignIntegrations } from './integrations/providers/docusign';
+// Task #1 (2026-05-10) — Slack provider (one-way notifications).
+// Side-effect import so registerProvider() runs at boot. No cron/sync —
+// Slack is send-only, driven by services/notify.ts.
+import './integrations/providers/slack';
 import network from './routes/network';
 import networkfx from './routes/networkfx';
 import profiling from './routes/profiling';
