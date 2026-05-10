@@ -243,11 +243,21 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
   const isSandbox = cfg.is_sandbox === true || cfg.is_sandbox === '1' || cfg.is_sandbox === 1;
   const verifier = typeof cfg.pkce_verifier === 'string' ? cfg.pkce_verifier : null;
   const tokens = await exchangeCode(c.env, input.oauth_code, isSandbox, verifier);
+  // Hard-fail when the org didn't return a refresh_token: without it we can't
+  // sustain a long-lived connection. Common cause is the Connected App's OAuth
+  // policy missing "Perform requests on your behalf at any time (refresh_token)"
+  // or the user's profile not granting the `refresh_token` scope.
+  if (!tokens.refresh_token) {
+    throw new Error(
+      'salesforce_no_refresh_token: the Connected App did not return a refresh_token. ' +
+      'Enable the "refresh_token" / "Perform requests at any time" scope on the Connected App and reconnect.',
+    );
+  }
   let identity: SfIdentity = {};
   if (tokens.id) identity = await fetchIdentity(tokens.id, tokens.access_token);
   const credentials: CredentialBlob = {
     access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token || '',
+    refresh_token: tokens.refresh_token,
     token_type: tokens.token_type || 'Bearer',
     instance_url: tokens.instance_url,
     issued_at: tokens.issued_at ? Number(tokens.issued_at) : Date.now(),
@@ -553,10 +563,21 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
     // SOQL datetime literals are unquoted but MUST match `YYYY-MM-DDThh:mm:ssZ` —
     // JS toISOString() emits milliseconds (`.123Z`) which SOQL rejects as malformed.
     const sinceIso = sinceIsoRaw.replace(/\.\d{3}Z$/, 'Z');
-    const soql = `SELECT Id, StageName, LastModifiedDate FROM Opportunity WHERE LastModifiedDate > ${sinceIso} ORDER BY LastModifiedDate DESC LIMIT 200`;
-    const res = await sfFetch(c.env, row, `/query?q=${encodeURIComponent(soql)}`);
-    if (res.ok) {
-      const out = await res.json() as { records: Array<{ Id: string; StageName: string }> };
+    const soql = `SELECT Id, StageName, LastModifiedDate FROM Opportunity WHERE LastModifiedDate > ${sinceIso} ORDER BY LastModifiedDate ASC LIMIT 200`;
+    // Page through SOQL results via `nextRecordsUrl` so high-volume orgs
+    // don't drop updates past the first 200 rows. Cap pages defensively to
+    // avoid runaway sync loops on broken cursors.
+    let nextPath: string | null = `/query?q=${encodeURIComponent(soql)}`;
+    let pages = 0;
+    const maxPages = 25; // up to 5,000 opportunities per sync run
+    while (nextPath && pages < maxPages) {
+      const res: Response = await sfFetch(c.env, row, nextPath);
+      if (!res.ok) { counts.errors++; break; }
+      const out = await res.json() as {
+        records: Array<{ Id: string; StageName: string }>;
+        nextRecordsUrl?: string;
+        done?: boolean;
+      };
       for (const r of (out.records || [])) {
         const next = sfStageToStudio(stageMaps, r.StageName);
         if (!next) continue;
@@ -572,8 +593,15 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
           counts.pulled++;
         }
       }
-    } else {
-      counts.errors++;
+      // `nextRecordsUrl` is an absolute API path like
+      // `/services/data/v60.0/query/01g...-2000`; sfFetch prefixes
+      // `/services/data/v60.0` so strip it when present.
+      if (!out.done && out.nextRecordsUrl) {
+        nextPath = out.nextRecordsUrl.replace(/^\/services\/data\/v\d+\.\d+/, '');
+      } else {
+        nextPath = null;
+      }
+      pages++;
     }
   } catch {
     counts.errors++;
