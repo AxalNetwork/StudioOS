@@ -94,7 +94,12 @@ export default function PaywallModal({ user }) {
   useEffect(() => {
     function onEvt(e) {
       const detail = e.detail || {};
-      const r = detail.required;
+      const raw = detail.required;
+      // Normalize legacy / namespaced tier codes from the worker (some
+      // older routes emit `investor_professional` / `investor_institutional`).
+      const r = raw === 'investor_professional' ? 'professional'
+        : raw === 'investor_institutional' ? 'institutional'
+        : raw;
       const norm = (r === 'studio' || r === 'professional' || r === 'institutional') ? r : 'growth';
       setRequired(norm);
       setMessage(typeof detail.message === 'string' ? detail.message : '');

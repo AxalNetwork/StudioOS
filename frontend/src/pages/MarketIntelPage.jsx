@@ -977,10 +977,16 @@ function isFullLensCaller(user) {
   return t === 'growth' || t === 'studio';
 }
 
+function normalizeTier(t) {
+  if (t === 'investor_professional') return 'professional';
+  if (t === 'investor_institutional') return 'institutional';
+  return t || 'growth';
+}
+
 function MIError({ err, fallbackTier = 'growth' }) {
   if (!err) return null;
   if (err.status === 402) {
-    const required = err.data?.required || fallbackTier;
+    const required = normalizeTier(err.data?.required || fallbackTier);
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
         <Lock size={16} className="text-amber-700 shrink-0 mt-0.5" />
@@ -1029,6 +1035,31 @@ function MiniBar({ value }) {
   );
 }
 
+// Build a plain-English "why this sector" string from the per-dimension
+// scores. Picks the top two dimensions (>=60) as drivers and the lowest
+// (<=40) as drag. Falls back to a neutral string when the full lens isn't
+// available (free callers).
+function compassReasoning(s) {
+  if (!s.dimensions) return 'Composite-only view — upgrade for the dimensional drivers.';
+  const dims = Object.entries(s.dimensions).map(([k, v]) => ({ k, v: v.value, n: v.source_count }));
+  const top = [...dims].sort((a, b) => b.v - a.v).slice(0, 2);
+  const bottom = [...dims].sort((a, b) => a.v - b.v)[0];
+  const drivers = top.filter((d) => d.v >= 55).map((d) => `${d.k} (${Math.round(d.v)})`);
+  const drag = bottom && bottom.v <= 45 ? ` Drag from ${bottom.k} (${Math.round(bottom.v)}).` : '';
+  if (drivers.length === 0) return `Mixed signals across all six dimensions.${drag}`;
+  return `Driven by ${drivers.join(' and ')}.${drag}`;
+}
+function totalSourceCount(s) {
+  if (!s.dimensions) return null;
+  return Object.values(s.dimensions).reduce((a, v) => a + (v.source_count || 0), 0);
+}
+function ConfidenceChip({ n }) {
+  if (n == null) return null;
+  const label = n >= 12 ? 'High' : n >= 6 ? 'Medium' : n >= 2 ? 'Low' : 'Sparse';
+  const tone = n >= 12 ? 'bg-emerald-100 text-emerald-700' : n >= 6 ? 'bg-violet-100 text-violet-700' : n >= 2 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600';
+  return <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${tone}`} title={`${n} source rows in window`}>Confidence: {label}</span>;
+}
+
 function SectorCompassTab({ user }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
@@ -1040,9 +1071,10 @@ function SectorCompassTab({ user }) {
     return () => { cancelled = true; };
   }, []);
   const full = isFullLensCaller(user);
+  const sortedPicks = data?.sectors ? [...data.sectors].sort((a, b) => b.composite - a.composite).slice(0, 5) : [];
   return (
     <div className="space-y-4">
-      <TabExplainer text="The Sector Compass ranks every tracked sector on a 0–100 composite — demand, supply, capital, talent, research, and sentiment, decayed by recency. Free callers see the headline composite; Growth+ unlocks the dimensional breakdown so you can see WHY a sector is moving." />
+      <TabExplainer text="The Sector Compass ranks every tracked sector on a 0–100 composite — demand, supply, capital, talent, research, and sentiment, decayed by recency. Free callers see the headline composite; Growth+ unlocks the dimensional breakdown plus the 'why this sector is moving' reasoning." />
       {err && <MIError err={err} fallbackTier="growth" />}
       {!err && !data && <div className="text-sm text-gray-500">Loading sector compass…</div>}
       {data && (
@@ -1050,6 +1082,25 @@ function SectorCompassTab({ user }) {
           <div className="text-[11px] text-gray-500">
             Period {data.period_key} · computed {new Date(data.computed_at).toLocaleString()} · {data.lens === 'full' ? 'full lens' : 'free composite'}
           </div>
+          {sortedPicks.length > 0 && (
+            <div className="bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl p-4">
+              <div className="text-[10px] uppercase tracking-widest text-violet-700 font-semibold mb-2">Top Sector Picks This Period</div>
+              <ol className="space-y-1.5">
+                {sortedPicks.map((p, i) => (
+                  <li key={p.sector} className="flex items-start gap-3 text-xs">
+                    <span className="text-violet-700 font-bold w-4">{i + 1}.</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-900">{p.sector}</span>
+                        <span className="text-violet-600 font-bold">{Math.round(p.composite)}</span>
+                      </div>
+                      <div className="text-gray-700">{compassReasoning(p)}</div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {(data.sectors || []).map((s) => (
               <div key={s.sector} className="bg-white border border-gray-200 rounded-xl p-5">
@@ -1058,19 +1109,25 @@ function SectorCompassTab({ user }) {
                   <span className="text-2xl font-bold text-violet-600">{Math.round(s.composite)}</span>
                 </div>
                 <MiniBar value={s.composite} />
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <ConfidenceChip n={totalSourceCount(s)} />
+                </div>
                 {s.dimensions ? (
-                  <ul className="mt-3 space-y-1.5 text-xs">
-                    {Object.entries(s.dimensions).map(([k, v]) => (
-                      <li key={k} className="flex items-center justify-between gap-2">
-                        <span className="text-gray-600 capitalize w-20">{k}</span>
-                        <div className="flex-1"><MiniBar value={v.value} /></div>
-                        <span className="text-gray-700 font-medium w-8 text-right">{Math.round(v.value)}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <>
+                    <p className="mt-3 text-xs text-gray-700 italic">{compassReasoning(s)}</p>
+                    <ul className="mt-3 space-y-1.5 text-xs">
+                      {Object.entries(s.dimensions).map(([k, v]) => (
+                        <li key={k} className="flex items-center justify-between gap-2">
+                          <span className="text-gray-600 capitalize w-20">{k}</span>
+                          <div className="flex-1"><MiniBar value={v.value} /></div>
+                          <span className="text-gray-700 font-medium w-8 text-right">{Math.round(v.value)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 ) : (
                   <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
-                    <span>Per-dimension breakdown</span>
+                    <span>Per-dimension breakdown + reasoning</span>
                     {!full && <LockPill required="growth" />}
                   </div>
                 )}
@@ -1083,9 +1140,57 @@ function SectorCompassTab({ user }) {
   );
 }
 
+// Per-sector citations drill-in. Used by Founder + Investor lenses to
+// expose the underlying signal rows (jobs velocity, hiring, patents,
+// research output, capital deployments) for a clicked sector. Lazy-loads
+// on expansion to keep the parent table light.
+function SectorCitationsDrill({ sector, dimensionFilter }) {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.miCitations(sector, 25)
+      .then((d) => {
+        if (cancelled) return;
+        const all = d.rows || [];
+        setRows(dimensionFilter ? all.filter((r) => dimensionFilter.test(r.metric_key || '')) : all);
+      })
+      .catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, [sector, dimensionFilter]);
+  if (err) return <div className="text-xs text-red-600 px-3 py-2">{err.message || 'Failed to load citations'}</div>;
+  if (!rows) return <div className="text-xs text-gray-500 px-3 py-2">Loading drill-in…</div>;
+  if (rows.length === 0) return <div className="text-xs text-gray-500 italic px-3 py-2">No citation rows in the last 30 days.</div>;
+  return (
+    <ul className="divide-y divide-gray-100 bg-gray-50/50">
+      {rows.slice(0, 10).map((r, i) => (
+        <li key={i} className="px-4 py-1.5 text-[11px] flex items-center gap-3">
+          <span className="font-mono text-gray-500 w-32 truncate">{r.source_key}</span>
+          <span className="text-gray-700 flex-1 truncate">{r.metric_key}</span>
+          <span className="text-gray-700 font-medium w-12 text-right">{Number(r.metric_value).toFixed(1)}</span>
+          <span className="text-gray-400 w-24 text-right">{new Date(r.ts).toLocaleDateString()}</span>
+          {r.citation_url && (
+            <a href={r.citation_url} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline inline-flex items-center gap-1">
+              <ExternalLink size={10} />
+            </a>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function founderReason(p) {
+  if (p.opportunity_gap > 10) return `Strong demand-supply gap (+${p.opportunity_gap.toFixed(0)}) — early movers can land before incumbents respond.`;
+  if (p.opportunity_gap > 0) return `Modest gap (+${p.opportunity_gap.toFixed(0)}) — viable for a focused team with a sharp wedge.`;
+  if (p.opportunity_gap < -10) return `Crowded supply (${p.opportunity_gap.toFixed(0)}) — only enter with a 10× differentiator.`;
+  return `Balanced market — execution beats positioning here.`;
+}
+
 function FounderLensTab({ user: _user }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
+  const [openSector, setOpenSector] = useState(null);
   useEffect(() => {
     let cancelled = false;
     api.miFounderLens()
@@ -1093,11 +1198,31 @@ function FounderLensTab({ user: _user }) {
       .catch((e) => { if (!cancelled) setErr(e); });
     return () => { cancelled = true; };
   }, []);
+  const top = data?.picks ? data.picks.slice(0, 5) : [];
   return (
     <div className="space-y-4">
-      <TabExplainer text="Founder Lens highlights the biggest opportunity gaps — sectors where market demand is racing ahead of supply. Sorted by gap so the top picks are where a new spin-out has the most room to land." />
+      <TabExplainer text="Founder Lens highlights the biggest opportunity gaps — sectors where market demand is racing ahead of supply. Click any row to drill into the recent funding actors, hiring velocity, patent filings and research output rows that drive the score." />
       {err && <MIError err={err} fallbackTier="growth" />}
       {!err && !data && <div className="text-sm text-gray-500">Loading founder lens…</div>}
+      {data && top.length > 0 && (
+        <div className="bg-gradient-to-r from-emerald-50 to-violet-50 border border-emerald-200 rounded-xl p-4">
+          <div className="text-[10px] uppercase tracking-widest text-emerald-700 font-semibold mb-2">Top 5 Spin-Out Targets</div>
+          <ol className="space-y-1.5">
+            {top.map((p, i) => (
+              <li key={p.sector} className="flex items-start gap-3 text-xs">
+                <span className="text-emerald-700 font-bold w-4">{i + 1}.</span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-gray-900">{p.sector}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${p.opportunity_gap > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700'}`}>gap {p.opportunity_gap > 0 ? '+' : ''}{p.opportunity_gap.toFixed(1)}</span>
+                  </div>
+                  <div className="text-gray-700">{founderReason(p)}</div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
       {data && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
@@ -1108,19 +1233,30 @@ function FounderLensTab({ user: _user }) {
                 <th className="text-right px-4 py-2 text-gray-600 font-medium">Demand</th>
                 <th className="text-right px-4 py-2 text-gray-600 font-medium">Supply</th>
                 <th className="text-right px-4 py-2 text-gray-600 font-medium">Opportunity Gap</th>
+                <th className="px-4 py-2"></th>
               </tr>
             </thead>
             <tbody>
               {(data.picks || []).map((p) => (
-                <tr key={p.sector} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-4 py-2 text-gray-900 font-medium">{p.sector}</td>
-                  <td className="px-4 py-2 text-right text-gray-700">{Math.round(p.composite)}</td>
-                  <td className="px-4 py-2 text-right text-gray-700">{Math.round(p.demand)}</td>
-                  <td className="px-4 py-2 text-right text-gray-700">{Math.round(p.supply)}</td>
-                  <td className={`px-4 py-2 text-right font-semibold ${p.opportunity_gap > 5 ? 'text-emerald-600' : p.opportunity_gap < -5 ? 'text-red-600' : 'text-gray-700'}`}>
-                    {p.opportunity_gap > 0 ? '+' : ''}{p.opportunity_gap.toFixed(1)}
-                  </td>
-                </tr>
+                <React.Fragment key={p.sector}>
+                  <tr className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => setOpenSector(openSector === p.sector ? null : p.sector)}>
+                    <td className="px-4 py-2 text-gray-900 font-medium">{p.sector}</td>
+                    <td className="px-4 py-2 text-right text-gray-700">{Math.round(p.composite)}</td>
+                    <td className="px-4 py-2 text-right text-gray-700">{Math.round(p.demand)}</td>
+                    <td className="px-4 py-2 text-right text-gray-700">{Math.round(p.supply)}</td>
+                    <td className={`px-4 py-2 text-right font-semibold ${p.opportunity_gap > 5 ? 'text-emerald-600' : p.opportunity_gap < -5 ? 'text-red-600' : 'text-gray-700'}`}>
+                      {p.opportunity_gap > 0 ? '+' : ''}{p.opportunity_gap.toFixed(1)}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <ChevronDown size={14} className={`inline text-gray-400 transition-transform ${openSector === p.sector ? 'rotate-180' : ''}`} />
+                    </td>
+                  </tr>
+                  {openSector === p.sector && (
+                    <tr><td colSpan={6} className="p-0">
+                      <SectorCitationsDrill sector={p.sector} dimensionFilter={/jobs|hiring|patent|research|search|demand|supply/i} />
+                    </td></tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -1130,9 +1266,10 @@ function FounderLensTab({ user: _user }) {
   );
 }
 
-function InvestorLensTab({ user: _user }) {
+function InvestorLensTab({ user }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
+  const [openSector, setOpenSector] = useState(null);
   useEffect(() => {
     let cancelled = false;
     api.miInvestorLens()
@@ -1140,11 +1277,56 @@ function InvestorLensTab({ user: _user }) {
       .catch((e) => { if (!cancelled) setErr(e); });
     return () => { cancelled = true; };
   }, []);
+  const top = data?.ranked ? data.ranked.slice(0, 5) : [];
+  // Institutional investors get a "print quarterly report" affordance.
+  // Real PDF generation is server-side (out of scope here); this uses the
+  // browser's native print dialog so users can save-as-PDF on demand.
+  const investorTier = String(user?.investor_tier || 'free').toLowerCase();
+  const isInstitutional = user?.role === 'investor' && investorTier === 'institutional';
   return (
     <div className="space-y-4">
-      <TabExplainer text="Investor Lens ranks sectors by capital deployment + sentiment. Numbers come from the SEC EDGAR + Crunchbase pipelines (and any other LIVE-flagged providers). Reserved for Investor Pro+ subscribers." />
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <TabExplainer text="Investor Lens ranks sectors by capital deployment + sentiment. Numbers come from the SEC EDGAR + Crunchbase pipelines (and any other LIVE-flagged providers). Click a row to see the citation rows behind capital scores. Reserved for Investor Pro+ subscribers." />
+        <div className="flex items-center gap-2">
+          {isInstitutional ? (
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="text-xs font-medium px-3 py-1.5 rounded-md border border-violet-300 text-violet-700 hover:bg-violet-50 inline-flex items-center gap-1"
+              title="Open the browser print dialog — choose 'Save as PDF' to capture this quarter's lens."
+            >
+              <BookOpen size={12} /> Quarterly PDF
+            </button>
+          ) : user?.role === 'investor' && (
+            <button
+              type="button"
+              onClick={() => openPaywall('institutional', 'Quarterly PDF reports are an Institutional benefit.')}
+              className="text-xs font-medium px-3 py-1.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 inline-flex items-center gap-1"
+            >
+              <Lock size={12} /> Quarterly PDF (Institutional)
+            </button>
+          )}
+        </div>
+      </div>
       {err && <MIError err={err} fallbackTier="professional" />}
       {!err && !data && <div className="text-sm text-gray-500">Loading investor lens…</div>}
+      {data && top.length > 0 && (
+        <div className="bg-gradient-to-r from-blue-50 to-violet-50 border border-blue-200 rounded-xl p-4">
+          <div className="text-[10px] uppercase tracking-widest text-blue-700 font-semibold mb-2">Top 5 Capital-Allocator Targets</div>
+          <ol className="space-y-1.5">
+            {top.map((s, i) => (
+              <li key={s.sector} className="flex items-start gap-3 text-xs">
+                <span className="text-blue-700 font-bold w-4">{i + 1}.</span>
+                <div className="flex-1">
+                  <span className="font-semibold text-gray-900">{s.sector}</span>{' '}
+                  <span className="text-blue-600 font-bold">{s.score.toFixed(1)}</span>
+                  <div className="text-gray-700">Capital {Math.round(s.capital)} · Sentiment {Math.round(s.sentiment)} · Composite {Math.round(s.composite)}</div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
       {data && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
@@ -1155,17 +1337,28 @@ function InvestorLensTab({ user: _user }) {
                 <th className="text-right px-4 py-2 text-gray-600 font-medium">Sentiment</th>
                 <th className="text-right px-4 py-2 text-gray-600 font-medium">Composite</th>
                 <th className="text-right px-4 py-2 text-gray-600 font-medium">Score</th>
+                <th className="px-4 py-2"></th>
               </tr>
             </thead>
             <tbody>
               {(data.ranked || []).map((s) => (
-                <tr key={s.sector} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-4 py-2 text-gray-900 font-medium">{s.sector}</td>
-                  <td className="px-4 py-2 text-right text-gray-700">{Math.round(s.capital)}</td>
-                  <td className="px-4 py-2 text-right text-gray-700">{Math.round(s.sentiment)}</td>
-                  <td className="px-4 py-2 text-right text-gray-700">{Math.round(s.composite)}</td>
-                  <td className="px-4 py-2 text-right font-semibold text-violet-600">{s.score.toFixed(1)}</td>
-                </tr>
+                <React.Fragment key={s.sector}>
+                  <tr className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => setOpenSector(openSector === s.sector ? null : s.sector)}>
+                    <td className="px-4 py-2 text-gray-900 font-medium">{s.sector}</td>
+                    <td className="px-4 py-2 text-right text-gray-700">{Math.round(s.capital)}</td>
+                    <td className="px-4 py-2 text-right text-gray-700">{Math.round(s.sentiment)}</td>
+                    <td className="px-4 py-2 text-right text-gray-700">{Math.round(s.composite)}</td>
+                    <td className="px-4 py-2 text-right font-semibold text-violet-600">{s.score.toFixed(1)}</td>
+                    <td className="px-4 py-2 text-right">
+                      <ChevronDown size={14} className={`inline text-gray-400 transition-transform ${openSector === s.sector ? 'rotate-180' : ''}`} />
+                    </td>
+                  </tr>
+                  {openSector === s.sector && (
+                    <tr><td colSpan={6} className="p-0">
+                      <SectorCitationsDrill sector={s.sector} dimensionFilter={/funding|capital|deal|round|investor|sentiment/i} />
+                    </td></tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -1174,6 +1367,25 @@ function InvestorLensTab({ user: _user }) {
     </div>
   );
 }
+
+// Heat-cell color ramp for the geography lens. Mirrors the MiniBar
+// thresholds so a sector at 70+ reads as "hot" everywhere on the page.
+function heatColor(v) {
+  const x = Math.max(0, Math.min(100, v));
+  if (x >= 75) return 'bg-red-500 text-white';
+  if (x >= 60) return 'bg-orange-400 text-white';
+  if (x >= 45) return 'bg-amber-300 text-gray-900';
+  if (x >= 30) return 'bg-emerald-200 text-gray-900';
+  return 'bg-blue-200 text-gray-900';
+}
+
+const GEO_REGIONS = [
+  { key: 'na', label: 'North America' },
+  { key: 'eu', label: 'Europe' },
+  { key: 'apac', label: 'Asia / Pacific' },
+  { key: 'latam', label: 'Latin America' },
+  { key: 'mena', label: 'Middle East / Africa' },
+];
 
 function GeographyLensTab({ user: _user }) {
   const [data, setData] = useState(null);
@@ -1185,27 +1397,59 @@ function GeographyLensTab({ user: _user }) {
       .catch((e) => { if (!cancelled) setErr(e); });
     return () => { cancelled = true; };
   }, []);
+  // Build a sector × region heat grid. The aggregator emits a single
+  // 'global' band today, so per-region cells fall back to the global
+  // composite with a "fallback" badge so users see WHY every region looks
+  // identical instead of assuming the data is wrong.
+  const globalBand = data?.geos?.find((g) => g.geo === 'global');
+  const sectors = globalBand ? globalBand.sectors : [];
   return (
     <div className="space-y-4">
-      <TabExplainer text="Geography Lens projects the composite onto regions. Today the aggregator emits a single ‘global’ band; per-country rollups land as additional connectors come online." />
+      <TabExplainer text="Geography Lens projects the composite onto regions as a sector × region heat grid. Today the aggregator emits a single 'global' band, so each region inherits the global composite — per-country rollups land as additional connectors come online." />
       {err && <MIError err={err} fallbackTier="professional" />}
       {!err && !data && <div className="text-sm text-gray-500">Loading geography lens…</div>}
-      {data && (data.geos || []).map((g) => (
-        <div key={g.geo} className="bg-white border border-gray-200 rounded-xl p-5">
-          <div className="text-xs text-gray-600 uppercase tracking-wider mb-3">{g.geo}</div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {(g.sectors || []).map((s) => (
-              <div key={s.sector} className="border border-gray-200 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-gray-900">{s.sector}</span>
-                  <span className="text-sm font-bold text-violet-600">{Math.round(s.composite)}</span>
-                </div>
-                <MiniBar value={s.composite} />
-              </div>
-            ))}
+      {data && sectors.length > 0 && (
+        <>
+          <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
+            Per-region rollups not yet emitted — every region currently mirrors the 'global' composite. Cells flagged <span className="px-1 py-0.5 rounded bg-amber-200 text-amber-900 font-medium text-[9px]">global fallback</span>.
           </div>
-        </div>
-      ))}
+          <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="text-left px-3 py-2 text-gray-600 font-medium">Sector</th>
+                  {GEO_REGIONS.map((r) => (
+                    <th key={r.key} className="text-center px-3 py-2 text-gray-600 font-medium whitespace-nowrap">{r.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sectors.map((s) => (
+                  <tr key={s.sector} className="border-b border-gray-100">
+                    <td className="px-3 py-2 text-gray-900 font-medium whitespace-nowrap">{s.sector}</td>
+                    {GEO_REGIONS.map((r) => (
+                      <td key={r.key} className="px-2 py-1.5 text-center">
+                        <div className={`inline-block px-2 py-1 rounded font-bold text-sm ${heatColor(s.composite)}`} title={`Global fallback: ${Math.round(s.composite)}`}>
+                          {Math.round(s.composite)}
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] text-gray-500">
+            <span>Cooler</span>
+            <span className="inline-block w-4 h-3 rounded bg-blue-200" />
+            <span className="inline-block w-4 h-3 rounded bg-emerald-200" />
+            <span className="inline-block w-4 h-3 rounded bg-amber-300" />
+            <span className="inline-block w-4 h-3 rounded bg-orange-400" />
+            <span className="inline-block w-4 h-3 rounded bg-red-500" />
+            <span>Hotter</span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
