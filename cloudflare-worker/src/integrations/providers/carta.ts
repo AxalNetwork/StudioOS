@@ -509,6 +509,26 @@ function validateConfig(
 
 // ───────────────────────────────────────────────────────────── side-effects
 
+/**
+ * Fire-and-forget hook the integrations route invokes via `waitUntil`
+ * after a fresh connect (both the api-key path and the OAuth callback).
+ * Eliminates the up-to-6-hour "dead period" until the first cron tick by
+ * running an immediate first sync. Errors are non-fatal — the cron will
+ * retry on its normal cadence.
+ */
+async function postConnect(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow): Promise<void> {
+  try {
+    // Re-load row to pick up the freshly-persisted issuer_id config the
+    // `connect()` call discovered (it's written by the integrations route
+    // layer right before postConnect fires).
+    const fresh = await c.env.DB.prepare('SELECT * FROM integrations WHERE id = ?')
+      .bind(row.id).first<IntegrationRow>();
+    if (fresh) await sync(c, user, fresh);
+  } catch (e) {
+    console.warn('[carta] postConnect first sync:', (e as Error).message);
+  }
+}
+
 const impl: ProviderImpl = {
   key: PROVIDER_KEY,
   connect,
@@ -516,6 +536,7 @@ const impl: ProviderImpl = {
   sync,
   disconnect,
   validateConfig,
+  postConnect,
 };
 registerProvider(impl);
 void REGISTRY;

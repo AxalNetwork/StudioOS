@@ -723,7 +723,11 @@ function LiveCapTablePanel({ live, loading, error, onRefresh }) {
         </div>
       ) : (
         <div className="px-4 py-6 text-sm text-gray-500 text-center">
-          {loading ? 'Loading live cap table…' : 'No holders synced yet. The first sync runs within 6 hours of connecting.'}
+          {loading
+            ? 'Loading live cap table…'
+            : connected
+              ? 'Syncing your cap table from Carta now — this usually completes in under a minute. Click Refresh to check.'
+              : 'No holders synced yet.'}
         </div>
       )}
     </div>
