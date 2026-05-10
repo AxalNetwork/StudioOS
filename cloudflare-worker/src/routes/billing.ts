@@ -652,7 +652,7 @@ async function handleStripeEvent(
       // only loses the entitlement that was actually cancelled.
       await env.DB.prepare(
         `UPDATE users SET mi_subscription_status = 'cancelled'
-         WHERE mi_stripe_customer_id = ? AND mi_stripe_subscription_id = ?`
+         WHERE mi_stripe_customer_id = ? AND mi_subscription_id = ?`
       ).bind(customer, subId).run();
       // Task #6 — drop the founder tier back to free when the tier sub ends.
       await env.DB.prepare(
