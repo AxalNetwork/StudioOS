@@ -180,8 +180,6 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
   if (!isFlagged(env, connector.flag_env)) {
     return { status: 'disabled', records_count: 0, raw_response: null, findings: [] };
   }
-  // Live: Crunchbase Basic API (env-keyed for the DD pipeline so admin
-  // scans don't depend on the case owner's per-user key).
   if (connector.key === 'crunchbase') {
     const apiKey = (env as unknown as Record<string, string | undefined>).CRUNCHBASE_API_KEY || '';
     if (apiKey) {
@@ -201,10 +199,6 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
           };
         }
         const findings: RawFinding[] = [];
-        // Per spec: Crunchbase findings default to `info`. The only
-        // escalation is the "funding=null + domain registered" rule
-        // below (low). Operating status / closed flags are surfaced
-        // as detail text but DO NOT escalate severity here.
         findings.push({
           source_kind: 'crunchbase', severity: 'info',
           title: `Crunchbase: ${top.name} — ${top.operating_status || 'status unknown'}`,
@@ -221,9 +215,6 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
           section_key: 'market_position',
         });
 
-        // Rule: funding=null + domain registered → low (early-stage signal,
-        // worth flagging for diligence reviewers as "company exists but
-        // hasn't disclosed funding").
         if ((top.funding_total_usd === null || top.funding_total_usd === undefined) && (top.website || top.linkedin)) {
           findings.push({
             source_kind: 'crunchbase', severity: 'low',
@@ -235,15 +226,6 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
           });
         }
 
-        // Rule: headcount delta vs prior snapshot for this case+connector.
-        // We look up the most recent prior dd_external_sources row for this
-        // subject and diff `num_employees_enum`. A drop from a higher band
-        // to a lower one is escalated to medium.
-        // Headcount delta vs prior snapshot: best-effort scan over the most
-        // recent prior dd_external_sources rows for this connector. We
-        // decrypt with the stored tuple ('dd_external_sources','raw_response_enc',id)
-        // — any decryption failure (key rotation / null blob) is silently
-        // skipped because the delta finding is purely additive.
         try {
           const prior = await env.DB.prepare(
             "SELECT id, raw_response_enc FROM dd_external_sources WHERE source_kind = 'crunchbase' AND status = 'ok' ORDER BY id DESC LIMIT 5",
@@ -271,9 +253,9 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
                 });
                 break;
               }
-            } catch { /* malformed prior — skip */ }
+            } catch { /* skip */ }
           }
-        } catch { /* delta finding is best-effort */ }
+        } catch { /* best-effort */ }
 
         return { status: 'ok', records_count: 1, raw_response: top, findings };
       } catch (e) {

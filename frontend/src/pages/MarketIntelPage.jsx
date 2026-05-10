@@ -13,9 +13,6 @@ export default function MarketIntelPage() {
   const [rounds, setRounds] = useState([]);
   const [benchmarks, setBenchmarks] = useState(null);
   const [conviction, setConviction] = useState([]);
-  // Portfolio enrichment — projects with a cached Crunchbase snapshot.
-  // Rendered on the Private Rounds tab so partners can see funding signals
-  // for their OWN portfolio alongside competitor rounds.
   const [enriched, setEnriched] = useState([]);
   const [tab, setTab] = useState('pulse');
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -36,8 +33,6 @@ export default function MarketIntelPage() {
       setBenchmarks(b);
       setConviction(c.high_conviction_plays || []);
     }).catch(() => {});
-    // Best-effort: pull projects with a cached Crunchbase snapshot. Quietly
-    // no-ops for users without listProjects access (e.g. raw investor role).
     api.listProjects().then((rows) => {
       const list = (Array.isArray(rows) ? rows : [])
         .filter((p) => p.crunchbase_uuid)
@@ -313,12 +308,6 @@ export default function MarketIntelPage() {
       {tab === 'private' && (
         <div className="space-y-4">
           <TabExplainer text="Private rounds = direct competitors' funding signals. Who just raised, at what stage, and at what valuation tells you whether the sector is heating up — and where your portfolio is mispriced." />
-          {/* Competitor enrichment — pick one of YOUR enriched projects and
-              pull live competitor signals from Crunchbase. Logo grid (uses
-              snapshot image_url) + funding-history bar chart (per-competitor
-              total_funding_usd from the search hits, sorted desc). Single
-              source of truth = stored snapshot + the existing /competitors
-              endpoint; no new backend route. */}
           {enriched.length > 0 && (
             <CompetitorEnrichmentBlock projects={enriched} />
           )}
@@ -796,13 +785,6 @@ function TabExplainer({ text }) {
   );
 }
 
-// Competitor enrichment — picks one of the user's enriched projects
-// (those with a Crunchbase snapshot) and renders (a) a logo grid of
-// competitors pulled from the existing /competitors endpoint, and
-// (b) a horizontal funding bar chart so partners can compare total
-// raised across the competitor set at a glance. Single-source-of-truth
-// for the data is the stored project snapshot + the live competitors
-// endpoint; no new backend route required.
 function CompetitorEnrichmentBlock({ projects }) {
   const [selectedId, setSelectedId] = useState(projects[0]?.id || '');
   const [source, setSource] = useState(null);
@@ -825,10 +807,6 @@ function CompetitorEnrichmentBlock({ projects }) {
     }).finally(() => setLoading(false));
   }, [selectedId]);
 
-  // Funding-history dataset — sorted desc by funding so the bars read
-  // top-down "biggest competitor first". Source is included as a pinned
-  // first row (highlighted) so the user sees their portfolio company in
-  // context with peer raises.
   const allRows = [
     ...(source ? [{ ...source, _isSource: true }] : []),
     ...comps,

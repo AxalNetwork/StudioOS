@@ -1,29 +1,4 @@
-/**
- * Task #3 (2026-05-10) — Crunchbase provider implementation (BETA, growth tier).
- *
- * One-way read-only enrichment via the Crunchbase Basic API. Each user
- * provides their own `user_key` (api_key) — Crunchbase issues per-account
- * keys; we do NOT operate a shared key. Per-user keys preserve rate-limit
- * accounting (Basic = 200 calls/day per key) and let the user revoke at
- * will from their Crunchbase account.
- *
- * Credential blob shape:
- *   { api_key: string }                 // long-lived user_key
- *
- * Endpoints we hit (Basic-tier surface):
- *   GET  /api/v4/searches/organizations  (POST body: query+field_ids+order)
- *   GET  /api/v4/entities/organizations/{uuid_or_permalink}?card_ids=...
- *
- * Rate-limit handling: a 429 from Crunchbase is the daily cap. We surface
- * it to the integration row's `last_error='rate_limited:<resetEpoch?>'`
- * so the IntegrationsPage banner renders explicit "daily limit reached"
- * copy. Other 4xx/5xx pass through with the upstream message.
- *
- * Actions exposed:
- *   - search       { q: string, limit?: number }    → [{uuid, name, ...}]
- *   - lookup       { uuid: string }                  → full snapshot
- *   - competitors  { uuid: string, limit?: number }  → similar orgs (sector heuristic)
- */
+// Crunchbase provider — per-user Basic API key, one-way read-only enrichment.
 import type { Context } from 'hono';
 import type { Env, User } from '../../types';
 import {
@@ -39,7 +14,6 @@ import { decryptCredentials, type CredentialBlob } from '../secrets';
 const PROVIDER_KEY = 'crunchbase';
 const CB_BASE = 'https://api.crunchbase.com/api/v4';
 
-// ───────────────────────────────────────────────── HTTP
 
 export class CrunchbaseRateLimited extends Error {
   resetHint?: string;
@@ -90,7 +64,6 @@ export async function crunchbaseFetch(
   return await res.json();
 }
 
-// ───────────────────────────────────────────────── shape helpers
 
 interface CbOrgIdentifier {
   uuid?: string;
@@ -189,7 +162,6 @@ export function shapeOrg(entity: CbOrgEntity): CrunchbaseSnapshot {
   };
 }
 
-// ───────────────────────────────────────────────── high-level helpers
 
 export async function searchOrganizations(
   apiKey: string, query: string, limit = 10,
@@ -214,11 +186,7 @@ export async function lookupOrganization(
   return shapeOrg(res);
 }
 
-/**
- * Sector-heuristic competitor list — Basic tier doesn't expose a "similar
- * companies" endpoint, so we search by category overlap on the source
- * snapshot's primary category_group and exclude the source uuid.
- */
+// Sector-heuristic competitor list (Basic tier has no similar-companies endpoint).
 export async function findCompetitors(
   apiKey: string, source: CrunchbaseSnapshot, limit = 10,
 ): Promise<CrunchbaseSnapshot[]> {
@@ -238,7 +206,6 @@ export async function findCompetitors(
   return entities.map(shapeOrg).filter(e => e.uuid !== source.uuid).slice(0, limit);
 }
 
-// ───────────────────────────────────────────────── credential extraction
 
 async function getApiKey(env: Env, row: IntegrationRow): Promise<string> {
   const fresh = await env.DB.prepare('SELECT credentials_enc FROM integrations WHERE id = ?')
@@ -249,25 +216,16 @@ async function getApiKey(env: Env, row: IntegrationRow): Promise<string> {
   return k;
 }
 
-/**
- * Persist a deterministic `rate_limited:<unix_epoch_ms>` marker on the row.
- * The epoch is the moment the user can retry: x-ratelimit-reset (seconds
- * since epoch) when present, else next UTC midnight (Crunchbase Basic
- * resets daily). The IntegrationsPage banner + the project lookup
- * slide-over both parse this suffix to render a "try again at HH:MM"
- * message and to disable search until the timestamp passes.
- */
+// Persist deterministic `rate_limited:<unix_epoch_ms>` marker (next UTC midnight if hint absent).
 function computeResetEpoch(hint?: string): number {
   if (hint) {
     const n = Number(hint);
     if (Number.isFinite(n) && n > 0) {
-      // Heuristic: values <1e10 are seconds, larger are ms.
       return n < 1e10 ? Math.floor(n * 1000) : Math.floor(n);
     }
     const t = Date.parse(hint);
     if (!Number.isNaN(t)) return t;
   }
-  // Default — next UTC midnight (Crunchbase Basic daily reset).
   const now = new Date();
   const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0);
   return next;
@@ -286,12 +244,10 @@ async function clearRateLimited(env: Env, row: IntegrationRow): Promise<void> {
   ).bind(row.id).run();
 }
 
-// ───────────────────────────────────────────────── connect / sync / action
 
 async function connect(_c: Context<{ Bindings: Env }>, _user: User, input: ConnectInput): Promise<ConnectResult> {
   const apiKey = String(input.api_key || '').trim();
   if (!apiKey) throw new Error('crunchbase_api_key_required');
-  // Validation smoke test — cheapest possible probe.
   try {
     await crunchbaseFetch(apiKey, '/searches/organizations', {
       method: 'POST',
@@ -313,8 +269,6 @@ async function connect(_c: Context<{ Bindings: Env }>, _user: User, input: Conne
 }
 
 async function sync(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<SyncResult> {
-  // Connection-health probe; doesn't pull any data on its own (Crunchbase
-  // enrichment is initiated from project-level lookup actions).
   const apiKey = await getApiKey(c.env, row);
   try {
     await crunchbaseFetch(apiKey, '/searches/organizations', {
@@ -383,11 +337,6 @@ const impl: ProviderImpl = {
 
 registerProvider(impl);
 
-/**
- * Look up the active Crunchbase integration row + decrypted API key for a
- * given user. Returns null when the user has no active connection. Used
- * by the project-level enrichment route + the DD connector.
- */
 export async function loadCrunchbaseKeyForUser(env: Env, userId: number): Promise<{ apiKey: string; row: IntegrationRow } | null> {
   const row = await env.DB.prepare(
     "SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'crunchbase' AND status = 'active' ORDER BY id DESC LIMIT 1",
@@ -401,13 +350,6 @@ export async function loadCrunchbaseKeyForUser(env: Env, userId: number): Promis
 
 export { markRateLimited as markCrunchbaseRateLimited, computeResetEpoch as crunchbaseResetEpoch };
 
-/**
- * Map a Crunchbase snapshot onto the denormalized `projects.*` columns
- * the schema reserves for cached enrichment (founded_year, hq,
- * employee_count, last_funding_round, total_funding). Used by the
- * /apply route after a server-side lookup so the project list/grid
- * surfaces don't have to JSON.parse `crunchbase_data_json` per row.
- */
 export interface ProjectAutofill {
   founded_year: number | null;
   hq: string | null;

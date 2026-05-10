@@ -44,8 +44,6 @@ export default function ProjectDetail() {
 
   useEffect(load, [id]);
 
-  // Auto-open the slide-over when ProjectsPage navigates here with ?cb=1.
-  // Strips the param after opening so a refresh doesn't keep re-opening it.
   useEffect(() => {
     if (searchParams.get('cb') === '1' && project && !cbOpen && !cbTierLocked) {
       setCbOpen(true);
@@ -92,9 +90,6 @@ export default function ProjectDetail() {
   const isOwner = !!user?.founder_id && project && project.founder_id === user.founder_id;
   const canEdit = isAdmin || isOwner;
   const canDelete = isAdmin || isOwner;
-  // Crunchbase enrichment is gated to growth-tier founders. Free-tier
-  // sees the button but clicking dispatches the global PaywallModal
-  // event ('studioos:tier_required'). Admin/elevated roles bypass.
   const tier = (user?.tier || user?.subscription_plan || 'free').toLowerCase();
   const isElevated = ['admin','partner','investor','mentor'].includes((user?.role || '').toLowerCase());
   const cbTierLocked = !isElevated && tier !== 'growth' && tier !== 'studio';
@@ -438,9 +433,6 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [notConnected, setNotConnected] = useState(false);
-  // 429 state — store the reset epoch so search input is disabled until
-  // the user can actually retry. Banner copy is the verbatim string the
-  // backend returns so it stays in sync with IntegrationsPage.
   const [rateLimitedUntil, setRateLimitedUntil] = useState(0);
   const [applyingUuid, setApplyingUuid] = useState('');
   const isRateLimited = rateLimitedUntil > Date.now();
@@ -469,8 +461,6 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
   const apply = async (snap) => {
     setApplyingUuid(snap.uuid); setErr('');
     try {
-      // Server-side lookup: send only uuid/permalink, never the snapshot
-      // body — backend re-fetches authoritative fields from Crunchbase.
       const res = await api.crunchbaseApply(project.id, { uuid: snap.uuid });
       onApplied?.(res?.snapshot || snap);
       onClose();
