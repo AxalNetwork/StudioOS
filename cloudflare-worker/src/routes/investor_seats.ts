@@ -173,7 +173,7 @@ export async function downgradeExpiredInvestorTrials(env: Env): Promise<{ scanne
      WHERE role = 'investor'
        AND investor_subscription_status = 'trialing'
        AND investor_trial_ends_at IS NOT NULL
-       AND investor_trial_ends_at <= datetime('now')`
+       AND datetime(investor_trial_ends_at) <= datetime('now')`
   ).all<{ id: number }>();
   const ids = (due.results || []).map((r) => r.id);
   if (ids.length === 0) return { scanned: 0, downgraded: 0 };
