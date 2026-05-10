@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Shield, LogIn, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Shield, LogIn } from 'lucide-react';
 import { api } from '../lib/api';
 
-// Single-page sign-in: email + authenticator code + Cloudflare Turnstile,
-// all visible at once. SMS is a fallback link that reveals the SMS code
-// field inline on the same page — we never navigate to a "step 2".
+// Single-page sign-in: email + authenticator code + Cloudflare Turnstile.
+// SMS is intentionally NOT offered as a primary sign-in factor — it lives
+// only in Settings → Security as a backup verification factor for account
+// recovery. See cloudflare-worker/src/routes/auth_sms.ts.
 //
 // Turnstile is REQUIRED here (matches /register). It must never be removed.
 // Backend `/api/auth/login` verifies the token via verifyTurnstile() and
@@ -15,13 +16,8 @@ const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [totpCode, setTotpCode] = useState('');
-  const [smsMode, setSmsMode] = useState(false);     // false = TOTP, true = SMS code field shown
-  const [smsCode, setSmsCode] = useState('');
-  const [smsLast4, setSmsLast4] = useState('');
-  const [smsSession, setSmsSession] = useState(null);
   const [turnstileToken, setTurnstileToken] = useState('');
   const [loading, setLoading] = useState(false);
-  const [smsLoading, setSmsLoading] = useState(false);
   const [error, setError] = useState('');
 
   // ---- Turnstile widget lifecycle (mirrors RegisterPage) ----
@@ -75,17 +71,12 @@ export default function LoginPage() {
   };
 
   // ---- Submit ----
-  const validateCommon = () => {
-    if (!email.trim()) { setError('Enter your email.'); return false; }
+  const submit = async () => {
+    if (!email.trim()) { setError('Enter your email.'); return; }
     if (TURNSTILE_SITE_KEY && !turnstileToken) {
       setError('Please complete the verification challenge.');
-      return false;
+      return;
     }
-    return true;
-  };
-
-  const verifyTotp = async () => {
-    if (!validateCommon()) return;
     if (totpCode.length !== 6) { setError('Enter the 6-digit code from your authenticator.'); return; }
     setLoading(true); setError('');
     try {
@@ -99,44 +90,6 @@ export default function LoginPage() {
       resetTurnstile();
     } finally { setLoading(false); }
   };
-
-  const verifySms = async () => {
-    if (!validateCommon()) return;
-    if (smsCode.length !== 6) { setError('Enter the 6-digit code we just sent.'); return; }
-    setLoading(true); setError('');
-    try {
-      const res = await api.smsVerifyChallenge(email.trim(), smsSession, smsCode);
-      if (!res?.token || !res?.user) throw new Error('Invalid response from server.');
-      localStorage.setItem('token', res.token);
-      localStorage.setItem('user', JSON.stringify(res.user));
-      window.location.href = 'https://axal.vc';
-    } catch (e) {
-      setError(e?.message || 'Sign in failed.');
-      resetTurnstile();
-    } finally { setLoading(false); }
-  };
-
-  const startSms = async () => {
-    if (!email.trim()) { setError('Enter your email first, then we can text you a code.'); return; }
-    setSmsLoading(true); setError('');
-    try {
-      const res = await api.smsStartChallenge(email.trim(), null);
-      if (!res?.session_info) {
-        setError("We couldn't text you. Try your authenticator code instead.");
-        return;
-      }
-      setSmsSession(res.session_info);
-      setSmsLast4(res.last4 || '');
-      setSmsMode(true);
-      setSmsCode('');
-    } catch (e) {
-      setError(e?.message || 'Could not send SMS. Try again or use your authenticator.');
-    } finally {
-      setSmsLoading(false);
-    }
-  };
-
-  const submit = () => (smsMode ? verifySms() : verifyTotp());
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center px-4">
@@ -153,7 +106,7 @@ export default function LoginPage() {
 
           <h2 className="text-xl font-bold text-gray-900 mb-1">Welcome Back</h2>
           <p className="text-sm text-gray-600 mb-6">
-            Sign in with your email and a verification code.
+            Sign in with your email and your authenticator code.
           </p>
 
           {error && (
@@ -170,33 +123,17 @@ export default function LoginPage() {
                 className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm" />
             </div>
 
-            {!smsMode ? (
-              <div>
-                <label className="text-xs text-gray-600 block mb-1">Authenticator code</label>
-                <input type="text" value={totpCode} inputMode="numeric" autoComplete="one-time-code"
-                  onChange={e => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  onKeyDown={e => e.key === 'Enter' && submit()}
-                  placeholder="000000" maxLength={6}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-2xl text-center tracking-[0.5em] font-mono" />
-                <p className="text-[10px] text-gray-500 mt-1">
-                  6-digit code from Google Authenticator, Authy, 1Password, etc. Recovery codes also work here.
-                </p>
-              </div>
-            ) : (
-              <div>
-                <label className="text-xs text-gray-600 block mb-1">SMS code</label>
-                <input type="text" value={smsCode} inputMode="numeric" autoComplete="one-time-code"
-                  onChange={e => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  onKeyDown={e => e.key === 'Enter' && submit()}
-                  placeholder="000000" maxLength={6}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-2xl text-center tracking-[0.5em] font-mono" />
-                <p className="text-[10px] text-gray-500 mt-1">
-                  {smsLast4
-                    ? <>We just sent a code to <span className="font-mono">•••• {smsLast4}</span>.</>
-                    : 'Enter the 6-digit code we just sent.'}
-                </p>
-              </div>
-            )}
+            <div>
+              <label className="text-xs text-gray-600 block mb-1">Authenticator code</label>
+              <input type="text" value={totpCode} inputMode="numeric" autoComplete="one-time-code"
+                onChange={e => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onKeyDown={e => e.key === 'Enter' && submit()}
+                placeholder="000000" maxLength={6}
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-2xl text-center tracking-[0.5em] font-mono" />
+              <p className="text-[10px] text-gray-500 mt-1">
+                6-digit code from Google Authenticator, Authy, 1Password, etc. Recovery codes also work here.
+              </p>
+            </div>
 
             {/* Cloudflare Turnstile — required. Do not remove. */}
             {TURNSTILE_SITE_KEY && (
@@ -204,38 +141,17 @@ export default function LoginPage() {
             )}
 
             <button onClick={submit}
-              disabled={loading || (TURNSTILE_SITE_KEY && !turnstileToken) || (smsMode ? smsCode.length !== 6 : totpCode.length !== 6)}
+              disabled={loading || (TURNSTILE_SITE_KEY && !turnstileToken) || totpCode.length !== 6}
               className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white flex items-center justify-center gap-2">
               {loading ? 'Signing in…' : <>Sign in <LogIn size={14} /></>}
             </button>
-
-            {/* SMS fallback — inline link, never a separate page. */}
-            <div className="flex items-center justify-between text-xs">
-              {!smsMode ? (
-                <button type="button" onClick={startSms} disabled={smsLoading}
-                  className="text-gray-600 hover:text-violet-700 underline disabled:opacity-50 flex items-center gap-1">
-                  <MessageSquare size={12} />
-                  {smsLoading ? 'Sending…' : 'Text me a code instead'}
-                </button>
-              ) : (
-                <>
-                  <button type="button" onClick={() => { setSmsMode(false); setSmsCode(''); setError(''); }}
-                    className="text-gray-600 hover:text-violet-700 underline">
-                    Use authenticator instead
-                  </button>
-                  <button type="button" onClick={startSms} disabled={smsLoading}
-                    className="text-gray-600 hover:text-violet-700 underline disabled:opacity-50">
-                    {smsLoading ? 'Sending…' : 'Resend code'}
-                  </button>
-                </>
-              )}
-            </div>
           </div>
 
           <div className="flex items-start gap-2 bg-violet-50 rounded-lg p-3 mt-5 border border-violet-300">
             <Shield size={14} className="text-violet-600 shrink-0 mt-0.5" />
             <p className="text-[10px] text-violet-700">
-              Your authenticator app stays the recommended factor. Billing changes, impersonation and other sensitive actions still require an authenticator code.
+              Lost your authenticator? Use one of your recovery codes here, or contact support.
+              You can enrol an SMS backup factor later from Settings → Security.
             </p>
           </div>
 

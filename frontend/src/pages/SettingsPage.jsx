@@ -1018,9 +1018,11 @@ function SmsPanel({ data, flash }) {
   }
   if (!status.sms_available) {
     return (
-      <Card title="SMS as a backup factor" description="SMS-based sign-in is not enabled on this server.">
+      <Card title="SMS as a backup factor" description="SMS verification is not enabled on this server yet.">
         <div className="text-xs text-gray-500 dark:text-gray-400">
-          Ask an administrator to provision Google Cloud Identity Platform credentials to turn this on.
+          An administrator needs to provision Google Cloud Identity Platform credentials
+          (<span className="font-mono">GCIP_API_KEY</span>) to turn this on. Once enabled, you'll
+          be able to add a phone number here as a backup factor for account recovery.
         </div>
       </Card>
     );
@@ -1029,7 +1031,7 @@ function SmsPanel({ data, flash }) {
   return (
     <Card
       title="SMS as a backup factor"
-      description="Add a phone number so you can sign in with a one-time text message if you lose access to your authenticator app."
+      description="Add a phone number as a backup verification factor. You'll receive a 6-digit code by text to confirm the number — used only for account recovery, never as a primary sign-in method."
     >
       <div className="text-xs text-amber-800 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300 border border-amber-200 dark:border-amber-900 rounded-lg p-3 mb-3">
         <strong>SIM-swap warning:</strong> SMS is less secure than your authenticator app — anyone who takes over your phone number can use it to sign in.

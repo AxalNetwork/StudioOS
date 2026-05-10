@@ -23,6 +23,7 @@ import type { Env, JobMessage } from './types';
 
 import realtime from './routes/realtime';
 import auth from './routes/auth';
+import authSms from './routes/auth_sms';
 import scoring from './routes/scoring';
 import projects from './routes/projects';
 import legal from './routes/legal';
@@ -205,6 +206,11 @@ app.route('/api', realtime);
 // `backend/app/api/routes/*.py` so the frontend `/api/...` calls hit the same
 // paths in dev and prod.
 app.route('/api/auth', auth);
+// SMS as a backup 2FA factor (Google Cloud Identity Platform). Mounted on
+// the same /api/auth prefix as the password/TOTP routes so endpoint paths
+// match the docstrings in routes/auth_sms.ts. Hono dispatches the most-
+// specific route first, so this never shadows /api/auth/login etc.
+app.route('/api/auth', authSms);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
 app.route('/api/billing', billing);
 
