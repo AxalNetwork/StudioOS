@@ -633,11 +633,7 @@ const impl: ProviderImpl = {
   action,
 };
 registerProvider(impl);
-
-// Flip the registry entry's status from 'coming_soon' → 'live' so the
-// frontend marketplace renders HubSpot in the Available section.
-const reg = REGISTRY.find(p => p.key === PROVIDER_KEY);
-if (reg) reg.status = 'live';
+void REGISTRY; // Static descriptor in registry.ts is the source of truth (status='live').
 
 /**
  * Cron entry-point. Iterates every active hubspot integration and runs

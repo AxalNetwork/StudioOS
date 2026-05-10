@@ -137,7 +137,11 @@ export const REGISTRY: ProviderDescriptor[] = [
     display_name: 'HubSpot',
     integration_type: 'crm',
     description: 'Sync deals, contacts, and notes between StudioOS and your HubSpot CRM.',
-    status: 'coming_soon',
+    // Task #2 — flipped to 'live' on 2026-05-10. The provider module's
+    // top-level `registerProvider` runs at boot via the side-effect import
+    // in index.ts, but we keep the static status authoritative so order of
+    // imports doesn't change marketplace visibility.
+    status: 'live',
     tier: 'growth',
     auth_type: 'oauth2',
     capabilities: ['Push deals', 'Pull contacts', 'Two-way sync'],
