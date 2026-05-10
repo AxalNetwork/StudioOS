@@ -35,6 +35,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { hashEmail } from '../util/hashEmail';
+import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
 
 const progress = new Hono<{ Bindings: Env }>();
 
@@ -196,6 +197,17 @@ progress.post('/discovery/:projectId', async (c) => {
   const project = await loadProject(c.env, projectId);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
+
+  // Task #6 — free-tier discovery interview cap.
+  if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+    await ensureTierSchema(c.env);
+    const existing = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?',
+    ).bind(projectId).first<{ n: number }>();
+    if (Number(existing?.n ?? 0) >= FREE_TIER_LIMITS.discoveryInterviews) {
+      ensureTier(user, 'growth');
+    }
+  }
 
   const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
   if (!body || typeof body !== 'object') {
@@ -410,6 +422,17 @@ progress.post('/roadmap/:projectId', async (c) => {
   const project = await loadProject(c.env, projectId);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
+
+  // Task #6 — free-tier OKR cap.
+  if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+    await ensureTierSchema(c.env);
+    const existing = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM roadmap_okrs WHERE project_id = ?',
+    ).bind(projectId).first<{ n: number }>();
+    if (Number(existing?.n ?? 0) >= FREE_TIER_LIMITS.roadmapOkrs) {
+      ensureTier(user, 'growth');
+    }
+  }
 
   const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
   if (!body || typeof body !== 'object') return c.json({ detail: 'Body required' }, 400);

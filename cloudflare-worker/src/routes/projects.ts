@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
 import { runFullScore } from '../services/scoring';
+import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
 
 const projects = new Hono<{ Bindings: Env }>();
 
@@ -104,6 +105,33 @@ async function createProjectHandler(c: any) {
   const name = typeof data?.name === 'string' ? data.name.trim() : '';
   if (!name) return c.json({ error: 'Project name is required' }, 400);
   const sql = getSQL(c.env);
+
+  // Task #6 — free-tier project cap (1). Counts ALL projects owned by the
+  // founder regardless of status. Bypass roles never hit the cap.
+  //
+  // We check BEFORE resolving founder_id: a founder whose users.founder_id is
+  // still NULL may already own a `founders` row (e.g. created by an admin or
+  // by a prior project flow that crashed). Counting only via user.founder_id
+  // would let them bypass the cap on their first call. Resolve via email
+  // first, then fall back to the linked column.
+  if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+    await ensureTierSchema(c.env);
+    let founderRow: Array<{ id: number }> = [];
+    if (user.founder_id) {
+      founderRow = [{ id: user.founder_id }];
+    } else if (user.email) {
+      founderRow = await sql`SELECT id FROM founders WHERE email = ${user.email}`;
+    }
+    if (founderRow.length > 0) {
+      const fid = founderRow[0].id;
+      const existing = await sql`SELECT COUNT(*)::int AS n FROM projects WHERE founder_id = ${fid}`;
+      const count = Number(existing?.[0]?.n ?? 0);
+      if (count >= FREE_TIER_LIMITS.projects) {
+        await sql.end();
+        ensureTier(user, 'growth'); // throws 402 → frontend opens PaywallModal
+      }
+    }
+  }
 
   const founderId = await resolveFounderIdForCreate(user as any, data, sql);
 

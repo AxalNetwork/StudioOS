@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { ensureMiPaywallSchema, MI_PRO_PRODUCTS, userHasMiPro } from '../middleware/miAccess';
+import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
 import { upsertPlanFromStripeSubscription } from '../services/subscriptionPlans';
 
 // Epic 6 — Market Intel Pro billing surface.
@@ -157,10 +158,117 @@ billing.all('/mi-pro/dev-upgrade', async (c) => {
   return c.json({ ok: true, status: 'active', plan, period_end: periodEnd });
 });
 
+// ---------------------------------------------------------------------------
+// Task #6 — Founder subscription tier checkout / portal / dev-upgrade.
+// Distinct customer + subscription columns from MI Pro so a founder can hold
+// both a Tier sub (Growth/Studio) and an MI Pro sub side-by-side.
+// ---------------------------------------------------------------------------
+
+const TIER_PRICE_ENV: Record<string, keyof Env> = {
+  growth: 'STRIPE_PRICE_GROWTH' as keyof Env,
+  studio: 'STRIPE_PRICE_STUDIO' as keyof Env,
+};
+
+function isValidTier(t: unknown): t is 'growth' | 'studio' {
+  return t === 'growth' || t === 'studio';
+}
+
+billing.post('/tier/checkout', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  const body = await c.req.json().catch(() => ({} as { tier?: string }));
+  const tier = body.tier;
+  if (!isValidTier(tier)) return c.json({ error: 'invalid_tier' }, 400);
+
+  const stripeKey = c.env.STRIPE_SECRET_KEY;
+  const priceEnvKey = TIER_PRICE_ENV[tier];
+  const priceId = (c.env as unknown as Record<string, unknown>)[priceEnvKey] as string | undefined;
+  const appUrl = c.env.APP_URL || 'http://localhost:5000';
+
+  // Dev fallback — no Stripe configured. Mirrors mi-pro/dev-upgrade.
+  if (!stripeKey || !priceId) {
+    return c.json({
+      url: `${appUrl}/api/billing/tier/dev-upgrade?tier=${tier}`,
+      dev: true,
+    });
+  }
+
+  const params: Record<string, string> = {
+    mode: 'subscription',
+    'line_items[0][price]': priceId,
+    'line_items[0][quantity]': '1',
+    success_url: `${appUrl}/settings?tab=billing&upgraded=1`,
+    cancel_url: `${appUrl}/settings?tab=billing&upgrade_cancelled=1`,
+    'metadata[user_id]': String(user.id),
+    'metadata[tier]': tier,
+    'metadata[kind]': 'tier',                     // disambiguates from MI Pro in webhook
+    client_reference_id: `tier:${user.id}`,
+  };
+  if (user.stripe_customer_id) {
+    params.customer = user.stripe_customer_id;
+  } else {
+    params.customer_email = user.email;
+  }
+
+  try {
+    const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params);
+    return c.json({ url: session.url, session_id: session.id });
+  } catch (e) {
+    return c.json({ error: 'checkout_failed', detail: (e as Error).message }, 502);
+  }
+});
+
+billing.post('/tier/portal', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  if (!user.stripe_customer_id) return c.json({ error: 'no_subscription' }, 400);
+  const appUrl = c.env.APP_URL || 'http://localhost:5000';
+  try {
+    const session = await stripeCall<{ url: string }>(c.env, '/billing_portal/sessions', {
+      customer: user.stripe_customer_id,
+      return_url: `${appUrl}/settings?tab=billing`,
+    });
+    return c.json({ url: session.url });
+  } catch (e) {
+    return c.json({ error: 'portal_failed', detail: (e as Error).message }, 502);
+  }
+});
+
+billing.get('/tier/status', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  return c.json({
+    tier: user.subscription_tier || 'free',
+    status: user.subscription_status || 'active',
+    renews_at: user.subscription_renews_at || null,
+    has_customer: !!user.stripe_customer_id,
+  });
+});
+
+billing.all('/tier/dev-upgrade', async (c) => {
+  if (c.env.STRIPE_SECRET_KEY) return c.json({ error: 'not_found' }, 404);
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  const url = new URL(c.req.url);
+  const tier = url.searchParams.get('tier') ?? 'growth';
+  if (!isValidTier(tier)) return c.json({ error: 'invalid_tier' }, 400);
+  const renewsAt = new Date(Date.now() + 30 * 86400 * 1000).toISOString();
+  await c.env.DB.prepare(
+    `UPDATE users SET subscription_tier = ?, subscription_status = 'active',
+                       subscription_renews_at = ?
+     WHERE id = ?`,
+  ).bind(tier, renewsAt, user.id).run();
+  if (c.req.method === 'GET') {
+    const appUrl = c.env.APP_URL || 'http://localhost:5000';
+    return c.redirect(`${appUrl}/settings?tab=billing&upgraded=1`);
+  }
+  return c.json({ ok: true, tier, renews_at: renewsAt });
+});
+
 // Stripe webhook. Signature verification is required when STRIPE_WEBHOOK_SECRET
 // is set; in dev with no secret we accept the body as-is so local testing works.
 billing.post('/stripe/webhook', async (c) => {
   await ensureMiPaywallSchema(c.env);
+  await ensureTierSchema(c.env);
   const raw = await c.req.text();
   const sig = c.req.header('stripe-signature') ?? '';
   const secret = c.env.STRIPE_WEBHOOK_SECRET;
@@ -197,13 +305,35 @@ async function handleStripeEvent(
   event: { type: string; data: { object: Record<string, unknown> } },
 ): Promise<void> {
   const obj = event.data.object;
+  // Task #6 — `metadata.kind === 'tier'` routes the event into the founder
+  // tier columns (subscription_tier / stripe_customer_id) instead of the MI
+  // Pro columns. Both pipes share the same Stripe webhook because Stripe
+  // only delivers to one endpoint per env.
+  const meta = (obj.metadata as Record<string, string> | undefined) ?? {};
+  const isTier = meta.kind === 'tier'
+    || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('tier:'));
+
   switch (event.type) {
     case 'checkout.session.completed': {
-      const userId = Number(((obj.metadata as Record<string, string> | undefined) ?? {}).user_id ?? obj.client_reference_id);
-      const plan = ((obj.metadata as Record<string, string> | undefined) ?? {}).plan ?? null;
+      const userId = Number(meta.user_id ??
+        (typeof obj.client_reference_id === 'string'
+          ? (obj.client_reference_id as string).replace(/^tier:/, '')
+          : obj.client_reference_id));
       const customer = obj.customer as string | null;
       const subscription = obj.subscription as string | null;
       if (!userId) return;
+      if (isTier) {
+        const tier = (meta.tier === 'growth' || meta.tier === 'studio') ? meta.tier : 'growth';
+        await env.DB.prepare(
+          `UPDATE users SET subscription_tier = ?,
+                             subscription_status = 'active',
+                             stripe_customer_id = COALESCE(?, stripe_customer_id),
+                             stripe_subscription_id = COALESCE(?, stripe_subscription_id)
+           WHERE id = ?`,
+        ).bind(tier, customer, subscription, userId).run();
+        return;
+      }
+      const plan = meta.plan ?? null;
       await env.DB.prepare(
         `UPDATE users SET mi_subscription_status = 'active',
                            mi_stripe_customer_id = COALESCE(?, mi_stripe_customer_id),
@@ -221,6 +351,30 @@ async function handleStripeEvent(
         ? new Date(Number(obj.current_period_end) * 1000).toISOString()
         : null;
       if (!customer) return;
+      // Tier-side update: only touches users whose stripe_customer_id matches.
+      // Tier metadata may be on the subscription's `metadata.tier`; if absent
+      // we leave subscription_tier alone (keeps the value set by checkout).
+      const subTier = isTier && (meta.tier === 'growth' || meta.tier === 'studio')
+        ? meta.tier
+        : null;
+      if (subTier) {
+        await env.DB.prepare(
+          `UPDATE users SET subscription_tier = ?,
+                             subscription_status = ?,
+                             subscription_renews_at = ?,
+                             stripe_subscription_id = ?
+           WHERE stripe_customer_id = ?`,
+        ).bind(subTier, status, periodEnd, obj.id as string, customer).run();
+      } else {
+        // Status / renewal updates on a tier sub without explicit metadata.
+        await env.DB.prepare(
+          `UPDATE users SET subscription_status = ?,
+                             subscription_renews_at = ?,
+                             stripe_subscription_id = ?
+           WHERE stripe_customer_id = ?`,
+        ).bind(status, periodEnd, obj.id as string, customer).run();
+      }
+      // MI Pro mirror — unchanged behaviour for callers on mi_stripe_customer_id.
       await env.DB.prepare(
         `UPDATE users SET mi_subscription_status = ?,
                            mi_subscription_id = ?,
@@ -285,6 +439,13 @@ async function handleStripeEvent(
       await env.DB.prepare(
         `UPDATE users SET mi_subscription_status = 'cancelled'
          WHERE mi_stripe_customer_id = ?`
+      ).bind(customer).run();
+      // Task #6 — drop the founder tier back to free when the tier sub ends.
+      await env.DB.prepare(
+        `UPDATE users SET subscription_tier = 'free',
+                           subscription_status = 'cancelled',
+                           stripe_subscription_id = NULL
+         WHERE stripe_customer_id = ?`,
       ).bind(customer).run();
       return;
     }

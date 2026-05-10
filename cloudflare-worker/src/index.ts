@@ -88,6 +88,11 @@ import insightsRoutes from './routes/insights';
 // T3 — Reserve allocation + waterfall simulator (Task #46 port).
 import fundSimulatorRoutes from './routes/fund_simulator';
 import { processQueueBatch } from './services/queueWorker';
+// Task #6 — founder subscription tier middleware + billing router (Stripe
+// checkout/portal/webhook + tier endpoints). Both must mount; the billing
+// import was missed in the first pass and left tier checkout/webhook 404.
+import { requireTier } from './middleware/requireTier';
+import billing from './routes/billing';
 import { Jobs } from './models/jobs';
 import { queueConsumer } from './queue-consumer';
 import { rateLimitMiddleware } from './middleware/rateLimit';
@@ -182,6 +187,35 @@ app.route('/api', realtime);
 // `backend/app/api/routes/*.py` so the frontend `/api/...` calls hit the same
 // paths in dev and prod.
 app.route('/api/auth', auth);
+// Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
+app.route('/api/billing', billing);
+
+// Task #6 — Studio-tier paywall mounts. Wildcards run BEFORE the route
+// registration so a 402 short-circuits the handler. Bypass roles
+// (admin/partner/investor/mentor) are exempt inside the middleware itself.
+// Growth-tier mutation gates live inline at the specific handler (decks,
+// captable, mentors booking, scoring run, comarketing, compliance create).
+const STUDIO_PREFIXES = [
+  '/api/capital',
+  '/api/funds',
+  '/api/fund-sim',
+  '/api/liquidity',
+  '/api/legalcap',
+  '/api/cofounder',
+  '/api/kyc',
+  '/api/networkfx',
+  '/api/insights',
+  '/api/portfolio',
+  '/api/journal',
+  '/api/watchlist',
+  '/api/antiportfolio',
+  '/api/partner-office-hours',
+];
+for (const p of STUDIO_PREFIXES) {
+  app.use(p, requireTier('studio'));
+  app.use(`${p}/*`, requireTier('studio'));
+}
+
 app.route('/api/scoring', scoring);
 app.route('/api/projects', projects);
 app.route('/api/legal', legal);

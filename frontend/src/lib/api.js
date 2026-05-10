@@ -73,6 +73,19 @@ async function request(path, options = {}) {
       const e = new Error(msg);
       e.status = res.status;
       e.data = detailObj || errorObj || err || null;
+      // Task #6 — when the worker returns 402 `{error:'tier_required'}`, fan
+      // out a custom event so PaywallModal opens automatically. Anything that
+      // catches the throw afterwards still gets the structured error object.
+      if (res.status === 402 && typeof window !== 'undefined') {
+        const tierPayload = (err && (err.required ? err : (err.error === 'tier_required' ? err : null))) || null;
+        if (tierPayload && tierPayload.required) {
+          try {
+            window.dispatchEvent(new CustomEvent('studioos:tier_required', {
+              detail: { required: tierPayload.required, message: tierPayload.message || '' },
+            }));
+          } catch { /* noop */ }
+        }
+      }
       throw e;
     }
     const data = await res.json().catch(() => {
@@ -835,6 +848,15 @@ export const api = {
   deleteCapTableScenario: (uid) =>
     request(`/captable/scenarios/${uid}`, { method: 'DELETE' }),
   exportCapTableCsvUrl: (uid) => `/api/captable/scenarios/${uid}/export.csv`,
+
+  // ---------- Task #6 — Founder subscription tier (FREE / GROWTH / STUDIO) ----------
+  // 402 `tier_required` responses are auto-handled by `request` above (it
+  // dispatches `studioos:tier_required` so PaywallModal opens). These helpers
+  // are for explicit triggers from Settings → Billing and the modal itself.
+  tierStatus: () => request('/billing/tier/status'),
+  tierCheckout: (tier) =>
+    request('/billing/tier/checkout', { method: 'POST', body: JSON.stringify({ tier }) }),
+  tierPortal: () => request('/billing/tier/portal', { method: 'POST' }),
 
   // ---------- Trust layer (Task #58) ----------
   getTrustSummary: () => request('/trust/summary'),

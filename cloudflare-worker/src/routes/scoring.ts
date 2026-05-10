@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
+import { ensureTier } from '../middleware/requireTier';
 import { runFullScore, tierLabel } from '../services/scoring';
 import { autoCreateStudioOpsForProject } from './studioops';
 import {
@@ -57,6 +58,9 @@ function pickQualitativeText(body: Record<string, unknown>): string {
 }
 
 scoring.post('/score', async (c) => {
+  // Task #6 — scoring runs are Growth-tier for founders. Bypass roles
+  // (admin/partner/investor) skip the gate inside ensureTier.
+  ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
   let body: Record<string, unknown>;
   try {

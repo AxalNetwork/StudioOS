@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import { ensureTier } from '../middleware/requireTier';
 import { isAdmin, isPartner, mapError, nowIso, newUid, requirePartnerProfile } from './_t13t14t15_helpers';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -81,6 +82,8 @@ async function mintCode(env: Env): Promise<string> {
 
 // Partner side ----------------------------------------------------------
 r.post('/me/pitches', async (c) => {
+  // Task #6 — co-marketing pitch creation is Growth-tier.
+  ensureTier(await requireAuth(c), 'growth');
   try {
     const user = await requireAuth(c);
     if (!(isPartner(user) || isAdmin(user))) return c.json({ detail: 'Partner role required' }, 403);

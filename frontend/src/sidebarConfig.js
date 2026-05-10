@@ -24,10 +24,17 @@ import {
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon,
 } from 'lucide-react';
 
-// Stub — Phase C / Prompt 4 will replace the body. Do not change the
-// signature: callers (App.jsx, future paywall modals) depend on it.
-export function hasTier(/* user, requiredTier */) {
-  return true;
+// Task #6 — Real subscription-tier check. Bypass roles
+// (admin/partner/investor/mentor) always pass; founders are gated by their
+// `subscription_tier` column. Mirrors the worker's `userMeetsTier` helper.
+const TIER_RANK = { free: 0, growth: 1, studio: 2 };
+const BYPASS_ROLES = new Set(['admin', 'partner', 'investor', 'mentor']);
+export function hasTier(user, requiredTier) {
+  if (!requiredTier || requiredTier === 'free') return true;
+  if (!user) return false;
+  if (BYPASS_ROLES.has(String(user.role))) return true;
+  const have = TIER_RANK[String(user.subscription_tier || 'free').toLowerCase()] ?? 0;
+  return have >= (TIER_RANK[requiredTier] ?? 0);
 }
 
 export const SIDEBAR_GROUPS = {
@@ -108,7 +115,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
       { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
       { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
-      { to: '/build/deck', icon: Sparkles, label: 'Pitch Deck' },
+      { to: '/build/deck', icon: Sparkles, label: 'Pitch Deck', requiredTier: 'growth' },
       { to: '/build/financials', icon: DollarSign, label: 'Financial Model' },
       { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
       { to: '/build/roadmap', icon: Layers, label: 'Roadmap' },
@@ -117,19 +124,19 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'validate', label: 'Validate', items: [
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
-      { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
-      { to: '/cofounder', icon: Users, label: 'Find a Co-founder' },
+      { to: '/mentors', icon: UserCircle, label: 'Find a Mentor', requiredTier: 'growth' },
+      { to: '/cofounder', icon: Users, label: 'Find a Co-founder', requiredTier: 'studio' },
     ]},
     { key: 'capital', label: 'Capital & Liquidity', items: [
-      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
+      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
       { to: '/payouts', icon: Wallet, label: 'Payouts' },
-      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health', requiredTier: 'studio' },
     ]},
     { key: 'legal', label: 'Legal & Compliance', items: [
-      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital', requiredTier: 'studio' },
       { to: '/incorporate', icon: Scale, label: 'Incorporate' },
-      { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
-      { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker' },
+      { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement', requiredTier: 'studio' },
+      { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker', requiredTier: 'studio' },
       { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
       { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
@@ -269,11 +276,11 @@ export function defaultOpenGroups(role) {
   return open;
 }
 
-// Apply tier filtering to a group. Items without `requiredTier` always
-// pass. The `hasTier` stub returns true for now; Phase C swaps it.
-export function filterItemsByTier(items, user) {
-  return (items || []).filter((it) => {
-    if (!it.requiredTier) return true;
-    return hasTier(user, it.requiredTier);
-  });
+// Task #6 — Items with a `requiredTier` the user lacks STAY in the list (so
+// they remain discoverable) but render with a lock icon and route through
+// PaywallModal on click. App.jsx reads `requiredTier` directly to render the
+// lock + intercept; this helper is kept for legacy callers but no longer
+// hides items.
+export function filterItemsByTier(items /* , user */) {
+  return items || [];
 }

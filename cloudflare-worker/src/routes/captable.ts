@@ -13,6 +13,7 @@
  *   GET    /scenarios/{uid}/export.csv   — 409A-friendly CSV export
  */
 import { Hono } from 'hono';
+import { ensureTier } from '../middleware/requireTier';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { simulate, validateInputs, toCsv, type Inputs, type SimulateResult } from '../services/captable';
@@ -102,6 +103,8 @@ captable.get('/scenarios', async (c) => {
 });
 
 captable.post('/scenarios', async (c) => {
+  // Task #6 — captable scenario writes are Growth-tier (read paths stay free).
+  ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({}));
   const name = String(body?.name || '').trim();
@@ -134,6 +137,7 @@ captable.get('/scenarios/:uid', async (c) => {
 });
 
 captable.put('/scenarios/:uid', async (c) => {
+  ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
   let row: ScenarioRow;
   try { row = await ensureOwnerOr404(c.env, c.req.param('uid'), user); }
@@ -162,6 +166,7 @@ captable.put('/scenarios/:uid', async (c) => {
 });
 
 captable.delete('/scenarios/:uid', async (c) => {
+  ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
   try { await ensureOwnerOr404(c.env, c.req.param('uid'), user); }
   catch (e) { return asJsonError(c, e); }

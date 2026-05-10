@@ -8,6 +8,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { ensureTier } from '../middleware/requireTier';
 
 const decks = new Hono<{ Bindings: Env }>();
 
@@ -253,6 +254,8 @@ async function insertVersion(env: Env, projectId: number, slides: any[], title: 
 }
 
 decks.post('/generate', async (c) => {
+  // Task #6 — deck generation/save is Growth-tier.
+  ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   const pid = parseInt(body?.project_id);
@@ -331,6 +334,7 @@ decks.get('/:id', async (c) => {
 });
 
 decks.put('/:id', async (c) => {
+  ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   await ensureSchema(c.env);
@@ -361,6 +365,7 @@ decks.post('/:id/restore', async (c) => {
 });
 
 decks.post('/:id/share', async (c) => {
+  ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   await ensureSchema(c.env);

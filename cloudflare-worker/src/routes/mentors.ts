@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import { ensureTier } from '../middleware/requireTier';
 import {
   role, isAdmin, isFounder, mapError, nowIso, newUid, jload,
 } from './_t13t14t15_helpers';
@@ -250,6 +251,8 @@ mentors.delete('/me/slots/:id', async (c) => {
 mentors.post('/slots/:id/book', async (c) => {
   try {
     const user = await requireAuth(c);
+    // Task #6 — mentor booking is Growth-tier for founders.
+    ensureTier(user, 'growth');
     if (!isFounder(user) && !isAdmin(user)) return c.json({ detail: 'Founder role required' }, 403);
     const slotId = Number(c.req.param('id'));
     const body = await c.req.json().catch(() => ({} as any));

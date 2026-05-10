@@ -262,7 +262,7 @@ export default function SettingsPage() {
             </>
           )}
           {safeActive === 'integrations' && allowedIds.has('integrations') && <IntegrationsTab flash={flash} />}
-          {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} />}
+          {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
           {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
           {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperTab flash={flash} />}
         </div>
@@ -1833,27 +1833,128 @@ function IntegrationsTab({ flash }) {
   );
 }
 
-function BillingTab({ data }) {
-  const tier = data?.tier || data?.subscription_tier || 'free';
+// Task #6 — Live tier billing tab. Reads /api/billing/tier/status; "Upgrade"
+// opens Stripe Checkout for the chosen tier (or the dev-upgrade fallback when
+// Stripe isn't configured); "Manage subscription" opens the Stripe billing
+// portal so users can update card / cancel / download invoices.
+function BillingTab({ data, flash }) {
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.tierStatus()
+      .then(s => { if (!cancelled) setStatus(s); })
+      .catch(() => { /* keep null → fall back to data prop */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Auto-flash when the URL carries an upgrade-completion param.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('upgraded') === '1') {
+      flash?.('Subscription updated.');
+      params.delete('upgraded');
+      const q = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (q ? '?' + q : ''));
+    } else if (params.get('upgrade_cancelled') === '1') {
+      flash?.('Upgrade cancelled.', 'error');
+      params.delete('upgrade_cancelled');
+      const q = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (q ? '?' + q : ''));
+    }
+  }, [flash]);
+
+  const tier = String(status?.tier || data?.subscription_tier || 'free').toLowerCase();
+  const subStatus = status?.status || data?.subscription_status || 'active';
+  const renews = status?.renews_at || data?.subscription_renews_at;
+  const hasCustomer = status?.has_customer ?? !!data?.stripe_customer_id;
+
+  const upgrade = async (target) => {
+    setBusy(target);
+    try {
+      const res = await api.tierCheckout(target);
+      if (res?.url) window.location.href = res.url;
+    } catch (e) { flash?.(e.message || 'Checkout failed', 'error'); }
+    finally { setBusy(null); }
+  };
+
+  const portal = async () => {
+    setBusy('portal');
+    try {
+      const res = await api.tierPortal();
+      if (res?.url) window.location.href = res.url;
+    } catch (e) { flash?.(e.message || 'Could not open billing portal', 'error'); }
+    finally { setBusy(null); }
+  };
+
+  const TIER_LABEL = { free: 'Free', growth: 'Growth — $79/mo', studio: 'Studio — $249/mo' };
+  const ladder = ['free', 'growth', 'studio'];
+  const RANK = { free: 0, growth: 1, studio: 2 };
+
   return (
-    <Card title="Billing"
-      description="Subscription tier, payment method, and invoices. Full self-serve management is shipping with the Tiers track.">
-      <div className="space-y-3 text-sm">
-        <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Current tier</div>
-            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100 capitalize">{tier}</div>
+    <>
+      <Card title="Current plan" description="Your founder workspace subscription.">
+        {loading ? (
+          <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
+        ) : (
+          <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+            <div>
+              <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Tier</div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                {TIER_LABEL[tier] || tier}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Status: <span className="capitalize">{subStatus}</span>
+                {renews ? <> · Renews {new Date(renews).toLocaleDateString()}</> : null}
+              </div>
+            </div>
+            {hasCustomer && (
+              <button type="button" disabled={busy === 'portal'} onClick={portal}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg text-sm font-medium disabled:opacity-50">
+                {busy === 'portal' ? 'Opening…' : 'Manage subscription'}
+              </button>
+            )}
           </div>
-          <a href="/founder?tab=billing"
-            className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">
-            Manage plan
-          </a>
+        )}
+      </Card>
+
+      <Card title="Plans" description="Upgrade any time. Downgrade or cancel from Manage subscription.">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {ladder.map((t) => {
+            const current = t === tier;
+            const upgradable = RANK[t] > RANK[tier];
+            return (
+              <div key={t}
+                className={`rounded-lg border p-4 ${current ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
+                <div className="font-semibold text-gray-900 dark:text-gray-100 capitalize">{t}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {t === 'free' && '1 project · 5 interviews · 3 OKRs'}
+                  {t === 'growth' && '$79/mo · Unlimited builds, deck, scoring, mentors'}
+                  {t === 'studio' && '$249/mo · + Capital, legal, partner tools'}
+                </div>
+                <div className="mt-3">
+                  {current && (
+                    <span className="text-xs uppercase tracking-wider text-violet-700 dark:text-violet-300 font-semibold">Current plan</span>
+                  )}
+                  {upgradable && (
+                    <button type="button" disabled={busy === t} onClick={() => upgrade(t)}
+                      className="w-full px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">
+                      {busy === t ? 'Opening checkout…' : `Upgrade to ${t}`}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400">
-          Need an invoice or to update your payment method? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
+        <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+          Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
         </div>
-      </div>
-    </Card>
+      </Card>
+    </>
   );
 }
 

@@ -12,7 +12,9 @@ import {
   ChevronDown, ChevronRight, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock, Calendar,
   Settings as SettingsIcon, PieChart as PieIcon, Heart, Bookmark, Megaphone, BookOpen, Search
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier } from './sidebarConfig';
+import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier, hasTier } from './sidebarConfig';
+import PaywallModal, { openPaywall } from './components/PaywallModal';
+import { Lock as LockIcon } from 'lucide-react';
 import { api } from './lib/api';
 import SpinoutLabSidebar from './components/SpinoutLabSidebar';
 import Dashboard from './pages/Dashboard';
@@ -180,7 +182,7 @@ function highlightMatch(label, query) {
   );
 }
 
-function SidebarNav({ groups, role, onNavigate }) {
+function SidebarNav({ groups, role, onNavigate, user }) {
   const [query, setQuery] = useState('');
   // Persisted open-state per group key. We seed once from
   // localStorage merged with `defaultOpenGroups()` so first-time users
@@ -265,7 +267,26 @@ function SidebarNav({ groups, role, onNavigate }) {
               <span>{group.label}</span>
             </button>
             {isOpen && visibleItems.map((item) => {
-              const { to, icon: Icon, label, highlight } = item;
+              const { to, icon: Icon, label, highlight, requiredTier } = item;
+              // Task #6 — items the user can't afford render as a "locked"
+              // button that opens PaywallModal instead of navigating. Bypass
+              // roles + users on the right tier render as normal NavLinks.
+              const locked = !!requiredTier && !hasTier(user, requiredTier);
+              if (locked) {
+                return (
+                  <button
+                    key={to}
+                    type="button"
+                    onClick={() => openPaywall(requiredTier)}
+                    className="w-full flex items-center gap-3 px-5 py-2 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                    title={`${label} — requires ${requiredTier === 'studio' ? 'Studio' : 'Growth'} plan`}
+                  >
+                    {Icon && <Icon size={16} />}
+                    <span className="truncate flex-1 text-left">{highlightMatch(label, q)}</span>
+                    <LockIcon size={11} className="flex-shrink-0" />
+                  </button>
+                );
+              }
               return (
                 <NavLink
                   key={to}
@@ -447,7 +468,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             {inSpinoutLab ? (
               <SpinoutLabSidebar onNavigate={closeOnMobileNav} />
             ) : (
-              <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} />
+              <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} user={user} />
             )}
             <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-800">
               {user && (
@@ -873,6 +894,13 @@ function GlobalAssistantMount() {
   return <PersonalAssistant user={user} />;
 }
 
+// Task #6 — Mount the tier paywall once at the app shell so any 402
+// `tier_required` response (or sidebar lock click) opens the same modal.
+function GlobalPaywallMount() {
+  const { user } = useAuth();
+  return <PaywallModal user={user} />;
+}
+
 export default function App() {
   // T20 — AuthProvider must be inside <BrowserRouter> (it uses
   // useLocation to throttle /me re-syncs to one per route change).
@@ -883,6 +911,7 @@ export default function App() {
         <AppInner />
         <SpinoutLabListener />
         <GlobalAssistantMount />
+        <GlobalPaywallMount />
       </SettingsProvider>
     </AuthProvider>
   );

@@ -631,6 +631,14 @@ auth.get('/me', async (c) => {
     // that pre-date the migration; coerce to 0 so the UI hides the launcher
     // until the user has actually completed onboarding.
     assistant_enabled: ((user as any).assistant_enabled ?? 0) ? 1 : 0,
+    // Task #6 — founder subscription tier (FREE / GROWTH / STUDIO).
+    // Bypass roles (admin/partner/investor/mentor) still receive these
+    // fields so the frontend can display them, but tier gates are no-ops.
+    subscription_tier: (user as any).subscription_tier || 'free',
+    subscription_status: (user as any).subscription_status || 'active',
+    subscription_renews_at: (user as any).subscription_renews_at || null,
+    stripe_customer_id: (user as any).stripe_customer_id || null,
+    stripe_subscription_id: (user as any).stripe_subscription_id || null,
   });
 });
 

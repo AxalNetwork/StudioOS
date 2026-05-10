@@ -12,6 +12,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { ensureTier } from '../middleware/requireTier';
 
 const compliance = new Hono<{ Bindings: Env }>();
 
@@ -314,6 +315,8 @@ compliance.get('/events', async (c) => {
 });
 
 compliance.post('/events', async (c) => {
+  // Task #6 — compliance event creation is Growth-tier (reads stay free).
+  ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({}));
   const projectId = Number(body?.project_id);

@@ -56,6 +56,9 @@ export interface Env {
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_ATLAS_API_KEY?: string;
+  // Task #6 — founder subscription tier price ids (Stripe).
+  STRIPE_PRICE_GROWTH?: string;
+  STRIPE_PRICE_STUDIO?: string;
   // Task #33 — Master keys for column-level cipher (PII / financial / cap-table)
   // and for one-time signed R2 download URLs. Both MUST be ≥32 bytes in
   // production. Generate via `openssl rand -hex 32`. Provision per env via
