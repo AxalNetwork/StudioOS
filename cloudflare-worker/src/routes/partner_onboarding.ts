@@ -63,6 +63,21 @@ function gateInvitation(inv: InvitationRow | null): { ok: true; inv: InvitationR
   return { ok: true, inv };
 }
 
+/**
+ * Returns 409 when an envelope has already been started for this
+ * invitation (deal status awaiting_signature or active). Used to
+ * block /profile, /propose, /select after finalize so concurrent
+ * clicks can't spawn parallel deals or envelopes.
+ */
+async function rejectIfDealStarted(env: Env, invitationId: number): Promise<{ status: string } | null> {
+  const r: any = await env.DB.prepare(
+    `SELECT status FROM partner_deals
+       WHERE invitation_id = ? AND status IN ('awaiting_signature','active')
+       ORDER BY id DESC LIMIT 1`,
+  ).bind(invitationId).first();
+  return r ? { status: String(r.status) } : null;
+}
+
 function parseAllowed(s: string | null): PartnerDealType[] {
   if (!s) return [];
   try {
@@ -126,6 +141,8 @@ onboard.post('/:token/profile', async (c) => {
   const inv = await loadInvitation(c.env, c.req.param('token'));
   const gate = gateInvitation(inv);
   if (!gate.ok) return c.json({ error: gate.error }, gate.status as 404 | 409 | 410);
+  const started = await rejectIfDealStarted(c.env, gate.inv.id);
+  if (started) return c.json({ error: `Cannot edit profile — deal is already ${started.status}` }, 409);
   const body = await c.req.json().catch(() => ({}));
 
   const fields = {
@@ -186,6 +203,8 @@ onboard.post('/:token/propose', async (c) => {
   const inv = await loadInvitation(c.env, c.req.param('token'));
   const gate = gateInvitation(inv);
   if (!gate.ok) return c.json({ error: gate.error }, gate.status as 404 | 409 | 410);
+  const started = await rejectIfDealStarted(c.env, gate.inv.id);
+  if (started) return c.json({ error: `Cannot regenerate proposals — deal is already ${started.status}` }, 409);
   const profile: any = await c.env.DB.prepare(
     `SELECT * FROM partner_profiles WHERE invitation_id = ?`,
   ).bind(gate.inv.id).first();
@@ -205,6 +224,8 @@ onboard.post('/:token/select', async (c) => {
   const inv = await loadInvitation(c.env, c.req.param('token'));
   const gate = gateInvitation(inv);
   if (!gate.ok) return c.json({ error: gate.error }, gate.status as 404 | 409 | 410);
+  const started = await rejectIfDealStarted(c.env, gate.inv.id);
+  if (started) return c.json({ error: `Cannot change selection — deal is already ${started.status}` }, 409);
   const body = await c.req.json().catch(() => ({}));
   const allowed = parseAllowed(gate.inv.allowed_deal_types);
   // Recompute server-side from profile so the client cannot fabricate

@@ -210,18 +210,30 @@ export async function activatePartnerDealOnSignature(
     userId = Number(ins.id);
   }
 
-  // Generate referral code with 1 retry on UNIQUE collision.
+  // Generate referral code with retry on UNIQUE collision. We only
+  // adopt the candidate once the UPDATE actually persists (changes>=1)
+  // so a lost race or a UNIQUE-failed retry can't surface a code that
+  // doesn't exist in the database.
   let referralCode = deal.referral_code as string | null;
   if (!referralCode) {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       const candidate = genPartnerReferralCode();
       try {
-        await env.DB.prepare(
+        const upd = await env.DB.prepare(
           `UPDATE partner_deals SET referral_code = ? WHERE id = ? AND referral_code IS NULL`,
         ).bind(candidate, deal.id).run();
-        referralCode = candidate;
-        break;
-      } catch (e) { /* retry */ }
+        if ((upd.meta?.changes || 0) > 0) {
+          referralCode = candidate;
+          break;
+        }
+      } catch (e) { /* UNIQUE collision — retry with a new code */ }
+    }
+    if (!referralCode) {
+      // Lost the race to a concurrent activation — re-read the persisted code.
+      const row: any = await env.DB.prepare(
+        `SELECT referral_code FROM partner_deals WHERE id = ?`,
+      ).bind(deal.id).first();
+      referralCode = row?.referral_code || null;
     }
   }
 
