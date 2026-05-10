@@ -262,7 +262,7 @@ export default function SpinoutLabSidebar({ onNavigate }) {
           <div key={key} className="group relative flex items-stretch">
             <NavLink
               to={f.to}
-              end={f.to === '/spinout-lab'}
+              end
               onClick={onNavigate}
               className={({ isActive }) =>
                 `flex-1 min-w-0 flex items-center gap-3 pl-5 pr-2 py-2 text-sm transition-colors ${
