@@ -37,6 +37,23 @@ export function hasTier(user, requiredTier) {
   return have >= (TIER_RANK[requiredTier] ?? 0);
 }
 
+// Task #7 (W-2) — Investor tier ladder mirrors the worker's
+// `userMeetsInvestorTier`. Bypass roles (admin/partner/mentor) always pass.
+// Trialing/active are honoured via the `investor_subscription_status` column;
+// past_due/unpaid/cancelled drop the user to free.
+const INVESTOR_RANK = { free: 0, professional: 1, institutional: 2 };
+const INVESTOR_BYPASS_ROLES = new Set(['admin', 'partner', 'mentor']);
+export function hasInvestorTier(user, required) {
+  if (!required || required === 'free') return true;
+  if (!user) return false;
+  if (INVESTOR_BYPASS_ROLES.has(String(user.role))) return true;
+  if (String(user.role) !== 'investor') return true; // gate is investor-specific
+  const status = String(user.investor_subscription_status || 'free').toLowerCase();
+  if (status === 'past_due' || status === 'unpaid' || status === 'cancelled') return false;
+  const have = INVESTOR_RANK[String(user.investor_tier || 'free').toLowerCase()] ?? 0;
+  return have >= (INVESTOR_RANK[required] ?? 0);
+}
+
 export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'home', label: 'Home', items: [
@@ -216,8 +233,8 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'pipeline', label: 'Pipeline', items: [
       { to: '/projects', icon: Zap, label: 'Projects' },
-      { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
-      { to: '/deals', icon: Handshake, label: 'Deal Flow' },
+      { to: '/pipeline', icon: Layers, label: 'Pipeline Board', requiredInvestorTier: 'professional' },
+      { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
       { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
     ]},

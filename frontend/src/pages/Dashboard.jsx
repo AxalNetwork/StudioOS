@@ -9,6 +9,7 @@ import {
 import { api } from '../lib/api';
 import SemanticSearch from '../components/SemanticSearch';
 import { PERSONA_BY_ID } from '../lib/personas';
+import InvestorTrialBanner from '../components/InvestorTrialBanner';
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
@@ -88,6 +89,9 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {/* Task #7 (W-2) — investor trial countdown banner (auto-hides) */}
+      <InvestorTrialBanner user={user} />
 
       {/* Persona tile */}
       <PersonaTile state={personaState} />

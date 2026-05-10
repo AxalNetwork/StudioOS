@@ -1,12 +1,16 @@
 // Task #6 — Paywall modal for the FREE/GROWTH/STUDIO tier ladder.
+// Task #7 (W-2) — Extended to also cover the investor tier ladder
+//   (free / professional / institutional) via the same global event.
 //
 // Listens for the global `studioos:tier_required` custom event dispatched by
-// `lib/api.js` whenever the worker returns 402 `{error:'tier_required'}`. The
-// payload carries `{required, message?}`. Also exposes `openPaywall(tier)` for
-// imperative triggers (sidebar click on a locked item).
+// `lib/api.js` whenever the worker returns 402 `{error:'tier_required'|
+// 'investor_tier_required', required, message?}`. Also exposes
+// `openPaywall(required, message?)` for imperative triggers (sidebar lock-pill
+// click). `required` is one of: growth, studio, professional, institutional.
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { Lock, Check, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 
 const TIER_PLANS = {
@@ -38,9 +42,41 @@ const TIER_PLANS = {
       'Partner office hours + demand insights',
     ],
   },
+  professional: {
+    label: 'Professional',
+    price: '$149',
+    period: '/ month',
+    blurb: 'Active investors who need full deal flow.',
+    plan: 'investor_pro_monthly',
+    features: [
+      '25 warm intros / quarter',
+      'Up to 5 active deal rooms',
+      'Full pipeline + deal flow access',
+      'Calendar bookings with founders',
+      'Market Intelligence exports',
+      'Founder reference checks',
+    ],
+  },
+  institutional: {
+    label: 'Institutional',
+    price: '$599',
+    period: '/ month',
+    blurb: 'Funds and family offices investing at scale.',
+    plan: 'investor_inst_monthly',
+    features: [
+      '100 warm intros / quarter',
+      'Unlimited deal rooms',
+      'Co-invest discovery & syndication',
+      'Carta sync (write) + LP reporting',
+      'Peer benchmarks',
+      '4 colleague seats included',
+    ],
+  },
 };
 
-const TIER_RANK = { free: 0, growth: 1, studio: 2 };
+const FOUNDER_RANK = { free: 0, growth: 1, studio: 2 };
+const INVESTOR_RANK = { free: 0, professional: 1, institutional: 2 };
+const INVESTOR_TIERS = new Set(['professional', 'institutional']);
 
 export function openPaywall(required = 'growth', message = '') {
   if (typeof window === 'undefined') return;
@@ -58,8 +94,9 @@ export default function PaywallModal({ user }) {
   useEffect(() => {
     function onEvt(e) {
       const detail = e.detail || {};
-      const r = detail.required === 'studio' ? 'studio' : 'growth';
-      setRequired(r);
+      const r = detail.required;
+      const norm = (r === 'studio' || r === 'professional' || r === 'institutional') ? r : 'growth';
+      setRequired(norm);
       setMessage(typeof detail.message === 'string' ? detail.message : '');
       setOpen(true);
     }
@@ -75,10 +112,15 @@ export default function PaywallModal({ user }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
-  const startCheckout = useCallback(async (tier) => {
-    setBusy(tier);
+  const isInvestorMode = INVESTOR_TIERS.has(required);
+
+  const startCheckout = useCallback(async (key) => {
+    setBusy(key);
     try {
-      const res = await api.tierCheckout(tier);
+      const plan = TIER_PLANS[key]?.plan;
+      const res = isInvestorMode && plan
+        ? await api.investorCheckout(plan)
+        : await api.tierCheckout(key);
       if (res?.url) window.location.href = res.url;
     } catch (e) {
       // eslint-disable-next-line no-alert
@@ -86,20 +128,24 @@ export default function PaywallModal({ user }) {
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [isInvestorMode]);
 
   if (!open) return null;
 
-  const userTier = String(user?.subscription_tier || 'free').toLowerCase();
-  const userRank = TIER_RANK[userTier] ?? 0;
+  let tiersToShow;
+  if (isInvestorMode) {
+    const userTier = String(user?.investor_tier || 'free').toLowerCase();
+    const userRank = INVESTOR_RANK[userTier] ?? 0;
+    tiersToShow = ['professional', 'institutional'].filter((t) => INVESTOR_RANK[t] > userRank);
+    if (tiersToShow.length === 0) tiersToShow = [required];
+  } else {
+    const userTier = String(user?.subscription_tier || 'free').toLowerCase();
+    const userRank = FOUNDER_RANK[userTier] ?? 0;
+    tiersToShow = ['growth', 'studio'].filter((t) => FOUNDER_RANK[t] > userRank);
+    if (tiersToShow.length === 0) tiersToShow = [required];
+  }
 
-  // Show ALL tiers AT or ABOVE the user's current tier so they can see the
-  // ladder. Users on Growth still see Studio as a step up; users on Studio
-  // shouldn't see this modal at all (server wouldn't have 402'd).
-  const tiersToShow = ['growth', 'studio'].filter((t) => TIER_RANK[t] > userRank);
-  // If a specific tier was requested but the user already has a higher tier,
-  // fall back to whatever's left (defensive — server should never trigger this).
-  if (tiersToShow.length === 0) tiersToShow.push(required);
+  const titleLabel = TIER_PLANS[required]?.label || required;
 
   return (
     <div
@@ -120,10 +166,10 @@ export default function PaywallModal({ user }) {
             </div>
             <div>
               <h2 id="paywall-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                Upgrade to keep building
+                {isInvestorMode ? 'Upgrade your investor plan' : 'Upgrade to keep building'}
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                {message || `This is a ${required === 'studio' ? 'Studio' : 'Growth'}-tier feature.`}
+                {message || `This is a ${titleLabel}-tier feature.`}
               </p>
             </div>
           </div>
@@ -189,6 +235,15 @@ export default function PaywallModal({ user }) {
         </div>
 
         <div className="px-6 pb-5 text-xs text-gray-500 dark:text-gray-400 text-center">
+          {isInvestorMode && (
+            <Link
+              to="/pricing/investor"
+              onClick={() => setOpen(false)}
+              className="text-violet-700 dark:text-violet-300 hover:underline mr-2"
+            >
+              Compare investor plans →
+            </Link>
+          )}
           Questions? Email{' '}
           <a href="mailto:billing@axal.vc" className="text-violet-700 dark:text-violet-300 hover:underline">
             billing@axal.vc

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
 import { Handshake, DollarSign, CheckCircle, Clock, TrendingUp, PieChart, Users } from 'lucide-react';
+import { useAuth } from '../hooks/useAuthSync';
+import InvestorQuotaBars from '../components/InvestorQuotaBars';
 
 const statusColors = {
   applied: 'bg-blue-100 text-blue-700',
@@ -12,6 +14,7 @@ const statusColors = {
 };
 
 export default function PartnerPortal() {
+  const { user } = useAuth();
   const [deals, setDeals] = useState([]);
   const [calls, setCalls] = useState([]);
   const [partners, setPartners] = useState([]);
@@ -81,6 +84,9 @@ export default function PartnerPortal() {
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Partner / Investor Portal</h1>
       <p className="text-gray-600 mb-6">Deal flow, capital calls, LP investors, and portfolio performance</p>
+
+      {/* Task #7 (W-2) — investor-only quota bars (no-op for partners/admins) */}
+      <InvestorQuotaBars user={user} />
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard icon={Handshake} label="Active Deals" value={deals.length} color="text-violet-600" />

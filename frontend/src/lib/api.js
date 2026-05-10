@@ -985,6 +985,25 @@ export const api = {
     request('/billing/tier/checkout', { method: 'POST', body: JSON.stringify({ tier }) }),
   tierPortal: () => request('/billing/tier/portal', { method: 'POST' }),
 
+  // ---------- Task #7 (W-2) — Investor paywall (3-tier: free / pro / inst) ----------
+  // Mirrors `/api/billing/investor/*` + `/api/investor-seats/*` +
+  // `/api/introductions/quota`. The 402 `{required, message, …}` shape from
+  // the worker is auto-fanned into `studioos:tier_required` by the request
+  // helper above, so PaywallModal opens automatically on quota exhaustion.
+  investorBillingStatus: () => request('/billing/investor/status'),
+  investorCheckout: (plan) =>
+    request('/billing/investor/checkout', { method: 'POST', body: JSON.stringify({ plan }) }),
+  investorPortal: () => request('/billing/investor/portal', { method: 'POST' }),
+  listInvestorSeats: () => request('/investor-seats/'),
+  inviteInvestorSeat: (email) =>
+    request('/investor-seats/invite', { method: 'POST', body: JSON.stringify({ email }) }),
+  acceptInvestorSeat: (token) =>
+    request('/investor-seats/accept', { method: 'POST', body: JSON.stringify({ token }) }),
+  revokeInvestorSeat: (id) =>
+    request(`/investor-seats/${id}`, { method: 'DELETE' }),
+  introductionsQuota: () => request('/introductions/quota'),
+  listIntroductions: () => request('/introductions/'),
+
   // ---------- Trust layer (Task #58) ----------
   // Task #4 (Y-2) — Trust Center v2 endpoints. The legacy
   // /trust/summary, /trust/kyb/*, /trust/accreditation/*, /trust/nda/*

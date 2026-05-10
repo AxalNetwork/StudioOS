@@ -126,7 +126,7 @@ const SECTIONS = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'privacy', label: 'Privacy', icon: Lock },
   { id: 'integrations', label: 'Integrations', icon: Plug },
-  { id: 'billing', label: 'Billing', icon: CreditCard, roles: ['founder'] },
+  { id: 'billing', label: 'Billing', icon: CreditCard, roles: ['founder', 'investor'] },
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'developer', label: 'Developer', icon: Code, roles: ['admin'] },
 ];
@@ -2585,7 +2585,17 @@ function IntegrationsTab({ flash }) {
 // opens Stripe Checkout for the chosen tier (or the dev-upgrade fallback when
 // Stripe isn't configured); "Manage subscription" opens the Stripe billing
 // portal so users can update card / cancel / download invoices.
+//
+// Task #7 (W-2) — Investors hit the same tab but see InvestorBillingPanel
+// (Pro / Institutional plans, ROI quotas, seat management for institutional).
 function BillingTab({ data, flash }) {
+  if (String(data?.role) === 'investor') {
+    return <InvestorBillingPanel data={data} flash={flash} />;
+  }
+  return <FounderBillingPanel data={data} flash={flash} />;
+}
+
+function FounderBillingPanel({ data, flash }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null);
@@ -2703,6 +2713,286 @@ function BillingTab({ data, flash }) {
         </div>
       </Card>
     </>
+  );
+}
+
+// Task #7 (W-2) — Investor billing UI. Mirrors FounderBillingPanel but uses
+// the investor endpoints (`/api/billing/investor/*`) and surfaces:
+//   1. Current plan card — tier, status (incl. trialing countdown), renews_at,
+//      Manage-subscription button when a Stripe customer exists.
+//   2. Plan ladder — Free / Professional / Institutional with monthly+annual
+//      toggle and Stripe-checkout buttons.
+//   3. Quotas card — warm intros / quarter (used vs cap) and deal-room cap.
+//   4. Seat management — only for Institutional plans (list/invite/revoke).
+function InvestorBillingPanel({ data, flash }) {
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [billingCycle, setBillingCycle] = useState('monthly');
+  const [busy, setBusy] = useState(null);
+
+  const refresh = React.useCallback(() => {
+    setLoading(true);
+    api.investorBillingStatus()
+      .then((s) => setStatus(s))
+      .catch((e) => flash?.(e.message || 'Could not load billing', 'error'))
+      .finally(() => setLoading(false));
+  }, [flash]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  // Stripe-redirect flash banners (mirrors FounderBillingPanel).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('upgraded') === '1') {
+      flash?.('Subscription updated.');
+      params.delete('upgraded');
+      window.history.replaceState({}, '', window.location.pathname + (params.toString() ? '?' + params : ''));
+    } else if (params.get('upgrade_cancelled') === '1') {
+      flash?.('Upgrade cancelled.', 'error');
+      params.delete('upgrade_cancelled');
+      window.history.replaceState({}, '', window.location.pathname + (params.toString() ? '?' + params : ''));
+    }
+  }, [flash]);
+
+  const tier = String(status?.tier || 'free').toLowerCase();
+  const rawTier = String(status?.raw_tier || tier).toLowerCase();
+  const subStatus = String(status?.status || 'free').toLowerCase();
+  const trialEnds = status?.trial_ends_at ? new Date(status.trial_ends_at) : null;
+  const renews = status?.renews_at ? new Date(status.renews_at) : null;
+  const hasCustomer = !!status?.has_customer;
+  const quotas = status?.quotas || {};
+
+  const upgrade = async (target) => {
+    const plan = `investor_${target === 'professional' ? 'pro' : 'inst'}_${billingCycle === 'yearly' ? 'yearly' : 'monthly'}`;
+    setBusy(target);
+    try {
+      const res = await api.investorCheckout(plan);
+      if (res?.url) window.location.href = res.url;
+    } catch (e) { flash?.(e.message || 'Checkout failed', 'error'); }
+    finally { setBusy(null); }
+  };
+
+  const portal = async () => {
+    setBusy('portal');
+    try {
+      const res = await api.investorPortal();
+      if (res?.url) window.location.href = res.url;
+    } catch (e) { flash?.(e.message || 'Could not open billing portal', 'error'); }
+    finally { setBusy(null); }
+  };
+
+  const TIER_LABEL = {
+    free: 'Free',
+    professional: billingCycle === 'yearly' ? 'Professional — $1,490/yr' : 'Professional — $149/mo',
+    institutional: billingCycle === 'yearly' ? 'Institutional — $5,990/yr' : 'Institutional — $599/mo',
+  };
+  const ladder = ['free', 'professional', 'institutional'];
+  const RANK = { free: 0, professional: 1, institutional: 2 };
+
+  const introsCap = quotas.intros_per_quarter ?? 3;
+  const introsUsed = quotas.intros_used ?? 0;
+  const dealroomMax = quotas.dealroom_max ?? 1;
+  const seatCount = quotas.seat_count ?? 0;
+  const seatCap = quotas.seats ?? 1;
+
+  return (
+    <>
+      <Card title="Current plan" description="Your investor subscription.">
+        {loading ? (
+          <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
+        ) : (
+          <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+            <div>
+              <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Tier</div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-gray-100 capitalize">
+                {tier}
+                {subStatus === 'trialing' && (
+                  <span className="ml-2 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">
+                    Trial
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Status: <span className="capitalize">{subStatus}</span>
+                {trialEnds && subStatus === 'trialing' && <> · Trial ends {trialEnds.toLocaleDateString()}</>}
+                {renews && subStatus !== 'trialing' && <> · Renews {renews.toLocaleDateString()}</>}
+                {rawTier !== tier && <> · Effective tier: {tier}</>}
+              </div>
+            </div>
+            {hasCustomer && (
+              <button type="button" disabled={busy === 'portal'} onClick={portal}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg text-sm font-medium disabled:opacity-50">
+                {busy === 'portal' ? 'Opening…' : 'Manage subscription'}
+              </button>
+            )}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Quotas this period" description="Limits reset each calendar quarter.">
+        <div className="grid sm:grid-cols-3 gap-3">
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+            <div className="text-xs text-gray-500 dark:text-gray-400">Warm intros / quarter</div>
+            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {introsUsed} / {introsCap >= 100000 ? '∞' : introsCap}
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+            <div className="text-xs text-gray-500 dark:text-gray-400">Deal rooms (max)</div>
+            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {dealroomMax >= 100000 ? 'Unlimited' : dealroomMax}
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+            <div className="text-xs text-gray-500 dark:text-gray-400">Colleague seats</div>
+            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">{seatCount} / {seatCap}</div>
+          </div>
+        </div>
+      </Card>
+
+      <Card title="Plans" description="Switch plan or change billing cycle. Cancel anytime from Manage subscription.">
+        <div className="flex justify-end mb-3">
+          <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-white dark:bg-gray-900 text-xs">
+            {[{id:'monthly',label:'Monthly'},{id:'yearly',label:'Annual · save 2 mo'}].map((b) => (
+              <button key={b.id} type="button" onClick={() => setBillingCycle(b.id)}
+                className={`px-3 py-1 rounded-md transition-colors ${
+                  billingCycle === b.id ? 'bg-violet-600 text-white font-medium' : 'text-gray-600 dark:text-gray-300'
+                }`}>{b.label}</button>
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {ladder.map((t) => {
+            const current = t === tier;
+            const upgradable = t !== 'free' && RANK[t] !== RANK[tier];
+            return (
+              <div key={t}
+                className={`rounded-lg border p-4 ${current ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
+                <div className="font-semibold text-gray-900 dark:text-gray-100">{TIER_LABEL[t] || t}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {t === 'free' && '3 intros/qtr · 1 deal room · browse only'}
+                  {t === 'professional' && '25 intros/qtr · 5 deal rooms · MI exports · calendar'}
+                  {t === 'institutional' && '100 intros/qtr · unlimited deal rooms · 4 seats · Carta sync'}
+                </div>
+                <div className="mt-3">
+                  {current && (
+                    <span className="text-xs uppercase tracking-wider text-violet-700 dark:text-violet-300 font-semibold">Current plan</span>
+                  )}
+                  {upgradable && (
+                    <button type="button" disabled={busy === t} onClick={() => upgrade(t)}
+                      className="w-full px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">
+                      {busy === t ? 'Opening checkout…' : (RANK[t] > RANK[tier] ? `Upgrade to ${t}` : `Switch to ${t}`)}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+          See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing/investor">investor pricing page</a>.
+        </div>
+      </Card>
+
+      {tier === 'institutional' && <InvestorSeatsCard flash={flash} cap={seatCap} onChange={refresh} />}
+    </>
+  );
+}
+
+// Seat management is Institutional-only. The endpoints already 403 lower
+// tiers; we just hide the UI to avoid confusion.
+function InvestorSeatsCard({ flash, cap, onChange }) {
+  const [seats, setSeats] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = React.useCallback(() => {
+    setLoading(true);
+    api.listInvestorSeats()
+      .then((res) => setSeats(Array.isArray(res?.seats) ? res.seats : (Array.isArray(res) ? res : [])))
+      .catch((e) => flash?.(e.message || 'Could not load seats', 'error'))
+      .finally(() => setLoading(false));
+  }, [flash]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const invite = async (e) => {
+    e?.preventDefault();
+    const v = email.trim();
+    if (!v) return;
+    setBusy(true);
+    try {
+      await api.inviteInvestorSeat(v);
+      flash?.('Invite sent.');
+      setEmail('');
+      load();
+      onChange?.();
+    } catch (err) { flash?.(err.message || 'Invite failed', 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const revoke = async (id) => {
+    if (!window.confirm('Revoke this seat? The colleague will lose access immediately.')) return;
+    try {
+      await api.revokeInvestorSeat(id);
+      flash?.('Seat revoked.');
+      load();
+      onChange?.();
+    } catch (err) { flash?.(err.message || 'Revoke failed', 'error'); }
+  };
+
+  const used = seats.length;
+  const full = cap > 0 && used >= cap;
+
+  return (
+    <Card title="Colleague seats" description={`Invite up to ${cap} colleagues to share your Institutional account.`}>
+      <form onSubmit={invite} className="flex gap-2 mb-4">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="colleague@firm.com"
+          disabled={busy || full}
+          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 disabled:opacity-50"
+        />
+        <button type="submit" disabled={busy || full || !email.trim()}
+          className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">
+          {busy ? 'Sending…' : 'Send invite'}
+        </button>
+      </form>
+      {full && (
+        <div className="text-xs text-amber-700 dark:text-amber-300 mb-3">All {cap} seats used. Revoke a seat to invite someone new.</div>
+      )}
+      {loading ? (
+        <div className="text-sm text-gray-500 dark:text-gray-400">Loading seats…</div>
+      ) : seats.length === 0 ? (
+        <div className="text-sm text-gray-500 dark:text-gray-400">No colleagues invited yet.</div>
+      ) : (
+        <div className="border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+          {seats.filter((s) => !s.revoked_at).map((s) => {
+            // Worker contract (cloudflare-worker/src/routes/investor_seats.ts):
+            //   { id, seat_email, seat_user_id, invited_at, accepted_at, revoked_at }
+            // No `status` column — derive from accepted_at vs revoked_at.
+            const status = s.revoked_at ? 'revoked' : (s.accepted_at ? 'active' : 'pending');
+            return (
+              <div key={s.id} className="flex items-center justify-between px-3 py-2">
+                <div className="min-w-0">
+                  <div className="text-sm text-gray-900 dark:text-gray-100 truncate">{s.seat_email || '—'}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {status}
+                    {s.accepted_at ? ` · joined ${new Date(s.accepted_at).toLocaleDateString()}` : ''}
+                    {!s.accepted_at && s.invited_at ? ` · invited ${new Date(s.invited_at).toLocaleDateString()}` : ''}
+                  </div>
+                </div>
+                <button type="button" onClick={() => revoke(s.id)}
+                  className="text-xs text-red-600 dark:text-red-400 hover:underline">Revoke</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
   );
 }
 

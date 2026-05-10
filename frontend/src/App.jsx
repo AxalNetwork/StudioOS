@@ -12,7 +12,7 @@ import {
   ChevronDown, ChevronRight, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock, Calendar,
   Settings as SettingsIcon, PieChart as PieIcon, Heart, Bookmark, Megaphone, BookOpen, Search
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier, hasTier } from './sidebarConfig';
+import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier, hasTier, hasInvestorTier } from './sidebarConfig';
 import PaywallModal, { openPaywall } from './components/PaywallModal';
 import { Lock as LockIcon } from 'lucide-react';
 import { api } from './lib/api';
@@ -73,6 +73,7 @@ import RiskDisclosuresPage from './pages/RiskDisclosuresPage';
 import MonitoringPage from './pages/MonitoringPage';
 import LiquidityPage from './pages/LiquidityPage';
 import FundsPage from './pages/FundsPage';
+import InvestorPricingPage from './pages/InvestorPricingPage';
 import ReservesPage from './pages/ReservesPage';
 import WaterfallPage from './pages/WaterfallPage';
 import SettingsPage from './pages/SettingsPage';
@@ -267,19 +268,27 @@ function SidebarNav({ groups, role, onNavigate, user }) {
               <span>{group.label}</span>
             </button>
             {isOpen && visibleItems.map((item) => {
-              const { to, icon: Icon, label, highlight, requiredTier } = item;
-              // Task #6 — items the user can't afford render as a "locked"
-              // button that opens PaywallModal instead of navigating. Bypass
-              // roles + users on the right tier render as normal NavLinks.
-              const locked = !!requiredTier && !hasTier(user, requiredTier);
+              const { to, icon: Icon, label, highlight, requiredTier, requiredInvestorTier } = item;
+              // Task #6 / #7 — items the user can't afford render as a
+              // "locked" button that opens PaywallModal. Bypass roles + users
+              // on the right tier render as normal NavLinks. Investor tier
+              // gates take precedence when present (investor-only nav).
+              const founderLocked = !!requiredTier && !hasTier(user, requiredTier);
+              const investorLocked = !!requiredInvestorTier && !hasInvestorTier(user, requiredInvestorTier);
+              const locked = founderLocked || investorLocked;
               if (locked) {
+                const lockTier = investorLocked ? requiredInvestorTier : requiredTier;
+                const lockLabel = lockTier === 'institutional' ? 'Institutional'
+                  : lockTier === 'professional' ? 'Professional'
+                  : lockTier === 'studio' ? 'Studio'
+                  : 'Growth';
                 return (
                   <button
                     key={to}
                     type="button"
-                    onClick={() => openPaywall(requiredTier)}
+                    onClick={() => openPaywall(lockTier)}
                     className="w-full flex items-center gap-3 px-5 py-2 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                    title={`${label} — requires ${requiredTier === 'studio' ? 'Studio' : 'Growth'} plan`}
+                    title={`${label} — requires ${lockLabel} plan`}
                   >
                     {Icon && <Icon size={16} />}
                     <span className="truncate flex-1 text-left">{highlightMatch(label, q)}</span>
@@ -784,6 +793,7 @@ function AppInner() {
     <Routes>
       <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/dashboard'} replace /> : <LandingPage />} />
       <Route path="/spinout-lab" element={<SpinoutLabPage />} />
+      <Route path="/pricing/investor" element={<InvestorPricingPage />} />
       <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
