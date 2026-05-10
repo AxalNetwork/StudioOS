@@ -96,6 +96,10 @@ async function ensureSchema(env: Env): Promise<void> {
     `ALTER TABLE esign_envelopes ADD COLUMN provider TEXT NOT NULL DEFAULT 'native'`,
     `ALTER TABLE esign_envelopes ADD COLUMN docusign_envelope_id TEXT`,
     `ALTER TABLE esign_envelopes ADD COLUMN docusign_account_id TEXT`,
+    // Last terminal-state reason from the provider (decline/void
+    // reason for DocuSign; null for in-house). Surfaced in the admin
+    // contracts UI so reviewers don't have to dig into audit events.
+    `ALTER TABLE esign_envelopes ADD COLUMN last_error TEXT`,
     `CREATE INDEX IF NOT EXISTS idx_esign_provider          ON esign_envelopes(provider)`,
     `CREATE INDEX IF NOT EXISTS idx_esign_docusign_envelope ON esign_envelopes(docusign_envelope_id)`,
     `CREATE INDEX IF NOT EXISTS idx_esign_docusign_account  ON esign_envelopes(docusign_account_id)`,

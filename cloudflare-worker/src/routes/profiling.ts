@@ -372,6 +372,17 @@ profiling.post('/admin/:email/verify', async (c) => {
         // request body. Defaults to native if absent or invalid.
         const providerRaw = String(reqBody?.provider ?? reqBody?.via_provider ?? 'native').toLowerCase();
         const viaProvider = providerRaw === 'docusign' ? 'docusign' : 'native';
+        // Studio-tier gate — DocuSign is a Studio-only provider.
+        // Without this check a downgraded admin who still has an
+        // active DocuSign connection could route envelopes through
+        // it via the verify path, bypassing the gate enforced on
+        // POST /api/legal/esign/send.
+        if (viaProvider === 'docusign') {
+          const { userMeetsTier } = await import('../middleware/requireTier');
+          if (!userMeetsTier(adminUser, 'studio')) {
+            return c.json({ error: 'tier_required', required: 'studio', message: 'DocuSign sends require the Studio plan.' }, 402);
+          }
+        }
         esignResult = await createAndSendEnvelope(c.env, {
           adminUserId: adminUser.id,
           adminName: adminUser.name || adminUser.email,

@@ -554,6 +554,20 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
   if (newStatus === 'completed') {
     const stored = await pullAndStoreSignedPdf(env, row, dsEnvelopeId, local.envelope_uuid);
     signedKey = stored?.key || null;
+    if (!signedKey) {
+      // PDF retrieval failed — DO NOT finalize the envelope status,
+      // otherwise the cron sweep (which only polls sent /
+      // partially_signed) will never retry the pull and we'd ship a
+      // "completed" envelope with no signed artifact. Record the
+      // failure on the row and leave status at sent so the next
+      // sweep retries.
+      try {
+        await env.DB.prepare(
+          `UPDATE esign_envelopes SET last_error = ? WHERE id = ?`,
+        ).bind('docusign_pdf_pull_failed: signed PDF retrieval failed; will retry on next sweep', local.id).run();
+      } catch {}
+      return { status: local.status, updated: false };
+    }
 
     // Mirror the in-house flow's recipient-side bookkeeping so the audit
     // trail and admin list stay consistent.
@@ -566,12 +580,21 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
   }
   if (newStatus === 'completed' && signedKey) {
     await env.DB.prepare(
-      `UPDATE esign_envelopes SET status = ?, signed_r2_key = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      `UPDATE esign_envelopes SET status = ?, signed_r2_key = ?, completed_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ?`,
     ).bind(newStatus, signedKey, local.id).run();
   } else {
-    await env.DB.prepare(
-      `UPDATE esign_envelopes SET status = ? WHERE id = ?`,
-    ).bind(newStatus, local.id).run();
+    // For terminal non-completed states (rejected/void), persist the
+    // provider-supplied reason on the envelope row so the admin
+    // Contracts UI can render it without trawling audit events.
+    if (stateReason && (newStatus === 'rejected' || newStatus === 'void')) {
+      await env.DB.prepare(
+        `UPDATE esign_envelopes SET status = ?, last_error = ? WHERE id = ?`,
+      ).bind(newStatus, stateReason, local.id).run();
+    } else {
+      await env.DB.prepare(
+        `UPDATE esign_envelopes SET status = ? WHERE id = ?`,
+      ).bind(newStatus, local.id).run();
+    }
   }
   // Append-only audit event for the status transition.
   try {
