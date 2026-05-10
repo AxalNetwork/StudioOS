@@ -354,6 +354,30 @@ export const api = {
   studioBenchmarks: () => request('/market-intel/studio-benchmarks'),
   competitiveIntelligence: () => request('/market-intel/competitive-intelligence'),
 
+  // Task #15 (AA-2) — Aggregator-backed Market Intel surfaces. The worker
+  // returns 402 {error:'tier_required', required} on gated endpoints; the
+  // shared request() helper auto-fires the studioos:tier_required event so
+  // PaywallModal opens without per-call wiring. Free callers get only
+  // {sector, composite} from /sector-compass; full-lens callers get the
+  // dimensional breakdown.
+  miSectorCompass: () => request('/market-intel/sector-compass'),
+  miFounderLens: () => request('/market-intel/founder-lens'),
+  miInvestorLens: () => request('/market-intel/investor-lens'),
+  miGeography: () => request('/market-intel/geography'),
+  miCitations: (sector, limit = 50) => {
+    const q = new URLSearchParams();
+    if (sector) q.set('sector', sector);
+    if (limit) q.set('limit', String(limit));
+    const qs = q.toString();
+    return request(`/market-intel/citations${qs ? `?${qs}` : ''}`);
+  },
+  miSources: () => request('/market-intel/sources'),
+  miWatchlistList: () => request('/market-intel/watchlist'),
+  miWatchlistAdd: (sector, geo = 'global', cadence = 'weekly') =>
+    request('/market-intel/watchlist', { method: 'POST', body: JSON.stringify({ sector, geo, cadence }) }),
+  miWatchlistRemove: (id) =>
+    request(`/market-intel/watchlist/${id}`, { method: 'DELETE' }),
+
   // Task #4 — Investor Signals + profiling chatbot
   getInvestorProfile: () => request('/investor-profile/me'),
   saveInvestorProfile: (data) => request('/investor-profile/me', { method: 'PUT', body: JSON.stringify(data) }),

@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
-import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, ChevronDown, Info, Lightbulb, Users, Database, ExternalLink } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, ChevronDown, Info, Lightbulb, Users, Database, ExternalLink, Compass, Target, MapPin, BookOpen, Bookmark, Lock, Trash2 } from 'lucide-react';
+import { openPaywall } from '../components/PaywallModal';
 import { Link } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 
 export default function MarketIntelPage() {
+  const { user } = useAuth();
   const [pulse, setPulse] = useState([]);
   const [headlines, setHeadlines] = useState([]);
   const [pulseUpdatedAt, setPulseUpdatedAt] = useState(null);
@@ -15,7 +17,7 @@ export default function MarketIntelPage() {
   const [benchmarks, setBenchmarks] = useState(null);
   const [conviction, setConviction] = useState([]);
   const [enriched, setEnriched] = useState([]);
-  const [tab, setTab] = useState('pulse');
+  const [tab, setTab] = useState('compass');
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   useEffect(() => {
@@ -63,6 +65,15 @@ export default function MarketIntelPage() {
   };
 
   const tabs = [
+    // Task #15 (AA-2) — Aggregator-backed lenses come first; they're the
+    // primary surface for the new Market Intelligence experience.
+    { key: 'compass', label: 'Sector Compass', icon: Compass },
+    { key: 'founder_lens', label: 'Founder Lens', icon: Target },
+    { key: 'investor_lens', label: 'Investor Lens', icon: TrendingUp },
+    { key: 'geography', label: 'Geography Lens', icon: MapPin },
+    { key: 'citations', label: 'Citations & Methodology', icon: BookOpen },
+    { key: 'watchlist', label: 'Custom Watchlist', icon: Bookmark },
+    // Legacy tabs (still useful — public markets, studio ops benchmarks, etc.)
     { key: 'pulse', label: 'Market Pulse', icon: Zap },
     { key: 'macro', label: 'Public Markets', icon: Globe },
     { key: 'private', label: 'Private Rounds', icon: Building2 },
@@ -372,6 +383,12 @@ export default function MarketIntelPage() {
       )}
 
       {tab === 'investor_signals' && <InvestorSignalsTab />}
+      {tab === 'compass' && <SectorCompassTab user={user} />}
+      {tab === 'founder_lens' && <FounderLensTab user={user} />}
+      {tab === 'investor_lens' && <InvestorLensTab user={user} />}
+      {tab === 'geography' && <GeographyLensTab user={user} />}
+      {tab === 'citations' && <CitationsTab user={user} />}
+      {tab === 'watchlist' && <WatchlistTab user={user} />}
 
       {tab === 'studio' && benchmarks && (
         <div className="space-y-6">
@@ -926,6 +943,440 @@ function FocusProjectCompetitorsBlock({ projects }) {
             </ul>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+// ─── Task #15 (AA-2) — Aggregator-backed Market Intelligence lenses ──────────
+//
+// All six tabs below read from the AA-1 worker endpoints. Tier gating is
+// enforced server-side; on 402 the shared api.js helper auto-fires the
+// `studioos:tier_required` event so PaywallModal opens without per-tab
+// wiring. Each tab also surfaces an inline upsell card when the API
+// returns a tier-required payload, so users see what they're missing
+// without the modal flickering.
+// -----------------------------------------------------------------------------
+
+const SECTOR_OPTIONS = [
+  'Agentic B2B', 'Bio-Automation', 'AI Infrastructure', 'Fintech / DeFi',
+  'Climate / Energy', 'Healthcare', 'DevTools', 'Consumer AI', 'Robotics',
+  'Cybersecurity',
+];
+
+function tierForUser(user) {
+  if (!user) return 'free';
+  if (user.role === 'investor') return String(user.investor_tier || 'free').toLowerCase();
+  return String(user.subscription_tier || 'free').toLowerCase();
+}
+function isFullLensCaller(user) {
+  if (!user) return false;
+  if (['admin', 'partner', 'mentor'].includes(user.role)) return true;
+  const t = tierForUser(user);
+  if (user.role === 'investor') return t === 'professional' || t === 'institutional';
+  return t === 'growth' || t === 'studio';
+}
+
+function MIError({ err, fallbackTier = 'growth' }) {
+  if (!err) return null;
+  if (err.status === 402) {
+    const required = err.data?.required || fallbackTier;
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+        <Lock size={16} className="text-amber-700 shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-amber-900">Upgrade to unlock this lens</div>
+          <p className="text-xs text-amber-800 mt-1">
+            {err.message || `This view requires the ${required} tier.`}
+          </p>
+          <button
+            type="button"
+            onClick={() => openPaywall(required, err.message || '')}
+            className="mt-2 text-xs font-medium px-3 py-1.5 rounded-md bg-amber-700 text-white hover:bg-amber-800"
+          >
+            See plans
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md px-3 py-2">
+      {err.message || 'Request failed'}
+    </div>
+  );
+}
+
+function LockPill({ required }) {
+  return (
+    <button
+      type="button"
+      onClick={() => openPaywall(required)}
+      className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-600 text-white hover:bg-violet-700"
+    >
+      <Lock size={10} /> {required}
+    </button>
+  );
+}
+
+function MiniBar({ value }) {
+  const v = Math.max(0, Math.min(100, Math.round(value)));
+  const tone = v >= 70 ? 'bg-emerald-500' : v >= 50 ? 'bg-violet-500' : v >= 30 ? 'bg-amber-500' : 'bg-red-500';
+  return (
+    <div className="h-1.5 bg-gray-100 rounded overflow-hidden">
+      <div className={`${tone} h-full`} style={{ width: `${v}%` }} />
+    </div>
+  );
+}
+
+function SectorCompassTab({ user }) {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.miSectorCompass()
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, []);
+  const full = isFullLensCaller(user);
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="The Sector Compass ranks every tracked sector on a 0–100 composite — demand, supply, capital, talent, research, and sentiment, decayed by recency. Free callers see the headline composite; Growth+ unlocks the dimensional breakdown so you can see WHY a sector is moving." />
+      {err && <MIError err={err} fallbackTier="growth" />}
+      {!err && !data && <div className="text-sm text-gray-500">Loading sector compass…</div>}
+      {data && (
+        <>
+          <div className="text-[11px] text-gray-500">
+            Period {data.period_key} · computed {new Date(data.computed_at).toLocaleString()} · {data.lens === 'full' ? 'full lens' : 'free composite'}
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {(data.sectors || []).map((s) => (
+              <div key={s.sector} className="bg-white border border-gray-200 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-gray-900">{s.sector}</h3>
+                  <span className="text-2xl font-bold text-violet-600">{Math.round(s.composite)}</span>
+                </div>
+                <MiniBar value={s.composite} />
+                {s.dimensions ? (
+                  <ul className="mt-3 space-y-1.5 text-xs">
+                    {Object.entries(s.dimensions).map(([k, v]) => (
+                      <li key={k} className="flex items-center justify-between gap-2">
+                        <span className="text-gray-600 capitalize w-20">{k}</span>
+                        <div className="flex-1"><MiniBar value={v.value} /></div>
+                        <span className="text-gray-700 font-medium w-8 text-right">{Math.round(v.value)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
+                    <span>Per-dimension breakdown</span>
+                    {!full && <LockPill required="growth" />}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function FounderLensTab({ user: _user }) {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.miFounderLens()
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, []);
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="Founder Lens highlights the biggest opportunity gaps — sectors where market demand is racing ahead of supply. Sorted by gap so the top picks are where a new spin-out has the most room to land." />
+      {err && <MIError err={err} fallbackTier="growth" />}
+      {!err && !data && <div className="text-sm text-gray-500">Loading founder lens…</div>}
+      {data && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="text-left px-4 py-2 text-gray-600 font-medium">Sector</th>
+                <th className="text-right px-4 py-2 text-gray-600 font-medium">Composite</th>
+                <th className="text-right px-4 py-2 text-gray-600 font-medium">Demand</th>
+                <th className="text-right px-4 py-2 text-gray-600 font-medium">Supply</th>
+                <th className="text-right px-4 py-2 text-gray-600 font-medium">Opportunity Gap</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data.picks || []).map((p) => (
+                <tr key={p.sector} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-2 text-gray-900 font-medium">{p.sector}</td>
+                  <td className="px-4 py-2 text-right text-gray-700">{Math.round(p.composite)}</td>
+                  <td className="px-4 py-2 text-right text-gray-700">{Math.round(p.demand)}</td>
+                  <td className="px-4 py-2 text-right text-gray-700">{Math.round(p.supply)}</td>
+                  <td className={`px-4 py-2 text-right font-semibold ${p.opportunity_gap > 5 ? 'text-emerald-600' : p.opportunity_gap < -5 ? 'text-red-600' : 'text-gray-700'}`}>
+                    {p.opportunity_gap > 0 ? '+' : ''}{p.opportunity_gap.toFixed(1)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InvestorLensTab({ user: _user }) {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.miInvestorLens()
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, []);
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="Investor Lens ranks sectors by capital deployment + sentiment. Numbers come from the SEC EDGAR + Crunchbase pipelines (and any other LIVE-flagged providers). Reserved for Investor Pro+ subscribers." />
+      {err && <MIError err={err} fallbackTier="professional" />}
+      {!err && !data && <div className="text-sm text-gray-500">Loading investor lens…</div>}
+      {data && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="text-left px-4 py-2 text-gray-600 font-medium">Sector</th>
+                <th className="text-right px-4 py-2 text-gray-600 font-medium">Capital</th>
+                <th className="text-right px-4 py-2 text-gray-600 font-medium">Sentiment</th>
+                <th className="text-right px-4 py-2 text-gray-600 font-medium">Composite</th>
+                <th className="text-right px-4 py-2 text-gray-600 font-medium">Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data.ranked || []).map((s) => (
+                <tr key={s.sector} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-2 text-gray-900 font-medium">{s.sector}</td>
+                  <td className="px-4 py-2 text-right text-gray-700">{Math.round(s.capital)}</td>
+                  <td className="px-4 py-2 text-right text-gray-700">{Math.round(s.sentiment)}</td>
+                  <td className="px-4 py-2 text-right text-gray-700">{Math.round(s.composite)}</td>
+                  <td className="px-4 py-2 text-right font-semibold text-violet-600">{s.score.toFixed(1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GeographyLensTab({ user: _user }) {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.miGeography()
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, []);
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="Geography Lens projects the composite onto regions. Today the aggregator emits a single ‘global’ band; per-country rollups land as additional connectors come online." />
+      {err && <MIError err={err} fallbackTier="professional" />}
+      {!err && !data && <div className="text-sm text-gray-500">Loading geography lens…</div>}
+      {data && (data.geos || []).map((g) => (
+        <div key={g.geo} className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="text-xs text-gray-600 uppercase tracking-wider mb-3">{g.geo}</div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {(g.sectors || []).map((s) => (
+              <div key={s.sector} className="border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-gray-900">{s.sector}</span>
+                  <span className="text-sm font-bold text-violet-600">{Math.round(s.composite)}</span>
+                </div>
+                <MiniBar value={s.composite} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CitationsTab({ user: _user }) {
+  const [sector, setSector] = useState('');
+  const [data, setData] = useState(null);
+  const [sources, setSources] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.miSources().then((d) => { if (!cancelled) setSources(d); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    setData(null);
+    setErr(null);
+    api.miCitations(sector || null, 100)
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, [sector]);
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="Every datapoint in the lenses traces back to a source row here. The source catalog tells you which providers are LIVE today (paid contracts wired) vs running on deterministic stubs." />
+      {sources && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="text-xs font-semibold text-gray-900 mb-2">{sources.count} registered sources</div>
+          <div className="flex flex-wrap gap-1.5">
+            {sources.sources.map((s) => (
+              <span key={s.key} className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${s.live ? 'bg-emerald-100 text-emerald-700' : s.paid ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>
+                {s.display_name} {s.live ? '· LIVE' : s.paid ? '· paid (stubbed)' : '· stub'}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-gray-600">Filter sector:</label>
+        <select
+          value={sector}
+          onChange={(e) => setSector(e.target.value)}
+          className="text-xs px-2 py-1 border border-gray-300 rounded-md bg-white"
+        >
+          <option value="">All sectors</option>
+          {SECTOR_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+      {err && <MIError err={err} fallbackTier="growth" />}
+      {!err && !data && <div className="text-sm text-gray-500">Loading citations…</div>}
+      {data && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="text-left px-3 py-2 text-gray-600 font-medium">Source</th>
+                <th className="text-left px-3 py-2 text-gray-600 font-medium">Sector</th>
+                <th className="text-left px-3 py-2 text-gray-600 font-medium">Metric</th>
+                <th className="text-right px-3 py-2 text-gray-600 font-medium">Value</th>
+                <th className="text-left px-3 py-2 text-gray-600 font-medium">Ingested</th>
+                <th className="text-left px-3 py-2 text-gray-600 font-medium">Citation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data.rows || []).map((r, i) => (
+                <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-3 py-1.5 text-gray-700 font-mono">{r.source_key}</td>
+                  <td className="px-3 py-1.5 text-gray-700">{r.sector}</td>
+                  <td className="px-3 py-1.5 text-gray-700">{r.metric_key}</td>
+                  <td className="px-3 py-1.5 text-right text-gray-700">{Number(r.metric_value).toFixed(2)}</td>
+                  <td className="px-3 py-1.5 text-gray-500">{new Date(r.ts).toLocaleString()}</td>
+                  <td className="px-3 py-1.5">
+                    {r.citation_url ? (
+                      <a href={r.citation_url} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline inline-flex items-center gap-1">
+                        open <ExternalLink size={10} />
+                      </a>
+                    ) : <span className="text-gray-400">—</span>}
+                  </td>
+                </tr>
+              ))}
+              {data.rows && data.rows.length === 0 && (
+                <tr><td colSpan="6" className="px-3 py-4 text-center text-gray-500">No rows in window — the aggregator runs hourly/daily/weekly per source.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WatchlistTab({ user: _user }) {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [sector, setSector] = useState(SECTOR_OPTIONS[0]);
+  const [cadence, setCadence] = useState('weekly');
+
+  const reload = () => {
+    setErr(null);
+    api.miWatchlistList()
+      .then((d) => setRows(d.rows || []))
+      .catch((e) => setErr(e));
+  };
+  useEffect(() => { reload(); }, []);
+
+  const add = async () => {
+    setBusy(true);
+    try {
+      await api.miWatchlistAdd(sector, 'global', cadence);
+      reload();
+    } catch (e) { setErr(e); }
+    finally { setBusy(false); }
+  };
+  const remove = async (id) => {
+    setBusy(true);
+    try { await api.miWatchlistRemove(id); reload(); }
+    catch (e) { setErr(e); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="Pin sectors you want a weekly digest on. The cron-driven digest pipeline (the same one your other notifications use) will email you a recap of every composite move + new citations in your window." />
+      {err && <MIError err={err} fallbackTier="growth" />}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">Sector</label>
+          <select value={sector} onChange={(e) => setSector(e.target.value)} className="text-sm px-2 py-1.5 border border-gray-300 rounded-md bg-white">
+            {SECTOR_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">Cadence</label>
+          <select value={cadence} onChange={(e) => setCadence(e.target.value)} className="text-sm px-2 py-1.5 border border-gray-300 rounded-md bg-white">
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={add}
+          className="px-3 py-1.5 rounded-md bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
+        >
+          Add to watchlist
+        </button>
+      </div>
+      {rows && rows.length === 0 && (
+        <div className="text-sm text-gray-500 italic">No saved sectors yet — add one above to start receiving digests.</div>
+      )}
+      {rows && rows.length > 0 && (
+        <ul className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+          {rows.map((r) => (
+            <li key={r.id} className="flex items-center justify-between px-4 py-3">
+              <div>
+                <div className="text-sm font-medium text-gray-900">{r.sector}</div>
+                <div className="text-[11px] text-gray-500">{r.geo} · {r.cadence} · added {new Date(r.created_at).toLocaleDateString()}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => remove(r.id)}
+                disabled={busy}
+                className="text-xs text-red-600 hover:text-red-700 inline-flex items-center gap-1 disabled:opacity-50"
+              >
+                <Trash2 size={12} /> Remove
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
