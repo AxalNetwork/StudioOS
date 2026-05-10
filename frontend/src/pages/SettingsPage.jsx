@@ -3003,7 +3003,11 @@ function InvestorSeatsCard({ flash, cap, onChange }) {
     } catch (err) { flash?.(err.message || 'Revoke failed', 'error'); }
   };
 
-  const used = seats.length;
+  // Worker treats revoked rows as historical; only non-revoked rows count
+  // against the seat cap. Counting all rows would falsely disable invites
+  // after a revoke until the page reloads.
+  const activeSeats = seats.filter((s) => !s.revoked_at);
+  const used = activeSeats.length;
   const full = cap > 0 && used >= cap;
 
   return (
