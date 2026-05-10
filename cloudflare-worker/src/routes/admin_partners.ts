@@ -243,6 +243,11 @@ admin_partners.post('/deals/:id/terminate', async (c) => {
   if (!reason) return c.json({ error: 'reason is required' }, 400);
 
   // Snapshot the deal before termination so we can revoke tier grants.
+  // NOTE on status vocabulary: partner_deals uses
+  //   proposed | awaiting_signature | active | terminated | expired | voided
+  // (voided = killed by admin revoke before activation). esign_recipients
+  // uses pending | signing | signed | declined. Keep these enums in sync
+  // when adding new transition paths.
   const deal: any = await c.env.DB.prepare(
     `SELECT id, user_id, granted_tier_founder, granted_tier_investor
        FROM partner_deals WHERE id = ? AND status = 'active'`,
@@ -288,12 +293,55 @@ admin_partners.post('/deals/:id/terminate', async (c) => {
     }
   }
 
+  // Cascade revocation to every prior redeemer of this deal — same
+  // policy as the daily expiry sweep, so termination has immediate
+  // effect across the whole partner's referral chain (not just their
+  // own grant). Paid upgrades that replaced a partner_referral status
+  // mid-term are preserved by the status='partner_referral' guard.
+  let redemptionsRevoked = 0;
+  try {
+    const reds: any = await c.env.DB.prepare(
+      `SELECT redeemed_by_user_id, granted_tier_founder, granted_tier_investor
+         FROM partner_referral_redemptions WHERE partner_deal_id = ?`,
+    ).bind(id).all().catch(() => ({ results: [] }));
+    for (const r of (reds?.results || []) as any[]) {
+      if (r.granted_tier_founder) {
+        const u = await c.env.DB.prepare(
+          `UPDATE users SET subscription_tier = 'free',
+                              subscription_status = 'partner_revoked',
+                              subscription_renews_at = NULL
+             WHERE id = ?
+               AND subscription_tier = ?
+               AND subscription_status = 'partner_referral'`,
+        ).bind(r.redeemed_by_user_id, r.granted_tier_founder).run();
+        if ((u.meta?.changes || 0) > 0) redemptionsRevoked += 1;
+      }
+      if (r.granted_tier_investor) {
+        const u = await c.env.DB.prepare(
+          `UPDATE users SET investor_tier = 'free',
+                              investor_subscription_status = 'partner_revoked',
+                              investor_subscription_renews_at = NULL,
+                              investor_dealroom_max = 5
+             WHERE id = ?
+               AND investor_tier = ?
+               AND investor_subscription_status = 'partner_referral'`,
+        ).bind(r.redeemed_by_user_id, r.granted_tier_investor).run();
+        if ((u.meta?.changes || 0) > 0) redemptionsRevoked += 1;
+      }
+    }
+  } catch (e) { console.warn('[admin_partners] terminate redemption revoke failed', e); }
+
   await logAdminAction(c.env, admin.id, admin.email, 'partner_deal_terminated', {
     deal_id: id, reason,
     revoked_tier_founder: deal.granted_tier_founder,
     revoked_tier_investor: deal.granted_tier_investor,
+    redemptions_revoked: redemptionsRevoked,
   });
-  return c.json({ ok: true, tiers_revoked: !!(deal.granted_tier_founder || deal.granted_tier_investor) });
+  return c.json({
+    ok: true,
+    tiers_revoked: !!(deal.granted_tier_founder || deal.granted_tier_investor),
+    redemptions_revoked: redemptionsRevoked,
+  });
 });
 
 function safeJsonArray(s: unknown): unknown[] {
