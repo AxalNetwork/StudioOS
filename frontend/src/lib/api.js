@@ -301,6 +301,21 @@ export const api = {
     myDeal: () => request('/partner-portal/my-deal'),
   },
 
+  // Task #10 (AC-1) — Personal advisor (dashboard chatbot + write-router).
+  // /explain returns an SSE stream and is consumed via fetch + ReadableStream
+  // in the AC-3 chat UI; we expose a thin URL helper for that consumer
+  // instead of wrapping it through request() (which buffers JSON).
+  advisor: {
+    start: () => request('/advisor/start', { method: 'POST', body: JSON.stringify({}) }),
+    answer: (conversation_uid, question_id, value) =>
+      request('/advisor/answer', { method: 'POST', body: JSON.stringify({ conversation_uid, question_id, value }) }),
+    skip: (conversation_uid, question_id) =>
+      request('/advisor/skip', { method: 'POST', body: JSON.stringify({ conversation_uid, question_id }) }),
+    progress: () => request('/advisor/progress'),
+    conversation: (uid) => request(`/advisor/conversations/${encodeURIComponent(uid)}`),
+    explainUrl: () => '/api/advisor/explain',
+  },
+
   listPartners: () => request('/partners'),
   createPartner: (data) => request('/partners', { method: 'POST', body: JSON.stringify(data) }),
   recommendPartners: (sector) => request(`/partners/matchmaking/recommend${sector ? `?sector=${sector}` : ''}`),

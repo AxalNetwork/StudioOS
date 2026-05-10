@@ -32,6 +32,8 @@ import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
 import partnerOnboarding from './routes/partner_onboarding';
 import partnerPortal from './routes/partner_portal';
+// Task #10 (AC-1) — Personal advisor backend + write-router.
+import advisorRoutes from './routes/advisor';
 import partnernet from './routes/partnernet';
 import capital from './routes/capital';
 import tickets from './routes/tickets';
@@ -285,6 +287,8 @@ app.route('/api/partners', partners);
 app.route('/api/admin/partners', adminPartners);
 app.route('/api/partner-onboard', partnerOnboarding);
 app.route('/api/partner-portal', partnerPortal);
+// Task #10 (AC-1) — Personal advisor (dashboard chatbot + write-router).
+app.route('/api/advisor', advisorRoutes);
 app.route('/api/partnernet', partnernet);
 app.route('/api/capital', capital);
 app.route('/api/tickets', tickets);
