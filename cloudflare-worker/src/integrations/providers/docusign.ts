@@ -50,6 +50,7 @@ import {
   decryptCredentials,
   encryptCredentials,
   encryptWebhookSecret,
+  decryptWebhookSecret,
   type CredentialBlob,
 } from '../secrets';
 import { encryptBytes } from '../../services/cryptoBox';
@@ -755,9 +756,311 @@ export async function syncAllDocusignIntegrations(env: Env): Promise<{ scanned: 
   return { scanned: list.length, ok, failed };
 }
 
+// ───────────────────────────────────────────────────────────── Connect provisioning
+
+// Per-integration Connect name. The uid is appended so two integrations
+// on the same DocuSign account never collide on duplicate-name and so
+// findExistingConnect cannot mis-adopt another integration's config.
+function connectName(row: IntegrationRow): string {
+  return `Axal StudioOS (${row.uid})`;
+}
+
+/**
+ * GET /connect on the account and look up the configuration belonging to
+ * this integration. Match is keyed primarily by exact `urlToPublishTo`
+ * (which embeds the per-integration uid via `/webhook/docusign/<uid>`)
+ * and secondarily by our per-integration `connectName(row)`. We never
+ * adopt a configuration whose URL points at a different integration.
+ */
+async function findExistingConnect(env: Env, row: IntegrationRow, webhookUrl: string): Promise<string | null> {
+  try {
+    const res = await dsFetch(env, row, '/connect');
+    if (!res.ok) return null;
+    const j = await res.json() as { configurations?: Array<{ connectId?: string; name?: string; urlToPublishTo?: string }> };
+    const list = j.configurations || [];
+    const wantName = connectName(row);
+    const byUrl = list.find(c => c.urlToPublishTo === webhookUrl);
+    if (byUrl?.connectId) return byUrl.connectId;
+    const byName = list.find(c => c.name === wantName && c.urlToPublishTo === webhookUrl);
+    return byName?.connectId || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Register an account-level DocuSign Connect subscription pointing at
+ * our per-integration webhook URL, then install our per-integration
+ * HMAC secret as the active signing key. Returns the resulting
+ * `connectId` so the caller can persist it atomically alongside the
+ * webhook secret.
+ *
+ * Eliminates the manual "DocuSign Admin → Connect → paste URL + secret"
+ * step that previously gated webhook delivery. The hourly reconcile cron
+ * remains as a safety net for missed Connect deliveries (DocuSign Connect
+ * has at-least-once semantics with retries, but our webhook handler
+ * dedupes on body SHA-256 — see `webhook()` above).
+ *
+ * On duplicate-name failure (re-running after a partial success where
+ * the create-then-persist sequence was interrupted), we GET /connect,
+ * pick the matching configuration, and re-install the HMAC against it
+ * rather than failing.
+ */
+async function provisionConnect(env: Env, row: IntegrationRow, webhookUrl: string, webhookSecret: string): Promise<string> {
+  const payload = {
+    configurationType: 'custom',
+    name: connectName(row),
+    urlToPublishTo: webhookUrl,
+    allowEnvelopePublish: 'true',
+    enableLog: 'true',
+    requireMutualTls: 'false',
+    signMessageWithX509Cert: 'false',
+    includeSenderAccountAsCustomField: 'false',
+    includeDocuments: 'false',
+    includeCertificateOfCompletion: 'false',
+    includeEnvelopeVoidReason: 'true',
+    includeTimeZone: 'true',
+    useSoapInterface: 'false',
+    requiresAcknowledgement: 'true',
+    allUsers: 'true',
+    envelopeEvents: 'Sent,Delivered,Completed,Declined,Voided',
+    eventData: { version: 'restv2.1', format: 'json', includeData: ['recipients'] },
+  };
+  let connectId: string | null = null;
+  const res = await dsFetch(env, row, '/connect', { method: 'POST', body: JSON.stringify(payload) });
+  if (res.ok) {
+    const out = await res.json() as { connectId?: string };
+    connectId = out.connectId || null;
+  } else {
+    const status = res.status;
+    const txt = await res.text();
+    // 400/409 most commonly mean "configuration with this name already exists"
+    // — recover by adopting the existing one. Anything else is fatal.
+    if (status === 400 || status === 409) {
+      connectId = await findExistingConnect(env, row, webhookUrl);
+    }
+    if (!connectId) {
+      throw new Error(`docusign_connect_create_failed: ${status} ${txt.slice(0, 200)}`);
+    }
+  }
+  if (!connectId) throw new Error('docusign_connect_create_no_id');
+
+  // Install our per-integration HMAC secret as the active signing key.
+  // Our webhook verifier matches against any X-DocuSign-Signature-1..5
+  // header, so a leftover legacy key on an adopted configuration would
+  // not break us — but we want our secret present and active.
+  const hmacRes = await dsFetch(env, row, `/connect/${encodeURIComponent(connectId)}/hmac`, {
+    method: 'POST',
+    body: JSON.stringify({ active: 'true', value: webhookSecret }),
+  });
+  if (!hmacRes.ok) {
+    const txt = await hmacRes.text();
+    throw new Error(`docusign_connect_hmac_failed: ${hmacRes.status} ${txt.slice(0, 200)}`);
+  }
+  return connectId;
+}
+
+async function tearDownConnect(env: Env, row: IntegrationRow): Promise<void> {
+  const cfg = safeParse(row.config_json);
+  const connectId = typeof cfg.connect_id === 'string' ? cfg.connect_id as string : '';
+  if (!connectId) return;
+  try {
+    const res = await dsFetch(env, row, `/connect/${encodeURIComponent(connectId)}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) {
+      // Don't echo upstream body — DocuSign errors can carry account context.
+      console.warn(`[docusign] connect teardown returned ${res.status}`);
+    }
+  } catch (e) {
+    console.warn('[docusign] tearDownConnect failed:', (e as Error).message);
+  }
+}
+
+// ───────────────────────────────────────────────────────────── postConnect
+
+/**
+ * After OAuth completes, provision a DocuSign Connect subscription
+ * pointing at `/api/integrations/webhook/docusign/<uid>` and ATOMICALLY
+ * persist (a) the per-integration HMAC secret into `webhook_secret_enc`
+ * and (b) the resulting `connectId` into `config_json.connect_id`. The
+ * secret is intentionally NOT persisted until provisioning succeeds:
+ * the "Webhook: Connected" indicator on the IntegrationsPage UI is
+ * driven by `has_webhook_secret`, so a half-provisioned state (secret
+ * persisted but DocuSign Connect not actually configured) would render
+ * a false-positive. With this ordering, `has_webhook_secret=true`
+ * implies remote provisioning succeeded.
+ *
+ * The per-envelope `eventNotification` path in `sendDocusignEnvelope`
+ * lazily creates its own secret via `ensureDocusignWebhookSecret` on
+ * first send, so the absence of `webhook_secret_enc` after a failed
+ * postConnect doesn't break envelope dispatch — it just means the
+ * legacy per-envelope flow takes over until provisioning is retried.
+ *
+ * Single-flight via a KV lease (mirrors `ensureWebhookSubscription` in
+ * `providers/calendly.ts`) so two concurrent isolates handling racing
+ * OAuth callback retries don't both try to create the Connect
+ * configuration. The loser bails immediately; the winner persists.
+ */
+async function postConnect(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<void> {
+  const appUrl = (c.env.APP_URL || '').replace(/\/+$/, '');
+  if (!appUrl.startsWith('http')) {
+    console.warn('[docusign] postConnect skipped: APP_URL not set');
+    return;
+  }
+
+  // Re-load fresh row state — `row` is the in-memory copy from
+  // registerProvider's connect() return shape and lacks fields like
+  // `webhook_secret_enc` and any concurrently-persisted `connect_id`.
+  const fresh = await c.env.DB.prepare('SELECT * FROM integrations WHERE id = ?')
+    .bind(row.id).first<IntegrationRow>();
+  if (!fresh) return;
+  const cfg0 = safeParse(fresh.config_json);
+  if (typeof cfg0.connect_id === 'string' && cfg0.connect_id) {
+    return; // already provisioned by a prior callback
+  }
+
+  const lockKey = `docusign:connect_provision:${fresh.uid}`;
+  const holder = crypto.randomUUID();
+  let acquired = false;
+  let kvAvailable = true;
+  try {
+    const cur = await c.env.RATE_LIMITS.get(lockKey);
+    if (cur) {
+      // Another isolate is mid-provisioning — bail; it will persist.
+      return;
+    }
+    await c.env.RATE_LIMITS.put(lockKey, holder, { expirationTtl: 60 });
+    const verify = await c.env.RATE_LIMITS.get(lockKey);
+    acquired = verify === holder;
+  } catch {
+    // KV infrastructure unavailable — proceed best-effort WITHOUT a
+    // lock. The under-lock re-check below + provisionConnect's
+    // duplicate-config recovery (findExistingConnect) keep this safe
+    // even in the rare two-isolate race; better than silently leaving
+    // the integration unprovisioned.
+    kvAvailable = false;
+  }
+  if (kvAvailable && !acquired) return; // legitimately held by another isolate
+
+  try {
+    // Re-check under the lock — winner may have already persisted between
+    // our first read and lock acquisition.
+    const recheck = await c.env.DB.prepare('SELECT * FROM integrations WHERE id = ?')
+      .bind(fresh.id).first<IntegrationRow>();
+    if (!recheck) return;
+    const cfg1 = safeParse(recheck.config_json);
+    if (typeof cfg1.connect_id === 'string' && cfg1.connect_id) return;
+
+    const webhookUrl = `${appUrl}/api/integrations/webhook/docusign/${encodeURIComponent(recheck.uid)}`;
+
+    // Reuse any existing per-integration secret (e.g. one already
+    // persisted by sendDocusignEnvelope's lazy ensureDocusignWebhookSecret
+    // path on a first-send-before-postConnect race). Overwriting it
+    // here with a fresh secret would invalidate verification for any
+    // in-flight envelope whose eventNotification already embeds the
+    // older secret.
+    let plaintextSecret: string;
+    let secretAlreadyPersisted = false;
+    if (recheck.webhook_secret_enc) {
+      const existing = await decryptWebhookSecret(c.env, recheck.uid, recheck.webhook_secret_enc);
+      if (existing) {
+        plaintextSecret = existing;
+        secretAlreadyPersisted = true;
+      } else {
+        // Decrypt failed (corrupted/legacy ciphertext) — generate a new one.
+        const buf = crypto.getRandomValues(new Uint8Array(32));
+        plaintextSecret = btoa(String.fromCharCode(...buf)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+    } else {
+      const buf = crypto.getRandomValues(new Uint8Array(32));
+      plaintextSecret = btoa(String.fromCharCode(...buf)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    let connectId: string;
+    try {
+      connectId = await provisionConnect(c.env, recheck, webhookUrl, plaintextSecret);
+    } catch (e) {
+      const msg = ((e as Error).message || 'connect_provision_failed').slice(0, 300);
+      try {
+        await c.env.DB.prepare(
+          'UPDATE integrations SET last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        ).bind(msg, recheck.id).run();
+      } catch {}
+      console.warn('[docusign] postConnect provisionConnect failed:', msg);
+      return;
+    }
+
+    // Atomic persist: secret (if not already there) + connect_id + clear
+    // last_error in one UPDATE. If this UPDATE fails, the next retry
+    // will GET /connect, find the existing configuration by URL, and
+    // re-install the HMAC (provisionConnect handles that recovery path).
+    try {
+      const newCfg = { ...cfg1, connect_id: connectId };
+      if (secretAlreadyPersisted) {
+        await c.env.DB.prepare(
+          'UPDATE integrations SET config_json = ?, last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        ).bind(JSON.stringify(newCfg), recheck.id).run();
+      } else {
+        // CAS-style guard: only write the secret if no concurrent writer
+        // (e.g. sendDocusignEnvelope) has populated it in the meantime.
+        // If they have, drop our generated secret (use theirs) and just
+        // record connect_id — provisionConnect already installed our
+        // generated secret as the active HMAC, but a follow-up sweep
+        // (or the next first-send) will reconcile, and webhook verifier
+        // accepts any of X-DocuSign-Signature-1..5.
+        const enc = await encryptWebhookSecret(c.env, recheck.uid, plaintextSecret);
+        const upd = await c.env.DB.prepare(
+          `UPDATE integrations SET webhook_secret_enc = ?, config_json = ?, last_error = NULL, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND webhook_secret_enc IS NULL`,
+        ).bind(enc, JSON.stringify(newCfg), recheck.id).run();
+        const changes = (upd.meta as { changes?: number } | undefined)?.changes ?? 0;
+        if (changes === 0) {
+          // Concurrent writer beat us to webhook_secret_enc — install
+          // their secret as an additional active HMAC on the Connect
+          // configuration so DocuSign signs with both, and persist
+          // connect_id only.
+          try {
+            const concurrentRow = await c.env.DB.prepare('SELECT webhook_secret_enc FROM integrations WHERE id = ?')
+              .bind(recheck.id).first<{ webhook_secret_enc: string | null }>();
+            const otherSecret = concurrentRow?.webhook_secret_enc
+              ? await decryptWebhookSecret(c.env, recheck.uid, concurrentRow.webhook_secret_enc)
+              : null;
+            if (otherSecret && otherSecret !== plaintextSecret) {
+              const hmacRes = await dsFetch(c.env, recheck, `/connect/${encodeURIComponent(connectId)}/hmac`, {
+                method: 'POST',
+                body: JSON.stringify({ active: 'true', value: otherSecret }),
+              });
+              if (!hmacRes.ok) {
+                console.warn('[docusign] postConnect: secondary HMAC install non-2xx', hmacRes.status);
+              }
+            }
+          } catch (e) {
+            console.warn('[docusign] postConnect: secondary HMAC install threw:', (e as Error).message);
+          }
+          await c.env.DB.prepare(
+            'UPDATE integrations SET config_json = ?, last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          ).bind(JSON.stringify(newCfg), recheck.id).run();
+        }
+      }
+    } catch (e) {
+      const msg = ((e as Error).message || 'connect_persist_failed').slice(0, 300);
+      try {
+        await c.env.DB.prepare(
+          'UPDATE integrations SET last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        ).bind(msg, recheck.id).run();
+      } catch {}
+      console.warn('[docusign] postConnect persist failed:', msg);
+    }
+  } finally {
+    try { if (acquired) await c.env.RATE_LIMITS.delete(lockKey); } catch {}
+  }
+}
+
 // ───────────────────────────────────────────────────────────── disconnect
 
 async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<void> {
+  // Tear down the Connect subscription FIRST — once the OAuth token is
+  // revoked we lose the ability to call DocuSign on this account's behalf.
+  await tearDownConnect(c.env, row);
   // Best-effort revoke. DocuSign uses /oauth/revoke — failures are non-fatal.
   try {
     const cfg = safeParse(row.config_json);
@@ -802,7 +1105,6 @@ export async function findActiveDocusignIntegrationForUser(env: Env, userId: num
  */
 export async function ensureDocusignWebhookSecret(env: Env, row: IntegrationRow): Promise<string> {
   if (row.webhook_secret_enc) {
-    const { decryptWebhookSecret } = await import('../secrets');
     const cur = await decryptWebhookSecret(env, row.uid, row.webhook_secret_enc);
     if (cur) return cur;
   }
@@ -810,9 +1112,32 @@ export async function ensureDocusignWebhookSecret(env: Env, row: IntegrationRow)
   const buf = crypto.getRandomValues(new Uint8Array(32));
   const b64 = btoa(String.fromCharCode(...buf)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const enc = await encryptWebhookSecret(env, row.uid, b64);
-  await env.DB.prepare(
-    `UPDATE integrations SET webhook_secret_enc = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+  // CAS-style write: only persist if no concurrent writer (postConnect or
+  // a parallel sendDocusignEnvelope in another isolate) has already
+  // populated webhook_secret_enc. On CAS miss, decrypt-and-return their
+  // secret so the caller embeds the secret that's actually persisted —
+  // never split-brain on the active HMAC for envelope verification.
+  const upd = await env.DB.prepare(
+    `UPDATE integrations SET webhook_secret_enc = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND webhook_secret_enc IS NULL`,
   ).bind(enc, row.id).run();
+  const changes = (upd.meta as { changes?: number } | undefined)?.changes ?? 0;
+  if (changes === 0) {
+    const fresh = await env.DB.prepare('SELECT webhook_secret_enc FROM integrations WHERE id = ?')
+      .bind(row.id).first<{ webhook_secret_enc: string | null }>();
+    if (fresh?.webhook_secret_enc) {
+      const cur = await decryptWebhookSecret(env, row.uid, fresh.webhook_secret_enc);
+      if (cur) {
+        row.webhook_secret_enc = fresh.webhook_secret_enc;
+        return cur;
+      }
+    }
+    // Concurrent row had ciphertext we can't decrypt (corrupted/legacy);
+    // overwrite with our freshly generated secret to recover.
+    await env.DB.prepare(
+      `UPDATE integrations SET webhook_secret_enc = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    ).bind(enc, row.id).run();
+  }
   // Mutate the in-memory row so subsequent reads in the same request see it.
   row.webhook_secret_enc = enc;
   return b64;
@@ -828,6 +1153,7 @@ const docusignProvider: ProviderImpl = {
   disconnect,
   buildAuthorizeUrl,
   verifyWebhook,
+  postConnect,
 };
 
 registerProvider(docusignProvider);
