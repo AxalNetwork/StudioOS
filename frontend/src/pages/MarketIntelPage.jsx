@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, Chev
 import { Link } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
 
 export default function MarketIntelPage() {
   const [pulse, setPulse] = useState([]);
@@ -310,6 +311,9 @@ export default function MarketIntelPage() {
           <TabExplainer text="Private rounds = direct competitors' funding signals. Who just raised, at what stage, and at what valuation tells you whether the sector is heating up — and where your portfolio is mispriced." />
           {enriched.length > 0 && (
             <CompetitorEnrichmentBlock projects={enriched} />
+          )}
+          {enriched.length > 0 && (
+            <FocusProjectCompetitorsBlock projects={enriched} />
           )}
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
@@ -809,6 +813,118 @@ function CompetitorEnrichmentBlock({ projects }) {
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Task #11 — Crunchbase peer-company lookup for the focus project, surfaced
+// inside Market Intelligence so partners analyzing the private-rounds tab
+// don't have to bounce out to a project detail page. Mirrors the
+// CrunchbaseProfileCard "Find competitors" pattern from ProjectDetail
+// (same api call + same 412/429 banner copy). Free-tier (and other
+// non-elevated tiers) get the upgrade pill instead of the live block.
+function FocusProjectCompetitorsBlock({ projects }) {
+  const { user } = useAuth();
+  const tier = (user?.tier || user?.subscription_plan || 'free').toLowerCase();
+  const isElevated = ['admin', 'partner', 'investor', 'mentor'].includes((user?.role || '').toLowerCase());
+  const tierLocked = !isElevated && tier !== 'growth' && tier !== 'studio';
+
+  const [focusId, setFocusId] = useState(projects[0]?.id || null);
+  const [comps, setComps] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  const focus = projects.find((p) => p.id === focusId) || projects[0];
+
+  useEffect(() => {
+    if (tierLocked || !focus) return;
+    let cancelled = false;
+    setLoading(true);
+    setErr('');
+    setComps(null);
+    api.crunchbaseCompetitors(focus.id, 10)
+      .then((res) => { if (!cancelled) setComps(res?.competitors || []); })
+      .catch((e) => {
+        if (cancelled) return;
+        const code = e?.data?.error || '';
+        if (code === 'crunchbase_not_connected') setErr("Crunchbase isn't connected. Connect it from Settings → Integrations.");
+        else if (code === 'crunchbase_unauthorized') setErr('Crunchbase rejected the stored API key — reconnect from Settings → Integrations.');
+        else if (e?.status === 429) setErr('Crunchbase Basic daily limit reached (200 calls/day). Try again tomorrow.');
+        else setErr(e?.message || 'Failed to load competitors');
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [focus?.id, tierLocked]);
+
+  const onUpgradeClick = () => {
+    try {
+      window.dispatchEvent(new CustomEvent('studioos:tier_required', {
+        detail: { required: 'growth', message: 'Crunchbase enrichment is a growth-tier feature.' },
+      }));
+    } catch {}
+  };
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+            <Database size={14} className="text-violet-600" /> Focus project — possible competitors
+          </h3>
+          <p className="text-[11px] text-gray-500 mt-0.5">Live Crunchbase lookup for the selected enriched project.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-[11px] text-gray-600">Focus</label>
+          <select
+            value={focus?.id || ''}
+            onChange={(e) => setFocusId(Number(e.target.value))}
+            className="text-xs bg-gray-50 border border-gray-300 rounded px-2 py-1 text-gray-900 focus:outline-none focus:border-violet-500"
+          >
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {tierLocked ? (
+        <button
+          onClick={onUpgradeClick}
+          className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100"
+        >
+          <span className="text-xs">
+            Crunchbase competitor lookup is a growth-tier feature. Upgrade to surface peer companies for {focus?.name || 'your projects'}.
+          </span>
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-200 text-amber-900">UPGRADE</span>
+        </button>
+      ) : (
+        <>
+          {loading && <div className="text-xs text-gray-500">Loading competitors for {focus?.name}…</div>}
+          {!loading && err && (
+            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">{err}</div>
+          )}
+          {!loading && !err && comps && comps.length === 0 && (
+            <div className="text-xs text-gray-500">No competitor matches found in Crunchbase Basic.</div>
+          )}
+          {!loading && !err && comps && comps.length > 0 && (
+            <ul className="space-y-1.5">
+              {comps.map((c) => (
+                <li key={c.uuid} className="flex items-center justify-between gap-2 text-xs">
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-900 truncate">{c.name}</div>
+                    {c.short_description && <div className="text-gray-600 truncate">{c.short_description}</div>}
+                  </div>
+                  {c.cb_url && (
+                    <a href={c.cb_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-1 whitespace-nowrap">
+                      open <ExternalLink size={10} />
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       )}
     </div>
