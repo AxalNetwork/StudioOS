@@ -63,6 +63,8 @@ import { syncAllCalendlyIntegrations } from './integrations/providers/calendly';
 import { syncAllSalesforceIntegrations } from './integrations/providers/salesforce';
 // Task #5 — Carta provider. Side-effect import so registerProvider() runs at boot.
 import { syncAllCartaIntegrations } from './integrations/providers/carta';
+// Task #2 — DocuSign provider. Side-effect import so registerProvider() runs at boot.
+import { syncAllDocusignIntegrations } from './integrations/providers/docusign';
 import network from './routes/network';
 import networkfx from './routes/networkfx';
 import profiling from './routes/profiling';
@@ -604,6 +606,19 @@ export default {
             }
           } catch (e) {
             console.error('[cron] carta sync failed', e);
+          }
+        }
+        // Task #2 — DocuSign reconcile sweep hourly at HH:05 (spreads load away
+        // from the top-of-hour batch). Polls in-flight envelopes so a missed
+        // Connect webhook delivery can't leave us stuck on `sent` forever.
+        if (now.getUTCMinutes() === 5) {
+          try {
+            const r = await syncAllDocusignIntegrations(env);
+            if (r.scanned > 0) {
+              console.info(`[cron] docusign sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
+            }
+          } catch (e) {
+            console.error('[cron] docusign sync failed', e);
           }
         }
         // Task #14 — flush pending digest emails. Cheap on idle ticks

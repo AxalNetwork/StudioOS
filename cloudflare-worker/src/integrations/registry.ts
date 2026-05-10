@@ -246,7 +246,7 @@ export const REGISTRY: ProviderDescriptor[] = [
     display_name: 'DocuSign',
     integration_type: 'e_sign',
     description: 'Send incorporation, NDA, and co-founder agreements through DocuSign with audit trail.',
-    status: 'coming_soon',
+    status: 'live',
     tier: 'studio',
     auth_type: 'oauth2',
     capabilities: ['Send envelopes', 'Webhook on signed', 'Template library'],

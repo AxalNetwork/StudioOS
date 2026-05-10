@@ -96,6 +96,10 @@ interface UnifiedContract {
   file_content_type: string | null;
   file_sha256: string | null;
   source: 'documents' | 'esign';
+  // Task #2 — e-sign provider for esign-source rows. 'native' = in-house
+  // signing flow; 'docusign' = routed through DocuSign. Always 'native'
+  // for documents-source rows.
+  provider?: 'native' | 'docusign';
 }
 
 function enrichDocRow(d: any, projectName: string | null, founderEmail: string | null): UnifiedContract {
@@ -157,6 +161,9 @@ function enrichEsignRow(e: any): UnifiedContract {
     file_content_type: e.signed_r2_key ? 'application/pdf' : null,
     file_sha256: null,
     source: 'esign',
+    // Task #2 — surface the e-sign provider so the admin UI can render
+    // a "DocuSign" badge alongside the existing "eSign" source pill.
+    provider: e.provider || 'native',
   };
 }
 
@@ -170,6 +177,7 @@ async function loadEsignContracts(sql: ReturnType<typeof getSQL>): Promise<Unifi
       e.id, e.envelope_uuid, e.user_id, e.deal_id,
       e.document_type, e.document_title,
       e.status, e.created_at, e.completed_at, e.signed_r2_key,
+      COALESCE(e.provider, 'native') AS provider,
       (SELECT recipient_email FROM esign_recipients WHERE envelope_id = e.id ORDER BY id ASC LIMIT 1) AS recipient_email,
       (SELECT recipient_name  FROM esign_recipients WHERE envelope_id = e.id ORDER BY id ASC LIMIT 1) AS recipient_name,
       (SELECT recipient_name  FROM esign_recipients WHERE envelope_id = e.id AND status = 'signed' ORDER BY signed_at DESC LIMIT 1) AS signer_name,

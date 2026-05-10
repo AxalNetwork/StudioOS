@@ -1432,10 +1432,16 @@ function ContractRow({ c, onOpen }) {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {c.source === 'esign' && (
+          {c.source === 'esign' && c.provider !== 'docusign' && (
             <span title="Stored in esign_envelopes (modern e-sign flow)"
               className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded uppercase tracking-wider">
               eSign
+            </span>
+          )}
+          {c.provider === 'docusign' && (
+            <span title="Routed through DocuSign — recipient signs in DocuSign's UI."
+              className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded uppercase tracking-wider">
+              DocuSign
             </span>
           )}
           <StatusPill status={c.status} />

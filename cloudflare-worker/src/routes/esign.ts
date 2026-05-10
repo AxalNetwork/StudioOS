@@ -90,6 +90,13 @@ async function ensureSchema(env: Env): Promise<void> {
       meta TEXT
     )`,
     `CREATE INDEX IF NOT EXISTS idx_esign_audit_envelope ON esign_audit_events(envelope_id, ts)`,
+    // Task #2 — DocuSign provider columns. ALTER ADD COLUMN has no
+    // IF NOT EXISTS in D1; the per-statement try/catch below swallows
+    // the resulting `duplicate column name` errors on re-run.
+    `ALTER TABLE esign_envelopes ADD COLUMN provider TEXT NOT NULL DEFAULT 'native'`,
+    `ALTER TABLE esign_envelopes ADD COLUMN docusign_envelope_id TEXT`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_provider          ON esign_envelopes(provider)`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_docusign_envelope ON esign_envelopes(docusign_envelope_id)`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch {}
@@ -196,8 +203,15 @@ export async function createAndSendEnvelope(
     documentType: string;
     dealId?: number | null;
     appUrl: string;
+    /**
+     * Task #2 — Provider override. When 'docusign', the envelope is
+     * routed through the admin's connected DocuSign account instead of
+     * the in-house signing flow. Falls back to 'native' if the admin
+     * has no active DocuSign integration. Default 'native'.
+     */
+    viaProvider?: 'native' | 'docusign';
   }
-): Promise<{ envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean } | null> {
+): Promise<{ envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean; provider?: string } | null> {
   await ensureSchema(env);
 
   const tpl = buildTemplateBody(opts.documentType, opts.recipientName, opts.recipientEmail);
@@ -245,6 +259,54 @@ export async function createAndSendEnvelope(
   }
   const envelopeId = insertEnv.id as number;
 
+  // ── Task #2 — DocuSign opt-in path ─────────────────────────────────────
+  // When the admin requests `viaProvider:'docusign'` AND has an active
+  // DocuSign integration, hand the document off to DocuSign and skip the
+  // in-house token/email path (DocuSign emails the signer). On any
+  // failure we fall back to the in-house flow so the agreement still
+  // lands in the recipient's inbox.
+  if (opts.viaProvider === 'docusign') {
+    try {
+      const { findActiveDocusignIntegrationForUser, sendDocusignEnvelope } = await import('../integrations/providers/docusign');
+      const dsRow = await findActiveDocusignIntegrationForUser(env, opts.adminUserId);
+      if (dsRow) {
+        const ds = await sendDocusignEnvelope(env, dsRow, {
+          documentTitle: tpl.title,
+          documentBody: tpl.body,
+          recipientEmail: opts.recipientEmail,
+          recipientName: opts.recipientName,
+          emailSubject: `Please sign: ${tpl.title}`,
+        });
+        await env.DB.prepare(
+          `UPDATE esign_envelopes SET provider = 'docusign', docusign_envelope_id = ? WHERE id = ?`,
+        ).bind(ds.docusign_envelope_id, envelopeId).run();
+        await appendAudit(env, envelopeId, {
+          ts: new Date().toISOString(),
+          signer_id: opts.adminUserId,
+          signer_email: null,
+          action: 'envelope_created',
+          ip: 'admin',
+          meta: { admin: opts.adminName, document_type: opts.documentType, recipient: opts.recipientEmail, provider: 'docusign', docusign_envelope_id: ds.docusign_envelope_id },
+        });
+        return {
+          envelope_id: envelopeId,
+          envelope_uuid: envelopeUuid,
+          signing_url: '',     // DocuSign emails the signer directly
+          email_sent: true,
+          provider: 'docusign',
+        };
+      }
+      // No active DocuSign integration — fall through to native flow.
+    } catch (e) {
+      // Strip upstream error bodies (which can carry recipient PII) — log
+      // only the error class prefix so postmortems still group meaningfully.
+      const msg = (e as Error).message || 'unknown';
+      const cls = msg.split(':')[0]?.slice(0, 80) || 'docusign_failed';
+      console.warn('[esign] docusign send failed, falling back to native:', cls);
+      // fall through
+    }
+  }
+
   const token = genToken();
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
   await env.DB.prepare(
@@ -275,7 +337,7 @@ export async function createAndSendEnvelope(
     meta: { signing_url: signingUrl },
   });
 
-  return { envelope_id: envelopeId, envelope_uuid: envelopeUuid, signing_url: signingUrl, email_sent: emailSent };
+  return { envelope_id: envelopeId, envelope_uuid: envelopeUuid, signing_url: signingUrl, email_sent: emailSent, provider: 'native' };
 }
 
 // ---------------------------------------------------------------------------
@@ -292,6 +354,7 @@ esign.post('/send', async (c) => {
   const recipientName = String(body?.recipient_name || '').trim();
   const recipientUserId = body?.recipient_user_id ? Number(body.recipient_user_id) : null;
   const dealId = body?.deal_id ? Number(body.deal_id) : null;
+  const viaProvider = body?.via_provider === 'docusign' ? 'docusign' : 'native';
   if (!documentType) return c.json({ error: 'document_type is required' }, 400);
   if (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(recipientEmail)) {
     return c.json({ error: 'valid recipient_email is required' }, 400);
@@ -306,6 +369,7 @@ esign.post('/send', async (c) => {
     documentType,
     dealId,
     appUrl: c.env.APP_URL || 'https://axal.vc',
+    viaProvider,
   });
   if (!result) return c.json({ error: 'Failed to create envelope' }, 500);
   return c.json(result);
