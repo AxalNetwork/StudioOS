@@ -232,7 +232,7 @@ export const REGISTRY: ProviderDescriptor[] = [
     key: 'slack',
     display_name: 'Slack',
     integration_type: 'messaging',
-    description: 'Receive deal-flow alerts and assistant prompts in your chosen Slack channel.',
+    description: 'Receive deal-flow alerts and assistant prompts in your chosen Slack channel. v1 sends one-way notifications. Two-way commands and DM digests are coming soon.',
     // Task #1 (2026-05-10) — flipped to 'beta' (free tier). One-way
     // Worker→Slack via incoming-webhook OAuth. Provider module is
     // side-effect imported from index.ts so registerProvider() runs at boot.

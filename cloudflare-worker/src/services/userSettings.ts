@@ -82,7 +82,6 @@ export async function ensureUserSettings(env: Env): Promise<void> {
         digest_frequency TEXT DEFAULT 'weekly',
         notif_categories_email TEXT DEFAULT '{}',
         notif_categories_inapp TEXT DEFAULT '{}',
-        notif_categories_slack TEXT NOT NULL DEFAULT '{}',
         quiet_hours_start TEXT,
         quiet_hours_end TEXT,
         quiet_hours_tz TEXT DEFAULT 'UTC',
@@ -103,12 +102,6 @@ export async function ensureUserSettings(env: Env): Promise<void> {
     try {
       await env.DB.prepare(
         `ALTER TABLE user_settings ADD COLUMN dismissed_explainers TEXT NOT NULL DEFAULT '[]'`,
-      ).run();
-    } catch {}
-    // Task #1 (Slack) — additive column for existing rows (idempotent ALTER).
-    try {
-      await env.DB.prepare(
-        `ALTER TABLE user_settings ADD COLUMN notif_categories_slack TEXT NOT NULL DEFAULT '{}'`,
       ).run();
     } catch {}
     migrated = true;
@@ -140,7 +133,6 @@ export interface UserSettingsPatch {
   digest_frequency?: DigestFrequency;
   notif_categories_email?: Record<string, boolean>;
   notif_categories_inapp?: Record<string, boolean>;
-  notif_categories_slack?: Record<string, boolean>;
   quiet_hours_start?: string | null;
   quiet_hours_end?: string | null;
   quiet_hours_tz?: string | null;
@@ -244,9 +236,6 @@ function buildUpdates(patch: UserSettingsPatch): Array<[string, unknown]> {
   }
   if (patch.notif_categories_inapp !== undefined) {
     push('notif_categories_inapp', JSON.stringify(patch.notif_categories_inapp || {}).slice(0, 4000));
-  }
-  if (patch.notif_categories_slack !== undefined) {
-    push('notif_categories_slack', JSON.stringify(patch.notif_categories_slack || {}).slice(0, 4000));
   }
   if (patch.quiet_hours_start !== undefined) {
     const v = patch.quiet_hours_start;

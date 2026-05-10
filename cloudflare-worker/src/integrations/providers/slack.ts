@@ -36,13 +36,17 @@ function redirectUri(env: Env): string {
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
+interface SlackEnvVars {
+  SLACK_CLIENT_ID?: string;
+  SLACK_CLIENT_SECRET?: string;
+  APP_URL?: string;
+}
 function ensureCreds(env: Env): { id: string; secret: string } {
-  const id = (env as unknown as Record<string, string | undefined>).SLACK_CLIENT_ID;
-  const secret = (env as unknown as Record<string, string | undefined>).SLACK_CLIENT_SECRET;
-  if (!id || !secret) {
+  const e = env as Env & SlackEnvVars;
+  if (!e.SLACK_CLIENT_ID || !e.SLACK_CLIENT_SECRET) {
     throw new Error('slack_oauth_unconfigured: SLACK_CLIENT_ID/SLACK_CLIENT_SECRET secrets must be set on the worker.');
   }
-  return { id, secret };
+  return { id: e.SLACK_CLIENT_ID, secret: e.SLACK_CLIENT_SECRET };
 }
 
 interface SlackOauthV2AccessResponse {
@@ -138,24 +142,18 @@ async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, sta
 
 // ───────────────────────────────────────────────────────────── disconnect
 
-async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<void> {
-  // Clear the per-category Slack opt-in map so a re-connect starts from
-  // defaults rather than inheriting stale toggles. Webhook itself is
-  // wiped when the route layer deletes the integrations row.
-  try {
-    const { ensureUserSettings } = await import('../../services/userSettings');
-    await ensureUserSettings(c.env);
-    await c.env.DB.prepare(
-      `UPDATE user_settings SET notif_categories_slack = '{}', updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`,
-    ).bind(row.user_id).run();
-  } catch (e) {
-    console.warn('[slack] disconnect clear notif_categories_slack failed:', (e as Error).message);
-  }
-  // Slack incoming webhooks are revoked automatically when the user
-  // removes the app from their workspace; there's no first-class revoke
-  // endpoint for the webhook URL itself. We intentionally don't call
-  // /api/apps.uninstall (it requires a user/bot token, which we don't
-  // hold for an incoming-webhook-only install).
+async function disconnect(_c: Context<{ Bindings: Env }>, _user: User, _row: IntegrationRow): Promise<void> {
+  // No-op. The route layer deletes the integrations row, which wipes
+  // the encrypted webhook URL. Slack incoming webhooks are revoked
+  // automatically when the user removes the app from their workspace;
+  // there's no first-class revoke endpoint for the webhook URL itself,
+  // and we don't hold a bot token (incoming-webhook-only install) to
+  // call /api/apps.uninstall.
+  //
+  // Per-event Slack toggles in the Settings UI are persisted under the
+  // shared `users.notification_prefs` map (NOT a Slack-specific column),
+  // so the next connect inherits whatever toggles the user previously
+  // chose — by design, matches the email/in-app pattern.
 }
 
 // ───────────────────────────────────────────────────────────── lookup helper

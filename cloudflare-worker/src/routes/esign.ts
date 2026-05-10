@@ -754,21 +754,21 @@ esign.post('/sign/:token', async (c) => {
       `UPDATE esign_envelopes SET status = 'completed', signed_r2_key = ?, completed_at = CURRENT_TIMESTAMP
          WHERE id = ? AND status != 'completed'`
     ).bind(signedKey, rec.envelope_id).run();
-    const wonRace = ((upd as any)?.meta?.changes ?? 0) > 0;
+    const wonRace = (upd.meta?.changes ?? 0) > 0;
     // Best-effort; never blocks the sign API.
     if (wonRace) try {
-      const env: any = await c.env.DB.prepare(
+      const envelopeRow = await c.env.DB.prepare(
         `SELECT user_id, document_title, envelope_uuid FROM esign_envelopes WHERE id = ?`
-      ).bind(rec.envelope_id).first();
-      if (env?.user_id) {
+      ).bind(rec.envelope_id).first<{ user_id: number | null; document_title: string | null; envelope_uuid: string }>();
+      if (envelopeRow?.user_id) {
         const { notify } = await import('../services/notify');
         await notify(c.env, {
-          userId: Number(env.user_id),
+          userId: envelopeRow.user_id,
           type: 'contract_signed',
-          title: `Contract fully signed: ${env.document_title || 'Agreement'}`,
+          title: `Contract fully signed: ${envelopeRow.document_title || 'Agreement'}`,
           body: `All counterparties have signed. The executed PDF is available in your Legal vault.`,
           link: '/legal',
-          payload: { envelope_uuid: env.envelope_uuid },
+          payload: { envelope_uuid: envelopeRow.envelope_uuid },
           channels: ['in_app', 'email', 'slack'],
           category: 'contract_signed',
         });

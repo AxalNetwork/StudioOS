@@ -287,13 +287,13 @@ mentors.post('/slots/:id/book', async (c) => {
       // Task #1 (Slack, 2026-05-10) — notify the mentor that a founder
       // has booked one of their slots. Best-effort; never blocks the booking.
       try {
-        const mentorRow: any = await c.env.DB.prepare(
+        const mentorRow = await c.env.DB.prepare(
           'SELECT user_id, display_name FROM mentors WHERE id = ?'
-        ).bind(slot.mentor_id).first();
+        ).bind(slot.mentor_id).first<{ user_id: number | null; display_name: string | null }>();
         if (mentorRow?.user_id) {
           const { notify } = await import('../services/notify');
           await notify(c.env, {
-            userId: Number(mentorRow.user_id),
+            userId: mentorRow.user_id,
             type: 'mentor_session_booked',
             title: `New office-hours booking`,
             body: `${user.name || user.email} booked your slot starting ${slot.starts_at}.`,
