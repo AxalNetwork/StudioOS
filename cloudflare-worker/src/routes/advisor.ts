@@ -58,9 +58,10 @@ import { routeAnswer, hydrateAlreadyAnswered, type WriteResult } from '../servic
 
 const advisor = new Hono<{ Bindings: Env }>();
 
-// LLM model used for /explain. Mirrors the assistant.ts default so we
-// share Anthropic prompt-cache pages where possible.
-const MODEL_DEFAULT = 'claude-haiku-4-5-20251001';
+// LLM model used for /explain. Per AC-1 we use Sonnet for the explain
+// surface so concept walkthroughs match the depth of the broader
+// in-app assistant. Override via ANTHROPIC_EXPLAIN_MODEL env var.
+const EXPLAIN_MODEL_DEFAULT = 'claude-sonnet-4-5-20250929';
 const EXPLAIN_MAX_TOKENS = 512;
 
 // ---------------------------------------------------------------------------
@@ -292,18 +293,21 @@ advisor.post('/start', async (c) => {
   const ans = Number(refreshed?.answered_count || 0);
   const skp = Number(refreshed?.skipped_count || 0);
 
+  const nextPub = publicQuestion(next);
   return c.json({
+    // `conversation_id` is the AC-1 spec field; `conversation_uid`
+    // remains as an alias for clients that already shipped against
+    // the earlier draft. `next_question` likewise aliases `next`.
+    conversation_id: conv.uid,
     conversation_uid: conv.uid,
     persona: personaFor(user),
     progress: {
       total: bank.length, answered: ans, skipped: skp,
       percent: bank.length > 0 ? Math.round(((ans + skp) / bank.length) * 100) : 100,
     },
-    // `next_question` is the AC-1 spec name; `next` is kept as an
-    // alias for older clients that already shipped against it.
-    next_question: publicQuestion(next),
-    next: publicQuestion(next),
-    hint: next?.hint || null,
+    next_question: nextPub,
+    next: nextPub,
+    hint: (nextPub?.hint as string | null | undefined) || null,
     complete: !next,
   });
 });
@@ -315,130 +319,123 @@ async function readJson<T>(c: Context<{ Bindings: Env }>): Promise<T | null> {
   try { return await c.req.json() as T; } catch { return null; }
 }
 
-interface AnswerBody { conversation_uid?: string; question_id?: string; value?: unknown }
+interface AnswerBody {
+  // AC-1 spec uses `conversation_id`. We also accept `conversation_uid`
+  // as a backward-compatible alias for clients that already shipped
+  // against the earlier draft. Both fields carry the public uid.
+  conversation_id?: string;
+  conversation_uid?: string;
+  question_id?: string;
+  value?: unknown;
+}
 
 // ---------------------------------------------------------------------------
-// POST /answer  —  persist an answer, route it through the
-// write-router, and stream the result + next question over SSE.
+// POST /answer  —  persist an answer and return JSON.
 //
-// Wire format (one event per line):
-//   tool_call    { name: 'writeAnswer', input: { question_id, value } }
-//   tool_result  { name: 'writeAnswer', saved_to, status, hint?, upgrade_link?, error? }
-//   next         { question }            — null when complete
-//   done         { conversation_uid, persona, complete, progress, saved_to, hint?, next_question }
-//   error        { message }
+// Response shape (AC-1 contract):
+//   {
+//     conversation_id, conversation_uid, persona,
+//     saved_to: { table, column, id, page_url } | null,
+//     next_question: { id, prompt, input_kind, options?, hint? } | null,
+//     hint: string | null,
+//     complete: boolean,
+//     progress: { total, answered, skipped, percent },
+//     status: 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop',
+//     upgrade_link?: string,        // only when status = paywalled
+//     error?: string                // only when status = failed
+//   }
 //
-// The "tool_call/tool_result" shape mirrors the assistant.ts agentic
-// loop so the AC-3 client code can reuse the same SSE parser. /answer
-// itself does NOT call Anthropic — the routing is deterministic — so
-// the "tool" here is the in-process writeAnswer fn rather than an
-// LLM-driven tool_use.
+// Routing here is deterministic so we don't burn LLM tokens — the
+// Anthropic surface is /explain. /answer therefore returns plain
+// JSON; the frontend `request()` helper parses it directly.
 // ---------------------------------------------------------------------------
 advisor.post('/answer', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const body = await readJson<AnswerBody>(c);
-  if (!body?.conversation_uid || !body.question_id) {
-    return c.json({ error: 'conversation_uid and question_id are required' }, 400);
+  const convUid = body?.conversation_id || body?.conversation_uid;
+  if (!convUid || !body.question_id) {
+    return c.json({ error: 'conversation_id and question_id are required' }, 400);
   }
   const conv = await c.env.DB.prepare(
     `SELECT * FROM advisor_conversations WHERE uid = ? AND user_id = ?`,
-  ).bind(body.conversation_uid, user.id).first<ConversationRow>();
+  ).bind(convUid, user.id).first<ConversationRow>();
   if (!conv) return c.json({ error: 'conversation not found' }, 404);
 
   // Refuse to write a destructive-sounding answer. The frontend chat
   // also rejects these but we defend in depth — the model never sees
   // user-typed strings until we route them.
   const valueStr = String(body.value ?? '').trim();
-  if (/\b(delete|drop|truncate|wipe|destroy)\b/i.test(valueStr) && valueStr.length < 60) {
+  // Destructive verbs are routed to the relevant page rather than
+  // executed via the chat. The list mirrors the system-prompt
+  // refusal rules so server-side defence-in-depth and the LLM agree.
+  // Length cap removed — the regex matches anywhere in the answer.
+  if (/\b(delete|remove|drop|truncate|wipe|destroy|void|cancel|disband|deactivate|revoke|terminate|purge|erase|reset)\b/i.test(valueStr)) {
     return c.json({
       error: 'Destructive actions must be performed from the relevant page directly.',
+      saved_to: null,
+      next_question: null,
+      hint: 'Open the page from the side nav and use its dedicated controls for delete / cancel / void.',
     }, 400);
   }
 
   const q = questionById(body.question_id);
   if (!q) return c.json({ error: 'unknown question_id' }, 400);
 
-  const enc = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      try {
-        // Persist the user turn first so the audit log is consistent
-        // even if a downstream step throws.
-        await recordMessage(c.env, conv.id, 'user', valueStr, q.id);
+  // Persist the user turn first so the audit log is consistent even
+  // if a downstream step throws.
+  await recordMessage(c.env, conv.id, 'user', valueStr, q.id);
 
-        controller.enqueue(enc.encode(sseEvent('tool_call', {
-          name: 'writeAnswer', input: { question_id: q.id, value: valueStr },
-        })));
+  const result: WriteResult = valueStr
+    ? await routeAnswer(c.env, user, q.id, valueStr)
+    : { status: 'skipped' };
+  await recordAnswer(c.env, conv, user, q.id, valueStr, result);
 
-        const result: WriteResult = valueStr
-          ? await routeAnswer(c.env, user, q.id, valueStr)
-          : { status: 'skipped' };
-        await recordAnswer(c.env, conv, user, q.id, valueStr, result);
+  // Re-fetch the user if the role-detector just changed persona so
+  // the next bank reflects the new role.
+  let liveUser = user;
+  if (q.id === 'role_detect.primary' && result.status === 'saved') {
+    const fresh = await c.env.DB.prepare(
+      `SELECT id, email, name, role, founder_id FROM users WHERE id = ?`,
+    ).bind(user.id).first<User>();
+    if (fresh) liveUser = { ...user, ...fresh };
+  }
 
-        controller.enqueue(enc.encode(sseEvent('tool_result', {
-          name: 'writeAnswer',
-          status: result.status,
-          saved_to: result.saved_to || null,
-          hint: result.hint || null,
-          upgrade_link: result.upgrade_link || null,
-          error: result.error || null,
-        })));
+  const bank = workingBankFor(liveUser);
+  const answered = await effectiveAnsweredSet(c.env, liveUser, conv.id);
+  const next = nextUnansweredQuestion(bank, answered);
+  await refreshCounts(c.env, conv.id, next?.id || null);
 
-        // Re-fetch the user if the role-detector just changed persona.
-        let liveUser = user;
-        if (q.id === 'role_detect.primary' && result.status === 'saved') {
-          const fresh = await c.env.DB.prepare(
-            `SELECT id, email, name, role, founder_id FROM users WHERE id = ?`,
-          ).bind(user.id).first<User>();
-          if (fresh) liveUser = { ...user, ...fresh };
-        }
+  if (!next) {
+    await c.env.DB.prepare(
+      `UPDATE advisor_conversations SET state = 'complete', updated_at = datetime('now') WHERE id = ?`,
+    ).bind(conv.id).run();
+  } else {
+    await recordMessage(c.env, conv.id, 'assistant', next.prompt, next.id);
+  }
 
-        const bank = workingBankFor(liveUser);
-        const answered = await effectiveAnsweredSet(c.env, liveUser, conv.id);
-        const next = nextUnansweredQuestion(bank, answered);
-        await refreshCounts(c.env, conv.id, next?.id || null);
+  const counts = await c.env.DB.prepare(
+    `SELECT answered_count, skipped_count FROM advisor_conversations WHERE id = ?`,
+  ).bind(conv.id).first<{ answered_count: number; skipped_count: number }>();
+  const ans = Number(counts?.answered_count || 0);
+  const skp = Number(counts?.skipped_count || 0);
+  const nextPub = publicQuestion(next);
 
-        if (!next) {
-          await c.env.DB.prepare(
-            `UPDATE advisor_conversations SET state = 'complete', updated_at = datetime('now') WHERE id = ?`,
-          ).bind(conv.id).run();
-        } else {
-          await recordMessage(c.env, conv.id, 'assistant', next.prompt, next.id);
-        }
-
-        const counts = await c.env.DB.prepare(
-          `SELECT answered_count, skipped_count FROM advisor_conversations WHERE id = ?`,
-        ).bind(conv.id).first<{ answered_count: number; skipped_count: number }>();
-        const ans = Number(counts?.answered_count || 0);
-        const skp = Number(counts?.skipped_count || 0);
-
-        const nextPub = publicQuestion(next);
-        controller.enqueue(enc.encode(sseEvent('next', { question: nextPub })));
-        controller.enqueue(enc.encode(sseEvent('done', {
-          conversation_uid: conv.uid,
-          persona: personaFor(liveUser),
-          complete: !next,
-          saved_to: result.saved_to || null,
-          hint: result.hint || (nextPub?.hint as string | null | undefined) || null,
-          next_question: nextPub,
-          progress: {
-            total: bank.length, answered: ans, skipped: skp,
-            percent: bank.length > 0 ? Math.round(((ans + skp) / bank.length) * 100) : 100,
-          },
-        })));
-      } catch (e) {
-        controller.enqueue(enc.encode(sseEvent('error', { message: (e as Error).message })));
-      } finally {
-        controller.close();
-      }
-    },
-  });
-  return new Response(stream, {
-    headers: {
-      'content-type': 'text/event-stream',
-      'cache-control': 'no-cache, no-transform',
-      'x-accel-buffering': 'no',
+  return c.json({
+    conversation_id: conv.uid,
+    conversation_uid: conv.uid,
+    persona: personaFor(liveUser),
+    status: result.status,
+    saved_to: result.saved_to || null,
+    next_question: nextPub,
+    next: nextPub,
+    hint: result.hint || (nextPub?.hint as string | null | undefined) || null,
+    upgrade_link: result.upgrade_link || null,
+    error: result.error || null,
+    complete: !next,
+    progress: {
+      total: bank.length, answered: ans, skipped: skp,
+      percent: bank.length > 0 ? Math.round(((ans + skp) / bank.length) * 100) : 100,
     },
   });
 });
@@ -449,13 +446,14 @@ advisor.post('/answer', async (c) => {
 advisor.post('/skip', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
-  const body = await readJson<{ conversation_uid?: string; question_id?: string }>(c);
-  if (!body?.conversation_uid || !body.question_id) {
-    return c.json({ error: 'conversation_uid and question_id are required' }, 400);
+  const body = await readJson<{ conversation_id?: string; conversation_uid?: string; question_id?: string }>(c);
+  const convUidS = body?.conversation_id || body?.conversation_uid;
+  if (!convUidS || !body?.question_id) {
+    return c.json({ error: 'conversation_id and question_id are required' }, 400);
   }
   const conv = await c.env.DB.prepare(
     `SELECT * FROM advisor_conversations WHERE uid = ? AND user_id = ?`,
-  ).bind(body.conversation_uid, user.id).first<ConversationRow>();
+  ).bind(convUidS, user.id).first<ConversationRow>();
   if (!conv) return c.json({ error: 'conversation not found' }, 404);
 
   const q = questionById(body.question_id);
@@ -513,10 +511,15 @@ advisor.get('/progress', async (c) => {
 // ---------------------------------------------------------------------------
 // GET /conversations/:uid  —  full Q&A trail for a conversation.
 // ---------------------------------------------------------------------------
-advisor.get('/conversations/:uid', async (c) => {
+// AC-1 spec uses `/conversations/:id`; older clients hit
+// `/conversations/:uid`. Both routes share a single handler that
+// looks the conversation up by its public uid (the only ID we expose
+// outside the worker).
+async function conversationDetailHandler(c: Context<{ Bindings: Env }>): Promise<Response> {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
-  const uid = c.req.param('uid');
+  const uid = c.req.param('id') || c.req.param('uid');
+  if (!uid) return c.json({ error: 'conversation id required' }, 400);
   const conv = await c.env.DB.prepare(
     `SELECT * FROM advisor_conversations WHERE uid = ? AND user_id = ?`,
   ).bind(uid, user.id).first<ConversationRow>();
@@ -529,6 +532,7 @@ advisor.get('/conversations/:uid', async (c) => {
        FROM advisor_answers WHERE conversation_id = ? ORDER BY id ASC`,
   ).bind(conv.id).all<{ question_id: string; raw_value: string | null; saved_to_table: string | null; saved_to_column: string | null; saved_to_id: string | null; saved_status: string; saved_error: string | null; created_at: string }>();
   return c.json({
+    conversation_id: conv.uid,
     conversation_uid: conv.uid,
     persona: conv.persona,
     state: conv.state,
@@ -540,7 +544,8 @@ advisor.get('/conversations/:uid', async (c) => {
     messages: messages.results || [],
     answers: answers.results || [],
   });
-});
+}
+advisor.get('/conversations/:id', conversationDetailHandler);
 
 // ---------------------------------------------------------------------------
 // POST /explain  —  SSE stream of a free-form LLM explanation.
@@ -564,9 +569,18 @@ advisor.post('/explain', async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) {
     return c.json({ error: 'advisor explanations are not configured' }, 503);
   }
-  const body = await readJson<{ topic?: string; conversation_uid?: string }>(c);
+  const body = await readJson<{ topic?: string; conversation_id?: string; conversation_uid?: string }>(c);
   const topic = String(body?.topic || '').trim().slice(0, 500);
   if (!topic) return c.json({ error: 'topic is required' }, 400);
+  // Per AC-1 the LLM is shown only the topic + persona context — never
+  // free-form user-typed answer text. Strip prompt-injection markers
+  // (system tags, role overrides) defensively before they reach
+  // Anthropic.
+  const safeTopic = topic
+    .replace(/<\/?(system|assistant|user|tool[^>]*)>/gi, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\b(ignore (all|previous) instructions|disregard the system prompt)\b/gi, '[filtered]')
+    .slice(0, 500);
 
   // Build the prompt. We deliberately do NOT pass any sensitive answer
   // content from advisor_answers (PII, financial data) — the LLM only
@@ -581,7 +595,7 @@ advisor.post('/explain', async (c) => {
     { type: 'text' as const, text: `User context: role=${persona}, name=${user.name || 'unknown'}.` },
   ];
 
-  const conversationUid = body?.conversation_uid ? String(body.conversation_uid) : null;
+  const conversationUid = (body?.conversation_id || body?.conversation_uid) ? String(body?.conversation_id || body?.conversation_uid) : null;
   let conversationId: number | null = null;
   if (conversationUid) {
     const conv = await c.env.DB.prepare(
@@ -589,7 +603,7 @@ advisor.post('/explain', async (c) => {
     ).bind(conversationUid, user.id).first<{ id: number }>();
     if (conv) conversationId = Number(conv.id);
   }
-  if (conversationId) await recordMessage(c.env, conversationId, 'user', `[explain] ${topic}`);
+  if (conversationId) await recordMessage(c.env, conversationId, 'user', `[explain] ${safeTopic}`);
 
   const upstream = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -599,10 +613,10 @@ advisor.post('/explain', async (c) => {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: MODEL_DEFAULT,
+      model: c.env.ANTHROPIC_EXPLAIN_MODEL || EXPLAIN_MODEL_DEFAULT,
       max_tokens: EXPLAIN_MAX_TOKENS,
       system,
-      messages: [{ role: 'user', content: topic }],
+      messages: [{ role: 'user', content: safeTopic }],
       stream: true,
     }),
   });
@@ -652,7 +666,7 @@ advisor.post('/explain', async (c) => {
         }
         controller.enqueue(enc.encode(sseEvent('done', {})));
         if (conversationId && collected) {
-          await recordMessage(c.env, conversationId, 'assistant', collected, null, { kind: 'explain', topic });
+          await recordMessage(c.env, conversationId, 'assistant', collected, null, { kind: 'explain', topic: safeTopic });
         }
       } catch (e) {
         controller.enqueue(enc.encode(sseEvent('error', { message: (e as Error).message })));

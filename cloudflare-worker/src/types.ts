@@ -37,6 +37,7 @@ export interface Env {
   // (cloudflare-worker/src/routes/assistant.ts). When unset the route
   // returns 503 instead of streaming, so the UI can degrade gracefully.
   ANTHROPIC_API_KEY?: string;
+  ANTHROPIC_EXPLAIN_MODEL?: string;
   GITHUB_ACCESS_TOKEN?: string;
   GITHUB_REPO_OWNER?: string;
   GITHUB_REPO_NAME?: string;
