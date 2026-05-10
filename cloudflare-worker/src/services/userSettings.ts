@@ -28,9 +28,6 @@ export interface UserSettingsRow {
   digest_frequency: DigestFrequency;
   notif_categories_email: string;
   notif_categories_inapp: string;
-  // Task #1 (Slack) — per-category opt-in map for Slack delivery.
-  // Cleared on Slack disconnect so a re-connect starts from defaults.
-  notif_categories_slack: string;
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
   quiet_hours_tz: string | null;
@@ -54,7 +51,6 @@ const DEFAULT_ROW = {
   digest_frequency: 'weekly' as DigestFrequency,
   notif_categories_email: '{}',
   notif_categories_inapp: '{}',
-  notif_categories_slack: '{}',
   quiet_hours_start: null as string | null,
   quiet_hours_end: null as string | null,
   quiet_hours_tz: 'UTC' as string | null,

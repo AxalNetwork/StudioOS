@@ -7,7 +7,7 @@
  *  - Persists the channel-bound webhook URL + channel name + team name
  *    in `integrations.credentials_enc` and surfaces them on the row's
  *    `external_account_id` / `external_account_name` for the UI.
- *  - Disconnect clears the webhook AND wipes `notif_categories_slack`
+ *  - Disconnect deletes the integrations row (which wipes the webhook)
  *    so a re-connect starts from defaults.
  *  - notify.ts loads the webhook for the recipient and renders Block
  *    Kit messages for the 5 trigger events spec'd by the brief.
