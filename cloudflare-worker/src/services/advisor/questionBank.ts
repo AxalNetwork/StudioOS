@@ -94,7 +94,9 @@ const FOUNDER_BANK: Question[] = [
   { id: 'founder.brand.theme_color', persona: 'founder', prompt: 'Pick a brand color (hex, e.g. #7c3aed).',          input_kind: 'short' },
   { id: 'founder.deck.problem', persona: 'founder', prompt: 'In one sentence, what problem are you solving?', input_kind: 'long' },
   { id: 'founder.deck.market',  persona: 'founder', prompt: 'Who are the customers, and roughly how many?',  input_kind: 'long' },
-  { id: 'founder.spinout.week1_review', persona: 'founder', prompt: 'Week 1 of Spin-Out Lab: anything blocking you before we move on?', input_kind: 'long' },
+  // Spin-Out Lab Week-1 milestones are emitted as side-effects of
+  // the three discovery interview answers (router writes
+  // `customer_interview_logged_{1,2,3}`); no standalone Q is needed.
 
   // Existing-founder additions — recorded as noops by the router but
   // recognised by questionById() so the chat client can render them

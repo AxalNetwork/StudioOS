@@ -285,6 +285,18 @@ export async function routeAnswer(
         const row = await env.DB.prepare(
           `SELECT id FROM discovery_interviews WHERE project_id = ? AND interviewee_role = ?`,
         ).bind(ctx.project_id, slot).first<{ id: number }>();
+        // Side-effect: log the canonical Spin-Out Lab Week-1
+        // milestone for this interview slot. The lab engine
+        // (routes/spinout_lab.ts) only recognises the keys
+        // `customer_interview_logged_{1,2,3}`, so writing
+        // anything else would silently fail to advance the week.
+        // INSERT OR IGNORE keeps it idempotent.
+        try {
+          await env.DB.prepare(
+            `INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key)
+               VALUES (?, 1, ?)`,
+          ).bind(user.id, `customer_interview_logged_${discoveryMatch[1]}`).run();
+        } catch { /* milestones table may not exist on legacy dev DBs */ }
         return {
           status: 'saved',
           saved_to: {
@@ -367,8 +379,13 @@ export async function routeAnswer(
     }
 
     // ---- AC-2: deck-draft seed (pitch_decks) -------------------------
+    // Stored as the canonical array-of-slide-objects shape that
+    // routes/decks.ts and the PitchDeckPage UI consume:
+    //   [{ title, subtitle, body, bullets, image_url }, …]
+    // We merge by title so subsequent answers update the same slide
+    // rather than appending duplicates.
     if (questionId === 'founder.deck.problem' || questionId === 'founder.deck.market') {
-      const slideKey = questionId === 'founder.deck.problem' ? 'Problem' : 'Market';
+      const slideTitle = questionId === 'founder.deck.problem' ? 'Problem' : 'Market';
       try {
         await env.DB.exec(
           "CREATE TABLE IF NOT EXISTS pitch_decks (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1, slides TEXT NOT NULL, title TEXT, is_current INTEGER DEFAULT 1, created_by INTEGER, created_at TEXT DEFAULT (datetime('now')))",
@@ -376,23 +393,28 @@ export async function routeAnswer(
         const cur = await env.DB.prepare(
           `SELECT id, slides FROM pitch_decks WHERE project_id = ? AND is_current = 1 ORDER BY version DESC LIMIT 1`,
         ).bind(ctx.project_id).first<{ id: number; slides: string }>();
-        let slides: Record<string, string> = {};
+        // Normalize whatever's there into an array of slide objects.
+        let slides: Array<{ title: string; subtitle?: string | null; body?: string; bullets?: string[]; image_url?: string | null }> = [];
         if (cur?.slides) {
           try {
             const parsed = JSON.parse(cur.slides);
-            // Existing decks may store slides as an array of objects
-            // ([{title,body}, …]) — convert to the keyed map we use
-            // here so subsequent merges are deterministic.
             if (Array.isArray(parsed)) {
-              for (const s of parsed) {
-                if (s && typeof s.title === 'string') slides[s.title] = String(s.body ?? '');
-              }
+              slides = parsed.filter((s) => s && typeof s === 'object');
             } else if (parsed && typeof parsed === 'object') {
-              slides = parsed as Record<string, string>;
+              // Legacy keyed-map shape from an earlier draft — convert.
+              for (const [t, v] of Object.entries(parsed)) {
+                slides.push({ title: t, body: typeof v === 'string' ? v : '' });
+              }
             }
           } catch { /* malformed slides — overwrite */ }
         }
-        slides[slideKey] = value;
+        const idx = slides.findIndex((s) => String(s.title || '').trim().toLowerCase() === slideTitle.toLowerCase());
+        const merged = { title: slideTitle, subtitle: null, body: value, bullets: [] as string[], image_url: null };
+        if (idx >= 0) {
+          slides[idx] = { ...slides[idx], ...merged };
+        } else {
+          slides.push(merged);
+        }
         const slidesJson = JSON.stringify(slides);
         if (cur?.id) {
           await env.DB.prepare(`UPDATE pitch_decks SET slides = ? WHERE id = ?`).bind(slidesJson, cur.id).run();
@@ -403,19 +425,6 @@ export async function routeAnswer(
         ).bind(ctx.project_id, slidesJson, 'Draft', user.id).run();
         const newId = Number((ins as { meta?: { last_row_id?: number } }).meta?.last_row_id || 0);
         return { status: 'saved', saved_to: { table: 'pitch_decks', column: 'slides', id: newId || undefined, page_url: '/build/deck' } };
-      } catch (e) {
-        return { status: 'failed', error: (e as Error).message };
-      }
-    }
-
-    // ---- AC-2: Spin-Out Lab Week-1 review milestone ------------------
-    if (questionId === 'founder.spinout.week1_review') {
-      try {
-        await env.DB.prepare(
-          `INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key)
-             VALUES (?, 1, 'week1_reviewed')`,
-        ).bind(user.id).run();
-        return { status: 'saved', saved_to: { table: 'spinout_lab_milestones', column: 'milestone_key', id: user.id, page_url: '/spin-out-lab' } };
       } catch (e) {
         return { status: 'failed', error: (e as Error).message };
       }

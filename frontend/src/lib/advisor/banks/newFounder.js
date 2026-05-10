@@ -221,17 +221,11 @@ export const NEW_FOUNDER_BANK = [
     validate: all(required, minChars(15), maxChars(400)),
   },
 
-  // --- Spin-Out Lab progress -------------------------------------------
-  {
-    id: 'founder.spinout.week1_review',
-    label: 'Week 1 of Spin-Out Lab: anything blocking you before we move on?',
-    type: 'long',
-    explainer:
-      'Marks Week 1 as reviewed. Saying “nothing blocking” here unlocks Week 2 prompts on the lab page.',
-    doc_anchor: 'spin-out-lab/week-1',
-    page_target: '/spin-out-lab',
-    validate: all(required, minChars(2)),
-  },
+  // Spin-Out Lab Week-1 progression is logged automatically as a
+  // side-effect of the three discovery interviews above (router emits
+  // `customer_interview_logged_{1,2,3}` milestones). No standalone
+  // "anything blocking?" question is needed here — that prompt lives
+  // on the lab page itself.
 ];
 
 export default NEW_FOUNDER_BANK;
