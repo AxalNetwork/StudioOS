@@ -838,6 +838,16 @@ integrations.get('/oauth/:provider/start', async (c) => {
     const sb = c.req.query('sandbox');
     extra.is_sandbox = sb === '1' || sb === 'true';
   }
+  if (provider === 'docusign') {
+    // DocuSign has separate demo (account-d.docusign.com) and prod
+    // (account.docusign.com) auth hosts. The frontend passes ?demo=1
+    // for sandbox connects. The callback recovers this from state.extra
+    // and feeds it into connect()'s config so we never trust the query
+    // string at callback time. Default = demo (matches the safest
+    // posture for first-time integrators).
+    const d = c.req.query('demo');
+    extra.is_demo = d === undefined ? true : (d === '1' || d === 'true');
+  }
   const state = await issueOauthState(c.env, user.id, provider, pkce.verifier, extra);
   const url = await impl.buildAuthorizeUrl(c, user, state);
   return c.json({ ok: true, authorize_url: url, state, pkce_method: pkce.method });

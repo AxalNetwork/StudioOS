@@ -494,10 +494,22 @@ async function pullAndStoreSignedPdf(env: Env, _row: IntegrationRow, dsEnvelopeI
  * Connect webhook and the cron poller.
  */
 async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: string): Promise<{ status: string; updated: boolean }> {
-  const local = await env.DB.prepare(
-    `SELECT id, envelope_uuid, status FROM esign_envelopes
-      WHERE provider = 'docusign' AND docusign_envelope_id = ?`,
-  ).bind(dsEnvelopeId).first<{ id: number; envelope_uuid: string; status: string }>();
+  // Tenant-scoped lookup — only reconcile envelopes that belong to this
+  // integration's DocuSign account. Webhook bodies arrive at the
+  // per-integration URL so a cross-tenant collision (same envelope id
+  // across two accounts is theoretically impossible per DocuSign, but
+  // we still scope to avoid surprises if account_id is unset).
+  const local = row.external_account_id
+    ? await env.DB.prepare(
+        `SELECT id, envelope_uuid, status FROM esign_envelopes
+          WHERE provider = 'docusign'
+            AND docusign_envelope_id = ?
+            AND (docusign_account_id IS NULL OR docusign_account_id = ?)`,
+      ).bind(dsEnvelopeId, row.external_account_id).first<{ id: number; envelope_uuid: string; status: string }>()
+    : await env.DB.prepare(
+        `SELECT id, envelope_uuid, status FROM esign_envelopes
+          WHERE provider = 'docusign' AND docusign_envelope_id = ?`,
+      ).bind(dsEnvelopeId).first<{ id: number; envelope_uuid: string; status: string }>();
   if (!local) return { status: 'unknown', updated: false };
   const res = await dsFetch(env, row, `/envelopes/${encodeURIComponent(dsEnvelopeId)}`);
   if (!res.ok) return { status: local.status, updated: false };
@@ -631,15 +643,24 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
 }
 
 async function syncIntegration(env: Env, row: IntegrationRow): Promise<{ summary: string; counts: Record<string, number> }> {
-  // Reconcile every still-in-flight envelope this account owns (via
-  // external_account_id == DocuSign accountId).
+  // Reconcile in-flight envelopes scoped to THIS integration's DocuSign
+  // account (multi-tenant isolation). The `docusign_account_id` column
+  // is populated on send and matched against the integration row's
+  // `external_account_id` (which equals the DocuSign accountId returned
+  // from /oauth/userinfo at connect time). Without this scoping the
+  // sweep would call dsFetch with this row's tokens against envelopes
+  // belonging to other tenants and rack up DocuSign 404s.
+  if (!row.external_account_id) {
+    return { summary: 'skipped (no external_account_id)', counts: { polled: 0, updated: 0, errors: 0 } };
+  }
   const inflight = await env.DB.prepare(
     `SELECT docusign_envelope_id FROM esign_envelopes
       WHERE provider = 'docusign'
         AND docusign_envelope_id IS NOT NULL
+        AND docusign_account_id = ?
         AND status IN ('sent','partially_signed')
       ORDER BY id DESC LIMIT 100`,
-  ).all<{ docusign_envelope_id: string }>();
+  ).bind(row.external_account_id).all<{ docusign_envelope_id: string }>();
   const counts = { polled: 0, updated: 0, errors: 0 };
   for (const r of (inflight.results || []) as Array<{ docusign_envelope_id: string }>) {
     counts.polled++;

@@ -95,11 +95,13 @@ async function ensureSchema(env: Env): Promise<void> {
     // the resulting `duplicate column name` errors on re-run.
     `ALTER TABLE esign_envelopes ADD COLUMN provider TEXT NOT NULL DEFAULT 'native'`,
     `ALTER TABLE esign_envelopes ADD COLUMN docusign_envelope_id TEXT`,
+    `ALTER TABLE esign_envelopes ADD COLUMN docusign_account_id TEXT`,
     `CREATE INDEX IF NOT EXISTS idx_esign_provider          ON esign_envelopes(provider)`,
     `CREATE INDEX IF NOT EXISTS idx_esign_docusign_envelope ON esign_envelopes(docusign_envelope_id)`,
-    // Partial UNIQUE — see migration 021 for rationale.
-    `CREATE UNIQUE INDEX IF NOT EXISTS uq_esign_user_docusign_envelope
-       ON esign_envelopes(user_id, docusign_envelope_id)
+    `CREATE INDEX IF NOT EXISTS idx_esign_docusign_account  ON esign_envelopes(docusign_account_id)`,
+    // Partial UNIQUE — see migration 021 for rationale (account-scoped).
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_esign_account_docusign_envelope
+       ON esign_envelopes(docusign_account_id, docusign_envelope_id)
        WHERE docusign_envelope_id IS NOT NULL`,
   ];
   for (const s of stmts) {
@@ -273,7 +275,14 @@ export async function createAndSendEnvelope(
     try {
       const { findActiveDocusignIntegrationForUser, sendDocusignEnvelope, ensureDocusignWebhookSecret } = await import('../integrations/providers/docusign');
       const dsRow = await findActiveDocusignIntegrationForUser(env, opts.adminUserId);
-      if (dsRow) {
+      if (!dsRow) {
+        // Explicit-provider contract — caller asked for DocuSign and
+        // we have no integration to satisfy it. We do NOT silently
+        // fall back to native; the caller decides whether to retry
+        // with provider='native' or surface a connect-DocuSign prompt.
+        throw new Error('docusign_not_connected: no active DocuSign integration for the calling admin.');
+      }
+      {
         const webhookSecret = await ensureDocusignWebhookSecret(env, dsRow);
         const ds = await sendDocusignEnvelope(env, dsRow, {
           documentTitle: tpl.title,
@@ -286,8 +295,8 @@ export async function createAndSendEnvelope(
           integrationUid: dsRow.uid,
         });
         await env.DB.prepare(
-          `UPDATE esign_envelopes SET provider = 'docusign', docusign_envelope_id = ? WHERE id = ?`,
-        ).bind(ds.docusign_envelope_id, envelopeId).run();
+          `UPDATE esign_envelopes SET provider = 'docusign', docusign_envelope_id = ?, docusign_account_id = ? WHERE id = ?`,
+        ).bind(ds.docusign_envelope_id, dsRow.external_account_id || null, envelopeId).run();
         await appendAudit(env, envelopeId, {
           ts: new Date().toISOString(),
           signer_id: opts.adminUserId,
@@ -304,14 +313,14 @@ export async function createAndSendEnvelope(
           provider: 'docusign',
         };
       }
-      // No active DocuSign integration — fall through to native flow.
     } catch (e) {
-      // Strip upstream error bodies (which can carry recipient PII) — log
-      // only the error class prefix so postmortems still group meaningfully.
+      // Caller explicitly asked for DocuSign — do NOT silently fall
+      // back to native. Strip upstream error bodies (recipient PII)
+      // and re-throw a typed error the route handler maps to a 412.
       const msg = (e as Error).message || 'unknown';
       const cls = msg.split(':')[0]?.slice(0, 80) || 'docusign_failed';
-      console.warn('[esign] docusign send failed, falling back to native:', cls);
-      // fall through
+      console.warn('[esign] docusign send failed (explicit provider, no fallback):', cls);
+      throw new Error(`docusign_send_failed: ${cls}`);
     }
   }
 
@@ -362,23 +371,52 @@ esign.post('/send', async (c) => {
   const recipientName = String(body?.recipient_name || '').trim();
   const recipientUserId = body?.recipient_user_id ? Number(body.recipient_user_id) : null;
   const dealId = body?.deal_id ? Number(body.deal_id) : null;
-  const viaProvider = body?.via_provider === 'docusign' ? 'docusign' : 'native';
+  // Canonical request field is `provider`; `via_provider` is kept as a
+  // backwards-compat alias for any in-flight callers. Both accept
+  // 'native' | 'docusign'.
+  const providerRaw = String(body?.provider ?? body?.via_provider ?? 'native').toLowerCase();
+  const viaProvider: 'native' | 'docusign' = providerRaw === 'docusign' ? 'docusign' : 'native';
   if (!documentType) return c.json({ error: 'document_type is required' }, 400);
   if (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(recipientEmail)) {
     return c.json({ error: 'valid recipient_email is required' }, 400);
   }
 
-  const result = await createAndSendEnvelope(c.env, {
-    adminUserId: admin.id,
-    adminName: admin.name || admin.email,
-    recipientUserId,
-    recipientEmail,
-    recipientName,
-    documentType,
-    dealId,
-    appUrl: c.env.APP_URL || 'https://axal.vc',
-    viaProvider,
-  });
+  // Studio-tier gate. DocuSign is a Studio-only provider; non-Studio
+  // admins get a 402 with the standard upsell payload (the BYPASS_ROLES
+  // set in middleware/requireTier already lets super-admins through).
+  if (viaProvider === 'docusign') {
+    const { userMeetsTier, tierUpsell } = await import('../middleware/requireTier');
+    if (!userMeetsTier(admin, 'studio')) {
+      return c.json(tierUpsell('studio'), 402);
+    }
+  }
+
+  let result;
+  try {
+    result = await createAndSendEnvelope(c.env, {
+      adminUserId: admin.id,
+      adminName: admin.name || admin.email,
+      recipientUserId,
+      recipientEmail,
+      recipientName,
+      documentType,
+      dealId,
+      appUrl: c.env.APP_URL || 'https://axal.vc',
+      viaProvider,
+    });
+  } catch (e) {
+    // No-silent-fallback: surface explicit-DocuSign failures as 412
+    // (Precondition Failed) so the UI can prompt the admin to either
+    // connect DocuSign or retry with provider='native'.
+    const msg = (e as Error).message || '';
+    if (msg.startsWith('docusign_not_connected')) {
+      return c.json({ error: 'docusign_not_connected', message: 'No active DocuSign integration for the calling admin.' }, 412);
+    }
+    if (msg.startsWith('docusign_send_failed')) {
+      return c.json({ error: 'docusign_send_failed', message: 'DocuSign rejected the send request — check the integration credentials and retry.' }, 502);
+    }
+    throw e;
+  }
   if (!result) return c.json({ error: 'Failed to create envelope' }, 500);
   return c.json(result);
 });
