@@ -33,6 +33,10 @@ export interface Env {
   MICROSOFT_TENANT_ID?: string;
   MICROSOFT_CALENDAR_REDIRECT_URI?: string;
   OPENAI_API_KEY?: string;
+  // Task #5 — Anthropic API key powers the Dashboard personal assistant
+  // (cloudflare-worker/src/routes/assistant.ts). When unset the route
+  // returns 503 instead of streaming, so the UI can degrade gracefully.
+  ANTHROPIC_API_KEY?: string;
   GITHUB_ACCESS_TOKEN?: string;
   GITHUB_REPO_OWNER?: string;
   GITHUB_REPO_NAME?: string;

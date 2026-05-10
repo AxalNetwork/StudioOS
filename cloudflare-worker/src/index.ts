@@ -35,6 +35,7 @@ import deals from './routes/deals';
 import users from './routes/users';
 import marketIntel from './routes/market_intel';
 import { investorProfile, investorSignals, aggregateInvestorSignals } from './routes/investor_signals';
+import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import advisory from './routes/advisory';
 import activity from './routes/activity';
 import admin from './routes/admin';
@@ -194,6 +195,7 @@ app.route('/api/users', users);
 app.route('/api/market-intel', marketIntel);
 app.route('/api/investor-profile', investorProfile);
 app.route('/api/investor-signals', investorSignals);
+app.route('/api/assistant', assistantRoutes);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
 // Task #33 — Cloudflare Access perimeter on the most sensitive route groups.
@@ -477,6 +479,17 @@ export default {
             console.info(`[cron] investor_signals aggregated n_total=${r.n_total} snapshot_id=${r.snapshot_id}`);
           } catch (e) {
             console.error('[cron] investor_signals aggregation failed', e);
+          }
+        }
+        // Task #5 — daily assistant retention sweep at 04:10 UTC. Drops
+        // conversations past their tier's TTL (90d free / 1y paid /
+        // 5y admin opt-in). CASCADE deletes messages + feedback.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 10) {
+          try {
+            const r = await sweepExpiredConversations(env);
+            console.info(`[cron] assistant retention sweep deleted_free=${r.deleted_free} deleted_paid=${r.deleted_paid}`);
+          } catch (e) {
+            console.error('[cron] assistant retention sweep failed', e);
           }
         }
       } finally {

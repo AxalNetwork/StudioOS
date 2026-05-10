@@ -118,6 +118,20 @@ onboarding.post('/complete', async (c) => {
        VALUES (?, ?, 0, 0, datetime('now'))`
     ).bind((user as any).id, body.flow).run();
   }
+  // Task #5 — flip users.assistant_enabled so the Dashboard surfaces the
+  // pinned personal-assistant chat for first-time post-onboarding users.
+  // Best-effort: column may not yet exist on a partially-migrated dev
+  // DB, in which case we swallow and move on (assistant route's
+  // ensureSchema will add it lazily on first use).
+  try {
+    await c.env.DB.prepare(
+      `UPDATE users SET assistant_enabled = 1 WHERE id = ?`
+    ).bind((user as any).id).run();
+  } catch (e: any) {
+    if (!/no such column/i.test(e?.message || '')) {
+      console.warn('[onboarding] assistant_enabled flip skipped:', e?.message);
+    }
+  }
   return c.json({ ok: true, completed_at: true });
 });
 

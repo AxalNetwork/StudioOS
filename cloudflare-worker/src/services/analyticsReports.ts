@@ -385,6 +385,9 @@ export interface FinancialReport {
   }>;
   ltv_by_cohort: Array<{ cohort: string; signups: number; paying: number;
     estimated_ltv_usd: number; estimated_ltv: number }>;
+  // Task #5 — assistant cost rollup (optional so old serialised reports
+  // without this field still type-check on the consumer side).
+  assistant_cost?: AssistantCostReport;
 }
 
 export async function loadFinancial(env: Env, range: DateRange, currency?: string | null): Promise<FinancialReport> {
@@ -479,7 +482,92 @@ export async function loadFinancial(env: Env, range: DateRange, currency?: strin
     fx_as_of: disp.asOf,
     mrr_breakdown_by_tier: breakdown,
     ltv_by_cohort: ltvByCohort,
+    assistant_cost: await loadAssistantCost(env, range, disp.conv),
   };
+}
+
+// Task #5 — Personal-assistant cost rollup. Surfaced inside the financial
+// report (Admin Analytics → Financial sub-tab) so admins can see how much
+// the assistant is actually costing per conversation / per active user.
+//
+// All in micro-USD on the wire (cost_usd_micros / 1e6 = USD); we expose
+// rounded $ here for display, plus the display-currency conversion. The
+// query is wrapped in try/catch because the assistant_conversations table
+// is created lazily on first use — a brand-new dev DB might not have it yet.
+export interface AssistantCostReport {
+  total_conversations: number;
+  total_messages: number;
+  total_cost_usd: number;
+  total_cost: number;        // display currency
+  avg_cost_per_conversation_usd: number;
+  avg_cost_per_conversation: number;
+  cost_by_model: Array<{ model: string; messages: number; cost_usd: number; cost: number }>;
+  top_conversations: Array<{
+    uid: string; title: string; user_id: number; messages: number;
+    cost_usd: number; cost: number; updated_at: string;
+  }>;
+}
+async function loadAssistantCost(
+  env: Env,
+  range: DateRange,
+  conv: (usd: number) => number,
+): Promise<AssistantCostReport> {
+  const empty: AssistantCostReport = {
+    total_conversations: 0, total_messages: 0,
+    total_cost_usd: 0, total_cost: 0,
+    avg_cost_per_conversation_usd: 0, avg_cost_per_conversation: 0,
+    cost_by_model: [], top_conversations: [],
+  };
+  try {
+    const sql = getSQL(env);
+    const totals = rows<SqlRow>(await sql`
+      SELECT COUNT(*) AS conversations,
+             SUM(message_count) AS messages,
+             SUM(cost_usd_micros) AS cost_micros
+      FROM assistant_conversations
+      WHERE updated_at >= ${range.fromIso} AND updated_at <= ${range.toIso}
+    `)[0] || {};
+    const totalConv = num(totals.conversations);
+    const totalMsg = num(totals.messages);
+    const totalCostUsd = num(totals.cost_micros) / 1_000_000;
+    const byModel = rows<SqlRow>(await sql`
+      SELECT model, COUNT(*) AS messages, SUM(cost_usd_micros) AS cost_micros
+      FROM assistant_messages
+      WHERE role = 'assistant' AND model IS NOT NULL
+        AND created_at >= ${range.fromIso} AND created_at <= ${range.toIso}
+      GROUP BY model
+      ORDER BY cost_micros DESC
+    `).map(r => {
+      const usd = num(r.cost_micros) / 1_000_000;
+      return { model: str(r.model), messages: num(r.messages), cost_usd: usd, cost: conv(usd) };
+    });
+    const top = rows<SqlRow>(await sql`
+      SELECT uid, title, user_id, message_count, cost_usd_micros, updated_at
+      FROM assistant_conversations
+      WHERE updated_at >= ${range.fromIso} AND updated_at <= ${range.toIso}
+      ORDER BY cost_usd_micros DESC LIMIT 10
+    `).map(r => {
+      const usd = num(r.cost_usd_micros) / 1_000_000;
+      return {
+        uid: str(r.uid), title: str(r.title), user_id: num(r.user_id),
+        messages: num(r.message_count),
+        cost_usd: usd, cost: conv(usd),
+        updated_at: str(r.updated_at),
+      };
+    });
+    return {
+      total_conversations: totalConv,
+      total_messages: totalMsg,
+      total_cost_usd: totalCostUsd,
+      total_cost: conv(totalCostUsd),
+      avg_cost_per_conversation_usd: totalConv > 0 ? totalCostUsd / totalConv : 0,
+      avg_cost_per_conversation: totalConv > 0 ? conv(totalCostUsd / totalConv) : 0,
+      cost_by_model: byModel,
+      top_conversations: top,
+    };
+  } catch {
+    return empty;
+  }
 }
 
 export interface TechnicalReport {

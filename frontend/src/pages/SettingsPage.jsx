@@ -1505,6 +1505,11 @@ const NOTIF_CATEGORY_KEYS = [
   { key: 'calendar', label: 'Calendar & meetings' },
   { key: 'scoring', label: 'Scoring & matches' },
   { key: 'billing', label: 'Billing & invoices' },
+  // Task #5 — Personal assistant proactive nudges (Dashboard greeting
+  // card + suggested next-actions). Stored in the same JSON columns so
+  // the existing /api/settings/notifications endpoint is the source of
+  // truth — the assistant reads notif_categories_inapp.proactive_nudges.
+  { key: 'proactive_nudges', label: 'Assistant proactive nudges' },
 ];
 
 function DigestQuietHoursCard({ flash }) {

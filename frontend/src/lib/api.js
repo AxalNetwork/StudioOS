@@ -223,6 +223,20 @@ export const api = {
   // Task #4 — Investor Signals + profiling chatbot
   getInvestorProfile: () => request('/investor-profile/me'),
   saveInvestorProfile: (data) => request('/investor-profile/me', { method: 'PUT', body: JSON.stringify(data) }),
+
+  // ── Task #5 — Dashboard personal assistant. The /message endpoint is
+  // SSE; consume it via fetch + ReadableStream in the component, NOT
+  // through this helper. Everything else is plain JSON.
+  assistant: {
+    listConversations: () => request('/assistant/conversations'),
+    getConversation: (uid) => request(`/assistant/conversations/${encodeURIComponent(uid)}`),
+    renameConversation: (uid, title) =>
+      request(`/assistant/conversations/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
+    deleteConversation: (uid) =>
+      request(`/assistant/conversations/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+    feedback: (message_id, rating, comment) =>
+      request('/assistant/feedback', { method: 'POST', body: JSON.stringify({ message_id, rating, comment }) }),
+  },
   optOutInvestorSignals: () => request('/investor-profile/me/opt-out', { method: 'POST' }),
   getInvestorSignals: () => request('/investor-signals/latest'),
 

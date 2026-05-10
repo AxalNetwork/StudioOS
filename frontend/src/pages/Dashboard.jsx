@@ -8,6 +8,7 @@ import {
 import { api } from '../lib/api';
 import SemanticSearch from '../components/SemanticSearch';
 import { PERSONA_BY_ID } from '../lib/personas';
+import PersonalAssistant from '../components/PersonalAssistant';
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
@@ -251,6 +252,13 @@ export default function Dashboard() {
           <IndependentSubsidiariesWidget />
         </div>
       </div>
+
+      {/* Task #5 — pinned personal assistant. Persists across reloads via
+          localStorage (open/closed + last conversation uid) and is hidden
+          on print. Founders/investors/partners/admins all see it once
+          users.assistant_enabled is flipped post-onboarding; the launcher
+          itself is harmless if the flag is off, so we render unconditionally. */}
+      <PersonalAssistant user={user} />
     </div>
   );
 }
