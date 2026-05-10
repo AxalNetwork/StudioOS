@@ -104,19 +104,16 @@ function personaFor(user: User): Persona {
   return 'unknown';
 }
 
-// Build the working bank for the conversation. The 3-question
-// role-detector (primary role, organization, headline) is always
-// prepended so AC-1's "ask the role detector when role is null"
-// requirement is satisfied end-to-end — i.e. the user is taken
-// through *all three* detector questions before pivoting deeper into
-// their persona bank, not just the primary-role question. Hydration
-// in /start pre-marks any detector questions whose answers already
-// exist in the users row (role / organization / headline), so users
-// with established profiles aren't re-asked.
+// Build the working bank. The 3-question role-detector
+// (primary / organization / headline) runs ONLY when users.role is
+// null — once a role is set the conversation pivots straight into
+// the persona bank. Hydration in /start additionally pre-marks any
+// detector questions whose answers already live on the users row so
+// users who set role via /signup never see the detector.
 function workingBankFor(user: User): Question[] {
   const persona = personaFor(user);
   if (persona === 'unknown') return ROLE_DETECTOR;
-  return [...ROLE_DETECTOR, ...bankFor(persona)];
+  return bankFor(persona);
 }
 
 // ---------------------------------------------------------------------------
@@ -333,9 +330,14 @@ interface AnswerBody {
 }
 
 // ---------------------------------------------------------------------------
-// POST /answer  —  persist an answer and return JSON.
+// POST /answer  —  persist an answer and return either:
+//   1. JSON (default) — the AC-1 contract envelope
+//   2. SSE stream — when the request carries `Accept: text/event-stream`
+//      the same payload is emitted as a tool_call → tool_result →
+//      next → done sequence (mirrors assistant.ts wire format) so
+//      LLM-driven clients can consume it incrementally.
 //
-// Response shape (AC-1 contract):
+// JSON envelope:
 //   {
 //     conversation_id, conversation_uid, persona,
 //     saved_to: { table, column, id, page_url } | null,
@@ -344,14 +346,30 @@ interface AnswerBody {
 //     complete: boolean,
 //     progress: { total, answered, skipped, percent },
 //     status: 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop',
-//     upgrade_link?: string,        // only when status = paywalled
-//     error?: string                // only when status = failed
+//     upgrade_link?: string,
+//     error?: string
 //   }
 //
-// Routing here is deterministic so we don't burn LLM tokens — the
-// Anthropic surface is /explain. /answer therefore returns plain
-// JSON; the frontend `request()` helper parses it directly.
+// Routing is deterministic — the LLM surface is /explain, where
+// Anthropic tool-use orchestration belongs (read-only assistant.ts
+// pattern; the writeAnswer/explainTopic/openPage tool-use loop
+// itself lives in AC-3's chat client which calls these JSON/SSE
+// endpoints directly). /answer never burns tokens.
 // ---------------------------------------------------------------------------
+interface AnswerEnvelope {
+  conversation_id: string;
+  conversation_uid: string;
+  persona: Persona;
+  status: WriteResult['status'];
+  saved_to: WriteResult['saved_to'] | null;
+  next_question: ReturnType<typeof publicQuestion>;
+  next: ReturnType<typeof publicQuestion>;
+  hint: string | null;
+  upgrade_link: string | null;
+  error: string | null;
+  complete: boolean;
+  progress: { total: number; answered: number; skipped: number; percent: number };
+}
 advisor.post('/answer', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
@@ -424,7 +442,7 @@ advisor.post('/answer', async (c) => {
   const skp = Number(counts?.skipped_count || 0);
   const nextPub = publicQuestion(next);
 
-  return c.json({
+  const envelope: AnswerEnvelope = {
     conversation_id: conv.uid,
     conversation_uid: conv.uid,
     persona: personaFor(liveUser),
@@ -440,7 +458,43 @@ advisor.post('/answer', async (c) => {
       total: bank.length, answered: ans, skipped: skp,
       percent: bank.length > 0 ? Math.round(((ans + skp) / bank.length) * 100) : 100,
     },
-  });
+  };
+
+  // SSE branch — clients that prefer streaming get the same payload
+  // as a tool_call → tool_result → next → done sequence so the
+  // AC-3 chat client can reuse the assistant.ts SSE parser. The
+  // deterministic write has already happened above; SSE is purely
+  // a wire-format choice.
+  const accept = (c.req.header('accept') || '').toLowerCase();
+  if (accept.includes('text/event-stream')) {
+    const enc = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(enc.encode(sseEvent('tool_call', {
+          name: 'writeAnswer', input: { question_id: q.id, value: valueStr },
+        })));
+        controller.enqueue(enc.encode(sseEvent('tool_result', {
+          name: 'writeAnswer',
+          status: envelope.status,
+          saved_to: envelope.saved_to,
+          hint: envelope.hint,
+          upgrade_link: envelope.upgrade_link,
+          error: envelope.error,
+        })));
+        controller.enqueue(enc.encode(sseEvent('next', { question: nextPub })));
+        controller.enqueue(enc.encode(sseEvent('done', envelope)));
+        controller.close();
+      },
+    });
+    return new Response(stream, {
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache, no-transform',
+        'x-accel-buffering': 'no',
+      },
+    });
+  }
+  return c.json(envelope);
 });
 
 // ---------------------------------------------------------------------------
