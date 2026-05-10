@@ -2080,30 +2080,77 @@ const NOTIF_CATEGORY_KEYS = [
   { key: 'proactive_nudges', label: 'Assistant proactive nudges' },
 ];
 
+// Task #14 — IANA tz list for the Quiet hours timezone picker. Browser
+// runtimes ship `Intl.supportedValuesOf('timeZone')`; fall back to a
+// sensible default set so older Safari / restricted environments still
+// render a usable select.
+const TZ_FALLBACK = [
+  'UTC', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Madrid',
+  'Europe/Amsterdam', 'Europe/Stockholm', 'Europe/Athens', 'Europe/Istanbul',
+  'Africa/Cairo', 'Africa/Johannesburg', 'Asia/Dubai', 'Asia/Kolkata',
+  'Asia/Bangkok', 'Asia/Singapore', 'Asia/Hong_Kong', 'Asia/Shanghai',
+  'Asia/Tokyo', 'Asia/Seoul', 'Australia/Sydney', 'Pacific/Auckland',
+  'America/Anchorage', 'America/Los_Angeles', 'America/Denver',
+  'America/Chicago', 'America/New_York', 'America/Sao_Paulo',
+  'America/Argentina/Buenos_Aires',
+];
+function listTimezones() {
+  try {
+    const list = Intl.supportedValuesOf?.('timeZone');
+    if (Array.isArray(list) && list.length) return list;
+  } catch { /* noop */ }
+  return TZ_FALLBACK;
+}
+
 function DigestQuietHoursCard({ flash }) {
   const [row, setRow] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  // Task #14 — per-field inline error messages from the worker.
+  const [fieldErrors, setFieldErrors] = useState({});
+  const tzList = useMemo(() => listTimezones(), []);
 
   useEffect(() => {
     let cancelled = false;
     api.getNotificationSettings()
-      .then(r => { if (!cancelled) setRow(r); })
+      .then(r => {
+        if (cancelled) return;
+        // Default tz from the user's profile if quiet_hours_tz hasn't been
+        // explicitly set yet — a much friendlier first-run experience.
+        let next = { ...r };
+        if (!next.quiet_hours_tz) {
+          try {
+            const cached = JSON.parse(localStorage.getItem('user') || '{}');
+            if (cached?.timezone) next.quiet_hours_tz = cached.timezone;
+          } catch { /* noop */ }
+        }
+        setRow(next);
+      })
       .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load notification settings'); });
     return () => { cancelled = true; };
   }, []);
 
-  const save = async (delta) => {
+  const save = async (delta, fieldHint) => {
     if (!row) return;
     const next = { ...row, ...delta };
     setRow(next);
     setBusy(true);
+    setFieldErrors({});
     try {
       const res = await api.updateNotificationSettings(delta);
       setRow({ ...next, ...res });
       flash('Saved');
     } catch (e) {
-      flash(e.message || 'Failed to save', 'error');
+      // Task #14 — surface field-level validation errors inline. The
+      // worker returns `{error, field, errors:{[field]:msg}}` for 400s
+      // raised by SettingsValidationError; older toasts only fire when
+      // we can't pin the failure to a known field.
+      const targetField = e?.field || fieldHint || null;
+      if (targetField && e?.status === 400) {
+        setFieldErrors({ [targetField]: e.message || 'Invalid value' });
+      } else {
+        flash(e.message || 'Failed to save', 'error');
+      }
       try { setRow(await api.getNotificationSettings()); } catch { /* ignore */ }
     } finally { setBusy(false); }
   };
@@ -2123,13 +2170,17 @@ function DigestQuietHoursCard({ flash }) {
       <Card title="Digest & categories"
         description="Roll-up email cadence, plus per-category overrides. Quiet hours below silence push notifications during your stated window.">
         <div className="grid sm:grid-cols-2 gap-3">
-          <Field label="Digest frequency">
+          <Field label="Digest frequency"
+            hint="Send a daily digest at 9 AM (your time) — non-critical updates collected into a single email instead of arriving one-by-one.">
             <select value={row.digest_frequency || 'weekly'}
-              onChange={e => save({ digest_frequency: e.target.value })} disabled={busy} className={inputCls}>
+              onChange={e => save({ digest_frequency: e.target.value }, 'digest_frequency')} disabled={busy} className={inputCls}>
               <option value="off">Off</option>
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
             </select>
+            {fieldErrors.digest_frequency && (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{fieldErrors.digest_frequency}</p>
+            )}
           </Field>
         </div>
         <div className="mt-4 overflow-x-auto">
@@ -2163,25 +2214,38 @@ function DigestQuietHoursCard({ flash }) {
       </Card>
 
       <Card title="Quiet hours"
-        description="Push and real-time alerts are skipped during this window (digest emails still send). Use HH:MM 24-hour format. Leave both blank to disable.">
+        description="Push and non-critical email are paused during this window. Critical alerts (security, billing, contract signing) always come through. Leave both blank to disable.">
         <div className="grid sm:grid-cols-3 gap-3">
           <Field label="Start (HH:MM)">
             <input type="time" value={row.quiet_hours_start || ''}
               onChange={e => setRow({ ...row, quiet_hours_start: e.target.value })}
-              onBlur={() => save({ quiet_hours_start: row.quiet_hours_start || null })}
+              onBlur={() => save({ quiet_hours_start: row.quiet_hours_start || null }, 'quiet_hours_start')}
               className={inputCls} />
+            {fieldErrors.quiet_hours_start && (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{fieldErrors.quiet_hours_start}</p>
+            )}
           </Field>
           <Field label="End (HH:MM)">
             <input type="time" value={row.quiet_hours_end || ''}
               onChange={e => setRow({ ...row, quiet_hours_end: e.target.value })}
-              onBlur={() => save({ quiet_hours_end: row.quiet_hours_end || null })}
+              onBlur={() => save({ quiet_hours_end: row.quiet_hours_end || null }, 'quiet_hours_end')}
               className={inputCls} />
+            {fieldErrors.quiet_hours_end && (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{fieldErrors.quiet_hours_end}</p>
+            )}
           </Field>
           <Field label="Timezone">
-            <input value={row.quiet_hours_tz || ''}
-              onChange={e => setRow({ ...row, quiet_hours_tz: e.target.value })}
-              onBlur={() => save({ quiet_hours_tz: row.quiet_hours_tz || null })}
-              placeholder="UTC" className={inputCls} />
+            <select value={row.quiet_hours_tz || ''}
+              onChange={e => save({ quiet_hours_tz: e.target.value || null }, 'quiet_hours_tz')}
+              disabled={busy} className={inputCls}>
+              <option value="">UTC (default)</option>
+              {tzList.map(tz => (
+                <option key={tz} value={tz}>{tz}</option>
+              ))}
+            </select>
+            {fieldErrors.quiet_hours_tz && (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{fieldErrors.quiet_hours_tz}</p>
+            )}
           </Field>
         </div>
       </Card>

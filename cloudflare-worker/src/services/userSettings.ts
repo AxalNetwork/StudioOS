@@ -150,10 +150,33 @@ function asInt(v: unknown): number {
 
 export class SettingsValidationError extends Error {
   status: number;
-  constructor(message: string, status = 400) {
+  /** Task #14 — field-level error so the UI can inline the message
+   * next to the offending input instead of a toast. */
+  field: string | null;
+  constructor(message: string, status = 400, field: string | null = null) {
     super(message);
     this.status = status;
+    this.field = field;
   }
+}
+
+// Task #14 — IANA tz validation. `Intl.supportedValuesOf('timeZone')`
+// is the spec'd way; fall back to a runtime probe (DateTimeFormat
+// throws on unknown zones) for older runtimes that lack it.
+let _tzSet: Set<string> | null = null;
+export function isValidTimeZone(tz: string): boolean {
+  if (!tz) return false;
+  if (!_tzSet) {
+    try {
+      const list = (Intl as any).supportedValuesOf?.('timeZone') as string[] | undefined;
+      if (Array.isArray(list)) _tzSet = new Set(list);
+    } catch {}
+  }
+  if (_tzSet) return _tzSet.has(tz);
+  try {
+    new Intl.DateTimeFormat('en-GB', { timeZone: tz });
+    return true;
+  } catch { return false; }
 }
 
 /** Returns the column/value pairs that should be UPDATEd. Validates inputs. */
@@ -196,7 +219,11 @@ function buildUpdates(patch: UserSettingsPatch): Array<[string, unknown]> {
   if (patch.discoverable !== undefined) push('discoverable', asInt(patch.discoverable));
   if (patch.digest_frequency !== undefined) {
     if (!['off', 'daily', 'weekly'].includes(patch.digest_frequency)) {
-      throw new SettingsValidationError('digest_frequency must be off|daily|weekly');
+      throw new SettingsValidationError(
+        'Digest frequency must be Off, Daily, or Weekly.',
+        400,
+        'digest_frequency',
+      );
     }
     push('digest_frequency', patch.digest_frequency);
   }
@@ -209,20 +236,39 @@ function buildUpdates(patch: UserSettingsPatch): Array<[string, unknown]> {
   if (patch.quiet_hours_start !== undefined) {
     const v = patch.quiet_hours_start;
     if (v != null && v !== '' && !HHMM_RE.test(String(v))) {
-      throw new SettingsValidationError('quiet_hours_start must be HH:MM (24h) or null');
+      throw new SettingsValidationError(
+        'Use 24-hour HH:MM (for example 22:00).',
+        400,
+        'quiet_hours_start',
+      );
     }
     push('quiet_hours_start', v == null || v === '' ? null : String(v));
   }
   if (patch.quiet_hours_end !== undefined) {
     const v = patch.quiet_hours_end;
     if (v != null && v !== '' && !HHMM_RE.test(String(v))) {
-      throw new SettingsValidationError('quiet_hours_end must be HH:MM (24h) or null');
+      throw new SettingsValidationError(
+        'Use 24-hour HH:MM (for example 07:00).',
+        400,
+        'quiet_hours_end',
+      );
     }
     push('quiet_hours_end', v == null || v === '' ? null : String(v));
   }
   if (patch.quiet_hours_tz !== undefined) {
-    const v = patch.quiet_hours_tz == null ? null : String(patch.quiet_hours_tz).slice(0, 64);
-    push('quiet_hours_tz', v && v.trim() ? v.trim() : null);
+    const raw = patch.quiet_hours_tz == null ? null : String(patch.quiet_hours_tz).slice(0, 64).trim();
+    if (raw) {
+      if (!isValidTimeZone(raw)) {
+        throw new SettingsValidationError(
+          'Pick a valid IANA timezone (e.g. Europe/London).',
+          400,
+          'quiet_hours_tz',
+        );
+      }
+      push('quiet_hours_tz', raw);
+    } else {
+      push('quiet_hours_tz', null);
+    }
   }
   if (patch.theme !== undefined) {
     if (!['light', 'dark', 'system'].includes(patch.theme)) {

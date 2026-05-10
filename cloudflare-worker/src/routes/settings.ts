@@ -840,7 +840,15 @@ function pickFeatureFlags(row: UserSettingsRow): Record<string, boolean> {
 
 function handleSettingsError(c: Context<{ Bindings: Env }>, e: unknown) {
   if (e instanceof SettingsValidationError) {
-    return c.json({ error: e.message }, e.status as any);
+    // Task #14 — return a field-level error envelope so the
+    // /settings/notifications form can inline messages next to the
+    // offending input rather than firing a generic toast.
+    const body: Record<string, unknown> = { error: e.message };
+    if (e.field) {
+      body.field = e.field;
+      body.errors = { [e.field]: e.message };
+    }
+    return c.json(body, e.status as any);
   }
   console.error('[settings v2] update failed', e);
   return c.json({ error: 'Update failed' }, 500);

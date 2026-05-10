@@ -545,6 +545,19 @@ export default {
             console.error('[cron] totp remediation failed', e);
           }
         }
+        // Task #14 — flush pending digest emails. Cheap on idle ticks
+        // (single GROUP BY query) and only sends to users whose local
+        // time is currently 09:00 with cadence-matched weekday. The
+        // every-minute cron means each user's slot fires once per day.
+        try {
+          const { flushPendingDigests } = await import('./services/notify');
+          const r = await flushPendingDigests(env);
+          if (r.sent > 0) {
+            console.info(`[cron] notification digest sent users=${r.sent} rows=${r.rows}`);
+          }
+        } catch (e) {
+          console.error('[cron] notification digest failed', e);
+        }
         // Task #13 — daily analytics snapshot at 02:05 UTC. Captures
         // yesterday's Overview + Financial rollup into `analytics_snapshots`
         // (USD baseline) so admin historical comparisons survive the
