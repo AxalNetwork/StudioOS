@@ -31,6 +31,7 @@ import legalcap from './routes/legalcap';
 import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
 import partnerOnboarding from './routes/partner_onboarding';
+import partnerPortal from './routes/partner_portal';
 import partnernet from './routes/partnernet';
 import capital from './routes/capital';
 import tickets from './routes/tickets';
@@ -283,6 +284,7 @@ app.route('/api/partners', partners);
 // public token-gated onboarding flow under /api/partner-onboard.
 app.route('/api/admin/partners', adminPartners);
 app.route('/api/partner-onboard', partnerOnboarding);
+app.route('/api/partner-portal', partnerPortal);
 app.route('/api/partnernet', partnernet);
 app.route('/api/capital', capital);
 app.route('/api/tickets', tickets);

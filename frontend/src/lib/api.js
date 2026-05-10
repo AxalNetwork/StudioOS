@@ -49,7 +49,14 @@ async function request(path, options = {}) {
       ...options,
     });
     if (!res.ok) {
-      if (res.status === 401 && !path.startsWith('/auth/')) {
+      // Public token-gated endpoints (partner onboarding, esign signing,
+      // public profile reads) must never trigger an auth-redirect — a 401
+      // here typically means the dev FastAPI backend lacks the worker-only
+      // route, not "your session expired".
+      const isPublicEndpoint = path.startsWith('/partner-onboard')
+        || path.startsWith('/esign/sign')
+        || path.startsWith('/public/');
+      if (res.status === 401 && !path.startsWith('/auth/') && !isPublicEndpoint) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         const currentPath = window.location.pathname;
@@ -255,6 +262,44 @@ export const api = {
   },
   spinoutProject: (projectId) => request(`/legal/spinout/${projectId}`, { method: 'POST' }),
   listEntities: () => request('/legal/entities'),
+
+  // Task #9 (X-2) — Partner deal engine: admin invitations + deals.
+  adminPartners: {
+    listInvitations: (opts = {}) => {
+      const q = new URLSearchParams();
+      if (opts.status) q.set('status', opts.status);
+      if (opts.email) q.set('email', opts.email);
+      const qs = q.toString();
+      return request(`/admin/partners/invitations${qs ? `?${qs}` : ''}`);
+    },
+    createInvitation: (data) =>
+      request('/admin/partners/invitations', { method: 'POST', body: JSON.stringify(data) }),
+    resendInvitation: (id) =>
+      request(`/admin/partners/invitations/${id}/resend`, { method: 'POST' }),
+    revokeInvitation: (id, reason) =>
+      request(`/admin/partners/invitations/${id}/revoke`, { method: 'POST', body: JSON.stringify({ reason: reason || '' }) }),
+    listDeals: (status = 'active') =>
+      request(`/admin/partners/deals?status=${encodeURIComponent(status)}`),
+    terminateDeal: (id, reason) =>
+      request(`/admin/partners/deals/${id}/terminate`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  },
+  // Task #9 (X-2) — Public token-gated partner onboarding flow.
+  partnerOnboard: {
+    get: (token) => request(`/partner-onboard/${encodeURIComponent(token)}`),
+    saveProfile: (token, profile) =>
+      request(`/partner-onboard/${encodeURIComponent(token)}/profile`, { method: 'POST', body: JSON.stringify(profile) }),
+    propose: (token) =>
+      request(`/partner-onboard/${encodeURIComponent(token)}/propose`, { method: 'POST', body: JSON.stringify({}) }),
+    select: (token, body) =>
+      request(`/partner-onboard/${encodeURIComponent(token)}/select`, { method: 'POST', body: JSON.stringify(body) }),
+    finalize: (token) =>
+      request(`/partner-onboard/${encodeURIComponent(token)}/finalize`, { method: 'POST', body: JSON.stringify({}) }),
+    status: (token) => request(`/partner-onboard/${encodeURIComponent(token)}/status`),
+  },
+  // Task #9 (X-2) — Authenticated partner deal portal.
+  partnerPortal: {
+    myDeal: () => request('/partner-portal/my-deal'),
+  },
 
   listPartners: () => request('/partners'),
   createPartner: (data) => request('/partners', { method: 'POST', body: JSON.stringify(data) }),

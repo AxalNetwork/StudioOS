@@ -33,6 +33,9 @@ import TicketsPage from './pages/TicketsPage';
 import DealsPage from './pages/DealsPage';
 import FounderPortal from './pages/FounderPortal';
 import PartnerPortal from './pages/PartnerPortal';
+import PartnerDealPortal from './pages/PartnerDealPortal';
+import PartnerOnboardPage from './pages/PartnerOnboardPage';
+import AdminPartnerInvitations from './pages/admin/PartnerInvitations';
 import MarketIntelPage from './pages/MarketIntelPage';
 import AdvisoryPage from './pages/AdvisoryPage';
 import ActivityPage from './pages/ActivityPage';
@@ -798,6 +801,11 @@ function AppInner() {
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/esign/:token" element={<ESignPage />} />
+      {/* Task #9 (X-2) — Public token-gated partner onboarding wizard.
+          Mounted at the path embedded in admin-emailed magic links AND a
+          query-string variant for fallback share-by-link channels. */}
+      <Route path="/partner-onboarding/:token" element={<PartnerOnboardPage />} />
+      <Route path="/partners/onboard" element={<PartnerOnboardPage />} />
       <Route path="/settings/email/confirm" element={<EmailChangeConfirmPage />} />
       <Route path="/settings/email/revoke" element={<EmailChangeRevokePage />} />
       <Route path="/settings/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SettingsPage />)} />
@@ -828,6 +836,7 @@ function AppInner() {
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/partners" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'mentor'], <AdminDueDiligencePage />)} />
       <Route path="/admin/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'mentor'], <AdminDueDiligenceCasePage />)} />
       <Route path="/scoring" element={guard(['admin', 'partner', 'investor'], <ScoringPage />)} />
@@ -875,6 +884,10 @@ function AppInner() {
       <Route path="/relationships" element={guard(['admin', 'founder', 'partner', 'investor'], <RelationshipsPage />)} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
       <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], <PartnerPortal />)} />
+      {/* Task #9 (X-2) — Deal-specific Partner Portal (referral code,
+          granted tiers, redemption count). Distinct from the legacy
+          /partner-portal which keeps the LP/capital-call surface. */}
+      <Route path="/partners/portal" element={guard(['admin', 'partner'], <PartnerDealPortal />)} />
       <Route path="/docs" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <DocsPage />)} />
       <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SettingsPage />)} />
 
