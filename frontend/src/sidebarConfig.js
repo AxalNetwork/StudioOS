@@ -82,6 +82,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/refer', icon: Share2, label: 'Refer & Earn' },
       { to: '/relationships', icon: Handshake, label: 'Relationships' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
+      { to: '/calendar', icon: Calendar, label: 'Calendar' },
     ]},
     { key: 'capital', label: 'Capital & Liquidity', items: [
       { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
