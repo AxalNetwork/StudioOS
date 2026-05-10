@@ -346,6 +346,14 @@ advisor.post('/start', async (c) => {
   // Refresh counts now that hydration may have inserted new rows.
   await syncBankTotal(c.env, conv, bank.length, personaFor(user));
   await refreshCounts(c.env, conv.id, next?.id || null);
+  // If hydration left no remaining questions on the very first
+  // open, mark the conversation complete so /progress reflects it.
+  if (!next && conv.state !== 'complete') {
+    await c.env.DB.prepare(
+      `UPDATE advisor_conversations SET state = 'complete', updated_at = datetime('now') WHERE id = ?`,
+    ).bind(conv.id).run();
+    conv.state = 'complete';
+  }
   const refreshed = await c.env.DB.prepare(
     `SELECT answered_count, skipped_count FROM advisor_conversations WHERE id = ?`,
   ).bind(conv.id).first<{ answered_count: number; skipped_count: number }>();
@@ -446,11 +454,17 @@ advisor.post('/answer', async (c) => {
   // also rejects these but we defend in depth — the model never sees
   // user-typed strings until we route them.
   const valueStr = String(body.value ?? '').trim();
-  // Destructive verbs are routed to the relevant page rather than
-  // executed via the chat. The list mirrors the system-prompt
-  // refusal rules so server-side defence-in-depth and the LLM agree.
-  // Length cap removed — the regex matches anywhere in the answer.
-  if (/\b(delete|remove|drop|truncate|wipe|destroy|void|cancel|disband|deactivate|revoke|terminate|purge|erase|reset)\b/i.test(valueStr)) {
+  // Destructive intent gate. We match imperative phrases ("delete
+  // my project", "wipe everything", "cancel the deal") rather than
+  // bare verbs so benign mentions like "I want to reset my pricing
+  // strategy" or "we cancelled an event last week" pass through.
+  // Server-side defence-in-depth — mirrors the system-prompt refusal
+  // rules; the dedicated page on the side nav owns these actions.
+  const destructiveIntent =
+    /\b(delete|remove|drop|truncate|wipe|destroy|void|disband|deactivate|revoke|terminate|purge|erase)\s+(?:the\s+|my\s+|our\s+|this\s+|that\s+|all\s+|every\s+|everything|account|project|deal|company|entity|user|row|record|data|profile|portfolio|fund)\b/i;
+  const cancelIntent =
+    /\b(cancel|reset)\s+(?:the\s+|my\s+|our\s+|this\s+|that\s+|all\s+|every\s+)?(account|subscription|membership|deal|contract|incorporation|filing|payment|invoice|payout|transfer|password|profile|project|entity|fund|allocation|portfolio)\b/i;
+  if (destructiveIntent.test(valueStr) || cancelIntent.test(valueStr)) {
     return c.json({
       error: 'Destructive actions must be performed from the relevant page directly.',
       saved_to: null,
