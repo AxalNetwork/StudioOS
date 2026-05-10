@@ -71,19 +71,35 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
           }
 
           // Task #13 — also write to Workers Analytics Engine when the
-          // ANALYTICS binding is present. This is the durable, low-cost
-          // edge-level telemetry the Admin Analytics Technical sub-tab
-          // reads from. Best-effort: never throw, never block the request.
+          // ANALYTICS binding is present. Required dimensions per task
+          // contract: {ts, route, status, duration_ms, user_id, role, tier}.
+          // ts is implicit (AE timestamps every row). Best-effort — never
+          // throw, never block the request.
           try {
             const ae = (env as unknown as { ANALYTICS?: AnalyticsEngineDataset }).ANALYTICS;
             if (ae && typeof ae.writeDataPoint === 'function') {
+              // Resolve subscription tier opportunistically. We don't want
+              // to add a D1 hop on every single request, so only fetch when
+              // we have a user id AND the binding is configured.
+              let tier = 'free';
+              if (userId != null) {
+                try {
+                  const row = await env.DB
+                    .prepare('SELECT mi_subscription_plan FROM users WHERE id = ?')
+                    .bind(userId)
+                    .first<{ mi_subscription_plan: string | null }>();
+                  if (row?.mi_subscription_plan) tier = String(row.mi_subscription_plan);
+                } catch {}
+              }
               ae.writeDataPoint({
                 // Indexes (cardinality-bounded; first one is the sampling key)
                 indexes: [path.slice(0, 96)],
-                // Blobs: free-form strings, ordered by analysis frequency
-                blobs: [path, method, role, String(status)],
-                // Doubles: numeric measurements
-                doubles: [latency, status, 1],
+                // Blobs (in slot order, must match SQL reads in
+                // analyticsReports.ts loadTechnicalFromAnalyticsEngine):
+                //   blob1 route, blob2 method, blob3 role, blob4 status, blob5 tier
+                blobs: [path, method, role, String(status), tier],
+                // Doubles: double1 latency_ms, double2 status, double3 user_id
+                doubles: [latency, status, userId ?? 0],
               });
             }
           } catch (e) {

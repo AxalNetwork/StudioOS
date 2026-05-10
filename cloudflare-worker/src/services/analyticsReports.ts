@@ -205,12 +205,21 @@ async function loadOverviewFromSnapshots(
   } as OverviewReport;
 }
 
-export async function loadOverview(env: Env, range: DateRange, currency?: string | null): Promise<OverviewReport> {
+export async function loadOverview(
+  env: Env,
+  range: DateRange,
+  currency?: string | null,
+  opts?: { forceLive?: boolean },
+): Promise<OverviewReport> {
   // Task #13 — prefer pre-computed snapshots for fully-historical windows.
   // Falls back to live aggregation when the window includes today or any
-  // day is missing from `analytics_snapshots`.
-  const snap = await loadOverviewFromSnapshots(env, range, currency);
-  if (snap) return snap;
+  // day is missing from `analytics_snapshots`. `forceLive` bypasses the
+  // snapshot read entirely — required by writeDailySnapshot/backfill so
+  // reruns recompute from source instead of re-reading stale snapshots.
+  if (!opts?.forceLive) {
+    const snap = await loadOverviewFromSnapshots(env, range, currency);
+    if (snap) return snap;
+  }
   const sql = getSQL(env);
   const priceMap = await loadPlanPriceMap(env);
   const disp = await displayContext(env, currency);
@@ -723,7 +732,7 @@ async function loadTechnicalFromAnalyticsEngine(
            QUANTILEMERGE(0.95, double1) AS p95,
            QUANTILEMERGE(0.99, double1) AS p99,
            SUMIF(1, double2 >= 500) AS errors_5xx
-    FROM studioos_requests
+    FROM studioos_metrics
     WHERE timestamp >= toDateTime('${range.fromIso}')
       AND timestamp <= toDateTime('${range.toIso}')
     GROUP BY blob1
@@ -1226,7 +1235,9 @@ export async function writeDailySnapshot(
   const range: DateRange = { from: day, to: day, days: 1, fromIso, toIso };
 
   try {
-    const overview = await loadOverview(env, range, 'USD');
+    // Task #13 — backfill MUST recompute from source rows; bypass the
+    // snapshot read path or rebuilds would just re-copy stale data.
+    const overview = await loadOverview(env, range, 'USD', { forceLive: true });
     const financial = await loadFinancial(env, range, 'USD');
 
     await sql`

@@ -149,7 +149,7 @@ bucket_name = "studioos-files"
 # is missing, loadTechnical() falls back to D1.
 [[analytics_engine_datasets]]
 binding = "ANALYTICS"
-dataset = "studioos_requests"
+dataset = "studioos_metrics"
 
 # ---------- Browser Rendering ----------
 # Powers true PDF generation for Admin Analytics exports
@@ -263,7 +263,7 @@ bucket_name = "studioos-files"
 
 [[env.production.analytics_engine_datasets]]
 binding = "ANALYTICS"
-dataset = "studioos_requests"
+dataset = "studioos_metrics"
 
 [env.production.browser]
 binding = "BROWSER"
