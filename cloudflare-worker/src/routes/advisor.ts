@@ -281,6 +281,20 @@ async function recordAnswer(
   }
 }
 
+// Update total_questions on the conversation row when the working
+// bank size changes. Called from /answer and /skip after the
+// detector → persona pivot, otherwise total_questions stays at the
+// initial value (3, for null-role onboarding) and /progress reports
+// percentages > 100 once the user enters the persona bank.
+async function syncBankTotal(env: Env, conv: ConversationRow, bankLen: number, persona: string): Promise<void> {
+  if (conv.total_questions === bankLen) return;
+  await env.DB.prepare(
+    `UPDATE advisor_conversations SET total_questions = ?, persona = ?, updated_at = datetime('now') WHERE id = ?`,
+  ).bind(bankLen, persona, conv.id).run();
+  conv.total_questions = bankLen;
+  conv.persona = persona;
+}
+
 async function refreshCounts(env: Env, conversationId: number, currentQid: string | null): Promise<void> {
   try {
     const counts = await env.DB.prepare(
@@ -330,12 +344,8 @@ advisor.post('/start', async (c) => {
   const next = nextUnansweredQuestion(bank, answered);
 
   // Refresh counts now that hydration may have inserted new rows.
+  await syncBankTotal(c.env, conv, bank.length, personaFor(user));
   await refreshCounts(c.env, conv.id, next?.id || null);
-  if (conv.total_questions !== bank.length) {
-    await c.env.DB.prepare(
-      `UPDATE advisor_conversations SET total_questions = ?, persona = ?, updated_at = datetime('now') WHERE id = ?`,
-    ).bind(bank.length, personaFor(user), conv.id).run();
-  }
   const refreshed = await c.env.DB.prepare(
     `SELECT answered_count, skipped_count FROM advisor_conversations WHERE id = ?`,
   ).bind(conv.id).first<{ answered_count: number; skipped_count: number }>();
@@ -474,6 +484,7 @@ advisor.post('/answer', async (c) => {
   const answered = await effectiveAnsweredSet(c.env, liveUser, conv.id);
   const bank = selectBank(liveUser, answered);
   const next = nextUnansweredQuestion(bank, answered);
+  await syncBankTotal(c.env, conv, bank.length, personaFor(liveUser));
   await refreshCounts(c.env, conv.id, next?.id || null);
 
   if (!next) {
@@ -575,6 +586,7 @@ advisor.post('/skip', async (c) => {
   const answered = await effectiveAnsweredSet(c.env, user, conv.id);
   const bank = selectBank(user, answered);
   const next = nextUnansweredQuestion(bank, answered);
+  await syncBankTotal(c.env, conv, bank.length, personaFor(user));
   await refreshCounts(c.env, conv.id, next?.id || null);
   if (!next) {
     await c.env.DB.prepare(
