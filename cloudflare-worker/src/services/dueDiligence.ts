@@ -261,7 +261,7 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
                 const b = ranks.indexOf(top.employee_range || '');
                 const dropped = a >= 0 && b >= 0 && b < a;
                 findings.push({
-                  source_kind: 'crunchbase', severity: dropped ? 'medium' : 'info',
+                  source_kind: 'crunchbase', severity: 'info',
                   title: `${top.name} — headcount band changed (${obj.employee_range} → ${top.employee_range})`,
                   detail: dropped
                     ? 'Headcount appears to have decreased between scans — possible layoffs or attrition. Confirm with founder.'
