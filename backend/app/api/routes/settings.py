@@ -1149,14 +1149,14 @@ _DEFAULT_USER_SETTINGS = {
     "quiet_hours_start": None,
     "quiet_hours_end": None,
     "quiet_hours_tz": "UTC",
-    "theme": "system",
+    "theme": "light",
     "density": "comfy",
     "sidebar_default": "expanded",
     "feature_flags": "{}",
 }
 
 _ALLOWED_VISIBILITY = {"public", "network", "private"}
-_ALLOWED_THEME = {"system", "light", "dark"}
+_ALLOWED_THEME = {"light", "dark"}
 _ALLOWED_DENSITY = {"comfy", "compact"}
 _ALLOWED_SIDEBAR = {"expanded", "collapsed"}
 _ALLOWED_DIGEST = {"off", "daily", "weekly", "monthly"}
@@ -1192,8 +1192,11 @@ def _pick_privacy(row: dict) -> dict:
 
 
 def _pick_appearance(row: dict) -> dict:
+    theme = row.get("theme") or "light"
+    if theme not in _ALLOWED_THEME:
+        theme = "light"
     return {
-        "theme": row.get("theme") or "system",
+        "theme": theme,
         "density": row.get("density") or "comfy",
         "sidebar_default": row.get("sidebar_default") or "expanded",
     }
@@ -1463,3 +1466,271 @@ def update_developer_settings(payload: dict, session: Session = Depends(get_sess
 def resync_developer_indices(user: User = Depends(get_current_user)):
     _require_admin(user)
     return {"ok": True, "queued": True, "message": "Re-sync request logged. The next scheduled cron will pick this up."}
+
+
+# ===========================================================================
+# Task #16 — Profile expansion + Task #15 — Page explainers (FastAPI port).
+#
+# Worker reference: cloudflare-worker/src/routes/settings.ts (915-1023) +
+# services/profileExpansion.ts. The dev backend stores both blocks as JSON
+# in a single helper table to keep migrations simple — full per-column
+# encryption + UBO row-level validation are intentionally out of scope here
+# (the worker is the production source of truth).
+# ===========================================================================
+
+_profile_extras_migrated = False
+
+
+def _ensure_profile_extras_schema(session: Session) -> None:
+    global _profile_extras_migrated
+    if _profile_extras_migrated:
+        return
+    try:
+        session.exec(text("""
+            CREATE TABLE IF NOT EXISTS user_profile_extras (
+                user_id INTEGER PRIMARY KEY,
+                personal_data TEXT NOT NULL DEFAULT '{}',
+                corporate_data TEXT NOT NULL DEFAULT '{}',
+                dismissed_explainers TEXT NOT NULL DEFAULT '[]',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        session.commit()
+        _profile_extras_migrated = True
+    except Exception:
+        session.rollback()
+
+
+_PERSONAL_TEXT_FIELDS = (
+    "full_legal_name", "date_of_birth", "nationality", "tax_residency_country",
+    "address_line1", "address_line2", "city", "state_or_region",
+    "postal_code", "country",
+)
+_PERSONAL_COMPLETION_FIELDS = (
+    "full_legal_name", "date_of_birth", "nationality", "tax_residency_country",
+    "address_line1", "city", "postal_code", "country",
+)
+_CORPORATE_TEXT_FIELDS = (
+    "entity_name", "entity_type", "registration_number", "registered_country",
+    "registered_address_line1", "registered_address_line2", "registered_city",
+    "registered_state", "registered_postal", "signing_authority_name",
+    "signing_authority_title", "signing_authority_email",
+)
+
+
+def _last4(raw: str) -> str:
+    s = (raw or "").strip()
+    return s[-4:] if len(s) >= 4 else s
+
+
+def _load_extras(session: Session, user_id: int) -> dict:
+    _ensure_profile_extras_schema(session)
+    row = session.exec(
+        text("SELECT personal_data, corporate_data, dismissed_explainers FROM user_profile_extras WHERE user_id = :uid"),
+        params={"uid": user_id},
+    ).first()
+    if row is None:
+        try:
+            session.exec(
+                text("INSERT INTO user_profile_extras (user_id) VALUES (:uid) ON CONFLICT (user_id) DO NOTHING"),
+                params={"uid": user_id},
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+        return {"personal": {}, "corporate": {}, "dismissed": []}
+    m = dict(row._mapping)  # type: ignore[attr-defined]
+    return {
+        "personal": _safe_json(m.get("personal_data"), {}),
+        "corporate": _safe_json(m.get("corporate_data"), {}),
+        "dismissed": _safe_json(m.get("dismissed_explainers"), []),
+    }
+
+
+def _save_extras_field(session: Session, user_id: int, column: str, value: Any) -> None:
+    _load_extras(session, user_id)  # ensure row exists
+    try:
+        session.exec(
+            text(f"UPDATE user_profile_extras SET {column} = :val, updated_at = CURRENT_TIMESTAMP WHERE user_id = :uid"),
+            params={"uid": user_id, "val": json.dumps(value)},
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise HTTPException(status_code=500, detail="Update failed")
+
+
+def _personal_view(personal: dict) -> dict:
+    filled = sum(1 for f in _PERSONAL_COMPLETION_FIELDS if personal.get(f))
+    if personal.get("tax_id_enc"):
+        filled += 1
+    if personal.get("phone_enc"):
+        filled += 1
+    pct = int(round(filled * 100 / (len(_PERSONAL_COMPLETION_FIELDS) + 2)))
+    return {
+        **{f: personal.get(f) or None for f in _PERSONAL_TEXT_FIELDS},
+        "tax_id_last4": personal.get("tax_id_last4") or None,
+        "has_tax_id": bool(personal.get("tax_id_enc")),
+        "phone_last4": personal.get("phone_last4") or None,
+        "has_phone": bool(personal.get("phone_enc")),
+        "profile_completion_pct": pct,
+    }
+
+
+def _corporate_view(corporate: dict) -> dict:
+    return {
+        **{f: corporate.get(f) or None for f in _CORPORATE_TEXT_FIELDS},
+        "tax_id_last4": corporate.get("tax_id_last4") or None,
+        "has_tax_id": bool(corporate.get("tax_id_enc")),
+        "ubos": corporate.get("ubos") or [],
+        "directors": corporate.get("directors") or [],
+        "insurance_carriers": corporate.get("insurance_carriers") or [],
+        "ubo_disclosed": bool(corporate.get("ubo_disclosed")),
+        "aml_high_risk_jurisdiction": False,
+        "sanctions_last_checked_at": None,
+        "updated_at": None,
+    }
+
+
+def _trim(v: Any, maxlen: int = 200) -> Optional[str]:
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s[:maxlen] if s else None
+
+
+def _apply_personal_patch(personal: dict, patch: dict) -> dict:
+    out = dict(personal)
+    for f in _PERSONAL_TEXT_FIELDS:
+        if f in patch:
+            v = _trim(patch[f])
+            if f in ("nationality", "tax_residency_country", "country") and v:
+                v = v.upper()[:2]
+            out[f] = v
+    if "tax_id_number" in patch:
+        raw = patch["tax_id_number"]
+        if raw is None or str(raw).strip() == "":
+            out.pop("tax_id_enc", None)
+            out.pop("tax_id_last4", None)
+        else:
+            s = str(raw).strip()
+            if len(s) < 4 or len(s) > 64:
+                raise HTTPException(status_code=400, detail={"error": "tax_id_number must be 4-64 chars", "field": "tax_id_number"})
+            out["tax_id_enc"] = base64.b64encode(s.encode("utf-8")).decode("ascii")
+            out["tax_id_last4"] = _last4(s)
+    if "phone_e164" in patch:
+        raw = patch["phone_e164"]
+        if raw is None or str(raw).strip() == "":
+            out.pop("phone_enc", None)
+            out.pop("phone_last4", None)
+        else:
+            s = str(raw).strip()
+            import re as _re
+            if not _re.match(r"^\+[1-9]\d{6,14}$", s):
+                raise HTTPException(status_code=400, detail={"error": "phone must be in E.164 format, e.g. +14155551234", "field": "phone_e164"})
+            out["phone_enc"] = base64.b64encode(s.encode("utf-8")).decode("ascii")
+            out["phone_last4"] = _last4(s)
+    return out
+
+
+def _apply_corporate_patch(corporate: dict, patch: dict) -> dict:
+    out = dict(corporate)
+    for f in _CORPORATE_TEXT_FIELDS:
+        if f in patch:
+            v = _trim(patch[f])
+            if f == "registered_country" and v:
+                v = v.upper()[:2]
+            out[f] = v
+    if "tax_id_number" in patch:
+        raw = patch["tax_id_number"]
+        if raw is None or str(raw).strip() == "":
+            out.pop("tax_id_enc", None)
+            out.pop("tax_id_last4", None)
+        else:
+            s = str(raw).strip()
+            out["tax_id_enc"] = base64.b64encode(s.encode("utf-8")).decode("ascii")
+            out["tax_id_last4"] = _last4(s)
+    for k in ("ubos", "directors", "insurance_carriers"):
+        if k in patch and isinstance(patch[k], list):
+            out[k] = patch[k]
+            if k == "ubos":
+                out["ubo_disclosed"] = len(patch[k]) > 0
+    return out
+
+
+@router.get("/profile/personal")
+def get_personal_profile(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    extras = _load_extras(session, user.id)
+    return _personal_view(extras["personal"])
+
+
+@router.put("/profile/personal")
+def update_personal_profile(payload: dict, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    extras = _load_extras(session, user.id)
+    next_personal = _apply_personal_patch(extras["personal"], payload or {})
+    _save_extras_field(session, user.id, "personal_data", next_personal)
+    return _personal_view(next_personal)
+
+
+@router.get("/profile/corporate")
+def get_corporate_profile(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    extras = _load_extras(session, user.id)
+    return _corporate_view(extras["corporate"])
+
+
+@router.put("/profile/corporate")
+def update_corporate_profile(payload: dict, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    extras = _load_extras(session, user.id)
+    next_corporate = _apply_corporate_patch(extras["corporate"], payload or {})
+    _save_extras_field(session, user.id, "corporate_data", next_corporate)
+    return _corporate_view(next_corporate)
+
+
+# --- Page header explainers (Task #15) -------------------------------------
+
+import re as _re_explainer  # noqa: E402
+
+
+def _normalize_explainer_key(raw: Any) -> Optional[str]:
+    if not isinstance(raw, str):
+        return None
+    s = raw.strip()[:64]
+    if not s or not _re_explainer.match(r"^[a-z0-9_]+$", s):
+        return None
+    return s
+
+
+@router.get("/explainers")
+def get_explainers(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    extras = _load_extras(session, user.id)
+    dismissed = extras["dismissed"] if isinstance(extras["dismissed"], list) else []
+    return {"dismissed": [k for k in dismissed if isinstance(k, str)]}
+
+
+@router.post("/explainer-dismissed")
+def dismiss_explainer(payload: dict, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    key = _normalize_explainer_key((payload or {}).get("page_key"))
+    if not key:
+        raise HTTPException(status_code=400, detail="page_key is required (a-z, 0-9, _, ≤64 chars)")
+    extras = _load_extras(session, user.id)
+    current = extras["dismissed"] if isinstance(extras["dismissed"], list) else []
+    if key not in current:
+        current = list(current) + [key]
+    _save_extras_field(session, user.id, "dismissed_explainers", current)
+    return {"dismissed": current}
+
+
+@router.post("/explainer-restore")
+def restore_explainer(payload: dict, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    raw = ((payload or {}).get("page_key") or "").strip()
+    extras = _load_extras(session, user.id)
+    current = extras["dismissed"] if isinstance(extras["dismissed"], list) else []
+    if raw == "all":
+        nxt: list = []
+    else:
+        key = _normalize_explainer_key(raw)
+        if not key:
+            raise HTTPException(status_code=400, detail='page_key must be a valid key or "all"')
+        nxt = [k for k in current if k != key]
+    _save_extras_field(session, user.id, "dismissed_explainers", nxt)
+    return {"dismissed": nxt}

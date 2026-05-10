@@ -7,7 +7,7 @@ import {
   User, Globe, Mail, ShieldCheck, Bell, Lock, Briefcase, Users,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
   Plus, X, KeyRound, Palette, Plug, CreditCard, Code, UserCog,
-  Sun, Moon, Monitor, ChevronDown, Check,
+  Sun, Moon, ChevronDown, Check,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 
@@ -2609,14 +2609,13 @@ function AppearanceTab({ flash }) {
   const themes = [
     { value: 'light', label: 'Light', icon: Sun },
     { value: 'dark', label: 'Dark', icon: Moon },
-    { value: 'system', label: 'System', icon: Monitor },
   ];
 
   return (
     <>
       <Card title="Theme"
-        description={`Light, dark, or follow your operating system. Currently rendering as ${effectiveTheme}.`}>
-        <div className="grid grid-cols-3 gap-2">
+        description={`Choose Light or Dark. Currently rendering as ${effectiveTheme}.`}>
+        <div className="grid grid-cols-2 gap-2">
           {themes.map(t => {
             const active = appearance.theme === t.value;
             const Icon = t.icon;
