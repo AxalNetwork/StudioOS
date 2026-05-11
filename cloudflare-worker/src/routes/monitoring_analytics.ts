@@ -212,6 +212,46 @@ function buildAuditWhere(opts: {
   return { where: clauses.join(' AND '), params };
 }
 
+// Task #4 (AJ) — spec alias. The richer `/audit` endpoint backs the
+// "Recent Exports" panel and supports filtering by action, admin, plan,
+// date range, etc. `/exports/recent` is the contract-named convenience
+// shape: most-recent N analytics exports for the current admin's view,
+// no extra filters. Defers entirely to the same handler logic by
+// pre-seeding query defaults so we never duplicate the audit SQL.
+r.get('/exports/recent', async (c) => {
+  await requireAdmin(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  const limit = clampInt(c.req.query('limit'), 25, 1, 100);
+  const offset = clampInt(c.req.query('offset'), 0, 0, 100000);
+  const { where, params } = buildAuditWhere({
+    action: 'analytics_export',
+    planId: null, adminUserId: null, adminQ: null,
+    fromBound: null, toBound: null,
+  });
+  const items = await sql.unsafe(
+    `SELECT a.id, a.admin_user_id, u.email AS admin_email, u.name AS admin_name,
+            a.action, a.report_type, a.format, a.filters_json,
+            a.download_url, a.exported_at
+     FROM admin_audit_log a
+     LEFT JOIN users u ON u.id = a.admin_user_id
+     WHERE ${where}
+     ORDER BY a.exported_at DESC LIMIT ? OFFSET ?`,
+    [...params, limit, offset],
+  );
+  const totalRow = await sql.unsafe(
+    `SELECT COUNT(*) AS c FROM admin_audit_log a
+       LEFT JOIN users u ON u.id = a.admin_user_id
+      WHERE ${where}`,
+    params,
+  );
+  return c.json({
+    items,
+    total: Number((totalRow as Array<{ c: number }>)[0]?.c ?? 0),
+    limit, offset,
+  });
+});
+
 r.get('/audit', async (c) => {
   await requireAdmin(c);
   await ensureSchema(c.env);
