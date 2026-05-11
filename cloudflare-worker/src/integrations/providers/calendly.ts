@@ -317,20 +317,14 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Extend
     expires_at: expiresAt,
   } as CredentialBlob;
 
-  // Try to register a webhook subscription. The signing key is stored in
-  // the integration row's webhook_secret_enc by the route layer once we
-  // hand it back via `config.webhook_signing_key_pending` — but the route
-  // doesn't propagate that. We instead persist the signing key directly in
-  // the credential blob (also encrypted) and expose webhook_secret_enc via
-  // a secondary helper triggered once the row exists. For the foundation
-  // path the simpler choice is: do the subscribe AFTER persistence in a
-  // post-connect hook. But the registry foundation has no such hook, so we
-  // do the subscribe up-front and rely on the route's webhook_secret_enc
-  // being populatable from `result.credentials.webhook_signing_key` via a
-  // small monkey-patch on the integrations route — see below.
-  const callbackBase = stripTrailingSlashes(c.env.APP_URL || '');
-  // The route uses `/webhook/:provider/:uid`; we don't know the uid yet.
-  // We register on the next sync() run instead, where row.uid is available.
+  // Webhook subscription is registered on the next sync() run (where
+  // row.uid is available); the registry foundation has no post-connect
+  // hook so we can't subscribe here. The signing key is persisted in
+  // the credential blob and exposed via webhook_secret_enc on the
+  // route's monkey-patch. (Previously computed `callbackBase` here for
+  // the eventual `/webhook/:provider/:uid` URL — removed because the
+  // value was unused; sync() recomputes it via stripTrailingSlashes
+  // when the uid is known.)
 
   return {
     credentials,

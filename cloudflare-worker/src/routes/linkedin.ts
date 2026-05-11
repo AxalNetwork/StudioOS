@@ -210,13 +210,14 @@ linkedin.get('/oauth/callback', async (c) => {
     // CodeQL js/clear-text-logging: do NOT log raw query-param values, they
     // can contain attacker-controlled strings (and `error_description` may
     // include identifiers / token fragments). Log only against an allow-list.
-    const KNOWN_ERRS = new Set([
-      'access_denied', 'invalid_request', 'unauthorized_client',
-      'unsupported_response_type', 'invalid_scope', 'server_error',
-      'temporarily_unavailable', 'user_cancelled_login', 'user_cancelled_authorize',
-    ]);
-    const safeCode = KNOWN_ERRS.has(String(oauthError)) ? String(oauthError) : 'unknown';
-    console.warn('[LINKEDIN] callback OAuth error code:', safeCode);
+    // Defense-in-depth: rather than echo any portion of the user-supplied
+    // `oauthError` back into the log line (which CodeQL js/clear-text-logging
+    // taint-flags even with an allow-list, since the source is still a
+    // query param), we emit a single literal message. The redirect carries
+    // the unified `oauth_denied` code; the LinkedIn provider docs are the
+    // source of truth for the underlying reason. If diagnostics are needed,
+    // surface them via a structured metric, NOT a log string.
+    console.warn('[LINKEDIN] callback OAuth error returned by provider; redirecting with oauth_denied');
     return redirectBack(c.env, 'error', 'oauth_denied' satisfies LinkedInCallbackCode);
   }
   if (!code || !state) {
