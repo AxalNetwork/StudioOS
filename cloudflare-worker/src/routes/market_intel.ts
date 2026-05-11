@@ -201,14 +201,6 @@ marketIntel.get('/export', async (c) => {
 type Role = 'admin' | 'founder' | 'partner' | 'investor' | 'mentor';
 const FULL_LENS_BYPASS: Role[] = ['admin', 'partner', 'mentor'];
 
-/** Founder-tier (subscription_tier) covers Growth+ when role is founder. */
-function founderHasGrowth(user: MIUser | null | undefined): boolean {
-  if (!user) return false;
-  if (user.role !== 'founder') return false;
-  const tier = String(user.subscription_tier ?? 'free').toLowerCase();
-  return tier === 'growth' || tier === 'studio';
-}
-
 interface IndexRow {
   sector: string; geo: string; period_key: string;
   dimension: string; value: number; source_count: number;
