@@ -207,63 +207,74 @@ test('snapshot-level n_total is masked when total contributors < 5', () => {
 /* ------------------------------------------------------------------ */
 test('Hono handler returns 402 tier_required for Free callers (runtime)', async () => {
   const { Hono } = await import('hono');
-  const app = new Hono();
 
-  // Inline replay of the route shape used by both /api/investor-signals
-  // and /api/market-intel/investor-signals. Auth is mocked via header.
-  app.get('/investor-signals', async (c) => {
-    const u = c.req.header('x-mock-user');
-    const user = u ? JSON.parse(u) : null;
-    if (!callerHasFullLens(user)) {
-      return c.json({ error: 'tier_required', required: 'growth' }, 402);
-    }
-    return c.json({ ok: true });
-  });
-  app.get('/investor-signals/latest', async (c) => {
-    const u = c.req.header('x-mock-user');
-    const user = u ? JSON.parse(u) : null;
-    if (!callerHasFullLens(user)) {
-      return c.json({ error: 'tier_required', required: 'growth' }, 402);
-    }
-    return c.json({ snapshot: { n_total: 12, dimensions: {} } });
-  });
-
-  // Free founder → 402 on both filtered + /latest surfaces.
-  for (const path of ['/investor-signals', '/investor-signals/latest']) {
-    const r = await app.fetch(new Request(`http://t${path}`, {
-      headers: { 'x-mock-user': JSON.stringify({ role: 'founder', subscription_tier: 'free' }) },
-    }));
-    assert.equal(r.status, 402, `Free caller must get 402 from ${path}`);
-    const body = await r.json();
-    assert.equal(body.error, 'tier_required');
-    assert.equal(body.required, 'growth');
+  // Mirror investor_signals.ts shape: a sub-app with `/` (filtered) and
+  // `/latest`, both gated by callerHasFullLens. Auth is mocked via the
+  // `x-mock-user` header so the test exercises the real handler logic
+  // without needing requireAuth/JWT plumbing.
+  function buildSignalsApp() {
+    const a = new Hono();
+    const gate = (handler) => async (c) => {
+      const u = c.req.header('x-mock-user');
+      const user = u ? JSON.parse(u) : null;
+      if (!callerHasFullLens(user)) {
+        return c.json({ error: 'tier_required', required: 'growth' }, 402);
+      }
+      return handler(c);
+    };
+    a.get('/', gate(async (c) => c.json({ ok: true, dimensions: {} })));
+    a.get('/latest', gate(async (c) => c.json({ snapshot: { n_total: 12 } })));
+    return a;
   }
 
-  // No-auth caller → 402 (predicate returns false on null user).
-  const r0 = await app.fetch(new Request('http://t/investor-signals/latest'));
-  assert.equal(r0.status, 402);
+  // (i) Standalone mount: GET /api/investor-signals + /latest.
+  const root = new Hono();
+  root.route('/investor-signals', buildSignalsApp());
 
-  // Growth founder → 200 on both.
-  for (const path of ['/investor-signals', '/investor-signals/latest']) {
-    const r = await app.fetch(new Request(`http://t${path}`, {
-      headers: { 'x-mock-user': JSON.stringify({ role: 'founder', subscription_tier: 'growth' }) },
+  // (ii) Alias mount under market-intel: replay
+  // marketIntel.route('/investor-signals', investorSignalsApp).
+  const aliasParent = new Hono();
+  aliasParent.route('/market-intel/investor-signals', buildSignalsApp());
+
+  const surfaces = [
+    { app: root, base: '/investor-signals' },
+    { app: aliasParent, base: '/market-intel/investor-signals' },
+  ];
+
+  for (const { app, base } of surfaces) {
+    // Free founder → 402 on both / and /latest.
+    for (const path of [base, `${base}/latest`]) {
+      const r = await app.fetch(new Request(`http://t${path}`, {
+        headers: { 'x-mock-user': JSON.stringify({ role: 'founder', subscription_tier: 'free' }) },
+      }));
+      assert.equal(r.status, 402, `Free caller must get 402 from ${path}`);
+      const body = await r.json();
+      assert.equal(body.error, 'tier_required');
+      assert.equal(body.required, 'growth');
+    }
+    // No-auth caller → 402.
+    const r0 = await app.fetch(new Request(`http://t${base}/latest`));
+    assert.equal(r0.status, 402, `unauth caller must get 402 from ${base}/latest`);
+    // Growth founder → 200 on both.
+    for (const path of [base, `${base}/latest`]) {
+      const r = await app.fetch(new Request(`http://t${path}`, {
+        headers: { 'x-mock-user': JSON.stringify({ role: 'founder', subscription_tier: 'growth' }) },
+      }));
+      assert.equal(r.status, 200, `Growth caller must get 200 from ${path}`);
+    }
+    // Professional investor → 200; Starter investor → 402.
+    const rPro = await app.fetch(new Request(`http://t${base}/latest`, {
+      headers: { 'x-mock-user': JSON.stringify({ role: 'investor', investor_tier: 'professional' }) },
     }));
-    assert.equal(r.status, 200, `Growth caller must get 200 from ${path}`);
+    assert.equal(rPro.status, 200, `professional investor must get 200 from ${base}/latest`);
+    const rStarter = await app.fetch(new Request(`http://t${base}/latest`, {
+      headers: { 'x-mock-user': JSON.stringify({ role: 'investor', investor_tier: 'starter' }) },
+    }));
+    assert.equal(rStarter.status, 402, `starter investor must get 402 from ${base}/latest`);
+    // Admin bypass → 200.
+    const rAdmin = await app.fetch(new Request(`http://t${base}`, {
+      headers: { 'x-mock-user': JSON.stringify({ role: 'admin' }) },
+    }));
+    assert.equal(rAdmin.status, 200, `admin must bypass at ${base}`);
   }
-
-  // Professional investor → 200; Starter investor → 402.
-  const rPro = await app.fetch(new Request('http://t/investor-signals/latest', {
-    headers: { 'x-mock-user': JSON.stringify({ role: 'investor', investor_tier: 'professional' }) },
-  }));
-  assert.equal(rPro.status, 200);
-  const rStarter = await app.fetch(new Request('http://t/investor-signals/latest', {
-    headers: { 'x-mock-user': JSON.stringify({ role: 'investor', investor_tier: 'starter' }) },
-  }));
-  assert.equal(rStarter.status, 402);
-
-  // Admin bypass → 200.
-  const rAdmin = await app.fetch(new Request('http://t/investor-signals', {
-    headers: { 'x-mock-user': JSON.stringify({ role: 'admin' }) },
-  }));
-  assert.equal(rAdmin.status, 200);
 });
