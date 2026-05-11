@@ -392,12 +392,16 @@ projects.delete('/:id', async (c) => {
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = rows[0];
   const isAdmin = user.role === 'admin';
+  const isPartner = user.role === 'partner';
   const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
-  if (!isAdmin && !isOwner) {
+  // Task #7 (AM) — admins + partners may soft-delete any project (partners
+  // routinely manage portfolio hygiene); founders may only delete their own.
+  if (!isAdmin && !isPartner && !isOwner) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
   if (hard && !isAdmin) {
+    // Hard-delete is irreversible → admin-only, even partners can't bypass.
     await sql.end();
     return c.json({ detail: 'Forbidden: hard delete is admin-only' }, 403);
   }
