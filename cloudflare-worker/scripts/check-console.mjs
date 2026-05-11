@@ -17,15 +17,19 @@ const FORBIDDEN = /\bconsole\.log\s*\(/;
 
 let bad = 0;
 function walk(dir) {
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    const s = statSync(p);
-    if (s.isDirectory()) {
-      walk(p);
-      continue;
-    }
+  // CodeQL js/file-system-race: use a single readdir(withFileTypes) call so we
+  // don't statSync() then readFileSync() the same path (TOCTOU). Wrap the
+  // file read in try/catch so a concurrent rename/delete just skips the entry.
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const ent of entries) {
+    const p = join(dir, ent.name);
+    if (ent.isDirectory()) { walk(p); continue; }
+    if (!ent.isFile()) continue;
     if (!p.endsWith('.ts') && !p.endsWith('.tsx')) continue;
-    const lines = readFileSync(p, 'utf8').split('\n');
+    let content;
+    try { content = readFileSync(p, 'utf8'); } catch { continue; }
+    const lines = content.split('\n');
     lines.forEach((line, i) => {
       // Allow the marker in this enforcer's own description / comments.
       if (line.trim().startsWith('//') || line.trim().startsWith('*')) return;

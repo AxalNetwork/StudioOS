@@ -24,6 +24,7 @@
  *     the OAuth tab in that case.
  */
 import { Hono } from 'hono';
+import { stripTrailingSlashes } from '../util/url';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
@@ -180,7 +181,7 @@ linkedin.post('/oauth/start', async (c) => {
 // the user row, discards the token, and redirects back to /refer.
 // ---------------------------------------------------------------------------
 function redirectBack(env: Env, status: 'connected' | 'error', message?: string) {
-  const base = (env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+  const base = stripTrailingSlashes(env.APP_URL || 'https://axal.vc');
   const params = new URLSearchParams({ linkedin: status });
   if (message) params.set('linkedin_error', message);
   return Response.redirect(`${base}/refer?${params.toString()}`, 302);
@@ -206,7 +207,16 @@ linkedin.get('/oauth/callback', async (c) => {
   const state = c.req.query('state');
   const oauthError = c.req.query('error');
   if (oauthError) {
-    console.warn('[LINKEDIN] callback OAuth error:', oauthError, c.req.query('error_description'));
+    // CodeQL js/clear-text-logging: do NOT log raw query-param values, they
+    // can contain attacker-controlled strings (and `error_description` may
+    // include identifiers / token fragments). Log only against an allow-list.
+    const KNOWN_ERRS = new Set([
+      'access_denied', 'invalid_request', 'unauthorized_client',
+      'unsupported_response_type', 'invalid_scope', 'server_error',
+      'temporarily_unavailable', 'user_cancelled_login', 'user_cancelled_authorize',
+    ]);
+    const safeCode = KNOWN_ERRS.has(String(oauthError)) ? String(oauthError) : 'unknown';
+    console.warn('[LINKEDIN] callback OAuth error code:', safeCode);
     return redirectBack(c.env, 'error', 'oauth_denied' satisfies LinkedInCallbackCode);
   }
   if (!code || !state) {

@@ -16,6 +16,7 @@
  * `esign` envelope/recipients tables (one envelope, three recipient rows).
  */
 import { Hono } from 'hono';
+import { stripTrailingSlashes } from '../util/url';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
 import {
@@ -252,7 +253,7 @@ trust.get('/agreements/:envelope_uuid/my_signing_url', async (c) => {
   if (row.status === 'signed') return c.json({ status: 'signed' });
   const exp = Date.parse(row.token_expires_at);
   if (Number.isFinite(exp) && exp < Date.now()) return c.json({ status: 'expired' });
-  const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+  const appUrl = stripTrailingSlashes(c.env.APP_URL || 'https://axal.vc');
   return c.json({
     status: 'pending',
     signing_url: `${appUrl}/esign/${row.signing_token}`,
@@ -608,7 +609,7 @@ trust.post('/nda/sign/:envelope_uuid', async (c) => {
   if (row.status === 'signed') return c.json({ status: 'signed' });
   const exp = Date.parse(row.token_expires_at);
   if (Number.isFinite(exp) && exp < Date.now()) return c.json({ status: 'expired' });
-  const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+  const appUrl = stripTrailingSlashes(c.env.APP_URL || 'https://axal.vc');
   return c.json({ status: 'pending', signing_url: `${appUrl}/esign/${row.signing_token}` });
 });
 
@@ -716,7 +717,7 @@ trust.post('/pairwise-ndas/:id/resend', async (c) => {
       WHERE e.envelope_uuid = ? AND r.status = 'pending'`,
   ).bind(pair.nda_envelope_uuid).all();
   const pending = (recipients?.results || []) as any[];
-  const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+  const appUrl = stripTrailingSlashes(c.env.APP_URL || 'https://axal.vc');
   let sent = 0;
   try {
     const { sendAgreementAssignedEmail } = await import('../services/email');

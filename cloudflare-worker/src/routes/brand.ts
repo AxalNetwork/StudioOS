@@ -76,13 +76,23 @@ function sanitizeSvg(svg: string | null | undefined): string | null {
   if (!svg) return null;
   let s = String(svg).trim();
   if (!s.toLowerCase().startsWith('<svg')) return null;
-  s = s.replace(/<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '');
-  s = s.replace(/<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*\/?>/gi, '');
-  s = s.replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  // CodeQL js/incomplete-multi-character-sanitization: a single replace pass
+  // can leave a fresh forbidden token in the result (e.g. `<scr<script>ipt>`
+  // → `<script>` after one pass). Loop to a fixed point.
+  const STRIP_TAG_PAIR = /<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi;
+  const STRIP_TAG_OPEN = /<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*\/?>/gi;
+  const STRIP_ON_ATTR  = /\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
   // Strip ALL href/xlink:href (quoted or unquoted, any scheme) — the
   // generated/uploaded logo SVGs have no need for hrefs and stripping
   // them blanket-blocks javascript:/data:text/html bypasses.
-  s = s.replace(/\s+(href|xlink:href)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  const STRIP_HREF     = /\s+(href|xlink:href)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
+  for (let prev = ''; prev !== s; ) {
+    prev = s;
+    s = s.replace(STRIP_TAG_PAIR, '')
+         .replace(STRIP_TAG_OPEN, '')
+         .replace(STRIP_ON_ATTR, '')
+         .replace(STRIP_HREF, '');
+  }
   // Belt-and-suspenders: drop the whole SVG if obfuscated payloads remain.
   const lower = s.toLowerCase();
   if (lower.includes('javascript:') || lower.includes('<script') || lower.includes('onload') || lower.includes('onerror')) {

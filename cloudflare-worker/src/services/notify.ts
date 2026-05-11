@@ -23,6 +23,7 @@
  *    user's pending outbox into a single email at 09:00 user-tz.
  */
 import type { Env } from '../types';
+import { stripTrailingSlashes } from '../util/url';
 import { getUserSettings, isInQuietHours } from './userSettings';
 
 export type NotifyChannel = 'in_app' | 'email' | 'slack';
@@ -145,8 +146,9 @@ function resolveChannels(prefs: Record<string, any>, type: string, requested: No
  * useful instead of silently dropping the Slack channel.
  */
 function buildSlackBlocks(args: NotifyArgs, appUrl: string): Record<string, unknown> {
+  const root = stripTrailingSlashes(appUrl);
   const link = args.link
-    ? (args.link.startsWith('http') ? args.link : `${appUrl.replace(/\/+$/, '')}${args.link}`)
+    ? (args.link.startsWith('http') ? args.link : `${root}${args.link}`)
     : null;
   const HEADERS: Record<string, string> = {
     contract_signed: ':inbox_tray: Contract signed',
@@ -173,7 +175,7 @@ function buildSlackBlocks(args: NotifyArgs, appUrl: string): Record<string, unkn
   }
   blocks.push({
     type: 'context',
-    elements: [{ type: 'mrkdwn', text: `Axal StudioOS · _Manage in <${appUrl.replace(/\/+$/, '')}/settings/notifications|Notification settings>_` }],
+    elements: [{ type: 'mrkdwn', text: `Axal StudioOS · _Manage in <${root}/settings/notifications|Notification settings>_` }],
   });
   // `text` fallback is required by Slack for screen readers / push previews.
   return {
@@ -444,7 +446,7 @@ function renderDigestSlackBlocks(
   cadence: 'daily' | 'weekly',
   appUrl: string,
 ): Record<string, unknown> {
-  const root = appUrl.replace(/\/+$/, '');
+  const root = stripTrailingSlashes(appUrl);
   const inboxUrl = `${root}/inbox`;
   const escape = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const resolveLink = (raw: string | null): string => {
