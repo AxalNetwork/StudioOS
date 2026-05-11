@@ -634,6 +634,24 @@ export default {
             }
           } catch (e) { console.error('[cron] partner deal expiry failed', e); }
         }
+        // Task #38 — daily rev-share attribution-window warning sweep
+        // at 04:45 UTC. Finds deal_sourcing_revshare redemptions whose
+        // 365-day window closes in 30 / 7 / 1 days, sends an email +
+        // in-app notification per (redemption, threshold) tuple, and
+        // a digest summary to admins. Idempotent via the
+        // partner_revshare_window_notifications dedupe table.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 45) {
+          try {
+            const { notifyExpiringRevshareWindows } = await import('./services/partnerDeals');
+            const r = await notifyExpiringRevshareWindows(env);
+            if (r.warnings_sent) {
+              console.info(
+                `[cron] revshare window warnings sent=${r.warnings_sent} ` +
+                `partner_emails=${r.partner_emails_sent} admin_digest=${r.admin_digest_sent}`,
+              );
+            }
+          } catch (e) { console.error('[cron] revshare window warnings failed', e); }
+        }
         // Task #6 (W-1) — daily investor trial downgrade at 04:25 UTC.
         // Idempotent: only flips users whose trial_ends_at is in the past
         // AND status='trialing'. Re-runs harmlessly when none are due.

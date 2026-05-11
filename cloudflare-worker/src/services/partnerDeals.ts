@@ -623,3 +623,245 @@ export async function expirePartnerDeals(env: Env): Promise<{
     redemptions_revoked: redemptionsRevoked,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Task #38 — Rev-share attribution-window expiry warnings.
+// ---------------------------------------------------------------------------
+//
+// Background. `partner_referral_redemptions` rows whose
+// `attribution_kind = 'deal_sourcing_revshare'` carry a 365-day
+// attribution window measured from `redeemed_at` (matches the per-
+// redemption countdown the partner portal already renders, see
+// routes/partner_portal.ts:54). When the window closes the partner
+// stops earning rev-share on that redeemer's deals — Task #26 made
+// the countdown visible in the UI; this cron turns it into a real
+// reminder so partners who don't open the portal still see it.
+//
+// Idempotency. Per-(redemption_id, threshold) dedupe lives in
+// `partner_revshare_window_notifications` (see migration 033). We
+// `INSERT OR IGNORE` and only send when meta.changes === 1, so
+// concurrent cron runs / lease handoffs never double-page.
+//
+// Thresholds: 30 / 7 / 1 days remaining. Each redemption gets up
+// to three warnings over its lifetime; admins get one digest per
+// run summarising every warning fired.
+
+const REVSHARE_THRESHOLDS_DAYS: ReadonlyArray<number> = [30, 7, 1];
+const REVSHARE_ATTRIBUTION_DAYS = 365;
+
+interface RevshareDueRow {
+  redemption_id: number;
+  redeemed_at: string;
+  partner_deal_id: number;
+  partner_user_id: number | null;
+  partner_email: string | null;
+  partner_name: string | null;
+  redeemer_name: string | null;
+  redeemer_email: string | null;
+  referral_code: string | null;
+}
+
+let revshareNotifSchemaReady = false;
+async function ensureRevshareNotifSchema(env: Env): Promise<boolean> {
+  if (revshareNotifSchemaReady) return true;
+  try {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS partner_revshare_window_notifications (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         redemption_id INTEGER NOT NULL REFERENCES partner_referral_redemptions(id),
+         threshold_days INTEGER NOT NULL,
+         notified_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         UNIQUE(redemption_id, threshold_days)
+       )`,
+    ).run();
+    await env.DB.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_prwn_redemption
+         ON partner_revshare_window_notifications(redemption_id)`,
+    ).run();
+    revshareNotifSchemaReady = true;
+    return true;
+  } catch (e) {
+    console.error('[partnerDeals] revshare notif schema migration failed', e);
+    return false;
+  }
+}
+
+interface FiredWarning {
+  redemption_id: number;
+  threshold_days: number;
+  partner_user_id: number | null;
+  partner_email: string | null;
+  partner_name: string | null;
+  redeemer_name: string | null;
+  redeemer_email: string | null;
+  referral_code: string | null;
+  closes_at: string;
+}
+
+/**
+ * Daily sweep — find every deal_sourcing_revshare redemption whose
+ * 365-day attribution window will close in 30 / 7 / 1 days and send
+ * the partner a one-shot warning per threshold (in_app + email),
+ * then a single digest email per admin summarising the batch.
+ *
+ * Idempotent: each (redemption_id, threshold_days) tuple is recorded
+ * in `partner_revshare_window_notifications` BEFORE the email/notify
+ * call so concurrent runs that race on the same row see meta.changes
+ * === 0 and skip dispatch (no double emails).
+ *
+ * Returns counts for cron logging.
+ */
+export async function notifyExpiringRevshareWindows(env: Env): Promise<{
+  warnings_sent: number;
+  partner_emails_sent: number;
+  admin_digest_sent: number;
+}> {
+  const out = { warnings_sent: 0, partner_emails_sent: 0, admin_digest_sent: 0 };
+  if (!(await ensureRevshareNotifSchema(env))) return out;
+
+  const fired: FiredWarning[] = [];
+
+  for (const threshold of REVSHARE_THRESHOLDS_DAYS) {
+    // Redemptions for which we've crossed the (365 - threshold)-day
+    // mark since `redeemed_at` but the window hasn't fully closed.
+    // The NOT EXISTS arm ensures we don't re-query rows already
+    // notified for this threshold even before INSERT OR IGNORE runs.
+    const dueRows: any = await env.DB.prepare(
+      `SELECT prr.id            AS redemption_id,
+              prr.redeemed_at   AS redeemed_at,
+              prr.partner_deal_id,
+              pd.user_id        AS partner_user_id,
+              pu.email          AS partner_email,
+              pu.name           AS partner_name,
+              ru.name           AS redeemer_name,
+              ru.email          AS redeemer_email,
+              pd.referral_code  AS referral_code
+         FROM partner_referral_redemptions prr
+         JOIN partner_deals pd ON pd.id = prr.partner_deal_id
+         LEFT JOIN users pu ON pu.id = pd.user_id
+         LEFT JOIN users ru ON ru.id = prr.redeemed_by_user_id
+        WHERE prr.attribution_kind = 'deal_sourcing_revshare'
+          AND datetime(prr.redeemed_at, '+' || ? || ' days') > datetime('now')
+          AND datetime(prr.redeemed_at, '+' || ? || ' days') <= datetime('now')
+          AND NOT EXISTS (
+            SELECT 1 FROM partner_revshare_window_notifications w
+             WHERE w.redemption_id = prr.id AND w.threshold_days = ?
+          )`,
+    ).bind(
+      REVSHARE_ATTRIBUTION_DAYS,
+      REVSHARE_ATTRIBUTION_DAYS - threshold,
+      threshold,
+    ).all().catch((e) => {
+      console.error('[partnerDeals] revshare due lookup failed', e);
+      return { results: [] };
+    });
+
+    const due: RevshareDueRow[] = (dueRows?.results || []) as RevshareDueRow[];
+    if (due.length === 0) continue;
+
+    // Lazy-import notify so this service stays free of route deps and
+    // we don't pay the import cost on the hot redemption path.
+    const { notify } = await import('./notify');
+
+    for (const row of due) {
+      // Atomic claim. If another isolate already inserted this tuple,
+      // meta.changes === 0 and we skip the notify call.
+      let claimed = false;
+      try {
+        const r: any = await env.DB.prepare(
+          `INSERT OR IGNORE INTO partner_revshare_window_notifications
+             (redemption_id, threshold_days) VALUES (?, ?)`,
+        ).bind(row.redemption_id, threshold).run();
+        const changes = r?.meta?.changes ?? r?.meta?.rows_written ?? 0;
+        claimed = Number(changes) === 1;
+      } catch (e) {
+        console.warn('[partnerDeals] revshare dedupe insert failed', row.redemption_id, threshold, e);
+      }
+      if (!claimed) continue;
+
+      const closesAt = new Date(
+        new Date(row.redeemed_at).getTime() + REVSHARE_ATTRIBUTION_DAYS * 86400_000,
+      ).toISOString();
+      const dayWord = threshold === 1 ? 'day' : 'days';
+      const redeemerLabel = row.redeemer_name || row.redeemer_email || 'a redeemer';
+      const title = `Rev-share attribution window closes in ${threshold} ${dayWord}`;
+      const body =
+        `Your 365-day attribution window for ${redeemerLabel}` +
+        (row.referral_code ? ` (referral code ${row.referral_code})` : '') +
+        ` closes in ${threshold} ${dayWord} (on ${closesAt.slice(0, 10)}). ` +
+        `Deals closed before then still earn you rev-share — see your partner portal for details.`;
+
+      out.warnings_sent += 1;
+      fired.push({
+        redemption_id: row.redemption_id,
+        threshold_days: threshold,
+        partner_user_id: row.partner_user_id,
+        partner_email: row.partner_email,
+        partner_name: row.partner_name,
+        redeemer_name: row.redeemer_name,
+        redeemer_email: row.redeemer_email,
+        referral_code: row.referral_code,
+        closes_at: closesAt,
+      });
+
+      if (row.partner_user_id) {
+        try {
+          await notify(env, {
+            userId: row.partner_user_id,
+            type: 'partner_revshare_window_closing',
+            title,
+            body,
+            link: '/partners/portal',
+            channels: ['in_app', 'email'],
+            // 'deals' bucket already exists in the notification-prefs
+            // matrix; partners can opt out from Settings → Notifications.
+            category: 'deals',
+            payload: {
+              redemption_id: row.redemption_id,
+              threshold_days: threshold,
+              closes_at: closesAt,
+              referral_code: row.referral_code,
+            },
+          });
+          if (row.partner_email) out.partner_emails_sent += 1;
+        } catch (e) {
+          console.warn('[partnerDeals] partner notify failed', row.redemption_id, e);
+        }
+      }
+    }
+  }
+
+  if (fired.length > 0) {
+    try {
+      const { sendNotificationEmail } = await import('./email');
+      const admins: any = await env.DB.prepare(
+        `SELECT id, email, name FROM users WHERE role = 'admin' AND is_active = 1`,
+      ).all().catch(() => ({ results: [] }));
+      const adminRows: Array<{ id: number; email: string; name: string | null }> =
+        (admins?.results || []) as any[];
+
+      const lines = fired.map((f) => {
+        const partner = f.partner_name || f.partner_email || `user ${f.partner_user_id}`;
+        const redeemer = f.redeemer_name || f.redeemer_email || 'unknown redeemer';
+        return `• ${partner} → ${redeemer} (${f.referral_code || 'no code'}) — ${f.threshold_days}d remaining, closes ${f.closes_at.slice(0, 10)}`;
+      });
+      const subject = `[Axal] Rev-share window warnings: ${fired.length} sent`;
+      const body =
+        `Daily rev-share attribution-window cron fired ${fired.length} warning${fired.length === 1 ? '' : 's'}:\n\n` +
+        lines.join('\n') +
+        `\n\nAdmin panel: /admin/partners`;
+
+      let sentAny = false;
+      for (const a of adminRows) {
+        if (!a.email) continue;
+        const ok = await sendNotificationEmail(env, a.email, subject, body);
+        if (ok) sentAny = true;
+      }
+      if (sentAny) out.admin_digest_sent = 1;
+    } catch (e) {
+      console.warn('[partnerDeals] admin digest send failed', e);
+    }
+  }
+
+  return out;
+}
