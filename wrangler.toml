@@ -223,6 +223,15 @@ enabled            = false
 persist            = true
 head_sampling_rate = 1
 
+# ---------- Tail consumer (top-level / default deploy target) ----------
+# `npx wrangler deploy` (no --env flag) deploys this top-level config as
+# the production `studioos` worker (see header comment). The tail
+# consumer must therefore be declared here too — env tables don't
+# inherit. Mirror under [[env.production.tail_consumers]] below for the
+# `--env production` deploy path.
+[[tail_consumers]]
+service = "studioos-tail"
+
 # ===========================================================================
 # Environment: production
 # ---------------------------------------------------------------------------
