@@ -23,14 +23,15 @@ import { test, expect, type APIRequestContext, type Page } from '@playwright/tes
  *      cloudflare-worker/src/routes/admin_partners.ts:159 returns
  *      `voided_deals` + `voided_envelopes` in the JSON body).
  *
- * Why revoke and not terminate?
- *   `terminate` only applies to deals in status='active', which
- *   requires a fully-signed envelope. We do not (and cannot)
- *   complete the signature in an e2e test without driving the
- *   external e-sign provider, so we exercise the equivalent
- *   cascade path through `revoke` (which voids the same deals +
- *   envelopes that terminate would). Terminate's tier-revoke path
- *   is independently covered by unit tests in admin_partners.ts.
+ * The terminate cascade (a separate state-machine path, only
+ * reachable AFTER the partner_msa_v1 envelope is signed) is
+ * covered by a second test in this file. That test drives the
+ * onboarding flow via the worker API (faster + deterministic),
+ * POSTs a real PNG signature to /api/legal/esign/sign/<token>
+ * — which triggers `activatePartnerDealOnSignature` and flips
+ * the deal to status='active' — then drives Terminate through
+ * the admin UI and asserts `tiers_revoked` came back true on
+ * the JSON response (admin_partners.ts:423).
  *
  * IMPORTANT — exercises real worker routes the dev FastAPI does
  * NOT host (`/api/admin/partners/*`, `/api/partner-onboard/*`,
@@ -279,5 +280,162 @@ test.describe('Partner onboarding — admin → chatbot → finalize → revoke 
       'revoke should void the in-flight deal').toBeGreaterThanOrEqual(1);
     expect(revokedBody.voided_envelopes,
       'revoke should void the just-started envelope').toBeGreaterThanOrEqual(1);
+  });
+
+  /* ================================================================ */
+  /* Terminate cascade — separate test because terminate requires the */
+  /* deal to be in status='active', which requires a fully-signed     */
+  /* partner_msa_v1 envelope. Drives the onboarding flow over the    */
+  /* worker API (faster + deterministic — the chatbot UI is already  */
+  /* exercised by the test above), POSTs a real PNG signature, and   */
+  /* asserts the terminate JSON cascade contract (tiers_revoked).    */
+  /* ================================================================ */
+
+  // 1×1 transparent PNG (smallest valid PNG that passes the
+  // SIGNATURE_DATAURL_PREFIX check + size cap in esign.ts:717).
+  const TINY_PNG_DATA_URL =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
+
+  test('admin terminate cascades on a signed (active) partner deal', async ({
+    page,
+    request,
+  }) => {
+    const recipient = uniqueRecipient();
+    await loginAsAdmin(request, page);
+
+    // ---- Drive the partner-onboarding flow via the worker API ---------
+    // (each step calls the SAME public route the wizard UI hits; the
+    // chatbot path is covered visually by the test above.)
+    const inv = await (await request.post('/api/admin/partners/invitations', {
+      data: {
+        recipient_email: recipient,
+        recipient_name: 'E2E Partner',
+        // equity_partnership grants a tier on activation so we have
+        // something for terminate to revoke.
+        allowed_deal_types: ['equity_partnership'],
+      },
+      headers: { 'content-type': 'application/json' },
+    })).json();
+    const token = inv.token as string;
+    expect(token, 'admin create returned a token').toBeTruthy();
+
+    // Profile (chatbot answers) — minimum that buildProposals expects.
+    const profileRes = await request.post(`/api/partner-onboard/${token}/profile`, {
+      data: {
+        full_name: 'E2E Partner',
+        organization: 'E2E Test LLC',
+        role_title: 'Operating Partner',
+        expertise: 'B2B SaaS GTM',
+        sectors: 'AI, Climate',
+        capacity_per_month: '5-10 hours / month',
+        motivation: 'e2e coverage',
+        raw_chat_json: { e2e: true },
+      },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(profileRes.ok(), `profile failed: ${await profileRes.text()}`).toBeTruthy();
+
+    const proposeRes = await request.post(`/api/partner-onboard/${token}/propose`, {
+      data: {},
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(proposeRes.ok()).toBeTruthy();
+    const propose = await proposeRes.json();
+    expect(propose.proposals?.length, 'at least one proposal').toBeGreaterThan(0);
+
+    const selectRes = await request.post(`/api/partner-onboard/${token}/select`, {
+      data: { proposal_id: 1 },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(selectRes.ok()).toBeTruthy();
+
+    const finalizeRes = await request.post(`/api/partner-onboard/${token}/finalize`, {
+      data: {},
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(
+      finalizeRes.ok(),
+      `finalize failed (${finalizeRes.status()}): ${await finalizeRes.text()}`,
+    ).toBeTruthy();
+    const finalize = await finalizeRes.json();
+    // signing_url is `${appUrl}/esign/<sign-token>`. Pull the sign-token.
+    const signMatch = String(finalize.signing_url || '').match(/\/esign\/([0-9a-f-]+)/i);
+    expect(signMatch, 'finalize returned a sign token').not.toBeNull();
+    const signToken = signMatch![1];
+
+    // POST the partner's signature — the recipient row has user_id IS
+    // NULL (createAndSendEnvelope was called with recipientUserId:null
+    // per partner_onboarding.ts:321), so the signer-identity gate
+    // doesn't apply and anonymous bearer access is allowed.
+    const signRes = await request.post(`/api/legal/esign/sign/${signToken}`, {
+      data: {
+        signature_data_url: TINY_PNG_DATA_URL,
+        accepted: true,
+        typed_name: 'E2E Partner',
+      },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(
+      signRes.ok(),
+      `signature submit failed (${signRes.status()}): ${await signRes.text()}`,
+    ).toBeTruthy();
+    // After this returns 2xx, esign.ts:882 has run
+    // activatePartnerDealOnSignature → partner_deals.status = 'active'.
+
+    // Sanity: the deal is now visible in the active-deals list.
+    const dealsRes = await request.get('/api/admin/partners/deals?status=active');
+    expect(dealsRes.ok()).toBeTruthy();
+    const deals = await dealsRes.json();
+    const myDeal = (deals.items || []).find(
+      (d: any) => String(d.partner_email || '').toLowerCase() === recipient.toLowerCase(),
+    );
+    expect(myDeal, 'just-signed deal should appear under status=active').toBeTruthy();
+
+    // ---- Drive Terminate from the admin UI ---------------------------
+    await page.goto('/admin/partners');
+    await page.getByRole('button', { name: /^Deals/i }).first().click();
+    // The Terminate button on the row carries a Ban icon + "Terminate" text.
+    const terminateRow = page
+      .getByRole('button', { name: /^Terminate$/i })
+      .first();
+    await expect(terminateRow).toBeVisible({ timeout: 10_000 });
+    await terminateRow.click();
+
+    await expect(
+      page.getByRole('heading', { name: /Terminate deal/i }),
+    ).toBeVisible();
+    // Reason is required — the modal disables the confirm CTA when blank.
+    await page
+      .getByPlaceholder(/Reason \(required/i)
+      .fill('e2e termination');
+
+    const terminateResponse = page.waitForResponse(
+      (r) =>
+        /\/api\/admin\/partners\/deals\/\d+\/terminate$/.test(r.url()) &&
+        r.request().method() === 'POST',
+    );
+    await page
+      .getByRole('button', { name: /^Terminate Deal$/i })
+      .click();
+    const terminated = await terminateResponse;
+    expect(
+      terminated.ok(),
+      `terminate failed (${terminated.status()}): ${await terminated.text()}`,
+    ).toBeTruthy();
+
+    // Cascade contract: tiers_revoked is true when the deal carries
+    // any granted tier (equity_partnership grants founder_pro +
+    // professional — see partnerDeals.ts:89-90), and redemptions_revoked
+    // counts downstream redeemers (zero in this fresh test).
+    const terminatedBody = await terminated.json();
+    expect(terminatedBody.ok).toBe(true);
+    expect(
+      terminatedBody.tiers_revoked,
+      'terminate should revoke the equity_partnership tier grants',
+    ).toBe(true);
+    expect(
+      typeof terminatedBody.redemptions_revoked,
+      'redemptions_revoked is part of the cascade contract',
+    ).toBe('number');
   });
 });
