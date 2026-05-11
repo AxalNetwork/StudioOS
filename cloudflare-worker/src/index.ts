@@ -692,6 +692,23 @@ export default {
             console.error('[cron] totp remediation failed', e);
           }
         }
+        // Task #7 (AM) — daily project trash sweep at 04:30 UTC. Hard-deletes
+        // projects that have been soft-deleted (deleted_at) for more than
+        // 30 days. Idempotent — short-circuits when no aged rows remain.
+        // The DELETE handler in routes/projects.ts handles the soft-delete
+        // path; this cron is the auto-purge backstop. Task #9 (AO) may
+        // adjust the schedule via wrangler.toml as needed.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 30) {
+          try {
+            const { sweepTrashedProjects } = await import('./services/projectTrash');
+            const r = await sweepTrashedProjects(env, 30);
+            if (r.scanned || r.deleted || r.failed) {
+              console.info(`[cron] project trash sweep scanned=${r.scanned} deleted=${r.deleted} failed=${r.failed}`);
+            }
+          } catch (e) {
+            console.error('[cron] project trash sweep failed', e);
+          }
+        }
         // Task #2 — HubSpot 30-minute reconcile. Drift between StudioOS
         // deal stages and HubSpot pipelines gets picked up here even when
         // webhooks are dropped. Cron fires every minute; gate on minute % 30.
