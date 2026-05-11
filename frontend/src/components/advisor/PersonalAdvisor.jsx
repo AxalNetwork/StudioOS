@@ -81,6 +81,11 @@ export default function PersonalAdvisor() {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  // Some environments (the dev FastAPI backend, older worker deploys)
+  // don't expose /api/advisor at all. We hide the whole card on 404 so
+  // the dashboard doesn't surface a scary "Not found" panel — the
+  // Personal Advisor is genuinely unavailable in those environments.
+  const [unavailable, setUnavailable] = useState(false);
 
   // Tutor mode state.
   const [tutor, setTutor] = useState(null); // { topic, text, doc_anchor, page_target, streaming }
@@ -117,6 +122,13 @@ export default function PersonalAdvisor() {
         } catch { /* non-fatal */ }
       }
     } catch (e) {
+      // 404 → endpoint not mounted in this environment (dev FastAPI
+      // backend doesn't host the advisor; worker-only feature). Hide
+      // the card silently rather than rendering a confusing error.
+      if (e?.status === 404) {
+        setUnavailable(true);
+        return;
+      }
       setLoadError(e?.message || 'Could not load advisor');
     }
   }, []);
@@ -311,6 +323,10 @@ export default function PersonalAdvisor() {
 
   // ---------- Render ------------------------------------------------------
   if (!user) return null; // anonymous: nothing to advise on yet
+  // Endpoint missing in this environment — render nothing so the
+  // dashboard slot collapses cleanly instead of showing a "Not found"
+  // tile to the user.
+  if (unavailable) return null;
 
   if (minimised) return <MinimisedBubble onOpen={() => setMinimised(false)} percent={progress.percent} />;
 
