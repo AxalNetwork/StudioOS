@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Mail, Plus, RefreshCw, Ban, Send, Copy, CheckCircle2, Clock, AlertTriangle,
-  X, Search, Handshake, ExternalLink, Loader2, ShieldAlert,
+  X, Search, Handshake, ExternalLink, Loader2, ShieldAlert, TrendingUp, Users,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
@@ -54,6 +54,9 @@ export default function PartnerInvitations() {
   const [revokeTarget, setRevokeTarget] = useState(null);
   const [terminateTarget, setTerminateTarget] = useState(null);
   const [busyIds, setBusyIds] = useState(new Set());
+  // Task #26 — admin operational counters
+  const [topDeals, setTopDeals] = useState([]);
+  const [drilldownDeal, setDrilldownDeal] = useState(null);
   const { toast, showToast } = useToast();
 
   const loadInvitations = useCallback(async () => {
@@ -70,8 +73,14 @@ export default function PartnerInvitations() {
 
   const loadDeals = useCallback(async () => {
     try {
-      const r = await api.adminPartners.listDeals(dealsStatus);
+      const [r, top] = await Promise.all([
+        api.adminPartners.listDeals(dealsStatus),
+        // Task #26 — top deals by redemptions, ranked across all statuses
+        // so admins can see the all-time leaders regardless of the filter.
+        api.adminPartners.listTopDeals({ limit: 5, status: 'all' }).catch(() => ({ items: [] })),
+      ]);
       setDeals(r.items || []);
+      setTopDeals((top.items || []).filter((d) => (d.redemptions_count || 0) > 0));
     } catch (e) {
       showToast({ kind: 'error', msg: e.message || 'Failed to load deals' });
     }
@@ -267,6 +276,33 @@ export default function PartnerInvitations() {
         </div>
       )}
 
+      {tab === 'deals' && topDeals.length > 0 && (
+        <div data-card className="mb-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp size={15} className="text-violet-600" />
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Top deals by redemptions</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {topDeals.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => setDrilldownDeal(d)}
+                className="text-left rounded-lg border border-gray-200 dark:border-gray-800 hover:border-violet-400 dark:hover:border-violet-700 p-3 bg-gray-50 dark:bg-gray-800/40 transition-colors"
+              >
+                <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{d.partner_name || d.partner_email || 'Unknown partner'}</div>
+                <div className="mt-1 flex items-baseline gap-1">
+                  <span className="text-xl font-semibold text-violet-700 dark:text-violet-300">{d.redemptions_count || 0}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-gray-500">redemptions</span>
+                </div>
+                <div className="text-[11px] text-gray-500 mt-1 font-mono truncate">{d.referral_code || '—'}</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">{String(d.deal_type || '').replace(/_/g, ' ')} · {d.status}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {tab === 'deals' && (
         <div data-card className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
           <div className="p-4 flex flex-wrap items-center gap-2 border-b border-gray-100 dark:border-gray-800">
@@ -321,7 +357,20 @@ export default function PartnerInvitations() {
                     </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{d.term_months ? `${d.term_months} mo` : '—'}</td>
                     <td className="px-4 py-3 font-mono text-xs text-violet-700 dark:text-violet-300">{d.referral_code || '—'}</td>
-                    <td className="px-4 py-3">{d.redemptions_count || 0}</td>
+                    <td className="px-4 py-3">
+                      {(d.redemptions_count || 0) > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setDrilldownDeal(d)}
+                          className="inline-flex items-center gap-1 text-violet-600 hover:text-violet-700 hover:underline"
+                          title="View redeemers"
+                        >
+                          {d.redemptions_count} <Users size={12} />
+                        </button>
+                      ) : (
+                        <span className="text-gray-400">0</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`inline-block text-[11px] px-2 py-0.5 rounded-full font-medium ${DEAL_BADGE[d.status] || 'bg-gray-100 text-gray-600'}`}>
                         {d.status}
@@ -368,6 +417,14 @@ export default function PartnerInvitations() {
             await loadInvitations();
             await loadDeals();
           }}
+          onError={(msg) => showToast({ kind: 'error', msg })}
+        />
+      )}
+
+      {drilldownDeal && (
+        <RedemptionsModal
+          deal={drilldownDeal}
+          onClose={() => setDrilldownDeal(null)}
           onError={(msg) => showToast({ kind: 'error', msg })}
         />
       )}
@@ -648,6 +705,104 @@ function TerminateModal({ deal, onClose, onDone, onError }) {
               Terminate Deal
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Task #26 — Per-deal redemption drill-down. Lists every user who has
+// redeemed the deal's referral code with date + granted tiers. For
+// `deal_sourcing_revshare` deals, also shows the per-redemption
+// attribution window remaining (365 days from intro).
+function RedemptionsModal({ deal, onClose, onError }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEscapeClose(onClose);
+  useEffect(() => {
+    let cancelled = false;
+    api.adminPartners.dealRedemptions(deal.id)
+      .then((r) => { if (!cancelled) { setData(r); setLoading(false); } })
+      .catch((e) => { if (!cancelled) { setLoading(false); onError(e.message || 'Failed to load redemptions'); } });
+    return () => { cancelled = true; };
+  }, [deal.id, onError]);
+
+  const isRevshare = (data?.deal?.deal_type || deal.deal_type) === 'deal_sourcing_revshare';
+  const items = data?.items || [];
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <Users size={16} className="text-violet-600" /> Redemptions
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {deal.partner_name || deal.partner_email || `Deal #${deal.id}`} ·
+              <span className="font-mono ml-1">{deal.referral_code || '—'}</span>
+              {isRevshare && data?.revshare_attribution_days && (
+                <span className="ml-2 text-[10px] uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                  rev-share · {data.revshare_attribution_days}d window
+                </span>
+              )}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="overflow-y-auto">
+          {loading ? (
+            <div className="p-10 text-center text-gray-400"><Loader2 size={18} className="animate-spin inline" /></div>
+          ) : items.length === 0 ? (
+            <div className="p-10 text-center text-gray-400 text-sm">No redemptions yet.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-800/50 text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <tr>
+                  <th className="text-left px-4 py-2">Redeemed by</th>
+                  <th className="text-left px-4 py-2">Date</th>
+                  <th className="text-left px-4 py-2">Granted tiers</th>
+                  {isRevshare && <th className="text-right px-4 py-2">Rev-share window</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {items.map((r) => (
+                  <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <td className="px-4 py-2.5">
+                      <div className="font-medium text-gray-900 dark:text-gray-100">{r.redeemer_name || '—'}</div>
+                      <div className="text-xs text-gray-500">{r.redeemer_email || '—'}</div>
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{fmtDate(r.redeemed_at)}</td>
+                    <td className="px-4 py-2.5 text-xs">
+                      {r.granted_tier_founder && <div>Founder: <strong>{r.granted_tier_founder}</strong></div>}
+                      {r.granted_tier_investor && <div>Investor: <strong>{r.granted_tier_investor}</strong></div>}
+                      {!r.granted_tier_founder && !r.granted_tier_investor && <span className="text-gray-400">—</span>}
+                    </td>
+                    {isRevshare && (
+                      <td className="px-4 py-2.5 text-right">
+                        {r.revshare_window_remaining_days != null ? (
+                          <span className={`text-xs font-medium ${
+                            r.revshare_window_remaining_days <= 30 ? 'text-amber-600' : 'text-emerald-600'
+                          }`}>
+                            {r.revshare_window_remaining_days > 0
+                              ? `${r.revshare_window_remaining_days}d left`
+                              : 'Closed'}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>

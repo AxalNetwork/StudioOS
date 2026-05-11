@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
-import { Handshake, DollarSign, CheckCircle, Clock, TrendingUp, PieChart, Users } from 'lucide-react';
+import { Handshake, DollarSign, CheckCircle, Clock, TrendingUp, PieChart, Users, Copy, Sparkles, ArrowRight } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
+import { useToast } from '../components/useToast';
 import InvestorQuotaBars from '../components/InvestorQuotaBars';
 
 const statusColors = {
@@ -87,6 +89,10 @@ export default function PartnerPortal() {
 
       {/* Task #7 (W-2) — investor-only quota bars (no-op for partners/admins) */}
       <InvestorQuotaBars user={user} />
+
+      {/* Task #26 — Partner deal counters widget (referral code, redemptions,
+          expiry, granted tiers). Renders only when the user has a deal. */}
+      <PartnerDealWidget />
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard icon={Handshake} label="Active Deals" value={deals.length} color="text-violet-600" />
@@ -297,6 +303,136 @@ function StatCard({ icon: Icon, label, value, color }) {
         <span className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>
       </div>
       <div className={`text-2xl font-bold ${color}`}>{value}</div>
+    </div>
+  );
+}
+
+function PartnerDealWidget() {
+  const [data, setData] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const { toast, showToast } = useToast();
+
+  useEffect(() => {
+    let cancelled = false;
+    api.partnerPortal.myDeal()
+      .then((r) => { if (!cancelled) { setData(r); setLoaded(true); } })
+      .catch((e) => { if (!cancelled) { reportError('PartnerPortal:myDeal', e); setLoaded(true); } });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!loaded || !data?.deal) return null;
+  const deal = data.deal;
+  const redemptions = data.redemptions || [];
+  const expiresAt = deal.expires_at ? new Date(deal.expires_at) : null;
+  const daysLeft = expiresAt ? Math.round((expiresAt.getTime() - Date.now()) / 86400000) : null;
+  const tiers = [
+    deal.granted_tier_founder && `Founder · ${deal.granted_tier_founder}`,
+    deal.granted_tier_investor && `Investor · ${deal.granted_tier_investor}`,
+  ].filter(Boolean);
+  const isRevshare = deal.deal_type === 'deal_sourcing_revshare';
+
+  const copy = async (text) => {
+    if (!text) return;
+    try { await navigator.clipboard.writeText(text); showToast({ kind: 'success', msg: 'Copied' }); }
+    catch { showToast({ kind: 'error', msg: 'Copy failed' }); }
+  };
+
+  return (
+    <div data-card className="mb-6 bg-white dark:bg-gray-900 border border-violet-200 dark:border-violet-900/60 rounded-xl p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Sparkles size={16} className="text-violet-600" />
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            Your partner deal
+          </h3>
+          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+            {String(deal.status).replace(/_/g, ' ')}
+          </span>
+        </div>
+        <Link to="/partners/portal" className="text-xs text-violet-600 hover:text-violet-700 inline-flex items-center gap-1">
+          Full portal <ArrowRight size={12} />
+        </Link>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="md:col-span-1">
+          <div className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Referral code</div>
+          {deal.referral_code ? (
+            <button
+              type="button"
+              onClick={() => copy(deal.referral_code)}
+              title="Copy code"
+              className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-violet-50 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-800 font-mono text-sm text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/50"
+            >
+              {deal.referral_code} <Copy size={12} />
+            </button>
+          ) : (
+            <div className="text-xs text-gray-500">Activates after signature</div>
+          )}
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Redemptions</div>
+          <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{data.redemptions_count || 0}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Deal expiry</div>
+          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {expiresAt ? expiresAt.toLocaleDateString() : '—'}
+          </div>
+          {daysLeft != null && (
+            <div className={`text-xs mt-0.5 ${daysLeft <= 30 ? 'text-amber-600' : 'text-gray-500'}`}>
+              {daysLeft > 0 ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : 'Expired'}
+            </div>
+          )}
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Granted tiers</div>
+          {tiers.length === 0 ? (
+            <div className="text-xs text-gray-500">None</div>
+          ) : (
+            <div className="flex flex-col gap-0.5 text-sm text-gray-900 dark:text-gray-100">
+              {tiers.map((t) => <span key={t}>{t}</span>)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {isRevshare && redemptions.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+          <div className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1.5">
+            Rev-share attribution windows
+          </div>
+          <ul className="text-xs space-y-1">
+            {redemptions.slice(0, 3).map((r) => (
+              <li key={r.id} className="flex items-center justify-between">
+                <span className="text-gray-700 dark:text-gray-300 truncate mr-2">
+                  {r.redeemer_name || 'Referred user'}
+                  <span className="text-gray-400 ml-1">· {new Date(r.redeemed_at).toLocaleDateString()}</span>
+                </span>
+                <span className={`font-medium ${
+                  (r.revshare_window_remaining_days ?? 0) <= 30
+                    ? 'text-amber-600'
+                    : 'text-emerald-600'
+                }`}>
+                  {r.revshare_window_remaining_days != null
+                    ? r.revshare_window_remaining_days > 0
+                      ? `${r.revshare_window_remaining_days}d window left`
+                      : 'Window closed'
+                    : '—'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-[80] px-4 py-2 rounded-lg shadow-lg text-sm font-medium ${
+          toast.kind === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'
+        }`}>
+          {typeof toast === 'string' ? toast : toast.msg}
+        </div>
+      )}
     </div>
   );
 }

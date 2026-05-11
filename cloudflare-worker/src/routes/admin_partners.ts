@@ -214,6 +214,89 @@ admin_partners.post('/invitations/:id/revoke', async (c) => {
 
 // ---------- Deals ----------
 
+// Task #26 — Top deals by referral redemptions (admin operational counter).
+// Used by the admin Partner Invitations page to surface which active deals
+// are driving the most network growth. `status` defaults to 'active'; pass
+// `status=all` to rank across every lifecycle state. `limit` is clamped 1..50.
+admin_partners.get('/deals/top', async (c) => {
+  await requireAdmin(c);
+  const limitRaw = parseInt(c.req.query('limit') || '10', 10);
+  const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 10, 1), 50);
+  const status = c.req.query('status') || 'active';
+  const where = status === 'all' ? '' : 'WHERE pd.status = ?';
+  const binds: unknown[] = status === 'all' ? [limit] : [status, limit];
+  const rows = await c.env.DB.prepare(
+    `SELECT pd.id, pd.deal_type, pd.referral_code, pd.granted_tier_founder,
+            pd.granted_tier_investor, pd.status, pd.expires_at, pd.activated_at,
+            pd.created_at, u.email AS partner_email, u.name AS partner_name,
+            (SELECT COUNT(*) FROM partner_referral_redemptions WHERE partner_deal_id = pd.id) AS redemptions_count
+       FROM partner_deals pd
+       LEFT JOIN users u ON u.id = pd.user_id
+       ${where}
+      ORDER BY redemptions_count DESC, pd.created_at DESC
+      LIMIT ?`,
+  ).bind(...binds).all();
+  return c.json({ items: rows.results || [], status, limit });
+});
+
+// Task #26 — Per-deal redemption drill-down. Lists every user who has
+// redeemed this deal's referral code, with the date and granted tiers.
+// For `deal_sourcing_revshare` deals, each redemption also returns
+// `revshare_window_remaining_days` — days left in the 365-day attribution
+// window measured from the redemption date (intro). Returns 0 once expired.
+admin_partners.get('/deals/:id/redemptions', async (c) => {
+  await requireAdmin(c);
+  const id = parseInt(c.req.param('id'), 10);
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
+  const deal: any = await c.env.DB.prepare(
+    `SELECT pd.id, pd.deal_type, pd.referral_code, pd.expires_at, pd.status,
+            pd.granted_tier_founder, pd.granted_tier_investor,
+            u.email AS partner_email, u.name AS partner_name
+       FROM partner_deals pd
+       LEFT JOIN users u ON u.id = pd.user_id
+      WHERE pd.id = ?`,
+  ).bind(id).first();
+  if (!deal) return c.json({ error: 'Deal not found' }, 404);
+
+  const rows = await c.env.DB.prepare(
+    `SELECT prr.id, prr.redeemed_at, prr.granted_tier_founder, prr.granted_tier_investor,
+            prr.granted_until, prr.attribution_kind,
+            u.id AS user_id, u.name AS redeemer_name, u.email AS redeemer_email
+       FROM partner_referral_redemptions prr
+       LEFT JOIN users u ON u.id = prr.redeemed_by_user_id
+      WHERE prr.partner_deal_id = ?
+      ORDER BY prr.redeemed_at DESC LIMIT 500`,
+  ).bind(id).all();
+
+  const isRevshare = String(deal.deal_type) === 'deal_sourcing_revshare';
+  const ATTRIBUTION_DAYS = 365;
+  const now = Date.now();
+  const items = (rows.results || []).map((r: any) => {
+    let revshareWindowRemainingDays: number | null = null;
+    if (isRevshare && r.redeemed_at) {
+      const t = new Date(r.redeemed_at).getTime();
+      if (Number.isFinite(t)) {
+        const end = t + ATTRIBUTION_DAYS * 86400 * 1000;
+        revshareWindowRemainingDays = Math.max(0, Math.ceil((end - now) / 86400000));
+      }
+    }
+    return { ...r, revshare_window_remaining_days: revshareWindowRemainingDays };
+  });
+
+  return c.json({
+    deal: {
+      id: deal.id, deal_type: deal.deal_type, referral_code: deal.referral_code,
+      expires_at: deal.expires_at, status: deal.status,
+      granted_tier_founder: deal.granted_tier_founder,
+      granted_tier_investor: deal.granted_tier_investor,
+      partner_email: deal.partner_email, partner_name: deal.partner_name,
+    },
+    items,
+    redemptions_count: items.length,
+    revshare_attribution_days: isRevshare ? ATTRIBUTION_DAYS : null,
+  });
+});
+
 admin_partners.get('/deals', async (c) => {
   await requireAdmin(c);
   const status = c.req.query('status') || 'active';

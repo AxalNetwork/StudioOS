@@ -37,14 +37,35 @@ portal.get('/my-deal', async (c) => {
   const redCountRow: any = await c.env.DB.prepare(
     `SELECT COUNT(*) AS n FROM partner_referral_redemptions WHERE partner_deal_id = ?`,
   ).bind(deal.id).first();
-  const redemptions = await c.env.DB.prepare(
+  const redemptionRows = await c.env.DB.prepare(
     `SELECT prr.id, prr.redeemed_at, prr.granted_tier_founder, prr.granted_tier_investor,
+            prr.attribution_kind, prr.granted_until,
             u.name AS redeemer_name
        FROM partner_referral_redemptions prr
        LEFT JOIN users u ON u.id = prr.redeemed_by_user_id
       WHERE prr.partner_deal_id = ?
       ORDER BY prr.redeemed_at DESC LIMIT 50`,
   ).bind(deal.id).all();
+
+  // Task #26 — For deal_sourcing_revshare deals, surface a per-redemption
+  // "attribution window remaining" counter (365 days from intro). Plain
+  // referral deals just get null so the UI can hide it.
+  const isRevshare = String(deal.deal_type) === 'deal_sourcing_revshare';
+  const ATTRIBUTION_DAYS = 365;
+  const nowMs = Date.now();
+  const redemptions = {
+    results: (redemptionRows.results || []).map((r: any) => {
+      let revshareWindowRemainingDays: number | null = null;
+      if (isRevshare && r.redeemed_at) {
+        const t = new Date(r.redeemed_at).getTime();
+        if (Number.isFinite(t)) {
+          const end = t + ATTRIBUTION_DAYS * 86400 * 1000;
+          revshareWindowRemainingDays = Math.max(0, Math.ceil((end - nowMs) / 86400000));
+        }
+      }
+      return { ...r, revshare_window_remaining_days: revshareWindowRemainingDays };
+    }),
+  };
 
   // Task #9 (X-2) — derive concrete next milestones for the portal UI.
   // Each entry is independently displayable: { id, title, hint,
@@ -118,6 +139,7 @@ portal.get('/my-deal', async (c) => {
     deal: { ...deal, proposal: safeJsonObject(deal.proposal_json), proposal_json: undefined },
     redemptions_count: redemptionsCount,
     redemptions: redemptions.results || [],
+    revshare_attribution_days: isRevshare ? ATTRIBUTION_DAYS : null,
     next_milestones: milestones,
   });
 });

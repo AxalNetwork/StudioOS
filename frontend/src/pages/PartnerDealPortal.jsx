@@ -172,7 +172,19 @@ export default function PartnerDealPortal() {
                         {r.granted_tier_investor && <span>Investor: {r.granted_tier_investor}</span>}
                       </div>
                     </div>
-                    <div className="text-xs text-gray-500">{new Date(r.redeemed_at).toLocaleDateString()}</div>
+                    <div className="text-right">
+                      <div className="text-xs text-gray-500">{new Date(r.redeemed_at).toLocaleDateString()}</div>
+                      {/* Task #26 — revshare attribution window remaining */}
+                      {r.revshare_window_remaining_days != null && (
+                        <div className={`text-[11px] font-medium mt-0.5 ${
+                          r.revshare_window_remaining_days <= 30 ? 'text-amber-600' : 'text-emerald-600'
+                        }`}>
+                          {r.revshare_window_remaining_days > 0
+                            ? `${r.revshare_window_remaining_days}d rev-share left`
+                            : 'Rev-share window closed'}
+                        </div>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>

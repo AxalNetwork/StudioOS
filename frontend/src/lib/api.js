@@ -282,6 +282,16 @@ export const api = {
       request(`/admin/partners/deals?status=${encodeURIComponent(status)}`),
     terminateDeal: (id, reason) =>
       request(`/admin/partners/deals/${id}/terminate`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    // Task #26 — operational counters
+    listTopDeals: (opts = {}) => {
+      const q = new URLSearchParams();
+      if (opts.limit) q.set('limit', String(opts.limit));
+      if (opts.status) q.set('status', opts.status);
+      const qs = q.toString();
+      return request(`/admin/partners/deals/top${qs ? `?${qs}` : ''}`);
+    },
+    dealRedemptions: (id) =>
+      request(`/admin/partners/deals/${encodeURIComponent(id)}/redemptions`),
   },
   // Task #9 (X-2) — Public token-gated partner onboarding flow.
   partnerOnboard: {
