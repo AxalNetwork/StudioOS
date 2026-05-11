@@ -6,6 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:drift": "node scripts/check-api-drift.mjs",
+    "test:e2e": "playwright test",
     "build": "cd frontend && npm run build",
     "deploy": "wrangler deploy --env production",
     "deploy:preview": "wrangler deploy --env preview",
@@ -35,6 +36,7 @@
     "vite": "^8.0.11"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.0",
     "wrangler": "~4.88.0"
   }
 }
