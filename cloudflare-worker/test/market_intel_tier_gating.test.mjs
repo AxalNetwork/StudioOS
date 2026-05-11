@@ -119,6 +119,11 @@ test('GET /citations honours `since` param + returns ingest timestamp', async ()
     'citations handler must read the `since` query param');
   assert.match(src, /created_at\s+AS\s+ingested_at/,
     'citations handler must surface the ingest timestamp from created_at');
+  // SQLite TEXT compare across `YYYY-MM-DD HH:MM:SS` (datetime('now'))
+  // and ISO `YYYY-MM-DDTHH:MM:SS.sssZ` is unsafe — both sides must
+  // be wrapped in datetime() so the compare normalizes correctly.
+  assert.match(src, /datetime\(created_at\)\s*>=\s*datetime\(\?\)/,
+    'citations `since` filter must wrap both sides in datetime() to avoid TEXT-format mismatches');
 });
 
 /* ------------------------------------------------------------------ */

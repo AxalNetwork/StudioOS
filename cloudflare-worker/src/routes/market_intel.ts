@@ -389,16 +389,21 @@ marketIntel.get('/citations', async (c) => {
   // Citations tab UX expectation of "what's new since I last looked".
   // The ORDER BY stays on `ts` so the most recently *observed* metric
   // surfaces first — ingest can lag observation by minutes.
+  // SQLite stores `created_at` as `YYYY-MM-DD HH:MM:SS` (datetime('now'))
+  // while ISO `cutoff` uses the `T` separator with milliseconds + `Z`.
+  // Lexical TEXT compare on those two formats is unsafe — wrap both
+  // sides in `datetime(...)` so the comparison normalizes to the
+  // canonical Julian-day form. Same treatment for ts handling.
   const rows = sector
     ? (await c.env.DB.prepare(
         `SELECT source_key, sector, metric_key, metric_value, ts, created_at AS ingested_at, citation_url
-           FROM market_intel_rows WHERE created_at >= ? AND sector = ?
-           ORDER BY ts DESC LIMIT ?`
+           FROM market_intel_rows WHERE datetime(created_at) >= datetime(?) AND sector = ?
+           ORDER BY datetime(ts) DESC LIMIT ?`
       ).bind(cutoff, sector, limit).all<CitationRow>()).results
     : (await c.env.DB.prepare(
         `SELECT source_key, sector, metric_key, metric_value, ts, created_at AS ingested_at, citation_url
-           FROM market_intel_rows WHERE created_at >= ?
-           ORDER BY ts DESC LIMIT ?`
+           FROM market_intel_rows WHERE datetime(created_at) >= datetime(?)
+           ORDER BY datetime(ts) DESC LIMIT ?`
       ).bind(cutoff, limit).all<CitationRow>()).results;
   return c.json({ rows: rows || [], since: cutoff });
 });
