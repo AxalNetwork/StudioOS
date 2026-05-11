@@ -51,6 +51,28 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        // FastAPI emits 307 redirects with an ABSOLUTE Location header
+        // (e.g. `Location: https://localhost:8000/api/projects/`) when a
+        // request hits a route declared as `@router.get("/")` without the
+        // trailing slash. Following that absolute URL takes the user's
+        // browser to `localhost:8000` (unreachable from the browser),
+        // which surfaces as a "500 / Internal server error" in the UI.
+        // Strip scheme+host from any Location pointing back at the
+        // upstream so the browser follows the redirect through the
+        // Replit proxy on the same origin.
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            const loc = proxyRes.headers && proxyRes.headers.location;
+            if (typeof loc === 'string') {
+              try {
+                const u = new URL(loc);
+                if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
+                  proxyRes.headers.location = u.pathname + u.search + u.hash;
+                }
+              } catch { /* not an absolute URL — leave it alone */ }
+            }
+          });
+        },
       },
     },
   },
