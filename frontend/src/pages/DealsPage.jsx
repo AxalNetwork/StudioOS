@@ -92,7 +92,7 @@ export default function DealsPage() {
 
   useEffect(() => {
     loadDeals();
-  }, []);
+  }, [canSeeRisk]);
 
   const loadDeals = async () => {
     try {
