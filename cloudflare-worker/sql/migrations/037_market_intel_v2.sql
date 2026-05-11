@@ -1,18 +1,19 @@
 -- Task #5 (AK) — Market Intelligence v2 schema verification.
 --
--- This is an IDEMPOTENT consolidation that re-asserts every table the
--- Market Intelligence sub-tabs + investor-signals surfaces depend on.
--- The individual table-creation migrations (009, 030, 031, 032) shipped
--- earlier; this file exists so a fresh D1 (or a partially-applied env)
--- can `wrangler d1 execute … --file=037…` once and have every column +
--- index the routes touch present.
+-- FULLY IDEMPOTENT consolidation that re-asserts every table the Market
+-- Intelligence sub-tabs + investor-signals surfaces depend on. Every
+-- statement is `CREATE … IF NOT EXISTS` so a re-run on a fully-migrated
+-- DB is a complete no-op (no aborted files, no duplicate-column errors).
 --
--- Every CREATE is `IF NOT EXISTS`. ALTER TABLE statements are split out
--- below and may report `duplicate column` on a fully-applied DB — that
--- is EXPECTED; D1 rolls back the file on the first failed statement
--- but the worker's lazy schema-bootstrap helpers
--- (services/market_intel/schema.ts and the ensureSchema() in
--- routes/investor_signals.ts) self-heal on next request.
+-- Additive columns added by 031 (`market_intel_watchlist.last_sent_at`
+-- + friends) and 032 (`users.mi_digest_paused_until`) are intentionally
+-- NOT re-asserted here — `ALTER TABLE … ADD COLUMN` is not natively
+-- idempotent in D1 and would abort the file. They are bootstrapped at
+-- request time by `services/market_intel/schema.ts`
+-- (`ensureMarketIntelSchema`, called by the `/api/market-intel/*`
+-- middleware), which wraps each ALTER in a try/catch that swallows
+-- `duplicate column`. That helper is the single source of truth for
+-- those columns.
 
 -- ---- Aggregator observation rows ----------------------------------------
 CREATE TABLE IF NOT EXISTS market_intel_rows (
@@ -108,15 +109,7 @@ CREATE TABLE IF NOT EXISTS investor_signals_snapshots (
 CREATE INDEX IF NOT EXISTS idx_investor_signals_snapshots_computed_at
   ON investor_signals_snapshots(computed_at DESC);
 
--- ---- ALTERs (run last; first duplicate-column will abort the rest) ------
--- Digest bookkeeping (originally added in 031). On an already-migrated DB
--- the first ALTER below will fail with `duplicate column name`, which
--- aborts the remainder of THIS file — that's why every CREATE above is
--- ordered first. The lazy schema bootstrap in
--- services/market_intel/schema.ts also adds these columns on demand so
--- workers serving a stale D1 self-heal at request time.
-ALTER TABLE market_intel_watchlist ADD COLUMN last_sent_at TEXT;
-ALTER TABLE market_intel_watchlist ADD COLUMN last_period_key TEXT;
-ALTER TABLE market_intel_watchlist ADD COLUMN last_composite REAL;
-CREATE INDEX IF NOT EXISTS idx_mi_watch_cadence_sent
-  ON market_intel_watchlist(cadence, last_sent_at);
+-- NOTE: digest-bookkeeping columns (`last_sent_at`, `last_period_key`,
+-- `last_composite`) and the `idx_mi_watch_cadence_sent` index are
+-- bootstrapped by `services/market_intel/schema.ts` at request time —
+-- see header comment for rationale (D1 ALTERs are not idempotent).

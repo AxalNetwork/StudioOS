@@ -13,10 +13,25 @@
  * { n: null, reason: 'insufficient_data' } — never raw counts.
  */
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { getSQL } from '../db';
 import { hashEmail } from '../util/hashEmail';
+import { effectiveInvestorTier, type InvestorUser } from '../middleware/requireInvestorTier';
+import type { TierUser } from '../middleware/requireTier';
+
+type MIUser = User & Partial<TierUser> & Partial<InvestorUser>;
+const FULL_LENS_BYPASS_ROLES = ['admin', 'partner', 'mentor'] as const;
+function callerHasFullLens(user: MIUser | null | undefined): boolean {
+  if (!user) return false;
+  if ((FULL_LENS_BYPASS_ROLES as readonly string[]).includes(String(user.role))) return true;
+  if (user.role === 'investor') {
+    const t = effectiveInvestorTier(user as InvestorUser);
+    return t === 'professional' || t === 'institutional';
+  }
+  const tier = String(user.subscription_tier ?? 'free').toLowerCase();
+  return tier === 'growth' || tier === 'studio';
+}
 
 export const investorProfile = new Hono<{ Bindings: Env }>();
 export const investorSignals = new Hono<{ Bindings: Env }>();
@@ -279,9 +294,20 @@ investorProfile.post('/me/opt-out', async (c) => {
 // labels (case-insensitive). When a filter param is omitted that
 // dimension is returned unfiltered. K-anonymity masking from the
 // aggregator is preserved — we never re-derive counts here, just slice.
+//
+// TIER GATE: the spec requires Free callers to see only the
+// sector-compass overview. Investors below 'professional' tier and
+// founders without growth/studio entitlement get 402; admin / partner /
+// mentor bypass via the same `callerHasFullLens` predicate that the
+// Market-Intel lens routes use, so behaviour is symmetric across the
+// seven sub-tabs. The pre-existing `/latest` endpoint stays open to all
+// authenticated callers (it shipped that way in Task #4) — gating only
+// the new filtered surface keeps backward compat for the current UI.
 investorSignals.get('/', async (c) => {
   const user = await requireAuth(c);
-  void user;
+  if (!callerHasFullLens(user)) {
+    return c.json({ error: 'tier_required', required: 'growth' }, 402);
+  }
   await ensureSchema(c.env);
   const sectorFilter = (c.req.query('sector') || '').trim().toLowerCase();
   const stageFilter  = (c.req.query('stage')  || '').trim().toLowerCase();

@@ -794,11 +794,20 @@ export default {
         //   • weekly sources   → Sunday 02:45 UTC (UTC day 0)
         //   • recomputeIndexes → 03:15 UTC nightly (after daily runs settle)
         try {
-          const { runSourcesByCadence, recomputeIndexes } = await import('./services/market_intel/aggregator');
+          const { runSourcesByCadence, recomputeIndexes, runFreeConnectors } = await import('./services/market_intel/aggregator');
           await import('./services/market_intel/sources'); // ensures registerSource() ran
           if (now.getUTCMinutes() === 0) {
             const r = await runSourcesByCadence(env, 'hourly');
             if (r.scanned) console.info(`[cron] mi hourly scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
+          }
+          // Task #5 (AK) — every 6h, run the FREE connectors only at :05
+          // past the boundary (00:05, 06:05, 12:05, 18:05). This keeps
+          // free sources flowing on the spec'd cadence without burning
+          // paid quota — paid sources still run via runSourcesByCadence
+          // on their own (hourly/daily/weekly) cron above.
+          if ([0, 6, 12, 18].includes(now.getUTCHours()) && now.getUTCMinutes() === 5) {
+            const r = await runFreeConnectors(env, 'hourly');
+            if (r.scanned) console.info(`[cron] mi free-connectors-6h scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
           }
           if (now.getUTCHours() === 2 && now.getUTCMinutes() === 30) {
             const r = await runSourcesByCadence(env, 'daily');
