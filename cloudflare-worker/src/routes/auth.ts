@@ -242,16 +242,19 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   // Cron in index.ts at 04:25 UTC downgrades expired trials to free.
   if (role === 'investor') {
     try {
-      const { ensureInvestorPaywallSchema } = await import('../middleware/requireInvestorTier');
+      // Task #43 — source dealroom cap from INVESTOR_QUOTAS so the trial
+      // initialisation tracks the canonical professional cap (still 5,
+      // but no longer a magic number that drifts from the constant).
+      const { ensureInvestorPaywallSchema, INVESTOR_QUOTAS } = await import('../middleware/requireInvestorTier');
       await ensureInvestorPaywallSchema(c.env);
       const trialEnds = new Date(Date.now() + 14 * 86400 * 1000).toISOString();
       await c.env.DB.prepare(
         `UPDATE users SET investor_tier = 'professional',
                            investor_subscription_status = 'trialing',
                            investor_trial_ends_at = ?,
-                           investor_dealroom_max = 5
+                           investor_dealroom_max = ?
          WHERE id = ?`
-      ).bind(trialEnds, user.id).run();
+      ).bind(trialEnds, INVESTOR_QUOTAS.professional.dealroom_max, user.id).run();
     } catch (e) { console.error('[auth] investor trial init failed', e); }
   }
   // Task #3 (Y-1) — Trust Center: seed role-conditional obligations the

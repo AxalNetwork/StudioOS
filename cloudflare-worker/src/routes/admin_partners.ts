@@ -18,6 +18,11 @@ import { requireAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { sendPartnerInvitationEmail } from '../services/email';
 import { ALL_PARTNER_DEAL_TYPES, type PartnerDealType } from '../services/partnerDeals';
+// Task #43 — revocation paths must drop investor_dealroom_max to the
+// free-tier cap, not the hardcoded `5` (which is the *professional* cap).
+// Sourcing the value from INVESTOR_QUOTAS keeps the column in sync with
+// the user's actual tier even if the free cap shifts later.
+import { INVESTOR_QUOTAS } from '../middleware/requireInvestorTier';
 
 const admin_partners = new Hono<{ Bindings: Env }>();
 
@@ -367,11 +372,11 @@ admin_partners.post('/deals/:id/terminate', async (c) => {
           `UPDATE users SET investor_tier = 'free',
                               investor_subscription_status = 'partner_revoked',
                               investor_subscription_renews_at = NULL,
-                              investor_dealroom_max = 5
+                              investor_dealroom_max = ?
              WHERE id = ?
                AND investor_tier = ?
                AND investor_subscription_status = 'partner_grant'`,
-        ).bind(deal.user_id, deal.granted_tier_investor).run();
+        ).bind(INVESTOR_QUOTAS.free.dealroom_max, deal.user_id, deal.granted_tier_investor).run();
       } catch (e) { console.warn('[admin_partners] revoke investor tier failed', e); }
     }
   }
@@ -404,11 +409,11 @@ admin_partners.post('/deals/:id/terminate', async (c) => {
           `UPDATE users SET investor_tier = 'free',
                               investor_subscription_status = 'partner_revoked',
                               investor_subscription_renews_at = NULL,
-                              investor_dealroom_max = 5
+                              investor_dealroom_max = ?
              WHERE id = ?
                AND investor_tier = ?
                AND investor_subscription_status = 'partner_referral'`,
-        ).bind(r.redeemed_by_user_id, r.granted_tier_investor).run();
+        ).bind(INVESTOR_QUOTAS.free.dealroom_max, r.redeemed_by_user_id, r.granted_tier_investor).run();
         if ((u.meta?.changes || 0) > 0) redemptionsRevoked += 1;
       }
     }

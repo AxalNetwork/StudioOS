@@ -12,6 +12,11 @@
  */
 import type { Env } from '../types';
 import { hashEmail } from '../util/hashEmail';
+// Task #43 — single source of truth for the per-tier dealroom cap. Used
+// in the expirePartnerDeals revocation paths below; the synchronous
+// activate/redeem grant paths still import dynamically because they
+// also need ensureInvestorPaywallSchema in the same await.
+import { INVESTOR_QUOTAS } from '../middleware/requireInvestorTier';
 
 export type PartnerDealType =
   | 'equity_partnership'
@@ -299,9 +304,14 @@ export async function activatePartnerDealOnSignature(
   }
   if (grantedInvestor) {
     try {
-      const { ensureInvestorPaywallSchema } = await import('../middleware/requireInvestorTier');
+      // Task #43 — single-source the dealroom cap from INVESTOR_QUOTAS
+      // instead of the local `institutional ? 999 : 5` ternary so the
+      // grant column tracks the canonical per-tier cap (and matches the
+      // billing-flow paths in routes/billing.ts that already do this).
+      const { ensureInvestorPaywallSchema, INVESTOR_QUOTAS } = await import('../middleware/requireInvestorTier');
       await ensureInvestorPaywallSchema(env);
-      const dealroomMax = grantedInvestor === 'institutional' ? 999 : 5;
+      const investorTier = grantedInvestor as 'free' | 'professional' | 'institutional';
+      const dealroomMax = INVESTOR_QUOTAS[investorTier].dealroom_max;
       await env.DB.prepare(
         `UPDATE users SET investor_tier = ?, investor_subscription_status = 'partner_grant',
                           investor_subscription_renews_at = ?, investor_dealroom_max = ?
@@ -493,9 +503,11 @@ export async function redeemPartnerReferralCode(
   }
   if (deal.granted_tier_investor) {
     try {
-      const { ensureInvestorPaywallSchema } = await import('../middleware/requireInvestorTier');
+      // Task #43 — same INVESTOR_QUOTAS sourcing as the grant path above.
+      const { ensureInvestorPaywallSchema, INVESTOR_QUOTAS } = await import('../middleware/requireInvestorTier');
       await ensureInvestorPaywallSchema(env);
-      const dealroomMax = deal.granted_tier_investor === 'institutional' ? 999 : 5;
+      const investorTier = deal.granted_tier_investor as 'free' | 'professional' | 'institutional';
+      const dealroomMax = INVESTOR_QUOTAS[investorTier].dealroom_max;
       await env.DB.prepare(
         `UPDATE users SET investor_tier = ?, investor_subscription_status = 'partner_referral',
                           investor_subscription_renews_at = ?, investor_dealroom_max = ?
@@ -574,11 +586,11 @@ export async function expirePartnerDeals(env: Env): Promise<{
           `UPDATE users SET investor_tier = 'free',
                               investor_subscription_status = 'partner_expired',
                               investor_subscription_renews_at = NULL,
-                              investor_dealroom_max = 5
+                              investor_dealroom_max = ?
              WHERE id = ?
                AND investor_tier = ?
                AND investor_subscription_status = 'partner_grant'`,
-        ).bind(d.user_id, d.granted_tier_investor).run();
+        ).bind(INVESTOR_QUOTAS.free.dealroom_max, d.user_id, d.granted_tier_investor).run();
         if ((r.meta?.changes || 0) > 0) investorRevoked += 1;
       }
 
@@ -605,11 +617,11 @@ export async function expirePartnerDeals(env: Env): Promise<{
             `UPDATE users SET investor_tier = 'free',
                                 investor_subscription_status = 'partner_expired',
                                 investor_subscription_renews_at = NULL,
-                                investor_dealroom_max = 5
+                                investor_dealroom_max = ?
                WHERE id = ?
                  AND investor_tier = ?
                  AND investor_subscription_status = 'partner_referral'`,
-          ).bind(r.redeemed_by_user_id, r.granted_tier_investor).run();
+          ).bind(INVESTOR_QUOTAS.free.dealroom_max, r.redeemed_by_user_id, r.granted_tier_investor).run();
           if ((u.meta?.changes || 0) > 0) redemptionsRevoked += 1;
         }
       }
