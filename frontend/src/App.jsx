@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import PersonalAssistant from './components/PersonalAssistant';
 import SpinoutLabListener from './components/SpinoutLabListener';
+import SafeMount from './components/SafeMount';
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
@@ -933,9 +934,15 @@ export default function App() {
     <AuthProvider>
       <SettingsProvider>
         <AppInner />
-        <SpinoutLabListener />
-        <GlobalAssistantMount />
-        <GlobalPaywallMount />
+        {/* Task #28 — global "always-on" mounts live OUTSIDE <Routes>,
+            so a render-time throw inside any of them blanks the entire
+            app (every route, including /login). Wrap each in a
+            SafeMount error boundary so a regression in one widget
+            degrades to "that one widget is missing" instead of "the
+            whole app is gone". */}
+        <SafeMount name="SpinoutLabListener"><SpinoutLabListener /></SafeMount>
+        <SafeMount name="GlobalAssistantMount"><GlobalAssistantMount /></SafeMount>
+        <SafeMount name="GlobalPaywallMount"><GlobalPaywallMount /></SafeMount>
       </SettingsProvider>
     </AuthProvider>
   );
