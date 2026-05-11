@@ -372,11 +372,17 @@ investorSignals.get('/', async (c) => {
 
 investorSignals.get('/latest', async (c) => {
   const user = await requireAuth(c);
+  // Task #5 (AK) — Investor Signals is a paid sub-tab; Free tier sees
+  // only the sector-compass overview. Gate `/latest` with the same
+  // predicate the filtered GET / uses so the alias mount under
+  // /api/market-intel/investor-signals is symmetric. K-anonymity
+  // already masks individual cells, but the spec entitles only
+  // growth+/professional+ callers (admin/partner/mentor bypass) to
+  // read this surface at all.
+  if (!callerHasFullLens(user)) {
+    return c.json({ error: 'tier_required', required: 'growth' }, 402);
+  }
   await ensureSchema(c.env);
-  // Investor Signals are visible to every authenticated role — the data is
-  // already k-anonymized so there's no marginal disclosure risk. Founders
-  // looking at "where investor demand is" is the whole point.
-  void user;
 
   const latest = await c.env.DB.prepare(
     `SELECT computed_at, n_total, payload_json FROM investor_signals_snapshots
