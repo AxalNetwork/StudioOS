@@ -1,0 +1,49 @@
+Objective
+  Admin > Contracts: Sent / Pending / Signed / Voided / Pairwise / Partner
+  Deals all empty. Admin > Integration Keys: every sub-tab (Overview,
+  Users, Financial, Technical, Management) errors. Fix both.
+
+Part 1 — Contracts union
+  Apply the fix already detailed in Prompt C / Z and verify in
+  production:
+    Admin > Contracts reads `documents` UNION `esign_envelopes`. List,
+    detail, stats, download, resend, void all use the union mapping.
+  Add filter chips and tabs:
+    Sent / Pending / Signed / Voided / Pairwise NDAs / Partner Deals
+  The two new tabs read from the new tables (pairwise_ndas,
+  partner_deals).
+  Wire the new doc_type taxonomy (investor_nda_axal,
+  mentor_nda_axal, partner_*, nda_3way_founder_investor_axal,
+  finders_fee_intro_agreement, …) into the friendly-label map and the
+  filter dropdown.
+
+Part 2 — Integration Keys
+  The user's Admin Console has an "Integration Keys" panel with five
+  sub-tabs (Overview, Users, Financial, Technical, Management) that
+  return errors. This panel is actually two things mixed together:
+    a) Integration keys/credentials administration (provider tokens
+       admin can rotate)
+    b) User Analytics tabs (Overview/Users/Financial/Technical/
+       Management) — these belong on Monitoring > User Analytics
+       (Prompt AJ)
+
+  Resolve the confusion:
+    - On the Admin page, rename the panel to "Integration Keys" and
+      remove the analytics sub-tabs from it. The analytics view lives
+      in Monitoring (Prompt AJ).
+    - Keep Integration Keys as: list of providers + admin's stored
+      OAuth client ids + webhook secrets, with Rotate / Revoke
+      actions. Endpoints:
+        GET    /api/admin/integration-keys
+        PUT    /api/admin/integration-keys/:provider
+        POST   /api/admin/integration-keys/:provider/rotate
+        POST   /api/admin/integration-keys/:provider/test
+      Behind requireAdmin + requireCfAccess. Values stored encrypted
+      via column cipher (Prompt B).
+
+Acceptance
+  - All Contracts tabs render real data with the new doc_type labels.
+  - Pairwise NDAs and Partner Deals tabs render their tables.
+  - Integration Keys panel renders, Rotate / Test buttons work, no
+    sub-tabs (analytics moved out).
+  - Non-admin or non-Cf-Access requests cleanly 403.

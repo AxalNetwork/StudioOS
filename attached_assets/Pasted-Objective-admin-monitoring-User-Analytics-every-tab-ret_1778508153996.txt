@@ -1,0 +1,54 @@
+Objective
+  /admin/monitoring User Analytics: every tab returns "Couldn't load
+  (404)". Recent Exports also 404. Land the endpoints + Cloudflare
+  Analytics Engine binding.
+
+Tasks
+  1. wrangler.toml: add Analytics Engine binding
+       [[analytics_engine_datasets]]
+       binding = "ANALYTICS"
+       dataset = "studioos_metrics"
+
+  2. cloudflare-worker/src/middleware/analytics.ts
+       Global middleware that writes one row per request:
+         { ts, route, status, duration_ms, user_id, role, tier }
+       Apply via app.use('*', analytics()).
+
+  3. cloudflare-worker/src/routes/monitoring.ts (add sub-router)
+       GET  /api/monitoring/analytics/overview?from=&to=
+       GET  /api/monitoring/analytics/users?role=&tier=&search=&limit=&offset=
+       GET  /api/monitoring/analytics/user/:id
+       GET  /api/monitoring/analytics/financial?from=&to=
+       GET  /api/monitoring/analytics/technical?from=&to=
+       GET  /api/monitoring/analytics/management?from=&to=
+       GET  /api/monitoring/analytics/exports/recent
+       POST /api/monitoring/analytics/export
+            body { report, format: 'csv'|'pdf', from, to, filters }
+            → { download_url } (R2 24h gated URL)
+       All require requireAdmin + requireCfAccess.
+
+  4. Data sources
+       Workers Analytics Engine for request-level metrics; D1 for
+       business metrics (users, projects, deals, billing,
+       esign_envelopes, tickets). Precompute daily snapshots into
+       `analytics_snapshots(date, metric_key, value)` via a cron
+       trigger so /overview returns in <200ms.
+
+  5. PDF export via Cloudflare Browser Rendering binding (add
+     [browser] to wrangler.toml). Render a React PDF template with
+     Axal-VC branding (see Prompt D5). CSV export streamed inline.
+
+  6. admin_audit_log every export with admin_user_id, report_type,
+     filters_json, exported_at, download_url.
+
+  7. Frontend (frontend/src/pages/MonitoringPage.jsx)
+       Wrap every fetch in try/catch with inline error cards instead
+       of generic toasts. Render skeletons during load. Show "No data
+       for this range" pill on empty success. Disable Export buttons
+       while loading.
+
+Acceptance
+  - Every Analytics sub-tab renders real numbers.
+  - Recent Exports list shows last 20 exports.
+  - CSV + PDF export work; PDF is Axal-branded.
+  - Non-admin → 403.

@@ -1,0 +1,68 @@
+We're shipping 10 sequential PRs to eliminate every "Not found", 500, and
+broken sub-section the user is seeing.
+
+Before you write a single line of code in any PR, you MUST collect the
+following tokens/secrets from the user. Open a chat message titled
+"Required tokens & secrets" and ask the user for each one below. Stop and
+wait for the user to paste them; do not generate placeholders.
+
+GitHub
+  GH_PAT  — fine-grained PAT scoped to AxalNetwork/StudioOS with
+            contents:rw, pull-requests:rw, issues:rw, workflows:rw
+
+Cloudflare
+  CF_ACCOUNT_ID
+  CF_API_TOKEN              with Workers Scripts:Edit, D1:Edit, KV:Edit,
+                             R2:Edit, Queues:Edit, Analytics:Read,
+                             Browser Rendering:Edit, Access:Read
+  CF_ZONE_ID                for app.axal.vc (used by WAF, Transform Rules)
+
+Worker secrets (the user will run `wrangler secret put NAME` for each;
+                ask which the user already has and which need to be
+                generated)
+  JWT_SECRET                64-byte hex; openssl rand -hex 48
+  SCORING_HMAC_SECRET
+  PII_KEK_HEX               32-byte hex AES-GCM master key
+  R2_KEK_HEX                32-byte hex
+  STRIPE_SECRET_KEY
+  STRIPE_WEBHOOK_SECRET
+  STRIPE_PRICE_FOUNDER_GROWTH_MONTHLY / _ANNUAL
+  STRIPE_PRICE_FOUNDER_STUDIO_MONTHLY / _ANNUAL
+  STRIPE_PRICE_INVESTOR_PRO_MONTHLY  / _ANNUAL
+  STRIPE_PRICE_INVESTOR_INST_MONTHLY / _ANNUAL
+  STRIPE_ATLAS_API_KEY
+  GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN
+  EMAIL_FROM                noreply@axal.vc
+  GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET                 (Calendar OAuth)
+  PERSONA_API_KEY  OR (SUMSUB_API_KEY + SUMSUB_SECRET + SUMSUB_WEBHOOK)
+  HUBSPOT_CLIENT_ID / HUBSPOT_CLIENT_SECRET
+  SF_CLIENT_ID / SF_CLIENT_SECRET
+  CARTA_CLIENT_ID / CARTA_CLIENT_SECRET
+  CALENDLY_CLIENT_ID / CALENDLY_CLIENT_SECRET
+  CRUNCHBASE_API_KEY
+  SLACK_CLIENT_ID / SLACK_CLIENT_SECRET
+  DOCUSIGN_INTEGRATION_KEY / DOCUSIGN_SECRET / DOCUSIGN_RSA_PRIVATE_KEY
+  AFFINITY_API_KEY          (per-user; not a global secret)
+  GCP_IDENTITY_API_KEY  + GCP_PROJECT_ID  + GCP_SERVICE_ACCOUNT_JSON
+                            (for SMS 2FA)
+  TURNSTILE_SECRET_KEY
+  GITHUB_ACCESS_TOKEN       optional, for ticket sync to repo
+
+For any secret the user does not yet have, give the exact dashboard URL
+where they create it, plus the wrangler command syntax:
+    wrangler secret put NAME       (paste value when prompted)
+
+Order of the 10 follow-up PRs
+  AG  Mount the 24 missing Worker route files          (foundation)
+  AH  Trust Center route fix + pairwise NDAs + sanctions
+  AI  Admin Console: contracts union + Integration Keys
+  AJ  Monitoring > User Analytics sub-routes
+  AK  Market Intelligence missing endpoints
+  AL  Settings broken sub-sections
+  AM  Projects DELETE + FK cascade
+  AN  Integrations 500 fix + connected plugins visible
+  AO  Cloudflare wrangler.toml + bindings + cron + tail
+  AP  Post-merge verification: run drift smoke test, confirm zero 404s
+
+Every PR must pass: typecheck, lint, drift smoke test, wrangler dry-run.
+No PR is merged unless the previous PR is green.

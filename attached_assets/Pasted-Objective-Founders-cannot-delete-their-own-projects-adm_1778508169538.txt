@@ -1,0 +1,49 @@
+Objective
+  Founders cannot delete their own projects; admins get a DB error.
+  Two root causes in cloudflare-worker/src/routes/projects.ts:236
+    1. `requireAdmin(c)` — founders 403.
+    2. Foreign-key columns on deals, score_snapshots, activity_logs,
+       documents, esign_envelopes, score_evidence, score_flags,
+       roadmap_okrs, discovery_interviews reference projects(id)
+       without ON DELETE CASCADE → integrity-violation for admin too.
+
+Tasks
+  1. Replace requireAdmin with: founder can delete own project,
+     admin/partner can delete any.
+       const user = await requireAuth(c);
+       const proj = …select… ;
+       if (!canAccessFounderResource(user, proj.founder_id) &&
+           user.role !== 'admin' && user.role !== 'partner')
+         return c.json({error:'Forbidden'}, 403);
+
+  2. Migration cloudflare-worker/sql/migrations/00xx_project_cascade.sql
+     For each child table, replace the FK with ON DELETE CASCADE.
+     D1 (SQLite) doesn't support ALTER … DROP CONSTRAINT — use the
+     standard rebuild-table dance:
+       PRAGMA foreign_keys=OFF;
+       BEGIN;
+       CREATE TABLE <child>_new (…columns…, FOREIGN KEY(project_id)
+         REFERENCES projects(id) ON DELETE CASCADE);
+       INSERT INTO <child>_new SELECT * FROM <child>;
+       DROP TABLE <child>;
+       ALTER TABLE <child>_new RENAME TO <child>;
+       … recreate indexes …
+       COMMIT;
+       PRAGMA foreign_keys=ON;
+     Wrap each rebuild in its own migration step; idempotent.
+
+  3. Soft-delete option: add `deleted_at` to projects and have the
+     handler set it instead of hard-deleting. Hard-delete only on a
+     30-day cron sweep. Hides the row from listProjects but lets
+     admins restore.
+
+  4. UI: ProjectsPage delete button now works for founders on their
+     own projects. Toast: "Project moved to trash — restore within
+     30 days from Admin > Trash."
+
+Acceptance
+  - Founder can delete own project → row hidden, child rows preserved
+    until cron sweep.
+  - Admin can hard-delete via Admin > Trash → child rows cascade.
+  - No FK violations in Workers logs.
+  - listProjects excludes deleted_at IS NOT NULL.
