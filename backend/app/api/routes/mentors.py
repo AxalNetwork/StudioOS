@@ -139,10 +139,20 @@ def list_mentors(
         rows, specialty=specialty, sector=sector, q=q,
         free_only=free_only, max_rate=max_rate, accepting_only=accepting_only,
     )
+    # Task #39 — batched user_id lookup so directory rows can render the
+    # trust-score badge for admin/investor/partner viewers without an
+    # extra fetch per row. Mentor model has no user_id FK; the reverse
+    # FK lives on `users.mentor_id`.
+    mentor_ids = [m.id for m, _, _ in ranked if m.id is not None]
+    user_id_by_mentor: dict[int, int] = {}
+    if mentor_ids:
+        for u in session.exec(select(User).where(User.mentor_id.in_(mentor_ids))).all():
+            if u.mentor_id and u.mentor_id not in user_id_by_mentor:
+                user_id_by_mentor[u.mentor_id] = u.id
     return {
         "calcom_available": svc.calcom_available(),
         "items": [
-            {**svc.mentor_dto(m, include_email=_is_admin(user)),
+            {**svc.mentor_dto(m, include_email=_is_admin(user), user_id=user_id_by_mentor.get(m.id)),
              "match_score": s, "match_reasons": reasons}
             for m, s, reasons in ranked
         ],

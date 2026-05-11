@@ -343,10 +343,11 @@ def filter_and_rank(
 # ===========================================================================
 # Serialisation helpers
 # ===========================================================================
-def mentor_dto(m: Mentor, *, include_email: bool = False) -> dict:
+def mentor_dto(m: Mentor, *, include_email: bool = False, user_id: int | None = None) -> dict:
     return {
         "id": m.id,
         "uid": m.uid,
+        "user_id": user_id,
         "name": m.name,
         "email": m.email if include_email else None,
         "headline": m.headline,

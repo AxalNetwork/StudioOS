@@ -89,10 +89,11 @@ def _summarize_reviews(session: Session, partner_id: int) -> dict:
     return {"avg_rating": round(avg, 2), "count": len(rows)}
 
 
-def _public_provider_dto(p: Partner, reviews_summary: dict) -> dict:
+def _public_provider_dto(p: Partner, reviews_summary: dict, user_id: int | None = None) -> dict:
     return {
         "id": p.id,
         "uid": p.uid,
+        "user_id": user_id,
         "name": p.name,
         "company": p.company,
         "headline": p.headline,
@@ -177,6 +178,18 @@ def list_providers(
         if own and own not in rows:
             rows = list(rows) + [own]
 
+    # Task #39 — batched lookup of the linked user_id for each partner row so
+    # admin/investor/partner viewers can render the trust-score badge inline
+    # without an extra round-trip per row. The trust-score endpoint itself
+    # enforces viewer-role access, so exposing the FK here doesn't leak any
+    # account/KYC info.
+    partner_ids = [p.id for p in rows if p.id is not None]
+    user_id_by_partner: dict[int, int] = {}
+    if partner_ids:
+        for u in session.exec(select(User).where(User.partner_id.in_(partner_ids))).all():
+            if u.partner_id and u.partner_id not in user_id_by_partner:
+                user_id_by_partner[u.partner_id] = u.id
+
     # In-memory filtering on JSON columns (small marketplace; switch to GIN
     # indexes later if cardinality grows).
     out = []
@@ -206,7 +219,7 @@ def list_providers(
             hay = " ".join(filter(None, [p.name, p.company, p.headline, p.bio, p.specialization])).lower()
             if q.lower() not in hay:
                 continue
-        out.append(_public_provider_dto(p, _summarize_reviews(session, p.id)))
+        out.append(_public_provider_dto(p, _summarize_reviews(session, p.id), user_id=user_id_by_partner.get(p.id)))
 
     out.sort(key=lambda d: (
         0 if d["kyb_verified"] else 1,
