@@ -179,15 +179,13 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 self.addEventListener('message', (event) => {
-  // CodeQL js/missing-origin-check: only honour messages from same-origin
-  // clients. Cross-origin frames embedding the page should not be able to
-  // trigger skipWaiting() (or any future message handlers).
-  try {
-    const src = event.source;
-    if (src && typeof src.url === 'string') {
-      const u = new URL(src.url);
-      if (u.origin !== self.location.origin) return;
-    }
-  } catch { return; }
+  // CodeQL js/missing-origin-check: default-DENY. Only honour messages
+  // from a same-origin Client (window/worker) — never from null/unknown
+  // sources or cross-origin frames embedding the page.
+  const src = event.source;
+  if (!src || typeof src.url !== 'string') return;
+  let origin;
+  try { origin = new URL(src.url).origin; } catch { return; }
+  if (origin !== self.location.origin) return;
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });

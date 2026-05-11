@@ -24,6 +24,7 @@
  *     the OAuth tab in that case.
  */
 import { Hono } from 'hono';
+import { stripTrailingSlashes } from '../util/url';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
@@ -180,7 +181,7 @@ linkedin.post('/oauth/start', async (c) => {
 // the user row, discards the token, and redirects back to /refer.
 // ---------------------------------------------------------------------------
 function redirectBack(env: Env, status: 'connected' | 'error', message?: string) {
-  const base = (env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+  const base = stripTrailingSlashes(env.APP_URL || 'https://axal.vc');
   const params = new URLSearchParams({ linkedin: status });
   if (message) params.set('linkedin_error', message);
   return Response.redirect(`${base}/refer?${params.toString()}`, 302);

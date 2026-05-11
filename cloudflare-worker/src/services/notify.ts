@@ -23,6 +23,7 @@
  *    user's pending outbox into a single email at 09:00 user-tz.
  */
 import type { Env } from '../types';
+import { stripTrailingSlashes } from '../util/url';
 import { getUserSettings, isInQuietHours } from './userSettings';
 
 export type NotifyChannel = 'in_app' | 'email' | 'slack';
@@ -144,14 +145,6 @@ function resolveChannels(prefs: Record<string, any>, type: string, requested: No
  * plain section block so any future notify() call still delivers something
  * useful instead of silently dropping the Slack channel.
  */
-// CodeQL js/polynomial-redos: `\/+$` is technically polynomial on pathological
-// inputs like `////...////`. Use a bounded loop helper instead of a regex.
-function stripTrailingSlashes(s: string): string {
-  let i = s.length;
-  while (i > 0 && s.charCodeAt(i - 1) === 47 /* '/' */) i--;
-  return i === s.length ? s : s.slice(0, i);
-}
-
 function buildSlackBlocks(args: NotifyArgs, appUrl: string): Record<string, unknown> {
   const root = stripTrailingSlashes(appUrl);
   const link = args.link

@@ -29,6 +29,7 @@
  * calendar.ts) reads from this table for `kind='calendly_event'`.
  */
 import type { Context } from 'hono';
+import { stripTrailingSlashes } from '../../util/url';
 import type { Env, User } from '../../types';
 import {
   registerProvider,
@@ -50,7 +51,7 @@ const CL_API = 'https://api.calendly.com';
 const CL_AUTH = 'https://auth.calendly.com';
 
 function redirectUri(env: Env): string {
-  const base = (env.APP_URL || '').replace(/\/+$/, '');
+  const base = stripTrailingSlashes(env.APP_URL || '');
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
@@ -327,7 +328,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Extend
   // do the subscribe up-front and rely on the route's webhook_secret_enc
   // being populatable from `result.credentials.webhook_signing_key` via a
   // small monkey-patch on the integrations route — see below.
-  const callbackBase = (c.env.APP_URL || '').replace(/\/+$/, '');
+  const callbackBase = stripTrailingSlashes(c.env.APP_URL || '');
   // The route uses `/webhook/:provider/:uid`; we don't know the uid yet.
   // We register on the next sync() run instead, where row.uid is available.
 
@@ -402,12 +403,7 @@ async function ensureWebhookSubscription(env: Env, row: IntegrationRow): Promise
     const userUri = typeof creds.user_uri === 'string' ? creds.user_uri as string : '';
     const orgUri = typeof creds.organization_uri === 'string' ? creds.organization_uri as string : '';
     if (!userUri || !orgUri) return;
-    // CodeQL js/polynomial-redos: avoid `\/+$` on uncontrolled APP_URL.
-    const _appUrl = env.APP_URL || '';
-    let _i = _appUrl.length;
-    while (_i > 0 && _appUrl.charCodeAt(_i - 1) === 47) _i--;
-    const _root = _i === _appUrl.length ? _appUrl : _appUrl.slice(0, _i);
-    const callback = `${_root}/api/integrations/webhook/${PROVIDER_KEY}/${row.uid}`;
+    const callback = `${stripTrailingSlashes(env.APP_URL || '')}/api/integrations/webhook/${PROVIDER_KEY}/${row.uid}`;
     if (!callback.startsWith('http')) return;
     const token = await getActiveAccessToken(env, { ...row, credentials_enc: recheck?.credentials_enc || row.credentials_enc });
     const sub = await createWebhookSubscription(env, token, callback, orgUri, userUri);

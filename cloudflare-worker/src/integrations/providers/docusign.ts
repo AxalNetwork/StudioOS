@@ -37,6 +37,7 @@
  * IMPORTANT: imported once from index.ts so registerProvider() runs at boot.
  */
 import type { Context } from 'hono';
+import { stripTrailingSlashes } from '../../util/url';
 import type { Env, User } from '../../types';
 import {
   registerProvider,
@@ -64,7 +65,7 @@ const DEMO_AUTH_HOST = 'https://account-d.docusign.com';
 function authHost(isDemo: boolean): string { return isDemo ? DEMO_AUTH_HOST : PROD_AUTH_HOST; }
 
 function redirectUri(env: Env): string {
-  const base = (env.APP_URL || '').replace(/\/+$/, '');
+  const base = stripTrailingSlashes(env.APP_URL || '');
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
@@ -233,7 +234,7 @@ function dsApiBase(row: IntegrationRow): string {
   const cfg = safeParse(row.config_json);
   const baseUri = typeof cfg.base_uri === 'string' ? cfg.base_uri : '';
   if (!baseUri) throw new Error('docusign_base_uri_missing');
-  return `${baseUri.replace(/\/+$/, '')}/restapi/v2.1`;
+  return `${stripTrailingSlashes(baseUri)}/restapi/v2.1`;
 }
 
 function dsAccountId(row: IntegrationRow): string {
@@ -381,7 +382,7 @@ export async function sendDocusignEnvelope(
   // keyed off `webhookSecret` (one of the `hmac` entries below). We
   // subscribe to the lifecycle envelope events that affect our local
   // status enum.
-  const webhookUrl = `${opts.appUrl.replace(/\/+$/, '')}/api/integrations/webhook/docusign/${encodeURIComponent(opts.integrationUid)}`;
+  const webhookUrl = `${stripTrailingSlashes(opts.appUrl)}/api/integrations/webhook/docusign/${encodeURIComponent(opts.integrationUid)}`;
   const eventNotification = {
     url: webhookUrl,
     loggingEnabled: 'true',
@@ -905,7 +906,7 @@ async function tearDownConnect(env: Env, row: IntegrationRow): Promise<void> {
  * configuration. The loser bails immediately; the winner persists.
  */
 async function postConnect(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<void> {
-  const appUrl = (c.env.APP_URL || '').replace(/\/+$/, '');
+  const appUrl = stripTrailingSlashes(c.env.APP_URL || '');
   if (!appUrl.startsWith('http')) {
     console.warn('[docusign] postConnect skipped: APP_URL not set');
     return;

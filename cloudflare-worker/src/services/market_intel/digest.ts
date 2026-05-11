@@ -22,6 +22,7 @@
  * also manage cadence per-sector inside the app at /market-intelligence.
  */
 import type { Env } from '../../types';
+import { stripTrailingSlashes } from '../../util/url';
 import { sendNotificationEmail } from '../email';
 import { periodKey } from './scoring';
 import { ensureMarketIntelSchema } from './schema';
@@ -377,10 +378,7 @@ export async function sendMarketIntelDigests(
   if (groups.size === 0) return { scanned: rows.length, users: 0, sent: 0, rows: 0, failed: 0 };
 
   const appUrl = (env as { APP_URL?: string }).APP_URL || '';
-  // CodeQL js/polynomial-redos: avoid `\/+$` regex on uncontrolled APP_URL.
-  let _i = appUrl.length;
-  while (_i > 0 && appUrl.charCodeAt(_i - 1) === 47) _i--;
-  const root = _i === appUrl.length ? appUrl : appUrl.slice(0, _i);
+  const root = stripTrailingSlashes(appUrl);
   const preferencesUrl = `${root}/market-intelligence`;
 
   let sent = 0, failed = 0, totalRows = 0, users = 0;

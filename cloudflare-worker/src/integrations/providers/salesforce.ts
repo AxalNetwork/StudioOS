@@ -22,6 +22,7 @@
  * registerProvider() call below runs at boot.
  */
 import type { Context } from 'hono';
+import { stripTrailingSlashes } from '../../util/url';
 import type { Env, User } from '../../types';
 import {
   registerProvider,
@@ -55,7 +56,7 @@ function loginHost(isSandbox: boolean): string {
 }
 
 function redirectUri(env: Env): string {
-  const base = (env.APP_URL || '').replace(/\/+$/, '');
+  const base = stripTrailingSlashes(env.APP_URL || '');
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
