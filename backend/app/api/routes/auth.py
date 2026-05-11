@@ -609,10 +609,26 @@ def login(req: LoginRequest, request: Request, session: Session = Depends(get_se
 
 
 class DevQuickLoginRequest(BaseModel):
-    # Default targets the seeded demo investor (see
-    # backend/app/services/demo_seed.py). Override to quick-login as the
-    # demo founder for two-sided e2e flows.
+    # Optional. Must be one of the two seeded demo emails (investor or
+    # founder) — any other value is rejected with 403. This is a strict
+    # allowlist, NOT an arbitrary-impersonation knob.
     email: Optional[str] = None
+
+
+def _is_production_env() -> bool:
+    """Production gate. Checks BOTH conventions used elsewhere in the
+    backend (`STUDIOOS_ENV` is the canonical one — see auth.py:29 and
+    github_service.py:38; `ENVIRONMENT` is the worker-side spelling
+    referenced in replit.md). Fails CLOSED: any deploy that even
+    *hints* at production by setting either var to a prod-ish value
+    disables the dev quick-login route entirely.
+    """
+    import os as _os
+    for var in ("STUDIOOS_ENV", "ENVIRONMENT"):
+        val = (_os.getenv(var) or "").strip().lower()
+        if val in ("production", "prod", "staging"):
+            return True
+    return False
 
 
 @router.post("/dev/quick-login")
@@ -622,19 +638,33 @@ def dev_quick_login(
     session: Session = Depends(get_session),
 ):
     """Task #41 — DEV-ONLY shortcut that mints a JWT for the seeded demo
-    user without requiring TOTP or Turnstile. Refuses to issue tokens when
-    ENVIRONMENT=production so this can never accidentally turn into an
-    auth-bypass on a real deploy.
+    investor (or demo founder when explicitly requested) without TOTP or
+    Turnstile. Returns 404 in production / staging so this can never
+    become an auth-bypass on a real deploy. The acceptable `email` values
+    are a strict allowlist (`DEMO_INVESTOR_EMAIL` / `DEMO_FOUNDER_EMAIL`)
+    — any other email is rejected with 403, even in dev.
 
     Returns the same `{token, user, expires_in}` shape as POST /api/auth/login
     so frontends and tests can use the response interchangeably.
     """
-    import os as _os
-    if (_os.getenv("ENVIRONMENT") or "").lower() == "production":
+    if _is_production_env():
         raise HTTPException(status_code=404, detail="Not found")
 
-    from backend.app.services.demo_seed import DEMO_INVESTOR_EMAIL
+    from backend.app.services.demo_seed import (
+        DEMO_FOUNDER_EMAIL,
+        DEMO_INVESTOR_EMAIL,
+    )
+    ALLOWED = {DEMO_INVESTOR_EMAIL.lower(), DEMO_FOUNDER_EMAIL.lower()}
     target_email = (req.email or DEMO_INVESTOR_EMAIL).strip().lower()
+    if target_email not in ALLOWED:
+        # Hard allowlist — refuse to mint a token for anyone other than
+        # the two seeded demo accounts. This must NEVER be relaxed: it
+        # is the only thing standing between a dev-ergonomics shortcut
+        # and full impersonation of arbitrary users.
+        raise HTTPException(
+            status_code=403,
+            detail="dev/quick-login only accepts seeded demo accounts",
+        )
 
     user = session.exec(select(User).where(User.email == target_email)).first()
     if not user:

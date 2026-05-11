@@ -54,25 +54,25 @@ async function devQuickLoginAsInvestor(request: APIRequestContext, page: Page) {
   }, { token: body.token, user: body.user });
 }
 
-// Opt-in gate. Chromium needs system libs (libglib-2.0.so.0 et al)
-// that the Replit/NixOS shell does not expose to Playwright's bundled
-// browser binary, so by default we skip rather than fail noisily.
-// Set E2E_RUN_INVESTOR_DEMO=1 in any environment with a working
-// chromium (CI, a local Linux box, etc.) to actually execute. The
-// dev FastAPI backend must be reachable at the playwright `baseURL`
-// (defaults to http://localhost:5000); no other env vars are required
-// — Task #41 added a dev-only quick-login that bypasses TOTP/Turnstile.
-const RUN_LOCAL = process.env.E2E_RUN_INVESTOR_DEMO === '1';
+// Default = RUN. The Task #41 dev quick-login + seed remove every env-var
+// dependency this test used to need, so a vanilla `npx playwright test`
+// against the local stack (FastAPI on :8000, Vite on :5000) just works.
+//
+// Opt-OUT escape hatch: set `E2E_SKIP_INVESTOR_DEMO=1` in shells where
+// Playwright's bundled chromium can't launch — notably this Replit
+// NixOS environment, which is missing system libs like libglib-2.0.so.0
+// that the chromium-headless-shell binary needs. CI runners (GitHub
+// Actions ubuntu-latest, etc.) have those libs and run the test.
+const SKIP_LOCAL = process.env.E2E_SKIP_INVESTOR_DEMO === '1';
 
 test.describe('Investor · Trust Center — LockedFounderCard intro flow', () => {
   test.skip(
-    !RUN_LOCAL,
-    'Set E2E_RUN_INVESTOR_DEMO=1 to run. Replit/NixOS shells lack the ' +
-      "system libs Playwright's bundled chromium needs (libglib-2.0.so.0); " +
-      'run from CI or a Linux box with `npx playwright install --with-deps`. ' +
-      'Backend smoke-tested via curl: /api/auth/dev/quick-login returns a ' +
-      'JWT, /api/trust/intro/{request,status} drive the dev_pairwise_ndas ' +
-      'state machine the LockedFounderCard reads.',
+    SKIP_LOCAL,
+    'Skipped via E2E_SKIP_INVESTOR_DEMO=1 — typically set in Replit ' +
+      "shells where Playwright's bundled chromium cannot launch " +
+      '(missing libglib-2.0.so.0 et al). Backend smoke-tested via curl: ' +
+      '/api/auth/dev/quick-login returns a JWT, /api/trust/intro/{request,status} ' +
+      'drive the dev_pairwise_ndas state machine the LockedFounderCard reads.',
   );
 
   test('demo investor signs in, expands a deal, requests intro, sees Intro pending', async ({

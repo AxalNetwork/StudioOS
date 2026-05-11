@@ -64,10 +64,16 @@ DEMO_PROJECT_DESC = (
 
 def is_production() -> bool:
     """Defensive gate. The FastAPI process is dev-only by contract (see
-    `replit.md`), but we still refuse to seed if ENVIRONMENT is set to
-    production so a misconfigured deploy can't accidentally create
-    well-known demo creds in a real DB."""
-    return (os.getenv("ENVIRONMENT") or "").lower() == "production"
+    `replit.md`), but we still refuse to seed if EITHER `STUDIOOS_ENV`
+    (the canonical backend convention — auth.py:29, github_service.py:38)
+    OR `ENVIRONMENT` (the worker-side spelling) hints at production /
+    staging, so a misconfigured deploy can't accidentally create
+    well-known demo creds in a real DB. Fails CLOSED."""
+    for var in ("STUDIOOS_ENV", "ENVIRONMENT"):
+        val = (os.getenv(var) or "").strip().lower()
+        if val in ("production", "prod", "staging"):
+            return True
+    return False
 
 
 def seed_demo_investor_and_founder() -> None:
