@@ -18,6 +18,7 @@ import {
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
+import UserTrustBadge from '../components/UserTrustBadge';
 
 const COMMITMENT_LABEL = {
   full_time: 'Full-time',
@@ -87,6 +88,10 @@ export default function CofounderPage() {
                    onCreateProfile={() => setTab('profile')} />
       )}
       {tab === 'connections' && <ConnectionsTab />}
+      {/* Task #51 — both BrowseCard and ConnectionCard render UserTrustBadge.
+          The badge gates internally to admin/investor/partner viewers, so
+          founder users (the primary audience here) silently see nothing
+          while admin viewers exploring the directory get the score. */}
       {tab === 'profile' && (
         <ProfileTab profile={profile} loading={profileLoading} onSaved={loadProfile} />
       )}
@@ -202,6 +207,7 @@ function BrowseTab({ profile, profileLoading, onCreateProfile }) {
 }
 
 function BrowseCard({ card, onInterest }) {
+  const { user } = useAuth();
   const skills = asArray(card.skills);
   const sectors = asArray(card.sectors);
   const reasons = asArray(card.match_reasons);
@@ -243,10 +249,13 @@ function BrowseCard({ card, onInterest }) {
             )}
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-right flex flex-col items-end gap-1">
           <span className="inline-flex items-center gap-1 text-xs text-blue-700 font-semibold">
             <Sparkles className="w-3 h-3" /> {card.match_score}
           </span>
+          {/* Task #51 — admin/investor/partner viewers see the trust score
+              (badge no-ops for founder viewers, who are the normal audience). */}
+          <UserTrustBadge userId={card.user_id} viewerRole={user?.role} />
         </div>
       </div>
 
@@ -396,6 +405,7 @@ function ConnectionsTab() {
 }
 
 function ConnectionCard({ conn, onSign, onClosed }) {
+  const { user } = useAuth();
   const isActive = conn.status === 'active';
   const isClosed = conn.status === 'closed';
   const cp = conn.counterparty || {};
@@ -429,6 +439,8 @@ function ConnectionCard({ conn, onSign, onClosed }) {
               </span>
             )}
             {isClosed && <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600">Closed</span>}
+            {/* Task #51 — counterparty trust score (admin/investor/partner only). */}
+            <UserTrustBadge userId={cp.user_id} viewerRole={user?.role} />
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600">
             <span className="flex items-center gap-1">

@@ -409,6 +409,12 @@ cofounder.get('/browse', async (c) => {
   scored.sort((a, b) => (b.score - a.score) || (a.profile.id - b.profile.id));
   const cards = scored.slice(0, limit).map(({ score, why, profile: p }) => {
     const card: any = serializeProfilePublic(p, uidById.get(p.user_id) || null);
+    // Task #51 — surface integer user_id alongside the (already-public)
+    // user_uid so admin/investor/partner viewers' UserTrustBadge can call
+    // /api/trust/score/:userId. Mirrors the partners.ts non-admin LEFT
+    // JOIN: identity stays anonymized (no name/email leak); the trust
+    // endpoint itself enforces viewer-role access.
+    card.user_id = p.user_id;
     card.match_score = score;
     card.match_reasons = why;
     card.interest_sent = sent.has(p.user_id);
