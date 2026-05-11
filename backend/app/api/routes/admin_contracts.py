@@ -213,11 +213,16 @@ def _doc_kind(d: Document) -> str:
     `template_name`. Prefer the template_name when it is one of the
     known extended keys so party-role / doc-type filters still match.
     """
-    tname = (d.template_name or "").strip()
-    if tname and tname in DOC_TYPE_PARTY_ROLES:
-        return tname
     raw = getattr(d.doc_type, "value", d.doc_type) or ""
-    return str(raw)
+    raw = str(raw)
+    tname = (d.template_name or "").strip()
+    # When the strict enum is the catch-all OTHER, the real key lives in
+    # template_name (Task #44 envelope stub). For pre-existing rows the
+    # enum is authoritative; only override with template_name when it
+    # adds information the enum can't carry.
+    if tname and (raw == "other" or not raw):
+        return tname
+    return raw
 
 
 @router.get("")
