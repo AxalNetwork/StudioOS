@@ -100,13 +100,15 @@ test('GET /api/investor-signals/latest is also tier-gated', async () => {
   // /latest is mounted under both /api/investor-signals and
   // /api/market-intel/investor-signals (via marketIntel.route alias),
   // so gating the handler covers both surfaces.
-  const m = src.match(/investorSignals\.get\(\s*'\/latest'\s*,\s*async\s*\(c\)\s*=>\s*\{([\s\S]*?)await\s+ensureSchema/);
-  assert.ok(m, '/latest handler missing or restructured');
-  assert.match(m[1], /callerHasFullLens\(\s*user\s*\)/,
+  const latestHandler = src.match(
+    /investorSignals\.get\(\s*'\/latest'\s*,\s*async\s*\(c\)\s*=>\s*\{([\s\S]*?)\}\s*\)\s*;/,
+  );
+  assert.ok(latestHandler, '/latest handler missing or restructured');
+  assert.match(latestHandler[1], /callerHasFullLens\(\s*user\s*\)/,
     '/latest must enforce tier gate (Free → 402)');
-  assert.match(m[1], /tier_required/,
+  assert.match(latestHandler[1], /tier_required/,
     '/latest must respond with tier_required for Free');
-  assert.match(m[1], /\b402\b/,
+  assert.match(latestHandler[1], /\b402\b/,
     '/latest must respond 402 for Free');
 });
 
