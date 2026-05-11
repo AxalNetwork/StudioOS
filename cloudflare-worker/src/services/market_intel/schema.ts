@@ -63,6 +63,13 @@ export async function ensureMarketIntelSchema(env: Env): Promise<void> {
        UNIQUE(user_id, sector, geo)
      )`,
     `CREATE INDEX IF NOT EXISTS idx_mi_watch_user ON market_intel_watchlist(user_id)`,
+    // Task #30 — digest bookkeeping. ALTER raises "duplicate column"
+    // on re-run; the catch below treats that as a no-op so this stays
+    // idempotent across the schema bootstrap.
+    `ALTER TABLE market_intel_watchlist ADD COLUMN last_sent_at TEXT`,
+    `ALTER TABLE market_intel_watchlist ADD COLUMN last_period_key TEXT`,
+    `ALTER TABLE market_intel_watchlist ADD COLUMN last_composite REAL`,
+    `CREATE INDEX IF NOT EXISTS idx_mi_watch_cadence_sent ON market_intel_watchlist(cadence, last_sent_at)`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); }

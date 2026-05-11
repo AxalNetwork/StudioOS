@@ -40,6 +40,7 @@ import tickets from './routes/tickets';
 import deals from './routes/deals';
 import users from './routes/users';
 import marketIntel from './routes/market_intel';
+import marketIntelPublic from './routes/market_intel_public';
 import { investorProfile, investorSignals, aggregateInvestorSignals } from './routes/investor_signals';
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import { runTotpRemediation } from './services/totpRemediation';
@@ -295,6 +296,10 @@ app.route('/api/tickets', tickets);
 app.route('/api/deals', deals);
 app.route('/api/users', users);
 app.route('/api/market-intel', marketIntel);
+// Public (no-auth) companion of /api/market-intel — currently the email
+// digest unsubscribe link. Mounted as a sibling so it sits OUTSIDE the
+// requireAuth middleware applied to /api/market-intel.
+app.route('/api/market-intel-public', marketIntelPublic);
 app.route('/api/investor-profile', investorProfile);
 app.route('/api/investor-signals', investorSignals);
 app.route('/api/assistant', assistantRoutes);
@@ -770,6 +775,22 @@ export default {
           }
         } catch (e) {
           console.error('[cron] market intel failed', e);
+        }
+        // Task #30 — Market-Intel watchlist digest. Walks
+        // market_intel_watchlist on the cadence-matched send slots
+        // (weekly Mon 09:00 UTC, monthly 1st 09:00 UTC), composes the
+        // composite-delta + new-citations email per user, and stamps
+        // last_period_key on confirmed delivery so a same-period retry
+        // is a no-op. Cheap on every other tick: the helper exits in
+        // O(1) when neither cadence window matches.
+        try {
+          const { sendMarketIntelDigests } = await import('./services/market_intel/digest');
+          const r = await sendMarketIntelDigests(env, now);
+          if (r.sent > 0 || r.failed > 0) {
+            console.info(`[cron] mi watchlist digest users=${r.users} sent=${r.sent} failed=${r.failed} rows=${r.rows}`);
+          }
+        } catch (e) {
+          console.error('[cron] mi watchlist digest failed', e);
         }
         // Task #14 — flush pending digest emails. Cheap on idle ticks
         // (single GROUP BY query) and only sends to users whose local
