@@ -67,7 +67,7 @@ test('runFreeConnectors is exported and wired into the cron', async () => {
   );
   assert.match(aggregator, /export\s+async\s+function\s+runFreeConnectors\b/,
     'runFreeConnectors export missing from aggregator');
-  assert.match(aggregator, /\.filter\(.*\.cadence\s*===\s*cadence\s*&&\s*!s\.paid\)/,
+  assert.match(aggregator, /\.filter\([^)]*\.cadence\s*===\s*cadence\s*&&\s*!s\.paid\)/,
     'runFreeConnectors must skip paid sources');
 
   const indexSrc = await readFile(
