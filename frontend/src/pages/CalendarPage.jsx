@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { safeReadJSON } from '../lib/storage';
 import { Calendar, Download, RefreshCw, Link as LinkIcon, X, Plus, Clock, Users as UsersIcon } from 'lucide-react';
 import { api } from '../lib/api';
+import PageExplainer from '../components/PageExplainer';
 
 const KIND_LABEL = {
   calendly_event: 'Calendly',
