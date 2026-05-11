@@ -207,17 +207,12 @@ linkedin.get('/oauth/callback', async (c) => {
   const state = c.req.query('state');
   const oauthError = c.req.query('error');
   if (oauthError) {
-    // CodeQL js/clear-text-logging: do NOT log raw query-param values, they
-    // can contain attacker-controlled strings (and `error_description` may
-    // include identifiers / token fragments). Log only against an allow-list.
-    // Defense-in-depth: rather than echo any portion of the user-supplied
-    // `oauthError` back into the log line (which CodeQL js/clear-text-logging
-    // taint-flags even with an allow-list, since the source is still a
-    // query param), we emit a single literal message. The redirect carries
-    // the unified `oauth_denied` code; the LinkedIn provider docs are the
-    // source of truth for the underlying reason. If diagnostics are needed,
-    // surface them via a structured metric, NOT a log string.
-    console.warn('[LINKEDIN] callback OAuth error returned by provider; redirecting with oauth_denied');
+    // CodeQL js/clear-text-logging: NO LOG on this branch. The user-supplied
+    // `error` query param is tainted; even a literal log call inside this
+    // gated block was being taint-flagged. The redirect carries the unified
+    // `oauth_denied` code which is sufficient for the UI; if provider-side
+    // diagnostics are ever needed, surface them via a structured metric
+    // (not a console call) so CodeQL has no string sink to taint.
     return redirectBack(c.env, 'error', 'oauth_denied' satisfies LinkedInCallbackCode);
   }
   if (!code || !state) {

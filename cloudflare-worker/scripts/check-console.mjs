@@ -9,7 +9,7 @@
  *
  * Run via `npm run lint:no-console`. Wired into `npm run lint`.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SRC_ROOT = new URL('../src/', import.meta.url).pathname;

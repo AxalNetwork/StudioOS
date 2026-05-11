@@ -181,11 +181,16 @@ self.addEventListener('notificationclick', (event) => {
 self.addEventListener('message', (event) => {
   // CodeQL js/missing-origin-check: default-DENY. Only honour messages
   // from a same-origin Client (window/worker) — never from null/unknown
-  // sources or cross-origin frames embedding the page.
+  // sources or cross-origin frames embedding the page. We check BOTH
+  // event.origin (canonical idiom CodeQL recognises) AND the source
+  // Client's URL for defense-in-depth: in ServiceWorker MessageEvents
+  // event.origin is populated for cross-origin frames, while same-origin
+  // Clients carry their identity on event.source.url.
+  if (event.origin && event.origin !== self.location.origin) return;
   const src = event.source;
   if (!src || typeof src.url !== 'string') return;
-  let origin;
-  try { origin = new URL(src.url).origin; } catch { return; }
-  if (origin !== self.location.origin) return;
+  let srcOrigin;
+  try { srcOrigin = new URL(src.url).origin; } catch { return; }
+  if (srcOrigin !== self.location.origin) return;
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });
