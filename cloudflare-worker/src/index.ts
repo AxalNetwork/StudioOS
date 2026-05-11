@@ -800,13 +800,17 @@ export default {
             const r = await runSourcesByCadence(env, 'hourly');
             if (r.scanned) console.info(`[cron] mi hourly scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
           }
-          // Task #5 (AK) — every 6h, run the FREE connectors only at :05
-          // past the boundary (00:05, 06:05, 12:05, 18:05). This keeps
-          // free sources flowing on the spec'd cadence without burning
-          // paid quota — paid sources still run via runSourcesByCadence
-          // on their own (hourly/daily/weekly) cron above.
+          // Task #5 (AK) — free connectors run on a 6-hour cadence
+          // (00:05, 06:05, 12:05, 18:05 UTC). The hourly slot above
+          // already pulls every `cadence==='hourly'` source — paid AND
+          // free — so this 6h slot is the *backfill* path: it re-runs
+          // ONLY free sources tagged with longer cadences (daily, etc.)
+          // that need an intra-day refresh on the spec'd window. We
+          // dispatch to runFreeConnectors with the 'daily' bucket so we
+          // don't duplicate the free hourly writes that already happened
+          // at :00 of the same hour.
           if ([0, 6, 12, 18].includes(now.getUTCHours()) && now.getUTCMinutes() === 5) {
-            const r = await runFreeConnectors(env, 'hourly');
+            const r = await runFreeConnectors(env, 'daily');
             if (r.scanned) console.info(`[cron] mi free-connectors-6h scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
           }
           if (now.getUTCHours() === 2 && now.getUTCMinutes() === 30) {
