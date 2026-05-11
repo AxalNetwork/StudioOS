@@ -819,3 +819,66 @@ CREATE TABLE IF NOT EXISTS quotes (
     currency TEXT DEFAULT 'USD',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ---------------------------------------------------------------------------
+-- Trust Center (Task #3 / Y-1, plus Task AH pairwise NDA + sanctions extras
+-- in migration 035). Mirrored here so a fresh `wrangler d1 execute --file
+-- schema.sql` provisions the full Trust Center stack in one shot.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS legal_obligations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  obligation_key TEXT NOT NULL,
+  required INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'pending',
+  expires_at TIMESTAMP,
+  evidence_envelope_uuid TEXT,
+  evidence_meta TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, obligation_key)
+);
+CREATE INDEX IF NOT EXISTS idx_legal_obligations_user   ON legal_obligations(user_id);
+CREATE INDEX IF NOT EXISTS idx_legal_obligations_status ON legal_obligations(status);
+CREATE INDEX IF NOT EXISTS idx_legal_obligations_expiry ON legal_obligations(expires_at)
+  WHERE expires_at IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS pairwise_ndas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  party_a_user_id INTEGER NOT NULL,
+  party_b_user_id INTEGER NOT NULL,
+  intermediary TEXT NOT NULL DEFAULT 'axal',
+  nda_envelope_uuid TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  valid_until TIMESTAMP,
+  signers_json TEXT NOT NULL DEFAULT '[]',
+  voided_at TIMESTAMP,
+  voided_reason TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(party_a_user_id, party_b_user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pairwise_ndas_a       ON pairwise_ndas(party_a_user_id);
+CREATE INDEX IF NOT EXISTS idx_pairwise_ndas_b       ON pairwise_ndas(party_b_user_id);
+CREATE INDEX IF NOT EXISTS idx_pairwise_ndas_status  ON pairwise_ndas(status);
+CREATE INDEX IF NOT EXISTS idx_pairwise_ndas_expiry  ON pairwise_ndas(valid_until)
+  WHERE valid_until IS NOT NULL;
+
+-- Task AH — sanctions screening history (per-user verdicts; source list
+-- payloads stay in KV under `sanctions:list:v1:*`).
+CREATE TABLE IF NOT EXISTS sanctions_screenings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  provider TEXT NOT NULL,
+  run_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  hit INTEGER NOT NULL DEFAULT 0,
+  severity TEXT NOT NULL DEFAULT 'none',
+  match_count INTEGER NOT NULL DEFAULT 0,
+  payload_json TEXT,
+  reviewed_by INTEGER,
+  reviewed_at TIMESTAMP,
+  review_notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sanctions_user   ON sanctions_screenings(user_id);
+CREATE INDEX IF NOT EXISTS idx_sanctions_run_at ON sanctions_screenings(run_at);
+CREATE INDEX IF NOT EXISTS idx_sanctions_hit    ON sanctions_screenings(hit, run_at);

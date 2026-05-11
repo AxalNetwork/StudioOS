@@ -19,9 +19,11 @@ import {
   MANAGED_PROVIDERS,
   type ManagedProviderKey,
   setOauthCreds,
+  rotateOauthSecret,
   deleteOauthCredsAndDisconnect,
   listProviderKeyStatus,
 } from '../services/providerOauthKeys';
+import { testOauthCreds } from '../services/providerOauthTest';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -79,6 +81,59 @@ r.put('/:provider', async (c) => {
     provider, client_id_preview: clientId.slice(0, 12),
   });
   return c.json({ ok: true, provider, source: 'db' });
+});
+
+// Task #3 — Rotate the secret in place. Body: { client_secret }.
+// client_id is left untouched (the provider issues new secrets against
+// the same client app). 404 if no row exists yet — admin must PUT first.
+r.post('/:provider/rotate', async (c) => {
+  const admin = await requireAdmin(c);
+  const provider = c.req.param('provider');
+  if (!isManaged(provider)) {
+    return c.json({ error: 'unknown_provider', allowed: MANAGED_PROVIDERS }, 400);
+  }
+  let body: { client_secret?: string } = {};
+  try { body = await c.req.json(); } catch { /* empty body → 400 below */ }
+  const clientSecret = String(body.client_secret || '').trim();
+  if (!clientSecret) {
+    return c.json({ error: 'client_secret_required' }, 400);
+  }
+  if (clientSecret.length > 4096) {
+    return c.json({ error: 'value_too_long' }, 400);
+  }
+  let rotated;
+  try {
+    rotated = await rotateOauthSecret(c.env, provider, clientSecret, admin.id);
+  } catch (e: any) {
+    const msg = e?.message || 'rotate_failed';
+    if (msg === 'provider_not_configured') {
+      return c.json({ error: 'provider_not_configured' }, 404);
+    }
+    return c.json({ error: msg }, 500);
+  }
+  await logActivity(c.env, admin.id, admin.email, 'integration_keys_rotated', { provider });
+  return c.json({ ok: true, provider, ...rotated });
+});
+
+// Task #3 — Dry-run a provider auth call to verify the configured
+// credentials are recognised. Returns a structured probe result that
+// the admin UI surfaces as a toast.
+r.post('/:provider/test', async (c) => {
+  const admin = await requireAdmin(c);
+  const provider = c.req.param('provider');
+  if (!isManaged(provider)) {
+    return c.json({ error: 'unknown_provider', allowed: MANAGED_PROVIDERS }, 400);
+  }
+  let result;
+  try {
+    result = await testOauthCreds(c.env, provider);
+  } catch (e: any) {
+    return c.json({ error: e?.message || 'test_failed' }, 500);
+  }
+  await logActivity(c.env, admin.id, admin.email, 'integration_keys_tested', {
+    provider, ok: result.ok, reachable: result.reachable, http_status: result.http_status ?? null,
+  });
+  return c.json({ provider, ...result });
 });
 
 r.delete('/:provider', async (c) => {

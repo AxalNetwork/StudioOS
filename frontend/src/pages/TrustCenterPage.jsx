@@ -330,23 +330,66 @@ function PairwiseSignButton({ envelopeUuid }) {
   );
 }
 
-function AgreementsTab({ obligations, onStart, currentUserId }) {
+function AgreementsTab({ obligations, onStart, role }) {
   const [items, setItems] = useState([]);
+  const [pending, setPending] = useState([]);
+  const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState({});  // { [pairId]: 'resend'|'void' }
+  const [info, setInfo] = useState(null);
+  const isAdmin = role === 'admin';
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await api.trustAgreements();
-        if (!cancelled) setItems(res?.agreements || []);
-      } catch (e) {
-        if (!cancelled) setErr(e?.message || 'Failed to load agreements');
-      } finally { if (!cancelled) setLoading(false); }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  async function reload() {
+    setErr(null);
+    try {
+      // Pairwise NDAs come from /trust/pairwise-ndas (admin-aware: admins
+      // see every pair so Resend / Void actually has rows to act on; users
+      // see only the pairs they're a party to). The /trust/agreements
+      // endpoint still feeds the "Other contracts" section with pending
+      // envelopes + signed documents touching the caller.
+      const [pairs, agree] = await Promise.allSettled([
+        api.trustListPairwiseNdas(),
+        api.trustAgreements(),
+      ]);
+      if (pairs.status === 'fulfilled') {
+        setItems(pairs.value?.items || []);
+      } else {
+        setItems([]);
+        setErr(pairs.reason?.message || 'Failed to load pairwise NDAs');
+      }
+      if (agree.status === 'fulfilled') {
+        setPending(agree.value?.pending_envelopes || []);
+        setDocuments(agree.value?.documents || []);
+      } else {
+        setPending([]); setDocuments([]);
+      }
+    } catch (e) {
+      setErr(e?.message || 'Failed to load agreements');
+    } finally { setLoading(false); }
+  }
+  useEffect(() => { reload(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function resend(id) {
+    setBusy(b => ({ ...b, [id]: 'resend' })); setInfo(null);
+    try {
+      const r = await api.trustResendPairwiseNda(id);
+      setInfo(`Sent ${r?.sent || 0} signing email${r?.sent === 1 ? '' : 's'}.`);
+      await reload();
+    } catch (e) { setErr(e?.message || 'Resend failed'); }
+    finally { setBusy(b => { const n = { ...b }; delete n[id]; return n; }); }
+  }
+  async function voidPair(id) {
+    const reason = window.prompt('Reason for voiding this NDA (visible in audit log):', '');
+    if (reason === null) return;
+    setBusy(b => ({ ...b, [id]: 'void' })); setInfo(null);
+    try {
+      await api.trustVoidPairwiseNda(id, reason || 'admin_void');
+      setInfo('NDA voided.');
+      await reload();
+    } catch (e) { setErr(e?.message || 'Void failed'); }
+    finally { setBusy(b => { const n = { ...b }; delete n[id]; return n; }); }
+  }
 
   const ndaObligations = obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'agreements');
 
@@ -355,26 +398,35 @@ function AgreementsTab({ obligations, onStart, currentUserId }) {
       <Section icon={FileSignature} title="Role agreements" subtitle="Standing NDAs and disclosures required for your role.">
         <ObligationList obligations={ndaObligations} emptyText="No role-level agreements required." onStart={onStart} />
       </Section>
-      <Section icon={Lock} title="Pairwise NDAs" subtitle="Active and pending mutual NDAs between you and other parties.">
+      <Section icon={Lock} title="Pairwise NDAs" subtitle={isAdmin
+        ? "Every founder ↔ investor mutual NDA. Resend re-emails any unsigned recipients; Void cancels the envelope and revokes access."
+        : "Active and pending mutual NDAs between you and other parties."}>
         {loading && <p className="text-sm text-slate-600">Loading…</p>}
         {err && <p className="text-sm text-red-600">{err}</p>}
+        {info && <p className="text-sm text-emerald-700 mb-2">{info}</p>}
         {!loading && !err && items.length === 0 && (
-          <p className="text-sm text-slate-600">No pairwise NDAs yet. Investors initiate one by requesting an intro to a founder.</p>
+          <p className="text-sm text-slate-600">No pairwise NDAs on file.</p>
         )}
         {!loading && items.length > 0 && (
           <ul className="space-y-2">
             {items.map(a => {
               const validUntil = a.valid_until ? new Date(a.valid_until) : null;
               const expired = validUntil && validUntil.getTime() < Date.now();
-              const display = expired ? 'expired' : a.status;
-              // Surface a Sign CTA whenever the envelope isn't fully
-              // active yet (status `issued` or `pending`) and isn't
-              // expired. The backend endpoint is the authority — it
-              // 404s for non-recipients and reports signed/expired,
-              // so this client check is just to avoid useless calls.
-              const canSign = !expired && a.status !== 'active' && !!a.nda_envelope_uuid;
+              const voided = a.status === 'voided' || a.status === 'revoked' || !!a.voided_at;
+              const display = voided ? 'revoked' : (expired ? 'expired' : a.status);
+              const canSign = !voided && !expired && a.status !== 'active' && !!a.nda_envelope_uuid;
+              const canAdminAct = isAdmin && !voided && a.status !== 'active' && !expired;
+              // Backend computes the signer list on read (joining
+              // esign_recipients) and ships it as `signers`. Fall back
+              // to the legacy `signers_json` blob if the enrichment
+              // step was unavailable.
+              const signers = (() => {
+                if (Array.isArray(a.signers)) return a.signers;
+                try { return Array.isArray(a.signers_json) ? a.signers_json : JSON.parse(a.signers_json || '[]'); }
+                catch { return []; }
+              })();
               return (
-                <li key={a.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded px-3 py-2">
+                <li key={a.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded px-3 py-2 gap-2 flex-wrap">
                   <div className="flex items-center gap-3 min-w-0">
                     <Lock size={16} className="text-slate-500 shrink-0" />
                     <div className="min-w-0">
@@ -384,12 +436,30 @@ function AgreementsTab({ obligations, onStart, currentUserId }) {
                       <div className="text-xs text-slate-500">
                         envelope {a.nda_envelope_uuid?.slice(0, 8)}…
                         {validUntil ? ` · valid until ${validUntil.toLocaleDateString()}` : ''}
+                        {signers.length > 0 ? ` · signed: ${signers.map(s => s.name || s.email).join(', ')}` : ''}
+                        {voided && a.voided_reason ? ` · voided: ${a.voided_reason}` : ''}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <StatusPill status={display} />
                     {canSign && <PairwiseSignButton envelopeUuid={a.nda_envelope_uuid} />}
+                    {canAdminAct && (
+                      <>
+                        <button
+                          onClick={() => resend(a.id)}
+                          disabled={!!busy[a.id]}
+                          className="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50">
+                          {busy[a.id] === 'resend' ? 'Sending…' : 'Resend'}
+                        </button>
+                        <button
+                          onClick={() => voidPair(a.id)}
+                          disabled={!!busy[a.id]}
+                          className="text-xs px-2 py-1 rounded border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50">
+                          {busy[a.id] === 'void' ? 'Voiding…' : 'Void'}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </li>
               );
@@ -397,6 +467,36 @@ function AgreementsTab({ obligations, onStart, currentUserId }) {
           </ul>
         )}
       </Section>
+      {(pending.length > 0 || documents.length > 0) && (
+        <Section icon={FileText} title="Other contracts" subtitle="Pending envelopes awaiting your signature and signed documents on file.">
+          {pending.length > 0 && (
+            <>
+              <h3 className="text-xs uppercase tracking-wide text-slate-500 mb-2">Awaiting your signature</h3>
+              <ul className="space-y-1 mb-4">
+                {pending.map(p => (
+                  <li key={p.envelope_uuid} className="text-sm text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>{p.agreement_type || 'Agreement'} · envelope {p.envelope_uuid?.slice(0, 8)}…</span>
+                    <StatusPill status={p.status} />
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {documents.length > 0 && (
+            <>
+              <h3 className="text-xs uppercase tracking-wide text-slate-500 mb-2">Signed documents</h3>
+              <ul className="space-y-1">
+                {documents.map(d => (
+                  <li key={d.id} className="text-sm text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>{d.title} <span className="text-xs text-slate-500">({d.doc_type})</span></span>
+                    <span className="text-xs text-slate-500">{d.signed_at ? new Date(d.signed_at).toLocaleDateString() : ''}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </Section>
+      )}
     </>
   );
 }
@@ -405,23 +505,113 @@ function AgreementsTab({ obligations, onStart, currentUserId }) {
 // Sanctions tab — admin-only.
 // ---------------------------------------------------------------------------
 function SanctionsTab() {
-  const [data, setData] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
-  useEffect(() => {
-    api.trustSanctions().then(setData).catch(e => setErr(e?.message || 'failed'));
-  }, []);
+  const [info, setInfo] = useState(null);
+  const [onlyHits, setOnlyHits] = useState(false);
+  // Inline rescreen form
+  const [userId, setUserId] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [dob, setDob] = useState('');
+  const [nationality, setNationality] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function reload() {
+    setErr(null);
+    try {
+      const res = await api.trustListSanctions({ only_hits: onlyHits ? 1 : 0, limit: 100 });
+      // Backend returns both `screenings` and `items` (alias for back-compat).
+      setRows(res?.screenings || res?.items || []);
+    } catch (e) { setErr(e?.message || 'Failed to load'); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { reload(); }, [onlyHits]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function runScreen(e) {
+    e.preventDefault(); setErr(null); setInfo(null);
+    const id = Number(userId);
+    if (!Number.isInteger(id) || id <= 0) { setErr('Enter a numeric user ID.'); return; }
+    setBusy(true);
+    try {
+      const r = await api.trustScreenSanctions(id, {
+        full_legal_name: fullName || undefined,
+        date_of_birth:    dob || undefined,
+        nationality:      nationality || undefined,
+      });
+      const hitCount = r?.matches?.length ?? r?.match_count ?? r?.hits?.length ?? 0;
+      setInfo(`Screening complete · severity: ${r?.severity || 'unknown'} · ${hitCount} hit(s).`);
+      setUserId(''); setFullName(''); setDob(''); setNationality('');
+      await reload();
+    } catch (e2) { setErr(e2?.message || 'Screening failed'); }
+    finally { setBusy(false); }
+  }
+
   return (
-    <Section icon={Search} title="Sanctions screening" subtitle="OFAC / UK HMT / EU CFSP — wired by X-1.">
-      {err && <p className="text-sm text-red-600">{err}</p>}
-      {!err && !data && <p className="text-sm text-slate-600">Loading…</p>}
-      {data && (
-        <div className="text-sm text-slate-700 dark:text-slate-300">
-          <p>Provider: <span className="font-mono">{data.provider}</span></p>
-          <p>Hits: {Array.isArray(data.hits) ? data.hits.length : 0}</p>
-          {data.note && <p className="text-xs text-slate-500 mt-2">{data.note}</p>}
-        </div>
-      )}
-    </Section>
+    <>
+      <Section icon={Search} title="Run a sanctions screening" subtitle="OFAC SDN + EU CFSP + UK HMT consolidated lists. Hits are stored for review.">
+        <form onSubmit={runScreen} className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
+          <label className="text-sm text-slate-700 dark:text-slate-300">User ID
+            <input value={userId} onChange={e => setUserId(e.target.value)} className="mt-1 w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900" required />
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-300">Full legal name (override)
+            <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Defaults to corporate or user name" className="mt-1 w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900" />
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-300">Date of birth (optional)
+            <input type="date" value={dob} onChange={e => setDob(e.target.value)} className="mt-1 w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900" />
+          </label>
+          <label className="text-sm text-slate-700 dark:text-slate-300">Nationality (ISO-2, optional)
+            <input value={nationality} onChange={e => setNationality(e.target.value.toUpperCase())} maxLength={2} placeholder="US" className="mt-1 w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900" />
+          </label>
+          <div className="md:col-span-2 flex items-center gap-3">
+            <button type="submit" disabled={busy} className="px-3 py-1.5 rounded bg-violet-600 text-white text-sm hover:bg-violet-700 disabled:opacity-50">
+              {busy ? 'Screening…' : 'Run screening'}
+            </button>
+            {info && <span className="text-sm text-emerald-700">{info}</span>}
+            {err && <span className="text-sm text-red-600">{err}</span>}
+          </div>
+        </form>
+      </Section>
+      <Section icon={Search} title="Recent screenings" subtitle="Most recent runs across all users. Severity = none (clear), review (possible match), or block (high-confidence hit).">
+        <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 mb-3">
+          <input type="checkbox" checked={onlyHits} onChange={e => setOnlyHits(e.target.checked)} />
+          Only show review/block
+        </label>
+        {loading && <p className="text-sm text-slate-600">Loading…</p>}
+        {!loading && rows.length === 0 && (
+          <p className="text-sm text-slate-600">No screenings yet.</p>
+        )}
+        {!loading && rows.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                <tr><th className="py-2 pr-2">When</th><th className="pr-2">User</th><th className="pr-2">Provider</th><th className="pr-2">Severity</th><th className="pr-2">Hits</th></tr>
+              </thead>
+              <tbody>
+                {rows.map(r => {
+                  // Backend persists `{ matches, triggeredBy }` in payload_json.
+                  const hits = (() => {
+                    try {
+                      const p = typeof r.payload_json === 'string' ? JSON.parse(r.payload_json || '{}') : (r.payload_json || {});
+                      return Array.isArray(p?.matches) ? p.matches : [];
+                    } catch { return []; }
+                  })();
+                  return (
+                    <tr key={r.id} className="border-b border-slate-100 dark:border-slate-800">
+                      <td className="py-2 pr-2 text-slate-600">{r.run_at ? new Date(r.run_at).toLocaleString() : ''}</td>
+                      <td className="pr-2">#{r.user_id}</td>
+                      <td className="pr-2 font-mono text-xs">{r.provider}</td>
+                      <td className="pr-2"><StatusPill status={r.severity === 'none' ? 'satisfied' : (r.severity === 'block' ? 'rejected' : 'in_review')} /></td>
+                      <td className="pr-2 text-xs text-slate-600">{hits.length ? hits.map(h => h.matched_name || h.name || h.entity).filter(Boolean).slice(0, 2).join(', ') + (hits.length > 2 ? ` +${hits.length - 2}` : '') : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+    </>
   );
 }
 
@@ -564,13 +754,14 @@ export default function TrustCenterPage() {
         <TrustScoreBadge size="md" score={score} missing={missing} label="Trust score" />
       </div>
 
-      <div className="border-b border-slate-200 dark:border-slate-700 mb-6 flex gap-1 overflow-x-auto">
+      <div className="border-b border-slate-200 dark:border-slate-700 mb-6 flex gap-1 overflow-x-auto" data-testid="trust-center-page">
         {tabs.map(t => {
           const Icon = t.icon;
           const active = tab === t.key;
           return (
             <button
               key={t.key}
+              data-testid={`trust-tab-${t.key}`}
               onClick={() => setTab(t.key)}
               className={`inline-flex items-center gap-2 px-3 py-2 text-sm border-b-2 -mb-px ${active
                 ? 'border-violet-600 text-violet-700 dark:text-violet-300 font-medium'
@@ -587,12 +778,12 @@ export default function TrustCenterPage() {
       {tab === 'entity'        && (entity || <Section icon={Building2} title="Entity (KYB)"><p className="text-sm text-slate-600">No entity verification required.</p></Section>)}
       {tab === 'accreditation' && (accreditation || <Section icon={BadgeCheck} title="Accreditation"><p className="text-sm text-slate-600">No accreditation required.</p></Section>)}
       {tab === 'agreements'    && (
-        <>
-          <AgreementsTab obligations={obligations} onStart={startObligation} />
+        <div data-testid="trust-agreements-panel">
+          <AgreementsTab obligations={obligations} onStart={startObligation} role={role} />
           {agreementsLegacy}
-        </>
+        </div>
       )}
-      {tab === 'sanctions'     && <SanctionsTab />}
+      {tab === 'sanctions'     && <div data-testid="trust-sanctions-panel"><SanctionsTab /></div>}
     </div>
   );
 }

@@ -174,7 +174,7 @@ interface UnifiedContract {
   file_size: number | null;
   file_content_type: string | null;
   file_sha256: string | null;
-  source: 'documents' | 'esign';
+  source: 'documents' | 'esign' | 'pairwise_nda' | 'partner_deal';
   // Task #2 — e-sign provider for esign-source rows. 'native' = in-house
   // signing flow; 'docusign' = routed through DocuSign. Always 'native'
   // for documents-source rows.
@@ -336,12 +336,138 @@ async function loadDocumentsContracts(sql: ReturnType<typeof getSQL>): Promise<U
   });
 }
 
+// Task #3 — pairwise NDAs source. The Y-1 `pairwise_ndas` table holds
+// founder ↔ investor / founder ↔ partner NDA pairs that aren't backed by
+// a single `documents` row but logically ARE contracts. We surface each
+// pair as a unified row so the main Contracts list / stats / status tabs
+// see the full population, not just the legacy `documents` slice. The
+// dedicated /pairwise-ndas endpoint stays for the Pairwise tab's
+// pair-centric view (party_a/party_b/intermediary).
+function mapPairwiseStatus(s: string): string {
+  const x = String(s || '').toLowerCase();
+  if (x === 'active' || x === 'completed' || x === 'signed') return 'signed';
+  if (x === 'revoked' || x === 'expired' || x === 'void' || x === 'rejected') return 'void';
+  return 'sent';
+}
+
+async function loadPairwiseNdaContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
+  let rows: any[] = [];
+  try {
+    rows = await sql`
+      SELECT p.id, p.party_a_user_id, p.party_b_user_id, p.intermediary,
+             p.nda_envelope_uuid, p.status, p.valid_until,
+             p.created_at, p.updated_at,
+             ua.email AS party_a_email, ub.email AS party_b_email
+        FROM pairwise_ndas p
+        LEFT JOIN users ua ON ua.id = p.party_a_user_id
+        LEFT JOIN users ub ON ub.id = p.party_b_user_id
+       ORDER BY p.created_at DESC
+    `;
+  } catch {
+    // table not present on this env (older D1) — surface empty.
+    return [];
+  }
+  const docType = 'nda_3way_founder_investor_axal';
+  return rows.map((r): UnifiedContract => decorateDocType({
+    id: r.id,
+    uid: r.nda_envelope_uuid || `pairwise:${r.id}`,
+    title: `Pairwise NDA — ${r.party_a_email || '?'} ↔ ${r.party_b_email || '?'}`,
+    doc_type: docType,
+    status: mapPairwiseStatus(r.status),
+    template_name: 'pairwise_nda',
+    project_id: null,
+    project_name: r.intermediary ? `intermediary: ${r.intermediary}` : null,
+    recipient_email: r.party_b_email || r.party_a_email || null,
+    signed_by: null,
+    signed_at: mapPairwiseStatus(r.status) === 'signed' ? (r.updated_at || null) : null,
+    signed_ip: null,
+    days_to_sign: mapPairwiseStatus(r.status) === 'signed'
+      ? daysBetween(r.updated_at, r.created_at)
+      : null,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    file_key: null,
+    file_size: null,
+    file_content_type: null,
+    file_sha256: null,
+    source: 'pairwise_nda',
+    raw_status: String(r.status || '').toLowerCase(),
+    can_resend: false,
+  }));
+}
+
+// Task #3 — partner_deals source (X-1 table). Each partner deal IS a
+// contract artefact (deal type, term, granted tiers). Surfacing them in
+// the union means the main list/stats reflect every partner agreement,
+// not just the founder-side `documents` rows.
+function mapPartnerDealStatus(s: string): string {
+  const x = String(s || '').toLowerCase();
+  if (x === 'active' || x === 'signed' || x === 'completed') return 'signed';
+  if (x === 'revoked' || x === 'expired' || x === 'void' || x === 'rejected') return 'void';
+  if (x === 'draft' || x === 'pending') return 'sent';
+  return 'sent';
+}
+
+async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
+  let rows: any[] = [];
+  try {
+    rows = await sql`
+      SELECT d.id, d.partner_user_id, d.deal_type, d.term_months,
+             d.granted_tiers, d.status, d.created_at, d.updated_at,
+             u.email AS partner_email, u.name AS partner_name
+        FROM partner_deals d
+        LEFT JOIN users u ON u.id = d.partner_user_id
+       ORDER BY d.created_at DESC
+    `;
+  } catch {
+    return [];
+  }
+  return rows.map((r): UnifiedContract => {
+    const dt = `partner_${String(r.deal_type || 'custom').toLowerCase()}`;
+    const docType = TEMPLATES[dt] ? dt : 'partner_custom';
+    const unified = mapPartnerDealStatus(r.status);
+    return decorateDocType({
+      id: r.id,
+      uid: `partner_deal:${r.id}`,
+      title: `${TEMPLATES[docType]?.title || 'Partner Deal'} — ${r.partner_email || r.partner_name || 'unknown'}`,
+      doc_type: docType,
+      status: unified,
+      template_name: docType,
+      project_id: null,
+      project_name: null,
+      recipient_email: r.partner_email || null,
+      signed_by: unified === 'signed' ? (r.partner_name || r.partner_email || null) : null,
+      signed_at: unified === 'signed' ? (r.updated_at || null) : null,
+      signed_ip: null,
+      days_to_sign: unified === 'signed'
+        ? daysBetween(r.updated_at, r.created_at)
+        : null,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      file_key: null,
+      file_size: null,
+      file_content_type: null,
+      file_sha256: null,
+      source: 'partner_deal',
+      raw_status: String(r.status || '').toLowerCase(),
+      can_resend: false,
+    });
+  });
+}
+
 async function loadAllContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
-  const [docRows, esignRows] = await Promise.all([
+  // Task #3 — true 4-source union: legacy documents + e-sign envelopes
+  // (live signing) + pairwise NDAs (Y-1) + partner deals (X-1). Each
+  // loader returns rows already normalised to UnifiedContract; failures
+  // on the optional sources (table missing on older D1) collapse to []
+  // inside the loader so the union is always best-effort.
+  const [docRows, esignRows, pairwiseRows, partnerRows] = await Promise.all([
     loadDocumentsContracts(sql),
     loadEsignContracts(sql),
+    loadPairwiseNdaContracts(sql),
+    loadPartnerDealContracts(sql),
   ]);
-  const merged = [...docRows, ...esignRows];
+  const merged = [...docRows, ...esignRows, ...pairwiseRows, ...partnerRows];
   merged.sort((a, b) => {
     const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
     const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -444,7 +570,7 @@ adminContracts.get('/', async (c) => {
     return c.json({
       total, limit, offset,
       items,
-      meta: { sources: ['documents', 'esign_envelopes'], unioned: true },
+      meta: { sources: ['documents', 'esign_envelopes', 'pairwise_ndas', 'partner_deals'], unioned: true },
     });
   } finally {
     await sql.end();
@@ -543,6 +669,8 @@ adminContracts.get('/templates', async (c) => {
 type ContractRowRef =
   | { source: 'documents'; row: any }
   | { source: 'esign'; row: any }
+  | { source: 'pairwise_nda'; row: any }
+  | { source: 'partner_deal'; row: any }
   | null;
 
 async function findContractByUid(sql: ReturnType<typeof getSQL>, uid: string): Promise<ContractRowRef> {
@@ -561,6 +689,38 @@ async function findContractByUid(sql: ReturnType<typeof getSQL>, uid: string): P
   }
   const envs: any[] = await sql`SELECT * FROM esign_envelopes WHERE envelope_uuid = ${uid} LIMIT 1`;
   if (envs.length > 0) return { source: 'esign', row: envs[0] };
+
+  // Task #3 — synthetic uids for the union's two non-document sources.
+  // Pairwise NDAs and partner deals don't have a natural per-row uid
+  // (the table holds a relationship, not a stored agreement file), so
+  // we synthesise `pairwise:<id>` / `partner_deal:<id>`. Detail/list
+  // resolve these; download/resend/void return deterministic 4xx since
+  // there's no signed PDF or single recipient to act on.
+  const pwMatch = uid.match(/^pairwise:(\d+)$/);
+  if (pwMatch) {
+    try {
+      const rows: any[] = await sql`
+        SELECT p.*, ua.email AS party_a_email, ub.email AS party_b_email
+          FROM pairwise_ndas p
+          LEFT JOIN users ua ON ua.id = p.party_a_user_id
+          LEFT JOIN users ub ON ub.id = p.party_b_user_id
+         WHERE p.id = ${Number(pwMatch[1])} LIMIT 1
+      `;
+      if (rows.length > 0) return { source: 'pairwise_nda', row: rows[0] };
+    } catch { /* table missing on older D1 */ }
+  }
+  const pdMatch = uid.match(/^partner_deal:(\d+)$/);
+  if (pdMatch) {
+    try {
+      const rows: any[] = await sql`
+        SELECT d.*, u.email AS partner_email, u.name AS partner_name
+          FROM partner_deals d
+          LEFT JOIN users u ON u.id = d.partner_user_id
+         WHERE d.id = ${Number(pdMatch[1])} LIMIT 1
+      `;
+      if (rows.length > 0) return { source: 'partner_deal', row: rows[0] };
+    } catch { /* table missing on older D1 */ }
+  }
   return null;
 }
 
@@ -623,6 +783,65 @@ adminContracts.get('/:uid', async (c) => {
       return c.json(detail);
     }
 
+    // Task #3 — pairwise + partner_deal synthetic uids return the
+    // already-enriched unified row directly (no second query needed
+    // because findContractByUid already JOINed users).
+    if (ref.source === 'pairwise_nda') {
+      // Re-run the same loader path so the response shape matches list rows.
+      const r = ref.row;
+      const docType = 'nda_3way_founder_investor_axal';
+      const detail = decorateDocType({
+        id: r.id,
+        uid: r.nda_envelope_uuid || `pairwise:${r.id}`,
+        title: `Pairwise NDA — ${r.party_a_email || '?'} ↔ ${r.party_b_email || '?'}`,
+        doc_type: docType,
+        status: mapPairwiseStatus(r.status),
+        template_name: 'pairwise_nda',
+        project_id: null,
+        project_name: r.intermediary ? `intermediary: ${r.intermediary}` : null,
+        recipient_email: r.party_b_email || r.party_a_email || null,
+        signed_by: null,
+        signed_at: mapPairwiseStatus(r.status) === 'signed' ? (r.updated_at || null) : null,
+        signed_ip: null,
+        days_to_sign: null,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        file_key: null, file_size: null, file_content_type: null, file_sha256: null,
+        source: 'pairwise_nda',
+        raw_status: String(r.status || '').toLowerCase(),
+        can_resend: false,
+      } as any);
+      return c.json(detail);
+    }
+    if (ref.source === 'partner_deal') {
+      const r = ref.row;
+      const dt = `partner_${String(r.deal_type || 'custom').toLowerCase()}`;
+      const docType = TEMPLATES[dt] ? dt : 'partner_custom';
+      const unified = mapPartnerDealStatus(r.status);
+      const detail = decorateDocType({
+        id: r.id,
+        uid: `partner_deal:${r.id}`,
+        title: `${TEMPLATES[docType]?.title || 'Partner Deal'} — ${r.partner_email || r.partner_name || 'unknown'}`,
+        doc_type: docType,
+        status: unified,
+        template_name: docType,
+        project_id: null,
+        project_name: null,
+        recipient_email: r.partner_email || null,
+        signed_by: unified === 'signed' ? (r.partner_name || r.partner_email || null) : null,
+        signed_at: unified === 'signed' ? (r.updated_at || null) : null,
+        signed_ip: null,
+        days_to_sign: null,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        file_key: null, file_size: null, file_content_type: null, file_sha256: null,
+        source: 'partner_deal',
+        raw_status: String(r.status || '').toLowerCase(),
+        can_resend: false,
+      } as any);
+      return c.json(detail);
+    }
+
     // esign source — re-query with the recipient subselects so the detail
     // payload matches list shape.
     const envRows: any[] = await sql`
@@ -678,6 +897,17 @@ adminContracts.post('/:uid/resend', async (c) => {
   try {
     const ref = await findContractByUid(sql, uid);
     if (!ref) return c.json({ error: 'Contract not found' }, 404);
+
+    // Task #3 — the union's pairwise + partner_deal sources have no
+    // single recipient or signing token, so resend is not meaningful.
+    // Return a deterministic 400 (action_not_supported) so the UI can
+    // surface a clear toast instead of a 500.
+    if (ref.source === 'pairwise_nda' || ref.source === 'partner_deal') {
+      return c.json(
+        { error: 'Resend is not supported for this contract source', source: ref.source },
+        400,
+      );
+    }
 
     // Task #5 (Z) — tighten resend to "sent / viewed only" per spec.
     // For documents-source rows, only `sent` qualifies (legacy table
@@ -754,6 +984,18 @@ adminContracts.post('/:uid/void', async (c) => {
   try {
     const ref = await findContractByUid(sql, uid);
     if (!ref) return c.json({ error: 'Contract not found' }, 404);
+
+    // Task #3 — pairwise NDAs are voided through the pair-management
+    // surface (admin_pairwise_ndas) and partner_deals through
+    // admin_partner_deals, both of which have their own audit + side-
+    // effect handling. Refuse here with a deterministic 400 so the
+    // contracts UI never silently mis-routes a void.
+    if (ref.source === 'pairwise_nda' || ref.source === 'partner_deal') {
+      return c.json(
+        { error: 'Void is not supported for this contract source from the contracts list', source: ref.source },
+        400,
+      );
+    }
 
     let envelopeUuid: string | null = null;
     let envelopeTitle: string | null = null;
@@ -847,9 +1089,14 @@ async function mintContractDownload(c: AppContext): Promise<ContractDownloadResu
     if (ref.source === 'documents') {
       fileKey = ref.row.file_key || null;
       title = ref.row.title;
-    } else {
+    } else if (ref.source === 'esign') {
       fileKey = ref.row.signed_r2_key || null;
       title = ref.row.document_title;
+    } else {
+      // Task #3 — pairwise + partner_deal have no stored PDF artefact.
+      // Return a deterministic 404 (no_file) so the UI's download
+      // button can disable cleanly.
+      return { error: c.json({ error: 'Contract has no stored file yet', source: ref.source }, 404) };
     }
 
     if (!fileKey) return { error: c.json({ error: 'Contract has no stored file yet' }, 404) };

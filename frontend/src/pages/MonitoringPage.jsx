@@ -322,7 +322,7 @@ export default function MonitoringPage() {
   const s = metrics?.summary || {};
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6" data-testid="monitoring-page">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -373,6 +373,7 @@ export default function MonitoringPage() {
         ].map(t => (
           <button
             key={t.id}
+            data-testid={`monitoring-tab-${t.id}`}
             onClick={() => setTab(t.id)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === t.id
@@ -386,7 +387,7 @@ export default function MonitoringPage() {
       </div>
 
       {tab === 'infra' ? <InfrastructureTab /> :
-       tab === 'analytics' ? <AnalyticsTab /> :
+       tab === 'analytics' ? <div data-testid="monitoring-analytics-panel"><AnalyticsTab /></div> :
        tab === 'integrity' ? <ScoreIntegrityTab focusSnapshotId={focusSnapshotId} /> : (
       <>
       {/* Summary cards */}

@@ -122,6 +122,37 @@ export async function loadOauthCreds(
   return null;
 }
 
+/**
+ * Task #3 — Rotate the secret for an EXISTING provider row in place.
+ * Differs from setOauthCreds: client_id is left untouched (the
+ * provider issues new secrets against the same client app, so
+ * rotating doesn't change the public app identifier). Throws if no
+ * row exists yet — caller should setOauthCreds() first.
+ */
+export async function rotateOauthSecret(
+  env: Env,
+  providerKey: ManagedProviderKey,
+  newClientSecret: string,
+  adminUserId: number,
+): Promise<{ rotated_at: string }> {
+  if (!newClientSecret.trim()) throw new Error('client_secret is required');
+  await ensureSchema(env);
+  const existing: any = await env.DB.prepare(
+    `SELECT 1 FROM provider_oauth_keys WHERE provider_key = ?`,
+  ).bind(providerKey).first();
+  if (!existing) throw new Error('provider_not_configured');
+  const enc = await encryptString(env, newClientSecret);
+  await env.DB.prepare(
+    `UPDATE provider_oauth_keys
+        SET client_secret_enc  = ?,
+            updated_by_user_id = ?,
+            updated_at         = CURRENT_TIMESTAMP
+      WHERE provider_key = ?`,
+  ).bind(enc, adminUserId, providerKey).run();
+  cache.delete(providerKey);
+  return { rotated_at: new Date().toISOString() };
+}
+
 /** Admin upsert. Encrypts the secret before write. Invalidates cache. */
 export async function setOauthCreds(
   env: Env,

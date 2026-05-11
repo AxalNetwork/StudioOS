@@ -174,7 +174,7 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="max-w-6xl mx-auto p-6 space-y-6" data-testid="calendar-page">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
@@ -229,7 +229,7 @@ export default function CalendarPage() {
                 </button>
               </>
             ) : (
-              <button onClick={connectGoogle} disabled={!google?.available}
+              <button data-testid="calendar-connect-google-btn" onClick={connectGoogle} disabled={!google?.available}
                       className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
                 Connect Google
               </button>

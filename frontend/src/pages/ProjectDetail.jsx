@@ -120,7 +120,7 @@ export default function ProjectDetail() {
   const latestScore = scores[0];
 
   return (
-    <div>
+    <div data-testid="project-detail">
       <Link to="/projects" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-4">
         <ArrowLeft size={14} /> Back to Projects
       </Link>
@@ -167,7 +167,7 @@ export default function ProjectDetail() {
               </button>
             )}
             {canDelete && (
-              <button onClick={handleDelete} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-red-200 hover:bg-red-50 rounded-lg text-xs text-red-600">
+              <button data-testid="project-delete-btn" onClick={handleDelete} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-red-200 hover:bg-red-50 rounded-lg text-xs text-red-600">
                 <Trash2 size={12} /> Delete
               </button>
             )}

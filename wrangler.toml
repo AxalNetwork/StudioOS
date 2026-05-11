@@ -32,6 +32,32 @@ workers_dev = true
 # isolates by ~10-15% on a deploy this size.
 minify = true
 
+# ---------- Module Rules ----------
+# Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
+# as text modules so legalTemplates.ts and friends can `import nda from
+# '../templates/legal/foo.md?raw'` to inline contract markdown into the
+# bundle. Without this, esbuild fails with "No loader is configured for
+# .md files" on `wrangler deploy`. fallthrough=true keeps esbuild's
+# defaults for everything else.
+[[rules]]
+type    = "Text"
+# Scope the markdown text loader to the legal-template directory only so
+# a stray transitive `import readme from 'some-pkg/README.md'` can't
+# accidentally inline third-party markdown into the production bundle.
+# Wrangler module rule globs match against the absolute filesystem path
+# esbuild resolves to, so we anchor on the trailing path segments rather
+# than a project-relative prefix.
+# Wrangler module-rule globs are matched by Cloudflare's `glob-to-regexp`
+# helper, which (a) compares against the path esbuild resolved to —
+# query suffix `?raw` and all — and (b) handles `**` at the START of the
+# pattern unreliably for this anchor. The pragmatic, narrow form is to
+# anchor with a leading `**/legal/` wildcard and a trailing `*md*` so
+# both `foo.md` and `foo.md?raw` are covered without enabling text
+# loading for arbitrary `.md` files anywhere in node_modules. The
+# `legal/` segment ensures only the bundled-contract directory matches.
+globs   = ["**/legal/*md*"]
+fallthrough = true
+
 # ---------- Public (non-secret) variables ----------
 [vars]
 APP_URL = "https://axal.vc"
@@ -91,7 +117,10 @@ queue   = "studioos-job-queue"
 queue              = "studioos-job-queue"
 max_batch_size     = 25
 max_batch_timeout  = 10
-max_retries        = 5
+# Task #9 (AO) — cap retries at 3 then route to DLQ for forensic review.
+# Higher retry counts mask poison messages; 3 attempts is enough to ride
+# out transient D1/upstream blips while still surfacing real failures.
+max_retries        = 3
 dead_letter_queue  = "studioos-job-queue-dlq"
 
 # ---------- Durable Objects (real-time fan-out) ----------
@@ -160,10 +189,23 @@ dataset = "studioos_metrics"
 binding = "BROWSER"
 
 # ---------- Cron Triggers ----------
-# Drains the in-DB queue every minute; daily cleanup runs at 03:00 UTC
-# inside the same handler.
+# The cron handler in cloudflare-worker/src/index.ts uses a per-minute
+# RATE_LIMITS lease so concurrent firings (e.g. when the every-minute
+# trigger and a once-daily trigger collide on the same wall-clock minute)
+# dedupe to a single execution. Internal time gating (now.getUTCHours/
+# Minutes) inside the handler routes per-cadence work, so adding additional
+# cron lines here is for dashboard observability + Cloudflare's "next run"
+# UI rather than for new behaviour. Task #9 (AO) declares the canonical
+# set so operators can see all cadences at a glance.
 [triggers]
-crons = ["* * * * *"]
+crons = [
+  "* * * * *",     # queue drain + sub-minute internal dispatch
+  "0 3 * * *",     # daily cleanup (legacy)
+  "0 */6 * * *",   # market-intel free connectors refresh
+  "0 4 * * *",     # market-intel composite + daily snapshot window
+  "0 9 * * *",     # daily digest emails
+  "0 9 * * 1",     # weekly digest emails (Monday)
+]
 
 # ---------- Observability ----------
 [observability]
@@ -238,7 +280,8 @@ queue   = "studioos-job-queue"
 queue              = "studioos-job-queue"
 max_batch_size     = 25
 max_batch_timeout  = 10
-max_retries        = 5
+# Mirror of the top-level consumer block (Wrangler env tables don't inherit).
+max_retries        = 3
 dead_letter_queue  = "studioos-job-queue-dlq"
 
 [[env.production.durable_objects.bindings]]
@@ -268,39 +311,107 @@ dataset = "studioos_metrics"
 [env.production.browser]
 binding = "BROWSER"
 
+# Task #9 (AO) — wire the studioos-tail consumer worker
+# (cloudflare-worker-tail/) so all production worker tail events get
+# forwarded to R2 (`studioos-logs`) for 7-year retention. The consumer
+# worker MUST be deployed at least once before this binding goes live;
+# until then `wrangler deploy` will warn "tail consumer service does not
+# exist". The dry-run validation in CI does NOT make this network call,
+# so the binding is safe to declare ahead of the first consumer deploy.
+[[env.production.tail_consumers]]
+service = "studioos-tail"
+
 [env.production.triggers]
-crons = ["* * * * *"]
+# Mirror of top-level [triggers] — Wrangler envs do not inherit cron tables.
+crons = [
+  "* * * * *",
+  "0 3 * * *",
+  "0 */6 * * *",
+  "0 4 * * *",
+  "0 9 * * *",
+  "0 9 * * 1",
+]
 
 # ===========================================================================
 # Environment: preview / staging
 # ---------------------------------------------------------------------------
-# Disabled by default. To enable, run the commands below and replace the
-# REPLACE_WITH_PREVIEW_* placeholders, then uncomment the [env.preview.*]
-# blocks. Until then, the GitHub Action skips the preview deploy job.
+# Task #9 (AO) — preview env declared so the GitHub Action's PR preview
+# deploy can run. Operator must provision the preview D1 + KV namespaces
+# and replace the REPLACE_WITH_PREVIEW_* placeholders below before the
+# `wrangler deploy --env preview` step in CI will succeed:
 #
 #   npx wrangler d1 create studioos-db-preview
-#   npx wrangler kv namespace create TOKENS      --preview
-#   npx wrangler kv namespace create RATE_LIMITS --preview
+#   npx wrangler kv namespace create TOKENS-PREVIEW
+#   npx wrangler kv namespace create RATE_LIMITS-PREVIEW
+#
+# Until placeholders are replaced, the CI preview-deploy job is gated on
+# the CLOUDFLARE_PREVIEW_READY repo variable; absence skips the job
+# without failing the build. See .github/workflows/ci.yml.
 # ===========================================================================
-# [env.preview]
-# name = "studioos-preview"
-#
-# [env.preview.vars]
-# APP_URL     = "https://preview.axal.vc"
-# ENVIRONMENT = "preview"
-#
-# [[env.preview.d1_databases]]
-# binding       = "DB"
-# database_name = "studioos-db-preview"
-# database_id   = "REPLACE_WITH_PREVIEW_D1_ID"
-#
-# [[env.preview.kv_namespaces]]
-# binding = "TOKENS"
-# id      = "REPLACE_WITH_PREVIEW_KV_TOKENS_ID"
-#
-# [[env.preview.kv_namespaces]]
-# binding = "RATE_LIMITS"
-# id      = "REPLACE_WITH_PREVIEW_KV_RATE_LIMITS_ID"
-#
-# [env.preview.ai]
-# binding = "AI"
+[env.preview]
+name = "studioos-preview"
+workers_dev = true
+
+[env.preview.vars]
+APP_URL           = "https://studioos-preview.workers.dev"
+ENVIRONMENT       = "preview"
+USE_CF_QUEUE      = "true"
+# Preview is allowed to widen CORS so PR review deploys can talk to
+# localhost SPAs and the workers.dev sandbox URL.
+EXTRA_DEV_ORIGINS = "https://studioos-preview.workers.dev,http://localhost:5000,http://localhost:5173"
+
+[[env.preview.d1_databases]]
+binding       = "DB"
+database_name = "studioos-db-preview"
+database_id   = "REPLACE_WITH_PREVIEW_D1_ID"
+
+[[env.preview.kv_namespaces]]
+binding = "TOKENS"
+id      = "REPLACE_WITH_PREVIEW_KV_TOKENS_ID"
+
+[[env.preview.kv_namespaces]]
+binding = "RATE_LIMITS"
+id      = "REPLACE_WITH_PREVIEW_KV_RATE_LIMITS_ID"
+
+[env.preview.ai]
+binding = "AI"
+
+[[env.preview.queues.producers]]
+binding = "JOB_QUEUE"
+queue   = "studioos-job-queue-preview"
+
+[[env.preview.queues.consumers]]
+queue              = "studioos-job-queue-preview"
+max_batch_size     = 25
+max_batch_timeout  = 10
+max_retries        = 3
+dead_letter_queue  = "studioos-job-queue-preview-dlq"
+
+[[env.preview.durable_objects.bindings]]
+name       = "PIPELINE_ROOM"
+class_name = "PipelineRoom"
+
+[[env.preview.durable_objects.bindings]]
+name       = "ONBOARDING_CHAT"
+class_name = "OnboardingChat"
+
+[[env.preview.migrations]]
+tag                = "v1-realtime"
+new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
+
+[[env.preview.r2_buckets]]
+binding     = "FILES"
+bucket_name = "studioos-files-preview"
+
+[[env.preview.analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "studioos_metrics_preview"
+
+[env.preview.browser]
+binding = "BROWSER"
+
+[env.preview.triggers]
+# Preview env keeps only the every-minute drain + market-intel cadences
+# so PR review deploys exercise the cron path. Daily 09:00 digests are
+# omitted to avoid sending real emails from preview workers.
+crons = ["* * * * *", "0 */6 * * *", "0 4 * * *"]

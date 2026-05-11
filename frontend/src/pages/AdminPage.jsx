@@ -239,42 +239,42 @@ export default function AdminPage({ onImpersonate }) {
       </div>
       <p className="text-gray-600 mb-6">Manage users, roles, and partner profiles</p>
 
-      <div className="flex gap-2 mb-6 border-b border-gray-200">
-        <button onClick={() => setTab('users')}
+      <div className="flex gap-2 mb-6 border-b border-gray-200" data-testid="admin-page">
+        <button data-testid="admin-tab-users" onClick={() => setTab('users')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'users' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
           <Users size={14} className="inline mr-1.5" /> Users
         </button>
-        <button onClick={() => setTab('profiles')}
+        <button data-testid="admin-tab-profiles" onClick={() => setTab('profiles')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'profiles' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
           <Briefcase size={14} className="inline mr-1.5" /> Partner Profiles
           {pendingProfiles > 0 && (
             <span className="ml-2 bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">{pendingProfiles} pending</span>
           )}
         </button>
-        <button onClick={() => setTab('kyc')}
+        <button data-testid="admin-tab-kyc" onClick={() => setTab('kyc')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'kyc' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
           <ShieldCheck size={14} className="inline mr-1.5" /> KYC Queue
           {kycFilter === 'pending' && kycQueue.length > 0 && (
             <span className="ml-2 bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">{kycQueue.length} pending</span>
           )}
         </button>
-        <button onClick={() => setTab('contracts')}
+        <button data-testid="admin-tab-contracts" onClick={() => setTab('contracts')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'contracts' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
           <FileText size={14} className="inline mr-1.5" /> Contracts
         </button>
-        <button onClick={() => setTab('personas')}
+        <button data-testid="admin-tab-personas" onClick={() => setTab('personas')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'personas' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
           <Sparkles size={14} className="inline mr-1.5" /> Personas
         </button>
-        <button onClick={() => setTab('integration-keys')}
+        <button data-testid="admin-tab-integration-keys" onClick={() => setTab('integration-keys')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'integration-keys' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
           <KeyRound size={14} className="inline mr-1.5" /> Integration Keys
         </button>
       </div>
 
-      {tab === 'contracts' && <ContractsPanel />}
+      {tab === 'contracts' && <div data-testid="admin-contracts-panel"><ContractsPanel /></div>}
       {tab === 'personas' && <PersonasPanel />}
-      {tab === 'integration-keys' && <IntegrationKeysPanel />}
+      {tab === 'integration-keys' && <div data-testid="admin-integration-keys-panel"><IntegrationKeysPanel /></div>}
 
       {tab === 'users' && (
         <>
@@ -1507,7 +1507,7 @@ export function ContractsPanel() {
           ['partner',   'Partner Deals'],
           ['templates', 'Templates'],
         ].map(([k, label]) => (
-          <button key={k} onClick={() => setSub(k)}
+          <button key={k} data-testid={`contracts-sub-${k}`} onClick={() => setSub(k)}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${sub === k ? 'bg-violet-600 border-violet-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-violet-300'}`}>
             {label}
           </button>
@@ -2127,12 +2127,28 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
 
         {doc && (
           <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 flex flex-wrap gap-2 justify-end">
-            <button onClick={doDownload} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5">
-              <Download size={13} /> Download
-            </button>
-            <button onClick={doShareLink} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5" title="Generates a 10-minute signed link">
-              <Send size={13} /> Share link
-            </button>
+            {/* Task #3 — pairwise NDAs and partner deals are union rows
+                with no signed-PDF artefact and no single recipient/
+                signing token. The backend returns deterministic 4xx for
+                download/resend/void on those sources, so we hide those
+                buttons here to avoid a confusing toast-on-click. */}
+            {(!doc.source || doc.source === 'documents' || doc.source === 'esign') && (
+              <>
+                <button onClick={doDownload} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5">
+                  <Download size={13} /> Download
+                </button>
+                <button onClick={doShareLink} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5" title="Generates a 10-minute signed link">
+                  <Send size={13} /> Share link
+                </button>
+              </>
+            )}
+            {(doc.source === 'pairwise_nda' || doc.source === 'partner_deal') && (
+              <div className="text-[11px] text-gray-500 italic mr-auto">
+                {doc.source === 'pairwise_nda'
+                  ? 'Pairwise NDA pair — manage from the Pairwise NDAs tab.'
+                  : 'Partner deal — manage from the Partner Deals tab.'}
+              </div>
+            )}
             {/* Task #5 (Z) — Open in DD deep-link. Surfaces only when the
                 worker has linked the envelope to dd_findings (column on
                 migration 026). */}
@@ -2153,7 +2169,8 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
                 <Send size={13} /> Resend
               </button>
             )}
-            {doc.status !== 'signed' && doc.status !== 'void' && doc.status !== 'completed' && (
+            {doc.status !== 'signed' && doc.status !== 'void' && doc.status !== 'completed'
+              && doc.source !== 'pairwise_nda' && doc.source !== 'partner_deal' && (
               <button onClick={() => setShowVoidReason(true)} disabled={busy} className="px-3 py-2 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 flex items-center gap-1.5">
                 <Ban size={13} /> Void
               </button>
@@ -2223,7 +2240,26 @@ function IntegrationKeysPanel() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
+  const [testing, setTesting] = useState(null); // Task #3 — provider_key currently being tested
   const { toast, showToast } = useToast(3500);
+
+  // Task #3 — Dry-run probe of provider OAuth credentials.
+  const onTest = async (provider) => {
+    setTesting(provider);
+    try {
+      const r = await api.adminTestIntegrationKeys(provider);
+      const label = PROVIDER_LABELS[provider] || provider;
+      if (r.ok) {
+        showToast({ kind: 'ok', msg: `${label}: ${r.detail || 'Credentials accepted.'}` });
+      } else if (!r.reachable) {
+        showToast({ kind: 'err', msg: `${label}: provider unreachable (network/timeout).` });
+      } else {
+        showToast({ kind: 'err', msg: `${label}: ${r.detail || 'Credentials rejected.'}` });
+      }
+    } catch (e) {
+      showToast({ kind: 'err', msg: e.message || 'Test failed' });
+    } finally { setTesting(null); }
+  };
 
   const refresh = async () => {
     setLoading(true);
@@ -2310,7 +2346,7 @@ function IntegrationKeysPanel() {
                 )}
                 {row.source === 'db' && row.updated_at && (
                   <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-3">
-                    Last updated {new Date(row.updated_at).toLocaleString()}
+                    Last rotated {new Date(row.updated_at).toLocaleString()}
                   </div>
                 )}
                 {row.source === 'env' && (
@@ -2321,13 +2357,22 @@ function IntegrationKeysPanel() {
                 {row.source === 'unconfigured' && (
                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-3">{PROVIDER_HINTS[row.provider_key]}</div>
                 )}
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <button
-                    onClick={() => setEditing(row.provider_key)}
+                    onClick={() => setEditing({ provider: row.provider_key, mode: row.source === 'db' ? 'rotate' : 'configure' })}
                     disabled={row.source === 'env'}
                     title={row.source === 'env' ? 'Configured via env var — edit the worker secret instead' : ''}
                     className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
                     {row.source === 'db' ? 'Rotate keys' : 'Configure'}
+                  </button>
+                  {/* Task #3 — Test button: dry-runs a provider auth call. */}
+                  <button
+                    onClick={() => onTest(row.provider_key)}
+                    disabled={!row.has_keys || testing === row.provider_key}
+                    title={row.has_keys ? 'Probe the provider with the configured credentials' : 'Configure keys first'}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/70 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
+                    {testing === row.provider_key ? <Loader2 size={12} className="animate-spin" /> : null}
+                    Test
                   </button>
                   {row.source === 'db' && (
                     <button
@@ -2345,9 +2390,10 @@ function IntegrationKeysPanel() {
 
       {editing && (
         <IntegrationKeysEditModal
-          provider={editing}
+          provider={editing.provider}
+          mode={editing.mode}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); refresh(); showToast({ kind: 'ok', msg: 'Keys saved.' }); }}
+          onSaved={() => { setEditing(null); refresh(); showToast({ kind: 'ok', msg: editing.mode === 'rotate' ? 'Secret rotated.' : 'Keys saved.' }); }}
           onError={(msg) => showToast({ kind: 'err', msg })}
         />
       )}
@@ -2355,25 +2401,38 @@ function IntegrationKeysPanel() {
   );
 }
 
-function IntegrationKeysEditModal({ provider, onClose, onSaved, onError }) {
+function IntegrationKeysEditModal({ provider, mode = 'configure', onClose, onSaved, onError }) {
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [saving, setSaving] = useState(false);
   useEscapeClose(onClose);
   const label = PROVIDER_LABELS[provider] || provider;
+  // Task #3 — rotate-mode only collects a new client_secret and calls
+  // POST /:provider/rotate (client_id stays the same). configure-mode
+  // is the original PUT flow used to first set up a provider.
+  const isRotate = mode === 'rotate';
 
   const submit = async (e) => {
     e?.preventDefault?.();
-    if (!clientId.trim() || !clientSecret.trim()) {
+    if (isRotate) {
+      if (!clientSecret.trim()) {
+        onError('A new Client Secret is required.');
+        return;
+      }
+    } else if (!clientId.trim() || !clientSecret.trim()) {
       onError('Both Client ID and Client Secret are required.');
       return;
     }
     setSaving(true);
     try {
-      await api.adminSetIntegrationKeys(provider, clientId.trim(), clientSecret.trim());
+      if (isRotate) {
+        await api.adminRotateIntegrationKeys(provider, clientSecret.trim());
+      } else {
+        await api.adminSetIntegrationKeys(provider, clientId.trim(), clientSecret.trim());
+      }
       onSaved();
     } catch (e) {
-      onError(e.message || 'Failed to save');
+      onError(e.message || (isRotate ? 'Failed to rotate' : 'Failed to save'));
     } finally { setSaving(false); }
   };
 
@@ -2382,21 +2441,30 @@ function IntegrationKeysEditModal({ provider, onClose, onSaved, onError }) {
       <form onSubmit={submit} onClick={(e) => e.stopPropagation()}
             className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{label} OAuth keys</h3>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{isRotate ? `Rotate ${label} secret` : `${label} OAuth keys`}</h3>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
         </div>
-        <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">{PROVIDER_HINTS[provider]}</p>
-        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Client ID</label>
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">
+          {isRotate
+            ? 'Paste the new client secret issued by the provider. The Client ID stays the same — only the secret is rotated in place.'
+            : PROVIDER_HINTS[provider]}
+        </p>
+        {!isRotate && (
+          <>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Client ID</label>
+            <input
+              autoFocus
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              className="w-full px-3 py-2 mb-3 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-mono"
+              placeholder="e.g. 1234567890.0987654321" />
+          </>
+        )}
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{isRotate ? 'New Client Secret' : 'Client Secret'}</label>
         <input
-          autoFocus
-          value={clientId}
-          onChange={(e) => setClientId(e.target.value)}
-          autoComplete="off"
-          spellCheck={false}
-          className="w-full px-3 py-2 mb-3 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-mono"
-          placeholder="e.g. 1234567890.0987654321" />
-        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Client Secret</label>
-        <input
+          autoFocus={isRotate}
           type="password"
           value={clientSecret}
           onChange={(e) => setClientSecret(e.target.value)}
@@ -2415,7 +2483,7 @@ function IntegrationKeysEditModal({ provider, onClose, onSaved, onError }) {
           <button type="submit" disabled={saving}
                   className="px-4 py-2 text-sm font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 inline-flex items-center gap-2">
             {saving && <Loader2 size={14} className="animate-spin" />}
-            Save keys
+            {isRotate ? 'Rotate secret' : 'Save keys'}
           </button>
         </div>
       </form>

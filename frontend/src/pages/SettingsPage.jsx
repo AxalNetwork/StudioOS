@@ -231,7 +231,7 @@ export default function SettingsPage() {
   const safeActive = allowedIds.has(active) ? active : 'profile';
 
   return (
-    <div className="max-w-5xl">
+    <div className="max-w-5xl" data-testid="settings-page" data-active-section={safeActive}>
       <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">Settings</h1>
       <p className="text-gray-600 dark:text-gray-400 mb-6">Profile, security, notifications, and role preferences for your Axal account.</p>
 

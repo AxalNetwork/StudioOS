@@ -29,6 +29,10 @@ paths = [
   # third-party JS that often trips heuristic regex (e.g. `Symbol2.keyFor`).
   # This directory should ideally be gitignored entirely.
   '''(?i)cloudflare-worker/\.wrangler/.*''',
+  # Test fixtures use `obligation_key`, `entity_key`, etc. as object keys
+  # for the trust/scoring contract; values are non-secret enum strings
+  # (e.g. 'kyc_v1', 'doc_signed_v2'). Whole file allowlisted.
+  '''(?i)frontend/test/trust_score\.test\.mjs$''',
 ]
 regexes = [
   # Tailwind / Vite generated content hashes that look like secrets but aren't.
@@ -37,6 +41,35 @@ regexes = [
   '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+''',
   # Bundler-emitted Symbol.keyFor reference — false positive on generic-api-key.
   '''(?i)Symbol2?\.keyFor''',
+  # Application-level identifier names that gitleaks' generic-api-key
+  # regex flags as `<word>_key = "..."` patterns. None of these are
+  # secrets — they are DB column names, JS variable names, or contract
+  # field labels:
+  #   - obligation_key  → `legal_obligations.obligation_key` D1 column
+  #   - REPROMPT_KEY    → localStorage key constant in MarketIntelPage
+  #   - fileKey         → R2 object key local variable in admin_contracts
+  #   - file_key        → contracts/documents.file_key D1 column
+  #   - entity_key      → cap-table entity identifier
+  '''\b(obligation_key|REPROMPT_KEY|fileKey|file_key|entity_key)\b''',
+  # Snake-case versioned enum values used throughout the trust-score and
+  # contract-template subsystems (`investor_nda_v1`, `mentor_disclaimer_v1`,
+  # `kyc_v1`, `investor_signals_reprompt_dismissed_v1`, …). The `_vN`
+  # suffix is the project-wide enum-version convention and is NOT used
+  # for any real credential. NB: real secrets are random hex/base64 with
+  # high entropy and never end in `_v\d+`.
+  '''\b[a-z][a-z0-9_]*_v\d+\b''',
+  # Literal property assignment from a row reference — `ref.row.<col>` is
+  # a TypeScript object-property access, not a value. Gitleaks' generic
+  # heuristic treats the right-hand side of `let foo = ref.row.bar` as a
+  # candidate secret because of the `=` boundary; this regex pins it as
+  # code, not a secret value.
+  '''ref\.row\.\w+''',
+  # Public sanctions/OFAC data-feed URL with a literal `?token=` query
+  # param. The "token" is the EU's published export-version marker
+  # (base64 of "token-2017"), not a credential — we pin both the literal
+  # value and the URL so the rule doesn't re-trigger on URL edits.
+  '''dG9rZW4tMjAxNw''',
+  '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]
 # Historical leak commits already exposed in public git history. Listed here
 # so CI doesn't fail forever on findings nobody can change without rewriting
@@ -51,4 +84,13 @@ commits = [
   "64fed2c558712e208050a118677206e7439ccfbf",  # historical: older JWT_SECRET in .replit
   "885de6ec5c9df186596d6a268a4fde25e7f0a606",  # historical: JWT_SECRET in .replit
   "af864bff081f71db498680fac75eb667f4f5a73f",  # historical: JWT_SECRET in .replit
+  # 2026-05-11 — JWT_SECRET re-introduced in .replit by Task #51 commit;
+  # value removed in this PR and rotation note added to replit.md. The
+  # commit itself stays in history (cannot be rewritten without breaking
+  # every open Dependabot PR + the gitsafe-backup mirror), so it's
+  # allowlisted here so CI doesn't loop forever on a finding nobody can
+  # change. ACTION REQUIRED OUTSIDE THIS FILE: rotate the JWT_SECRET via
+  # Replit Secrets → set the new value in Cloudflare Worker secrets via
+  # `wrangler secret put JWT_SECRET --env production`.
+  "e5ba56538b542a3f0ae4784f7c6f776c879aa2f7",  # historical: JWT_SECRET re-leaked in .replit (Task #51)
 ]

@@ -69,7 +69,6 @@ GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME = "StudioOS"
 UV_PROJECT_ENVIRONMENT = "/home/runner/workspace/.venv"
 UV_SYSTEM_PYTHON = "0"
-JWT_SECRET = "962eae8ea8fdbe60a47e36205d08beb19cb7ef9dafa7a48be9932585342dfb989b47397dc211f6f486e90394cae3fa52"
 
 [postMerge]
 path = "scripts/post-merge.sh"

@@ -83,7 +83,7 @@ export default function MarketIntelPage() {
   ];
 
   return (
-    <div>
+    <div data-testid="market-intel-page" data-active-tab={tab}>
       <div className="flex items-end justify-between mb-4 flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Market Intelligence</h1>
@@ -117,7 +117,7 @@ export default function MarketIntelPage() {
         {/* Desktop tabs */}
         <div className="hidden md:flex gap-1 overflow-x-auto pb-2">
           {tabs.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
+            <button key={t.key} data-testid={`mi-tab-${t.key}`} onClick={() => setTab(t.key)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
                 tab === t.key ? 'bg-violet-600 text-white' : 'bg-gray-200 text-gray-700 hover:text-gray-900'
               }`}>

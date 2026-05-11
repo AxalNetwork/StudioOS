@@ -145,6 +145,72 @@ export interface Env {
   // Provision via `wrangler secret put HUBSPOT_CLIENT_ID --env=production`.
   HUBSPOT_CLIENT_ID?: string;
   HUBSPOT_CLIENT_SECRET?: string;
+
+  // -------------------------------------------------------------------------
+  // Task #9 (AO) — full secret surface declared for type safety. All optional
+  // so unit-test envs and partially-configured preview deploys still
+  // type-check; production guarded by per-route ensureCreds() calls and
+  // boot-time `assert*` helpers in auth.ts. Provision via
+  // `wrangler secret put NAME --env production`.
+  // -------------------------------------------------------------------------
+
+  // Stripe — additional price ids. The four investor + two founder tiers
+  // declared above plus these two MI-Pro standalone prices = 8.
+  STRIPE_PRICE_MI_PRO_MONTHLY?: string;
+  STRIPE_PRICE_MI_PRO_YEARLY?: string;
+
+  // Email transport
+  EMAIL_FROM?: string;
+
+  // KEK aliases (PII_KEK_HEX / R2_KEK_HEX) — newer naming used in
+  // .env.example. Existing code reads KEK_PII / KEK_R2; keeping both
+  // declared so a wrangler secret put under either name type-checks.
+  PII_KEK_HEX?: string;
+  R2_KEK_HEX?: string;
+
+  // Sumsub (alternative KYC vendor to Persona)
+  SUMSUB_SECRET?: string;
+  SUMSUB_APP_TOKEN?: string;
+
+  // Salesforce OAuth
+  SF_CLIENT_ID?: string;
+  SF_CLIENT_SECRET?: string;
+  SALESFORCE_CLIENT_ID?: string;
+  SALESFORCE_CLIENT_SECRET?: string;
+
+  // Carta OAuth
+  CARTA_CLIENT_ID?: string;
+  CARTA_CLIENT_SECRET?: string;
+
+  // Calendly OAuth
+  CALENDLY_CLIENT_ID?: string;
+  CALENDLY_CLIENT_SECRET?: string;
+
+  // Crunchbase API
+  CRUNCHBASE_API_KEY?: string;
+
+  // Slack OAuth (one-way notifications)
+  SLACK_CLIENT_ID?: string;
+  SLACK_CLIENT_SECRET?: string;
+
+  // DocuSign — Integration Key + RSA private key for JWT grant
+  DOCUSIGN_INTEGRATION_KEY?: string;
+  DOCUSIGN_SECRET?: string;
+  DOCUSIGN_RSA_PRIVATE_KEY?: string;
+
+  // GCP Identity Toolkit / SMS auth (alias surface — see GCIP_* above for
+  // the legacy names the existing code reads).
+  GCP_IDENTITY_API_KEY?: string;
+  GCP_PROJECT_ID?: string;
+  GCP_SERVICE_ACCOUNT_JSON?: string;
+
+  // Tail worker forwarding bucket — declared for type safety in case the
+  // main worker ever needs to read from the same bucket directly. The
+  // tail consumer worker (cloudflare-worker-tail/) writes the events.
+  LOGS?: R2Bucket;
+
+  // Wide allowlist for preview/dev CORS, see middleware/cors guard.
+  EXTRA_DEV_ORIGINS?: string;
 }
 
 // Cloudflare Queues message envelope (matches the body shape the producer sends).

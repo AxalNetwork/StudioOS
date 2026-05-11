@@ -172,14 +172,48 @@ integrations.get('/available', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const user = await requireAuth(c);
   ensureRole(c, user);
+  // Compute already_connected from the caller's existing integrations.
+  // Defensive — a stale/missing `integrations` table must not collapse
+  // the marketplace into a 500. Empty set just means nothing is shown
+  // as "Update" instead of "Connect" until the table is ready.
+  let connectedSet = new Set<string>();
+  try {
+    const rows = await c.env.DB.prepare(
+      "SELECT provider_key FROM integrations WHERE user_id = ? AND status = 'active'",
+    ).bind(user.id).all<{ provider_key: string }>();
+    connectedSet = new Set((rows.results || []).map(r => r.provider_key));
+  } catch (e) {
+    const msg = (e as Error).message || 'select_failed';
+    console.warn('[integrations] /available connectedSet lookup failed:', msg);
+    // Best-effort log to integration_logs so ops can see the read-path
+    // degradation. Mirrors the listMine recovery path.
+    try {
+      await c.env.DB.prepare(
+        'INSERT INTO integration_logs (integration_id, user_id, provider_key, direction, event_type, status, response_summary) ' +
+        "VALUES (0, ?, '_system', 'internal', 'available_lookup_failed', 'error', ?)",
+      ).bind(user.id, msg.slice(0, 500)).run();
+    } catch { /* logs table may not exist either */ }
+  }
   const providers = REGISTRY.map(p => {
     const pub = publicDescriptor(p);
+    const lockedForUser = p.tier === 'free' ? false : !userMeetsTier(user, p.tier as 'growth' | 'studio');
     return {
       ...pub,
-      tier_locked: p.tier === 'free' ? false : !userMeetsTier(user, p.tier as 'growth' | 'studio'),
+      // Spec-named fields (Task #8 / AN). Existing fields kept as
+      // back-compat aliases so the frontend keeps rendering during the
+      // FE migration window.
+      provider_name: p.key,
+      required_tier: p.tier,
+      icon_key: p.icon ?? null,
+      locked_for_user: lockedForUser,
+      already_connected: connectedSet.has(p.key),
+      // Legacy aliases — DO NOT remove until FE consumers migrate.
+      tier_locked: lockedForUser,
     };
   });
-  return c.json({ ok: true, providers });
+  // Task #8 (AN) spec wants the catalogue under `items`. We also return
+  // `providers` for back-compat with the frontend until it migrates.
+  return c.json({ ok: true, items: providers, providers });
 });
 
 // ───────────────────────────────────────────────────────────────────── list mine
@@ -190,10 +224,29 @@ const listMine = async (c: Context<{ Bindings: Env }>) => {
   ensureRole(c, user);
   const sql = getSQL(c.env);
   const isAdmin = (user.role || '').toLowerCase() === 'admin';
-  const rows = (isAdmin
-    ? await sql`SELECT * FROM integrations ORDER BY datetime(created_at) DESC`
-    : await sql`SELECT * FROM integrations WHERE user_id = ${user.id} ORDER BY datetime(created_at) DESC`
-  ) as IntegrationRow[];
+  // Defensive read — Task #8 (AN): a fresh D1 where ensureIntegrationsSchema
+  // failed (e.g. transient lock, migration race) must NOT 5xx the page.
+  // Fall back to an empty list and best-effort log to integration_logs so
+  // ops can see the issue. The marketplace section still renders from the
+  // static REGISTRY, so the user can recover by retrying.
+  let rows: IntegrationRow[] = [];
+  try {
+    rows = (isAdmin
+      ? await sql`SELECT * FROM integrations ORDER BY datetime(created_at) DESC`
+      : await sql`SELECT * FROM integrations WHERE user_id = ${user.id} ORDER BY datetime(created_at) DESC`
+    ) as IntegrationRow[];
+  } catch (e) {
+    const msg = (e as Error).message || 'select_failed';
+    console.warn('[integrations] listMine select failed:', msg);
+    try {
+      await c.env.DB.prepare(
+        'INSERT INTO integration_logs (integration_id, user_id, provider_key, direction, event_type, status, response_summary) ' +
+        "VALUES (0, ?, '_system', 'internal', 'list_failed', 'error', ?)",
+      ).bind(user.id, msg.slice(0, 500)).run();
+    } catch { /* logs table may not exist either */ }
+    await sql.end();
+    return c.json({ ok: true, items: [], degraded: true });
+  }
   // Decrypt only enough to render a 4-char preview; bulk-decrypt is fine
   // because each row's blob is small and the page lists are short.
   // Per-row decrypt with isolation: a single unreadable credential blob
@@ -243,11 +296,14 @@ integrations.post('/connect', async (c) => {
   if (!desc) return c.json({ error: 'unknown_provider', provider_key: key }, 404);
 
   if (desc.status === 'coming_soon') {
+    // Spec contract (Task #8 / AN): 503 + coming_soon + provider-scoped
+    // notify_me_url. The 409 we used to return was wrong because the
+    // resource isn't in conflict — it just isn't available yet.
     return c.json({
-      error: 'provider_coming_soon',
+      error: 'coming_soon',
       message: `${desc.display_name} isn't available yet — join the waitlist to be notified.`,
-      notify_me_url: `/api/integrations/notify-me`,
-    }, 409);
+      notify_me_url: `/api/integrations/${key}/notify-me`,
+    }, 503, { 'Retry-After': '86400' });
   }
 
   // Tier gate (founders only; admin/partner/investor/mentor bypass).
@@ -785,6 +841,25 @@ integrations.post('/notify-me', async (c) => {
   const key = String(body?.provider_key || '').toLowerCase().trim();
   const desc = getDescriptor(key);
   if (!desc) return c.json({ error: 'unknown_provider' }, 404);
+  const notes = body?.notes ? String(body.notes).slice(0, 1000) : null;
+  await c.env.DB.prepare(
+    'INSERT INTO integration_waitlist (user_id, provider_key, notes) VALUES (?, ?, ?) ' +
+    'ON CONFLICT(user_id, provider_key) DO UPDATE SET notes = excluded.notes',
+  ).bind(user.id, key, notes).run();
+  return c.json({ ok: true, joined: true, provider_key: key });
+});
+
+// Per-provider POST alias — matches the `notify_me_url` we advertise
+// from POST /connect when a coming_soon provider is requested. Body is
+// optional; provider key comes from the URL.
+integrations.post('/:provider/notify-me', async (c) => {
+  await ensureIntegrationsSchema(c.env);
+  const user = await requireAuth(c);
+  ensureRole(c, user);
+  const key = c.req.param('provider').toLowerCase();
+  const desc = getDescriptor(key);
+  if (!desc) return c.json({ error: 'unknown_provider' }, 404);
+  const body = await c.req.json().catch(() => ({}));
   const notes = body?.notes ? String(body.notes).slice(0, 1000) : null;
   await c.env.DB.prepare(
     'INSERT INTO integration_waitlist (user_id, provider_key, notes) VALUES (?, ?, ?) ' +

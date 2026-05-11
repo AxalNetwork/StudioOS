@@ -602,6 +602,15 @@ export const api = {
     }),
   adminDeleteIntegrationKeys: (provider) =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
+  // Task #3 — Rotate the secret in place (client_id stays the same).
+  adminRotateIntegrationKeys: (provider, client_secret) =>
+    request(`/admin/integration-keys/${encodeURIComponent(provider)}/rotate`, {
+      method: 'POST',
+      body: JSON.stringify({ client_secret }),
+    }),
+  // Task #3 — Dry-run a provider auth call to verify configured credentials.
+  adminTestIntegrationKeys: (provider) =>
+    request(`/admin/integration-keys/${encodeURIComponent(provider)}/test`, { method: 'POST' }),
   adminUpdateRole: (userId, role) => request(`/admin/users/${userId}/role?role=${role}`, { method: 'PATCH' }),
   adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),
   // Set per-user access level. `level` is 'limited' (browse-only, no signing
@@ -1136,6 +1145,27 @@ export const api = {
     body: JSON.stringify({ user_ids: userIds }),
   }),
   trustMatrix: (role) => request(`/trust/matrix${role ? `?role=${encodeURIComponent(role)}` : ''}`),
+
+  // Task AH — pairwise NDA management + sanctions screening.
+  trustListPairwiseNdas: () => request('/trust/pairwise-ndas'),
+  trustResendPairwiseNda: (id) =>
+    request(`/trust/pairwise-ndas/${encodeURIComponent(id)}/resend`, { method: 'POST' }),
+  trustVoidPairwiseNda: (id, reason) =>
+    request(`/trust/pairwise-ndas/${encodeURIComponent(id)}/void`, {
+      method: 'POST', body: JSON.stringify({ reason: reason || '' }),
+    }),
+  trustListSanctions: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.user_id) qs.set('user_id', String(params.user_id));
+    if (params.only_hits) qs.set('only_hits', 'true');
+    if (params.limit) qs.set('limit', String(params.limit));
+    const s = qs.toString();
+    return request(`/trust/sanctions${s ? `?${s}` : ''}`);
+  },
+  trustScreenSanctions: (userId, payload = {}) =>
+    request(`/trust/sanctions/screen/${encodeURIComponent(userId)}`, {
+      method: 'POST', body: JSON.stringify(payload),
+    }),
 
   getTrustSummary: () => request('/trust/summary'),
   getKybStatus: () => request('/trust/kyb/status'),

@@ -1,0 +1,47 @@
+#:schema node_modules/wrangler/config-schema.json
+# ---------------------------------------------------------------------------
+# Axal StudioOS – Tail Consumer Worker
+# ---------------------------------------------------------------------------
+# Receives `tailEvent` batches from the production `studioos` worker and
+# forwards structured JSON lines to the `studioos-logs` R2 bucket. Operators
+# query historical logs from R2 (Athena / DuckDB / parquet pipeline) — kept
+# 7 years for SOC 2 / regulatory retention. The Cloudflare-native
+# observability dashboard handles short-window debugging; this tail consumer
+# is the long-term archive.
+#
+# Deploy:
+#   cd cloudflare-worker-tail && npx wrangler deploy
+#
+# After deploy, the dashboard task in docs/CLOUDFLARE_DASHBOARD_TASKS.md
+# binds this worker as a tail consumer of `studioos`.
+# ---------------------------------------------------------------------------
+
+name = "studioos-tail"
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+# Declares the producer relationship per Task #9 (AO) spec text. In
+# Cloudflare's actual semantics, `[[tail_consumers]]` is read on the
+# PRODUCER side (the main `studioos` worker, see root wrangler.toml
+# under [env.production.tail_consumers]). Listing the producer here is
+# accepted by wrangler as a no-op declarative reference and keeps this
+# worker's config self-documenting about which service it tails.
+[[tail_consumers]]
+service = "studioos"
+
+[[r2_buckets]]
+binding     = "LOGS"
+bucket_name = "studioos-logs"
+
+[vars]
+# Retention metadata stamped into each log object's R2 metadata. The R2
+# lifecycle rule (configured via dashboard — see CLOUDFLARE_DASHBOARD_TASKS)
+# transitions to Standard-IA after 90 days and expires after 7 years.
+RETENTION_DAYS = "2555"
+ENVIRONMENT    = "production"
+
+[observability]
+enabled            = true
+head_sampling_rate = 1

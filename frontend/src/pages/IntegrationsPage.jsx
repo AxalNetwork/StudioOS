@@ -62,9 +62,16 @@ export default function IntegrationsPage() {
   const role = (liveRole || me.role || '').toLowerCase();
   const bypassesTier = BYPASS_ROLES.has(role);
 
+  // Task #8 (AN): distinguish a hard load failure (5xx, network) from
+  // an inline action error. A hard failure replaces the whole page with
+  // an inline "Couldn't load integrations — Retry" panel rather than a
+  // dismissable banner, since none of the sections can render without
+  // the catalogue.
+  const [loadError, setLoadError] = useState('');
   const refresh = async () => {
     try {
       setError('');
+      setLoadError('');
       const [av, mine, wl] = await Promise.all([
         api.integrationsAvailable(),
         api.integrationsList(),
@@ -74,7 +81,12 @@ export default function IntegrationsPage() {
       setItems(mine.items || []);
       setWaitlist(wl.items || []);
     } catch (e) {
-      setError(e.message);
+      const status = Number(e?.status) || 0;
+      if (status >= 500 || status === 0) {
+        setLoadError(e.message || "Couldn't load integrations.");
+      } else {
+        setError(e.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -167,8 +179,32 @@ export default function IntegrationsPage() {
 
   if (loading) return <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Loading…</div>;
 
+  if (loadError) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto" data-density-target>
+        <header className="flex items-start gap-3 mb-6">
+          <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center"><Plug size={20} /></div>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 leading-snug">
+            Integrations <span className="text-gray-500 dark:text-gray-400 font-normal">— Connect your CRM, legal providers, and data feeds. Push deals out, receive webhooks back.</span>
+          </h1>
+        </header>
+        <div className="bg-white dark:bg-gray-900 border border-red-200 dark:border-red-900 rounded-xl p-6 text-center">
+          <AlertCircle className="mx-auto text-red-500 mb-2" size={28} />
+          <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">Couldn't load integrations</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-4">{loadError}</div>
+          <button
+            onClick={() => { setLoading(true); refresh(); }}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700"
+          >
+            <RefreshCw size={12} /> Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6 max-w-6xl mx-auto" data-density-target>
+    <div className="p-6 max-w-6xl mx-auto" data-density-target data-testid="integrations-page">
       <header className="flex items-start gap-3 mb-6">
         <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center"><Plug size={20} /></div>
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 leading-snug">
@@ -395,7 +431,7 @@ function ProviderCard({ provider, connected, bypassesTier, onConnect }) {
   const tierLocked = !bypassesTier && provider.tier_locked;
   const beta = provider.status === 'beta';
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col">
+    <div data-testid="integration-provider-card" data-provider-key={provider.key} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col">
       <div className="flex items-start gap-3 mb-2">
         <div className="w-10 h-10 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 flex items-center justify-center">
           <ProviderIcon name={provider.icon} />

@@ -56,19 +56,69 @@ trust.get('/me', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /agreements — signed + pending pairwise NDAs touching the caller.
+// GET /agreements — every NDA / contract touching the caller, drawn from
+// three sources and unioned client-side:
+//   1. `pairwise_ndas`       — mutual NDA pairs (both signed → active),
+//   2. `esign_envelopes`     — pending envelopes the caller is a recipient on,
+//   3. `documents`           — legacy signed contracts referencing the caller.
+// Each source is wrapped in try/catch so a missing/legacy table on a stale
+// D1 (e.g. envelopes / documents not yet provisioned) never blocks the
+// canonical pairwise list. Admins also get the pairs they don't sit on.
 // ---------------------------------------------------------------------------
 trust.get('/agreements', async (c) => {
   const user = await requireAuth(c);
   await ensureTrustSchema(c.env);
-  const rows: any = await c.env.DB.prepare(
+  // Make sure pairwise_ndas has the post-035 columns before we SELECT them.
+  // On a stale D1 (pre-task-AH) the SELECT below would otherwise raise
+  // "no such column: signers_json" and the .catch() would silently
+  // swallow every pairwise row — hiding NDAs from the UI.
+  const { ensurePairwiseNdaColumns } = await import('../services/sanctions');
+  await ensurePairwiseNdaColumns(c.env);
+
+  const pairwiseRows: any = await c.env.DB.prepare(
     `SELECT id, party_a_user_id, party_b_user_id, intermediary, nda_envelope_uuid,
-            status, valid_until, created_at, updated_at
+            status, valid_until, signers_json, voided_at, voided_reason,
+            created_at, updated_at
        FROM pairwise_ndas
       WHERE party_a_user_id = ? OR party_b_user_id = ?
       ORDER BY updated_at DESC LIMIT 200`,
-  ).bind(user.id, user.id).all();
-  return c.json({ agreements: (rows?.results || []) });
+  ).bind(user.id, user.id).all().catch(() => ({ results: [] }));
+
+  // Pending envelopes the caller is a recipient on (joins esign_recipients
+  // by email — `recipient_user_id` is not always set on legacy rows).
+  let pending: any[] = [];
+  try {
+    const env: any = await c.env.DB.prepare(
+      `SELECT e.envelope_uuid, e.agreement_type, e.status, e.created_at, e.completed_at,
+              r.recipient_email, r.signed_at
+         FROM esign_envelopes e
+         JOIN esign_recipients r ON r.envelope_id = e.id
+        WHERE LOWER(r.recipient_email) = LOWER(?)
+          AND e.status IN ('sent','viewed','partial')
+        ORDER BY e.created_at DESC LIMIT 100`,
+    ).bind(user.email).all();
+    pending = env?.results || [];
+  } catch { pending = []; }
+
+  // Legacy signed contracts referencing the caller (best-effort — schema
+  // varies across deploys, so a single LIKE on `signed_by` is the lowest
+  // common denominator).
+  let documents: any[] = [];
+  try {
+    const docs: any = await c.env.DB.prepare(
+      `SELECT id, uid, title, doc_type, status, signed_by, signed_at, created_at
+         FROM documents
+        WHERE status = 'signed' AND LOWER(IFNULL(signed_by,'')) LIKE ?
+        ORDER BY signed_at DESC LIMIT 100`,
+    ).bind('%' + (user.email || '').toLowerCase() + '%').all();
+    documents = docs?.results || [];
+  } catch { documents = []; }
+
+  return c.json({
+    agreements: pairwiseRows?.results || [],
+    pending_envelopes: pending,
+    documents,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -416,12 +466,354 @@ trust.post('/obligation/:key/start', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /sanctions — admin-only sanctions check stub. Real OFAC/UK HMT/EU
-// CFSP feeds plug in here; X-1 (partner deals) lights it up.
+// GET /sanctions — admin-only Trust Center sanctions tab. Returns the most
+// recent screening rows from `sanctions_screenings` (newest first), with
+// optional `?user_id=` and `?only_hits=true` filters. Task AH lights up the
+// matcher behind POST /sanctions/screen/:user_id; this read endpoint is
+// purely a history view.
 // ---------------------------------------------------------------------------
 trust.get('/sanctions', async (c) => {
   await requireAdmin(c);
-  return c.json({ provider: 'stub', hits: [], note: 'OFAC/HMT/EU sanctions screening not yet wired (X-1 follow-up).' });
+  const { listScreenings } = await import('../services/sanctions');
+  const userId = Number(c.req.query('user_id'));
+  const onlyHits = c.req.query('only_hits') === 'true';
+  const items = await listScreenings(c.env, {
+    user_id: Number.isInteger(userId) && userId > 0 ? userId : undefined,
+    only_hits: onlyHits,
+    limit: Math.min(Math.max(Number(c.req.query('limit')) || 50, 1), 200),
+  });
+  // Frontend (TrustCenterPage SanctionsTab) reads `screenings`; alias
+  // `items` is preserved for backward compat with any older callers.
+  return c.json({ screenings: items, items, provider: 'aggregate' });
+});
+
+// ---------------------------------------------------------------------------
+// POST /sanctions/screen/:user_id — admin trigger. Body may carry overrides
+// (full_legal_name, date_of_birth, nationality); otherwise we read the
+// subject from the user row + corporate_profiles.
+// ---------------------------------------------------------------------------
+trust.post('/sanctions/screen/:user_id', async (c) => {
+  const admin = await requireAdmin(c);
+  const userId = Number(c.req.param('user_id'));
+  if (!Number.isInteger(userId) || userId <= 0) return c.json({ error: 'invalid_user' }, 400);
+  const body = await c.req.json().catch(() => ({} as any));
+  // Read the canonical user row first so a missing/legacy corporate_profiles
+  // row never collapses the whole lookup into a 404. The corporate join is
+  // best-effort — if the table or columns are missing on the local D1
+  // we fall back to the users row alone.
+  const userRow: any = await c.env.DB.prepare(
+    `SELECT id, email, name FROM users WHERE id = ? LIMIT 1`,
+  ).bind(userId).first().catch(() => null);
+  if (!userRow) return c.json({ error: 'user_not_found' }, 404);
+  let corp: any = null;
+  try {
+    corp = await c.env.DB.prepare(
+      `SELECT entity_name, registered_country
+         FROM corporate_profiles WHERE user_id = ? LIMIT 1`,
+    ).bind(userId).first();
+  } catch { corp = null; }
+  const subject = {
+    full_legal_name: String(body?.full_legal_name || corp?.entity_name || userRow.name || userRow.email || '').trim(),
+    date_of_birth: body?.date_of_birth || null,
+    nationality: body?.nationality || corp?.registered_country || null,
+  };
+  if (!subject.full_legal_name) return c.json({ error: 'missing_subject_name' }, 400);
+  const { screenUser } = await import('../services/sanctions');
+  const result = await screenUser(c.env, userId, subject, {
+    admin_user_id: admin.id,
+    reason: body?.reason || 'admin_triggered',
+  });
+  return c.json(result);
+});
+
+// ---------------------------------------------------------------------------
+// GET /summary — single-call payload for TrustCenterPage.
+// Combines obligations (matrix), the caller's pairwise NDA list, and a
+// compact completion-ring breakdown so the SPA doesn't have to fan out.
+// ---------------------------------------------------------------------------
+trust.get('/summary', async (c) => {
+  const user = await requireAuth(c);
+  await ensureTrustSchema(c.env);
+  await seedObligations(c.env, user.id, user.role);
+  const obligations: any[] = ((await c.env.DB.prepare(
+    `SELECT obligation_key, required, status, expires_at, evidence_envelope_uuid, updated_at
+       FROM legal_obligations WHERE user_id = ? ORDER BY required DESC, obligation_key`,
+  ).bind(user.id).all())?.results || []) as any[];
+  const required = obligations.filter(o => o.required);
+  const satisfied = required.filter(o => o.status === 'satisfied' || o.status === 'waived').length;
+  const score = required.length === 0 ? 100 : Math.round((satisfied / required.length) * 100);
+  const ndas: any[] = ((await c.env.DB.prepare(
+    `SELECT id, party_a_user_id, party_b_user_id, intermediary, nda_envelope_uuid,
+            status, valid_until, updated_at
+       FROM pairwise_ndas
+      WHERE party_a_user_id = ? OR party_b_user_id = ?
+      ORDER BY updated_at DESC LIMIT 50`,
+  ).bind(user.id, user.id).all())?.results || []) as any[];
+  return c.json({
+    role: user.role,
+    score,
+    obligations,
+    required_total: required.length,
+    required_satisfied: satisfied,
+    fully_compliant: required.length === satisfied,
+    ndas,
+    // Legacy shape preserved so TrustCenterPage's `legacy.kyb` /
+    // `legacy.accreditation` / `legacy.ndas` reads keep working —
+    // Task AH leaves the KYB+Accred cards out of scope, so they are
+    // surfaced via /api/kyc/* and the obligation matrix.
+    kyb: null,
+    accreditation: null,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /nda/required — the per-role NDA obligation set the caller still
+// needs to sign. Drives the "Sign Founder NDA" CTA on the Trust Center.
+// ---------------------------------------------------------------------------
+trust.get('/nda/required', async (c) => {
+  const user = await requireAuth(c);
+  await ensureTrustSchema(c.env);
+  await seedObligations(c.env, user.id, user.role);
+  const ndaKeys = new Set(['founder_nda_v1','investor_nda_v1','mentor_nda_v1']);
+  const rows: any = await c.env.DB.prepare(
+    `SELECT obligation_key, required, status, expires_at, evidence_envelope_uuid
+       FROM legal_obligations WHERE user_id = ?`,
+  ).bind(user.id).all();
+  const items = ((rows?.results || []) as any[])
+    .filter(r => ndaKeys.has(r.obligation_key))
+    .map(r => ({
+      ...r,
+      open: r.required === 1 && r.status !== 'satisfied' && r.status !== 'waived',
+    }));
+  return c.json({ items });
+});
+
+// ---------------------------------------------------------------------------
+// POST /nda/sign/:envelope_uuid — convenience: returns the caller's own
+// signing URL for an outstanding NDA envelope. Same auth/security guards
+// as GET /agreements/:envelope_uuid/my_signing_url.
+// ---------------------------------------------------------------------------
+trust.post('/nda/sign/:envelope_uuid', async (c) => {
+  const user = await requireAuth(c);
+  const envelopeUuid = c.req.param('envelope_uuid');
+  if (!envelopeUuid || envelopeUuid.length > 64) return c.json({ error: 'invalid_envelope' }, 400);
+  const row: any = await c.env.DB.prepare(
+    `SELECT r.signing_token, r.token_expires_at, r.status
+       FROM esign_recipients r
+       JOIN esign_envelopes e ON e.id = r.envelope_id
+      WHERE e.envelope_uuid = ? AND r.user_id = ?
+      LIMIT 1`,
+  ).bind(envelopeUuid, user.id).first();
+  if (!row) return c.json({ error: 'not_a_recipient' }, 404);
+  if (row.status === 'signed') return c.json({ status: 'signed' });
+  const exp = Date.parse(row.token_expires_at);
+  if (Number.isFinite(exp) && exp < Date.now()) return c.json({ status: 'expired' });
+  const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+  return c.json({ status: 'pending', signing_url: `${appUrl}/esign/${row.signing_token}` });
+});
+
+// ---------------------------------------------------------------------------
+// GET /pairwise-ndas — list pairwise NDAs touching the caller (or all
+// rows for an admin caller). Mirrors the admin-only equivalent at
+// /api/admin/contracts/pairwise-ndas but without the requireAdmin gate
+// for non-admin self-views.
+// ---------------------------------------------------------------------------
+trust.get('/pairwise-ndas', async (c) => {
+  const user = await requireAuth(c);
+  await ensureTrustSchema(c.env);
+  const { ensurePairwiseNdaColumns } = await import('../services/sanctions');
+  await ensurePairwiseNdaColumns(c.env);
+  const isAdmin = user.role === 'admin';
+  const rows: any = isAdmin
+    ? await c.env.DB.prepare(
+        `SELECT p.id, p.party_a_user_id, p.party_b_user_id, p.intermediary,
+                p.nda_envelope_uuid, p.status, p.valid_until, p.created_at, p.updated_at,
+                p.signers_json, p.voided_at, p.voided_reason,
+                ua.email AS party_a_email, ub.email AS party_b_email,
+                e.status AS envelope_status
+           FROM pairwise_ndas p
+           LEFT JOIN users ua ON ua.id = p.party_a_user_id
+           LEFT JOIN users ub ON ub.id = p.party_b_user_id
+           LEFT JOIN esign_envelopes e ON e.envelope_uuid = p.nda_envelope_uuid
+          ORDER BY p.created_at DESC LIMIT 500`,
+      ).all()
+    : await c.env.DB.prepare(
+        `SELECT p.id, p.party_a_user_id, p.party_b_user_id, p.intermediary,
+                p.nda_envelope_uuid, p.status, p.valid_until, p.created_at, p.updated_at,
+                p.signers_json, p.voided_at, p.voided_reason,
+                ua.email AS party_a_email, ub.email AS party_b_email,
+                e.status AS envelope_status
+           FROM pairwise_ndas p
+           LEFT JOIN users ua ON ua.id = p.party_a_user_id
+           LEFT JOIN users ub ON ub.id = p.party_b_user_id
+           LEFT JOIN esign_envelopes e ON e.envelope_uuid = p.nda_envelope_uuid
+          WHERE p.party_a_user_id = ?1 OR p.party_b_user_id = ?1
+          ORDER BY p.created_at DESC LIMIT 200`,
+      ).bind(user.id).all();
+
+  // Enrich with computed signer list. We don't trust `signers_json` to
+  // be populated retroactively for envelopes that completed before this
+  // task shipped, so the canonical source is `esign_recipients` joined
+  // by envelope_uuid. Each item ships a fresh `signers: [{name,email,
+  // signed_at}]` array that the UI renders directly; we keep
+  // `signers_json` for any caller relying on the legacy field.
+  const items = (rows?.results || []) as any[];
+  const uuids = items.map(i => i.nda_envelope_uuid).filter(Boolean);
+  if (uuids.length > 0) {
+    try {
+      const placeholders = uuids.map(() => '?').join(',');
+      const recRows: any = await c.env.DB.prepare(
+        `SELECT e.envelope_uuid, r.recipient_email, r.recipient_name,
+                r.status, r.signed_at
+           FROM esign_recipients r
+           JOIN esign_envelopes e ON e.id = r.envelope_id
+          WHERE e.envelope_uuid IN (${placeholders})
+          ORDER BY r.signed_at`,
+      ).bind(...uuids).all();
+      const byUuid: Record<string, any[]> = {};
+      for (const r of (recRows?.results || []) as any[]) {
+        const k = r.envelope_uuid;
+        (byUuid[k] = byUuid[k] || []).push({
+          email: r.recipient_email,
+          name: r.recipient_name || r.recipient_email,
+          status: r.status,
+          signed_at: r.signed_at || null,
+        });
+      }
+      for (const it of items) {
+        const all = byUuid[it.nda_envelope_uuid] || [];
+        it.signers = all.filter(s => s.status === 'signed' || !!s.signed_at);
+        it.recipients = all;
+      }
+    } catch { /* best-effort enrichment — UI degrades gracefully */ }
+  }
+  return c.json({ items });
+});
+
+// ---------------------------------------------------------------------------
+// POST /pairwise-ndas/:id/resend — admin resends signing emails to any
+// recipient still in `pending`. Returns the count of emails resent.
+// ---------------------------------------------------------------------------
+trust.post('/pairwise-ndas/:id/resend', async (c) => {
+  await requireAdmin(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid_id' }, 400);
+  const pair: any = await c.env.DB.prepare(
+    `SELECT id, nda_envelope_uuid, status FROM pairwise_ndas WHERE id = ? LIMIT 1`,
+  ).bind(id).first();
+  if (!pair) return c.json({ error: 'not_found' }, 404);
+  if (pair.status === 'active' || pair.status === 'revoked' || pair.status === 'expired') {
+    return c.json({ error: 'not_resendable', status: pair.status }, 409);
+  }
+  // The canonical e-sign schema (cloudflare-worker/src/routes/esign.ts)
+  // uses `recipient_email` / `recipient_name`. Earlier draft selected
+  // `signer_email` / `signer_name` (audit-event columns) which broke
+  // the SQL outright on real D1 — fixed here.
+  const recipients: any = await c.env.DB.prepare(
+    `SELECT r.id, r.recipient_email, r.recipient_name, r.signing_token, r.status
+       FROM esign_recipients r
+       JOIN esign_envelopes e ON e.id = r.envelope_id
+      WHERE e.envelope_uuid = ? AND r.status = 'pending'`,
+  ).bind(pair.nda_envelope_uuid).all();
+  const pending = (recipients?.results || []) as any[];
+  const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+  let sent = 0;
+  try {
+    const { sendAgreementAssignedEmail } = await import('../services/email');
+    for (const r of pending) {
+      try {
+        await sendAgreementAssignedEmail(
+          c.env,
+          r.recipient_email,
+          r.recipient_name || r.recipient_email,
+          '3-Way Mutual NDA — please sign',
+          `${appUrl}/esign/${r.signing_token}`,
+          'Axal Admin',
+        );
+        sent += 1;
+      } catch (e) { console.warn('[trust] resend email failed', r.recipient_email, (e as Error).message); }
+    }
+  } catch (e) { console.warn('[trust] email module unavailable', (e as Error).message); }
+  await c.env.DB.prepare(
+    `UPDATE pairwise_ndas SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+  ).bind(id).run();
+  // Return both `sent` (frontend reads this) and `resent` (legacy alias).
+  return c.json({ ok: true, sent, resent: sent, pending: pending.length });
+});
+
+// ---------------------------------------------------------------------------
+// POST /pairwise-ndas/:id/void — admin revokes a pairwise NDA. Flips the
+// row to `revoked`, stamps `voided_at` + `voided_reason`, and (if the
+// underlying envelope hasn't completed) marks the envelope `cancelled`
+// so the signing tokens stop working.
+// ---------------------------------------------------------------------------
+trust.post('/pairwise-ndas/:id/void', async (c) => {
+  await requireAdmin(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid_id' }, 400);
+  const body = await c.req.json().catch(() => ({} as any));
+  const reason = String(body?.reason || '').slice(0, 500) || 'admin_voided';
+  const pair: any = await c.env.DB.prepare(
+    `SELECT id, nda_envelope_uuid, status FROM pairwise_ndas WHERE id = ? LIMIT 1`,
+  ).bind(id).first();
+  if (!pair) return c.json({ error: 'not_found' }, 404);
+  if (pair.status === 'revoked') return c.json({ ok: true, already: true });
+  // Defensive — schema upgrade may not have run yet on dev D1.
+  try {
+    await c.env.DB.prepare(
+      `UPDATE pairwise_ndas SET status = 'revoked', voided_at = CURRENT_TIMESTAMP,
+              voided_reason = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+    ).bind(reason, id).run();
+  } catch {
+    await c.env.DB.prepare(
+      `UPDATE pairwise_ndas SET status = 'revoked', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    ).bind(id).run();
+  }
+  try {
+    await c.env.DB.prepare(
+      `UPDATE esign_envelopes SET status = 'cancelled' WHERE envelope_uuid = ? AND status NOT IN ('completed','cancelled')`,
+    ).bind(pair.nda_envelope_uuid).run();
+  } catch {}
+  return c.json({ ok: true, status: 'revoked', reason });
+});
+
+// ---------------------------------------------------------------------------
+// POST /kyb/start — thin facade so the SPA can launch entity verification
+// from the Trust Center even though the canonical KYB flow lives under
+// /api/kyc. Marks the kyb_v1 obligation as `in_review` and upserts a
+// minimal `corporate_profiles` row so subsequent KYC submissions have a
+// row to attach to.
+// ---------------------------------------------------------------------------
+trust.post('/kyb/start', async (c) => {
+  const user = await requireAuth(c);
+  await ensureTrustSchema(c.env);
+  const body = await c.req.json().catch(() => ({} as any));
+  const legalName = String(body?.legal_name || '').slice(0, 255).trim();
+  const businessId = String(body?.business_id || '').slice(0, 120).trim();
+  const country = String(body?.country || body?.country_code || '').slice(0, 8).trim().toUpperCase();
+  // Best-effort upsert against the canonical corporate_profiles columns
+  // (entity_name + registration_number + registered_country). Dev D1 may
+  // be missing the table on a stale checkout, so we swallow + warn.
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO corporate_profiles (user_id, entity_name, registration_number, registered_country, updated_at)
+       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(user_id) DO UPDATE SET
+         entity_name = COALESCE(excluded.entity_name, corporate_profiles.entity_name),
+         registration_number = COALESCE(excluded.registration_number, corporate_profiles.registration_number),
+         registered_country = COALESCE(excluded.registered_country, corporate_profiles.registered_country),
+         updated_at = CURRENT_TIMESTAMP`,
+    ).bind(user.id, legalName || null, businessId || null, country || null).run();
+  } catch (e) {
+    console.warn('[trust] kyb_start corporate_profiles upsert failed', (e as Error).message);
+  }
+  await c.env.DB.prepare(
+    `UPDATE legal_obligations
+        SET status = 'in_review', required = 1, updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = ? AND obligation_key = 'kyb_v1'`,
+  ).bind(user.id).run();
+  return c.json({ ok: true, status: 'in_review' });
 });
 
 // Ensure obligations exist for a list of role-defaults exposed for
