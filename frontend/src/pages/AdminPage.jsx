@@ -1721,11 +1721,23 @@ function NewEnvelopeWizard({ onClose, onSent }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [progress, setProgress] = useState(null);
+  // Templates endpoint is worker-only (`/admin/contracts/templates/legal`).
+  // The dev FastAPI backend doesn't host it, so the catalog fetch 404s
+  // there. We track that case separately so the modal shows a calm
+  // "unavailable in this environment" message rather than a scary
+  // "Not found" red banner above an empty dropdown.
+  const [templatesUnavailable, setTemplatesUnavailable] = useState(false);
 
   useEffect(() => {
     api.adminListLegalTemplates()
       .then(r => { setTemplates(r.items || []); if (r.items?.[0]) setDocType(r.items[0].doc_type); })
-      .catch(e => setErr(e.message));
+      .catch(e => {
+        if (e?.status === 404) {
+          setTemplatesUnavailable(true);
+        } else {
+          setErr(e.message);
+        }
+      });
   }, []);
 
   const updateRecipient = (idx, patch) => {
@@ -1778,12 +1790,19 @@ function NewEnvelopeWizard({ onClose, onSent }) {
         </div>
         <form onSubmit={submit} className="px-5 py-4 space-y-3 overflow-y-auto">
           {err && <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-2 rounded">{err}</div>}
+          {templatesUnavailable && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs p-2 rounded">
+              The legal template catalog isn't available in this environment. Envelope creation runs against the production worker — try again from the deployed app.
+            </div>
+          )}
           {progress && busy && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs p-2 rounded">Sending… {progress.done} / {progress.total}</div>}
           <label className="block">
             <span className="text-xs font-semibold text-gray-700">Template</span>
             <select value={docType} onChange={e => setDocType(e.target.value)} required
               className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white">
-              {templates.length === 0 && <option value="">Loading…</option>}
+              {templates.length === 0 && (
+                <option value="">{templatesUnavailable ? 'Unavailable in this environment' : 'Loading…'}</option>
+              )}
               {templates.map(t => <option key={t.key} value={t.doc_type}>{t.title}</option>)}
             </select>
           </label>
