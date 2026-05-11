@@ -572,6 +572,10 @@ export const api = {
   },
   adminContractStats: () => request('/admin/contracts/stats'),
   adminContractTemplates: () => request('/admin/contracts/templates'),
+  adminContractTemplateUsage: (docType, params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
+    return request(`/admin/contracts/templates/${encodeURIComponent(docType)}/usage${q ? `?${q}` : ''}`);
+  },
   adminGetContract: (uid) => request(`/admin/contracts/${uid}`),
   adminResendContract: (uid) => request(`/admin/contracts/${uid}/resend`, { method: 'POST' }),
   adminVoidContract: (uid) => request(`/admin/contracts/${uid}/void`, { method: 'POST' }),

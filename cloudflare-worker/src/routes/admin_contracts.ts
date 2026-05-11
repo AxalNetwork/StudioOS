@@ -1247,4 +1247,85 @@ adminContracts.get('/templates/legal', async (c) => {
   return c.json({ items: LEGAL_TEMPLATE_CATALOG });
 });
 
+// GET /api/admin/contracts/templates/:doc_type/usage — drill-down for a
+// single template card on Admin > Contracts > Templates. Returns the
+// template metadata, aggregate counters across the 4-source union for
+// that doc_type, and the list of envelopes/contracts using it (newest
+// first), so admins can see who's been assigned, what was sent, what's
+// signed, and when. Re-uses `loadAllContracts` so source coverage
+// (documents + esign + pairwise + partner_deals) and field decoration
+// stay in lock-step with the main list endpoint.
+adminContracts.get('/templates/:doc_type/usage', async (c) => {
+  await requireAdmin(c);
+  const docType = c.req.param('doc_type');
+  const tpl = TEMPLATES[docType];
+  if (!tpl) return c.json({ error: 'unknown_template', doc_type: docType }, 404);
+
+  const limit = Math.min(parseInt(c.req.query('limit') || '200', 10) || 200, 500);
+  const offset = parseInt(c.req.query('offset') || '0', 10) || 0;
+
+  const sql = getSQL(c.env);
+  try {
+    const all = await loadAllContracts(sql);
+    const rows = all.filter(r => r.doc_type === docType);
+
+    const byStatus: Record<string, number> = { draft: 0, generated: 0, sent: 0, signed: 0, void: 0 };
+    const signDays: number[] = [];
+    let signedRecent = 0;
+    const cutoff = Date.now() - 30 * 86400000;
+    let lastUsed: string | null = null;
+    for (const r of rows) {
+      if (r.status in byStatus) byStatus[r.status]++;
+      if (r.days_to_sign != null) signDays.push(r.days_to_sign);
+      if (r.signed_at) {
+        const t = new Date(r.signed_at).getTime();
+        if (Number.isFinite(t) && t >= cutoff) signedRecent++;
+      }
+      if (r.created_at && (!lastUsed || new Date(r.created_at) > new Date(lastUsed))) {
+        lastUsed = r.created_at;
+      }
+    }
+
+    const items = rows.slice(offset, offset + limit);
+    // Same void-reason batch enrichment used by the list endpoint so the
+    // template-usage modal can show why a void row was voided without an
+    // extra round-trip.
+    const voidUids = items.filter(r => r.status === 'void' && r.uid).map(r => r.uid);
+    if (voidUids.length > 0) {
+      const reasons = await loadVoidReasonsBatch(sql, voidUids);
+      for (const r of items) {
+        if (r.status !== 'void') continue;
+        const v = reasons.get(r.uid);
+        if (v) { r.void_reason = v.reason; r.voided_at = v.voided_at; }
+      }
+    }
+
+    return c.json({
+      template: {
+        key: docType,
+        doc_type: docType,
+        title: tpl.title,
+        layer: tpl.layer,
+        layer_label: TEMPLATE_LAYERS[tpl.layer]?.label || tpl.layer,
+      },
+      stats: {
+        total: rows.length,
+        by_status: byStatus,
+        signed_last_30d: signedRecent,
+        pending_signature: byStatus.sent + byStatus.generated,
+        avg_days_to_sign: signDays.length
+          ? Math.round((signDays.reduce((a, b) => a + b, 0) / signDays.length) * 10) / 10
+          : null,
+        last_used_at: lastUsed,
+      },
+      total: rows.length,
+      limit,
+      offset,
+      items,
+    });
+  } finally {
+    await sql.end();
+  }
+});
+
 export default adminContracts;

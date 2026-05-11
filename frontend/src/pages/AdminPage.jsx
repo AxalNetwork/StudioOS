@@ -1976,26 +1976,212 @@ function ContractRow({ c, onOpen }) {
 }
 
 function TemplatesGrid({ templates }) {
+  const [openTpl, setOpenTpl] = useState(null);
   if (!templates || templates.length === 0) {
     return <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm">No templates available.</div>;
   }
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-      {templates.map(t => (
-        <div key={t.key} className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="font-semibold text-gray-900 truncate">{t.title}</div>
-              <div className="text-[11px] text-gray-500 mt-0.5">{t.layer_label}</div>
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {templates.map(t => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setOpenTpl(t)}
+            data-testid={`template-card-${t.key}`}
+            className="bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-violet-400 hover:shadow-sm transition focus:outline-none focus:ring-2 focus:ring-violet-400">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-semibold text-gray-900 truncate">{t.title}</div>
+                <div className="text-[11px] text-gray-500 mt-0.5">{t.layer_label}</div>
+              </div>
+              <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-1 rounded-full whitespace-nowrap">{t.usage_count} uses</span>
             </div>
-            <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-1 rounded-full whitespace-nowrap">{t.usage_count} uses</span>
+            <div className="text-[11px] text-gray-500 mt-3">
+              Last used: {fmtDate(t.last_used_at) || 'Never'}
+            </div>
+            <div className="text-[10px] text-gray-400 mt-1 font-mono truncate">{t.key}</div>
+          </button>
+        ))}
+      </div>
+      {openTpl && (
+        <TemplateUsageModal
+          docType={openTpl.doc_type || openTpl.key}
+          fallback={openTpl}
+          onClose={() => setOpenTpl(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// Detail modal for a single template card. Lists every contract/envelope
+// that has used this template across the 4-source union, with a small
+// stats header (total/sent/signed/voided/avg-days-to-sign). Each row is
+// clickable and opens the existing ContractDetailModal so admins can
+// drill all the way through (resend / void / download / share-link)
+// without leaving the modal stack.
+function TemplateUsageModal({ docType, fallback, onClose }) {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [openContract, setOpenContract] = useState(null);
+  // Modal-stack guard: when the inner ContractDetailModal is mounted,
+  // backdrop clicks and Escape must close ONLY the inner modal, not
+  // collapse the entire stack. Both events bubble to window/document
+  // (Escape) and to the outer overlay div (click), so we no-op the
+  // outer close handler whenever a child modal is open.
+  useEscapeClose(openContract ? () => {} : onClose);
+
+  const reload = async () => {
+    setLoading(true); setErr('');
+    try {
+      const r = await api.adminContractTemplateUsage(docType, { limit: 200 });
+      setData(r);
+    } catch (e) {
+      setErr(e.message || 'Failed to load template usage.');
+      reportError('TemplateUsageModal:load', e);
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [docType]);
+
+  const tpl = data?.template || { title: fallback?.title, layer_label: fallback?.layer_label, doc_type: docType, key: docType };
+  const stats = data?.stats;
+  const items = data?.items || [];
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      onClick={() => { if (!openContract) onClose(); }}>
+      <div onClick={e => e.stopPropagation()} className="relative bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[88vh] overflow-hidden flex flex-col">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <FileText size={16} className="text-violet-600" />
+              <h3 className="font-semibold text-gray-900 truncate">{tpl.title}</h3>
+              <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full">
+                {stats ? `${stats.total} use${stats.total === 1 ? '' : 's'}` : '…'}
+              </span>
+            </div>
+            <div className="text-xs text-gray-500">
+              {tpl.layer_label}
+              <span className="font-mono text-gray-400 ml-2">{tpl.doc_type}</span>
+            </div>
           </div>
-          <div className="text-[11px] text-gray-500 mt-3">
-            Last used: {fmtDate(t.last_used_at) || 'Never'}
-          </div>
-          <div className="text-[10px] text-gray-400 mt-1 font-mono truncate">{t.key}</div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
         </div>
-      ))}
+
+        <div className="px-5 py-4 overflow-y-auto flex-1 space-y-4">
+          {err && <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-2 rounded">{err}</div>}
+
+          {/* Stats header */}
+          {stats && (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              <StatBox label="Pending" value={stats.pending_signature} accent="amber" />
+              <StatBox label="Signed" value={stats.by_status.signed} accent="emerald" />
+              <StatBox label="Voided" value={stats.by_status.void} accent="rose" />
+              <StatBox label="Signed (30d)" value={stats.signed_last_30d} accent="violet" />
+              <StatBox label="Avg days to sign" value={stats.avg_days_to_sign ?? '—'} accent="slate" />
+            </div>
+          )}
+
+          {/* Usage list */}
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2">
+              Envelopes using this template
+              {stats?.last_used_at && (
+                <span className="ml-2 normal-case font-normal text-gray-400">
+                  · last used {fmtDate(stats.last_used_at)}
+                </span>
+              )}
+            </div>
+            {loading ? (
+              <div className="bg-white border border-gray-200 rounded-xl p-6 text-center text-gray-500 text-sm">Loading…</div>
+            ) : items.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 text-sm">
+                This template hasn't been used yet. Send your first envelope from the Profiles tab.
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-gray-200 rounded-xl">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 text-gray-600">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium">Recipient</th>
+                      <th className="text-left px-3 py-2 font-medium">Project</th>
+                      <th className="text-left px-3 py-2 font-medium">Status</th>
+                      <th className="text-left px-3 py-2 font-medium">Sent</th>
+                      <th className="text-left px-3 py-2 font-medium">Signed</th>
+                      <th className="text-left px-3 py-2 font-medium">Source</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {items.map(c => (
+                      <tr key={c.uid} className="hover:bg-violet-50/40 cursor-pointer" onClick={() => setOpenContract(c)}>
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-gray-900 truncate max-w-[200px]" title={c.recipient_email || '—'}>
+                            {c.recipient_email || c.signed_by || '—'}
+                          </div>
+                          {c.title && c.title !== c.recipient_email && (
+                            <div className="text-[10px] text-gray-500 truncate max-w-[200px]" title={c.title}>{c.title}</div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-gray-600 truncate max-w-[160px]">{c.project_name || '—'}</td>
+                        <td className="px-3 py-2"><StatusPill status={c.status} /></td>
+                        <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{fmtDate(c.created_at) || '—'}</td>
+                        <td className="px-3 py-2 text-gray-600 whitespace-nowrap">
+                          {c.signed_at ? (
+                            <span title={c.signed_by || ''}>
+                              {fmtDate(c.signed_at)}
+                              {c.signed_by && <div className="text-[10px] text-gray-500 truncate max-w-[140px]">by {c.signed_by}</div>}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="text-[10px] uppercase tracking-wide text-gray-500 font-mono">{c.source}</span>
+                          {c.provider === 'docusign' && (
+                            <span className="ml-1 text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">DocuSign</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button type="button" className="text-violet-700 hover:text-violet-900 font-medium">Open →</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {openContract && (
+        <ContractDetailModal
+          uid={openContract.uid}
+          onClose={() => setOpenContract(null)}
+          onChanged={(opts) => {
+            reload();
+            if (!opts || !opts.keepOpen) setOpenContract(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function StatBox({ label, value, accent = 'slate' }) {
+  const colors = {
+    amber: 'bg-amber-50 border-amber-200 text-amber-800',
+    emerald: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+    rose: 'bg-rose-50 border-rose-200 text-rose-800',
+    violet: 'bg-violet-50 border-violet-200 text-violet-800',
+    slate: 'bg-gray-50 border-gray-200 text-gray-800',
+  }[accent] || 'bg-gray-50 border-gray-200 text-gray-800';
+  return (
+    <div className={`border rounded-lg px-3 py-2 ${colors}`}>
+      <div className="text-[10px] uppercase tracking-wide opacity-75">{label}</div>
+      <div className="text-lg font-bold leading-tight">{value}</div>
     </div>
   );
 }
