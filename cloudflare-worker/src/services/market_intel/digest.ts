@@ -203,11 +203,22 @@ function renderDigestHtml(args: {
 
     const citeRows = s.citations.length === 0
       ? `<tr><td style="padding:8px 0;font-size:12px;color:#9ca3af;font-style:italic;">No new citations this period.</td></tr>`
-      : s.citations.slice(0, 3).map((c) => `
+      : s.citations.slice(0, 3).map((c) => {
+          // Only render http(s) citation URLs as anchors. Anything
+          // else (javascript:, data:, mailto:, missing scheme) shows
+          // as plain escaped text to avoid funnelling untrusted
+          // third-party data into a clickable link.
+          const safeHref = /^https?:\/\//i.test(c.citation_url || '') ? c.citation_url : '';
+          const label = escapeHtml(c.metric_key);
+          const urlText = escapeHtml(c.citation_url || '');
+          return `
           <tr><td style="padding:6px 0;border-top:1px solid #f3f4f6;">
-            <a href="${escapeHtml(c.citation_url)}" style="color:#2563eb;text-decoration:none;font-size:13px;font-weight:500;">${escapeHtml(c.metric_key)}</a>
-            <div style="font-size:11px;color:#9ca3af;margin-top:2px;">${escapeHtml(c.citation_url)}</div>
-          </td></tr>`).join('');
+            ${safeHref
+              ? `<a href="${escapeHtml(safeHref)}" style="color:#2563eb;text-decoration:none;font-size:13px;font-weight:500;">${label}</a>`
+              : `<span style="color:#374151;font-size:13px;font-weight:500;">${label}</span>`}
+            <div style="font-size:11px;color:#9ca3af;margin-top:2px;">${urlText}</div>
+          </td></tr>`;
+        }).join('');
 
     return `
       <tr><td style="padding:0 0 14px;">
