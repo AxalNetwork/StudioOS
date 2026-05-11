@@ -1,0 +1,151 @@
+
+Select alert #140
+Unused variable, import, function or class
+Note
+#140 opened 5 days ago • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :16
+main
+
+Select alert #139
+Unused variable, import, function or class
+Note
+#139 opened 5 days ago • Detected by CodeQL in frontend/.../pages/ApiBridgePage.jsx :1
+main
+
+Select alert #138
+Unused variable, import, function or class
+Note
+#138 opened 5 days ago • Detected by CodeQL in frontend/.../lib/deckPdf.jsx :23
+main
+
+Select alert #137
+Unused variable, import, function or class
+Note
+#137 opened 5 days ago • Detected by CodeQL in frontend/.../components/OnboardingWizard.jsx :13
+main
+
+Select alert #136
+Unused variable, import, function or class
+Note
+#136 opened 5 days ago • Detected by CodeQL in frontend/.../components/CompanyProfilePanel.jsx :1
+main
+
+Select alert #135
+Unused variable, import, function or class
+Note
+#135 opened 5 days ago • Detected by CodeQL in frontend/src/App.jsx :9
+main
+
+Select alert #134
+Unused variable, import, function or class
+Note
+#134 opened 5 days ago • Detected by CodeQL in frontend/public/verify-email.html :496
+main
+
+Select alert #133
+Unused variable, import, function or class
+Note
+Documentation
+#133 opened 5 days ago • Detected by CodeQL in docs/verify-email.html :496
+main
+
+Select alert #132
+Unused variable, import, function or class
+Note
+#132 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../services/queueWorker.ts :17
+main
+
+Select alert #131
+Unused variable, import, function or class
+Note
+#131 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/partner_office_hours.ts :50
+main
+
+Select alert #130
+Unused variable, import, function or class
+Note
+#130 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/networkfx.ts :173
+main
+
+Select alert #129
+Unused variable, import, function or class
+Note
+#129 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/mentors.ts :14
+main
+
+Select alert #128
+Unused variable, import, function or class
+Note
+#128 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/matches.ts :332
+main
+
+Select alert #127
+Unused variable, import, function or class
+Note
+#127 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/legalcap.ts :17
+main
+
+Select alert #126
+Unused variable, import, function or class
+Note
+#126 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/legalcap.ts :16
+main
+
+Select alert #125
+Unused variable, import, function or class
+Note
+#125 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/legalcap.ts :11
+main
+
+Select alert #124
+Unused variable, import, function or class
+Note
+#124 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/liquidity.ts :16
+main
+
+Select alert #122
+Unused variable, import, function or class
+Note
+#122 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/journal.ts :77
+main
+
+Select alert #121
+Unused variable, import, function or class
+Note
+#121 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/insights.ts :98
+main
+
+Select alert #120
+Unused variable, import, function or class
+Note
+#120 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/comarketing.ts :270
+main
+
+Select alert #119
+Unused variable, import, function or class
+Note
+#119 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/advisory.ts :39
+main
+
+Select alert #118
+Unused variable, import, function or class
+Note
+#118 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/advisory.ts :17
+main
+
+Select alert #117
+Unused variable, import, function or class
+Note
+#117 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../middleware/rateLimit.ts :1
+main
+
+Select alert #91
+First parameter of a method is not named 'self'
+Note
+#91 opened 5 days ago • Detected by CodeQL in backend/.../routes/wellbeing.py :294
+main
+
+Select alert #90
+First parameter of a method is not named 'self'
+Note
+#90 opened 5 days ago • Detected by CodeQL in backend/.../routes/wellbeing.py :91
+main

@@ -1,0 +1,151 @@
+
+Select alert #87
+Unused import
+Note
+#87 opened 5 days ago • Detected by CodeQL in backend/.../routes/wellbeing.py :28
+main
+
+Select alert #86
+Unused import
+Note
+#86 opened 5 days ago • Detected by CodeQL in backend/.../services/watchlist.py :18
+main
+
+Select alert #85
+Unused import
+Note
+#85 opened 5 days ago • Detected by CodeQL in backend/.../routes/watchlist.py :28
+main
+
+Select alert #84
+Unused import
+Note
+#84 opened 5 days ago • Detected by CodeQL in backend/.../routes/users.py :7
+main
+
+Select alert #83
+Unused import
+Note
+#83 opened 5 days ago • Detected by CodeQL in backend/.../services/trust.py :37
+main
+
+Select alert #82
+Unused import
+Note
+#82 opened 5 days ago • Detected by CodeQL in backend/.../services/trust.py :33
+main
+
+Select alert #81
+Unused import
+Note
+#81 opened 5 days ago • Detected by CodeQL in backend/.../routes/trust.py :27
+main
+
+Select alert #80
+Unused import
+Note
+#80 opened 5 days ago • Detected by CodeQL in backend/.../routes/trust.py :24
+main
+
+Select alert #79
+Unused import
+Note
+#79 opened 5 days ago • Detected by CodeQL in backend/.../routes/trust.py :20
+main
+
+Select alert #78
+Unused import
+Note
+Test
+#78 opened 5 days ago • Detected by CodeQL in tests/test_db_guards.py :15
+main
+
+Select alert #77
+Unused import
+Note
+#77 opened 5 days ago • Detected by CodeQL in backend/.../services/stripe_connect.py :18
+main
+
+Select alert #76
+Unused import
+Note
+#76 opened 5 days ago • Detected by CodeQL in backend/.../routes/services.py :21
+main
+
+Select alert #75
+Unused import
+Note
+#75 opened 5 days ago • Detected by CodeQL in backend/.../routes/scoring.py :5
+main
+
+Select alert #74
+Unused import
+Note
+#74 opened 5 days ago • Detected by CodeQL in backend/.../services/scoring.py :1
+main
+
+Select alert #73
+Unused import
+Note
+#73 opened 5 days ago • Detected by CodeQL in backend/.../routes/references.py :24
+main
+
+Select alert #72
+Unused import
+Note
+#72 opened 5 days ago • Detected by CodeQL in backend/.../routes/public_profiles.py :37
+main
+
+Select alert #71
+Unused import
+Note
+#71 opened 5 days ago • Detected by CodeQL in backend/.../routes/projects.py :15
+main
+
+Select alert #70
+Unused import
+Note
+#70 opened 5 days ago • Detected by CodeQL in backend/.../routes/private_data.py :5
+main
+
+Select alert #69
+Unused import
+Note
+#69 opened 5 days ago • Detected by CodeQL in backend/.../services/notify.py :23
+main
+
+Select alert #68
+Unused import
+Note
+#68 opened 5 days ago • Detected by CodeQL in backend/.../routes/needs.py :19
+main
+
+Select alert #67
+Unused import
+Note
+#67 opened 5 days ago • Detected by CodeQL in backend/.../services/mentors.py :27
+main
+
+Select alert #66
+Unused import
+Note
+#66 opened 5 days ago • Detected by CodeQL in backend/.../routes/mentors.py :25
+main
+
+Select alert #65
+Unused import
+Note
+#65 opened 5 days ago • Detected by CodeQL in backend/.../routes/market_intel.py :7
+main
+
+Select alert #64
+Unused import
+Note
+#64 opened 5 days ago • Detected by CodeQL in backend/.../models/entities.py :3
+main
+
+Select alert #63
+Unused import
+Note
+#63 opened 5 days ago • Detected by CodeQL in backend/.../models/entities.py :1
+main

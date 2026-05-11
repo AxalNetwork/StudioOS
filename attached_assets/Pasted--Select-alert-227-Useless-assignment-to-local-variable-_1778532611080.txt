@@ -1,0 +1,153 @@
+
+Select alert #227
+Useless assignment to local variable
+Warning
+#227 opened yesterday • Detected by CodeQL in cloudflare-worker/.../routes/admin_contracts.ts :1009
+main
+
+Select alert #221
+Useless conditional
+Warning
+#221 opened yesterday • Detected by CodeQL in cloudflare-worker/.../providers/calendly.ts :175
+main
+
+Select alert #214
+Useless conditional
+Warning
+#214 opened yesterday • Detected by CodeQL in cloudflare-worker/.../providers/hubspot.ts :200
+main
+
+Select alert #209
+Superfluous trailing arguments
+Warning
+#209 opened 2 days ago • Detected by CodeQL in frontend/src/App.jsx :150
+main
+
+Select alert #208
+Useless assignment to local variable
+Warning
+#208 opened 2 days ago • Detected by CodeQL in cloudflare-worker/.../routes/auth_sms.ts :142
+main
+
+Select alert #193
+Useless conditional
+Warning
+#193 opened 5 days ago • Detected by CodeQL in frontend/.../pages/ESignPage.jsx :175
+main
+
+Select alert #192
+Useless assignment to local variable
+Warning
+#192 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/linkedin.ts :271
+main
+
+Select alert #39
+Variable defined multiple times
+Warning
+#39 opened 5 days ago • Detected by CodeQL in backend/.../routes/progress.py :549
+main
+
+Select alert #113
+Redundant comparison
+Warning
+#113 opened 5 days ago • Detected by CodeQL in backend/.../routes/auth.py :53
+main
+
+Select alert #249
+Unused variable, import, function or class
+Note
+Test
+#249 opened 50 minutes ago • Detected by CodeQL in cloudflare-worker/test/admin_contracts_union.te... :235
+main
+
+Select alert #248
+Unused variable, import, function or class
+Note
+Test
+#248 opened 50 minutes ago • Detected by CodeQL in cloudflare-worker/test/admin_contracts_union.te... :200
+main
+
+Select alert #247
+Unused variable, import, function or class
+Note
+Test
+#247 opened 50 minutes ago • Detected by CodeQL in cloudflare-worker/test/admin_contracts_union.te... :197
+main
+
+Select alert #244
+Unused variable, import, function or class
+Note
+#244 opened 5 hours ago • Detected by CodeQL in cloudflare-worker/.../routes/market_intel.ts :5
+main
+
+Select alert #237
+Unused variable, import, function or class
+Note
+#237 opened 13 hours ago • Detected by CodeQL in frontend/.../banks/newFounder.js :24
+main
+
+Select alert #236
+Unused variable, import, function or class
+Note
+#236 opened yesterday • Detected by CodeQL in frontend/.../admin/PartnerInvitations.jsx :3
+main
+
+Select alert #235
+Unused variable, import, function or class
+Note
+#235 opened yesterday • Detected by CodeQL in frontend/.../admin/PartnerInvitations.jsx :2
+main
+
+Select alert #234
+Unused variable, import, function or class
+Note
+#234 opened yesterday • Detected by CodeQL in frontend/.../admin/PartnerInvitations.jsx :1
+main
+
+Select alert #233
+Unused variable, import, function or class
+Note
+#233 opened yesterday • Detected by CodeQL in frontend/.../pages/PartnerOnboardPage.jsx :173
+main
+
+Select alert #232
+Unused variable, import, function or class
+Note
+#232 opened yesterday • Detected by CodeQL in frontend/.../pages/PartnerOnboardPage.jsx :74
+main
+
+Select alert #231
+Unused variable, import, function or class
+Note
+#231 opened yesterday • Detected by CodeQL in frontend/.../pages/PartnerOnboardPage.jsx :73
+main
+
+Select alert #230
+Unused variable, import, function or class
+Note
+#230 opened yesterday • Detected by CodeQL in frontend/.../pages/PartnerDealPortal.jsx :16
+main
+
+Select alert #226
+Unused variable, import, function or class
+Note
+#226 opened yesterday • Detected by CodeQL in frontend/.../pages/InvestorPricingPage.jsx :12
+main
+
+Select alert #225
+Unused variable, import, function or class
+Note
+#225 opened yesterday • Detected by CodeQL in frontend/.../pages/AdminPage.jsx :4
+main
+
+Select alert #223
+Unused variable, import, function or class
+Note
+#223 opened yesterday • Detected by CodeQL in frontend/.../pages/MarketIntelPage.jsx :6
+main
+
+Select alert #220
+Unused variable, import, function or class
+Note
+#220 opened yesterday • Detected by CodeQL in cloudflare-worker/.../providers/calendly.ts :330
+main
