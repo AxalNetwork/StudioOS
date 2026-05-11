@@ -141,7 +141,7 @@ self.addEventListener('fetch', (event) => {
 
   // Everything else: network with cache fallback
   event.respondWith(
-    fetch(request).catch(() => caches.match(request))
+    fetch(request).catch(() => caches.match(request).then((res) => res || Response.error()))
   );
 });
 
