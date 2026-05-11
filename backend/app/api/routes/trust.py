@@ -16,6 +16,7 @@ from typing import Optional
 from fastapi import (APIRouter, Depends, File, Form, Header, HTTPException,
                      Request, UploadFile)
 from pydantic import BaseModel, Field as PField
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from backend.app.api.routes.auth import get_current_user
@@ -354,3 +355,130 @@ def trust_summary(
         except HTTPException:
             pass
     return out
+
+
+# ===========================================================================
+# Task #41 — DEV-ONLY trust intro stubs
+# ---------------------------------------------------------------------------
+# The production Cloudflare Worker hosts /trust/intro/{request,status} with
+# a full 3-way envelope creation flow (cloudflare-worker/src/routes/trust.ts
+# + services/trustEnvelope.ts). The dev FastAPI backend doesn't have R2 +
+# DocuSign + Resend wired in, so we provide a tiny stub that's just enough
+# to drive the LockedFounderCard UI:
+#
+#   POST /trust/intro/request  → upserts a row in `dev_pairwise_ndas`
+#                                with status='pending', returns
+#                                {status: 'envelope_issued', envelope_uuid}.
+#                                If a row already exists with status='active'
+#                                we short-circuit with {status: 'already_active'}.
+#   GET  /trust/intro/status   → returns {active, status, ...} matching the
+#                                shape `LockedFounderCard.useEffect` reads.
+#
+# The dev backend never deploys (replit.md), so this stub can never serve
+# real production traffic. Branch order matches the worker's
+# `requestIntroLogic` so the failure modes (cannot_intro_self,
+# founder_not_found, target_is_not_a_founder) stay observable in dev.
+# ===========================================================================
+class IntroRequestIn(BaseModel):
+    founder_user_id: int
+
+
+@router.post("/intro/request")
+def trust_intro_request(
+    body: IntroRequestIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    role = (getattr(user.role, "value", user.role) or "").lower()
+    if role not in ("investor", "admin"):
+        raise HTTPException(status_code=403, detail="investor_role_required")
+    fid = int(body.founder_user_id or 0)
+    if fid <= 0:
+        raise HTTPException(status_code=400, detail="founder_user_id required")
+    if fid == user.id:
+        raise HTTPException(status_code=400, detail="cannot_intro_self")
+
+    founder = session.get(User, fid)
+    if not founder:
+        raise HTTPException(status_code=404, detail="founder_not_found")
+    f_role = (getattr(founder.role, "value", founder.role) or "").lower()
+    if f_role != "founder":
+        raise HTTPException(status_code=400, detail="target_is_not_a_founder")
+
+    # Lazy-create the dev table — the lifespan hook also runs this, but
+    # belt-and-braces in case a fresh dev DB is dropped in mid-process.
+    from backend.app.services.demo_seed import ensure_dev_pairwise_ndas_table
+    ensure_dev_pairwise_ndas_table()
+
+    existing = session.exec(
+        text(
+            """SELECT status, envelope_uuid FROM dev_pairwise_ndas
+               WHERE founder_user_id = :f AND investor_user_id = :i"""
+        ).bindparams(f=fid, i=user.id)
+    ).first()
+    if existing and (existing[0] if isinstance(existing, tuple) else existing._mapping["status"]) == "active":
+        env_uuid = existing[1] if isinstance(existing, tuple) else existing._mapping["envelope_uuid"]
+        return {"status": "already_active", "envelope_uuid": env_uuid}
+
+    import uuid as _uuid
+    env_uuid = _uuid.uuid4().hex
+    if existing:
+        session.exec(
+            text(
+                """UPDATE dev_pairwise_ndas SET status='pending', envelope_uuid=:e
+                   WHERE founder_user_id=:f AND investor_user_id=:i"""
+            ).bindparams(e=env_uuid, f=fid, i=user.id)
+        )
+    else:
+        session.exec(
+            text(
+                """INSERT INTO dev_pairwise_ndas
+                   (founder_user_id, investor_user_id, status, envelope_uuid)
+                   VALUES (:f, :i, 'pending', :e)"""
+            ).bindparams(f=fid, i=user.id, e=env_uuid)
+        )
+    session.commit()
+    # Match the worker's success-shape so the frontend (LockedFounderCard)
+    # treats this exactly like the prod flow: anything other than
+    # `already_active` flips the card to "Intro pending — sign NDA".
+    return {
+        "status": "envelope_issued",
+        "envelope_uuid": env_uuid,
+        # Dev stub: no real signing URL — point at /trust so the UI hint
+        # ("sign the mutual NDA in your Trust Center") still resolves.
+        "signing_url": "/trust",
+    }
+
+
+@router.get("/intro/status")
+def trust_intro_status(
+    founder: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    role = (getattr(user.role, "value", user.role) or "").lower()
+    if role not in ("investor", "admin"):
+        raise HTTPException(status_code=403, detail="investor_role_required")
+    fid = int(founder or 0)
+    if fid <= 0:
+        raise HTTPException(status_code=400, detail="founder query param required")
+
+    from backend.app.services.demo_seed import ensure_dev_pairwise_ndas_table
+    ensure_dev_pairwise_ndas_table()
+
+    row = session.exec(
+        text(
+            """SELECT status FROM dev_pairwise_ndas
+               WHERE founder_user_id=:f AND investor_user_id=:i"""
+        ).bindparams(f=fid, i=user.id)
+    ).first()
+    status = "none"
+    if row:
+        status = row[0] if isinstance(row, tuple) else row._mapping["status"]
+    return {
+        "founder_user_id": fid,
+        "investor_user_id": user.id,
+        "status": status,
+        "valid_until": None,
+        "active": status == "active",
+    }

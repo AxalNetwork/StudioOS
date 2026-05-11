@@ -43,7 +43,24 @@ def get_project(project_id: int, session: Session = Depends(get_session), user: 
     # IDOR guard: founders may only read their own project.
     ensure_founder_access(user, project.founder_id)
     founder = session.get(Founder, project.founder_id) if project.founder_id else None
-    return {**project.model_dump(), "founder": founder.model_dump() if founder else None}
+    # Task #41 — surface the founder's *user* id so the LockedFounderCard
+    # on the investor-side /deals view can resolve the NDA pair. Mirrors
+    # the worker's `LEFT JOIN users u ON u.founder_id = p.founder_id` in
+    # cloudflare-worker/src/routes/projects.ts:24.
+    founder_user_id = None
+    if project.founder_id:
+        row = session.exec(
+            text("SELECT id FROM users WHERE founder_id = :fid LIMIT 1").bindparams(
+                fid=project.founder_id
+            )
+        ).first()
+        if row:
+            founder_user_id = row[0] if isinstance(row, tuple) else row._mapping["id"]
+    return {
+        **project.model_dump(),
+        "founder": founder.model_dump() if founder else None,
+        "founder_user_id": founder_user_id,
+    }
 
 
 @router.post("/")

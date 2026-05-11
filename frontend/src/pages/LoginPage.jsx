@@ -70,6 +70,38 @@ export default function LoginPage() {
     }
   };
 
+  // ---- Task #41 — DEV-ONLY demo investor quick-login ----
+  // The dev FastAPI backend exposes POST /api/auth/dev/quick-login
+  // which mints a JWT for the seeded `demo-investor@axal.test` account
+  // without TOTP / Turnstile (refused entirely when ENVIRONMENT=production).
+  // The button is gated on Vite's `import.meta.env.DEV` so the production
+  // bundle never includes it. Lands the user on /deals so testers can
+  // immediately drive the LockedFounderCard → Request intro flow.
+  const showDemoQuickLogin = !!import.meta.env.DEV;
+  const [demoLoading, setDemoLoading] = useState(false);
+  const demoLogin = async () => {
+    setDemoLoading(true); setError('');
+    try {
+      const res = await fetch('/api/auth/dev/quick-login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`Demo login unavailable (${res.status}). ${txt}`.trim());
+      }
+      const data = await res.json();
+      if (!data?.token || !data?.user) throw new Error('Invalid response from demo login.');
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      window.location.href = '/deals';
+    } catch (e) {
+      setError(e?.message || 'Demo login failed.');
+    } finally { setDemoLoading(false); }
+  };
+
   // ---- Submit ----
   const submit = async () => {
     if (!email.trim()) { setError('Enter your email.'); return; }
@@ -145,6 +177,22 @@ export default function LoginPage() {
               className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white flex items-center justify-center gap-2">
               {loading ? 'Signing in…' : <>Sign in <LogIn size={14} /></>}
             </button>
+
+            {showDemoQuickLogin && (
+              <div className="pt-2 border-t border-gray-200">
+                <button
+                  onClick={demoLogin}
+                  disabled={demoLoading}
+                  data-testid="demo-investor-login"
+                  className="w-full bg-amber-100 hover:bg-amber-200 border border-amber-300 disabled:opacity-50 rounded-lg py-2 text-xs font-medium text-amber-900 flex items-center justify-center gap-2"
+                >
+                  {demoLoading ? 'Signing in…' : 'Sign in as demo investor (dev only)'}
+                </button>
+                <p className="text-[10px] text-gray-500 mt-1 text-center">
+                  Skips TOTP &amp; Turnstile. Lands on <code>/deals</code>. Disabled in production builds.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex items-start gap-2 bg-violet-50 rounded-lg p-3 mt-5 border border-violet-300">

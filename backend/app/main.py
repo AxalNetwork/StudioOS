@@ -175,6 +175,18 @@ async def lifespan(app: FastAPI):
         # Task #55 — public profile handle column + backfill.
         ensure_user_handle_column()
         logger.info("StudioOS migrations: user.handle column ensured")
+        # Task #41 — demo investor + founder + project + deal so the
+        # dev quick-login button and the Trust Center e2e flow have a
+        # real deal to drive. Idempotent; refuses to seed when
+        # ENVIRONMENT=production. Also creates the dev-only
+        # `dev_pairwise_ndas` table backing the local /trust/intro stub.
+        from backend.app.services.demo_seed import (
+            ensure_dev_pairwise_ndas_table,
+            seed_demo_investor_and_founder,
+        )
+        ensure_dev_pairwise_ndas_table()
+        seed_demo_investor_and_founder()
+        logger.info("StudioOS demo seed: demo investor + founder ready")
     except Exception as exc:  # noqa: BLE001
         # Migrations are best-effort: a failure here must not prevent the API
         # from booting (e.g. fresh DB, missing legacy tables).

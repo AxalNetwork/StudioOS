@@ -608,6 +608,89 @@ def login(req: LoginRequest, request: Request, session: Session = Depends(get_se
     }
 
 
+class DevQuickLoginRequest(BaseModel):
+    # Default targets the seeded demo investor (see
+    # backend/app/services/demo_seed.py). Override to quick-login as the
+    # demo founder for two-sided e2e flows.
+    email: Optional[str] = None
+
+
+@router.post("/dev/quick-login")
+def dev_quick_login(
+    req: DevQuickLoginRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    """Task #41 — DEV-ONLY shortcut that mints a JWT for the seeded demo
+    user without requiring TOTP or Turnstile. Refuses to issue tokens when
+    ENVIRONMENT=production so this can never accidentally turn into an
+    auth-bypass on a real deploy.
+
+    Returns the same `{token, user, expires_in}` shape as POST /api/auth/login
+    so frontends and tests can use the response interchangeably.
+    """
+    import os as _os
+    if (_os.getenv("ENVIRONMENT") or "").lower() == "production":
+        raise HTTPException(status_code=404, detail="Not found")
+
+    from backend.app.services.demo_seed import DEMO_INVESTOR_EMAIL
+    target_email = (req.email or DEMO_INVESTOR_EMAIL).strip().lower()
+
+    user = session.exec(select(User).where(User.email == target_email)).first()
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Demo user '{target_email}' not seeded — restart the backend so the lifespan seeder runs.",
+        )
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is inactive")
+
+    # Mirror the real /login session-row + JWT-mint dance so revocation
+    # and the Settings → Active Sessions list keep working.
+    from backend.app.api.routes.settings import _ensure_schema as _ensure_settings_schema
+    try:
+        _ensure_settings_schema(session)
+    except Exception:
+        session.rollback()
+    import uuid as _uuid
+    jti = _uuid.uuid4().hex
+    token = create_jwt(user.id, user.email, user.role, jti=jti)
+
+    log = ActivityLog(
+        action="user_login",
+        details=f"DEV quick-login as {user.email}",
+        actor=user.email,
+    )
+    session.add(log)
+    ua = (request.headers.get("user-agent") or "")[:500] or None
+    fwd = request.headers.get("x-forwarded-for") or ""
+    ip = (fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else None))
+    if ip:
+        ip = ip[:64]
+    try:
+        session.exec(
+            text(
+                """INSERT INTO user_sessions (user_id, jti, user_agent, ip)
+                   VALUES (:uid, :j, :ua, :ip)"""
+            ).bindparams(uid=user.id, j=jti, ua=ua, ip=ip)
+        )
+    except Exception:
+        session.rollback()
+        session.add(log)
+    session.commit()
+
+    return {
+        "token": token,
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+        },
+        "expires_in": JWT_EXPIRY_HOURS * 3600,
+    }
+
+
 @router.get("/me")
 def get_me(user: User = Depends(get_current_user)):
     return {
