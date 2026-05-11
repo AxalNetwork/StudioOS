@@ -190,6 +190,13 @@ interface UnifiedContract {
   // it never appears for envelopes the backend would 400 on.
   raw_status?: string;
   can_resend?: boolean;
+  // Task #45 — void reason + timestamp surfaced directly on list rows
+  // so admins scanning Admin > Contracts > Voided can see why each row
+  // was voided without clicking through to the detail modal. Populated
+  // by `loadVoidReasonsBatch` after pagination so the join cost is
+  // bounded by the page size, not the table size.
+  void_reason?: string;
+  voided_at?: string | null;
 }
 
 function decorateDocType<T extends UnifiedContract>(row: T): T {
@@ -343,6 +350,42 @@ async function loadAllContracts(sql: ReturnType<typeof getSQL>): Promise<Unified
   return merged;
 }
 
+// Task #45 — batch sibling of `loadVoidReason` used by the list endpoint.
+// Single SQL pass over `activity_logs` for every void-state row in the
+// returned page (keyed by either `details.uid` or `details.envelope_uuid`).
+// `ORDER BY id DESC` + skip-if-already-seen keeps only the most recent
+// `contract_voided` entry per contract, matching `loadVoidReason`'s
+// behaviour. Best-effort — never throws.
+async function loadVoidReasonsBatch(
+  sql: ReturnType<typeof getSQL>,
+  uids: string[],
+): Promise<Map<string, { reason: string; voided_at: string | null }>> {
+  const out = new Map<string, { reason: string; voided_at: string | null }>();
+  if (uids.length === 0) return out;
+  try {
+    const placeholders = uids.map(() => '?').join(',');
+    const rows: any[] = await sql.unsafe(
+      `SELECT details, created_at FROM activity_logs
+        WHERE action = 'contract_voided'
+          AND json_valid(details) = 1
+          AND COALESCE(json_extract(details, '$.uid'), json_extract(details, '$.envelope_uuid')) IN (${placeholders})
+        ORDER BY id DESC`,
+      uids,
+    );
+    for (const r of rows) {
+      try {
+        const d = JSON.parse(r.details || '{}');
+        const k = d.uid || d.envelope_uuid;
+        if (!k || out.has(k) || !d.reason) continue;
+        out.set(String(k), { reason: String(d.reason), voided_at: r.created_at || null });
+      } catch { /* skip malformed details */ }
+    }
+  } catch (e) {
+    console.warn('[admin_contracts] batch void reason lookup skipped:', (e as Error).message);
+  }
+  return out;
+}
+
 // GET /api/admin/contracts — list with filters (UNION over documents + esign).
 adminContracts.get('/', async (c) => {
   await requireAdmin(c);
@@ -385,9 +428,22 @@ adminContracts.get('/', async (c) => {
     }
 
     const total = rows.length;
+    const items = rows.slice(offset, offset + limit);
+    // Task #45 — attach void_reason/voided_at to every void row in the
+    // page so the Voided sub-tab can show a truncated reason inline
+    // without N+1 detail-fetches.
+    const voidUids = items.filter(r => r.status === 'void' && r.uid).map(r => r.uid);
+    if (voidUids.length > 0) {
+      const reasons = await loadVoidReasonsBatch(sql, voidUids);
+      for (const r of items) {
+        if (r.status !== 'void') continue;
+        const v = reasons.get(r.uid);
+        if (v) { r.void_reason = v.reason; r.voided_at = v.voided_at; }
+      }
+    }
     return c.json({
       total, limit, offset,
-      items: rows.slice(offset, offset + limit),
+      items,
       meta: { sources: ['documents', 'esign_envelopes'], unioned: true },
     });
   } finally {

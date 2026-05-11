@@ -1916,6 +1916,20 @@ function ContractRow({ c, onOpen }) {
             <span>Signed: {fmtDate(c.signed_at) || '—'}</span>
             {c.days_to_sign != null && <span>Days to sign: <span className="text-gray-700 font-medium">{c.days_to_sign}</span></span>}
           </div>
+          {/* Task #45 — surface the recorded void reason directly on the row
+              so admins scanning the Voided sub-tab don't have to open the
+              detail modal for each row. Truncated to 60 chars with the full
+              text in a hover tooltip; full text also still appears in the
+              detail modal (Task #19). */}
+          {c.status === 'void' && c.void_reason && (
+            <div className="mt-1.5 flex items-start gap-1.5 text-[11px]" title={c.void_reason}>
+              <Ban size={11} className="text-red-600 mt-0.5 flex-shrink-0" />
+              <span className="text-red-700 font-medium">Reason:</span>
+              <span className="text-red-900 truncate">
+                {c.void_reason.length > 60 ? `${c.void_reason.slice(0, 60)}…` : c.void_reason}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {c.source === 'esign' && c.provider !== 'docusign' && (
