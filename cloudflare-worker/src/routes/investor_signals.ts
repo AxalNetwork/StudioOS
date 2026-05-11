@@ -13,25 +13,11 @@
  * { n: null, reason: 'insufficient_data' } — never raw counts.
  */
 import { Hono } from 'hono';
-import type { Env, User } from '../types';
+import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { getSQL } from '../db';
 import { hashEmail } from '../util/hashEmail';
-import { effectiveInvestorTier, type InvestorUser } from '../middleware/requireInvestorTier';
-import type { TierUser } from '../middleware/requireTier';
-
-type MIUser = User & Partial<TierUser> & Partial<InvestorUser>;
-const FULL_LENS_BYPASS_ROLES = ['admin', 'partner', 'mentor'] as const;
-function callerHasFullLens(user: MIUser | null | undefined): boolean {
-  if (!user) return false;
-  if ((FULL_LENS_BYPASS_ROLES as readonly string[]).includes(String(user.role))) return true;
-  if (user.role === 'investor') {
-    const t = effectiveInvestorTier(user as InvestorUser);
-    return t === 'professional' || t === 'institutional';
-  }
-  const tier = String(user.subscription_tier ?? 'free').toLowerCase();
-  return tier === 'growth' || tier === 'studio';
-}
+import { callerHasFullLens } from '../util/marketIntelTier';
 
 export const investorProfile = new Hono<{ Bindings: Env }>();
 export const investorSignals = new Hono<{ Bindings: Env }>();

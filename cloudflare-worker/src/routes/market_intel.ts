@@ -17,6 +17,7 @@ import { readEdgeCache, writeEdgeCache, readKv, writeKv } from '../services/mark
 // top-level so listSources() returns the full set after this barrel.
 import '../services/market_intel/sources';
 import { investorSignals as investorSignalsApp } from './investor_signals';
+import { callerHasFullLens } from '../util/marketIntelTier';
 
 const marketIntel = new Hono<{ Bindings: Env }>();
 
@@ -208,17 +209,6 @@ function founderHasGrowth(user: MIUser | null | undefined): boolean {
   return tier === 'growth' || tier === 'studio';
 }
 
-/** Returns true when caller may see the full lens (vs free composite-only view). */
-function callerHasFullLens(user: MIUser | null | undefined): boolean {
-  if (!user) return false;
-  if (FULL_LENS_BYPASS.includes(user.role as Role)) return true;
-  if (user.role === 'investor') {
-    const t = effectiveInvestorTier(user as InvestorUser);
-    return t === 'professional' || t === 'institutional';
-  }
-  return founderHasGrowth(user);
-}
-
 interface IndexRow {
   sector: string; geo: string; period_key: string;
   dimension: string; value: number; source_count: number;
@@ -395,15 +385,19 @@ marketIntel.get('/citations', async (c) => {
   } else {
     cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString();
   }
+  // `since` filters on ingest time (`created_at`), matching the
+  // Citations tab UX expectation of "what's new since I last looked".
+  // The ORDER BY stays on `ts` so the most recently *observed* metric
+  // surfaces first — ingest can lag observation by minutes.
   const rows = sector
     ? (await c.env.DB.prepare(
         `SELECT source_key, sector, metric_key, metric_value, ts, created_at AS ingested_at, citation_url
-           FROM market_intel_rows WHERE ts >= ? AND sector = ?
+           FROM market_intel_rows WHERE created_at >= ? AND sector = ?
            ORDER BY ts DESC LIMIT ?`
       ).bind(cutoff, sector, limit).all<CitationRow>()).results
     : (await c.env.DB.prepare(
         `SELECT source_key, sector, metric_key, metric_value, ts, created_at AS ingested_at, citation_url
-           FROM market_intel_rows WHERE ts >= ?
+           FROM market_intel_rows WHERE created_at >= ?
            ORDER BY ts DESC LIMIT ?`
       ).bind(cutoff, limit).all<CitationRow>()).results;
   return c.json({ rows: rows || [], since: cutoff });
