@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { Calendar, Plus, Trash2, CheckCircle, XCircle, Star, X, Loader2, UserCircle } from 'lucide-react';
 import { api } from '../lib/api';
+import PageExplainer from '../components/PageExplainer';
 
 function StarPicker({ rating, onChange }) {
   return (

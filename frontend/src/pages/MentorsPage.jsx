@@ -9,6 +9,7 @@ import { Search, Star, Calendar, Clock, Video, X, Send, MessageCircle, Loader2 }
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import UserTrustBadge from '../components/UserTrustBadge';
+import PageExplainer from '../components/PageExplainer';
 import { markMilestone } from '../lib/spinoutLabHooks';
 
 function StarRow({ rating, onChange }) {

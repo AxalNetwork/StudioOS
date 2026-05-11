@@ -870,6 +870,10 @@ function AppInner() {
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor'], <TrustCenterPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/spinouts" element={guard(['admin', 'founder', 'partner', 'investor'], <SpinOutsPage />)} />
+      {/* Friendly-URL alias: the canonical route is /spinouts (no hyphen),
+          but users frequently type or link /spin-outs. Redirect instead of
+          rendering a blank page. */}
+      <Route path="/spin-outs" element={<Navigate to="/spinouts" replace />} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], <LiquidityPage currentUser={user} />)} />
       <Route path="/funds" element={guard(['admin', 'investor'], <FundsPage currentUser={user} />)} />
