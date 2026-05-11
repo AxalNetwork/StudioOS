@@ -206,7 +206,16 @@ linkedin.get('/oauth/callback', async (c) => {
   const state = c.req.query('state');
   const oauthError = c.req.query('error');
   if (oauthError) {
-    console.warn('[LINKEDIN] callback OAuth error:', oauthError, c.req.query('error_description'));
+    // CodeQL js/clear-text-logging: do NOT log raw query-param values, they
+    // can contain attacker-controlled strings (and `error_description` may
+    // include identifiers / token fragments). Log only against an allow-list.
+    const KNOWN_ERRS = new Set([
+      'access_denied', 'invalid_request', 'unauthorized_client',
+      'unsupported_response_type', 'invalid_scope', 'server_error',
+      'temporarily_unavailable', 'user_cancelled_login', 'user_cancelled_authorize',
+    ]);
+    const safeCode = KNOWN_ERRS.has(String(oauthError)) ? String(oauthError) : 'unknown';
+    console.warn('[LINKEDIN] callback OAuth error code:', safeCode);
     return redirectBack(c.env, 'error', 'oauth_denied' satisfies LinkedInCallbackCode);
   }
   if (!code || !state) {

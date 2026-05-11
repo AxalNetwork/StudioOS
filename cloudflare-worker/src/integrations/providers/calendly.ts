@@ -402,7 +402,12 @@ async function ensureWebhookSubscription(env: Env, row: IntegrationRow): Promise
     const userUri = typeof creds.user_uri === 'string' ? creds.user_uri as string : '';
     const orgUri = typeof creds.organization_uri === 'string' ? creds.organization_uri as string : '';
     if (!userUri || !orgUri) return;
-    const callback = `${(env.APP_URL || '').replace(/\/+$/, '')}/api/integrations/webhook/${PROVIDER_KEY}/${row.uid}`;
+    // CodeQL js/polynomial-redos: avoid `\/+$` on uncontrolled APP_URL.
+    const _appUrl = env.APP_URL || '';
+    let _i = _appUrl.length;
+    while (_i > 0 && _appUrl.charCodeAt(_i - 1) === 47) _i--;
+    const _root = _i === _appUrl.length ? _appUrl : _appUrl.slice(0, _i);
+    const callback = `${_root}/api/integrations/webhook/${PROVIDER_KEY}/${row.uid}`;
     if (!callback.startsWith('http')) return;
     const token = await getActiveAccessToken(env, { ...row, credentials_enc: recheck?.credentials_enc || row.credentials_enc });
     const sub = await createWebhookSubscription(env, token, callback, orgUri, userUri);

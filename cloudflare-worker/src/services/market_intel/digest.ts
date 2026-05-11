@@ -377,7 +377,10 @@ export async function sendMarketIntelDigests(
   if (groups.size === 0) return { scanned: rows.length, users: 0, sent: 0, rows: 0, failed: 0 };
 
   const appUrl = (env as { APP_URL?: string }).APP_URL || '';
-  const root = appUrl.replace(/\/+$/, '');
+  // CodeQL js/polynomial-redos: avoid `\/+$` regex on uncontrolled APP_URL.
+  let _i = appUrl.length;
+  while (_i > 0 && appUrl.charCodeAt(_i - 1) === 47) _i--;
+  const root = _i === appUrl.length ? appUrl : appUrl.slice(0, _i);
   const preferencesUrl = `${root}/market-intelligence`;
 
   let sent = 0, failed = 0, totalRows = 0, users = 0;

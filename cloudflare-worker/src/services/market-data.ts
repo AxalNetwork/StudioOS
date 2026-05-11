@@ -106,10 +106,22 @@ export async function getLiveQuotes(env: Env): Promise<{ quotes: LiveQuote[]; up
 }
 
 function decodeHtmlEntities(s: string): string {
-  return s
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&')
+  // Strip CDATA + tags FIRST in a fixed-point loop so payloads like
+  // `<scr<script>ipt>` cannot survive a single pass (CodeQL
+  // js/incomplete-multi-character-sanitization). Decoding entities BEFORE
+  // tag-stripping would let `&lt;script&gt;` re-enter the tag space, so we
+  // must strip tags first; the loop closes the partial-overlap bypass.
+  let out = s;
+  for (let prev = ''; prev !== out; ) {
+    prev = out;
+    out = out
+      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+      .replace(/<[^>]+>/g, '');
+  }
+  // Now decode entities. Single pass — order matters: numeric/named entities
+  // first, then `&amp;` LAST so we never produce a `&` that gets reinterpreted
+  // as a fresh entity prefix (CodeQL js/double-escaping).
+  out = out
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
@@ -117,7 +129,8 @@ function decodeHtmlEntities(s: string): string {
     .replace(/&apos;/g, "'")
     .replace(/&nbsp;/g, ' ')
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
-    .trim();
+    .replace(/&amp;/g, '&');
+  return out.trim();
 }
 
 function extractTag(item: string, tag: string): string {
