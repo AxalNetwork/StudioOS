@@ -556,15 +556,22 @@ export async function sendNotificationEmail(
   to: string,
   subject: string,
   body: string,
+  opts?: { html?: string; from?: string },
 ): Promise<boolean> {
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
     return false;
   }
   try {
     const accessToken = await getGmailAccessToken(env);
-    const safeBody = escapeHtml(body || subject);
-    const html = `<p style="font-family:'Space Grotesk',sans-serif;font-size:14px;color:#111;">${safeBody}</p>`;
-    const rawEmail = buildRawEmail(to, subject, html, body || subject);
+    // Task #33 — callers can supply a pre-rendered HTML body (e.g. the
+    // designed Market-Intel digest template); the plain-text `body`
+    // becomes the multipart/alternative fallback. Without an explicit
+    // html opt we keep the legacy single-<p> wrapper so existing
+    // notification flows render unchanged.
+    const html = opts?.html
+      ? opts.html
+      : `<p style="font-family:'Space Grotesk',sans-serif;font-size:14px;color:#111;">${escapeHtml(body || subject)}</p>`;
+    const rawEmail = buildRawEmail(to, subject, html, body || subject, opts?.from);
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST',

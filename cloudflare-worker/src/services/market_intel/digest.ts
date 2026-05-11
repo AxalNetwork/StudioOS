@@ -113,22 +113,31 @@ export async function verifyUnsubscribeToken(env: Env, userId: number, token: st
   return diff === 0;
 }
 
-/** Render the per-user email body. Plain text — sendNotificationEmail
- *  wraps it in a minimal `<p>` HTML envelope. */
-function renderDigestBody(args: {
+type DigestSector = {
+  sector: string;
+  composite: number | null;
+  prior: number | null;
+  delta: number | null;
+  citations: CitationLite[];
+};
+
+interface RenderedDigest { subject: string; body: string; html: string }
+
+function escapeHtml(s: string): string {
+  return (s || '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c] as string));
+}
+
+/** Plain-text body — kept as the multipart/alternative fallback so
+ *  text-only mail clients render correctly. */
+function renderDigestText(args: {
   cadence: Cadence;
-  sectors: Array<{
-    sector: string;
-    composite: number | null;
-    prior: number | null;
-    delta: number | null;
-    citations: CitationLite[];
-  }>;
+  sectors: DigestSector[];
   unsubscribeUrl: string;
   preferencesUrl: string;
-}): { subject: string; body: string } {
+}): string {
   const { cadence, sectors, unsubscribeUrl, preferencesUrl } = args;
-  const subject = `[Axal] Your ${cadence} sector digest — ${sectors.length} sector${sectors.length === 1 ? '' : 's'}`;
   const lines: string[] = [];
   lines.push(`Here's how the sectors you're watching moved over the last ${cadence === 'weekly' ? 'week' : 'month'}.`);
   lines.push('');
@@ -145,8 +154,7 @@ function renderDigestBody(args: {
     if (s.citations.length === 0) {
       lines.push('   No new citations this period.');
     } else {
-      const top = s.citations.slice(0, 3);
-      for (const c of top) {
+      for (const c of s.citations.slice(0, 3)) {
         lines.push(`   • ${c.metric_key} — ${c.citation_url}`);
       }
     }
@@ -160,7 +168,124 @@ function renderDigestBody(args: {
   lines.push(`Pause or unsubscribe from sector digests: ${unsubscribeUrl}`);
   lines.push('');
   lines.push('— Axal StudioOS');
-  return { subject, body: lines.join('\n') };
+  return lines.join('\n');
+}
+
+/** Render a designed HTML email matching the rest of Axal's
+ *  transactional template (header logo + sector cards + delta chips +
+ *  citation rows + footer). All values are HTML-escaped — sector names
+ *  come from a fixed registry, but citation URLs/metric keys are
+ *  third-party data and could contain markup. */
+function renderDigestHtml(args: {
+  cadence: Cadence;
+  sectors: DigestSector[];
+  unsubscribeUrl: string;
+  preferencesUrl: string;
+}): string {
+  const { cadence, sectors, unsubscribeUrl, preferencesUrl } = args;
+  const window = cadence === 'weekly' ? 'last week' : 'last month';
+
+  const sectorCards = sectors.map((s) => {
+    const composite = s.composite == null ? '—' : s.composite.toFixed(1);
+    // Delta chip — green up / red down / neutral grey when no prior.
+    let chip = '';
+    if (s.delta != null && s.prior != null) {
+      const up = s.delta > 0;
+      const flat = s.delta === 0;
+      const bg = flat ? '#f3f4f6' : up ? '#ecfdf5' : '#fef2f2';
+      const fg = flat ? '#374151' : up ? '#047857' : '#b91c1c';
+      const arrow = flat ? '→' : up ? '▲' : '▼';
+      const sign = s.delta > 0 ? '+' : '';
+      chip = `<span style="display:inline-block;background:${bg};color:${fg};font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;letter-spacing:.01em;">${arrow} ${sign}${s.delta.toFixed(1)} vs ${s.prior.toFixed(1)}</span>`;
+    } else {
+      chip = `<span style="display:inline-block;background:#f3f4f6;color:#6b7280;font-size:12px;font-weight:500;padding:3px 8px;border-radius:999px;">no prior period yet</span>`;
+    }
+
+    const citeRows = s.citations.length === 0
+      ? `<tr><td style="padding:8px 0;font-size:12px;color:#9ca3af;font-style:italic;">No new citations this period.</td></tr>`
+      : s.citations.slice(0, 3).map((c) => `
+          <tr><td style="padding:6px 0;border-top:1px solid #f3f4f6;">
+            <a href="${escapeHtml(c.citation_url)}" style="color:#2563eb;text-decoration:none;font-size:13px;font-weight:500;">${escapeHtml(c.metric_key)}</a>
+            <div style="font-size:11px;color:#9ca3af;margin-top:2px;">${escapeHtml(c.citation_url)}</div>
+          </td></tr>`).join('');
+
+    return `
+      <tr><td style="padding:0 0 14px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;">
+          <tr><td style="padding:16px 18px 12px;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tr>
+              <td style="vertical-align:middle;">
+                <div style="font-size:11px;color:#7c3aed;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Sector</div>
+                <div style="font-size:16px;color:#111827;font-weight:700;margin-top:2px;">${escapeHtml(s.sector)}</div>
+              </td>
+              <td align="right" style="vertical-align:middle;">
+                <div style="font-size:11px;color:#9ca3af;font-weight:500;text-transform:uppercase;letter-spacing:.06em;">Composite</div>
+                <div style="font-size:22px;color:#111827;font-weight:700;line-height:1.1;">${composite}</div>
+              </td>
+            </tr></table>
+            <div style="margin-top:8px;">${chip}</div>
+          </td></tr>
+          <tr><td style="padding:6px 18px 16px;">
+            <div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">New citations</div>
+            <table width="100%" cellpadding="0" cellspacing="0">${citeRows}</table>
+          </td></tr>
+        </table>
+      </td></tr>`;
+  }).join('');
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your ${cadence} sector digest</title></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
+<tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;">
+  <tr><td style="padding:0 0 20px;">
+    <table cellpadding="0" cellspacing="0"><tr>
+      <td style="vertical-align:middle;padding-right:10px;">
+        <img src="https://axal.vc/axal-mark.png" alt="Axal VC" width="36" height="36" style="display:block;border:0;border-radius:8px;" />
+      </td>
+      <td style="vertical-align:middle;">
+        <span style="font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.01em;">Axal Market Intel</span>
+        <div style="font-size:11px;color:#9ca3af;margin-top:2px;">Your ${escapeHtml(cadence)} sector digest</div>
+      </td>
+    </tr></table>
+  </td></tr>
+  <tr><td style="padding:0 0 18px;">
+    <h1 style="font-size:20px;font-weight:700;color:#111827;margin:0 0 6px;letter-spacing:-0.02em;">${sectors.length} sector${sectors.length === 1 ? '' : 's'} you're watching</h1>
+    <p style="font-size:14px;color:#6b7280;margin:0;line-height:1.55;">Here's how the sectors you've pinned moved over the ${window}, with the freshest citations we picked up since your last digest.</p>
+  </td></tr>
+  ${sectorCards}
+  <tr><td style="padding:8px 0 0;">
+    <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;padding:16px 18px;">
+      <p style="margin:0 0 6px;color:#6b7280;font-size:13px;">
+        <a href="${escapeHtml(preferencesUrl)}" style="color:#7c3aed;font-weight:600;text-decoration:none;">Manage cadence per sector →</a>
+      </p>
+      <p style="margin:0;color:#9ca3af;font-size:12px;">
+        Want a quiet week? <a href="${escapeHtml(unsubscribeUrl)}" style="color:#6b7280;text-decoration:underline;">Pause or unsubscribe</a> — pausing keeps your pinned sectors saved.
+      </p>
+    </div>
+    <p style="font-size:11px;color:#9ca3af;margin:18px 0 0;text-align:center;">— Axal StudioOS</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>`;
+}
+
+function renderDigestBody(args: {
+  cadence: Cadence;
+  sectors: DigestSector[];
+  unsubscribeUrl: string;
+  preferencesUrl: string;
+}): RenderedDigest {
+  const { cadence, sectors } = args;
+  const subject = `[Axal] Your ${cadence} sector digest — ${sectors.length} sector${sectors.length === 1 ? '' : 's'}`;
+  return {
+    subject,
+    body: renderDigestText(args),
+    html: renderDigestHtml(args),
+  };
 }
 
 /**
@@ -332,11 +457,13 @@ export async function sendMarketIntelDigests(
 
     const unsubToken = await buildUnsubscribeToken(env, userId);
     const unsubscribeUrl = `${root}/api/market-intel-public/unsubscribe?u=${userId}&t=${unsubToken}`;
-    const { subject, body } = renderDigestBody({
+    const { subject, body, html } = renderDigestBody({
       cadence, sectors: sectorPayload, unsubscribeUrl, preferencesUrl,
     });
 
-    const ok = await sendNotificationEmail(env, email, subject, body);
+    // Task #33 — designed HTML body with sector cards, plain text
+    // retained as the multipart/alternative fallback.
+    const ok = await sendNotificationEmail(env, email, subject, body, { html });
     if (!ok) {
       failed += 1;
       console.warn('[mi digest] email failed; leaving rows un-stamped for retry', { userId, cadence });
