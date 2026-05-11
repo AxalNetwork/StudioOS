@@ -155,10 +155,17 @@ import {
   type InvestorUser,
 } from '../middleware/requireInvestorTier';
 
+// Bypass roles can join any number of dealrooms — they're acting in an
+// admin/partner/mentor capacity and never count against an investor cap.
+const DEALROOM_BYPASS_ROLES = new Set<string>(['admin', 'partner', 'mentor']);
+
 deals.post('/:id/dealroom/join', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
   await ensureInvestorPaywallSchema(c.env);
-  if (user.role !== 'investor') return c.json({ error: 'investor_only' }, 403);
+  const isBypass = DEALROOM_BYPASS_ROLES.has(String(user.role));
+  if (user.role !== 'investor' && !isBypass) {
+    return c.json({ error: 'investor_only' }, 403);
+  }
   const dealId = Number(c.req.param('id'));
   if (!Number.isFinite(dealId)) return c.json({ error: 'bad_id' }, 400);
 
@@ -170,7 +177,20 @@ deals.post('/:id/dealroom/join', async (c) => {
   if (existing) return c.json({ ok: true, already_member: true });
 
   const tier = effectiveInvestorTier(user);
-  const cap = INVESTOR_QUOTAS[tier].dealroom_max;
+  // Task #24 — cap is sourced from `users.investor_dealroom_max` (the
+  // canonical column written by the Stripe webhook + dev-upgrade
+  // helpers + admin-grant codepaths). The billing webhook bumps that
+  // column to 1_000_000 when a user becomes Institutional, so reading
+  // the column directly guarantees Institutional users are never
+  // gated even if the tier-derived default in INVESTOR_QUOTAS drifts
+  // out of sync. Falls back to the tier default when the column is
+  // null (e.g. legacy rows that pre-date 027_investor_paywall.sql and
+  // somehow escaped the schema-bootstrap default of 5).
+  const colCap = (user as { investor_dealroom_max?: number | null }).investor_dealroom_max;
+  const tierCap = INVESTOR_QUOTAS[tier].dealroom_max;
+  const cap = isBypass
+    ? Number.POSITIVE_INFINITY
+    : (Number.isFinite(colCap as number) && (colCap as number) > 0 ? Number(colCap) : tierCap);
   const cnt = await c.env.DB.prepare(
     `SELECT COUNT(*) AS n FROM investor_dealroom_members WHERE investor_user_id = ?`
   ).bind(user.id).first<{ n: number }>();
@@ -205,7 +225,11 @@ deals.post('/:id/dealroom/join', async (c) => {
 
 deals.delete('/:id/dealroom/leave', async (c) => {
   const user = await requireAuth(c);
-  if (user.role !== 'investor') return c.json({ error: 'investor_only' }, 403);
+  // Mirror the bypass list from the join endpoint — admin/partner/mentor
+  // who joined a dealroom must also be able to leave it.
+  if (user.role !== 'investor' && !DEALROOM_BYPASS_ROLES.has(String(user.role))) {
+    return c.json({ error: 'investor_only' }, 403);
+  }
   const dealId = Number(c.req.param('id'));
   if (!Number.isFinite(dealId)) return c.json({ error: 'bad_id' }, 400);
   await c.env.DB.prepare(
