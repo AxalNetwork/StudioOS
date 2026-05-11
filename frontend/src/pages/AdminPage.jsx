@@ -7,6 +7,24 @@ import { PERSONAS as PERSONA_TAXONOMY } from '../lib/personas';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { useWebSocket } from '../hooks/useWebSocket';
+import TrustScoreBadge from '../components/TrustScoreBadge';
+
+// Task #16 — per-row trust score column on the admin Users table.
+// Uses GET /api/trust/score/:userId (admin/investor/partner readable).
+// Renders nothing until the score loads to keep the row stable.
+function UserTrustCell({ userId }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!userId) return;
+    api.trustScore(userId)
+      .then(d => { if (!cancelled) setData(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [userId]);
+  if (!data) return <span className="text-xs text-gray-400">—</span>;
+  return <TrustScoreBadge size="sm" score={data.score} missing={data.missing} label={false} />;
+}
 
 const ROLE_BADGES = {
   admin: 'bg-violet-100 text-violet-700',
@@ -262,6 +280,7 @@ export default function AdminPage({ onImpersonate }) {
                       <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Status</th>
                       <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Verified</th>
                       <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">KYC</th>
+                      <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs" title="Required legal obligations satisfied">Trust</th>
                       <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Joined</th>
                       <th className="text-right px-4 py-2.5 text-gray-600 font-medium text-xs">Actions</th>
                     </tr>
@@ -327,6 +346,9 @@ export default function AdminPage({ onImpersonate }) {
                               </span>
                             );
                           })()}
+                        </td>
+                        <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <UserTrustCell userId={u.id} />
                         </td>
                         <td className="px-4 py-3 text-gray-500 text-xs">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
                         <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>

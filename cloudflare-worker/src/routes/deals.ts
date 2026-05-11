@@ -13,15 +13,18 @@ deals.get('/', async (c) => {
   const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
   // IDOR guard: founders can only list deals on their own projects.
   let rows: any;
+  // Task #16 — surface founder_user_id on the listing so investors/admins can
+  // render the per-founder TrustScoreBadge inline next to FounderRiskBadge
+  // without an extra round-trip per row.
   if (isPrivileged) {
     rows = status
-      ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id WHERE d.status = ${status} ORDER BY d.created_at DESC`
-      : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id ORDER BY d.created_at DESC`;
+      ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id WHERE d.status = ${status} ORDER BY d.created_at DESC`
+      : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id ORDER BY d.created_at DESC`;
   } else {
     if (!user.founder_id) { await sql.end(); return c.json([]); }
     rows = status
-      ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id WHERE d.status = ${status} AND p.founder_id = ${user.founder_id} ORDER BY d.created_at DESC`
-      : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id WHERE p.founder_id = ${user.founder_id} ORDER BY d.created_at DESC`;
+      ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id WHERE d.status = ${status} AND p.founder_id = ${user.founder_id} ORDER BY d.created_at DESC`
+      : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id WHERE p.founder_id = ${user.founder_id} ORDER BY d.created_at DESC`;
   }
   await sql.end();
   return c.json(rows);

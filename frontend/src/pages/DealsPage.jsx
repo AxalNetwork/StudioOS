@@ -6,6 +6,25 @@ import { ArrowRight, ChevronDown, ChevronRight, Filter } from 'lucide-react';
 import ReferenceChecksPanel from '../components/ReferenceChecksPanel';
 import FounderRiskBadge from '../components/FounderRiskBadge';
 import LockedFounderCard from '../components/LockedFounderCard';
+import TrustScoreBadge from '../components/TrustScoreBadge';
+
+// Task #16 — fetch + render the founder's trust score (size=sm) inline on
+// each deal row for admin/investor/partner viewers. Silently no-ops when
+// the backend 403s (e.g. founder-role viewer) or the deal has no resolved
+// founder_user_id (legacy unlinked rows).
+function DealTrustBadge({ founderUserId }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!founderUserId) return;
+    api.trustScore(founderUserId)
+      .then(d => { if (!cancelled) setData(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [founderUserId]);
+  if (!data) return null;
+  return <TrustScoreBadge size="sm" score={data.score} missing={data.missing} label="Trust" />;
+}
 
 function getCurrentRole() {
   try { return safeReadJSON('user', {}).role || null; }
@@ -151,6 +170,9 @@ export default function DealsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {canSeeRisk && deal.founder_user_id && (
+                      <DealTrustBadge founderUserId={deal.founder_user_id} />
+                    )}
                     {canSeeRisk && <FounderRiskBadge dealId={deal.id} />}
                     {nextStatus && deal.status !== 'rejected' && (
                       <button onClick={() => updateDeal(deal.id, nextStatus)} className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-medium flex items-center gap-1">
