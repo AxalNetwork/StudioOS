@@ -851,13 +851,13 @@ export async function notifyExpiringRevshareWindows(env: Env): Promise<{
         lines.join('\n') +
         `\n\nAdmin panel: /admin/partners`;
 
-      let sentAny = false;
+      // Counter is the number of admins we successfully emailed (not
+      // a 0/1 flag) so cron telemetry reflects actual reach.
       for (const a of adminRows) {
         if (!a.email) continue;
         const ok = await sendNotificationEmail(env, a.email, subject, body);
-        if (ok) sentAny = true;
+        if (ok) out.admin_digest_sent += 1;
       }
-      if (sentAny) out.admin_digest_sent = 1;
     } catch (e) {
       console.warn('[partnerDeals] admin digest send failed', e);
     }
