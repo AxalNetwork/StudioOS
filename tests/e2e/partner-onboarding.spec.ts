@@ -394,11 +394,12 @@ test.describe('Partner onboarding — admin → chatbot → finalize → revoke 
     // ---- Drive Terminate from the admin UI ---------------------------
     await page.goto('/admin/partners');
     await page.getByRole('button', { name: /^Deals/i }).first().click();
-    // The Terminate button on the row carries a Ban icon + "Terminate" text.
-    const terminateRow = page
-      .getByRole('button', { name: /^Terminate$/i })
-      .first();
-    await expect(terminateRow).toBeVisible({ timeout: 10_000 });
+    // Scope the Terminate click to the <tr> for THIS recipient so the
+    // test stays deterministic in shared/non-isolated environments.
+    const dealRow = page.locator('tr', { hasText: recipient }).first();
+    await expect(dealRow).toBeVisible({ timeout: 10_000 });
+    const terminateRow = dealRow.getByRole('button', { name: /^Terminate$/i });
+    await expect(terminateRow).toBeVisible();
     await terminateRow.click();
 
     await expect(
