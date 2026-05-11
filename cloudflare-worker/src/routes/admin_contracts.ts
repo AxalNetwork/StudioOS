@@ -508,6 +508,34 @@ async function findContractByUid(sql: ReturnType<typeof getSQL>, uid: string): P
   return null;
 }
 
+// Task #19 — Look up the most recent recorded void reason for a given
+// contract uid by scanning activity_logs.details JSON. Returns null when
+// no `contract_voided` event has been logged (or the row predates the
+// reason field). Best-effort — never throws.
+async function loadVoidReason(
+  sql: ReturnType<typeof getSQL>,
+  matchKey: 'uid' | 'envelope_uuid',
+  matchVal: string,
+): Promise<{ reason: string; voided_at: string | null } | null> {
+  try {
+    const rows: any[] = await sql.unsafe(
+      `SELECT details, created_at FROM activity_logs
+        WHERE action = 'contract_voided'
+          AND json_valid(details) = 1
+          AND json_extract(details, '$.${matchKey}') = ?
+        ORDER BY id DESC LIMIT 1`,
+      [matchVal],
+    );
+    if (!rows[0]) return null;
+    const parsed = JSON.parse(rows[0].details || '{}');
+    if (!parsed?.reason) return null;
+    return { reason: String(parsed.reason), voided_at: rows[0].created_at || null };
+  } catch (e) {
+    console.warn('[admin_contracts] void reason lookup skipped:', (e as Error).message);
+    return null;
+  }
+}
+
 // GET /api/admin/contracts/:uid — detail (UNION-aware).
 adminContracts.get('/:uid', async (c) => {
   await requireAdmin(c);
@@ -531,7 +559,12 @@ adminContracts.get('/:uid', async (c) => {
         `;
         if (pr[0]) { projName = pr[0].name; founderEmail = pr[0].founder_email; }
       }
-      return c.json(decorateDocType(enrichDocRow(d, projName, founderEmail)));
+      const detail = decorateDocType(enrichDocRow(d, projName, founderEmail)) as any;
+      if (String(d.status || '').toLowerCase() === 'void') {
+        const vr = await loadVoidReason(sql, 'uid', d.uid);
+        if (vr) { detail.void_reason = vr.reason; detail.voided_at = vr.voided_at; }
+      }
+      return c.json(detail);
     }
 
     // esign source — re-query with the recipient subselects so the detail
@@ -549,7 +582,11 @@ adminContracts.get('/:uid', async (c) => {
       FROM esign_envelopes e WHERE e.id = ${ref.row.id} LIMIT 1
     `;
     if (!envRows[0]) return c.json({ error: 'Contract not found' }, 404);
-    const detail = decorateDocType(enrichEsignRow(envRows[0]));
+    const detail = decorateDocType(enrichEsignRow(envRows[0])) as any;
+    if (detail.status === 'void') {
+      const vr = await loadVoidReason(sql, 'envelope_uuid', envRows[0].envelope_uuid || '');
+      if (vr) { detail.void_reason = vr.reason; detail.voided_at = vr.voided_at; }
+    }
     // Task #5 (Z) — surface DD linkage so the modal can render an
     // "Open in DD" button. Best-effort: empty if column not yet
     // present (migration 026 not applied).

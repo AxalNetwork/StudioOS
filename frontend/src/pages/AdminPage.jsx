@@ -1562,7 +1562,13 @@ export function ContractsPanel() {
         <ContractDetailModal
           uid={openContract.uid}
           onClose={() => setOpenContract(null)}
-          onChanged={() => { setOpenContract(null); reload(); }}
+          onChanged={(opts) => {
+            // Task #19 — submitVoid passes { keepOpen: true } so the
+            // recorded reason stays visible in the modal. All other
+            // mutations (e.g. resend) close the modal as before.
+            if (!opts || !opts.keepOpen) setOpenContract(null);
+            reload();
+          }}
         />
       )}
 
@@ -1985,8 +1991,18 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
   const submitVoid = async () => {
     if (voidReason.trim().length < 5) { setErr('Reason must be at least 5 characters.'); return; }
     setBusy(true); setErr('');
-    try { await api.adminVoidContractWithReason(uid, voidReason.trim()); onChanged(); }
-    catch (e) { setErr(e.message); setBusy(false); }
+    try {
+      // Task #19 — keep the modal open after voiding so the recorded
+      // reason is surfaced inline. The list behind it still refreshes
+      // so the row's status pill flips to VOID immediately.
+      await api.adminVoidContractWithReason(uid, voidReason.trim());
+      const refreshed = await api.adminGetContract(uid).catch(() => null);
+      if (refreshed) setDoc(refreshed);
+      setShowVoidReason(false);
+      setVoidReason('');
+      setBusy(false);
+      if (typeof onChanged === 'function') onChanged({ keepOpen: true });
+    } catch (e) { setErr(e.message); setBusy(false); }
   };
   const doDownload = () => {
     const url = api.adminDownloadContractUrl(uid);
@@ -2037,6 +2053,18 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
             <div className="text-center text-gray-500 text-sm py-8">Loading…</div>
           ) : (
             <>
+              {/* Task #19 — surface the recorded void reason whenever the
+                  contract is in a void state. Server reads the latest
+                  `contract_voided` entry from activity_logs, so this also
+                  shows for contracts voided in earlier sessions. */}
+              {doc.status === 'void' && doc.void_reason && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold text-red-700 uppercase tracking-wide mb-1">
+                    <Ban size={11} /> Voided{doc.voided_at ? ` · ${fmtDate(doc.voided_at)}` : ''}
+                  </div>
+                  <div className="text-xs text-red-900 whitespace-pre-wrap break-words">{doc.void_reason}</div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Recipient"   value={doc.recipient_email} />
                 <Field label="Project"     value={doc.project_name} />
