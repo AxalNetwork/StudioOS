@@ -16,8 +16,15 @@ import { readEdgeCache, writeEdgeCache, readKv, writeKv } from '../services/mark
 // Side-effect import — every connector calls registerSource() at module
 // top-level so listSources() returns the full set after this barrel.
 import '../services/market_intel/sources';
+import { investorSignals as investorSignalsApp } from './investor_signals';
 
 const marketIntel = new Hono<{ Bindings: Env }>();
+
+// Task #5 (AK) — spec requires `GET /api/market-intel/investor-signals`
+// alongside the standalone `/api/investor-signals` mount. We mount the
+// same Hono sub-app under `/investor-signals` so both paths surface the
+// identical filtered+latest endpoints with no logic duplication.
+marketIntel.route('/investor-signals', investorSignalsApp);
 
 // All market-intel endpoints require an authenticated session.
 marketIntel.use('*', async (c, next) => {
@@ -219,7 +226,8 @@ interface IndexRow {
 }
 interface CitationRow {
   source_key: string; sector: string; metric_key: string;
-  metric_value: number; ts: string; citation_url: string | null;
+  metric_value: number; ts: string; ingested_at?: string;
+  citation_url: string | null;
 }
 interface WatchlistRow {
   id: number; sector: string; geo: string; cadence: string; created_at: string;
@@ -371,19 +379,34 @@ marketIntel.get('/citations', async (c) => {
   }
   const sector = c.req.query('sector') || '';
   const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '50', 10) || 50, 1), 200);
-  const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  // Task #5 (AK) — `since` (ISO timestamp) lets the Citations tab fetch
+  // only rows newer than the user's last visit. Falls back to a 30-day
+  // window when omitted or unparseable. The DB rows expose both `ts`
+  // (observation time, source-supplied) and `created_at` (ingest time
+  // written by `persistRows`) so the UI can display when WE saw it vs
+  // when the source published it.
+  const sinceQ = c.req.query('since');
+  let cutoff: string;
+  if (sinceQ) {
+    const d = new Date(sinceQ);
+    cutoff = isNaN(d.getTime())
+      ? new Date(Date.now() - 30 * 86_400_000).toISOString()
+      : d.toISOString();
+  } else {
+    cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  }
   const rows = sector
     ? (await c.env.DB.prepare(
-        `SELECT source_key, sector, metric_key, metric_value, ts, citation_url
+        `SELECT source_key, sector, metric_key, metric_value, ts, created_at AS ingested_at, citation_url
            FROM market_intel_rows WHERE ts >= ? AND sector = ?
            ORDER BY ts DESC LIMIT ?`
       ).bind(cutoff, sector, limit).all<CitationRow>()).results
     : (await c.env.DB.prepare(
-        `SELECT source_key, sector, metric_key, metric_value, ts, citation_url
+        `SELECT source_key, sector, metric_key, metric_value, ts, created_at AS ingested_at, citation_url
            FROM market_intel_rows WHERE ts >= ?
            ORDER BY ts DESC LIMIT ?`
       ).bind(cutoff, limit).all<CitationRow>()).results;
-  return c.json({ rows: rows || [] });
+  return c.json({ rows: rows || [], since: cutoff });
 });
 
 /** List the registered sources + their LIVE/STUB status. Available to all auth'd callers. */

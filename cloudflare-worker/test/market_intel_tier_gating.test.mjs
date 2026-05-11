@@ -76,6 +76,31 @@ test('runFreeConnectors is exported and wired into the cron', async () => {
   );
   assert.match(indexSrc, /runFreeConnectors\s*\(\s*env\s*,\s*'hourly'\s*\)/,
     'cron handler must invoke runFreeConnectors on the spec cadence');
+  // Daily 04:00 UTC combined refresh: recomputeIndexes + investor-signals.
+  assert.match(indexSrc, /getUTCHours\(\)\s*===\s*4\s*&&\s*now\.getUTCMinutes\(\)\s*===\s*0[\s\S]{0,200}recomputeIndexes/,
+    'cron must run recomputeIndexes at 04:00 UTC daily');
+  assert.match(indexSrc, /getUTCHours\(\)\s*===\s*4\s*&&\s*now\.getUTCMinutes\(\)\s*===\s*0[\s\S]{0,400}aggregateInvestorSignals/,
+    'cron must refresh investor-signals snapshot at 04:00 UTC daily');
+});
+
+test('GET /api/market-intel/investor-signals is mounted as alias', async () => {
+  const src = await readFile(
+    resolve(__dirname, '../src/routes/market_intel.ts'),
+    'utf8',
+  );
+  assert.match(src, /marketIntel\.route\(\s*'\/investor-signals'\s*,\s*investorSignalsApp\s*\)/,
+    'spec endpoint /api/market-intel/investor-signals must be mounted');
+});
+
+test('GET /citations honours `since` param + returns ingest timestamp', async () => {
+  const src = await readFile(
+    resolve(__dirname, '../src/routes/market_intel.ts'),
+    'utf8',
+  );
+  assert.match(src, /c\.req\.query\(\s*'since'\s*\)/,
+    'citations handler must read the `since` query param');
+  assert.match(src, /created_at\s+AS\s+ingested_at/,
+    'citations handler must surface the ingest timestamp from created_at');
 });
 
 /* ------------------------------------------------------------------ */

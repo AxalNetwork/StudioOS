@@ -817,9 +817,20 @@ export default {
             const r = await runSourcesByCadence(env, 'weekly');
             if (r.scanned) console.info(`[cron] mi weekly scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
           }
-          if (now.getUTCHours() === 3 && now.getUTCMinutes() === 15) {
+          // Task #5 (AK) — daily 04:00 UTC: combined index recompute +
+          // investor-signals snapshot refresh. The 03:15 slot was kept
+          // through #14 for historical compatibility but the AK spec
+          // pins this surface to a single nightly refresh window so
+          // operators have one timestamp to monitor for staleness.
+          if (now.getUTCHours() === 4 && now.getUTCMinutes() === 0) {
             const r = await recomputeIndexes(env);
             console.info(`[cron] mi recompute sectors=${r.sectors} rows_written=${r.rows_written}`);
+            try {
+              const s = await aggregateInvestorSignals(env);
+              console.info(`[cron] investor_signals daily-refresh n_total=${s.n_total} snapshot_id=${s.snapshot_id}`);
+            } catch (e) {
+              console.error('[cron] investor_signals daily-refresh failed', e);
+            }
           }
           // Institutional quarterly Axal-VC PDF — stub trigger. The PDF
           // renderer + R2 dropbox land with AA-2; this cron simply logs
