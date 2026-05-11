@@ -161,10 +161,75 @@ def _doc_dto(session: Session, doc: Document, *, include_content: bool = False) 
 # ---------------------------------------------------------------------------
 # List + filter
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Task #44 — Party-role classification mirrored from
+# `cloudflare-worker/src/routes/admin_contracts.ts` (DOC_TYPE_PARTY_ROLES).
+# Drives the `party_role` filter chip locally so the New-Envelope wizard
+# dev stub behaves like the production worker.
+# ---------------------------------------------------------------------------
+DOC_TYPE_PARTY_ROLES: dict[str, list[str]] = {
+    "bylaws": ["founder", "axal"],
+    "equity_split": ["founder"],
+    "ip_license": ["founder", "axal"],
+    "ip_background_schedule": ["founder", "axal"],
+    "spa": ["founder", "investor", "axal"],
+    "voting_rights": ["founder", "investor"],
+    "section_83b": ["founder"],
+    "lpa": ["investor", "axal"],
+    "ppm": ["investor", "axal"],
+    "subscription": ["investor", "axal"],
+    "investor_subscription_pro": ["investor", "axal"],
+    "investor_subscription_inst": ["investor", "axal"],
+    "investor_nda_axal": ["investor", "axal"],
+    "mentor_nda_axal": ["mentor", "axal"],
+    "mentor_engagement_disclaimer": ["mentor", "axal"],
+    "partner_nda_nonsolicit": ["partner", "axal"],
+    "partner_equity": ["partner", "axal"],
+    "partner_services": ["partner", "axal"],
+    "partner_revshare": ["partner", "axal"],
+    "partner_capital": ["partner", "axal"],
+    "partner_custom": ["partner", "axal"],
+    "nda_3way_founder_investor_axal": ["founder", "investor", "axal"],
+    "finders_fee_intro_agreement": ["investor", "partner", "axal"],
+    "data_access_acknowledgment_admin": ["axal"],
+    "operating_agreement": ["axal"],
+    "carried_interest": ["axal"],
+    "ic_charter": ["axal"],
+    "service_agreement": ["axal"],
+    "mgmt_company": ["axal"],
+    "safe": ["founder", "investor"],
+    "term_sheet": ["founder", "investor"],
+    "form_adv": ["axal"],
+    "aml_kyc": ["axal"],
+}
+
+
+def _doc_kind(d: Document) -> str:
+    """Logical doc-type key used for filter matching.
+
+    The `Document.doc_type` enum is intentionally narrow (legacy types
+    only); newer doc types arriving via the Task #44 `/legal/esign/send`
+    stub are stored as `doc_type=OTHER` with the real key in
+    `template_name`. Prefer the template_name when it is one of the
+    known extended keys so party-role / doc-type filters still match.
+    """
+    tname = (d.template_name or "").strip()
+    if tname and tname in DOC_TYPE_PARTY_ROLES:
+        return tname
+    raw = getattr(d.doc_type, "value", d.doc_type) or ""
+    return str(raw)
+
+
 @router.get("")
 def list_contracts(
     status: Optional[str] = Query(None, description="draft|generated|sent|signed|void"),
     doc_type: Optional[str] = None,
+    party_role: Optional[str] = Query(
+        None, description="founder|investor|mentor|partner|axal — mirrors worker filter"
+    ),
+    provider: Optional[str] = Query(
+        None, description="native|docusign — accepted for parity with worker (dev backend has no DocuSign envelopes)"
+    ),
     project_id: Optional[int] = None,
     q: Optional[str] = Query(None, description="Search title/recipient/template"),
     limit: int = Query(50, ge=1, le=500),
@@ -175,12 +240,23 @@ def list_contracts(
     stmt = select(Document).order_by(Document.created_at.desc())
     if status:
         stmt = stmt.where(Document.status == status)
-    if doc_type:
-        stmt = stmt.where(Document.doc_type == doc_type)
     if project_id:
         stmt = stmt.where(Document.project_id == project_id)
 
     docs = session.exec(stmt).all()
+
+    # doc_type / party_role / provider are applied in Python because new
+    # envelope types live in `template_name` (see `_doc_kind`), and
+    # provider isn't tracked by the dev backend at all.
+    if doc_type:
+        docs = [d for d in docs if _doc_kind(d) == doc_type]
+    if party_role:
+        pr = party_role.lower()
+        docs = [d for d in docs if pr in DOC_TYPE_PARTY_ROLES.get(_doc_kind(d), [])]
+    if provider and provider.lower() == "docusign":
+        # Dev backend never routes through DocuSign; chip filters to empty.
+        docs = []
+
     rows = [_doc_dto(session, d) for d in docs]
 
     if q:
@@ -251,6 +327,37 @@ def contract_stats(
 # ---------------------------------------------------------------------------
 # Templates with usage counts
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Task #44 — Legal templates catalog (dev parity with the Cloudflare Worker
+# route `GET /admin/contracts/templates/legal`). The admin "+ New envelope"
+# wizard reads this list to populate its template dropdown; the dev FastAPI
+# backend now hosts it so the wizard stops showing the
+# "Unavailable in this environment" banner locally. Keep in lock-step with
+# `LEGAL_TEMPLATE_CATALOG` in `cloudflare-worker/src/routes/admin_contracts.ts`.
+# ---------------------------------------------------------------------------
+LEGAL_TEMPLATE_CATALOG: list[dict] = [
+    {"key": "tos_v1",                            "doc_type": "tos_v1",                            "title": "Terms of Service v1"},
+    {"key": "privacy_v1",                        "doc_type": "privacy_v1",                        "title": "Privacy Policy v1"},
+    {"key": "founder_nda_v1",                    "doc_type": "founder_nda_v1",                    "title": "Founder Mutual NDA v1"},
+    {"key": "investor_nda_v1",                   "doc_type": "investor_nda_axal",                 "title": "Investor NDA (Axal) v1"},
+    {"key": "mentor_nda_v1",                     "doc_type": "mentor_nda_axal",                   "title": "Mentor NDA (Axal) v1"},
+    {"key": "mentor_disclaimer_v1",              "doc_type": "mentor_engagement_disclaimer",      "title": "Mentor Engagement Disclaimer v1"},
+    {"key": "accreditation_v1",                  "doc_type": "accreditation_v1",                  "title": "Accreditation Attestation v1"},
+    {"key": "partner_msa_v1",                    "doc_type": "partner_services",                  "title": "Partner Services / MSA v1"},
+    {"key": "nda_3way_founder_investor_axal_v1", "doc_type": "nda_3way_founder_investor_axal",    "title": "3-Way NDA (Founder ↔ Investor ↔ Axal) v1"},
+]
+
+
+@router.get("/templates/legal")
+def contract_templates_legal(_: User = Depends(require_admin)):
+    """Static legal-template catalog used by the admin New-Envelope wizard.
+
+    Mirrors the worker route's response shape exactly: `{ items: [...] }`
+    where each item is `{ key, doc_type, title }`.
+    """
+    return {"items": LEGAL_TEMPLATE_CATALOG}
+
+
 @router.get("/templates")
 def contract_templates(
     session: Session = Depends(get_session),

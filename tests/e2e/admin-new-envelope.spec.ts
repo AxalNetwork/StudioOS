@@ -30,11 +30,14 @@ import { test, expect, type APIRequestContext, type Page } from '@playwright/tes
  *   E2E_ADMIN_PASSWORD=... \
  *   npx playwright test
  *
- * If the env vars are missing the test is skipped with a clear
- * message rather than failing noisily.
+ * Task #44 — both endpoints are now stubbed in the dev FastAPI backend
+ * so the wizard works against the local stack on `http://localhost:5000`
+ * (the playwright.config.ts default `baseURL`) without setting
+ * `E2E_BASE_URL`. Admin credentials are still required to actually run
+ * the test — if `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD` are missing we
+ * skip cleanly rather than failing noisily.
  */
 
-const BASE_URL = process.env.E2E_BASE_URL || '';
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || '';
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || '';
 const TEMPLATE_DOC_TYPE = 'investor_nda_axal';
@@ -75,10 +78,11 @@ async function loginAsAdmin(request: APIRequestContext, page: Page) {
 
 test.describe('Admin · Contracts — New envelope wizard', () => {
   test.skip(
-    !BASE_URL || !ADMIN_EMAIL || !ADMIN_PASSWORD,
-    'Set E2E_BASE_URL, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD to run this test ' +
-      'against a worker (prod or `wrangler dev`). The dev FastAPI backend ' +
-      "does not host /admin/contracts/templates/legal or /legal/esign/send.",
+    !ADMIN_EMAIL || !ADMIN_PASSWORD,
+    'Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run this test. ' +
+      'Defaults to baseURL=http://localhost:5000 (Task #44 stubbed both ' +
+      'wizard endpoints in the dev FastAPI backend); set E2E_BASE_URL to ' +
+      'override (e.g. https://axal.vc or wrangler dev).',
   );
 
   test('admin can send investor_nda_axal template and see it in the unified list', async ({

@@ -1084,6 +1084,132 @@ def get_document(
     return _hydrate_doc_content(doc, viewer=user, session=session)
 
 
+# ---------------------------------------------------------------------------
+# Task #44 — Dev stub for the Cloudflare Worker route
+# `POST /api/legal/esign/send`. The admin "+ New envelope" wizard
+# (frontend NewEnvelopeWizard) calls this to mint an envelope. In
+# production it lives on the worker against `esign_envelopes` + R2; the
+# dev FastAPI backend doesn't host that machinery, so we persist a
+# `documents` row instead so the new envelope shows up in the unified
+# Admin > Contracts list (`GET /admin/contracts`).
+#
+# We store the actual document_type (e.g. `investor_nda_axal`) in
+# `template_name` because `Document.doc_type` is a strict enum that
+# doesn't (and shouldn't) include the Y/X/W extension types. The admin
+# list endpoint resolves the logical kind via `template_name` first when
+# applying party-role / doc-type filters (see admin_contracts._doc_kind).
+# ---------------------------------------------------------------------------
+import uuid as _esign_uuid
+
+# Friendly titles for the legal-template catalog. Mirrors
+# `cloudflare-worker/src/routes/admin_contracts.ts` TEMPLATES.
+_LEGAL_TEMPLATE_TITLES: dict[str, str] = {
+    "tos_v1": "Terms of Service",
+    "privacy_v1": "Privacy Policy",
+    "founder_nda_v1": "Founder Mutual NDA",
+    "investor_nda_axal": "Investor NDA (Axal)",
+    "mentor_nda_axal": "Mentor NDA (Axal)",
+    "mentor_engagement_disclaimer": "Mentor Engagement Disclaimer",
+    "accreditation_v1": "Accreditation Attestation",
+    "partner_services": "Partner Services Agreement",
+    "nda_3way_founder_investor_axal": "3-Way NDA (Founder ↔ Investor ↔ Axal)",
+}
+
+
+class _EsignSendRequest(BaseModel):
+    document_type: str
+    recipient_email: str
+    recipient_name: Optional[str] = None
+    recipient_user_id: Optional[int] = None
+    deal_id: Optional[int] = None
+    merge_fields: Optional[dict] = None
+    provider: Optional[str] = "native"
+    via_provider: Optional[str] = None  # legacy alias accepted by the worker
+
+
+@router.post("/esign/send")
+def esign_send(
+    body: _EsignSendRequest,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Dev stub for the worker's `/legal/esign/send` route.
+
+    Creates a `documents` row representing the envelope so the unified
+    Admin > Contracts list picks it up. Never actually sends an email —
+    the dev backend has no transactional-email integration. Returns the
+    same shape as the worker for frontend parity.
+    """
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
+
+    document_type = (body.document_type or "").strip()
+    if not document_type:
+        raise HTTPException(status_code=400, detail="document_type is required")
+
+    recipient_email = (body.recipient_email or "").strip().lower()
+    import re as _re
+    if not recipient_email or not _re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$", recipient_email):
+        raise HTTPException(status_code=400, detail="valid recipient_email is required")
+
+    provider = (body.provider or body.via_provider or "native").lower()
+    if provider not in ("native", "docusign"):
+        provider = "native"
+    if provider == "docusign":
+        # Studio-tier feature with no dev backend equivalent — surface
+        # explicitly rather than silently downgrading.
+        raise HTTPException(status_code=412, detail="docusign_not_connected")
+
+    title = _LEGAL_TEMPLATE_TITLES.get(document_type, document_type)
+    envelope_uuid = _esign_uuid.uuid4().hex
+
+    # `Document.project_id` has a FK to projects.id — only carry deal_id
+    # forward when it actually points at a real project, otherwise the
+    # commit raises IntegrityError and surfaces as a confusing 500.
+    project_id = None
+    if body.deal_id:
+        if session.get(Project, body.deal_id):
+            project_id = body.deal_id
+
+    doc = Document(
+        title=title,
+        # Strict enum doesn't carry the Y/X/W extension types; use OTHER
+        # and stash the real key in `template_name` (admin list resolves
+        # the logical kind from there).
+        doc_type=DocumentType.OTHER,
+        status=DocumentStatus.SENT,
+        template_name=document_type,
+        signed_by=recipient_email,  # `_recipient_email` reads this for the row
+        project_id=project_id,
+    )
+    session.add(doc)
+    session.commit()
+    session.refresh(doc)
+
+    try:
+        from backend.app.services.audit import log_audit, AuditAction
+        log_audit(
+            session,
+            action=AuditAction.CONTRACT_SENT,
+            actor=user,
+            target_uid=doc.uid,
+            project_id=doc.project_id,
+            summary=f"Admin {user.email} sent envelope '{title}' to {recipient_email}",
+            meta={"document_type": document_type, "provider": provider, "envelope_uuid": envelope_uuid},
+            commit=True,
+        )
+    except Exception:  # noqa: BLE001
+        session.rollback()
+
+    return {
+        "envelope_id": doc.id,
+        "envelope_uuid": envelope_uuid,
+        "signing_url": None,  # dev backend has no native-signing UI
+        "email_sent": False,  # dev backend has no transactional email
+        "provider": "native",
+    }
+
+
 @router.post("/documents/{doc_id}/send")
 def send_document(
     doc: Document = Depends(require_contract_view),
