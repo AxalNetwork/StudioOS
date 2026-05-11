@@ -153,7 +153,11 @@ function renderDigestBody(args: {
     lines.push('');
   }
   lines.push(`Manage cadence per sector: ${preferencesUrl}`);
-  lines.push(`Unsubscribe from all sector digests: ${unsubscribeUrl}`);
+  // Task #32 — the unsubscribe link now lands on a confirmation page
+  // whose primary action is PAUSE (1w / 1m / indefinitely). Removing
+  // every pinned sector is still available there as a deliberate
+  // secondary action.
+  lines.push(`Pause or unsubscribe from sector digests: ${unsubscribeUrl}`);
   lines.push('');
   lines.push('— Axal StudioOS');
   return { subject, body: lines.join('\n') };
@@ -185,6 +189,14 @@ export async function sendMarketIntelDigests(
   const placeholders = cadences.map(() => '?').join(',');
   let rows: WatchRow[] = [];
   try {
+    // Task #32 — skip users whose digest pause window is still active.
+    // `mi_digest_paused_until` is an ISO timestamp (NULL = not paused;
+    // sentinel '9999-12-31T00:00:00Z' = paused indefinitely). Comparing
+    // as strings is safe because all stored values are zero-padded
+    // ISO-8601 UTC, which sorts lexicographically the same as
+    // chronologically. The pause is self-clearing once the timestamp
+    // passes — no cron tick needed to "resume".
+    const nowIso = now.toISOString();
     const r: any = await env.DB.prepare(
       `SELECT w.id, w.user_id, w.sector, w.geo, w.cadence,
               w.last_sent_at, w.last_period_key, w.last_composite, u.email
@@ -192,9 +204,11 @@ export async function sendMarketIntelDigests(
          JOIN users u ON u.id = w.user_id
         WHERE w.cadence IN (${placeholders})
           AND u.email IS NOT NULL AND u.email != ''
+          AND (u.mi_digest_paused_until IS NULL
+               OR u.mi_digest_paused_until <= ?)
         ORDER BY w.user_id, w.sector
         LIMIT 5000`,
-    ).bind(...cadences).all();
+    ).bind(...cadences, nowIso).all();
     rows = (r?.results || []) as WatchRow[];
   } catch (e) {
     console.warn('[mi digest] watchlist load failed', e);

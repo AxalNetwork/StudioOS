@@ -70,6 +70,13 @@ export async function ensureMarketIntelSchema(env: Env): Promise<void> {
     `ALTER TABLE market_intel_watchlist ADD COLUMN last_period_key TEXT`,
     `ALTER TABLE market_intel_watchlist ADD COLUMN last_composite REAL`,
     `CREATE INDEX IF NOT EXISTS idx_mi_watch_cadence_sent ON market_intel_watchlist(cadence, last_sent_at)`,
+    // Task #32 — per-user pause for digest sends. NULL = not paused.
+    // Sentinel '9999-12-31T00:00:00Z' = paused indefinitely. ALTER is
+    // NOT idempotent — the loop below treats duplicate-column as ok.
+    `ALTER TABLE users ADD COLUMN mi_digest_paused_until TEXT`,
+    `CREATE INDEX IF NOT EXISTS idx_users_mi_digest_paused
+       ON users(mi_digest_paused_until)
+       WHERE mi_digest_paused_until IS NOT NULL`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); }

@@ -387,6 +387,13 @@ export const api = {
     request('/market-intel/watchlist', { method: 'POST', body: JSON.stringify({ sector, geo, cadence }) }),
   miWatchlistRemove: (id) =>
     request(`/market-intel/watchlist/${id}`, { method: 'DELETE' }),
+  // Task #32 — pause/resume sector-digest emails without unpinning.
+  // `until`: ISO string | 'indefinite' | null (null = resume).
+  miWatchlistPause: (until) =>
+    request('/market-intel/watchlist/pause', {
+      method: 'POST',
+      body: JSON.stringify({ until }),
+    }),
 
   // Task #4 — Investor Signals + profiling chatbot
   getInvestorProfile: () => request('/investor-profile/me'),

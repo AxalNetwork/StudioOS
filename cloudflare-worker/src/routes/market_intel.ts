@@ -410,7 +410,56 @@ marketIntel.get('/watchlist', async (c) => {
   const rows = (await c.env.DB.prepare(
     `SELECT id, sector, geo, cadence, created_at FROM market_intel_watchlist WHERE user_id = ? ORDER BY id DESC`
   ).bind(user.id).all<WatchlistRow>()).results || [];
-  return c.json({ rows });
+  // Task #32 — surface the per-user digest pause window so the UI can
+  // render the "Pause digests" control with the correct state. NULL =
+  // not paused; ISO timestamp = paused until then; the sentinel
+  // '9999-12-31T00:00:00Z' = paused indefinitely.
+  const pauseRow = await c.env.DB.prepare(
+    `SELECT mi_digest_paused_until AS until FROM users WHERE id = ?`
+  ).bind(user.id).first<{ until: string | null }>();
+  const until = pauseRow?.until || null;
+  const nowIso = new Date().toISOString();
+  const isActive = !!(until && until > nowIso);
+  const indefinite = !!(until && until.startsWith('9999-'));
+  return c.json({
+    rows,
+    digest_pause: {
+      paused_until: isActive ? until : null,
+      indefinite: isActive && indefinite,
+    },
+  });
+});
+
+// Task #32 — set/clear the per-user digest pause window. Body shape:
+//   { until: 'iso-string' }   → pause until that timestamp
+//   { until: 'indefinite' }   → pause forever (sentinel year 9999)
+//   { until: null }           → resume immediately
+// 1w/1m presets are computed client-side so the server stays a thin
+// passthrough — easier to add new presets without a deploy.
+marketIntel.post('/watchlist/pause', async (c) => {
+  const user = await requireAuth(c);
+  if (!callerHasFullLens(user)) {
+    return c.json({ error: 'tier_required', required: 'growth' }, 402);
+  }
+  const body = await c.req.json<{ until?: string | null }>().catch(() => ({} as { until?: string | null }));
+  let value: string | null = null;
+  const until = body?.until;
+  if (until != null) {
+    if (until === 'indefinite') {
+      value = '9999-12-31T00:00:00.000Z';
+    } else {
+      const d = new Date(String(until));
+      if (isNaN(d.getTime())) return c.json({ error: 'invalid_until' }, 400);
+      // Cap at 1 year so a typo (e.g. year 4001) doesn't strand the
+      // user; "indefinite" is the explicit sentinel for forever.
+      const max = new Date(Date.now() + 366 * 86_400_000);
+      value = (d > max ? max : d).toISOString();
+    }
+  }
+  await c.env.DB.prepare(
+    `UPDATE users SET mi_digest_paused_until = ? WHERE id = ?`
+  ).bind(value, user.id).run();
+  return c.json({ ok: true, paused_until: value });
 });
 
 marketIntel.post('/watchlist', async (c) => {

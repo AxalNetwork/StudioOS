@@ -1544,18 +1544,43 @@ function CitationsTab({ user: _user }) {
 
 function WatchlistTab({ user: _user }) {
   const [rows, setRows] = useState(null);
+  const [pause, setPause] = useState({ paused_until: null, indefinite: false });
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [sector, setSector] = useState(SECTOR_OPTIONS[0]);
   const [cadence, setCadence] = useState('weekly');
+  const [pausePreset, setPausePreset] = useState('1w');
 
   const reload = () => {
     setErr(null);
     api.miWatchlistList()
-      .then((d) => setRows(d.rows || []))
+      .then((d) => {
+        setRows(d.rows || []);
+        setPause(d.digest_pause || { paused_until: null, indefinite: false });
+      })
       .catch((e) => setErr(e));
   };
   useEffect(() => { reload(); }, []);
+
+  const applyPause = async () => {
+    setBusy(true);
+    try {
+      let until;
+      if (pausePreset === 'indefinite') until = 'indefinite';
+      else if (pausePreset === '1w') until = new Date(Date.now() + 7 * 86400000).toISOString();
+      else if (pausePreset === '1m') until = new Date(Date.now() + 28 * 86400000).toISOString();
+      else until = new Date(Date.now() + 7 * 86400000).toISOString();
+      await api.miWatchlistPause(until);
+      reload();
+    } catch (e) { setErr(e); }
+    finally { setBusy(false); }
+  };
+  const resumePause = async () => {
+    setBusy(true);
+    try { await api.miWatchlistPause(null); reload(); }
+    catch (e) { setErr(e); }
+    finally { setBusy(false); }
+  };
 
   const add = async () => {
     setBusy(true);
@@ -1576,6 +1601,54 @@ function WatchlistTab({ user: _user }) {
     <div className="space-y-4">
       <TabExplainer text="Pin sectors you want a weekly digest on. The cron-driven digest pipeline (the same one your other notifications use) will email you a recap of every composite move + new citations in your window." />
       {err && <MIError err={err} fallbackTier="growth" />}
+      {/* Task #32 — pause sector digests without unpinning. */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        {pause.paused_until ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-sm">
+              <span className="font-medium text-amber-700">Sector digests are paused</span>
+              <span className="text-gray-600">
+                {' '}— {pause.indefinite
+                  ? 'indefinitely'
+                  : `until ${new Date(pause.paused_until).toLocaleDateString()}`}.
+                Your pinned sectors are still saved.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={resumePause}
+              disabled={busy}
+              className="ml-auto px-3 py-1.5 rounded-md bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
+            >
+              Resume now
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">Pause digests</label>
+              <select
+                value={pausePreset}
+                onChange={(e) => setPausePreset(e.target.value)}
+                className="text-sm px-2 py-1.5 border border-gray-300 rounded-md bg-white"
+              >
+                <option value="1w">For 1 week</option>
+                <option value="1m">For 1 month</option>
+                <option value="indefinite">Indefinitely</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={applyPause}
+              className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Pause digests
+            </button>
+            <span className="text-xs text-gray-500">Stops the email digest while keeping every sector you've pinned.</span>
+          </div>
+        )}
+      </div>
       <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-end gap-3">
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">Sector</label>
