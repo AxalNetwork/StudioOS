@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { safeReadJSON } from '../lib/storage';
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
 import { Check, AlertCircle, FileText, Shield, Clock, Eraser, X } from 'lucide-react';
 
 /**
@@ -24,13 +24,19 @@ export default function ESignPage() {
   // front so they don't waste time drawing a signature only to be rejected
   // by the server. The server is still authoritative — see the worker
   // /api/legal/esign/sign/:token handler.
-  let signerAccessLevel = null;
-  let signerKycStatus = null;
-  try {
-    const stored = safeReadJSON('user', {});
-    signerAccessLevel = stored?.access_level || null;
-    signerKycStatus = stored?.kyc_status || null;
-  } catch {}
+  //
+  // Task #42 — read from the live AuthProvider context (`useAuth`) instead
+  // of `safeReadJSON('user')`. The previous storage read was a one-shot
+  // module evaluation, so a signer whose role/access_level/kyc_status had
+  // just been changed server-side would see a stale warning (or none at
+  // all) until they hard-refreshed. AuthProvider re-fetches `/api/auth/me`
+  // on every route change, keeping the banner state in sync with what the
+  // server will actually enforce. `user` is `null` when the visitor isn't
+  // signed in, in which case neither field is set and the banner stays
+  // hidden — same behaviour as before.
+  const { user: signer } = useAuth();
+  const signerAccessLevel = signer?.access_level || null;
+  const signerKycStatus = signer?.kyc_status || null;
   const limitedSigner = signerAccessLevel === 'limited' && signerKycStatus !== 'approved';
 
   useEffect(() => {

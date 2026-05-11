@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
-import { safeReadJSON } from '../lib/storage';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Upload, AlertTriangle, CheckCircle2, Clock, XCircle, Loader2, Search, ChevronDown, X } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
 
 const ID_TYPES = [
   { value: '', label: 'Select ID type' },
@@ -50,6 +50,11 @@ const STATUS_META = {
 
 export default function KYCPage() {
   const navigate = useNavigate();
+  // Task #42 — pull the user via the AuthProvider so a freshly-changed
+  // role / KYC status is reflected immediately. We also call `refresh`
+  // after `kycSubmit` to push the new `kyc_status` into the context
+  // without waiting for the next route navigation.
+  const { user: authUser, refresh: refreshAuth } = useAuth();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -68,11 +73,11 @@ export default function KYCPage() {
     try {
       const s = await api.kycStatus();
       setStatus(s);
-      try {
-        const me = await api.getMe();
-        const stored = safeReadJSON('user', {});
-        localStorage.setItem('user', JSON.stringify({ ...stored, ...me }));
-      } catch {}
+      // Task #42 — instead of duplicating the /me + localStorage merge
+      // dance here, ask the AuthProvider to force-refresh. It owns the
+      // canonical user object and mirrors to localStorage for legacy
+      // readers (see hooks/useAuthSync.jsx).
+      try { await refreshAuth({ force: true }); } catch {}
     } catch (e) {
       setError(e.message);
     } finally { setLoading(false); }
@@ -142,7 +147,7 @@ export default function KYCPage() {
 
       {s === 'pending' && (
         <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-700">
-          Your submission is in queue. An Axal compliance reviewer typically approves within 1 business day. You will receive an email update at <strong>{safeReadJSON('user', {}).email}</strong>.
+          Your submission is in queue. An Axal compliance reviewer typically approves within 1 business day. You will receive an email update at <strong>{authUser?.email || ''}</strong>.
         </div>
       )}
 

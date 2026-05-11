@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { reportError } from '../lib/log';
-import { safeReadJSON } from '../lib/storage';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Rocket, CheckCircle, XCircle, AlertTriangle, ArrowRight, ChevronDown, ShieldCheck } from 'lucide-react';
+import { useAuth } from '../hooks/useAuthSync';
 
 // Founder KYC is stage-gated (Epic 0.5): we only nudge them to verify their
 // identity once one of their projects has hit BUILD or LAUNCH. Sign-time KYC
@@ -13,22 +13,26 @@ const KYC_REQUIRED_STAGES = new Set(['BUILD', 'LAUNCH']);
 
 function FounderKycBanner() {
   const [show, setShow] = useState(false);
+  // Task #42 — read role / kyc_status / access_level from the live
+  // AuthProvider context. With the previous run-once `safeReadJSON`
+  // read inside useEffect, a freshly-approved founder kept seeing the
+  // "Identity verification recommended" nudge until they hard-refreshed.
+  const { user: authUser } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
-    const stored = safeReadJSON('user', {});
     // Skip when an admin is impersonating a founder. App.jsx overwrites
     // localStorage `user` with the impersonated founder (and stashes the
     // real admin under `realUser`), so role alone isn't enough — the
     // presence of `realUser`/`realToken` is the impersonation flag.
     const isImpersonating =
       !!localStorage.getItem('realUser') || !!localStorage.getItem('realToken');
-    if (isImpersonating) return;
+    if (isImpersonating) { setShow(false); return; }
     // Skip for non-founders, users already approved, and admin-granted
     // limited-access accounts (sign gates handle them already).
-    if (!stored || stored.role !== 'founder') return;
-    if (stored.kyc_status === 'approved') return;
-    if (stored.access_level === 'limited') return;
+    if (!authUser || authUser.role !== 'founder') { setShow(false); return; }
+    if (authUser.kyc_status === 'approved') { setShow(false); return; }
+    if (authUser.access_level === 'limited') { setShow(false); return; }
 
     (async () => {
       try {
@@ -46,7 +50,9 @@ function FounderKycBanner() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+    // Re-run when the relevant auth fields actually change so the banner
+    // hides instantly after a server-side approval propagates via /me.
+  }, [authUser?.role, authUser?.kyc_status, authUser?.access_level]);
 
   if (!show) return null;
   return (
