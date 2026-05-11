@@ -190,6 +190,9 @@ CREATE TABLE IF NOT EXISTS projects (
     employee_count TEXT,
     last_funding_round TEXT,
     total_funding REAL,
+    -- Task #7 (AM) — soft-delete marker. Founder DELETE sets this; admin
+    -- "?hard=true" path bypasses it. List endpoints filter `deleted_at IS NULL`.
+    deleted_at TIMESTAMP,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -197,11 +200,13 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name);
 CREATE INDEX IF NOT EXISTS idx_projects_sf_account ON projects(sf_account_id);
 CREATE INDEX IF NOT EXISTS idx_projects_crunchbase_uuid ON projects(crunchbase_uuid);
+CREATE INDEX IF NOT EXISTS idx_projects_deleted_at ON projects(deleted_at);
 
 CREATE TABLE IF NOT EXISTS score_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
-    project_id INTEGER NOT NULL REFERENCES projects(id),
+    -- Task #7 (AM) — ON DELETE CASCADE so admin hard-delete drops scores too.
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     total_score REAL NOT NULL,
     tier TEXT NOT NULL,
     market_size REAL DEFAULT 0,
@@ -253,7 +258,8 @@ CREATE INDEX IF NOT EXISTS idx_scores_locked_until ON score_snapshots(project_id
 CREATE TABLE IF NOT EXISTS documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
-    project_id INTEGER REFERENCES projects(id),
+    -- Task #7 (AM) — ON DELETE CASCADE so admin hard-delete drops docs too.
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     doc_type TEXT NOT NULL DEFAULT 'other',
     status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'generated', 'sent', 'signed')),
@@ -301,7 +307,8 @@ CREATE INDEX IF NOT EXISTS idx_memos_project ON deal_memos(project_id);
 CREATE TABLE IF NOT EXISTS deals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
-    project_id INTEGER NOT NULL REFERENCES projects(id),
+    -- Task #7 (AM) — ON DELETE CASCADE so admin hard-delete drops deals too.
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     partner_id INTEGER REFERENCES partners(id),
     status TEXT NOT NULL DEFAULT 'applied' CHECK (status IN ('applied', 'scored', 'active', 'funded', 'rejected')),
     notes TEXT,
@@ -379,7 +386,8 @@ CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_logs(user_id);
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS discovery_interviews (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id INTEGER NOT NULL REFERENCES projects(id),
+    -- Task #7 (AM) — ON DELETE CASCADE so admin hard-delete drops interviews too.
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     interviewee_name TEXT NOT NULL,
     interviewee_role TEXT,
     interview_date TEXT,
@@ -395,7 +403,8 @@ CREATE INDEX IF NOT EXISTS idx_discovery_interviews_project
 
 CREATE TABLE IF NOT EXISTS roadmap_okrs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id INTEGER NOT NULL REFERENCES projects(id),
+    -- Task #7 (AM) — ON DELETE CASCADE so admin hard-delete drops OKRs too.
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     objective TEXT NOT NULL,
     key_results_json TEXT,
     kanban_status TEXT NOT NULL DEFAULT 'now',

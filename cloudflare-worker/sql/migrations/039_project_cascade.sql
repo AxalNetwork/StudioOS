@@ -5,45 +5,64 @@
 --   2. Rebuild every child table that FKs to projects(id) so the FK becomes
 --      `ON DELETE CASCADE`. Without this, hard-deleting a project that has
 --      ANY history (scores, deals, docs, …) trips a FOREIGN KEY constraint
---      violation and the existing manual-cascade code in routes/projects.ts
---      has to enumerate every child by hand.
+--      violation and the existing manual-cascade code in
+--      services/projectTrash.ts has to enumerate every child by hand.
 --
--- ONE-SHOT — re-runs WILL fail. The rebuild dance (CREATE _new → INSERT
--- SELECT → DROP → RENAME) is not safely re-runnable in raw SQL because D1
--- has no procedural conditional. Apply this migration EXACTLY ONCE per
--- environment via:
+-- IDEMPOTENCY CONTRACT:
+--   * The first transaction inserts a marker into `_migrations_applied` with
+--     PRIMARY KEY = '039_project_cascade'. On re-run the INSERT errors with
+--     UNIQUE constraint and the file aborts BEFORE any destructive DDL has
+--     a chance to run. wrangler stops on first error and never reaches the
+--     subsequent rebuild blocks. So re-running this file is safe.
+--   * Every subsequent rebuild is wrapped in its own BEGIN/COMMIT so a
+--     mid-file failure (e.g. unexpected schema drift on one child) leaves
+--     all OTHER children intact rather than half-rebuilt.
+--
+-- Tables NOT rebuilt by this migration (deliberate):
+--   * `score_evidence`, `score_flags` — listed in the task spec but do not
+--     exist in this codebase (no CREATE TABLE found anywhere).
+--   * `esign_envelopes` — has `deal_id` (deals.id), no direct project FK,
+--     so it cascades indirectly via the deals rebuild below.
+--   * `activity_logs` — DELIBERATELY NOT REBUILT. It has lazy-added
+--     columns (action_type, entity_type, entity_id, ip_address,
+--     user_agent, metadata) that are added on-demand by partnernet.ts
+--     and may or may not exist on a given install; an INSERT SELECT that
+--     enumerates them would either lose data (if omitted) or break the
+--     migration (if listed). Audit-history rows for a hard-deleted project
+--     are PRESERVED on purpose (services/projectTrash.ts:hardDeleteProject
+--     nulls out `project_id` rather than deleting the row), so a CASCADE
+--     FK is not desired here in the first place.
+--
+-- Apply via:
 --   wrangler d1 execute studioos-db --remote \
 --     --file=cloudflare-worker/sql/migrations/039_project_cascade.sql
---
--- Idempotency you DO get:
---   * `ALTER TABLE projects ADD COLUMN deleted_at` errors as duplicate-column
---     on re-run; D1 rolls back the file at that point. Re-running is safe in
---     the sense that no destructive step happens before the marker.
---   * Indexes are recreated with IF NOT EXISTS.
---
--- Tables NOT cascaded by this migration (deliberate):
---   * `score_evidence`, `score_flags` — listed in task spec but not present
---     in this codebase (no CREATE TABLE found).
---   * `esign_envelopes` — has `deal_id` (deals.id), no direct project_id
---     FK, so it cascades indirectly via the deals rebuild below.
---
--- Lazy-added columns (017/019/021/007 + lazy code-paths in routes/esign.ts
--- and routes/partnernet.ts) ARE included in the _new schemas below; we
--- assume the canonical lazy schema is fully applied to the target DB. If a
--- specific column is absent on a stale DB, the corresponding INSERT SELECT
--- will error out — re-apply the relevant earlier migration first.
+
+-- ---------------------------------------------------------------------------
+-- 0. Idempotency guard. On a second run, the INSERT below errors with
+--    UNIQUE constraint, the file aborts, and nothing destructive happens.
+-- ---------------------------------------------------------------------------
+BEGIN;
+CREATE TABLE IF NOT EXISTS _migrations_applied (
+    name TEXT PRIMARY KEY,
+    applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO _migrations_applied (name) VALUES ('039_project_cascade');
+COMMIT;
 
 PRAGMA foreign_keys=OFF;
 
 -- ---------------------------------------------------------------------------
 -- 1. projects.deleted_at — soft-delete marker.
 -- ---------------------------------------------------------------------------
+BEGIN;
 ALTER TABLE projects ADD COLUMN deleted_at TIMESTAMP;
 CREATE INDEX IF NOT EXISTS idx_projects_deleted_at ON projects(deleted_at);
+COMMIT;
 
 -- ---------------------------------------------------------------------------
 -- 2. deals — FK projects(id) → ON DELETE CASCADE.
 -- ---------------------------------------------------------------------------
+BEGIN;
 CREATE TABLE deals_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
@@ -63,10 +82,12 @@ DROP TABLE deals;
 ALTER TABLE deals_new RENAME TO deals;
 CREATE INDEX IF NOT EXISTS idx_deals_project ON deals(project_id);
 CREATE INDEX IF NOT EXISTS idx_deals_sf_opp ON deals(sf_opportunity_id);
+COMMIT;
 
 -- ---------------------------------------------------------------------------
 -- 3. score_snapshots — FK projects(id) → ON DELETE CASCADE.
 -- ---------------------------------------------------------------------------
+BEGIN;
 CREATE TABLE score_snapshots_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
@@ -118,10 +139,13 @@ CREATE INDEX IF NOT EXISTS idx_scores_project      ON score_snapshots(project_id
 CREATE INDEX IF NOT EXISTS idx_scores_sandbox      ON score_snapshots(project_id, is_sandbox, created_at);
 CREATE INDEX IF NOT EXISTS idx_scores_review       ON score_snapshots(admin_review_status);
 CREATE INDEX IF NOT EXISTS idx_scores_locked_until ON score_snapshots(project_id, locked_until);
+COMMIT;
 
 -- ---------------------------------------------------------------------------
 -- 4. documents — FK projects(id) → ON DELETE CASCADE.
+--    Includes migration 007's `migrated_to_esign_id` column.
 -- ---------------------------------------------------------------------------
+BEGIN;
 CREATE TABLE documents_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
@@ -141,37 +165,12 @@ INSERT INTO documents_new (id, uid, project_id, title, doc_type, status, content
   SELECT id, uid, project_id, title, doc_type, status, content, template_name, signed_by, signed_at, migrated_to_esign_id, created_at, updated_at FROM documents;
 DROP TABLE documents;
 ALTER TABLE documents_new RENAME TO documents;
+COMMIT;
 
 -- ---------------------------------------------------------------------------
--- 5. activity_logs — FK projects(id) → ON DELETE CASCADE.
--- Canonical-only column copy (id, uid, project_id, user_id, action, details,
--- actor, created_at). The lazy partnernet.ts ALTERs (action_type,
--- entity_type, entity_id, ip_address, user_agent, metadata) are NOT
--- enumerated here because they are added on-demand and may be absent on
--- some installs — listing them in INSERT SELECT would break the migration.
--- The lazy ALTERs in partnernet.ts will re-add the columns on next hit
--- (try/catch swallowed); any historical data in those lazy columns is lost
--- as a deliberate trade-off for migration robustness.
+-- 5. discovery_interviews — FK projects(id) → ON DELETE CASCADE.
 -- ---------------------------------------------------------------------------
-CREATE TABLE activity_logs_new (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
-    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
-    user_id INTEGER REFERENCES users(id),
-    action TEXT NOT NULL,
-    details TEXT,
-    actor TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-INSERT INTO activity_logs_new (id, uid, project_id, user_id, action, details, actor, created_at)
-  SELECT id, uid, project_id, user_id, action, details, actor, created_at FROM activity_logs;
-DROP TABLE activity_logs;
-ALTER TABLE activity_logs_new RENAME TO activity_logs;
-CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_logs(user_id);
-
--- ---------------------------------------------------------------------------
--- 6. discovery_interviews — FK projects(id) → ON DELETE CASCADE.
--- ---------------------------------------------------------------------------
+BEGIN;
 CREATE TABLE discovery_interviews_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -188,10 +187,12 @@ INSERT INTO discovery_interviews_new SELECT * FROM discovery_interviews;
 DROP TABLE discovery_interviews;
 ALTER TABLE discovery_interviews_new RENAME TO discovery_interviews;
 CREATE INDEX IF NOT EXISTS idx_discovery_interviews_project ON discovery_interviews(project_id);
+COMMIT;
 
 -- ---------------------------------------------------------------------------
--- 7. roadmap_okrs — FK projects(id) → ON DELETE CASCADE.
+-- 6. roadmap_okrs — FK projects(id) → ON DELETE CASCADE.
 -- ---------------------------------------------------------------------------
+BEGIN;
 CREATE TABLE roadmap_okrs_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -207,5 +208,6 @@ INSERT INTO roadmap_okrs_new SELECT * FROM roadmap_okrs;
 DROP TABLE roadmap_okrs;
 ALTER TABLE roadmap_okrs_new RENAME TO roadmap_okrs;
 CREATE INDEX IF NOT EXISTS idx_roadmap_okrs_project_status_order ON roadmap_okrs(project_id, kanban_status, sort_order);
+COMMIT;
 
 PRAGMA foreign_keys=ON;
