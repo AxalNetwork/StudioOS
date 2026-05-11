@@ -286,9 +286,9 @@ investorProfile.post('/me/opt-out', async (c) => {
 // founders without growth/studio entitlement get 402; admin / partner /
 // mentor bypass via the same `callerHasFullLens` predicate that the
 // Market-Intel lens routes use, so behaviour is symmetric across the
-// seven sub-tabs. The pre-existing `/latest` endpoint stays open to all
-// authenticated callers (it shipped that way in Task #4) — gating only
-// the new filtered surface keeps backward compat for the current UI.
+// seven sub-tabs. `/latest` below is gated with the same predicate so
+// the alias mount under /api/market-intel/investor-signals/* stays
+// symmetric across both paths.
 investorSignals.get('/', async (c) => {
   const user = await requireAuth(c);
   if (!callerHasFullLens(user)) {
