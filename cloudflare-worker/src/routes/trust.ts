@@ -166,9 +166,12 @@ trust.post('/intro/request', async (c) => {
   const investor = await requireAuth(c);
   await ensureTrustSchema(c.env);
   const body = await c.req.json().catch(() => ({} as any));
-  // Lazy-import the heavy provider modules (envelope + notify) so a
-  // fast-fail validation branch (cannot_intro_self / bad founder id)
-  // doesn't pay the cost of pulling them in.
+  // Dynamic-import the heavy provider modules (envelope + notify) to
+  // avoid pulling them into the cold-start graph of the trust router
+  // — they are only needed by this single route. Note: these imports
+  // run before validation, so a fast-fail branch (cannot_intro_self /
+  // bad founder id) still pays the import cost; that's an acceptable
+  // tradeoff vs. the cold-start savings on every other trust route.
   const { createThreeWayNdaEnvelope } = await import('../services/trustEnvelope');
   const { notify } = await import('../services/notify');
   const result = await requestIntroLogic(c.env, investor, body, {
