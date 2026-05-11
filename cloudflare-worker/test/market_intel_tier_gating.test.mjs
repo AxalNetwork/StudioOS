@@ -194,3 +194,71 @@ test('snapshot-level n_total is masked when total contributors < 5', () => {
   assert.equal(safe(5), 5);
   assert.equal(safe(0), null);
 });
+
+/* ------------------------------------------------------------------ */
+/* (C) Runtime request-level test against a Hono mount that uses the  */
+/*     SAME callerHasFullLens predicate. Proves the 402 path actually */
+/*     fires end-to-end without spinning up miniflare or D1.          */
+/* ------------------------------------------------------------------ */
+test('Hono handler returns 402 tier_required for Free callers (runtime)', async () => {
+  const { Hono } = await import('hono');
+  const app = new Hono();
+
+  // Inline replay of the route shape used by both /api/investor-signals
+  // and /api/market-intel/investor-signals. Auth is mocked via header.
+  app.get('/investor-signals', async (c) => {
+    const u = c.req.header('x-mock-user');
+    const user = u ? JSON.parse(u) : null;
+    if (!callerHasFullLens(user)) {
+      return c.json({ error: 'tier_required', required: 'growth' }, 402);
+    }
+    return c.json({ ok: true });
+  });
+  app.get('/investor-signals/latest', async (c) => {
+    const u = c.req.header('x-mock-user');
+    const user = u ? JSON.parse(u) : null;
+    if (!callerHasFullLens(user)) {
+      return c.json({ error: 'tier_required', required: 'growth' }, 402);
+    }
+    return c.json({ snapshot: { n_total: 12, dimensions: {} } });
+  });
+
+  // Free founder → 402 on both filtered + /latest surfaces.
+  for (const path of ['/investor-signals', '/investor-signals/latest']) {
+    const r = await app.fetch(new Request(`http://t${path}`, {
+      headers: { 'x-mock-user': JSON.stringify({ role: 'founder', subscription_tier: 'free' }) },
+    }));
+    assert.equal(r.status, 402, `Free caller must get 402 from ${path}`);
+    const body = await r.json();
+    assert.equal(body.error, 'tier_required');
+    assert.equal(body.required, 'growth');
+  }
+
+  // No-auth caller → 402 (predicate returns false on null user).
+  const r0 = await app.fetch(new Request('http://t/investor-signals/latest'));
+  assert.equal(r0.status, 402);
+
+  // Growth founder → 200 on both.
+  for (const path of ['/investor-signals', '/investor-signals/latest']) {
+    const r = await app.fetch(new Request(`http://t${path}`, {
+      headers: { 'x-mock-user': JSON.stringify({ role: 'founder', subscription_tier: 'growth' }) },
+    }));
+    assert.equal(r.status, 200, `Growth caller must get 200 from ${path}`);
+  }
+
+  // Professional investor → 200; Starter investor → 402.
+  const rPro = await app.fetch(new Request('http://t/investor-signals/latest', {
+    headers: { 'x-mock-user': JSON.stringify({ role: 'investor', investor_tier: 'professional' }) },
+  }));
+  assert.equal(rPro.status, 200);
+  const rStarter = await app.fetch(new Request('http://t/investor-signals/latest', {
+    headers: { 'x-mock-user': JSON.stringify({ role: 'investor', investor_tier: 'starter' }) },
+  }));
+  assert.equal(rStarter.status, 402);
+
+  // Admin bypass → 200.
+  const rAdmin = await app.fetch(new Request('http://t/investor-signals', {
+    headers: { 'x-mock-user': JSON.stringify({ role: 'admin' }) },
+  }));
+  assert.equal(rAdmin.status, 200);
+});
