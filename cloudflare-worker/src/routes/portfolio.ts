@@ -34,7 +34,7 @@ async function visibleProjectIds(env: Env, user: User): Promise<number[] | null>
   if (isAdmin(user) || isInvestor(user) || isPartner(user)) return null;
   if (isFounder(user)) {
     if (!user.founder_id) return [];
-    const rows = await env.DB.prepare('SELECT id FROM projects WHERE founder_id = ?')
+    const rows = await env.DB.prepare('SELECT id FROM projects WHERE founder_id = ? AND deleted_at IS NULL')
       .bind(user.founder_id).all<{ id: number }>();
     return (rows.results || []).map((r) => r.id);
   }
@@ -130,12 +130,12 @@ r.get('/health', async (c) => {
     const visible = await visibleProjectIds(c.env, user);
     let projects: any[];
     if (visible == null) {
-      projects = ((await c.env.DB.prepare('SELECT * FROM projects').all<any>()).results || []) as any[];
+      projects = ((await c.env.DB.prepare('SELECT * FROM projects WHERE deleted_at IS NULL').all<any>()).results || []) as any[];
     } else if (visible.length === 0) {
       return c.json({ items: [], as_of: null, totals: { green: 0, yellow: 0, red: 0, intervention: 0 } });
     } else {
       const ph = visible.map(() => '?').join(',');
-      projects = ((await c.env.DB.prepare(`SELECT * FROM projects WHERE id IN (${ph})`).bind(...visible).all<any>()).results || []) as any[];
+      projects = ((await c.env.DB.prepare(`SELECT * FROM projects WHERE id IN (${ph}) AND deleted_at IS NULL`).bind(...visible).all<any>()).results || []) as any[];
     }
     const items: any[] = [];
     let asOf: string | null = null;
@@ -168,7 +168,7 @@ r.get('/health/:uid', async (c) => {
     if (!canViewDashboard(user)) return c.json({ detail: 'Forbidden' }, 403);
     const projectUid = c.req.param('uid');
     const days = Math.max(1, Math.min(365, Number(c.req.query('history_days') || 30)));
-    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE uid = ?').bind(projectUid).first<any>();
+    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE uid = ? AND deleted_at IS NULL').bind(projectUid).first<any>();
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     const visible = await visibleProjectIds(c.env, user);
     if (visible != null && !visible.includes(project.id)) return c.json({ detail: 'Forbidden' }, 403);
@@ -201,7 +201,7 @@ r.post('/health/recompute/:uid', async (c) => {
     if (!isAdmin(user) && !isInvestor(user) && !isPartner(user)) {
       return c.json({ detail: 'Admin/partner/investor only' }, 403);
     }
-    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE uid = ?').bind(c.req.param('uid')).first<any>();
+    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE uid = ? AND deleted_at IS NULL').bind(c.req.param('uid')).first<any>();
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     const row = await upsertSnapshot(c.env, project);
     return c.json(snapDto(row, project));

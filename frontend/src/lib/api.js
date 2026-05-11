@@ -189,6 +189,10 @@ export const api = {
   createProject: (data) => request('/projects', { method: 'POST', body: JSON.stringify(data) }),
   updateProject: (id, data) => request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteProject: (id) => request(`/projects/${id}`, { method: 'DELETE' }),
+  // Task #7 (AM) — Admin > Trash management for soft-deleted projects.
+  adminListProjectTrash: () => request('/admin/projects/trash'),
+  adminRestoreProject: (id) => request(`/admin/projects/${id}/restore`, { method: 'POST' }),
+  adminHardDeleteProject: (id) => request(`/admin/projects/${id}/hard-delete`, { method: 'DELETE' }),
   advanceWeek: (id) => request(`/projects/${id}/advance-week`, { method: 'POST' }),
 
   // Epic 5: scoreStartup honours `is_sandbox` (founder practice mode). The

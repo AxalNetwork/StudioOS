@@ -41,6 +41,7 @@ import MarketIntelPage from './pages/MarketIntelPage';
 import AdvisoryPage from './pages/AdvisoryPage';
 import ActivityPage from './pages/ActivityPage';
 import AdminPage from './pages/AdminPage';
+import AdminTrashPage from './pages/AdminTrashPage';
 import AdminDueDiligencePage from './pages/AdminDueDiligencePage';
 import AdminDueDiligenceCasePage from './pages/AdminDueDiligenceCasePage';
 import ApiBridgePage from './pages/ApiBridgePage';
@@ -837,6 +838,7 @@ function AppInner() {
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/trash" element={guard(['admin'], <AdminTrashPage />)} />
       <Route path="/admin/partners" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'mentor'], <AdminDueDiligencePage />)} />
       <Route path="/admin/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'mentor'], <AdminDueDiligenceCasePage />)} />

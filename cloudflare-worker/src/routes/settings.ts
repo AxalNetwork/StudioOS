@@ -760,7 +760,7 @@ settings.post('/founder/invites', async (c) => {
       await sql.end();
       return c.json({ error: 'Founder profile required to invite to a project' }, 403);
     }
-    const owns = await sql`SELECT id FROM projects WHERE id = ${projectId} AND founder_id = ${user.founder_id}`;
+    const owns = await sql`SELECT id FROM projects WHERE id = ${projectId} AND founder_id = ${user.founder_id} AND deleted_at IS NULL`;
     if (!owns.length) {
       await sql.end();
       return c.json({ error: 'Project not found or not owned by you' }, 403);

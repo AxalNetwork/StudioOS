@@ -69,11 +69,12 @@ export default function ProjectsPage() {
 
   const handleDelete = async (project) => {
     if (!project?.id) return;
-    if (!window.confirm(`Delete "${project.name}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete "${project.name}"? It will be moved to the trash and permanently removed after 30 days.`)) return;
     try {
       await api.deleteProject(project.id);
       setProjects(prev => prev.filter(p => p.id !== project.id));
-      showToast({ kind: 'success', msg: 'Project deleted' });
+      // Task #7 (AM) — soft-delete UX: tell the user where to find it.
+      showToast({ kind: 'success', msg: 'Project moved to trash — restore within 30 days from Admin > Trash' });
     } catch (e) {
       showToast({ kind: 'error', msg: e?.message || 'Failed to delete project' });
     }

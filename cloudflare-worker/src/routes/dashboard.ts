@@ -72,15 +72,15 @@ dashboard.get('/', async (c) => {
   ] = await Promise.all([
     safeQuery('deals', () =>
       isAdmin
-        ? sql`SELECT id, name, sector, stage, status, score, ai_decision, created_at FROM projects WHERE status NOT IN ('rejected', 'archived') ORDER BY created_at DESC LIMIT 12`
+        ? sql`SELECT id, name, sector, stage, status, score, ai_decision, created_at FROM projects WHERE status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 12`
         : isFounder
-          ? sql`SELECT id, name, sector, stage, status, score, ai_decision, created_at FROM projects WHERE submitted_by = ${user.id} AND status NOT IN ('rejected', 'archived') ORDER BY created_at DESC LIMIT 12`
+          ? sql`SELECT id, name, sector, stage, status, score, ai_decision, created_at FROM projects WHERE submitted_by = ${user.id} AND status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 12`
           // Task #3 (Y-1) — investors get the founder_user_id JOIN so
           // the Trust Center mask can null sensitive fields when no
           // active pairwise NDA exists. Partners stay un-masked.
           : isInvestor
-            ? sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.score, p.ai_decision, p.created_at, u.id AS founder_user_id FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} LEFT JOIN users u ON u.founder_id = p.founder_id WHERE p.status NOT IN ('rejected', 'archived') AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT 12`
-            : sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.score, p.ai_decision, p.created_at FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} WHERE p.status NOT IN ('rejected', 'archived') AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT 12`,
+            ? sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.score, p.ai_decision, p.created_at, u.id AS founder_user_id FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} LEFT JOIN users u ON u.founder_id = p.founder_id WHERE p.status NOT IN ('rejected', 'archived') AND p.deleted_at IS NULL AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT 12`
+            : sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.score, p.ai_decision, p.created_at FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} WHERE p.status NOT IN ('rejected', 'archived') AND p.deleted_at IS NULL AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT 12`,
       [] as any[]),
     safeQuery('scoresMine', () => sql`
       SELECT ms.*, p.name as deal_name, p.sector, p.stage

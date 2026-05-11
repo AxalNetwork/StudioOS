@@ -28,7 +28,7 @@ function canUseWatchlist(user: User): boolean {
 
 async function dto(env: Env, w: ItemRow): Promise<any> {
   const proj = await env.DB.prepare(
-    'SELECT id, uid, name, sector, stage, status FROM projects WHERE id = ?'
+    'SELECT id, uid, name, sector, stage, status FROM projects WHERE id = ? AND deleted_at IS NULL'
   ).bind(w.project_id).first<any>();
   return {
     id: w.id, uid: w.uid, owner_user_id: w.owner_user_id,
@@ -77,7 +77,7 @@ r.post('/watchlist', async (c) => {
     const body = await c.req.json().catch(() => ({} as any));
     const projectId = Number(body.project_id);
     if (!Number.isFinite(projectId)) return c.json({ detail: 'project_id required' }, 400);
-    const proj = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectId).first<{ id: number }>();
+    const proj = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(projectId).first<{ id: number }>();
     if (!proj) return c.json({ detail: 'Project not found' }, 404);
     const conviction = body.conviction ? String(body.conviction).slice(0, 16) : null;
     const thesis = body.thesis ? String(body.thesis).slice(0, 4000) : null;

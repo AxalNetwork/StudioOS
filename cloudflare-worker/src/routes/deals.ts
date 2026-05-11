@@ -18,13 +18,13 @@ deals.get('/', async (c) => {
   // without an extra round-trip per row.
   if (isPrivileged) {
     rows = status
-      ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id WHERE d.status = ${status} ORDER BY d.created_at DESC`
-      : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id ORDER BY d.created_at DESC`;
+      ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id WHERE d.status = ${status} AND (p.id IS NULL OR p.deleted_at IS NULL) ORDER BY d.created_at DESC`
+      : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id WHERE (p.id IS NULL OR p.deleted_at IS NULL) ORDER BY d.created_at DESC`;
   } else {
     if (!user.founder_id) { await sql.end(); return c.json([]); }
     rows = status
-      ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id WHERE d.status = ${status} AND p.founder_id = ${user.founder_id} ORDER BY d.created_at DESC`
-      : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id WHERE p.founder_id = ${user.founder_id} ORDER BY d.created_at DESC`;
+      ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id WHERE d.status = ${status} AND p.founder_id = ${user.founder_id} AND p.deleted_at IS NULL ORDER BY d.created_at DESC`
+      : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id WHERE p.founder_id = ${user.founder_id} AND p.deleted_at IS NULL ORDER BY d.created_at DESC`;
   }
   await sql.end();
   return c.json(rows);

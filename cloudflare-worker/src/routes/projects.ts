@@ -17,22 +17,25 @@ async function listProjectsHandler(c: any) {
   // Task #3 (Y-1) — investor list rows JOIN to users so we can per-row
   // mask via maskFounderForInvestor (no active pairwise NDA → public
   // fields only). Other roles keep the legacy SELECT shape.
+  // Task #7 (AM) — soft-deleted projects (deleted_at IS NOT NULL) are
+  // hidden from every list view. They reappear only in the Admin > Trash
+  // page, which uses the dedicated /api/admin/projects/trash route.
   let rows: any;
   if (isPrivileged) {
     if (user.role === 'investor') {
       rows = status
-        ? await sql`SELECT p.*, u.id AS founder_user_id FROM projects p LEFT JOIN users u ON u.founder_id = p.founder_id WHERE p.status = ${status} ORDER BY p.created_at DESC`
-        : await sql`SELECT p.*, u.id AS founder_user_id FROM projects p LEFT JOIN users u ON u.founder_id = p.founder_id ORDER BY p.created_at DESC`;
+        ? await sql`SELECT p.*, u.id AS founder_user_id FROM projects p LEFT JOIN users u ON u.founder_id = p.founder_id WHERE p.status = ${status} AND p.deleted_at IS NULL ORDER BY p.created_at DESC`
+        : await sql`SELECT p.*, u.id AS founder_user_id FROM projects p LEFT JOIN users u ON u.founder_id = p.founder_id WHERE p.deleted_at IS NULL ORDER BY p.created_at DESC`;
     } else {
       rows = status
-        ? await sql`SELECT * FROM projects WHERE status = ${status} ORDER BY created_at DESC`
-        : await sql`SELECT * FROM projects ORDER BY created_at DESC`;
+        ? await sql`SELECT * FROM projects WHERE status = ${status} AND deleted_at IS NULL ORDER BY created_at DESC`
+        : await sql`SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC`;
     }
   } else {
     if (!user.founder_id) { await sql.end(); return c.json([]); }
     rows = status
-      ? await sql`SELECT * FROM projects WHERE status = ${status} AND founder_id = ${user.founder_id} ORDER BY created_at DESC`
-      : await sql`SELECT * FROM projects WHERE founder_id = ${user.founder_id} ORDER BY created_at DESC`;
+      ? await sql`SELECT * FROM projects WHERE status = ${status} AND founder_id = ${user.founder_id} AND deleted_at IS NULL ORDER BY created_at DESC`
+      : await sql`SELECT * FROM projects WHERE founder_id = ${user.founder_id} AND deleted_at IS NULL ORDER BY created_at DESC`;
   }
   await sql.end();
   if (user.role === 'investor') {
@@ -372,56 +375,60 @@ projects.put('/:id', async (c) => {
 });
 
 projects.delete('/:id', async (c) => {
-  // Task #17 — founders must be able to delete their OWN projects (the
-  // happy path includes a delete step). Admins keep blanket delete rights.
+  // Task #7 (AM) — DEFAULT path = SOFT-DELETE.
+  //   * Founders may soft-delete their own project.
+  //   * Admins may soft-delete any project, OR pass `?hard=true` to
+  //     skip the trash and physically purge the row immediately. The
+  //     hard path also lives at /api/admin/projects/:id/hard-delete
+  //     (see routes/admin.ts) for a clearer audit trail.
+  // Soft-deleted rows are invisible to every list endpoint (filter
+  // `deleted_at IS NULL`) and are physically removed by the 30-day
+  // sweep cron (see services/projectTrash.ts).
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
+  const hard = c.req.query('hard') === 'true' || c.req.query('hard') === '1';
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id, founder_id FROM projects WHERE id = ${id}`;
+  const rows = await sql`SELECT id, founder_id, deleted_at FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = rows[0];
-  const isPrivileged = user.role === 'admin';
+  const isAdmin = user.role === 'admin';
   const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
-  if (!isPrivileged && !isOwner) {
+  if (!isAdmin && !isOwner) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
-  // SQLite/D1 does not cascade by default and most child tables
-  // were created without ON DELETE CASCADE, so a bare DELETE FROM
-  // projects fails with FOREIGN KEY constraint violations once the
-  // project has any history (score snapshots, deal memos, financial
-  // models, milestones, etc.). Best-effort delete from every known
-  // dependent table first; per-table errors are swallowed so a
-  // missing optional table on a fresh DB doesn't abort the cascade.
-  const childTables = [
-    'score_snapshots', 'documents', 'deal_memos', 'deals',
-    'capital_calls', 'tickets', 'discovery_interviews', 'roadmap_okrs',
-    'fund_reserve_allocations', 'financial_models',
-    'compliance_events', 'cap_table_scenarios', 'founder_checkins',
-    'cap_table_holders', 'cap_table_securities', 'investor_introductions',
-    'project_milestones', 'project_week_progress', 'spinout_lab_milestones',
-    'project_health_signals', 'health_interventions', 'project_watchlist',
-    'project_metrics', 'sf_sync_log',
-  ];
-  for (const t of childTables) {
-    try { await c.env.DB.prepare(`DELETE FROM ${t} WHERE project_id = ?`).bind(id).run(); }
-    catch { /* table absent on this DB or different shape — fine */ }
-  }
-  // activity_logs has project_id on some installs but not others, and
-  // we want to keep audit history anyway → null it out instead.
-  try { await c.env.DB.prepare(`UPDATE activity_logs SET project_id = NULL WHERE project_id = ?`).bind(id).run(); } catch {}
-  try {
-    await sql`DELETE FROM projects WHERE id = ${id}`;
-  } catch (e) {
+  if (hard && !isAdmin) {
     await sql.end();
-    console.error('[projects:delete] FK cascade still failed for project', id, (e as Error).message);
-    return c.json({
-      error: 'Could not delete project — it still has linked records. Please remove linked deals/contracts/milestones first.',
-    }, 409);
+    return c.json({ detail: 'Forbidden: hard delete is admin-only' }, 403);
   }
-  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_delete', { type: 'project', id }); } catch {}
+
+  if (hard) {
+    // Migration 039 added ON DELETE CASCADE to every project FK we ship,
+    // so a single DELETE is enough on a migrated DB. The legacy manual
+    // cascade (kept for stale installs that haven't applied 039 yet) lives
+    // in services/projectTrash.ts:hardDeleteProject.
+    const { hardDeleteProject } = await import('../services/projectTrash');
+    try {
+      await hardDeleteProject(c.env, id);
+    } catch (e) {
+      await sql.end();
+      console.error('[projects:delete:hard] cascade failed for', id, (e as Error).message);
+      return c.json({ error: 'Could not hard-delete project', detail: (e as Error).message }, 409);
+    }
+    try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_delete', { type: 'project', id }); } catch {}
+    await sql.end();
+    return c.json({ ok: true, hard: true });
+  }
+
+  // Soft-delete (idempotent). Re-deleting an already-trashed project is
+  // a no-op so retried requests don't 404 the user.
+  if (project.deleted_at) {
+    await sql.end();
+    return c.json({ ok: true, soft: true, already_trashed: true });
+  }
+  await sql`UPDATE projects SET deleted_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   await sql.end();
-  return c.json({ ok: true });
+  return c.json({ ok: true, soft: true });
 });
 
 projects.post('/:id/advance-week', async (c) => {

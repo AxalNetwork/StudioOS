@@ -49,7 +49,7 @@ privateData.get('/portfolio/metrics', async (c) => {
     // runs are practice and a flagged run reads as "no score yet" until admin
     // signs off. Goes through getVerifiedLatestSnapshot so reads are audited.
     const baseProjects = user.founder_id
-      ? await sql`SELECT * FROM projects WHERE founder_id = ${user.founder_id}`
+      ? await sql`SELECT * FROM projects WHERE founder_id = ${user.founder_id} AND deleted_at IS NULL`
       : [];
     const { getVerifiedLatestSnapshot } = await import('../services/scoreIntegrity');
     const projects = await Promise.all(
@@ -83,7 +83,7 @@ privateData.get('/portfolio/metrics', async (c) => {
       SELECT p.*, u.id AS founder_user_id
         FROM projects p
         LEFT JOIN users u ON u.founder_id = p.founder_id
-       WHERE p.status IN ('spinout', 'active', 'tier_1', 'tier_2')`;
+       WHERE p.status IN ('spinout', 'active', 'tier_1', 'tier_2') AND p.deleted_at IS NULL`;
     await sql.end();
     let portfolio: any[] = portfolioRaw as any[];
     if (user.role === 'investor') {
@@ -99,7 +99,7 @@ privateData.get('/portfolio/metrics', async (c) => {
     return c.json({ role: roleLabel, deals, total_deals: deals.length, active_deals: deals.filter((d: any) => ['applied', 'scored', 'active'].includes(d.status)).length, fund_metrics: { total_committed: Number(committed[0].total), total_called: Number(called[0].total), tvpi, portfolio_companies: portfolioCount }, portfolio });
   }
 
-  const allProjects = await sql`SELECT * FROM projects`;
+  const allProjects = await sql`SELECT * FROM projects WHERE deleted_at IS NULL`;
   const active = allProjects.filter((p: any) => ['spinout', 'active', 'tier_1', 'tier_2'].includes(p.status));
   const committed = await sql`SELECT COALESCE(SUM(commitment_amount), 0) as total FROM limited_partners`;
   const called = await sql`SELECT COALESCE(SUM(invested_amount), 0) as total FROM limited_partners`;
@@ -120,7 +120,7 @@ privateData.get('/founder/:userId', async (c) => {
   if (target.length === 0 || target[0].role !== 'founder') { await sql.end(); return c.json({ error: 'Founder not found' }, 404); }
 
   const projects = target[0].founder_id
-    ? await sql`SELECT * FROM projects WHERE founder_id = ${target[0].founder_id}`
+    ? await sql`SELECT * FROM projects WHERE founder_id = ${target[0].founder_id} AND deleted_at IS NULL`
     : [];
   await sql.end();
   return c.json({ role: 'founder', projects, total_projects: projects.length });

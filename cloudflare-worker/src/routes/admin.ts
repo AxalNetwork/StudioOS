@@ -465,4 +465,75 @@ admin.patch('/users/:userId/toggle-active', async (c) => {
   return c.json({ message: `User ${newActive ? 'activated' : 'deactivated'}`, is_active: newActive });
 });
 
+// ---------------------------------------------------------------------------
+// Task #7 (AM) — Project trash management. Founder DELETE soft-deletes the
+// project (sets deleted_at); these admin-only endpoints surface the trash
+// list and allow Restore / hard-delete actions. The 30-day cron sweep that
+// physically purges old rows lives in services/projectTrash.ts.
+// ---------------------------------------------------------------------------
+
+admin.get('/projects/trash', async (c) => {
+  await requireAdmin(c);
+  const limit = clampLimit(c.req.query('limit'), 100, 200);
+  const offset = parseOffset(c.req.query('offset'));
+  const res: any = await c.env.DB.prepare(
+    `SELECT p.id, p.uid, p.name, p.sector, p.stage, p.status, p.founder_id, p.deleted_at, p.created_at,
+            f.name AS founder_name, f.email AS founder_email
+       FROM projects p
+       LEFT JOIN founders f ON f.id = p.founder_id
+      WHERE p.deleted_at IS NOT NULL
+      ORDER BY datetime(p.deleted_at) DESC
+      LIMIT ? OFFSET ?`,
+  ).bind(limit, offset).all();
+  return c.json({ projects: res?.results || [] });
+});
+
+admin.post('/projects/:id/restore', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const id = parseInt(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid project id' }, 400);
+  const proj: any = await c.env.DB.prepare(
+    `SELECT id, name, deleted_at FROM projects WHERE id = ?`,
+  ).bind(id).first();
+  if (!proj) return c.json({ error: 'Project not found' }, 404);
+  if (!proj.deleted_at) return c.json({ ok: true, already_active: true });
+  await c.env.DB.prepare(`UPDATE projects SET deleted_at = NULL WHERE id = ?`).bind(id).run();
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`,
+    ).bind('project_restored',
+      `Admin ${adminUser.name} restored project ${proj.name} (id=${id})`,
+      adminHash, adminUser.id, id).run();
+  } catch {}
+  return c.json({ ok: true, restored: true });
+});
+
+admin.delete('/projects/:id/hard-delete', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const id = parseInt(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid project id' }, 400);
+  const proj: any = await c.env.DB.prepare(
+    `SELECT id, name FROM projects WHERE id = ?`,
+  ).bind(id).first();
+  if (!proj) return c.json({ error: 'Project not found' }, 404);
+  const { hardDeleteProject } = await import('../services/projectTrash');
+  try {
+    await hardDeleteProject(c.env, id);
+  } catch (e) {
+    console.error('[admin/hard-delete] failed', id, (e as Error).message);
+    return c.json({ error: 'Hard delete failed', detail: (e as Error).message }, 409);
+  }
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind('project_hard_deleted',
+      `Admin ${adminUser.name} hard-deleted project ${proj.name} (id=${id})`,
+      adminHash, adminUser.id).run();
+  } catch {}
+  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_delete', { type: 'project', id }); } catch {}
+  return c.json({ ok: true, hard: true });
+});
+
 export default admin;
