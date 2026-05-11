@@ -56,14 +56,24 @@ portal.get('/my-deal', async (c) => {
   const redemptions = {
     results: (redemptionRows.results || []).map((r: any) => {
       let revshareWindowRemainingDays: number | null = null;
+      let revshareWindowClosesAt: string | null = null;
       if (isRevshare && r.redeemed_at) {
         const t = new Date(r.redeemed_at).getTime();
         if (Number.isFinite(t)) {
           const end = t + ATTRIBUTION_DAYS * 86400 * 1000;
           revshareWindowRemainingDays = Math.max(0, Math.ceil((end - nowMs) / 86400000));
+          // Task #49 — also expose the absolute close date so the
+          // partner-portal badge can show the exact date in its hover
+          // tooltip (matches the urgency emails partners receive at
+          // 30/7/1 days).
+          revshareWindowClosesAt = new Date(end).toISOString();
         }
       }
-      return { ...r, revshare_window_remaining_days: revshareWindowRemainingDays };
+      return {
+        ...r,
+        revshare_window_remaining_days: revshareWindowRemainingDays,
+        revshare_window_closes_at: revshareWindowClosesAt,
+      };
     }),
   };
 

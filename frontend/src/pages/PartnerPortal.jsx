@@ -409,17 +409,10 @@ function PartnerDealWidget() {
                   {r.redeemer_name || 'Referred user'}
                   <span className="text-gray-400 ml-1">· {new Date(r.redeemed_at).toLocaleDateString()}</span>
                 </span>
-                <span className={`font-medium ${
-                  (r.revshare_window_remaining_days ?? 0) <= 30
-                    ? 'text-amber-600'
-                    : 'text-emerald-600'
-                }`}>
-                  {r.revshare_window_remaining_days != null
-                    ? r.revshare_window_remaining_days > 0
-                      ? `${r.revshare_window_remaining_days}d window left`
-                      : 'Window closed'
-                    : '—'}
-                </span>
+                <RevshareWindowBadge
+                  daysRemaining={r.revshare_window_remaining_days}
+                  closesAt={r.revshare_window_closes_at}
+                />
               </li>
             ))}
           </ul>
@@ -434,6 +427,58 @@ function PartnerDealWidget() {
         </div>
       )}
     </div>
+  );
+}
+
+// Task #49 — Color-coded urgency badge for the rev-share attribution
+// window. Tiers mirror the email cadence (30 / 7 / 1 days) so the
+// partner sees the same signal in-app the moment they open the page
+// after a warning email. Hover/title shows the exact close date.
+//   >30d remaining → emerald (healthy / no badge urgency)
+//   ≤30d           → amber  ("closing soon")
+//   ≤7d            → orange ("act now")
+//   ≤1d            → red    ("last chance")
+//   0d / closed    → gray   ("window closed")
+function RevshareWindowBadge({ daysRemaining, closesAt }) {
+  if (daysRemaining == null) {
+    return <span className="text-xs text-gray-400">—</span>;
+  }
+  const closeDateLabel = closesAt
+    ? new Date(closesAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+    : null;
+  let tone;
+  let label;
+  if (daysRemaining <= 0) {
+    tone = 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700';
+    label = 'Window closed';
+  } else if (daysRemaining <= 1) {
+    tone = 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900';
+    label = `${daysRemaining}d left`;
+  } else if (daysRemaining <= 7) {
+    tone = 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-900';
+    label = `${daysRemaining}d left`;
+  } else if (daysRemaining <= 30) {
+    tone = 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900';
+    label = `${daysRemaining}d left`;
+  } else {
+    // >30d: keep the original quiet emerald text styling (no badge box)
+    // so we don't add visual weight to long-running healthy windows.
+    return (
+      <span
+        className="text-xs font-medium text-emerald-600 dark:text-emerald-400"
+        title={closeDateLabel ? `Closes ${closeDateLabel}` : undefined}
+      >
+        {daysRemaining}d window left
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-full border ${tone}`}
+      title={closeDateLabel ? `Closes ${closeDateLabel}` : undefined}
+    >
+      {label}
+    </span>
   );
 }
 
