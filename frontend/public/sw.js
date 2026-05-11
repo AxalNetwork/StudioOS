@@ -66,11 +66,11 @@ async function staleWhileRevalidate(req, cacheName) {
       cache.put(req, res.clone()).catch(() => {});
     }
     return res;
-  }).catch(() => null);
-  return cached || (await network) || new Response(
+  }).catch(() => new Response(
     JSON.stringify({ offline: true, error: 'offline_no_cache' }),
     { status: 503, headers: { 'Content-Type': 'application/json' } }
-  );
+  ));
+  return cached || (await network);
 }
 
 async function networkFirst(req, cacheName) {
