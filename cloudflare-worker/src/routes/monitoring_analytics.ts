@@ -222,7 +222,8 @@ r.get('/exports/recent', async (c) => {
   await requireAdmin(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
-  const limit = clampInt(c.req.query('limit'), 25, 1, 100);
+  // Spec default for /exports/recent is the last 20 entries; /audit uses 25.
+  const limit = clampInt(c.req.query('limit'), 20, 1, 100);
   const offset = clampInt(c.req.query('offset'), 0, 0, 100000);
   const { where, params } = buildAuditWhere({
     action: 'analytics_export',
