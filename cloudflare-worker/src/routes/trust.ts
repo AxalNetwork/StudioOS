@@ -153,88 +153,152 @@ trust.get('/agreements/:envelope_uuid/my_signing_url', async (c) => {
 //      counter-signer) using the nda_3way_v1 template, persist a row in
 //      `pairwise_ndas`, and return the envelope_uuid so the UI can
 //      route to the signing pages.
+//
+// Task #17 — the body of this handler is extracted into the pure
+// `requestIntroLogic` function below so that worker tests can drive
+// every branch (founder-not-found, target-is-not-a-founder,
+// cannot-intro-self, already-active short-circuit, and the
+// notifications_inbox write) with a fully mocked dependency surface.
+// The Hono wrapper here is the only piece that touches `requireAuth`
+// + dynamic provider imports.
 // ---------------------------------------------------------------------------
 trust.post('/intro/request', async (c) => {
   const investor = await requireAuth(c);
-  if (investor.role !== 'investor' && investor.role !== 'admin') {
-    return c.json({ error: 'investor_role_required' }, 403);
-  }
   await ensureTrustSchema(c.env);
   const body = await c.req.json().catch(() => ({} as any));
+  // Lazy-import the heavy provider modules (envelope + notify) so a
+  // fast-fail validation branch (cannot_intro_self / bad founder id)
+  // doesn't pay the cost of pulling them in.
+  const { createThreeWayNdaEnvelope } = await import('../services/trustEnvelope');
+  const { notify } = await import('../services/notify');
+  const result = await requestIntroLogic(c.env, investor, body, {
+    lookupFounder: async (env, id) => {
+      const sql = getSQL(env);
+      const rows: any = await sql`SELECT id, email, name, role FROM users WHERE id = ${id} LIMIT 1`;
+      await sql.end();
+      return rows.length ? rows[0] : null;
+    },
+    getPairwise: getPairwiseNda,
+    isPairwiseActive: hasActivePairwiseNda,
+    upsertPairwise: upsertPairwiseNda,
+    createEnvelope: createThreeWayNdaEnvelope,
+    notify,
+  });
+  return c.json(result.body, result.status as any);
+});
+
+/**
+ * Pure logic for POST /intro/request, lifted out so the worker test
+ * suite can drive every branch with mocked deps. The five branches
+ * the test file exercises:
+ *
+ *   1. cannot_intro_self     — investor.id === founder_user_id  → 400
+ *   2. founder_not_found     — lookupFounder returns null        → 404
+ *   3. target_is_not_a_founder — looked-up user.role !== founder → 400
+ *   4. already_active short-circuit — existing pairwise NDA + active → 200
+ *   5. happy path            — envelope created + founder receives a
+ *                              `contract_sign_request` notify call
+ *                              (which lands in notifications_inbox).
+ *
+ * SECURITY: never leak founder/Axal signing tokens back to the
+ * requesting investor — they would be able to sign as all three
+ * parties via the public /api/legal/esign/sign/:token endpoint and
+ * fraudulently activate the pairwise NDA. The investor receives
+ * ONLY their own signing URL here (the others are emailed by
+ * createThreeWayNdaEnvelope).
+ */
+export interface IntroDeps {
+  lookupFounder: (env: any, id: number) => Promise<{ id: number; email: string; name: string | null; role: string } | null>;
+  getPairwise: (env: any, fid: number, iid: number) => Promise<any | null>;
+  isPairwiseActive: (env: any, fid: number, iid: number) => Promise<boolean>;
+  upsertPairwise: (env: any, fid: number, iid: number, uuid: string) => Promise<void>;
+  createEnvelope: (env: any, args: { founder: any; investor: any; appUrl: string }) => Promise<{ envelope_uuid: string; signing_urls: { investor: string; founder?: string; axal?: string } }>;
+  // notify returns the inserted notifications_inbox row id (or null if
+  // it was suppressed). We don't care about the value here — the test
+  // file just spies on the call shape — so the contract is `Promise<any>`.
+  notify: (env: any, args: any) => Promise<any>;
+}
+
+// Note: we deliberately omit the explicit return-type annotation on
+// `requestIntroLogic` so the TS-source slicer in
+// `cloudflare-worker/test/trust_intro.test.mjs` can isolate the
+// function body via plain brace-balancing without having to track
+// generic angle brackets (`Promise<{...}>` confuses naive walkers).
+// TS infers the same `{ status: number; body: any }` shape from the
+// return statements below.
+export async function requestIntroLogic(
+  env: any,
+  investor: { id: number; role: string; email: string; name?: string | null },
+  body: { founder_user_id?: any },
+  deps: IntroDeps,
+) {
+  if (investor.role !== 'investor' && investor.role !== 'admin') {
+    return { status: 403, body: { error: 'investor_role_required' } };
+  }
   const founderUserId = Number(body?.founder_user_id);
   if (!Number.isInteger(founderUserId) || founderUserId <= 0) {
-    return c.json({ error: 'founder_user_id required' }, 400);
+    return { status: 400, body: { error: 'founder_user_id required' } };
   }
   if (founderUserId === investor.id) {
-    return c.json({ error: 'cannot_intro_self' }, 400);
+    return { status: 400, body: { error: 'cannot_intro_self' } };
   }
 
-  const sql = getSQL(c.env);
-  const founderRows: any = await sql`SELECT id, email, name, role FROM users WHERE id = ${founderUserId} LIMIT 1`;
-  await sql.end();
-  if (!founderRows.length) return c.json({ error: 'founder_not_found' }, 404);
-  const founder = founderRows[0];
-  if (founder.role !== 'founder') return c.json({ error: 'target_is_not_a_founder' }, 400);
+  const founder = await deps.lookupFounder(env, founderUserId);
+  if (!founder) return { status: 404, body: { error: 'founder_not_found' } };
+  if (founder.role !== 'founder') return { status: 400, body: { error: 'target_is_not_a_founder' } };
 
-  // Already-active short-circuit.
-  const existing = await getPairwiseNda(c.env, founderUserId, investor.id);
-  if (existing && await hasActivePairwiseNda(c.env, founderUserId, investor.id)) {
-    return c.json({
-      status: 'already_active',
-      envelope_uuid: existing.nda_envelope_uuid,
-      valid_until: existing.valid_until,
-    });
+  const existing = await deps.getPairwise(env, founderUserId, investor.id);
+  if (existing && await deps.isPairwiseActive(env, founderUserId, investor.id)) {
+    return {
+      status: 200,
+      body: {
+        status: 'already_active',
+        envelope_uuid: existing.nda_envelope_uuid,
+        valid_until: existing.valid_until,
+      },
+    };
   }
 
-  // Issue a fresh 3-way envelope. We reuse the eSign infrastructure
-  // (one envelope, three recipient rows) so the audit trail and
-  // signing-token expiry mechanics are identical to single-signer flows.
-  const { createThreeWayNdaEnvelope } = await import('../services/trustEnvelope');
-  let env;
+  let envelope;
   try {
-    env = await createThreeWayNdaEnvelope(c.env, {
+    envelope = await deps.createEnvelope(env, {
       founder: { user_id: founder.id, email: founder.email, name: founder.name || founder.email },
       investor: { user_id: investor.id, email: investor.email, name: investor.name || investor.email },
-      appUrl: c.env.APP_URL || 'https://axal.vc',
+      appUrl: env.APP_URL || 'https://axal.vc',
     });
   } catch (e) {
     console.error('[trust] 3-way envelope creation failed', e);
-    return c.json({ error: 'envelope_creation_failed', message: (e as Error).message }, 500);
+    return { status: 500, body: { error: 'envelope_creation_failed', message: (e as Error).message } };
   }
-  await upsertPairwiseNda(c.env, founderUserId, investor.id, env.envelope_uuid);
+  await deps.upsertPairwise(env, founderUserId, investor.id, envelope.envelope_uuid);
 
   // Task #4 (Y-2) — in-app notification to the founder so the
   // pending NDA appears in their bell inbox + Trust Center
   // immediately, not just via email. `contract_sign_request` is
   // listed in CRITICAL_CATEGORIES so it bypasses quiet hours.
   try {
-    const { notify } = await import('../services/notify');
-    await notify(c.env, {
+    await deps.notify(env, {
       userId: founderUserId,
       type: 'contract_sign_request',
       title: 'New investor intro request',
       body: `${investor.name || investor.email} has requested an introduction. Please review and sign the mutual NDA in your Trust Center.`,
       link: '/trust',
       category: 'contract_sign_request',
-      payload: { envelope_uuid: env.envelope_uuid, investor_user_id: investor.id },
+      payload: { envelope_uuid: envelope.envelope_uuid, investor_user_id: investor.id },
     });
   } catch (e) {
     console.error('[trust] founder intro notify failed', e);
   }
 
-  // SECURITY: never leak founder/Axal signing tokens back to the
-  // requesting investor — they would be able to sign as all three
-  // parties via the public /api/legal/esign/sign/:token endpoint and
-  // fraudulently activate the pairwise NDA. The founder + Axal links
-  // are delivered only via email (sendAgreementAssignedEmail) inside
-  // createThreeWayNdaEnvelope. The investor receives ONLY their own
-  // signing URL here (also separately emailed).
-  return c.json({
-    status: 'envelope_issued',
-    envelope_uuid: env.envelope_uuid,
-    signing_url: env.signing_urls.investor,
-  });
-});
+  return {
+    status: 200,
+    body: {
+      status: 'envelope_issued',
+      envelope_uuid: envelope.envelope_uuid,
+      signing_url: envelope.signing_urls.investor,
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // GET /intro/status?founder=<id> — pair status check (mask gate consults this).
