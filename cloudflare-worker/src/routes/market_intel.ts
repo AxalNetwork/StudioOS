@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { getLiveQuotes, getMarketHeadlines } from '../services/market-data';
@@ -344,8 +344,11 @@ marketIntel.get('/investor-lens', async (c) => {
   return c.json({ period_key: period, ranked, computed_at: new Date().toISOString() });
 });
 
-/** Geography lens — currently single 'global' band; per-geo rollups land in AA-2. */
-marketIntel.get('/geography', async (c) => {
+// Task #5 (AK) — Geography lens. Currently single 'global' band; per-geo
+// rollups land in AA-2. Both `/geography` and `/geography-lens` route to
+// the same handler so the seven sub-tabs share a consistent lens-naming
+// convention without paying for an internal sub-request.
+const geographyLensHandler = async (c: Context<{ Bindings: Env }>) => {
   const user = await requireAuth(c);
   if (!callerHasFullLens(user)) {
     return c.json({ error: 'tier_required', required: 'professional' }, 402);
@@ -356,7 +359,9 @@ marketIntel.get('/geography', async (c) => {
     period_key: period,
     geos: [{ geo: 'global', sectors: rows.filter((r) => r.dimension === 'composite').map((r) => ({ sector: r.sector, composite: r.value })) }],
   });
-});
+};
+marketIntel.get('/geography', geographyLensHandler);
+marketIntel.get('/geography-lens', geographyLensHandler);
 
 /** Citations — last N rows backing the most recent index recompute. */
 marketIntel.get('/citations', async (c) => {

@@ -272,6 +272,78 @@ investorProfile.post('/me/opt-out', async (c) => {
   return c.json({ ok: true, contribute_to_signals: false });
 });
 
+// Task #5 (AK) — filtered view of the latest snapshot. The spec asks for
+// GET /api/investor-signals?sector=&stage=&geo= so the Investor Signals
+// sub-tab can pre-filter the cells server-side. We read the same latest
+// snapshot used by /latest and narrow each cell-array to the requested
+// labels (case-insensitive). When a filter param is omitted that
+// dimension is returned unfiltered. K-anonymity masking from the
+// aggregator is preserved — we never re-derive counts here, just slice.
+investorSignals.get('/', async (c) => {
+  const user = await requireAuth(c);
+  void user;
+  await ensureSchema(c.env);
+  const sectorFilter = (c.req.query('sector') || '').trim().toLowerCase();
+  const stageFilter  = (c.req.query('stage')  || '').trim().toLowerCase();
+  const geoFilter    = (c.req.query('geo')    || '').trim().toLowerCase();
+
+  const latest = await c.env.DB.prepare(
+    `SELECT computed_at, n_total, payload_json FROM investor_signals_snapshots
+     ORDER BY computed_at DESC LIMIT 1`,
+  ).first<{ computed_at: string; n_total: number; payload_json: string }>();
+  if (!latest) {
+    return c.json({
+      snapshot: null,
+      message: 'No snapshot computed yet — first run pending.',
+      min_cell_size: MIN_CELL_SIZE,
+      filters: { sector: sectorFilter || null, stage: stageFilter || null, geo: geoFilter || null },
+    });
+  }
+  let payload: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(latest.payload_json);
+    if (parsed && typeof parsed === 'object') payload = parsed as Record<string, unknown>;
+  } catch { /* malformed payload — fall through */ }
+
+  type Cell = { label: string; n: number | null; pct?: number; reason?: string };
+  const sliceCells = (arr: unknown, want: string): Cell[] => {
+    if (!Array.isArray(arr)) return [];
+    if (!want) return arr as Cell[];
+    return (arr as Cell[]).filter(c => String(c?.label || '').toLowerCase() === want);
+  };
+
+  const sectors = sliceCells(payload.sectors, sectorFilter);
+  const stages  = sliceCells(payload.stages,  stageFilter);
+  const geos    = sliceCells(payload.geos,    geoFilter);
+
+  // Sector × stage ticket buckets — narrow when either filter is set.
+  type Bucket = { sector: string; stage: string; n: number | null; reason?: string };
+  let ticket_stats_by_sector_stage = (Array.isArray(payload.ticket_stats_by_sector_stage)
+    ? payload.ticket_stats_by_sector_stage as Bucket[]
+    : []);
+  if (sectorFilter) ticket_stats_by_sector_stage = ticket_stats_by_sector_stage.filter(b => String(b.sector).toLowerCase() === sectorFilter);
+  if (stageFilter)  ticket_stats_by_sector_stage = ticket_stats_by_sector_stage.filter(b => String(b.stage).toLowerCase()  === stageFilter);
+
+  const safeNTotal = latest.n_total >= MIN_CELL_SIZE ? latest.n_total : null;
+  return c.json({
+    snapshot: {
+      computed_at: latest.computed_at,
+      n_total: safeNTotal,
+      ...(safeNTotal == null ? { reason: 'insufficient_data' as const } : {}),
+      sectors,
+      stages,
+      geos,
+      ticket_bands: payload.ticket_bands || [],
+      ticket_stats: payload.ticket_stats || { n: null, reason: 'insufficient_data' },
+      ticket_stats_by_sector_stage,
+      thesis_keywords: payload.thesis_keywords || [],
+      options: payload.options || {},
+    },
+    filters: { sector: sectorFilter || null, stage: stageFilter || null, geo: geoFilter || null },
+    min_cell_size: MIN_CELL_SIZE,
+  });
+});
+
 investorSignals.get('/latest', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);

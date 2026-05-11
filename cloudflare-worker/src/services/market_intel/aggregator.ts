@@ -94,6 +94,34 @@ async function runOneSource(env: Env, src: SourceDescriptor): Promise<{ source: 
   }
 }
 
+/**
+ * Task #5 (AK) — convenience wrapper that runs every FREE source on the
+ * given cadence. The spec asks for a single cron-callable entry point for
+ * the always-available connectors; this just filters out `paid: true`
+ * descriptors so the cron can call `runFreeConnectors(env, 'hourly')`
+ * without leaking into paid quotas.
+ *
+ * NOTE: cron WIRING (wrangler.toml schedule + invocation in `index.ts`)
+ * is owned by Task #9 (AO). This export is the contract that task hooks
+ * into — the existing 6h aggregator in index.ts still uses
+ * `runSourcesByCadence` to keep both free + paid sources flowing on the
+ * same cadence today.
+ */
+export async function runFreeConnectors(env: Env, cadence: Cadence): Promise<{ scanned: number; ok: number; failed: number; inserted: number; details: Array<Awaited<ReturnType<typeof runOneSource>>> }> {
+  const sources = listSources().filter((s) => s.cadence === cadence && !s.paid);
+  const details: Array<Awaited<ReturnType<typeof runOneSource>>> = [];
+  let inserted = 0;
+  let ok = 0;
+  let failed = 0;
+  for (const s of sources) {
+    const r = await runOneSource(env, s);
+    details.push(r);
+    inserted += r.inserted;
+    if (r.error && r.mode !== 'degraded') failed += 1; else ok += 1;
+  }
+  return { scanned: sources.length, ok, failed, inserted, details };
+}
+
 export async function runSourcesByCadence(env: Env, cadence: Cadence): Promise<{ scanned: number; ok: number; failed: number; inserted: number; details: Array<Awaited<ReturnType<typeof runOneSource>>> }> {
   const sources = listSources().filter((s) => s.cadence === cadence);
   const details: Array<Awaited<ReturnType<typeof runOneSource>>> = [];
