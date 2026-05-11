@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { Search, Star, Calendar, Clock, Video, X, Send, MessageCircle, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
+import UserTrustBadge from '../components/UserTrustBadge';
 import { markMilestone } from '../lib/spinoutLabHooks';
 
 function StarRow({ rating, onChange }) {
@@ -28,7 +29,7 @@ function StarRow({ rating, onChange }) {
   );
 }
 
-function MentorCard({ mentor, onOpen }) {
+function MentorCard({ mentor, onOpen, viewerRole }) {
   return (
     <button
       onClick={() => onOpen(mentor)}
@@ -63,6 +64,11 @@ function MentorCard({ mentor, onOpen }) {
       )}
       {!mentor.accepting_bookings && (
         <div className="mt-2 text-[11px] text-amber-700">Not accepting bookings right now</div>
+      )}
+      {mentor.user_id && (
+        <div className="mt-2">
+          <UserTrustBadge userId={mentor.user_id} viewerRole={viewerRole} />
+        </div>
       )}
       {mentor.user_id && <CalendlyCTA userId={mentor.user_id} />}
     </button>
@@ -340,6 +346,7 @@ function MyBookings({ refreshKey }) {
 }
 
 export default function MentorsPage() {
+  const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
@@ -437,7 +444,7 @@ export default function MentorsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {items.map((m) => <MentorCard key={m.uid} mentor={m} onOpen={setOpenMentor} />)}
+          {items.map((m) => <MentorCard key={m.uid} mentor={m} onOpen={setOpenMentor} viewerRole={user?.role} />)}
         </div>
       )}
 

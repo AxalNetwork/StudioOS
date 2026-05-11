@@ -6,6 +6,7 @@ import {
   Briefcase, Filter, AlertCircle, Save, ExternalLink, Check, Inbox, Edit3,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import UserTrustBadge from '../components/UserTrustBadge';
 
 const CATEGORY_LABELS = {
   legal: 'Legal',
@@ -155,6 +156,11 @@ function BrowseTab({ meta, user }) {
               </div>
               <span className={`text-[10px] px-2 py-0.5 rounded-full border ${CAPACITY_TONE[p.capacity_status] || CAPACITY_TONE.unavailable}`}>{p.capacity_status}</span>
             </div>
+            {p.user_id && (
+              <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                <UserTrustBadge userId={p.user_id} viewerRole={user?.role} />
+              </div>
+            )}
             {p.headline && <p className="text-sm text-gray-700 mt-2 line-clamp-2">{p.headline}</p>}
             <div className="mt-3 flex flex-wrap gap-1">
               {(p.categories || []).slice(0, 4).map((c) => <span key={c} className="text-[10px] bg-violet-50 text-violet-700 rounded-full px-2 py-0.5">{CATEGORY_LABELS[c] || c}</span>)}
