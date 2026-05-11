@@ -74,7 +74,7 @@ export default function ProjectsPage() {
       await api.deleteProject(project.id);
       setProjects(prev => prev.filter(p => p.id !== project.id));
       // Task #7 (AM) — soft-delete UX: tell the user where to find it.
-      showToast({ kind: 'success', msg: 'Project moved to trash — restore within 30 days from Admin > Trash' });
+      showToast({ kind: 'success', msg: isAdmin ? 'Project moved to trash — restore within 30 days from Admin > Trash' : 'Project moved to trash — contact an admin within 30 days to restore' });
     } catch (e) {
       showToast({ kind: 'error', msg: e?.message || 'Failed to delete project' });
     }
