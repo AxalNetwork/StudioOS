@@ -358,13 +358,10 @@ investorSignals.get('/', async (c) => {
 
 investorSignals.get('/latest', async (c) => {
   const user = await requireAuth(c);
-  // Task #5 (AK) — Investor Signals is a paid sub-tab; Free tier sees
-  // only the sector-compass overview. Gate `/latest` with the same
-  // predicate the filtered GET / uses so the alias mount under
-  // /api/market-intel/investor-signals is symmetric. K-anonymity
-  // already masks individual cells, but the spec entitles only
-  // growth+/professional+ callers (admin/partner/mentor bypass) to
-  // read this surface at all.
+  // Task #5 (AK) — Investor Signals is a paid sub-tab. Gated with the
+  // same predicate as GET /, so the alias mount under
+  // /api/market-intel/investor-signals/* stays symmetric. Free callers
+  // see the sector-compass overview only; admin/partner/mentor bypass.
   if (!callerHasFullLens(user)) {
     return c.json({ error: 'tier_required', required: 'growth' }, 402);
   }

@@ -74,7 +74,7 @@ test('runFreeConnectors is exported and wired into the cron', async () => {
     resolve(__dirname, '../src/index.ts'),
     'utf8',
   );
-  assert.match(indexSrc, /runFreeConnectors\s*\(\s*env\s*,\s*'(hourly|daily)'\s*\)/,
+  assert.match(indexSrc, /runFreeConnectors\s*\(\s*env\s*,\s*(?:'(?:hourly|daily|weekly)'|cad)\s*\)/,
     'cron handler must invoke runFreeConnectors on the spec cadence');
   // Daily 04:00 UTC combined refresh: recomputeIndexes + investor-signals.
   assert.match(indexSrc, /getUTCHours\(\)\s*===\s*4\s*&&\s*now\.getUTCMinutes\(\)\s*===\s*0[\s\S]{0,200}recomputeIndexes/,
