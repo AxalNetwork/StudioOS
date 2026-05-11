@@ -300,4 +300,30 @@ r.get('/me/attributions', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// Task #1 (AG) — spec-contract aliases.
+// POST /pitches mirrors /me/pitches (the create endpoint for the caller's pitch).
+r.post('/pitches', async (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/comarketing/me/pitches';
+  url.search = '';
+  const body = await c.req.text();
+  return r.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
+});
+// GET /campaigns aliases /published (campaigns = published pitches). Query
+// params on /campaigns?... must be forwarded via url.search, never embedded
+// into url.pathname (which would produce an encoded `%3F` segment).
+r.get('/campaigns', (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/comarketing/published';
+  return r.fetch(new Request(url, { method: 'GET', headers: c.req.raw.headers }), c.env, c.executionCtx);
+});
+// POST /campaigns aliases /me/pitches (creating a campaign = creating a pitch).
+r.post('/campaigns', async (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/comarketing/me/pitches';
+  url.search = '';
+  const body = await c.req.text();
+  return r.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
+});
+
 export default r;

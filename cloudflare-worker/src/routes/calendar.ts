@@ -591,4 +591,80 @@ calendar.post('/microsoft/sync', safe('m_sync', 'Microsoft sync failed', async (
   }
 }));
 
+// Task #1 (AG) — spec-contract aliases. Generic /events CRUD (separate from
+// the /ic-meetings + /founder-checkins typed surfaces) writes to the same
+// calendar_events table the GET /events read uses. Founders must own the row;
+// admin/partner/investor may write any row attributed to them.
+calendar.post('/events', async (c) => {
+  const user = await requireAuth(c);
+  const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
+  const title = String(body?.title || '').trim();
+  const startAt = String(body?.start_at || '').trim();
+  const endAt = String(body?.end_at || startAt).trim();
+  if (!title || !startAt) return c.json({ detail: 'title and start_at required' }, 400);
+  const source = body?.source ? String(body.source).slice(0, 40) : 'manual';
+  const kind = body?.kind ? String(body.kind).slice(0, 40) : 'other';
+  const externalUri = `axal:manual:${crypto.randomUUID()}`;
+  const r = await c.env.DB.prepare(
+    `INSERT INTO calendar_events (user_id, source, kind, external_uri, title, start_at, end_at, status,
+                                   notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, datetime('now'), datetime('now'))`,
+  ).bind(user.id, source, kind, externalUri, title.slice(0, 240),
+         startAt, endAt, body?.notes ? String(body.notes).slice(0, 4000) : null).run();
+  return c.json({ id: r.meta.last_row_id, ok: true });
+});
+
+calendar.patch('/events/:id', async (c) => {
+  const user = await requireAuth(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
+  const row = await c.env.DB.prepare('SELECT id, user_id FROM calendar_events WHERE id = ?')
+    .bind(id).first<{ id: number; user_id: number }>();
+  if (!row) return c.json({ detail: 'Event not found' }, 404);
+  if (row.user_id !== user.id && user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
+  const fields: string[] = [];
+  const vals: (string | null)[] = [];
+  for (const k of ['title', 'start_at', 'end_at', 'status', 'notes', 'location_uri'] as const) {
+    if (body[k] !== undefined) {
+      fields.push(`${k} = ?`);
+      vals.push(body[k] == null ? null : String(body[k]).slice(0, 4000));
+    }
+  }
+  if (!fields.length) return c.json({ ok: true });
+  fields.push("updated_at = datetime('now')");
+  await c.env.DB.prepare(`UPDATE calendar_events SET ${fields.join(', ')} WHERE id = ?`)
+    .bind(...vals, id).run();
+  return c.json({ ok: true });
+});
+
+calendar.delete('/events/:id', async (c) => {
+  const user = await requireAuth(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
+  const row = await c.env.DB.prepare('SELECT id, user_id FROM calendar_events WHERE id = ?')
+    .bind(id).first<{ id: number; user_id: number }>();
+  if (!row) return c.json({ detail: 'Event not found' }, 404);
+  if (row.user_id !== user.id && user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  await c.env.DB.prepare('DELETE FROM calendar_events WHERE id = ?').bind(id).run();
+  return c.json({ ok: true });
+});
+
+// POST aliases for the existing DELETE /google and /microsoft disconnects —
+// both verbs are valid per the spec contract.
+calendar.post('/google/disconnect', safe('g_disconnect_post', 'Could not disconnect Google', async (c) => {
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${user.id}`;
+  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'google'`;
+  return c.json({ ok: true });
+}));
+calendar.post('/microsoft/disconnect', safe('m_disconnect_post', 'Could not disconnect Microsoft', async (c) => {
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  await sql`DELETE FROM microsoft_oauth_tokens WHERE user_id = ${user.id}`;
+  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'microsoft'`;
+  return c.json({ ok: true });
+}));
+
 export default calendar;

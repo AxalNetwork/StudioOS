@@ -489,5 +489,59 @@ engagementsRouter.post('/:id/reviews', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// Task #1 (AG) — Marketplace facade endpoints called from the founder UI.
+// These are typed lookups that augment (not replace) the core needs CRUD.
+needs.get('/categories', async (c) => {
+  await requireAuth(c);
+  return c.json({ items: [...VALID_CATEGORIES].map((slug) => ({ slug, label: slug })) });
+});
+
+needs.get('/inquiries', (c) => {
+  // url already carries the original querystring on `url.search`; only swap
+  // the pathname. Never concatenate `url.search` again — that would double
+  // the query string (e.g. `?status=open?status=open`).
+  const url = new URL(c.req.url);
+  url.pathname = '/api/needs/';
+  return needs.fetch(
+    new Request(url, { method: 'GET', headers: c.req.raw.headers }),
+    c.env, c.executionCtx,
+  );
+});
+
+needs.post('/inquiries', async (c) => {
+  const body = await c.req.text();
+  const url = new URL(c.req.url);
+  url.pathname = '/api/needs/';
+  url.search = '';
+  return needs.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
+});
+
+needs.get('/providers', async (c) => {
+  await requireAuth(c);
+  // Providers are partners with status='active' — return the public-safe shape.
+  const rows = await c.env.DB.prepare(
+    `SELECT uid, name, company, specialization FROM partners WHERE status = 'active' ORDER BY name LIMIT 200`,
+  ).all();
+  return c.json({ items: rows.results || [] });
+});
+
+needs.get('/providers/me/stripe', async (c) => {
+  const user = await requireAuth(c);
+  // Stripe Connect onboarding is owned by AO; return a typed empty status so
+  // the SPA's check renders without crashing.
+  return c.json({
+    user_id: user.id,
+    connected: false,
+    account_id: null,
+    onboarding_url: null,
+    detail: 'stripe_connect_not_configured',
+  });
+});
+
+needs.post('/providers/me/stripe/onboard', async (c) => {
+  await requireAuth(c);
+  return c.json({ ok: false, detail: 'stripe_connect_not_configured' }, 503);
+});
+
 export { needs, quotesRouter, engagementsRouter };
 export default needs;

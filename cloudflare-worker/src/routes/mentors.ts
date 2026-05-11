@@ -432,4 +432,17 @@ mentors.get('/bookings/:id/reviews', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// Task #1 (AG) — spec-contract alias. POST /:uid/book maps the mentor's user
+// uid + a slot id (in body) to the existing /slots/:id/book handler.
+mentors.post('/:uid/book', async (c) => {
+  const body = await c.req.text();
+  let parsed: Record<string, unknown> = {};
+  try { parsed = JSON.parse(body || '{}'); } catch { /* noop */ }
+  const slotId = Number(parsed?.slot_id);
+  if (!Number.isFinite(slotId)) return c.json({ detail: 'slot_id required in body' }, 400);
+  const url = new URL(c.req.url);
+  url.pathname = `/api/mentors/slots/${slotId}/book`;
+  return mentors.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
+});
+
 export default mentors;

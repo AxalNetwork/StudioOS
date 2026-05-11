@@ -716,4 +716,23 @@ cofounder.delete('/connections/:uid', async (c) => {
   return c.json(await serializeConnectionFor(c.env, conn, user));
 });
 
+// Task #1 (AG) — spec-contract aliases.
+// POST /me/preferences mirrors PUT /me (preferences are part of the profile).
+cofounder.post('/me/preferences', async (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/cofounder/me';
+  url.search = '';
+  const body = await c.req.text();
+  const proxied = new Request(url, { method: 'PUT', headers: c.req.raw.headers, body });
+  return cofounder.fetch(proxied, c.env, c.executionCtx);
+});
+// GET /matches mirrors /browse (the discovery surface). Preserve query params
+// (e.g. ?stage=, ?skills=) by leaving url.search untouched and only swapping
+// the pathname — never concatenate `search` into `pathname`.
+cofounder.get('/matches', (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/cofounder/browse';
+  return cofounder.fetch(new Request(url, { method: 'GET', headers: c.req.raw.headers }), c.env, c.executionCtx);
+});
+
 export default cofounder;

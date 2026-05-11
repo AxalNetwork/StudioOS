@@ -663,4 +663,108 @@ progress.get('/signals/:projectId', async (c) => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Metrics snapshots — Task #1 (AG). Founders log periodic MRR / active-user
+// metrics; readers see them on the project dashboard. The /signals slider
+// stays as-is (zero out users/revenue) — wiring those is a follow-up.
+// ---------------------------------------------------------------------------
+type MetricsSnapshot = {
+  id: number;
+  project_id: number;
+  snapshot_date: string;
+  mrr: number | null;
+  active_users: number | null;
+  notes: string | null;
+  source: string | null;
+  created_by: number | null;
+  created_at: string;
+};
+
+type SerializedSnap = {
+  id: number;
+  project_id: number;
+  snapshot_date: string;
+  mrr: number | null;
+  active_users: number | null;
+  notes: string | null;
+  source: string | null;
+  created_at: string;
+};
+
+function serializeSnap(s: MetricsSnapshot): SerializedSnap {
+  return {
+    id: s.id,
+    project_id: s.project_id,
+    snapshot_date: s.snapshot_date,
+    mrr: s.mrr,
+    active_users: s.active_users,
+    notes: s.notes,
+    source: s.source,
+    created_at: s.created_at,
+  };
+}
+
+progress.get('/metrics/:projectId', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanView(project, user);
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM metrics_snapshots WHERE project_id = ? ORDER BY snapshot_date DESC, id DESC LIMIT 200`,
+  ).bind(projectId).all<MetricsSnapshot>();
+  return c.json({ items: (rows.results || []).map(serializeSnap) });
+});
+
+progress.post('/metrics/:projectId', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+  const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
+  const dateRaw = String(body?.snapshot_date || '').trim();
+  const snapshotDate = dateRaw || new Date().toISOString().slice(0, 10);
+  const mrr = body?.mrr != null && body.mrr !== '' && Number.isFinite(Number(body.mrr)) ? Number(body.mrr) : null;
+  const activeUsers = body?.active_users != null && body.active_users !== '' && Number.isFinite(Number(body.active_users)) ? Number(body.active_users) : null;
+  const notes = body?.notes ? String(body.notes).slice(0, 4000) : null;
+  const source = body?.source ? String(body.source).slice(0, 80) : 'manual';
+  const r = await c.env.DB.prepare(
+    `INSERT INTO metrics_snapshots
+       (project_id, snapshot_date, mrr, active_users, notes, source, created_by, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+  ).bind(projectId, snapshotDate, mrr, activeUsers, notes, source, user.id).run();
+  const fresh = await c.env.DB.prepare('SELECT * FROM metrics_snapshots WHERE id = ?')
+    .bind(r.meta.last_row_id).first<MetricsSnapshot>();
+  return c.json(serializeSnap(fresh as MetricsSnapshot));
+});
+
+progress.delete('/metrics/:id', async (c) => {
+  const user = await requireAuth(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
+  const existing = await c.env.DB.prepare('SELECT id, project_id FROM metrics_snapshots WHERE id = ?')
+    .bind(id).first<{ id: number; project_id: number }>();
+  if (!existing) return c.json({ detail: 'Snapshot not found' }, 404);
+  const project = await loadProject(c.env, existing.project_id);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+  await c.env.DB.prepare('DELETE FROM metrics_snapshots WHERE id = ?').bind(id).run();
+  return c.json({ ok: true });
+});
+
+progress.post('/metrics/:projectId/import-stripe', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+  // Stripe ingestion is not yet wired in the worker — return a typed
+  // empty success so the SPA's import button doesn't crash.
+  return c.json({ ok: true, imported: 0, source: 'stripe', detail: 'not_configured' });
+});
+
 export default progress;

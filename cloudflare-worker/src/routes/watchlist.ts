@@ -210,4 +210,41 @@ r.get('/antiportfolio', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// Task #1 (AG) — spec-contract aliases. /items mirrors the existing /watchlist
+// surface (root list/create/delete) and /digest aliases /anti-portfolio for
+// the daily digest view.
+r.get('/items', (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/watchlist/watchlist';
+  return r.fetch(new Request(url, { method: 'GET', headers: c.req.raw.headers }), c.env, c.executionCtx);
+});
+r.post('/items', async (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/watchlist/watchlist';
+  url.search = '';
+  const body = await c.req.text();
+  return r.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
+});
+// /items/:id — spec uses numeric id; canonical handler is keyed by `:uid`.
+// Translate id → uid via DB lookup, then forward. Returns 404 if no row.
+r.delete('/items/:id', async (c) => {
+  try {
+    await requireAuth(c);
+    const n = Number(c.req.param('id'));
+    if (!Number.isFinite(n) || n <= 0) return c.json({ detail: 'Not found' }, 404);
+    const row = await c.env.DB.prepare('SELECT uid FROM watchlist_items WHERE id = ?')
+      .bind(n).first<{ uid: string }>();
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    const url = new URL(c.req.url);
+    url.pathname = `/api/watchlist/watchlist/${row.uid}`;
+    url.search = '';
+    return r.fetch(new Request(url, { method: 'DELETE', headers: c.req.raw.headers }), c.env, c.executionCtx);
+  } catch (e) { return mapError(c, e); }
+});
+r.get('/digest', (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/watchlist/watchlist/anti-portfolio';
+  return r.fetch(new Request(url, { method: 'GET', headers: c.req.raw.headers }), c.env, c.executionCtx);
+});
+
 export default r;

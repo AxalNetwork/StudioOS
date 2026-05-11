@@ -284,4 +284,26 @@ r.delete('/company/:uid/members/:userId', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// Task #1 (AG) — spec-contract alias. Frontend calls PATCH /api/company/me;
+// resolve `me` to the caller's primary company via user_company_links (same
+// pattern as GET /company/me) and delegate to the canonical /:uid handler.
+r.patch('/company/me', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const link = await c.env.DB.prepare(
+      `SELECT company_id FROM user_company_links WHERE user_id = ?
+         ORDER BY is_primary_admin DESC, created_at ASC LIMIT 1`,
+    ).bind(user.id).first<{ company_id: number }>();
+    if (!link) return c.json({ detail: 'Company not found for current user' }, 404);
+    const company = await c.env.DB.prepare('SELECT uid FROM company_profiles WHERE id = ?')
+      .bind(link.company_id).first<{ uid: string }>();
+    if (!company) return c.json({ detail: 'Company not found' }, 404);
+    const body = await c.req.text();
+    const url = new URL(c.req.url);
+    url.pathname = `/api/company/${company.uid}`;
+    const proxied = new Request(url, { method: 'PATCH', headers: c.req.raw.headers, body });
+    return await r.fetch(proxied, c.env, c.executionCtx);
+  } catch (e) { return mapError(c, e); }
+});
+
 export default r;

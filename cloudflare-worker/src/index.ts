@@ -119,6 +119,9 @@ import comarketingRoutes from './routes/comarketing';
 import companyRoutes from './routes/company';
 import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 import insightsRoutes from './routes/insights';
+import founderRiskRoutes from './routes/founder_risk';
+import servicesRoutes from './routes/services';
+import publicRoutes from './routes/public';
 // T3 — Reserve allocation + waterfall simulator (Task #46 port).
 import fundSimulatorRoutes from './routes/fund_simulator';
 import { processQueueBatch } from './services/queueWorker';
@@ -370,6 +373,8 @@ app.route('/api/linkedin', linkedinRoutes);
 app.route('/api/calendar', calendarRoutes);
 // T11 — Financial Model Builder + Founder Wellbeing (ported from FastAPI).
 app.route('/api/financials', financialsRoutes);
+// Task #1 (AG) — kept alphabetically adjacent to /api/financials.
+app.route('/api/founder-risk', founderRiskRoutes);
 app.route('/api/progress', progressRoutes);
 app.route('/api/wellbeing', wellbeingRoutes);
 // T12 — Compliance calendar + Cap-table simulator + Co-founder matching.
@@ -393,7 +398,13 @@ app.route('/api/investor-seats', investorSeatsRoutes);
 app.route('/api', watchlistRoutes);
 app.route('/api/journal', journalRoutes);
 app.route('/api/portfolio', portfolioRoutes);
+// Task #1 (AG) — public profile facade (no auth) sits between /api/portfolio
+// and /api/references alphabetically.
+app.route('/api/public', publicRoutes);
 app.route('/api/references', referencesRoutes);
+// Task #1 (AG) — service offerings (founder marketplace) alphabetically
+// after /api/references and before /api/spinout-lab/comarketing.
+app.route('/api/services', servicesRoutes);
 // T15 — Co-marketing, Company Profiles, Founder Needs / Quotes / Engagements,
 // Insights. companyRoutes mounts /company/* + /companies (root /api).
 app.route('/api/comarketing', comarketingRoutes);

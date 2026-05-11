@@ -249,4 +249,17 @@ r.post('/bookings/:id/no-show', async (c) => {
     { allowed: ['pending', 'confirmed'], nextStatus: 'no_show', whoCan: 'partner', reason: body.reason || null });
 });
 
+// Task #1 (AG) — spec-contract alias. POST /:uid/book maps the partner uid +
+// slot_id (body) to the existing /slots/:id/book handler.
+r.post('/:uid/book', async (c) => {
+  const body = await c.req.text();
+  let parsed: Record<string, unknown> = {};
+  try { parsed = JSON.parse(body || '{}'); } catch { /* noop */ }
+  const slotId = Number(parsed?.slot_id);
+  if (!Number.isFinite(slotId)) return c.json({ detail: 'slot_id required in body' }, 400);
+  const url = new URL(c.req.url);
+  url.pathname = `/api/partner-office-hours/slots/${slotId}/book`;
+  return r.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
+});
+
 export default r;

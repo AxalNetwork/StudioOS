@@ -149,4 +149,53 @@ r.delete('/:uid', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// Task #1 (AG) — spec-contract aliases. /entries mirrors the root list/create
+// + /:uid PATCH/DELETE on the same `journal_entries` table.
+r.get('/entries', (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/journal/';
+  return r.fetch(new Request(url, { method: 'GET', headers: c.req.raw.headers }), c.env, c.executionCtx);
+});
+r.post('/entries', async (c) => {
+  const body = await c.req.text();
+  const url = new URL(c.req.url);
+  url.pathname = '/api/journal/';
+  url.search = '';
+  return r.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
+});
+// PATCH/DELETE /entries/:id — spec uses numeric id; canonical handlers are
+// keyed by `:uid` (string). Translate id → uid via DB lookup before
+// forwarding so the spec contract works without duplicating the handler
+// bodies. Returns 404 if no row matches the id.
+async function resolveEntryUid(env: Env, id: string): Promise<string | null> {
+  const n = Number(id);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const row = await env.DB.prepare('SELECT uid FROM decision_journal_entries WHERE id = ?')
+    .bind(n).first<{ uid: string }>();
+  return row?.uid ?? null;
+}
+r.patch('/entries/:id', async (c) => {
+  try {
+    await requireAuth(c);
+    const uid = await resolveEntryUid(c.env, c.req.param('id'));
+    if (!uid) return c.json({ detail: 'Not found' }, 404);
+    const body = await c.req.text();
+    const url = new URL(c.req.url);
+    url.pathname = `/api/journal/${uid}`;
+    url.search = '';
+    return r.fetch(new Request(url, { method: 'PUT', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
+  } catch (e) { return mapError(c, e); }
+});
+r.delete('/entries/:id', async (c) => {
+  try {
+    await requireAuth(c);
+    const uid = await resolveEntryUid(c.env, c.req.param('id'));
+    if (!uid) return c.json({ detail: 'Not found' }, 404);
+    const url = new URL(c.req.url);
+    url.pathname = `/api/journal/${uid}`;
+    url.search = '';
+    return r.fetch(new Request(url, { method: 'DELETE', headers: c.req.raw.headers }), c.env, c.executionCtx);
+  } catch (e) { return mapError(c, e); }
+});
+
 export default r;

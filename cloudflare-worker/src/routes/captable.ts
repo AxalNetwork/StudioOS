@@ -250,4 +250,59 @@ captable.get('/live', async (c) => {
   });
 });
 
+// Task #1 (AG) — spec-contract aliases. Read-only project-scoped views over
+// the existing cap_table_holders / cap_table_securities tables. Founders see
+// only their own project; admin/partner/investor see any.
+captable.get('/:projectId', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const proj = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
+    .bind(projectId).first<{ id: number; founder_id: number | null }>();
+  if (!proj) return c.json({ detail: 'Project not found' }, 404);
+  if (user.role === 'founder' && user.founder_id !== proj.founder_id) {
+    return c.json({ detail: 'Forbidden' }, 403);
+  }
+  const holders = await c.env.DB.prepare(
+    'SELECT * FROM cap_table_holders WHERE project_id = ? ORDER BY id ASC',
+  ).bind(projectId).all();
+  const securities = await c.env.DB.prepare(
+    'SELECT * FROM cap_table_securities WHERE project_id = ? ORDER BY id ASC',
+  ).bind(projectId).all();
+  return c.json({
+    project_id: projectId,
+    holders: holders.results || [],
+    securities: securities.results || [],
+  });
+});
+
+captable.put('/:projectId/holders', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const proj = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
+    .bind(projectId).first<{ id: number; founder_id: number | null }>();
+  if (!proj) return c.json({ detail: 'Project not found' }, 404);
+  if (user.role === 'founder' && user.founder_id !== proj.founder_id) {
+    return c.json({ detail: 'Forbidden' }, 403);
+  }
+  if (user.role !== 'admin' && user.role !== 'founder') {
+    return c.json({ detail: 'Forbidden' }, 403);
+  }
+  const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
+  const incoming = Array.isArray(body?.holders) ? body.holders as Array<Record<string, unknown>> : [];
+  await c.env.DB.prepare('DELETE FROM cap_table_holders WHERE project_id = ?').bind(projectId).run();
+  for (const h of incoming) {
+    const name = String(h?.name || '').trim().slice(0, 200);
+    if (!name) continue;
+    const shares = h?.shares != null && Number.isFinite(Number(h.shares)) ? Number(h.shares) : 0;
+    const kind = h?.kind ? String(h.kind).slice(0, 40) : 'common';
+    await c.env.DB.prepare(
+      `INSERT INTO cap_table_holders (project_id, name, shares, kind, created_at, updated_at)
+       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
+    ).bind(projectId, name, shares, kind).run();
+  }
+  return c.json({ ok: true, count: incoming.length });
+});
+
 export default captable;
