@@ -1123,6 +1123,14 @@ export const api = {
   trustMySigningUrl: (envelope_uuid) =>
     request(`/trust/agreements/${encodeURIComponent(envelope_uuid)}/my_signing_url`),
   trustScore: (userId) => request(`/trust/score/${encodeURIComponent(userId)}`),
+  // Task #40 — batch the per-row trust-score lookups on AdminPage / DealsPage
+  // into a single request. Returns { scores: [{ user_id, score, missing[],
+  // required_total }] } in the same order the ids were sent. Admin/partner/
+  // investor only; founders should keep using `trustScore(userId)` for self.
+  trustScoreBatch: (userIds) => request('/trust/score/batch', {
+    method: 'POST',
+    body: JSON.stringify({ user_ids: userIds }),
+  }),
   trustMatrix: (role) => request(`/trust/matrix${role ? `?role=${encodeURIComponent(role)}` : ''}`),
 
   getTrustSummary: () => request('/trust/summary'),

@@ -109,6 +109,72 @@ trust.get('/score/:userId', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /score/batch — Task #40.
+// Body: { user_ids: number[] }
+// Returns: { scores: [{ user_id, score, missing[], required_total }] }
+//
+// Collapses N sequential GET /score/:userId calls (one per visible row in
+// AdminPage Users / DealsPage pipeline) into a single round-trip + two
+// SQL queries. Auth mirrors the single-user route minus the founder
+// self-only branch — founders never need to see other people's scores
+// in batch contexts (admin/investor/partner are the only callers that
+// render a list of users with trust columns), so we hard-require those
+// roles here. A founder asking for their OWN score still has the
+// per-user GET /score/:userId fallback.
+//
+// Performance notes:
+//   - We deliberately SKIP the per-user `seedObligations(role)` self-heal
+//     that the single-user route runs. That self-heal exists to top up
+//     legacy unseeded users on profile views; in a 50-row admin table,
+//     calling it 50× would burn the latency this endpoint is here to
+//     save. New signups go through `seedObligations` at registration,
+//     and any unseeded legacy user falls back to score=100 (correct
+//     "no required obligations" semantics) here, then gets re-seeded
+//     the next time their profile page calls /score/:userId.
+//   - Batch is capped at 200 user_ids per call (worker request body is
+//     1MB; this is well under the practical bound but stops accidental
+//     "send me every user" calls).
+// ---------------------------------------------------------------------------
+trust.post('/score/batch', async (c) => {
+  const caller = await requireAuth(c);
+  if (caller.role !== 'admin' && caller.role !== 'partner' && caller.role !== 'investor') {
+    return c.json({ error: 'forbidden' }, 403);
+  }
+  const body = await c.req.json().catch(() => ({} as any));
+  const raw = Array.isArray(body?.user_ids) ? body.user_ids : [];
+  const ids: number[] = Array.from(new Set(
+    raw.map((v: any) => Number(v)).filter((n: number) => Number.isInteger(n) && n > 0),
+  )).slice(0, 200) as number[];
+  if (ids.length === 0) return c.json({ scores: [] });
+  await ensureTrustSchema(c.env);
+  const placeholders = ids.map(() => '?').join(',');
+  const rows: any = await c.env.DB.prepare(
+    `SELECT user_id, obligation_key, required, status
+       FROM legal_obligations
+      WHERE user_id IN (${placeholders})`,
+  ).bind(...ids).all();
+  const grouped = new Map<number, any[]>();
+  for (const id of ids) grouped.set(id, []);
+  for (const r of (rows?.results || []) as any[]) {
+    const arr = grouped.get(Number(r.user_id));
+    if (arr) arr.push(r);
+  }
+  const scores = ids.map((id) => {
+    const obligations = grouped.get(id) || [];
+    const required = obligations.filter((o: any) => o.required);
+    const satisfied = required.filter(
+      (o: any) => o.status === 'satisfied' || o.status === 'waived',
+    ).length;
+    const score = required.length === 0 ? 100 : Math.round((satisfied / required.length) * 100);
+    const missing = required
+      .filter((o: any) => o.status !== 'satisfied' && o.status !== 'waived')
+      .map((o: any) => o.obligation_key);
+    return { user_id: id, score, missing, required_total: required.length };
+  });
+  return c.json({ scores });
+});
+
+// ---------------------------------------------------------------------------
 // GET /agreements/:envelope_uuid/my_signing_url — Task #4 (Y-2).
 // Returns the CALLER's own signing URL for an esign envelope they're a
 // recipient of. Used by the Trust Center "Sign" CTA so a founder/investor

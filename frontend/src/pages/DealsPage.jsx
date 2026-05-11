@@ -13,18 +13,22 @@ import TrustScoreBadge from '../components/TrustScoreBadge';
 // each deal row for admin/investor/partner viewers. Silently no-ops when
 // the backend 403s (e.g. founder-role viewer) or the deal has no resolved
 // founder_user_id (legacy unlinked rows).
-function DealTrustBadge({ founderUserId }) {
-  const [data, setData] = useState(null);
+// Task #40 — accepts a pre-fetched `data` prop populated by the parent's
+// single POST /api/trust/score/batch call across all visible deals; falls
+// back to the per-founder GET only when the parent didn't provide one.
+function DealTrustBadge({ founderUserId, data }) {
+  const [fallback, setFallback] = useState(null);
   useEffect(() => {
+    if (data || !founderUserId) return;
     let cancelled = false;
-    if (!founderUserId) return;
     api.trustScore(founderUserId)
-      .then(d => { if (!cancelled) setData(d); })
+      .then(d => { if (!cancelled) setFallback(d); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [founderUserId]);
-  if (!data) return null;
-  return <TrustScoreBadge size="sm" score={data.score} missing={data.missing} label="Trust" />;
+  }, [founderUserId, data]);
+  const eff = data || fallback;
+  if (!eff) return null;
+  return <TrustScoreBadge size="sm" score={eff.score} missing={eff.missing} label="Trust" />;
 }
 
 // Task #18 — read role from the live AuthProvider (re-fetched from
@@ -80,6 +84,8 @@ export default function DealsPage() {
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
+  // Task #40 — single batched trust-score lookup keyed by founder_user_id.
+  const [trustScores, setTrustScores] = useState({});
   const role = useCurrentRole();
   const canSeeReferences = role === 'admin' || role === 'investor';
   const canSeeRisk = role === 'admin' || role === 'partner' || role === 'investor';
@@ -92,6 +98,26 @@ export default function DealsPage() {
     try {
       const d = await api.listDeals();
       setDeals(d);
+      // Task #40 — fan-in founder trust scores in one batched call.
+      // Only roles that render the badge (admin/partner/investor) get
+      // a 200; founders 403 here, so we gate the call on `canSeeRisk`.
+      if (canSeeRisk) {
+        const ids = Array.from(new Set(
+          (d || []).map(deal => deal.founder_user_id).filter(Boolean),
+        ));
+        if (ids.length > 0) {
+          try {
+            const res = await api.trustScoreBatch(ids);
+            const map = {};
+            for (const s of (res?.scores || [])) map[s.user_id] = s;
+            setTrustScores(map);
+          } catch (e) {
+            reportError('DealsPage:trustScoreBatch', e);
+          }
+        } else {
+          setTrustScores({});
+        }
+      }
     } catch (e) {
       reportError('DealsPage:loadDeals', e);
     }
@@ -179,7 +205,7 @@ export default function DealsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     {canSeeRisk && deal.founder_user_id && (
-                      <DealTrustBadge founderUserId={deal.founder_user_id} />
+                      <DealTrustBadge founderUserId={deal.founder_user_id} data={trustScores[deal.founder_user_id]} />
                     )}
                     {canSeeRisk && <FounderRiskBadge dealId={deal.id} />}
                     {nextStatus && deal.status !== 'rejected' && (

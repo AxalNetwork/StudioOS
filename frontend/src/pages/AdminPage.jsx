@@ -10,20 +10,24 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import TrustScoreBadge from '../components/TrustScoreBadge';
 
 // Task #16 — per-row trust score column on the admin Users table.
-// Uses GET /api/trust/score/:userId (admin/investor/partner readable).
-// Renders nothing until the score loads to keep the row stable.
-function UserTrustCell({ userId }) {
-  const [data, setData] = useState(null);
+// Task #40 — accepts a pre-fetched `data` prop populated by the parent's
+// single batch call (POST /api/trust/score/batch); falls back to the
+// per-user GET /api/trust/score/:userId only if the parent didn't
+// provide one (e.g. a row whose batch entry failed). Renders an em-dash
+// placeholder while the batch is in flight to keep the row height stable.
+function UserTrustCell({ userId, data }) {
+  const [fallback, setFallback] = useState(null);
   useEffect(() => {
+    if (data || !userId) return;
     let cancelled = false;
-    if (!userId) return;
     api.trustScore(userId)
-      .then(d => { if (!cancelled) setData(d); })
+      .then(d => { if (!cancelled) setFallback(d); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [userId]);
-  if (!data) return <span className="text-xs text-gray-400">—</span>;
-  return <TrustScoreBadge size="sm" score={data.score} missing={data.missing} label={false} />;
+  }, [userId, data]);
+  const eff = data || fallback;
+  if (!eff) return <span className="text-xs text-gray-400">—</span>;
+  return <TrustScoreBadge size="sm" score={eff.score} missing={eff.missing} label={false} />;
 }
 
 const ROLE_BADGES = {
@@ -90,6 +94,10 @@ const TRACK_BADGES = {
 export default function AdminPage({ onImpersonate }) {
   const [tab, setTab] = useState('users');
   const [users, setUsers] = useState([]);
+  // Task #40 — batched trust-score map keyed by user_id, populated by a
+  // single POST /api/trust/score/batch after each users-list refresh.
+  // Replaces the previous per-row GET /trust/score/:userId fan-out.
+  const [trustScores, setTrustScores] = useState({});
   const [profiles, setProfiles] = useState([]);
   const [kycQueue, setKycQueue] = useState([]);
   const [kycFilter, setKycFilter] = useState('pending');
@@ -112,6 +120,22 @@ export default function AdminPage({ onImpersonate }) {
       ]);
       setUsers(u);
       setProfiles(p);
+      // Task #40 — fan-in trust scores in one call. Best-effort: if it
+      // fails (network blip, 403 mid-role-change), each row's
+      // UserTrustCell falls back to the per-user GET.
+      const ids = (u || []).map(row => row.id).filter(Boolean);
+      if (ids.length > 0) {
+        try {
+          const res = await api.trustScoreBatch(ids);
+          const map = {};
+          for (const s of (res?.scores || [])) map[s.user_id] = s;
+          setTrustScores(map);
+        } catch (e) {
+          reportError('AdminPage:trustScoreBatch', e);
+        }
+      } else {
+        setTrustScores({});
+      }
     } catch (e) {
       reportError('AdminPage:loadAdminData', e);
     } finally { setLoading(false); }
@@ -348,7 +372,7 @@ export default function AdminPage({ onImpersonate }) {
                           })()}
                         </td>
                         <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                          <UserTrustCell userId={u.id} />
+                          <UserTrustCell userId={u.id} data={trustScores[u.id]} />
                         </td>
                         <td className="px-4 py-3 text-gray-500 text-xs">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
                         <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
