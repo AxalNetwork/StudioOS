@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
+import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 import { ArrowRight, ChevronDown, ChevronRight, Filter } from 'lucide-react';
 import ReferenceChecksPanel from '../components/ReferenceChecksPanel';
@@ -26,7 +27,14 @@ function DealTrustBadge({ founderUserId }) {
   return <TrustScoreBadge size="sm" score={data.score} missing={data.missing} label="Trust" />;
 }
 
-function getCurrentRole() {
+// Task #18 — read role from the live AuthProvider (re-fetched from
+// /api/auth/me on every navigation) so a stale localStorage user can't
+// keep showing risk badges to a viewer who was just demoted out of
+// admin/investor/partner. localStorage is only consulted as a
+// first-paint fallback while the auth context is hydrating.
+function useCurrentRole() {
+  const { role } = useAuth();
+  if (role) return role;
   try { return safeReadJSON('user', {}).role || null; }
   catch { return null; }
 }
@@ -72,7 +80,7 @@ export default function DealsPage() {
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
-  const role = getCurrentRole();
+  const role = useCurrentRole();
   const canSeeReferences = role === 'admin' || role === 'investor';
   const canSeeRisk = role === 'admin' || role === 'partner' || role === 'investor';
 

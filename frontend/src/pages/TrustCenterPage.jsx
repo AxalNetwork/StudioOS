@@ -449,14 +449,20 @@ function tabsForRole(role, obligations) {
 // Main page.
 // ---------------------------------------------------------------------------
 export default function TrustCenterPage() {
-  const me = safeReadJSON('user', {}) || {};
-  const role = me.role || 'member';
-
   const [matrix, setMatrix] = useState(null);   // /api/trust/me
   const [legacy, setLegacy] = useState(null);   // /api/trust/summary (old)
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('overview');
+
+  // Task #18 — read role from /api/trust/me once it resolves so a stale
+  // localStorage user (impersonation, server-side role change, signup
+  // session that hasn't been refreshed) can't hide tabs the caller
+  // actually qualifies for. localStorage is only consulted as a
+  // first-paint fallback while the matrix is still loading; once
+  // /trust/me has answered, the server is the sole source of truth.
+  const cachedRole = safeReadJSON('user', {})?.role;
+  const role = matrix?.role || cachedRole || 'member';
 
   async function load() {
     setErr(null);

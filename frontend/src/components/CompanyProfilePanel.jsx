@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { safeReadJSON } from '../lib/storage';
+import { useAuth } from '../hooks/useAuthSync';
 import { Building2, Plus, Save, X, Search, UserPlus, Trash2, Loader2, Globe, Users, ChevronRight } from 'lucide-react';
 
 import { api } from '../lib/api';
@@ -193,10 +194,18 @@ function CompanyDirectory({ onOpen }) {
   // Revenue is a private business field — backend gates the filter to admins
   // (returns 403 for everyone else). Mirror that here so non-admins don't see
   // a control that is guaranteed to error.
-  const isAdmin = (() => {
-    try { return safeReadJSON('user', {}).role === 'admin'; }
-    catch { return false; }
+  //
+  // Task #18 — prefer the live AuthProvider role (re-fetched from
+  // /api/auth/me on every navigation) over the cached localStorage user
+  // so an admin who was just demoted to partner stops seeing this
+  // filter on their next page transition, not on their next hard
+  // refresh. localStorage stays as a first-paint fallback.
+  const { role: liveRole } = useAuth();
+  const cachedRole = (() => {
+    try { return safeReadJSON('user', {}).role || null; }
+    catch { return null; }
   })();
+  const isAdmin = (liveRole || cachedRole) === 'admin';
 
   async function reload() {
     setLoading(true);

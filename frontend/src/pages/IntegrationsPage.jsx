@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { safeReadJSON } from '../lib/storage';
+import { useAuth } from '../hooks/useAuthSync';
 
 const ICON_MAP = {
   Building2, Calendar, Cloud, PieChart, MessageSquare, PenTool, Database,
@@ -49,8 +50,16 @@ export default function IntegrationsPage() {
   const [configFor, setConfigFor] = useState(null);
   const { toast, showToast } = useToast(2500);
 
+  // Task #18 — `bypassesTier` lets admin/partner/investor/mentor unlock
+  // tier-gated providers, so we MUST read the live AuthProvider role
+  // (re-fetched from /api/auth/me on every navigation) instead of the
+  // cached localStorage user. Otherwise a former admin who was just
+  // demoted keeps seeing tier-locked providers as connectable until a
+  // hard refresh. localStorage stays only as a first-paint fallback
+  // while the auth context is hydrating.
+  const { role: liveRole } = useAuth();
   const me = safeReadJSON('user') || {};
-  const role = (me.role || '').toLowerCase();
+  const role = (liveRole || me.role || '').toLowerCase();
   const bypassesTier = BYPASS_ROLES.has(role);
 
   const refresh = async () => {

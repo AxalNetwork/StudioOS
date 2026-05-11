@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { safeReadJSON } from '../lib/storage';
+import { useAuth } from '../hooks/useAuthSync';
 import {
   Bookmark, BookOpen, Compass, Plus, Trash2, RefreshCw, X, Award, AlertTriangle,
   ArrowUpRight, CheckCircle2,
@@ -705,7 +706,12 @@ function AntiPortfolioTab({ canSeeAll }) {
 // =====================================================================
 export default function WatchlistJournalPage() {
   const [tab, setTab] = useState('watchlist');
-  const role = (() => {
+  // Task #18 — `canSeeAll` gates an admin-only view of every user's
+  // watchlist (security-adjacent), so we prefer the live AuthProvider
+  // role over the cached localStorage user. localStorage is only used
+  // as a first-paint fallback while the auth context is still hydrating.
+  const { role: liveRole } = useAuth();
+  const role = liveRole || (() => {
     try { return safeReadJSON('user', {}).role || ''; }
     catch { return ''; }
   })();
