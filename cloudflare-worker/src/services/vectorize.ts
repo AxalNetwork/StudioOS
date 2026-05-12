@@ -172,8 +172,11 @@ export async function embedAndUpsertById(env: Env, type: EntityType, id: number)
       type, id,
       text,
       title: `${row.name} (${row.role})`,
-      url: `/admin?user=${id}`,
-      snippet: `${row.role} • ${row.email}`,
+      // Task #5 (AV) — partner CTAs are surfaced to founders/investors,
+      // so the route must point at the user-facing partner directory
+      // instead of the admin user editor (which non-admins cannot open).
+      url: `/partners?user=${id}`,
+      snippet: `${row.role} • ${domain}`,
     });
   }
   if (type === 'deal') {

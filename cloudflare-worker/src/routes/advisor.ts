@@ -1642,9 +1642,10 @@ advisor.post('/tool', async (c) => {
   await ensureSchema(c.env);
   await ensureGuardrailColumns(c.env);
 
-  const body = await c.req.json().catch(() => ({} as any));
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const name = String(body?.name || '').trim();
-  const args = (body?.args && typeof body.args === 'object') ? body.args : {};
+  const rawArgs = body?.args;
+  const args: Record<string, unknown> = (rawArgs && typeof rawArgs === 'object') ? rawArgs as Record<string, unknown> : {};
 
   if (!isToolName(name)) {
     return c.json({ error: 'unknown tool', status: 'refused', reason: 'unknown_tool' }, 400);
@@ -1791,7 +1792,7 @@ const TOOL_CALL_SYSTEM_PROMPT = [
   'STRICT JSON only — no prose, no code fences — of the form',
   '{"name":"<toolName>","args":{...}}. The args object MUST conform to the',
   'tool\'s JSON schema. If nothing fits, return',
-  '{"name":"openPage","args":{"page":"dashboard"}}.',
+  '{"name":"openPage","args":{"route":"/dashboard"}}.',
   '',
   'Available tools:',
   TOOL_SCHEMAS.map((t) => `- ${t.name}: ${t.description}\n  args schema: ${JSON.stringify(t.parameters)}`).join('\n'),
@@ -1802,7 +1803,7 @@ advisor.post('/tool/auto', async (c) => {
   await ensureSchema(c.env);
   await ensureGuardrailColumns(c.env);
 
-  const body = await c.req.json().catch(() => ({} as any));
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const message = String(body?.message || '').trim();
   if (!message || message.length > 2000) {
     return c.json({ error: 'message required (1..2000 chars)' }, 400);
@@ -1810,7 +1811,7 @@ advisor.post('/tool/auto', async (c) => {
 
   // Step 1 — let the LLM pick the tool.
   let pickedName: import('../services/advisor/tools').ToolName = 'openPage';
-  let pickedArgs: Record<string, unknown> = { page: 'dashboard' };
+  let pickedArgs: Record<string, unknown> = { route: '/dashboard' };
   let llmRefusal: string | null = null;
   try {
     const r = await aiRouterRun(c.env, {

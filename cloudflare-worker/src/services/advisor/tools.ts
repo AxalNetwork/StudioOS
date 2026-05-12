@@ -155,7 +155,7 @@ function hitsToResult(hits: SearchHit[]) {
   }));
 }
 
-async function findMentor(ctx: ToolContext, args: any): Promise<ToolEnvelope> {
+async function findMentor(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const query = asString(args?.query || args?.q || args?.expertise || '');
   const limit = asPositiveInt(args?.limit) || 5;
   const hits = await searchByType(ctx.env, query, 'mentor', limit);
@@ -176,7 +176,7 @@ async function findMentor(ctx: ToolContext, args: any): Promise<ToolEnvelope> {
   return { result, cta };
 }
 
-async function findInvestor(ctx: ToolContext, args: any): Promise<ToolEnvelope> {
+async function findInvestor(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const query = asString(args?.query || args?.q || args?.thesis || '');
   const limit = asPositiveInt(args?.limit) || 5;
   const hits = await searchByType(ctx.env, query, 'investor', limit);
@@ -197,7 +197,7 @@ async function findInvestor(ctx: ToolContext, args: any): Promise<ToolEnvelope> 
   return { result, cta };
 }
 
-async function findPartner(ctx: ToolContext, args: any): Promise<ToolEnvelope> {
+async function findPartner(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const query = asString(args?.query || args?.q || '');
   const limit = asPositiveInt(args?.limit) || 5;
   const hits = await searchByType(ctx.env, query, 'partner', limit);
@@ -218,7 +218,7 @@ async function findPartner(ctx: ToolContext, args: any): Promise<ToolEnvelope> {
   return { result, cta };
 }
 
-async function findDeal(ctx: ToolContext, args: any): Promise<ToolEnvelope> {
+async function findDeal(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const query = asString(args?.query || args?.q || '');
   const limit = asPositiveInt(args?.limit) || 5;
   const hits = await searchByType(ctx.env, query, 'deal', limit);
@@ -242,7 +242,7 @@ async function findDeal(ctx: ToolContext, args: any): Promise<ToolEnvelope> {
 // ---------------------------------------------------------------------------
 // Deterministic deep-link tools
 // ---------------------------------------------------------------------------
-async function openPage(_ctx: ToolContext, args: any): Promise<ToolEnvelope> {
+async function openPage(_ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const route = asString(args?.route || args?.path || '/dashboard', 200);
   if (!isAllowedRoute(route)) {
     // Refuse silently — fall back to dashboard so the LLM cannot route the
@@ -256,7 +256,7 @@ async function openPage(_ctx: ToolContext, args: any): Promise<ToolEnvelope> {
   };
 }
 
-async function startContract(ctx: ToolContext, args: any): Promise<ToolEnvelope> {
+async function startContract(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const template = asString(args?.template || 'safe', 64);
   const counterparty = asString(args?.counterparty || args?.party || '', 200);
   const dealId = asPositiveInt(args?.deal_id);
@@ -276,7 +276,7 @@ async function startContract(ctx: ToolContext, args: any): Promise<ToolEnvelope>
   };
 }
 
-async function bookOfficeHours(_ctx: ToolContext, args: any): Promise<ToolEnvelope> {
+async function bookOfficeHours(_ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const mentorId = asPositiveInt(args?.mentor_id || args?.id);
   const slotId = asPositiveInt(args?.slot_id);
   const params = new URLSearchParams();
@@ -295,7 +295,7 @@ async function bookOfficeHours(_ctx: ToolContext, args: any): Promise<ToolEnvelo
   };
 }
 
-async function exploreDocs(_ctx: ToolContext, args: any): Promise<ToolEnvelope> {
+async function exploreDocs(_ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const anchor = asString(args?.anchor || args?.topic || '', 200)
     .replace(/[^a-zA-Z0-9/_-]/g, '');
   const route = anchor ? `/docs/${anchor}` : '/docs';
@@ -310,7 +310,7 @@ async function exploreDocs(_ctx: ToolContext, args: any): Promise<ToolEnvelope> 
   };
 }
 
-async function draftCofounderAgreement(_ctx: ToolContext, args: any): Promise<ToolEnvelope> {
+async function draftCofounderAgreement(_ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const cofounderEmail = asString(args?.cofounder_email || '', 200);
   const equityPct = asPositiveInt(args?.equity_pct);
   const params = new URLSearchParams();
@@ -329,7 +329,7 @@ async function draftCofounderAgreement(_ctx: ToolContext, args: any): Promise<To
   };
 }
 
-async function scheduleMeeting(_ctx: ToolContext, args: any): Promise<ToolEnvelope> {
+async function scheduleMeeting(_ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const attendee = asString(args?.attendee || args?.with || '', 200);
   const subject = asString(args?.subject || args?.title || '', 200);
   const startsAt = asString(args?.starts_at || '', 64);
@@ -350,7 +350,7 @@ async function scheduleMeeting(_ctx: ToolContext, args: any): Promise<ToolEnvelo
   };
 }
 
-async function listMyTasks(ctx: ToolContext, args: any): Promise<ToolEnvelope> {
+async function listMyTasks(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const limit = Math.max(1, Math.min(20, asPositiveInt(args?.limit) || 5));
   let tasks: Array<{ id: number; title: string; due_at: string | null; status: string }> = [];
   try {
@@ -360,7 +360,7 @@ async function listMyTasks(ctx: ToolContext, args: any): Promise<ToolEnvelope> {
         WHERE user_id = ? AND status IN ('pending','in_progress','overdue')
         ORDER BY (due_at IS NULL), due_at ASC, id ASC
         LIMIT ?`,
-    ).bind(ctx.user.id, limit).all<any>();
+    ).bind(ctx.user.id, limit).all<{ id: number; title: string; due_at: string | null; status: string }>();
     tasks = (rows.results || []).map((r) => ({
       id: Number(r.id),
       title: String(r.title || ''),
@@ -384,7 +384,7 @@ async function listMyTasks(ctx: ToolContext, args: any): Promise<ToolEnvelope> {
   };
 }
 
-async function surfacePaywall(_ctx: ToolContext, args: any): Promise<ToolEnvelope> {
+async function surfacePaywall(_ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const feature = asString(args?.feature || args?.gated_tool || 'studio', 64);
   const tier = asString(args?.required_tier || 'studio', 32);
   const route = `/billing/upgrade?feature=${encodeURIComponent(feature)}&tier=${encodeURIComponent(tier)}`;
@@ -402,7 +402,8 @@ async function surfacePaywall(_ctx: ToolContext, args: any): Promise<ToolEnvelop
 // ---------------------------------------------------------------------------
 // Registry + dispatcher
 // ---------------------------------------------------------------------------
-type ToolFn = (ctx: ToolContext, args: any) => Promise<ToolEnvelope>;
+export type ToolArgs = Record<string, unknown>;
+type ToolFn = (ctx: ToolContext, args: ToolArgs) => Promise<ToolEnvelope>;
 
 export const TOOL_REGISTRY: Record<ToolName, ToolFn> = {
   findMentor,
@@ -429,7 +430,12 @@ export function isToolName(s: string): s is ToolName {
  * dispatcher re-validates everything against the schema below before
  * executing.
  */
-export const TOOL_SCHEMAS: Array<{ name: ToolName; description: string; parameters: any }> = [
+export interface ToolJsonSchema {
+  type: 'object';
+  properties: Record<string, { type: string; enum?: readonly string[] }>;
+  required?: string[];
+}
+export const TOOL_SCHEMAS: Array<{ name: ToolName; description: string; parameters: ToolJsonSchema }> = [
   {
     name: 'findMentor',
     description: 'Find a mentor by topic or expertise (e.g. "fundraising", "B2B GTM").',
@@ -498,5 +504,6 @@ export async function executeTool(
 ): Promise<ToolEnvelope> {
   const fn = TOOL_REGISTRY[name];
   if (!fn) throw new Error(`unknown tool: ${name}`);
-  return fn(ctx, args && typeof args === 'object' ? args : {});
+  const safeArgs: ToolArgs = (args && typeof args === 'object') ? (args as ToolArgs) : {};
+  return fn(ctx, safeArgs);
 }
