@@ -11,12 +11,23 @@ function fmtUsd(n) {
 }
 function fmtPct(n) { return `${((Number(n) || 0) * 100).toFixed(1)}%`; }
 
+// Static accent map — Tailwind purges classes it can't see at build time,
+// so dynamic strings like `bg-${accent}-100` would be stripped from the
+// production CSS. This keeps every utility literally present in source.
+const ACCENT_CLASSES = {
+  violet:  'bg-violet-100 text-violet-700',
+  amber:   'bg-amber-100 text-amber-700',
+  emerald: 'bg-emerald-100 text-emerald-700',
+  red:     'bg-red-100 text-red-700',
+};
+
 function StatCard({ icon: Icon, label, value, sub, accent = 'violet' }) {
+  const accentCls = ACCENT_CLASSES[accent] || ACCENT_CLASSES.violet;
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</span>
-        <div className={`h-8 w-8 rounded-lg bg-${accent}-100 text-${accent}-700 flex items-center justify-center`}>
+        <div className={`h-8 w-8 rounded-lg ${accentCls} flex items-center justify-center`}>
           <Icon size={15} />
         </div>
       </div>
