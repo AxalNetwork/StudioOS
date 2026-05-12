@@ -1,0 +1,156 @@
+/**
+ * Task #2 (AR) — New Founder Spin-Out Lab bank.
+ *
+ * Drives the 4-week Spin-Out Lab onboarding. Each question carries
+ * `unlock_required` so the advisor only surfaces questions whose
+ * pre-requisite milestones have been satisfied — Week-1 questions
+ * are visible immediately; Week-2 unlocks once Week-1 milestones
+ * (project + 3 customer interviews) are complete; etc.
+ *
+ * Mirror of `frontend/src/lib/advisor/banks/newFounder.js`. The
+ * server is the source of truth — the frontend imports the manifest
+ * served by `/api/advisor/manifest`.
+ */
+import type { Question } from '../questionBank';
+
+const SECTORS = ['AI', 'B2B SaaS', 'Climate', 'Fintech', 'Healthcare', 'Consumer', 'Deep Tech', 'Other'];
+const STAGES = ['Idea', 'Prototype', 'Pre-seed', 'Seed', 'Series A', 'Later'];
+
+export const NEW_FOUNDER_SPINOUT_BANK: Question[] = [
+  // ---- WEEK 1 — Project + Customer Discovery -------------------------
+  { id: 'founder.project.name', persona: 'founder', section: 'BUILD',
+    prompt: 'What is your startup called?',
+    hint: 'Working name; rename any time on the project page.',
+    input_kind: 'short', importance: 'critical',
+    page_target: '/projects', doc_anchor: 'build/projects',
+    validate: 'short' },
+  { id: 'founder.project.pitch', persona: 'founder', section: 'BUILD',
+    prompt: 'Give me a one-paragraph pitch — what do you do, for whom?',
+    input_kind: 'long', importance: 'critical',
+    page_target: '/projects', doc_anchor: 'build/projects',
+    validate: 'long' },
+  { id: 'founder.project.sector', persona: 'founder', section: 'BUILD',
+    prompt: 'Which sector are you in?',
+    input_kind: 'select', options: SECTORS, importance: 'high',
+    page_target: '/projects', doc_anchor: 'build/projects',
+    validate: 'select' },
+  { id: 'founder.project.stage', persona: 'founder', section: 'BUILD',
+    prompt: 'What stage are you at?',
+    input_kind: 'select', options: STAGES, importance: 'high',
+    page_target: '/projects', doc_anchor: 'build/projects',
+    validate: 'select' },
+
+  { id: 'founder.discovery.interview1.name', persona: 'founder', section: 'BUILD',
+    prompt: 'Pick 3 prospective customers to interview. Who is the first one?',
+    input_kind: 'short', importance: 'critical',
+    unlock_required: { milestones: ['project_created'] },
+    page_target: '/build/discovery', doc_anchor: 'build/customer-discovery',
+    followups: ['founder.discovery.interview1.pains'],
+    validate: 'short' },
+  { id: 'founder.discovery.interview1.pains', persona: 'founder', section: 'BUILD',
+    prompt: 'What pain are you testing with them?',
+    input_kind: 'long', importance: 'high',
+    unlock_required: { milestones: ['project_created'] },
+    page_target: '/build/discovery', doc_anchor: 'build/customer-discovery',
+    validate: 'long' },
+  { id: 'founder.discovery.interview2.name', persona: 'founder', section: 'BUILD',
+    prompt: 'Second interviewee?',
+    input_kind: 'short', importance: 'critical',
+    unlock_required: { milestones: ['customer_interview_logged_1'] },
+    page_target: '/build/discovery', doc_anchor: 'build/customer-discovery',
+    followups: ['founder.discovery.interview2.pains'],
+    validate: 'short' },
+  { id: 'founder.discovery.interview2.pains', persona: 'founder', section: 'BUILD',
+    prompt: 'And the pain you’re testing with them?',
+    input_kind: 'long', importance: 'high',
+    unlock_required: { milestones: ['customer_interview_logged_1'] },
+    page_target: '/build/discovery', doc_anchor: 'build/customer-discovery',
+    validate: 'long' },
+  { id: 'founder.discovery.interview3.name', persona: 'founder', section: 'BUILD',
+    prompt: 'Third interviewee?',
+    input_kind: 'short', importance: 'critical',
+    unlock_required: { milestones: ['customer_interview_logged_2'] },
+    page_target: '/build/discovery', doc_anchor: 'build/customer-discovery',
+    followups: ['founder.discovery.interview3.pains'],
+    validate: 'short' },
+  { id: 'founder.discovery.interview3.pains', persona: 'founder', section: 'BUILD',
+    prompt: 'And the pain you’re testing with them?',
+    input_kind: 'long', importance: 'high',
+    unlock_required: { milestones: ['customer_interview_logged_2'] },
+    page_target: '/build/discovery', doc_anchor: 'build/customer-discovery',
+    validate: 'long' },
+
+  // ---- WEEK 2 — Roadmap + Brand + Deck (gated by Week-1 milestones) --
+  { id: 'founder.okrs.q1_objective1', persona: 'founder', section: 'BUILD',
+    prompt: 'Set three objectives for this quarter. What is the first?',
+    input_kind: 'long', importance: 'high',
+    unlock_required: { week: 2, milestones: ['customer_interview_logged_3'] },
+    page_target: '/build/roadmap', doc_anchor: 'build/roadmap',
+    validate: 'long' },
+  { id: 'founder.okrs.q1_objective2', persona: 'founder', section: 'BUILD',
+    prompt: 'Second objective for this quarter?',
+    input_kind: 'long', importance: 'high',
+    unlock_required: { week: 2, milestones: ['customer_interview_logged_3'] },
+    page_target: '/build/roadmap', doc_anchor: 'build/roadmap',
+    validate: 'long' },
+  { id: 'founder.okrs.q1_objective3', persona: 'founder', section: 'BUILD',
+    prompt: 'Third objective for this quarter?',
+    input_kind: 'long', importance: 'high',
+    unlock_required: { week: 2, milestones: ['customer_interview_logged_3'] },
+    page_target: '/build/roadmap', doc_anchor: 'build/roadmap',
+    validate: 'long' },
+  { id: 'founder.brand.tagline', persona: 'founder', section: 'BUILD',
+    prompt: 'Give me a one-line tagline for the landing page.',
+    input_kind: 'short', importance: 'normal',
+    unlock_required: { week: 2 },
+    page_target: '/build/brand', doc_anchor: 'build/brand-builder',
+    validate: 'short' },
+  { id: 'founder.brand.theme_color', persona: 'founder', section: 'BUILD',
+    prompt: 'Pick a brand color (hex, e.g. #7c3aed).',
+    input_kind: 'short', importance: 'low',
+    unlock_required: { week: 2 },
+    page_target: '/build/brand', doc_anchor: 'build/brand-builder',
+    validate: 'hex_color', skip_allowed: true },
+  { id: 'founder.deck.problem', persona: 'founder', section: 'BUILD',
+    prompt: 'Your deck — in one sentence, what problem are you solving?',
+    input_kind: 'long', importance: 'high',
+    unlock_required: { week: 2, milestones: ['brand_basics_filled'] },
+    page_target: '/build/deck', doc_anchor: 'build/pitch-deck',
+    validate: 'long' },
+  { id: 'founder.deck.market', persona: 'founder', section: 'BUILD',
+    prompt: 'And the market — who are the customers, and roughly how many?',
+    input_kind: 'long', importance: 'high',
+    unlock_required: { week: 2, milestones: ['brand_basics_filled'] },
+    page_target: '/build/deck', doc_anchor: 'build/pitch-deck',
+    validate: 'long' },
+
+  // ---- WEEK 3 — Network (mentors / co-founders / scoring) ------------
+  { id: 'founder.team.cofounders', persona: 'founder', section: 'NETWORK',
+    prompt: 'Are you solo, or do you have co-founders? (comma-separated names; type "solo" if none)',
+    input_kind: 'short', importance: 'normal',
+    unlock_required: { week: 3 },
+    page_target: '/cofounder-match', doc_anchor: 'getting-started/invite-team',
+    validate: 'short', skip_allowed: true },
+  { id: 'founder.mentors.needs', persona: 'founder', section: 'NETWORK',
+    prompt: 'What expertise do you most need from a mentor right now? (comma-separated)',
+    input_kind: 'short', importance: 'high',
+    unlock_required: { week: 3 },
+    page_target: '/mentors', doc_anchor: 'portals/mentor',
+    validate: 'csv' },
+
+  // ---- WEEK 4 — Incorporation + Capital ------------------------------
+  { id: 'founder.captable.entity', persona: 'founder', section: 'LEGAL',
+    prompt: 'Are you ready to incorporate? If so, what entity (e.g. Delaware C-Corp)?',
+    input_kind: 'short', importance: 'critical',
+    unlock_required: { week: 4 },
+    page_target: '/legal/incorporation', doc_anchor: 'legal/incorporation',
+    validate: 'short' },
+  { id: 'founder.captable.ownership', persona: 'founder', section: 'CAPITAL',
+    prompt: 'Roughly, who will own the company at incorporation? (e.g. "Founders 90%, ESOP 10%")',
+    input_kind: 'long', importance: 'high',
+    unlock_required: { week: 4, milestones: ['incorporation_completed'] },
+    page_target: '/build/captable', doc_anchor: 'capital/cap-table',
+    validate: 'long' },
+];
+
+export default NEW_FOUNDER_SPINOUT_BANK;

@@ -51,6 +51,11 @@ import {
   ROLE_DETECTOR,
   bankFor,
   questionById,
+  filterByContext,
+  groupByPage,
+  groupBySection,
+  sortByImportance,
+  type BankName,
   type Persona,
   type Question,
 } from '../services/advisor/questionBank';
@@ -103,6 +108,76 @@ function personaFor(user: User): Persona {
   return 'unknown';
 }
 
+// ---------------------------------------------------------------------------
+// Task #2 (AR) — lazy column ensure for users.spinout_lab_week.
+// Mirrors the migration 041 pattern so dev/SQLite works without
+// running the migration. Idempotent: PRAGMA table_info short-circuits
+// when the column is already present (production case).
+// ---------------------------------------------------------------------------
+let _userColsReady = false;
+async function ensureAdvisorWeekColumn(env: Env): Promise<void> {
+  if (_userColsReady) return;
+  try {
+    const cols = await env.DB.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
+    const have = new Set((cols.results || []).map((r) => r.name));
+    if (!have.has('spinout_lab_week')) {
+      try { await env.DB.exec(`ALTER TABLE users ADD COLUMN spinout_lab_week INTEGER`); }
+      catch (e) { /* duplicate-column race; ignore */ void e; }
+    }
+    _userColsReady = true;
+  } catch (e) {
+    console.error('[advisor] ensureAdvisorWeekColumn:', (e as Error).message);
+  }
+}
+
+// Pull the spin-out lab gating context for a founder. Returns
+// `{ active:false }` for any non-founder or any user that hasn't
+// opted into the lab. Also computes the active billing-tier set
+// used by `tier_required` filtering.
+interface AdvisorGate {
+  spinoutLabActive: boolean;
+  week: number;                       // 1..4 (defaults to 1)
+  completedMilestones: Set<string>;
+  tiers: Set<string>;
+}
+async function loadAdvisorGate(env: Env, user: User): Promise<AdvisorGate> {
+  const tiers = new Set<string>();
+  const persona = personaFor(user);
+
+  // Tier — investor_pro / generic active subscription.
+  try {
+    const sub = await env.DB.prepare(
+      `SELECT investor_subscription_status, subscription_status FROM users WHERE id = ?`,
+    ).bind(user.id).first<{ investor_subscription_status: string | null; subscription_status: string | null }>();
+    if (sub?.investor_subscription_status === 'active') tiers.add('investor_pro');
+    if (sub?.subscription_status === 'active') tiers.add('subscriber');
+  } catch { /* columns may be missing on older dev DBs */ }
+
+  if (persona !== 'founder') {
+    return { spinoutLabActive: false, week: 1, completedMilestones: new Set(), tiers };
+  }
+
+  let active = false;
+  let week = 1;
+  try {
+    const row = await env.DB.prepare(
+      `SELECT spinout_lab_active, spinout_lab_week FROM users WHERE id = ?`,
+    ).bind(user.id).first<{ spinout_lab_active: number | null; spinout_lab_week: number | null }>();
+    active = Number(row?.spinout_lab_active ?? 0) === 1;
+    week = Math.max(1, Math.min(4, Number(row?.spinout_lab_week ?? 1)));
+  } catch { /* schema not migrated yet — treat as inactive */ }
+
+  const completed = new Set<string>();
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = ?`,
+    ).bind(user.id).all<{ milestone_key: string }>();
+    for (const r of (rows.results || [])) completed.add(r.milestone_key);
+  } catch { /* spinout_lab_milestones absent in dev */ }
+
+  return { spinoutLabActive: active, week, completedMilestones: completed, tiers };
+}
+
 // Build the working bank.
 //
 // AC-1 contract: "persona detection runs first if `users.role` is
@@ -118,10 +193,10 @@ function personaFor(user: User): Persona {
 // /answer call re-reads the user, sees the flipped role, and pivots
 // straight into the persona bank for the next question. Existing
 // role-known users start directly in the persona bank from /start.
-function workingBankFor(user: User): Question[] {
+function workingBankFor(user: User, gate?: AdvisorGate): Question[] {
   const persona = personaFor(user);
   if (persona === 'unknown') return ROLE_DETECTOR;
-  return bankFor(persona);
+  return bankFor(persona, { spinoutLabActive: !!gate?.spinoutLabActive });
 }
 
 // IDs of the three detector questions. Used to keep the detector
@@ -131,21 +206,37 @@ const DETECTOR_IDS: string[] = ROLE_DETECTOR.map((q) => q.id);
 // Shared bank-selection logic used by /start, /answer, and /skip
 // so detector-pending behaviour is consistent everywhere.
 //
-// AC-1: when `users.role` was null at the start of onboarding the
-// 3-question detector must complete in full before pivoting to the
-// persona bank — even across skips and resume/reload. We detect
-// "mid-onboarding" by looking at the current conversation's
-// answered set: if any detector question is answered AND any is
-// still missing, the user is mid-detector and we re-prepend
-// ROLE_DETECTOR. Otherwise the bank collapses to the persona bank
-// (or, for a still-unknown role, to the detector alone).
-function selectBank(user: User, answered: Set<string>): Question[] {
+// Task #2 (AR) extends AC-1 selectBank with persona-aware splitting
+// (founder → newFounderSpinout vs existingFounder via the gate)
+// and unlock/week/tier filtering applied via filterByContext. The
+// detector-pending behaviour is preserved so a partial role detection
+// never lets the user jump into a persona bank prematurely.
+function selectBank(
+  user: User,
+  answered: Set<string>,
+  gate: AdvisorGate,
+  focusSection?: string,
+): { visible: Question[]; deferred: ReturnType<typeof filterByContext>['deferred'] } {
   const persona = personaFor(user);
   const detectorAnswered = DETECTOR_IDS.filter((id) => answered.has(id)).length;
   const detectorPending = detectorAnswered > 0 && detectorAnswered < DETECTOR_IDS.length;
-  if (persona === 'unknown') return ROLE_DETECTOR;
-  if (detectorPending) return [...ROLE_DETECTOR, ...bankFor(persona)];
-  return bankFor(persona);
+  if (persona === 'unknown') return { visible: ROLE_DETECTOR, deferred: [] };
+
+  const personaBank = bankFor(persona, { spinoutLabActive: gate.spinoutLabActive });
+  const filtered = filterByContext(personaBank, {
+    persona,
+    week: gate.week,
+    tiers: gate.tiers,
+    completedMilestones: gate.completedMilestones,
+    focusSection,
+  });
+  // Critical-first sort within section keeps the most important
+  // questions ahead of nice-to-haves.
+  const sorted = sortByImportance(filtered.visible);
+  if (detectorPending) {
+    return { visible: [...ROLE_DETECTOR, ...sorted], deferred: filtered.deferred };
+  }
+  return { visible: sorted, deferred: filtered.deferred };
 }
 
 // ---------------------------------------------------------------------------
@@ -230,11 +321,20 @@ function publicQuestion(q: Question | null): Record<string, unknown> | null {
   return {
     id: q.id,
     persona: q.persona,
+    section: q.section || null,
     prompt: q.prompt,
     hint: q.hint,
     input_kind: q.input_kind,
     options: q.options,
     skip_allowed: q.skip_allowed !== false,
+    importance: q.importance || 'normal',
+    page_target: q.page_target || null,
+    doc_anchor: q.doc_anchor || null,
+    tier_required: q.tier_required || null,
+    persona_filter: q.persona_filter || null,
+    unlock_required: q.unlock_required || null,
+    followups: Array.isArray(q.followups) ? q.followups : null,
+    validate: q.validate || null,
   };
 }
 
@@ -324,12 +424,14 @@ async function refreshCounts(env: Env, conversationId: number, currentQid: strin
 advisor.post('/start', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
+  await ensureAdvisorWeekColumn(c.env);
+  const gate = await loadAdvisorGate(c.env, user);
 
   let conv = await getActiveConversation(c.env, user);
   if (!conv) {
     // For a brand-new conversation there are no prior answers, so
     // selectBank reduces to the workingBankFor result for sizing.
-    const initialBank = workingBankFor(user);
+    const initialBank = workingBankFor(user, gate);
     const firstQ = initialBank[0] || null;
     conv = await createConversation(c.env, user, initialBank.length, firstQ?.id || null);
     if (firstQ) await recordMessage(c.env, conv.id, 'assistant', firstQ.prompt, firstQ.id);
@@ -340,7 +442,7 @@ advisor.post('/start', async (c) => {
   // answered `role_detect.primary`, closed the tab, and came back,
   // the detector triplet is still served before the persona bank.
   const answered = await effectiveAnsweredSet(c.env, user, conv.id);
-  const bank = selectBank(user, answered);
+  const { visible: bank } = selectBank(user, answered, gate);
   const next = nextUnansweredQuestion(bank, answered);
 
   // Refresh counts now that hydration may have inserted new rows.
@@ -495,8 +597,10 @@ advisor.post('/answer', async (c) => {
     if (fresh) liveUser = { ...user, ...fresh };
   }
 
+  await ensureAdvisorWeekColumn(c.env);
+  const gate = await loadAdvisorGate(c.env, liveUser);
   const answered = await effectiveAnsweredSet(c.env, liveUser, conv.id);
-  const bank = selectBank(liveUser, answered);
+  const { visible: bank } = selectBank(liveUser, answered, gate);
   const next = nextUnansweredQuestion(bank, answered);
   await syncBankTotal(c.env, conv, bank.length, personaFor(liveUser));
   await refreshCounts(c.env, conv.id, next?.id || null);
@@ -597,8 +701,10 @@ advisor.post('/skip', async (c) => {
   // Use the shared selectBank helper so skipping detector question
   // 2 does not let the user jump into the persona bank before
   // detector question 3 is served.
+  await ensureAdvisorWeekColumn(c.env);
+  const gate = await loadAdvisorGate(c.env, user);
   const answered = await effectiveAnsweredSet(c.env, user, conv.id);
-  const bank = selectBank(user, answered);
+  const { visible: bank } = selectBank(user, answered, gate);
   const next = nextUnansweredQuestion(bank, answered);
   await syncBankTotal(c.env, conv, bank.length, personaFor(user));
   await refreshCounts(c.env, conv.id, next?.id || null);
@@ -609,42 +715,197 @@ advisor.post('/skip', async (c) => {
   } else {
     await recordMessage(c.env, conv.id, 'assistant', next.prompt, next.id);
   }
+  // /progress envelope inline so the AC-3 client can refresh
+  // per-page rings without a second round-trip after a skip.
+  const counts = await c.env.DB.prepare(
+    `SELECT answered_count, skipped_count FROM advisor_conversations WHERE id = ?`,
+  ).bind(conv.id).first<{ answered_count: number; skipped_count: number }>();
+  const ans = Number(counts?.answered_count || 0);
+  const skp = Number(counts?.skipped_count || 0);
   return c.json({
     conversation_uid: conv.uid,
     next: publicQuestion(next),
+    next_question: publicQuestion(next),
+    complete: !next,
+    progress: {
+      total: bank.length, answered: ans, skipped: skp,
+      percent: bank.length > 0 ? Math.round(((ans + skp) / bank.length) * 100) : 100,
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /next-question?focus=SECTION  —  return the next visible
+// question pinned to a section (BUILD/CAPITAL/LEGAL/NETWORK or any
+// persona-defined section). Used by the per-page progress rail's
+// "drill in" affordance.
+// ---------------------------------------------------------------------------
+advisor.get('/next-question', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  await ensureAdvisorWeekColumn(c.env);
+  const focus = (c.req.query('focus') || '').trim() || undefined;
+  const gate = await loadAdvisorGate(c.env, user);
+  const conv = await getActiveConversation(c.env, user);
+  if (!conv) {
+    return c.json({ next: null, next_question: null, complete: true });
+  }
+  const answered = await effectiveAnsweredSet(c.env, user, conv.id);
+  const { visible: bank } = selectBank(user, answered, gate, focus);
+  const next = nextUnansweredQuestion(bank, answered);
+  return c.json({
+    persona: personaFor(user),
+    focus: focus || null,
+    next: publicQuestion(next),
+    next_question: publicQuestion(next),
     complete: !next,
   });
 });
 
 // ---------------------------------------------------------------------------
-// GET /progress  —  cheap polling endpoint for the dashboard widget.
+// GET /progress  —  per-page + per-section + overall completion.
+// Task #2 (AR) replaces the earlier flat envelope with a structured
+// shape consumed by the right-rail progress bars. Backward-compatible
+// flat fields remain on the top level so existing clients keep
+// working through one rollout cycle.
 // ---------------------------------------------------------------------------
 advisor.get('/progress', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
-  const bank = workingBankFor(user);
+  await ensureAdvisorWeekColumn(c.env);
+  const gate = await loadAdvisorGate(c.env, user);
+  const persona = personaFor(user);
+  const personaBank = workingBankFor(user, gate);
+  // Match the served advisor flow: rings count against the
+  // currently-VISIBLE bank, not locked/deferred questions, so the
+  // /progress envelope stays consistent with /next-question and
+  // doesn't strand users at <100% behind unmet unlock_required gates.
+  const filtered = filterByContext(personaBank, {
+    persona,
+    week: gate.week,
+    tiers: gate.tiers,
+    completedMilestones: gate.completedMilestones,
+  });
+  const visibleBank = filtered.visible;
+
   // Use the LATEST conversation regardless of state so the dashboard
-  // ring keeps showing 100% / complete after the user finishes the
-  // questionnaire instead of resetting to zero.
+  // ring keeps showing 100% / complete after the user finishes.
   const conv = await getLatestConversation(c.env, user);
-  if (!conv) {
-    return c.json({
-      persona: personaFor(user),
-      conversation_id: null, conversation_uid: null,
-      total: bank.length, answered: 0, skipped: 0, percent: 0, complete: false,
-    });
+  const answered: Set<string> = conv ? await answeredQuestionIds(c.env, conv.id) : new Set();
+  const savedSet: Set<string> = new Set();
+  if (conv) {
+    const rows = await c.env.DB.prepare(
+      `SELECT question_id FROM advisor_answers WHERE conversation_id = ? AND saved_status = 'saved'`,
+    ).bind(conv.id).all<{ question_id: string }>();
+    for (const r of (rows.results || [])) savedSet.add(r.question_id);
   }
-  const total = Number(conv.total_questions || bank.length);
-  const answered = Number(conv.answered_count || 0);
-  const skipped = Number(conv.skipped_count || 0);
+
+  // Per-page progress.
+  const byPage = groupByPage(visibleBank).map((g) => ({
+    page: g.page,
+    doc_anchor: g.doc_anchor || null,
+    total: g.ids.length,
+    answered: g.ids.filter((id) => savedSet.has(id)).length,
+  })).map((g) => ({
+    ...g,
+    percent: g.total > 0 ? Math.round((g.answered / g.total) * 100) : 0,
+  }));
+
+  // Per-section progress.
+  const bySection = groupBySection(visibleBank).map((g) => ({
+    section: g.section,
+    total: g.ids.length,
+    answered: g.ids.filter((id) => savedSet.has(id)).length,
+  })).map((g) => ({
+    ...g,
+    percent: g.total > 0 ? Math.round((g.answered / g.total) * 100) : 0,
+  }));
+
+  // Overall — counts include skipped to preserve the AC-1 contract
+  // (skipped questions count toward "done" for the dashboard ring).
+  // Total tracks the VISIBLE bank so locked questions don't pull
+  // the percentage down.
+  const total = visibleBank.length;
+  const deferredCount = filtered.deferred.length;
+  const ans = Number(conv?.answered_count || 0);
+  const skp = Number(conv?.skipped_count || 0);
+  const overallPct = total > 0 ? Math.round(((ans + skp) / total) * 100) : 100;
+
   return c.json({
     persona: personaFor(user),
-    conversation_id: conv.uid,
-    conversation_uid: conv.uid,
-    total, answered, skipped,
-    percent: total > 0 ? Math.round(((answered + skipped) / total) * 100) : 100,
-    complete: conv.state === 'complete',
-    current_question_id: conv.current_question_id,
+    conversation_id: conv?.uid || null,
+    conversation_uid: conv?.uid || null,
+    by_page: byPage,
+    by_section: bySection,
+    overall: {
+      total, answered: ans, skipped: skp, percent: overallPct,
+      deferred: deferredCount,
+      complete: conv?.state === 'complete' || (!!conv && total > 0 && ans + skp >= total),
+    },
+    spinout_lab: gate.spinoutLabActive
+      ? { active: true, week: gate.week }
+      : { active: false, week: null },
+    // Legacy flat fields — kept for one rollout cycle.
+    total, answered: ans, skipped: skp, percent: overallPct,
+    complete: conv?.state === 'complete',
+    current_question_id: conv?.current_question_id || null,
+    // Surface answered count even for users with no /start yet.
+    _answered_in_conversation: answered.size,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /manifest  —  question manifest for the current persona.
+//
+// The frontend right-rail and section picker derive their structure
+// from this manifest so the server stays the source of truth.
+// Returns the visible bank (post-filter) plus the deferred metadata
+// so the UI can show "Unlocks in Week 3" hints without guessing.
+// ---------------------------------------------------------------------------
+advisor.get('/manifest', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  await ensureAdvisorWeekColumn(c.env);
+  const gate = await loadAdvisorGate(c.env, user);
+  const persona = personaFor(user);
+
+  const personaBank = workingBankFor(user, gate);
+  const filtered = filterByContext(personaBank, {
+    persona,
+    week: gate.week,
+    tiers: gate.tiers,
+    completedMilestones: gate.completedMilestones,
+  });
+
+  // Include both `visible` and `deferred` so the UI can render
+  // greyed-out preview rows for not-yet-unlocked questions.
+  const publicQs = filtered.visible.map((q) => publicQuestion(q));
+  const deferred = filtered.deferred.map((d) => ({
+    question: publicQuestion(d.question),
+    reason: d.reason,
+    detail: d.detail || null,
+  }));
+
+  // Section + page indices.
+  const sections = groupBySection(filtered.visible).map((g) => ({
+    section: g.section, ids: g.ids,
+  }));
+  const pages = groupByPage(filtered.visible).map((g) => ({
+    page: g.page, doc_anchor: g.doc_anchor || null, ids: g.ids,
+  }));
+
+  return c.json({
+    persona,
+    bank: gate.spinoutLabActive ? 'newFounderSpinout' : (
+      persona === 'founder' ? 'existingFounder' :
+      persona === 'partner' ? 'operatingPartner' :
+      persona
+    ) as BankName | string,
+    spinout_lab: { active: gate.spinoutLabActive, week: gate.week },
+    questions: publicQs,
+    deferred,
+    sections,
+    pages,
   });
 });
 

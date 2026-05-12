@@ -326,6 +326,10 @@ export const api = {
     skip: (conversation_id, question_id) =>
       request('/advisor/skip', { method: 'POST', body: JSON.stringify({ conversation_id, question_id }) }),
     progress: () => request('/advisor/progress'),
+    // Task #2 (AR) — pinned next-question fetch + canonical manifest.
+    nextQuestion: (focus) =>
+      request(`/advisor/next-question${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`),
+    manifest: () => request('/advisor/manifest'),
     conversation: (uid) => request(`/advisor/conversations/${encodeURIComponent(uid)}`),
     explainUrl: () => '/api/advisor/explain',
   },

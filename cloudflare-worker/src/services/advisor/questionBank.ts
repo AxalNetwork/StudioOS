@@ -1,62 +1,98 @@
 /**
- * Task #10 (AC-1) — Minimal seed question bank.
+ * Task #2 (AR) — Promoted Question schema + canonical bank registry.
  *
- * AC-2 will replace this with the full per-persona, multi-page banks.
- * For AC-1 we ship just enough questions per persona to exercise the
- * write-router round trip (start → answer → next).
+ * Each persona bank lives in `./banks/<name>.ts`; this module is the
+ * single registry that the advisor route + write-router consume.
  *
- * Each Question is a SOURCE-OF-TRUTH record:
- *   - id              — opaque key persisted in advisor_answers; never reuse
- *   - persona         — 'founder' | 'investor' | 'mentor' | 'partner' | 'unknown'
- *   - prompt          — the natural-language question shown to the user
- *   - hint            — short helper text under the input
- *   - input_kind      — 'short' | 'long' | 'number' | 'select' | 'multi'
- *   - options         — required when input_kind ∈ {select, multi}
- *   - skip_allowed    — if false the UI suppresses the Skip button
- *   - sensitive       — if true never echo back to LLM in /explain prompts
+ * Promoted Question shape:
+ *   - id              — opaque key persisted in advisor_answers
+ *   - persona         — primary persona enum
+ *   - persona_filter? — additional personas allowed to see this Q
+ *   - section?        — bucket label (e.g. BUILD/CAPITAL/LEGAL/NETWORK)
+ *   - prompt          — natural-language question
+ *   - hint?           — short helper text
+ *   - input_kind      — 'short'|'long'|'number'|'select'|'multi'
+ *   - options?        — required for select / multi
+ *   - skip_allowed?   — defaults true
+ *   - sensitive?      — never echo to LLM
+ *   - importance?     — 'critical'|'high'|'normal'|'low'
+ *   - page_target?    — route the answer's data lives on
+ *   - doc_anchor?     — docs/ section to deep-link from "Read more"
+ *   - tier_required?  — billing tier needed to write
+ *   - unlock_required?— { week?, milestones? } gating for spin-out lab
+ *   - followups?      — IDs to surface immediately after this Q
+ *   - validate?       — client-side validator name
  */
 
 export type Persona = 'founder' | 'investor' | 'mentor' | 'partner' | 'admin' | 'unknown';
+export type Importance = 'critical' | 'high' | 'normal' | 'low';
+export type ValidateKind =
+  | 'short' | 'long' | 'number' | 'select' | 'multi'
+  | 'csv' | 'url' | 'email' | 'hex_color';
+
+export interface UnlockRequirement {
+  week?: number;          // minimum spinout_lab_week
+  milestones?: string[];  // milestone keys that must all be completed
+}
 
 export interface Question {
   id: string;
   persona: Persona;
+  persona_filter?: Persona[];
+  section?: string;
   prompt: string;
   hint?: string;
   input_kind: 'short' | 'long' | 'number' | 'select' | 'multi';
   options?: string[];
   skip_allowed?: boolean;
   sensitive?: boolean;
+  importance?: Importance;
+  page_target?: string;
+  doc_anchor?: string;
+  tier_required?: string;
+  unlock_required?: UnlockRequirement;
+  followups?: string[];
+  validate?: ValidateKind;
 }
 
-// ----- Role detector (asked when users.role is null) ----------------------
+// ---------------------------------------------------------------------------
+// Role detector — surfaced when users.role is null.
+// ---------------------------------------------------------------------------
 export const ROLE_DETECTOR: Question[] = [
   {
     id: 'role_detect.primary',
     persona: 'unknown',
+    section: 'ROLE',
     prompt: "Welcome to Axal. Which best describes how you'll use StudioOS?",
     hint: 'You can change this any time in Settings.',
     input_kind: 'select',
     options: ['I am building a startup', 'I invest in startups', 'I mentor founders', 'I partner with the studio'],
     skip_allowed: false,
+    importance: 'critical',
+    page_target: '/onboarding/persona',
+    doc_anchor: 'getting-started/personas',
+    validate: 'select',
   },
   {
     id: 'role_detect.organization',
     persona: 'unknown',
+    section: 'ROLE',
     prompt: 'What firm or organization are you with? (Type "Independent" if none.)',
-    input_kind: 'short',
-    skip_allowed: true,
+    input_kind: 'short', skip_allowed: true,
+    importance: 'normal', page_target: '/settings',
+    doc_anchor: 'getting-started/personas', validate: 'short',
   },
   {
     id: 'role_detect.headline',
     persona: 'unknown',
+    section: 'ROLE',
     prompt: 'In one line, what are you working on or known for right now?',
-    input_kind: 'short',
-    skip_allowed: true,
+    input_kind: 'short', skip_allowed: true,
+    importance: 'normal', page_target: '/settings',
+    doc_anchor: 'getting-started/personas', validate: 'short',
   },
 ];
 
-// Map the role-detector primary answer → users.role enum value.
 export function mapRoleAnswer(answerText: string): Persona | null {
   const t = answerText.toLowerCase();
   if (t.includes('build')) return 'founder';
@@ -66,127 +102,178 @@ export function mapRoleAnswer(answerText: string): Persona | null {
   return null;
 }
 
-// ----- Per-persona seed banks --------------------------------------------
-const FOUNDER_BANK: Question[] = [
-  { id: 'founder.project.name',     persona: 'founder', prompt: 'What is your startup called?',                           input_kind: 'short' },
-  { id: 'founder.project.pitch',    persona: 'founder', prompt: 'Give me a one-paragraph pitch — what do you do, for whom?', input_kind: 'long' },
-  { id: 'founder.project.sector',   persona: 'founder', prompt: 'Which sector are you in?', input_kind: 'select',
-    options: ['AI', 'B2B SaaS', 'Climate', 'Fintech', 'Healthcare', 'Consumer', 'Deep Tech', 'Other'] },
-  { id: 'founder.project.stage',    persona: 'founder', prompt: 'What stage are you at?', input_kind: 'select',
-    options: ['Idea', 'Prototype', 'Pre-seed', 'Seed', 'Series A', 'Later'] },
-  { id: 'founder.project.traction', persona: 'founder', prompt: 'Briefly — what traction do you have so far? (users, revenue, LOIs, etc.)', input_kind: 'long', skip_allowed: true },
+// ---------------------------------------------------------------------------
+// Bank registry — imports the canonical TS modules under ./banks/.
+// ---------------------------------------------------------------------------
+import { NEW_FOUNDER_SPINOUT_BANK } from './banks/newFounderSpinout';
+import { EXISTING_FOUNDER_BANK } from './banks/existingFounder';
+import { INVESTOR_BANK } from './banks/investor';
+import { OPERATING_PARTNER_BANK } from './banks/operatingPartner';
+import { MENTOR_BANK } from './banks/mentor';
 
-  // ----- AC-2 New Founder additions ---------------------------------
-  // The router persists every id below into a real domain table so a
-  // founder finishing the bank ends up with a populated project, ≥3
-  // discovery interviews, ≥3 OKRs, brand basics, a deck-draft seed,
-  // and the Spin-Out-Lab week-1 review milestone.
-  { id: 'founder.discovery.interview1.name',  persona: 'founder', prompt: 'Pick 3 customers to interview. Who is the first one?', input_kind: 'short' },
-  { id: 'founder.discovery.interview1.pains', persona: 'founder', prompt: 'What pain are you testing with them?', input_kind: 'long' },
-  { id: 'founder.discovery.interview2.name',  persona: 'founder', prompt: 'Second interviewee?', input_kind: 'short' },
-  { id: 'founder.discovery.interview2.pains', persona: 'founder', prompt: 'And the pain you’re testing with them?', input_kind: 'long' },
-  { id: 'founder.discovery.interview3.name',  persona: 'founder', prompt: 'Third interviewee?', input_kind: 'short' },
-  { id: 'founder.discovery.interview3.pains', persona: 'founder', prompt: 'And the pain you’re testing with them?', input_kind: 'long' },
-  { id: 'founder.okrs.q1_objective1', persona: 'founder', prompt: 'Set three objectives for this quarter. What is the first?', input_kind: 'long' },
-  { id: 'founder.okrs.q1_objective2', persona: 'founder', prompt: 'Second objective for this quarter?', input_kind: 'long' },
-  { id: 'founder.okrs.q1_objective3', persona: 'founder', prompt: 'Third objective for this quarter?', input_kind: 'long' },
-  { id: 'founder.brand.tagline',     persona: 'founder', prompt: 'Give me a one-line tagline for the landing page.', input_kind: 'short' },
-  { id: 'founder.brand.theme_color', persona: 'founder', prompt: 'Pick a brand color (hex, e.g. #7c3aed).',          input_kind: 'short' },
-  { id: 'founder.deck.problem', persona: 'founder', prompt: 'In one sentence, what problem are you solving?', input_kind: 'long' },
-  { id: 'founder.deck.market',  persona: 'founder', prompt: 'Who are the customers, and roughly how many?',  input_kind: 'long' },
-  // Spin-Out Lab Week-1 milestones are emitted as side-effects of
-  // the three discovery interview answers (router writes
-  // `customer_interview_logged_{1,2,3}`); no standalone Q is needed.
-
-  // Existing-founder additions — recorded as noops by the router but
-  // recognised by questionById() so the chat client can render them
-  // without unknown_question errors.
-  { id: 'founder.team.cofounders',          persona: 'founder', prompt: 'Solo or co-founders? (comma-separated names)', input_kind: 'short', skip_allowed: true },
-  { id: 'founder.captable.entity',          persona: 'founder', prompt: 'Are you incorporated? If yes, what entity?',  input_kind: 'short' },
-  { id: 'founder.captable.ownership',       persona: 'founder', prompt: 'Roughly, who owns the company today?',         input_kind: 'long' },
-  { id: 'founder.financials.runway_months', persona: 'founder', prompt: 'How many months of runway do you have?',       input_kind: 'number' },
-  { id: 'founder.financials.monthly_burn_usd', persona: 'founder', prompt: 'Monthly burn (USD).',                       input_kind: 'number' },
-  { id: 'founder.financials.mrr_usd',       persona: 'founder', prompt: 'Monthly recurring revenue (USD). 0 if none.',  input_kind: 'number' },
-  { id: 'founder.pipeline.top_deals',       persona: 'founder', prompt: 'Your top 3 sales deals or design partners in flight?', input_kind: 'long' },
-  { id: 'founder.compliance.status',        persona: 'founder', prompt: 'Compliance — anything overdue?',               input_kind: 'long' },
-  { id: 'founder.capital.raise_active',     persona: 'founder', prompt: 'Are you actively raising right now?',          input_kind: 'select', options: ['Yes', 'No', 'Soon'] },
-  { id: 'founder.capital.raise_target_usd', persona: 'founder', prompt: 'How much are you raising (USD)?',              input_kind: 'number', skip_allowed: true },
-  { id: 'founder.mentors.needs',            persona: 'founder', prompt: 'What expertise do you most need from a mentor right now?', input_kind: 'short' },
-];
-
-const INVESTOR_BANK: Question[] = [
-  { id: 'investor.profile.investor_type', persona: 'investor', prompt: 'Which best describes your investing capacity?', input_kind: 'select',
-    options: ['Angel', 'Family Office', 'Micro VC', 'Traditional VC', 'Corporate Venture', 'Syndicate Lead'] },
-  { id: 'investor.profile.sectors', persona: 'investor', prompt: 'Which sectors are you actively investing in? (comma-separated)', input_kind: 'short',
-    hint: 'e.g. AI, Climate, Fintech' },
-  { id: 'investor.profile.stages', persona: 'investor', prompt: 'Which stages do you write checks at? (comma-separated)', input_kind: 'short',
-    hint: 'e.g. Pre-seed, Seed, Series A' },
-  { id: 'investor.profile.ticket_band', persona: 'investor', prompt: 'What ticket size do you typically write?', input_kind: 'select',
-    options: ['<$25k', '$25k–$100k', '$100k–$500k', '$500k–$2M', '$2M+'] },
-  { id: 'investor.profile.thesis',  persona: 'investor', prompt: 'Tell me your investment thesis in 2-4 sentences.', input_kind: 'long', skip_allowed: true },
-
-  // ----- AC-2 additions (recorded as noops; surfaced by chat UI) -----
-  { id: 'investor.pipeline.deal_volume',     persona: 'investor', prompt: 'How many deals do you actively look at per quarter?', input_kind: 'select',
-    options: ['<5', '5–20', '20–50', '50+'] },
-  { id: 'investor.coinvest.preferences',     persona: 'investor', prompt: 'Lead, follow, or both? Co-invest preferences?', input_kind: 'long' },
-  { id: 'investor.watchlist.seed_companies', persona: 'investor', prompt: 'Any companies you’re already tracking? (comma-separated)', input_kind: 'short', skip_allowed: true },
-];
-
-// Mentor bank — column names match the live D1 mentors schema as used
-// by routes/mentors.ts (display_name / bio / sectors_json /
-// expertise_json / hourly_rate_usd / linkedin_url). Earlier drafts
-// referenced `headline` / `capacity_per_week` / `hourly_rate` which do
-// not exist in the production schema.
-const MENTOR_BANK: Question[] = [
-  { id: 'mentor.profile.display_name',   persona: 'mentor', prompt: 'What name should we display on your mentor profile?', input_kind: 'short' },
-  { id: 'mentor.profile.bio',            persona: 'mentor', prompt: 'A short bio (2-3 sentences) — what should founders know about you?', input_kind: 'long' },
-  { id: 'mentor.profile.sectors',        persona: 'mentor', prompt: 'Which sectors do you cover? (comma-separated)', input_kind: 'short' },
-  { id: 'mentor.profile.expertise',      persona: 'mentor', prompt: 'Which functional areas of expertise do you offer? (comma-separated)', input_kind: 'short' },
-  { id: 'mentor.profile.hourly_rate_usd', persona: 'mentor', prompt: 'Your hourly rate in USD (0 if pro-bono).', input_kind: 'number', skip_allowed: true },
-  { id: 'mentor.profile.linkedin_url',   persona: 'mentor', prompt: 'Share your LinkedIn URL so founders can vet you.', input_kind: 'short', skip_allowed: true },
-
-  // ----- AC-2 additions (recorded as noops; surfaced by chat UI) -----
-  { id: 'mentor.topics.willing',         persona: 'mentor', prompt: 'Which topics are you happy to take on? (comma-separated)', input_kind: 'short' },
-  { id: 'mentor.topics.unwilling',       persona: 'mentor', prompt: 'Anything you would rather not advise on?',                input_kind: 'short', skip_allowed: true },
-  { id: 'mentor.calendar.weekly_hours',  persona: 'mentor', prompt: 'Roughly how many hours per week can you offer founders?', input_kind: 'select', options: ['<1', '1-2', '3-5', '5+'] },
-];
-
-// Partners are profiled in the dedicated partner-onboarding wizard
-// (Task #9, X-2). Inside the advisor we only ask non-binding ambient
-// questions so partners aren't double-prompted.
-const PARTNER_BANK: Question[] = [
-  { id: 'partner.profile.focus',    persona: 'partner', prompt: 'What slice of the studio do you want to focus on this quarter?', input_kind: 'long', skip_allowed: true },
-  // ----- AC-2 additions (recorded as noops; surfaced by chat UI) -----
-  { id: 'partner.firm.name',          persona: 'partner', prompt: 'Which firm or organization are you with?',                  input_kind: 'short' },
-  { id: 'partner.role.kind',          persona: 'partner', prompt: 'Which role best describes your partnership with the studio?', input_kind: 'select', options: ['Investor', 'Service Provider', 'Mentor / Advisor', 'Strategic Partner', 'Other'] },
-  { id: 'partner.services.offered',   persona: 'partner', prompt: 'What do you bring to portfolio companies? (comma-separated)', input_kind: 'short' },
-  { id: 'partner.deals.interest',     persona: 'partner', prompt: 'What kinds of deals or projects most interest you?',         input_kind: 'long' },
-  { id: 'partner.conflicts.list',     persona: 'partner', prompt: 'Any conflicts of interest we should know about?',            input_kind: 'long', skip_allowed: true },
-  { id: 'partner.dealflow.channels',  persona: 'partner', prompt: 'Where does your deal flow come from today? (comma-separated)', input_kind: 'short' },
-];
+export type BankName =
+  | 'newFounderSpinout' | 'existingFounder'
+  | 'investor' | 'operatingPartner' | 'mentor' | 'admin';
 
 const ADMIN_BANK: Question[] = [
-  { id: 'admin.preferences.digest_freq', persona: 'admin', prompt: 'How often do you want the daily-digest summary?', input_kind: 'select',
-    options: ['Daily', 'Weekly', 'Off'] },
+  { id: 'admin.preferences.digest_freq', persona: 'admin', section: 'PREFS',
+    prompt: 'How often do you want the daily-digest summary?',
+    input_kind: 'select', options: ['Daily', 'Weekly', 'Off'],
+    importance: 'normal', page_target: '/settings',
+    doc_anchor: 'getting-started/personas', validate: 'select' },
 ];
 
-const PERSONA_BANK: Record<Persona, Question[]> = {
-  founder:  FOUNDER_BANK,
-  investor: INVESTOR_BANK,
-  mentor:   MENTOR_BANK,
-  partner:  PARTNER_BANK,
-  admin:    ADMIN_BANK,
-  unknown:  [],
+export const BANKS: Record<BankName, Question[]> = {
+  newFounderSpinout: NEW_FOUNDER_SPINOUT_BANK,
+  existingFounder:   EXISTING_FOUNDER_BANK,
+  investor:          INVESTOR_BANK,
+  operatingPartner:  OPERATING_PARTNER_BANK,
+  mentor:            MENTOR_BANK,
+  admin:             ADMIN_BANK,
 };
 
-export function bankFor(persona: Persona): Question[] {
-  return PERSONA_BANK[persona] || [];
+export function bankByName(name: BankName): Question[] {
+  return BANKS[name] || [];
 }
 
+/**
+ * Pick the canonical bank for a persona. Founders split into the
+ * Spin-Out Lab bank when `spinout_lab_active === 1`, else the
+ * existing-founder bank.
+ */
+export function bankFor(persona: Persona, ctx?: { spinoutLabActive?: boolean }): Question[] {
+  switch (persona) {
+    case 'founder':  return ctx?.spinoutLabActive ? BANKS.newFounderSpinout : BANKS.existingFounder;
+    case 'investor': return BANKS.investor;
+    case 'partner':  return BANKS.operatingPartner;
+    case 'mentor':   return BANKS.mentor;
+    case 'admin':    return BANKS.admin;
+    default:         return [];
+  }
+}
+
+/**
+ * Lookup any question by id across every bank + the role detector.
+ */
 export function questionById(id: string): Question | null {
-  for (const persona of Object.keys(PERSONA_BANK) as Persona[]) {
-    const hit = PERSONA_BANK[persona].find(q => q.id === id);
+  for (const name of Object.keys(BANKS) as BankName[]) {
+    const hit = BANKS[name].find((q) => q.id === id);
     if (hit) return hit;
   }
-  return ROLE_DETECTOR.find(q => q.id === id) || null;
+  return ROLE_DETECTOR.find((q) => q.id === id) || null;
+}
+
+// ---------------------------------------------------------------------------
+// Filtering — applies week + tier + unlock + persona_filter + section focus.
+// Returns { visible, deferred } so the route can surface "not yet" hints.
+// ---------------------------------------------------------------------------
+export interface FilterContext {
+  persona: Persona;
+  week?: number;                  // user's current spinout_lab_week (1..4)
+  tiers?: Set<string>;            // active billing tiers (e.g. 'investor_pro')
+  completedMilestones?: Set<string>;
+  focusSection?: string;          // pin to one section
+}
+
+export interface DeferredQuestion {
+  question: Question;
+  reason: 'week' | 'milestones' | 'tier' | 'persona_filter';
+  detail?: string;                // human-readable explainer
+}
+
+export interface FilteredBank {
+  visible: Question[];
+  deferred: DeferredQuestion[];
+}
+
+export function filterByContext(bank: Question[], ctx: FilterContext): FilteredBank {
+  const visible: Question[] = [];
+  const deferred: DeferredQuestion[] = [];
+  const tiers = ctx.tiers ?? new Set<string>();
+  const completed = ctx.completedMilestones ?? new Set<string>();
+
+  for (const q of bank) {
+    // persona_filter — absent means "primary persona only"; present
+    // means an explicit allow-list.
+    if (q.persona_filter && q.persona_filter.length > 0 && !q.persona_filter.includes(ctx.persona)) {
+      deferred.push({ question: q, reason: 'persona_filter' });
+      continue;
+    }
+    // section focus
+    if (ctx.focusSection && q.section && q.section !== ctx.focusSection) continue;
+
+    // week gate
+    const u = q.unlock_required;
+    if (u?.week && (ctx.week ?? 0) < u.week) {
+      deferred.push({ question: q, reason: 'week', detail: `Unlocks in Spin-Out Week ${u.week}.` });
+      continue;
+    }
+    // milestones gate
+    if (u?.milestones && u.milestones.length > 0) {
+      const missing = u.milestones.filter((m) => !completed.has(m));
+      if (missing.length > 0) {
+        deferred.push({
+          question: q,
+          reason: 'milestones',
+          detail: `Complete first: ${missing.join(', ')}.`,
+        });
+        continue;
+      }
+    }
+    // tier gate (advisor still surfaces these — write-router returns
+    // `paywalled` envelope when the user submits — so do NOT defer
+    // unless we want to hide them entirely. We hide tier-gated
+    // questions only when explicitly missing the tier flag.)
+    if (q.tier_required && !tiers.has(q.tier_required)) {
+      // Surface anyway so the user sees the upgrade CTA via the
+      // existing /answer paywalled path. Mark deferred metadata for
+      // the manifest consumers.
+      deferred.push({ question: q, reason: 'tier', detail: `Requires ${q.tier_required}.` });
+    }
+    visible.push(q);
+  }
+  return { visible, deferred };
+}
+
+/**
+ * Group a bank by `page_target` for the per-page progress rail.
+ */
+export function groupByPage(bank: Question[]): Array<{ page: string; doc_anchor?: string; ids: string[] }> {
+  const groups = new Map<string, { page: string; doc_anchor?: string; ids: string[] }>();
+  for (const q of bank) {
+    if (!q.page_target) continue;
+    let g = groups.get(q.page_target);
+    if (!g) { g = { page: q.page_target, doc_anchor: q.doc_anchor, ids: [] }; groups.set(q.page_target, g); }
+    g.ids.push(q.id);
+  }
+  return Array.from(groups.values()).sort((a, b) => a.page.localeCompare(b.page));
+}
+
+/**
+ * Group a bank by `section` for section-level progress.
+ */
+export function groupBySection(bank: Question[]): Array<{ section: string; ids: string[] }> {
+  const groups = new Map<string, { section: string; ids: string[] }>();
+  for (const q of bank) {
+    const s = q.section || 'OTHER';
+    let g = groups.get(s);
+    if (!g) { g = { section: s, ids: [] }; groups.set(s, g); }
+    g.ids.push(q.id);
+  }
+  return Array.from(groups.values()).sort((a, b) => a.section.localeCompare(b.section));
+}
+
+/**
+ * Sort questions critical-first within their section, preserving
+ * original order otherwise.
+ */
+const IMPORTANCE_RANK: Record<Importance, number> = { critical: 0, high: 1, normal: 2, low: 3 };
+export function sortByImportance(bank: Question[]): Question[] {
+  return bank.slice().sort((a, b) => {
+    const sa = a.section || ''; const sb = b.section || '';
+    if (sa !== sb) return sa.localeCompare(sb);
+    const ia = IMPORTANCE_RANK[a.importance ?? 'normal'];
+    const ib = IMPORTANCE_RANK[b.importance ?? 'normal'];
+    return ia - ib;
+  });
 }

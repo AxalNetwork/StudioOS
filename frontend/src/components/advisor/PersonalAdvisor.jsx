@@ -32,12 +32,11 @@ import {
   Sparkles, Send, X, Minus, HelpCircle, Loader2, CheckCircle2,
   ArrowRight, MessageSquare, ChevronRight, SkipForward, BookOpen,
 } from 'lucide-react';
-import { api } from '../../lib/api';
+import { api, spinoutLab as spinoutLabApi } from '../../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
 import { useAuth } from '../../hooks/useAuthSync';
 import { useEscapeClose } from '../useEscapeClose';
-import { pickPersonaBank, isSpinoutLabActive } from '../../lib/advisor/persona';
-import { predictTarget, pagesForBank, pageLabel } from '../../lib/advisor/router';
+import { predictTarget, pageLabel } from '../../lib/advisor/router';
 
 const STORAGE_KEY = 'advisor:state';
 
@@ -87,6 +86,13 @@ export default function PersonalAdvisor() {
   // Personal Advisor is genuinely unavailable in those environments.
   const [unavailable, setUnavailable] = useState(false);
 
+  // Task #2 (AR) — server-driven per-page / per-section progress
+  // and Spin-Out week banner state. Refreshed after every answer
+  // so the right-rail bars stay in sync with the writeRouter.
+  const [progressDetail, setProgressDetail] = useState({ by_page: [], by_section: [], overall: null, spinout_lab: null });
+  const [labState, setLabState] = useState(null); // { active, week, ... } from /api/spinout-lab/state
+  const [focusSection, setFocusSection] = useState(null);
+
   // Tutor mode state.
   const [tutor, setTutor] = useState(null); // { topic, text, doc_anchor, page_target, streaming }
   const tutorAbortRef = useRef(null);
@@ -97,6 +103,28 @@ export default function PersonalAdvisor() {
   useEffect(() => {
     safeWriteJSON(STORAGE_KEY, { minimised, conversation_id: conversationId });
   }, [minimised, conversationId]);
+
+  // ---------- Server-driven progress (by_page / by_section / overall) ----
+  const refreshProgress = useCallback(async () => {
+    try {
+      const p = await api.advisor.progress();
+      setProgressDetail({
+        by_page: Array.isArray(p?.by_page) ? p.by_page : [],
+        by_section: Array.isArray(p?.by_section) ? p.by_section : [],
+        overall: p?.overall || null,
+        spinout_lab: p?.spinout_lab || null,
+      });
+    } catch { /* non-fatal — rings will hide */ }
+  }, []);
+
+  // Pull spin-out lab state for the week banner. Hidden silently
+  // when the endpoint isn't mounted (older worker / FastAPI dev).
+  const refreshLabState = useCallback(async () => {
+    try {
+      const s = await spinoutLabApi.state();
+      setLabState(s || null);
+    } catch { setLabState(null); }
+  }, []);
 
   // ---------- Initial load ------------------------------------------------
   const bootstrap = useCallback(async () => {
@@ -134,6 +162,12 @@ export default function PersonalAdvisor() {
   }, []);
 
   useEffect(() => { if (user) bootstrap(); }, [user, bootstrap]);
+  // Server-driven progress + lab state.
+  useEffect(() => {
+    if (!user) return;
+    refreshProgress();
+    refreshLabState();
+  }, [user, refreshProgress, refreshLabState]);
 
   // Auto-scroll the transcript on new messages / streaming tokens.
   useEffect(() => {
@@ -178,6 +212,10 @@ export default function PersonalAdvisor() {
       setQuestion(next);
       setProgress(r.progress || progress);
       if (next) setMessages((m) => [...m, { role: 'assistant', content: next.prompt, question_id: next.id }]);
+      // Refresh server-driven per-page rings + lab week (a saved
+      // milestone may have advanced the lab to the next week).
+      refreshProgress();
+      refreshLabState();
     } catch (e) {
       setMessages((m) => [...m, { role: 'assistant', content: `Error: ${e?.message || 'send failed'}` }]);
       // Roll back the optimistic answeredIds entry.
@@ -185,7 +223,7 @@ export default function PersonalAdvisor() {
     } finally {
       setBusy(false);
     }
-  }, [busy, conversationId, input, question, progress]);
+  }, [busy, conversationId, input, question, progress, refreshProgress, refreshLabState]);
 
   const skip = useCallback(async () => {
     if (!question || !conversationId || busy) return;
@@ -205,12 +243,28 @@ export default function PersonalAdvisor() {
         try { const p = await api.advisor.progress(); setProgress(p); } catch { /* non-fatal */ }
       }
       if (next) setMessages((m) => [...m, { role: 'assistant', content: next.prompt, question_id: next.id }]);
+      refreshProgress();
     } catch (e) {
       setMessages((m) => [...m, { role: 'assistant', content: `Error: ${e?.message || 'skip failed'}` }]);
     } finally {
       setBusy(false);
     }
-  }, [question, conversationId, busy]);
+  }, [question, conversationId, busy, refreshProgress]);
+
+  // ---------- Section focus — fetch the next pinned question -------------
+  const pickFocus = useCallback(async (section) => {
+    const next = section === focusSection ? null : section;
+    setFocusSection(next);
+    if (busy) return;
+    try {
+      const r = await api.advisor.nextQuestion(next || undefined);
+      const q = r?.next_question || r?.next || null;
+      if (q) {
+        setQuestion(q);
+        setMessages((m) => [...m, { role: 'assistant', content: q.prompt, question_id: q.id }]);
+      }
+    } catch { /* non-fatal */ }
+  }, [focusSection, busy]);
 
   // ---------- Tutor (SSE explain) -----------------------------------------
   const openTutor = useCallback(async (topic) => {
@@ -290,36 +344,30 @@ export default function PersonalAdvisor() {
   // Cleanup any in-flight stream on unmount.
   useEffect(() => () => { if (tutorAbortRef.current) tutorAbortRef.current.abort(); }, []);
 
-  // ---------- Right rail completion rings ---------------------------------
-  // Pick the bank using the AC-2 dispatcher; falls back to an empty
-  // list (e.g. role still being detected) and the rings just hide.
-  const bankPages = useMemo(() => {
-    const bank = pickPersonaBank(user);
-    if (!bank) return [];
-    // The persona dispatcher returns the bank object — find which key
-    // it corresponds to so pagesForBank can look it up.
-    const bankName = (() => {
-      const role = String(user?.role || '').toLowerCase();
-      if (role === 'investor') return 'investor';
-      if (role === 'mentor') return 'mentor';
-      if (role === 'partner') return 'partner';
-      // Reuse the shared persona dispatcher's spin-out-lab rule so
-      // graduated/incorporated founders don't get mis-grouped into
-      // the New Founder bank for ring purposes.
-      if (role === 'founder') return isSpinoutLabActive(user) ? 'newFounder' : 'existingFounder';
-      return null;
-    })();
-    return bankName ? pagesForBank(bankName) : [];
-  }, [user]);
-
+  // ---------- Right rail completion rings (server-driven) ----------------
+  // Task #2 (AR) — the right rail consumes /progress.by_page directly,
+  // making the server the source of truth for per-page totals. Falls
+  // back to an empty list while progressDetail is still loading.
   const ringStats = useMemo(() => {
-    const answered = new Set(answeredIds);
-    return bankPages.map((p) => {
-      const total = p.ids.length;
-      const done = p.ids.filter((id) => answered.has(id)).length;
-      return { ...p, total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 };
-    });
-  }, [bankPages, answeredIds]);
+    return (progressDetail.by_page || []).map((p) => ({
+      page: p.page,
+      doc_anchor: p.doc_anchor || null,
+      label: pageLabel(p.page),
+      total: p.total,
+      done: p.answered,
+      percent: p.percent || 0,
+    }));
+  }, [progressDetail.by_page]);
+
+  const sectionStats = useMemo(() => progressDetail.by_section || [], [progressDetail.by_section]);
+
+  // Spin-Out Week banner: prefer dedicated lab state when available,
+  // else fall back to /progress.spinout_lab snapshot.
+  const weekBanner = useMemo(() => {
+    const src = (labState && labState.active) ? labState : (progressDetail.spinout_lab && progressDetail.spinout_lab.active ? progressDetail.spinout_lab : null);
+    if (!src || !src.active) return null;
+    return { week: Number(src.week || 1), unlocked: src.unlockedFeatures || src.unlocked_features || null };
+  }, [labState, progressDetail.spinout_lab]);
 
   // ---------- Render ------------------------------------------------------
   if (!user) return null; // anonymous: nothing to advise on yet
@@ -342,6 +390,7 @@ export default function PersonalAdvisor() {
         onMinimise={() => setMinimised(true)}
         isDesktop={isDesktop}
       />
+      {weekBanner && <WeekBanner week={weekBanner.week} />}
 
       <div className={isDesktop ? 'grid grid-cols-1 lg:grid-cols-3' : 'flex-1 flex flex-col overflow-hidden'}>
         {/* Chat column */}
@@ -376,31 +425,57 @@ export default function PersonalAdvisor() {
           />
         </div>
 
-        {/* Right rail — completion rings */}
+        {/* Right rail — section focus + per-page progress bars */}
         {isDesktop && (
-          <aside className="p-4 bg-gray-50 dark:bg-gray-950/40 max-h-[600px] overflow-y-auto">
-            <div className="text-[11px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-3">Your progress</div>
-            {ringStats.length === 0 ? (
-              <div className="text-xs text-gray-500 dark:text-gray-400">We'll show page-by-page progress here once we know your role.</div>
-            ) : (
-              <div className="space-y-2">
-                {ringStats.map((r) => (
-                  <Link
-                    key={r.page}
-                    to={r.page}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-white dark:hover:bg-gray-900 border border-transparent hover:border-gray-200 dark:hover:border-gray-800 transition-colors"
-                    title={`${r.done} of ${r.total} answered`}
-                  >
-                    <Ring percent={r.percent} done={r.done === r.total && r.total > 0} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{r.label || pageLabel(r.page)}</div>
-                      <div className="text-[10px] text-gray-500 dark:text-gray-400">{r.done} / {r.total}</div>
-                    </div>
-                    <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />
-                  </Link>
-                ))}
+          <aside className="p-4 bg-gray-50 dark:bg-gray-950/40 max-h-[600px] overflow-y-auto space-y-4">
+            {sectionStats.length > 1 && (
+              <div>
+                <div className="text-[11px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-2">Focus a section</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {sectionStats.map((s) => {
+                    const active = focusSection === s.section;
+                    return (
+                      <button
+                        key={s.section}
+                        onClick={() => pickFocus(s.section)}
+                        className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                          active
+                            ? 'bg-violet-600 text-white border-violet-600'
+                            : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:border-violet-400'
+                        }`}
+                        title={`${s.answered} / ${s.total} answered`}
+                      >
+                        {s.section} {s.percent > 0 ? `· ${s.percent}%` : ''}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
+            <div>
+              <div className="text-[11px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-2">Your progress</div>
+              {ringStats.length === 0 ? (
+                <div className="text-xs text-gray-500 dark:text-gray-400">We'll show page-by-page progress here once we know your role.</div>
+              ) : (
+                <div className="space-y-2">
+                  {ringStats.map((r) => (
+                    <Link
+                      key={r.page}
+                      to={r.page}
+                      className="block p-2 rounded-lg hover:bg-white dark:hover:bg-gray-900 border border-transparent hover:border-gray-200 dark:hover:border-gray-800 transition-colors"
+                      title={`${r.done} of ${r.total} answered`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="flex-1 min-w-0 text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{r.label}</div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 flex-shrink-0">{r.done} / {r.total}</div>
+                        <ChevronRight size={12} className="text-gray-400 flex-shrink-0" />
+                      </div>
+                      <ProgressBar percent={r.percent} done={r.done === r.total && r.total > 0} />
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </aside>
         )}
       </div>
@@ -605,27 +680,35 @@ function TutorPanel({ tutor, onClose }) {
   );
 }
 
-function Ring({ percent, done }) {
-  const size = 32;
-  const stroke = 3;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const offset = c * (1 - Math.max(0, Math.min(100, percent)) / 100);
-  const color = done ? 'stroke-emerald-500' : percent > 0 ? 'stroke-violet-500' : 'stroke-gray-300 dark:stroke-gray-700';
+function ProgressBar({ percent, done }) {
+  const pct = Math.max(0, Math.min(100, Number(percent) || 0));
+  const color = done ? 'bg-emerald-500' : pct > 0 ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-700';
   return (
-    <svg width={size} height={size} className="flex-shrink-0">
-      <circle cx={size / 2} cy={size / 2} r={r} className="stroke-gray-200 dark:stroke-gray-800 fill-none" strokeWidth={stroke} />
-      <circle
-        cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke}
-        className={color}
-        strokeLinecap="round"
-        strokeDasharray={c}
-        strokeDashoffset={offset}
-        transform={`rotate(-90 ${size / 2} ${size / 2})`}
-      />
-      <text x={size / 2} y={size / 2 + 3} textAnchor="middle" className="fill-gray-700 dark:fill-gray-200 text-[9px] font-bold">
-        {done ? '✓' : `${percent}`}
-      </text>
-    </svg>
+    <div className="h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
+      <div className={`h-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+    </div>
   );
 }
+
+function WeekBanner({ week }) {
+  const w = Math.max(1, Math.min(4, Number(week) || 1));
+  const labels = { 1: 'Customer Discovery', 2: 'Build', 3: 'Network', 4: 'Incorporate' };
+  return (
+    <div className="px-4 py-2 border-b border-violet-100 dark:border-violet-900/40 bg-gradient-to-r from-violet-100/60 to-indigo-100/60 dark:from-violet-900/20 dark:to-indigo-900/20 flex items-center justify-between">
+      <div className="flex items-center gap-2 text-xs">
+        <span className="font-semibold text-violet-800 dark:text-violet-200">Spin-Out Lab · Week {w}</span>
+        <span className="text-violet-700/80 dark:text-violet-300/80">{labels[w] || ''}</span>
+      </div>
+      <div className="flex items-center gap-1">
+        {[1, 2, 3, 4].map((n) => (
+          <span
+            key={n}
+            className={`w-6 h-1 rounded-full ${n <= w ? 'bg-violet-600' : 'bg-violet-200 dark:bg-violet-900/50'}`}
+            title={`Week ${n}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
