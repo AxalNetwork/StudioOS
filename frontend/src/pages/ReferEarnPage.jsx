@@ -800,8 +800,12 @@ export default function ReferEarnPage() {
                     // server response so a row that hit the dedupe check
                     // gets badged even before the next refetch lands.
                     let ann = annotateImport(c.email);
-                    if (!ann && sendResult?.already_member?.includes(c.email)) ann = { kind: 'joined', label: 'Already a member' };
-                    if (!ann && sendResult?.already_invited?.includes(c.email)) ann = { kind: 'already', label: 'Already invited' };
+                    // Normalise both sides to lowercase: the worker lower-cases
+                    // emails before storing/returning them, so naive includes()
+                    // would miss casing variants (e.g. "Foo@Bar.com" in CSV).
+                    const emailLc = (c.email || '').toLowerCase();
+                    if (!ann && (sendResult?.already_member || []).some(e => (e || '').toLowerCase() === emailLc)) ann = { kind: 'joined', label: 'Already a member' };
+                    if (!ann && (sendResult?.already_invited || []).some(e => (e || '').toLowerCase() === emailLc)) ann = { kind: 'already', label: 'Already invited' };
                     return (
                     <tr key={`${c.email}-${i}`} className={selected.has(i) ? 'bg-violet-50/40' : ''}>
                       <td className="px-6 py-3">
