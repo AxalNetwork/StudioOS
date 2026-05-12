@@ -24,7 +24,10 @@ export type JobType =
   // Epic 5: nightly re-verification of every non-sandbox score snapshot's
   // HMAC. Mismatches surface in MonitoringPage and `error_logs`.
   | 'score_hash_audit'
-  | 'flagged_score_digest';
+  | 'flagged_score_digest'
+  // Task #6 (AT-1) — MI extractor fan-out per advisor answer + nightly reducer.
+  | 'mi_extract'
+  | 'mi_reduce';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

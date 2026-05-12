@@ -712,6 +712,14 @@ export default {
         // The DELETE handler in routes/projects.ts handles the soft-delete
         // path; this cron is the auto-purge backstop. Task #9 (AO) may
         // adjust the schedule via wrangler.toml as needed.
+        // Task #6 (AT-1) — nightly Market Intelligence reducer at 02:15 UTC.
+        // Re-aggregates per-answer signals into k≥5 cells, recomputes
+        // fit_match cosine pairs, and purges any signals from users who
+        // flipped `mi_contribution_optout=1` since the last sweep.
+        if (now.getUTCHours() === 2 && now.getUTCMinutes() === 15) {
+          try { await Jobs.enqueue(env, 'mi_reduce', {}); }
+          catch (e) { console.error('[cron] mi_reduce enqueue failed', e); }
+        }
         if (now.getUTCHours() === 4 && now.getUTCMinutes() === 30) {
           try {
             const { sweepTrashedProjects } = await import('./services/projectTrash');

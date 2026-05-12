@@ -83,6 +83,7 @@ import {
   type ToolEnvelope,
 } from '../services/advisor/tools';
 import { run as aiRouterRun } from '../services/aiRouter';
+import { enqueueJob } from '../services/queue';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
@@ -899,6 +900,31 @@ advisor.post('/answer', async (c) => {
         c.env, user.id, q.id, q.page_target || null,
         result.saved_to || null, 'advisor', evidenceStr,
       );
+    }
+  }
+
+  // Task #6 (AT-1) — fan-out the MI extractors over this answer.
+  // Best-effort: opt-out is honored inside the worker, queue failures
+  // never block the user's chat turn. Only enqueue on `saved` writes
+  // so we don't aggregate paywalled / failed entries.
+  if (result.status === 'saved' && valueStr) {
+    try {
+      let answerId: number | null = null;
+      try {
+        const r = await c.env.DB.prepare(
+          `SELECT id FROM advisor_answers WHERE conversation_id = ? AND question_id = ?`,
+        ).bind(conv.id, q.id).first<{ id: number }>();
+        answerId = r?.id ?? null;
+      } catch { /* best-effort */ }
+      await enqueueJob(c.env, 'mi_extract', {
+        user_id: user.id,
+        persona: conv.persona || (user.role || 'unknown'),
+        question_id: q.id,
+        raw_value: valueStr,
+        advisor_answer_id: answerId,
+      });
+    } catch (e) {
+      console.warn('[advisor] mi_extract enqueue failed', (e as Error).message);
     }
   }
 

@@ -428,6 +428,33 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       await digestUnreviewedFlaggedScores(env);
       return;
     }
+    case 'mi_extract': {
+      // Task #6 (AT-1) — runs the six extractors over one advisor answer.
+      // Idempotent via UNIQUE(extractor, user_id, advisor_answer_id, content_hash).
+      const { runExtractorsForAnswer } = await import('./market_intel/extractors');
+      const { ensureExtractorSchema } = await import('./market_intel/extractor_schema');
+      await ensureExtractorSchema(env);
+      await runExtractorsForAnswer({
+        env,
+        userId: Number(payload.user_id),
+        persona: String(payload.persona || 'unknown'),
+        questionId: String(payload.question_id || ''),
+        rawValue: String(payload.raw_value || ''),
+        advisorAnswerId: payload.advisor_answer_id != null ? Number(payload.advisor_answer_id) : null,
+      });
+      return;
+    }
+    case 'mi_reduce': {
+      // Task #6 (AT-1) — full reducer sweep + opt-out purge. Triggered
+      // by the nightly cron (02:15 UTC) and on-demand from
+      // /api/infra/process. Stats land in system_metrics via meter().
+      const { runReducer } = await import('./market_intel/reducer');
+      const { ensureExtractorSchema } = await import('./market_intel/extractor_schema');
+      await ensureExtractorSchema(env);
+      const r = await runReducer(env, payload?.since_iso ? { sinceIso: String(payload.since_iso) } : undefined);
+      console.info(`[mi.reducer] cells=${r.cells_written} suppressed=${r.cells_suppressed} fit_pairs=${r.fit_pairs_written} purged=${r.optout_purged}`);
+      return;
+    }
     default:
       throw new Error(`unknown job type ${job.job_type}`);
   }

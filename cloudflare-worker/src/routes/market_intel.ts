@@ -513,5 +513,276 @@ marketIntel.delete('/watchlist/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+// =============================================================================
+// Task #6 (AT-1) — Anonymised advisor-derived MI surfaces.
+//
+// Nine read endpoints over `market_intel_aggregates` (k≥5 enforced both
+// at reduce-time and read-time). Investor-identity disclosure on the
+// `/fit/*` endpoints requires an active pairwise NDA; otherwise the
+// counter-party id is hashed.
+// =============================================================================
+import { ensureExtractorSchema } from '../services/market_intel/extractor_schema';
+
+marketIntel.use('/at1/*', async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
+marketIntel.use('/sentiment',     async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
+marketIntel.use('/talc',          async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
+marketIntel.use('/demand-supply', async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
+marketIntel.use('/sector-heat',   async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
+marketIntel.use('/sentiment-geo', async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
+marketIntel.use('/capital-velocity', async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
+marketIntel.use('/partner-pulse', async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
+marketIntel.use('/fit/*',         async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
+marketIntel.use('/contribution-optout', async (c, next) => { await ensureExtractorSchema(c.env); await next(); });
+
+const K_MIN = 5;
+function safeJson(s: string | null | undefined): any { try { return s ? JSON.parse(s) : {}; } catch { return {}; } }
+function clampPeriods(p: string | undefined, fallback: number): number {
+  const n = p ? parseInt(p, 10) : NaN;
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(52, Math.max(1, n));
+}
+
+// 1. /sentiment — recent N weeks per sector, mean valence + energy.
+marketIntel.get('/sentiment', async (c) => {
+  const periods = clampPeriods(c.req.query('weeks'), 8);
+  const rows = await c.env.DB.prepare(
+    `SELECT dimension_key, period_key, n, value, payload_json
+       FROM market_intel_aggregates
+       WHERE extractor='sentiment' AND n >= ?
+       ORDER BY period_key DESC, dimension_key ASC LIMIT ?`,
+  ).bind(K_MIN, periods * 32).all();
+  const items = (rows.results || []).map((r: any) => ({
+    sector: String(r.dimension_key).replace(/^sector:/, ''),
+    period_key: r.period_key,
+    valence: r.value,
+    energy: safeJson(r.payload_json).energy ?? null,
+    n: r.n,
+  }));
+  return c.json({ items, k_min: K_MIN });
+});
+
+// 2. /talc — TALC stage distribution per persona × sector.
+marketIntel.get('/talc', async (c) => {
+  const periods = clampPeriods(c.req.query('months'), 6);
+  const rows = await c.env.DB.prepare(
+    `SELECT dimension_key, period_key, n, value, payload_json
+       FROM market_intel_aggregates
+       WHERE extractor='talc' AND n >= ?
+       ORDER BY period_key DESC LIMIT ?`,
+  ).bind(K_MIN, periods * 64).all();
+  const items = (rows.results || []).map((r: any) => {
+    const [persona, sector] = String(r.dimension_key).split(':');
+    const p = safeJson(r.payload_json);
+    return { persona, sector, period_key: r.period_key, mode: p.mode || null,
+             distribution: p.distribution || {}, dominance: r.value, n: r.n };
+  });
+  return c.json({ items, k_min: K_MIN });
+});
+
+// 3. /demand-supply — counts by sector × side × topic.
+marketIntel.get('/demand-supply', async (c) => {
+  const sector = (c.req.query('sector') || '').slice(0, 64) || null;
+  const where = sector ? `AND dimension_key LIKE ?` : '';
+  const stmt = c.env.DB.prepare(
+    `SELECT dimension_key, period_key, n, value FROM market_intel_aggregates
+       WHERE extractor='demand_supply' AND n >= ? ${where}
+       ORDER BY period_key DESC, value DESC LIMIT 200`,
+  );
+  const rows = sector ? await stmt.bind(K_MIN, `${sector}:%`).all() : await stmt.bind(K_MIN).all();
+  const items = (rows.results || []).map((r: any) => {
+    const [sec, side, topic] = String(r.dimension_key).split(':');
+    return { sector: sec, side, topic, period_key: r.period_key, count: r.value, n: r.n };
+  });
+  return c.json({ items, k_min: K_MIN });
+});
+
+// 4. /sector-heat — composite "heat" index per sector per week.
+marketIntel.get('/sector-heat', async (c) => {
+  const weeks = clampPeriods(c.req.query('weeks'), 8);
+  const rows = await c.env.DB.prepare(
+    `SELECT dimension_key, period_key, n, value, payload_json
+       FROM market_intel_aggregates
+       WHERE extractor='sector_heat' AND n >= ?
+       ORDER BY period_key DESC, value DESC LIMIT ?`,
+  ).bind(K_MIN, weeks * 32).all();
+  const items = (rows.results || []).map((r: any) => {
+    const p = safeJson(r.payload_json);
+    return { sector: String(r.dimension_key).replace(/^sector:/, ''),
+             period_key: r.period_key, heat: r.value,
+             contributions: p.contributions ?? null, mean_valence: p.mean_valence ?? null, n: r.n };
+  });
+  return c.json({ items, k_min: K_MIN });
+});
+
+// 5. /sentiment-geo — geo × sector cross-tab.
+marketIntel.get('/sentiment-geo', async (c) => {
+  const weeks = clampPeriods(c.req.query('weeks'), 4);
+  const rows = await c.env.DB.prepare(
+    `SELECT dimension_key, period_key, n, value FROM market_intel_aggregates
+       WHERE extractor='sentiment_geo' AND n >= ?
+       ORDER BY period_key DESC LIMIT ?`,
+  ).bind(K_MIN, weeks * 64).all();
+  const items = (rows.results || []).map((r: any) => {
+    const [, geo, sector] = String(r.dimension_key).split(':');
+    return { geo, sector, period_key: r.period_key, valence: r.value, n: r.n };
+  });
+  return c.json({ items, k_min: K_MIN });
+});
+
+// 6. /capital-velocity — derived: investor-side TALC distribution shift
+//    (higher dominance of 'distributing' → more capital recycling).
+marketIntel.get('/capital-velocity', async (c) => {
+  const months = clampPeriods(c.req.query('months'), 6);
+  const rows = await c.env.DB.prepare(
+    `SELECT dimension_key, period_key, n, value, payload_json
+       FROM market_intel_aggregates
+       WHERE extractor='talc' AND n >= ? AND dimension_key LIKE 'investor:%'
+       ORDER BY period_key DESC LIMIT ?`,
+  ).bind(K_MIN, months * 16).all();
+  const items = (rows.results || []).map((r: any) => {
+    const [, sector] = String(r.dimension_key).split(':');
+    const dist = (safeJson(r.payload_json).distribution || {}) as Record<string, number>;
+    const total = Object.values(dist).reduce((a, b) => a + (Number(b) || 0), 0) || 1;
+    const distributing = (dist.distributing || 0) / total;
+    const scaling = (dist.scaling || 0) / total;
+    return { sector, period_key: r.period_key, velocity: round(distributing + 0.5 * scaling),
+             distributing_share: round(distributing), scaling_share: round(scaling), n: r.n };
+  });
+  return c.json({ items, k_min: K_MIN });
+});
+
+// 7. /partner-pulse — rolling supply-side topics aggregated across mentors+partners.
+marketIntel.get('/partner-pulse', async (c) => {
+  const rows = await c.env.DB.prepare(
+    `SELECT dimension_key, period_key, n, value FROM market_intel_aggregates
+       WHERE extractor='demand_supply' AND n >= ? AND dimension_key LIKE '%:supply:%'
+       ORDER BY period_key DESC, value DESC LIMIT 200`,
+  ).bind(K_MIN).all();
+  const items = (rows.results || []).map((r: any) => {
+    const [sector, , topic] = String(r.dimension_key).split(':');
+    return { sector, topic, period_key: r.period_key, supply_count: r.value, n: r.n };
+  });
+  return c.json({ items, k_min: K_MIN });
+});
+
+// 8. /fit/founder/:project_id — top investor matches for this founder's
+//    project. Investor identifiers are hashed unless an active pairwise
+//    NDA exists between viewer (founder) and the investor user.
+marketIntel.get('/fit/founder/:project_id', async (c) => {
+  const user = (await requireAuth(c)) as MIUser;
+  const projectId = parseInt(c.req.param('project_id'), 10);
+  if (!Number.isFinite(projectId)) return c.json({ error: 'invalid_project' }, 400);
+  // Resolve founder user_id for the project; require ownership.
+  const owner = await c.env.DB.prepare(
+    `SELECT u.id AS user_id FROM projects p JOIN users u ON u.founder_id = p.founder_id
+       WHERE p.id = ? AND p.deleted_at IS NULL`,
+  ).bind(projectId).first<{ user_id: number }>();
+  if (!owner) return c.json({ error: 'not_found' }, 404);
+  const isAdmin = (user.role || '').toLowerCase() === 'admin';
+  if (owner.user_id !== user.id && !isAdmin) return c.json({ error: 'forbidden' }, 403);
+  const cell = await c.env.DB.prepare(
+    `SELECT n, value, payload_json FROM market_intel_aggregates
+       WHERE extractor='fit_match' AND dimension_key = ?`,
+  ).bind(`founder:${owner.user_id}`).first<{ n: number; value: number; payload_json: string }>();
+  if (!cell || (cell.n ?? 0) < K_MIN) {
+    return c.json({ matches: [], note: cell ? 'k_anonymity_suppressed' : 'no_fit_yet', k_min: K_MIN });
+  }
+  const matches = (safeJson(cell.payload_json).matches || []) as Array<{ user_id: number; score: number }>;
+  const disclosed = await disclosedIdentities(c.env, user.id, matches.map((m) => m.user_id));
+  return c.json({
+    matches: await Promise.all(matches.map(async (m) => ({
+      score: m.score,
+      investor_user_id: disclosed.has(m.user_id) ? m.user_id : null,
+      investor_id_hash: disclosed.has(m.user_id) ? null : await pseudoId(c.env, m.user_id),
+      nda_required: !disclosed.has(m.user_id),
+    }))),
+    k_min: K_MIN,
+  });
+});
+
+// 9. /fit/investor/me — top founder matches for the calling investor.
+marketIntel.get('/fit/investor/me', async (c) => {
+  const user = (await requireAuth(c)) as MIUser;
+  if ((user.role || '').toLowerCase() !== 'investor' && (user.role || '').toLowerCase() !== 'admin') {
+    return c.json({ error: 'forbidden', required_role: 'investor' }, 403);
+  }
+  const cell = await c.env.DB.prepare(
+    `SELECT n, value, payload_json FROM market_intel_aggregates
+       WHERE extractor='fit_match' AND dimension_key = ?`,
+  ).bind(`investor:${user.id}`).first<{ n: number; value: number; payload_json: string }>();
+  if (!cell || (cell.n ?? 0) < K_MIN) {
+    return c.json({ matches: [], note: cell ? 'k_anonymity_suppressed' : 'no_fit_yet', k_min: K_MIN });
+  }
+  const matches = (safeJson(cell.payload_json).matches || []) as Array<{ user_id: number; score: number }>;
+  const disclosed = await disclosedIdentities(c.env, user.id, matches.map((m) => m.user_id));
+  return c.json({
+    matches: await Promise.all(matches.map(async (m) => ({
+      score: m.score,
+      founder_user_id: disclosed.has(m.user_id) ? m.user_id : null,
+      founder_id_hash: disclosed.has(m.user_id) ? null : await pseudoId(c.env, m.user_id),
+      nda_required: !disclosed.has(m.user_id),
+    }))),
+    k_min: K_MIN,
+  });
+});
+
+// Per-user opt-out toggle (default: contribute = optout=0).
+marketIntel.get('/contribution-optout', async (c) => {
+  const user = (await requireAuth(c)) as MIUser;
+  const r = await c.env.DB.prepare(`SELECT mi_contribution_optout AS x FROM users WHERE id = ?`)
+    .bind(user.id).first<{ x: number | null }>();
+  return c.json({ opted_out: Number(r?.x || 0) === 1 });
+});
+marketIntel.post('/contribution-optout', async (c) => {
+  const user = (await requireAuth(c)) as MIUser;
+  const body = await c.req.json().catch(() => ({} as { opt_out?: boolean }));
+  const flag = body.opt_out ? 1 : 0;
+  await c.env.DB.prepare(`UPDATE users SET mi_contribution_optout = ? WHERE id = ?`).bind(flag, user.id).run();
+  return c.json({ ok: true, opted_out: flag === 1, note: 'Existing contributions purged within 24h by nightly reducer.' });
+});
+
+function round(x: number | null): number | null { return x == null ? null : Math.round(x * 1000) / 1000; }
+// HMAC-SHA-256 truncated to 16 hex chars, keyed on
+// AXAL_ENCRYPTION_SECRET (or JWT_SECRET as fallback) so non-disclosed
+// numeric user-ids cannot be enumerated by brute-force preimage. The
+// per-deployment secret means the opaque id is stable for one
+// deployment but not portable across environments.
+async function pseudoId(env: Env, id: number): Promise<string> {
+  const secret = (env as any).AXAL_ENCRYPTION_SECRET || (env as any).JWT_SECRET || '';
+  if (!secret) return `mi_anon_${(id * 2654435761 >>> 0).toString(36)}`;
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`mi:fit:${id}`));
+  const hex = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  return `mi_${hex.slice(0, 16)}`;
+}
+
+/** Returns the subset of `targetUserIds` for which an active pairwise NDA exists with the viewer. */
+async function disclosedIdentities(env: Env, viewerId: number, targetUserIds: number[]): Promise<Set<number>> {
+  const out = new Set<number>();
+  if (targetUserIds.length === 0) return out;
+  const placeholders = targetUserIds.map(() => '?').join(',');
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT party_a_user_id AS a, party_b_user_id AS b
+         FROM pairwise_ndas
+         WHERE status='active'
+           AND (valid_until IS NULL OR valid_until > datetime('now'))
+           AND ((party_a_user_id = ? AND party_b_user_id IN (${placeholders}))
+             OR (party_b_user_id = ? AND party_a_user_id IN (${placeholders})))`,
+    ).bind(viewerId, ...targetUserIds, viewerId, ...targetUserIds)
+      .all<{ a: number; b: number }>();
+    for (const r of rows.results || []) {
+      if (r.a === viewerId) out.add(r.b);
+      else if (r.b === viewerId) out.add(r.a);
+    }
+  } catch (e) {
+    console.warn('[mi.fit] pairwise_ndas lookup failed:', (e as Error).message);
+  }
+  return out;
+}
+
 export { MARKET_PULSE, STUDIO_BENCHMARKS };
 export default marketIntel;
