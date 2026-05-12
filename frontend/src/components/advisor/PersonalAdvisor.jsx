@@ -368,6 +368,32 @@ export default function PersonalAdvisor() {
     }
   }, [conversationId, question]);
 
+  // Task #5 (AV) — route a free-form message through the LLM tool-binding
+  // endpoint and append the returned {result, cta} envelope as a
+  // role='tool' message so <Bubble> renders inline CTA buttons.
+  const submitToolAuto = useCallback(async (raw) => {
+    setBusy(true);
+    setMessages((m) => [...m, { role: 'user', content: raw }]);
+    setInput('');
+    try {
+      const r = await api.advisor.toolAuto(raw);
+      setMessages((m) => [...m, {
+        role: 'tool',
+        content: JSON.stringify({ result: r.result, cta: r.cta }),
+        cta: r.cta,
+        tool: r.tool,
+      }]);
+    } catch (e) {
+      const data = e?.data || null;
+      setMessages((m) => [...m, {
+        role: 'assistant',
+        content: data?.error || `Couldn't route that — ${e?.message || 'request failed'}`,
+      }]);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
   // Detect "explain X" as user input — open tutor instead of answering.
   const handleSend = useCallback(() => {
     const raw = input.trim();
@@ -378,8 +404,17 @@ export default function PersonalAdvisor() {
       setInput('');
       return;
     }
+    // Route to the LLM tool-binding endpoint when the profile is
+    // complete (no active question) or when the user opens with a
+    // verb that strongly implies "do something" rather than "answer
+    // the current profile question".
+    const isToolish = /^\s*(?:\/(?:tool|find|open|book|schedule|draft|start)\b|find\b|show\b|search\b|book\b|schedule\b|draft\b|open\b|start\b|deep[- ]link\b)/i.test(raw);
+    if (!question || isToolish) {
+      submitToolAuto(raw);
+      return;
+    }
     submit(raw);
-  }, [input, openTutor, submit]);
+  }, [input, openTutor, submit, submitToolAuto, question]);
 
   const closeTutor = useCallback(() => {
     if (tutorAbortRef.current) tutorAbortRef.current.abort();
@@ -447,6 +482,16 @@ export default function PersonalAdvisor() {
             onCloseTutor={closeTutor}
             loadError={loadError}
             complete={progress.complete && !question}
+            onCtaClick={async () => {
+              // Task #5 (AV) — refresh /progress so the right-rail rings
+              // pick up any tool-driven completion (e.g. opening a page
+              // counts toward that page's profile section).
+              try {
+                const p = await api.advisor.progress();
+                if (p) setProgress(p);
+                refreshProgress();
+              } catch { /* non-fatal */ }
+            }}
           />
 
           {question && (
@@ -462,7 +507,7 @@ export default function PersonalAdvisor() {
             onSend={handleSend}
             onSkip={skip}
             busy={busy}
-            disabled={!question}
+            disabled={false}
             skipAllowed={question?.skip_allowed !== false}
             inputKind={question?.input_kind}
             options={question?.options}
@@ -578,7 +623,7 @@ function Header({ persona, progress, onMinimise, isDesktop }) {
   );
 }
 
-const Transcript = React.forwardRef(function Transcript({ messages, tutor, onCloseTutor, loadError, complete }, ref) {
+const Transcript = React.forwardRef(function Transcript({ messages, tutor, onCloseTutor, loadError, complete, onCtaClick }, ref) {
   return (
     <div ref={ref} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-[260px]">
       {loadError && (
@@ -592,7 +637,7 @@ const Transcript = React.forwardRef(function Transcript({ messages, tutor, onClo
           Your advisor will guide you through a quick setup. Type your answer below — or ask "explain X" any time.
         </div>
       )}
-      {messages.map((m, i) => <Bubble key={i} m={m} />)}
+      {messages.map((m, i) => <Bubble key={i} m={m} onCtaClick={onCtaClick} />)}
       {complete && (
         <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded p-2">
           <CheckCircle2 size={14} /> Profile complete — your dashboard is now tailored to you.
@@ -603,7 +648,7 @@ const Transcript = React.forwardRef(function Transcript({ messages, tutor, onClo
   );
 });
 
-function Bubble({ m }) {
+function Bubble({ m, onCtaClick }) {
   const isUser = m.role === 'user';
   // Task #5 (AV) — render the inline CTA block produced by /advisor/tool.
   // The envelope can arrive on `m.cta` (live tool turn) or be embedded in
@@ -643,7 +688,7 @@ function Bubble({ m }) {
           </div>
         )}
         {/* Task #5 (AV) — inline tool CTA: primary + optional secondary. */}
-        {!isUser && cta && <CtaButtons cta={cta} />}
+        {!isUser && cta && <CtaButtons cta={cta} onCtaClick={onCtaClick} />}
       </div>
     </div>
   );
@@ -679,26 +724,32 @@ function ToolPreview({ preview }) {
   return null;
 }
 
-function CtaButtons({ cta }) {
-  // The CTA's `route` is always a relative app-router path. We use a
-  // plain anchor (not <Link>) so the component remains usable from
-  // contexts that aren't yet wrapped in a router (e.g. story tests).
+function CtaButtons({ cta, onCtaClick }) {
+  // The CTA's `route` is always a relative app-router path. We use
+  // <Link> for SPA navigation (no full reload) and fire the
+  // onCtaClick side-effect so the host can refresh progress /
+  // telemetry the moment the user routes.
   if (!cta || !cta.primary) return null;
+  const fire = (which) => () => {
+    try { onCtaClick && onCtaClick({ which, cta }); } catch { /* non-fatal */ }
+  };
   return (
     <div className="mt-2 flex flex-wrap gap-2">
-      <a
-        href={cta.primary.route}
+      <Link
+        to={cta.primary.route}
+        onClick={fire('primary')}
         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-violet-600 text-white text-xs font-medium hover:bg-violet-700 transition"
       >
         {cta.primary.label} <ArrowRight size={12} />
-      </a>
+      </Link>
       {cta.secondary && (
-        <a
-          href={cta.secondary.route}
+        <Link
+          to={cta.secondary.route}
+          onClick={fire('secondary')}
           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 text-xs font-medium hover:bg-violet-50 dark:hover:bg-violet-950/40 transition"
         >
           {cta.secondary.label}
-        </a>
+        </Link>
       )}
     </div>
   );
