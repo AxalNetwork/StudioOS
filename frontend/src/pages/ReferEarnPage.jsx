@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import {
   Copy, Check, Users, DollarSign, Share2, ExternalLink, Network as NetworkIcon,
   MessageCircle, Mail, Upload, Edit3, X, AlertCircle, Save,
-  Send, Loader2, ShieldCheck, Info, FileDown,
+  Send, Loader2, ShieldCheck, Info, FileDown, Bell, UserCheck, Clock,
 } from 'lucide-react';
 
 // lucide-react v1 dropped brand icons; reuse the inline LinkedinSvg below.
@@ -88,6 +88,16 @@ export default function ReferEarnPage() {
   const [linkedinStatus, setLinkedinStatus] = useState({ configured: false, connected: false });
   const [linkedinBusy, setLinkedinBusy] = useState(false);
   const [linkedinFlash, setLinkedinFlash] = useState(''); // success/error banner inside the modal
+  // Task #4 — Sent invitations panel + per-row reminder action.
+  // `invites` is the full list as returned by GET /api/email/invites
+  // (joined-status backfilled server-side). `remindBusy` tracks the in-
+  // flight invite id so we can spinner-and-disable that one row.
+  // `inviteFlash` is a transient toast (auto-clears after 4s) used for
+  // both success and error feedback on the reminder action.
+  const [invites, setInvites] = useState([]);
+  const [invitesLoading, setInvitesLoading] = useState(false);
+  const [remindBusy, setRemindBusy] = useState(null);
+  const [inviteFlash, setInviteFlash] = useState(null); // {kind:'ok'|'err', msg}
   const qrRef = useRef(null);
   const fileRef = useRef(null);
   const linkedinFileRef = useRef(null);
@@ -113,6 +123,29 @@ export default function ReferEarnPage() {
       QRCode.toCanvas(qrRef.current, data.register_link, { width: 180, margin: 2 });
     }
   }, [data]);
+
+  // Task #4 — load the sender's full invite list once on mount + after every
+  // successful send/remind. Failures here are non-fatal; the panel just
+  // stays empty rather than blocking the rest of the page.
+  const refreshInvites = async () => {
+    setInvitesLoading(true);
+    try {
+      const res = await api.emailInvites();
+      setInvites(Array.isArray(res?.invites) ? res.invites : []);
+    } catch {
+      // Silent — the panel's empty-state already handles "no invites".
+    } finally {
+      setInvitesLoading(false);
+    }
+  };
+  useEffect(() => { refreshInvites(); }, []);
+
+  // Auto-clear the toast so it can't leak into an unmounted modal.
+  useEffect(() => {
+    if (!inviteFlash) return;
+    const t = setTimeout(() => setInviteFlash(null), 4000);
+    return () => clearTimeout(t);
+  }, [inviteFlash]);
 
   // Load LinkedIn status on mount. 404 means the deployment hasn't shipped
   // /api/linkedin yet — treat as "not configured" rather than an error.
@@ -375,12 +408,71 @@ export default function ReferEarnPage() {
         });
         return next;
       });
+      // Task #4 — refresh the Sent Invitations panel so the just-sent rows
+      // show up immediately (and any newly-rejected dupes update too).
+      refreshInvites();
     } catch (e) {
       setSendResult({ error: e.message || 'Send failed' });
     } finally {
       setSending(false);
     }
   };
+
+  // Task #4 — fire a reminder for a single invite. Optimistically bumps
+  // the row's `reminder_count` + `last_reminded_at` on success so the UI
+  // reflects the cooldown immediately without waiting for refetch.
+  const remindInvite = async (id) => {
+    if (remindBusy) return;
+    setRemindBusy(id);
+    try {
+      const res = await api.emailRemindInvite(id);
+      setInvites(prev => prev.map(inv => inv.id === id
+        ? { ...inv, reminder_count: res.reminder_count, last_reminded_at: res.last_reminded_at, status: 'sent' }
+        : inv));
+      setInviteFlash({ kind: 'ok', msg: 'Reminder sent.' });
+    } catch (e) {
+      setInviteFlash({ kind: 'err', msg: e?.message || 'Reminder failed.' });
+    } finally {
+      setRemindBusy(null);
+    }
+  };
+
+  // Task #4 — annotation maps for the import preview. We cross-reference
+  // the locally-cached invite list (refreshed after each send) so users
+  // see "Already invited" / "Joined" badges BEFORE hitting Send. The set
+  // is keyed by lowercased email; values are the matching invite row so
+  // the badge can render the join date when present.
+  const inviteByEmail = useMemo(() => {
+    const m = new Map();
+    for (const inv of invites) m.set((inv.recipient_email || '').toLowerCase(), inv);
+    return m;
+  }, [invites]);
+  const annotateImport = (email) => {
+    const inv = inviteByEmail.get((email || '').toLowerCase());
+    if (!inv) return null;
+    if (inv.signed_up_user_id) return { kind: 'joined', label: 'Joined' };
+    return { kind: 'already', label: 'Already invited' };
+  };
+
+  // When the import preview loads, default-uncheck rows we've already
+  // invited so a careless "Send" doesn't waste a daily-quota slot on a
+  // certain dedupe-rejection. Users can still tick them back on if they
+  // really want — the worker will surface them in the `already_invited`
+  // response array either way.
+  useEffect(() => {
+    if (imported.length === 0) return;
+    setSelected(prev => {
+      const next = new Set(prev);
+      imported.forEach((c, i) => {
+        const ann = annotateImport(c.email);
+        if (ann && (ann.kind === 'already' || ann.kind === 'joined')) next.delete(i);
+      });
+      return next;
+    });
+    // We intentionally exclude `selected` from deps — we only want this to
+    // run when the import OR invite-cache changes, not on every toggle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imported, inviteByEmail]);
 
   if (loading) return <div className="p-6 text-sm text-gray-500">Loading…</div>;
   if (error) return <div className="p-6 text-sm text-red-600">{error}</div>;
@@ -485,6 +577,136 @@ export default function ReferEarnPage() {
         </div>
       </div>
 
+      {/* Task #4 — Sent Invitations panel. Lives between Wallet and Import
+          Contacts so users see the conversion-funnel BEFORE deciding who
+          to invite next. Reminder action lives per-row. */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Sent Invitations</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {invitesLoading
+                ? 'Loading…'
+                : `${invites.length} invite${invites.length === 1 ? '' : 's'} · ${invites.filter(i => i.signed_up_user_id).length} joined`}
+            </p>
+          </div>
+          <button
+            onClick={refreshInvites}
+            disabled={invitesLoading}
+            className="text-xs text-violet-600 hover:underline disabled:text-gray-400"
+          >
+            Refresh
+          </button>
+        </div>
+        {inviteFlash && (
+          <div className={`px-6 py-2 text-xs flex items-center gap-2 border-b ${
+            inviteFlash.kind === 'ok'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-red-50 border-red-200 text-red-700'
+          }`}>
+            {inviteFlash.kind === 'ok' ? <Check size={12} /> : <AlertCircle size={12} />}
+            {inviteFlash.msg}
+          </div>
+        )}
+        {invites.length === 0 ? (
+          <div className="p-8 text-center text-xs text-gray-500">
+            No invites sent yet. Use Import Contacts below to send your first batch.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr className="text-left text-xs text-gray-600">
+                  <th className="px-6 py-3 font-medium">Recipient</th>
+                  <th className="px-6 py-3 font-medium">Status</th>
+                  <th className="px-6 py-3 font-medium">Sent</th>
+                  <th className="px-6 py-3 font-medium">Reminders</th>
+                  <th className="px-6 py-3 font-medium text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {invites.map(inv => {
+                  const joined = !!inv.signed_up_user_id;
+                  const failed = inv.status === 'failed';
+                  // Cooldown computed client-side from `last_reminded_at`.
+                  // SQLite CURRENT_TIMESTAMP returns naive UTC ("YYYY-MM-DD
+                  // HH:MM:SS") so we append 'Z' before parsing. The server
+                  // is the source of truth; this is just for button-state.
+                  let cooldownLeft = 0;
+                  if (inv.last_reminded_at) {
+                    const lastMs = Date.parse(inv.last_reminded_at + (inv.last_reminded_at.endsWith('Z') ? '' : 'Z'));
+                    if (Number.isFinite(lastMs)) {
+                      cooldownLeft = Math.max(0, lastMs + 7 * 24 * 3600 * 1000 - Date.now());
+                    }
+                  }
+                  const canRemind = !joined && !failed && cooldownLeft === 0;
+                  return (
+                    <tr key={inv.id}>
+                      <td className="px-6 py-3">
+                        <div className="text-gray-900">{inv.recipient_name || inv.joined_user_name || '—'}</div>
+                        <div className="text-[11px] text-gray-500">{inv.recipient_email}</div>
+                      </td>
+                      <td className="px-6 py-3">
+                        {joined ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                            <UserCheck size={10} /> Joined{inv.joined_at ? ` ${new Date(inv.joined_at).toLocaleDateString()}` : ''}
+                          </span>
+                        ) : failed ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-800" title={inv.failure_reason || ''}>
+                            <AlertCircle size={10} /> Failed
+                          </span>
+                        ) : inv.opened_at ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                            Opened
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                            Sent
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-3 text-xs text-gray-500">
+                        {inv.sent_at ? new Date(inv.sent_at + (inv.sent_at.endsWith('Z') ? '' : 'Z')).toLocaleDateString() : '—'}
+                      </td>
+                      <td className="px-6 py-3 text-xs text-gray-600">
+                        {(inv.reminder_count || 0) === 0
+                          ? <span className="text-gray-400">—</span>
+                          : (
+                            <span title={inv.last_reminded_at ? `Last: ${new Date(inv.last_reminded_at + (inv.last_reminded_at.endsWith('Z') ? '' : 'Z')).toLocaleString()}` : ''}>
+                              {inv.reminder_count}× {inv.last_reminded_at ? `· ${new Date(inv.last_reminded_at + (inv.last_reminded_at.endsWith('Z') ? '' : 'Z')).toLocaleDateString()}` : ''}
+                            </span>
+                          )}
+                      </td>
+                      <td className="px-6 py-3 text-right">
+                        {joined ? (
+                          <span className="text-[11px] text-gray-400">—</span>
+                        ) : (
+                          <button
+                            onClick={() => remindInvite(inv.id)}
+                            disabled={!canRemind || remindBusy === inv.id}
+                            title={
+                              failed ? 'Original send failed — re-import to retry'
+                                : cooldownLeft > 0 ? `Cooldown — try again in ${Math.ceil(cooldownLeft / (24 * 3600 * 1000))} day(s)`
+                                : 'Send a reminder email'
+                            }
+                            className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-md border border-violet-200 text-violet-700 hover:bg-violet-50 disabled:border-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
+                          >
+                            {remindBusy === inv.id
+                              ? <Loader2 size={11} className="animate-spin" />
+                              : cooldownLeft > 0 ? <Clock size={11} /> : <Bell size={11} />}
+                            {remindBusy === inv.id ? 'Sending…' : 'Remind'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* Import contacts */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
@@ -572,7 +794,15 @@ export default function ReferEarnPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {imported.map((c, i) => (
+                  {imported.map((c, i) => {
+                    // Task #4 — annotate from the cached invite list so dupes
+                    // are visible BEFORE Send. Also reflect the just-returned
+                    // server response so a row that hit the dedupe check
+                    // gets badged even before the next refetch lands.
+                    let ann = annotateImport(c.email);
+                    if (!ann && sendResult?.already_member?.includes(c.email)) ann = { kind: 'joined', label: 'Already a member' };
+                    if (!ann && sendResult?.already_invited?.includes(c.email)) ann = { kind: 'already', label: 'Already invited' };
+                    return (
                     <tr key={`${c.email}-${i}`} className={selected.has(i) ? 'bg-violet-50/40' : ''}>
                       <td className="px-6 py-3">
                         <input
@@ -583,7 +813,18 @@ export default function ReferEarnPage() {
                         />
                       </td>
                       <td className="px-6 py-3 text-gray-900">{c.name || '—'}</td>
-                      <td className="px-6 py-3 text-gray-600">{c.email}</td>
+                      <td className="px-6 py-3 text-gray-600">
+                        {c.email}
+                        {ann && (
+                          <span className={`ml-2 inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                            ann.kind === 'joined'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {ann.label}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-6 py-3">
                         <code className="text-[11px] text-violet-700 font-mono truncate inline-block max-w-[260px] align-middle">{c.link}</code>
                         <button onClick={() => copy(c.link)} className="ml-2 text-[11px] text-violet-600 hover:underline">copy</button>
@@ -592,7 +833,8 @@ export default function ReferEarnPage() {
                         <a href={c.mailto} className="text-[11px] text-violet-600 hover:underline">Open in mail app →</a>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

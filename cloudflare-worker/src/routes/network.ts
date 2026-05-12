@@ -170,6 +170,24 @@ export async function attachReferral(env: Env, newUserId: number, refCode: strin
     const existing = await sql`SELECT id FROM referrals WHERE referred_id = ${newUserId}`;
     if (existing.length) return false;
     await sql`INSERT INTO referrals (referrer_id, referred_id, referral_code, status) VALUES (${referrerId}, ${newUserId}, ${refCode}, 'pending')`;
+    // Task #4 — close the loop on the inviter's "Sent invitations" panel.
+    // Any prior referral_invites row from THIS referrer to this user's email
+    // gets stamped with the new user_id + status='joined'. Idempotent — only
+    // touches rows where signed_up_user_id IS NULL. We do NOT scope by
+    // referrer here because a user might join via a different sender's link;
+    // the lazy backfill in GET /api/email/invites picks up that case too.
+    try {
+      await env.DB.prepare(
+        `UPDATE referral_invites
+            SET signed_up_user_id = ?, status = 'joined'
+          WHERE signed_up_user_id IS NULL
+            AND LOWER(recipient_email) = (
+                  SELECT LOWER(email) FROM users WHERE id = ?
+                )`
+      ).bind(newUserId, newUserId).run();
+    } catch (e: any) {
+      console.error('[attachReferral] referral_invites stamp failed:', e?.message);
+    }
     // Build compounding chain (L1, L2, L3) — log any failure so silent revenue loss is detectable
     try {
       const { buildReferralChain } = await import('./networkfx');

@@ -1052,6 +1052,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ contacts, custom_message }),
     }),
+  // Task #4 — Sent invitations panel + per-row reminder action.
+  emailInvites: () => request('/email/invites'),
+  emailRemindInvite: (id) =>
+    request(`/email/invites/${encodeURIComponent(id)}/remind`, { method: 'POST' }),
 
   // ---------- LinkedIn (Refer & Earn) ----------
   // Sign-in with LinkedIn (OIDC) attaches a verified identity to the
