@@ -70,14 +70,21 @@ AI scoring; legal entity formation; cap-table simulator + fund mgmt + waterfall;
 ### Ops items still owned by user (not in code)
 - (a) Disable R2 public access + add 90-day lifecycle rule to Standard-IA.
 - (b) Verify search/backfill cron in prod.
-- (c) **JWT_SECRET rotation (2026-05-11).** A production-grade `JWT_SECRET`
-  was committed to `.replit` at commit `e5ba56538b542a3f0ae4784f7c6f776c879aa2f7`
-  (Task #51). The line was removed from `.replit` via `deleteEnvVars` on
-  2026-05-11 and the commit added to `.gitleaks.toml`'s historical-leak
-  allowlist. **The leaked value must be considered burned.** Required
-  follow-up: (1) re-add a freshly generated `JWT_SECRET` as a Replit
-  Secret (Secrets pane, NOT `[env]` in `.replit`); (2) push the same
-  fresh value to the production worker via
-  `wrangler secret put JWT_SECRET --env production`; (3) re-issue any
-  long-lived JWTs that were signed with the burned secret (or rely on
-  natural token TTL expiry — `7d` per current settings).
+- (c) **JWT_SECRET rotation (2026-05-11 + 2026-05-12).** A production-grade
+  `JWT_SECRET` was committed to `.replit` TWICE: first at commit
+  `e5ba56538b542a3f0ae4784f7c6f776c879aa2f7` (Task #51, 2026-05-11) and
+  again — with a new value — at commit
+  `d9da1be1a41c216028cc8edb17ae6f02e1b0248d` (Task #2 AU Admin
+  Publication Exports, 2026-05-12). Both lines were removed from
+  `.replit` via `deleteEnvVars` and both commits added to
+  `.gitleaks.toml`'s historical-leak allowlist. **Both leaked values
+  must be considered burned.** Required follow-up: (1) re-add a freshly
+  generated `JWT_SECRET` as a Replit Secret (Secrets pane, NOT `[env]`
+  in `.replit` — committing it there is what causes the recurring
+  gitleaks failure); (2) push the same fresh value to the production
+  worker via `wrangler secret put JWT_SECRET --env production`;
+  (3) re-issue any long-lived JWTs that were signed with the burned
+  secret (or rely on natural token TTL expiry — `7d` per current
+  settings). Recurrence note: task agents writing to `.replit`
+  re-introduce this leak; consider adding a pre-commit hook or task-agent
+  guardrail that rejects `JWT_SECRET = "..."` lines in `.replit`.
