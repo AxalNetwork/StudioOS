@@ -216,12 +216,9 @@ export default function PersonalAdvisor() {
       // inline. Stash the pending value so the next submit() call
       // re-uses it, attaching the user's evidence reply.
       if (r.status === 'needs_evidence' || r.status === 'invalid') {
-        const cta = r.open_url || qPage
-          ? `\n\nOr open the page directly: ${r.open_url || qPage}`
-          : '';
         setMessages((m) => [...m, {
           role: 'assistant',
-          content: `${r.hint || 'I need a quick clarification before saving that.'}${cta}`,
+          content: r.hint || 'I need a quick clarification before saving that.',
           question_id: qid,
           needs_evidence: r.status === 'needs_evidence',
           pending_value: value,
@@ -256,10 +253,9 @@ export default function PersonalAdvisor() {
       const is422 = e?.status === 422 && data && (data.status === 'needs_evidence' || data.status === 'invalid');
       setAnsweredIds((ids) => ids.filter((x) => x !== qid));
       if (is422) {
-        const cta = data.open_url ? `\n\nOr open the page directly: ${data.open_url}` : '';
         setMessages((m) => [...m, {
           role: 'assistant',
-          content: `${data.hint || 'I need a quick clarification before saving that.'}${cta}`,
+          content: data.hint || 'I need a quick clarification before saving that.',
           question_id: qid,
           needs_evidence: data.status === 'needs_evidence',
           pending_value: value,
@@ -617,6 +613,19 @@ function Bubble({ m }) {
           : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-sm'
       }`}>
         {m.content}
+        {/* Task #3 (AS) — explicit CTA control for evidence-gate /
+            paywall bubbles instead of a plain text URL. Renders only
+            on assistant bubbles that opted in via `open_url`. */}
+        {!isUser && m.open_url && (
+          <div className="mt-2">
+            <a
+              href={m.open_url}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-violet-600 text-white text-xs font-medium hover:bg-violet-700 transition"
+            >
+              Open the page →
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );
