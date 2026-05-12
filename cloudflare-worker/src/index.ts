@@ -749,8 +749,14 @@ export default {
                 since = v ? Number(v) || 0 : 0;
               } catch { /* best-effort */ }
               try {
+                // `users` is shared by partner+investor — filter by role
+                // (mirrors /search/backfill) so we never enqueue an
+                // unrelated user under the wrong type and contaminate
+                // findPartner / findInvestor results.
                 const where = type === 'investor'
                   ? `id > ? AND role = 'investor' ORDER BY id ASC LIMIT ?`
+                  : type === 'partner'
+                  ? `id > ? AND role = 'partner' ORDER BY id ASC LIMIT ?`
                   : `id > ? ORDER BY id ASC LIMIT ?`;
                 const rows = await env.DB.prepare(
                   `SELECT id FROM ${table} WHERE ${where}`,

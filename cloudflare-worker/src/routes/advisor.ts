@@ -1897,6 +1897,36 @@ advisor.post('/tool/auto', async (c) => {
     { tool_name: effectiveTool, degraded: degradedToPaywall ? 1 : 0, via: 'tool_auto' },
   );
 
+  // Mirror /tool's observability: activity_logs (email_hash per T22.1)
+  // + writeTurnAudit so the LLM-bound entry point shows up in the same
+  // dashboards / audit trails as the deterministic /tool path.
+  try {
+    const actorHash = await hashEmail((user as User).email || '');
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind(
+      'advisor.tool.auto',
+      JSON.stringify({
+        tool: effectiveTool, requested: pickedName,
+        route: envelope.cta?.route, llm_refusal: llmRefusal,
+      }).slice(0, 500),
+      actorHash, user.id,
+    ).run();
+  } catch { /* activity_logs may not exist on dev DB */ }
+
+  await writeTurnAudit(c.env, {
+    userId: user.id, conversationId: conv.id, model: '@cf/qwen/qwen2.5-coder-32b-instruct',
+    promptHash: await promptHash(),
+    toolCalls: [{
+      name: effectiveTool, requested: pickedName,
+      route: envelope.cta?.route, degraded: degradedToPaywall,
+      via: 'tool_auto',
+    }],
+    aiSpendUsd: 0, safetyScore: null,
+    sanitisationActions: [], refusalReason: llmRefusal,
+    shadowFlagged: false,
+  });
+
   return c.json({
     status: 'ok',
     tool: effectiveTool,
