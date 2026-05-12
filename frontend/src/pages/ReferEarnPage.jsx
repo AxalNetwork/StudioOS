@@ -669,7 +669,7 @@ export default function ReferEarnPage() {
           <div className="px-6 py-3 border-b border-gray-100 bg-gray-50/60 flex flex-wrap items-center gap-x-3 gap-y-2">
             <div className="flex flex-wrap items-center gap-2 text-[11px]">
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-700">
-                <span className="font-semibold text-gray-900">{inviteStats.total}</span> sent
+                <span className="font-semibold text-gray-900">{inviteStats.total}</span> invites
               </span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800">
                 <span className="font-semibold">{inviteStats.opened}</span> opened
