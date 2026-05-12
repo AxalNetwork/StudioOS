@@ -184,7 +184,11 @@ const TOOL_PERSONA_ALLOWLIST: Record<string, string[]> = {
   exploreDocs:             ['founder', 'investor', 'mentor', 'partner', 'admin'],
   draftCofounderAgreement: ['founder', 'admin'],
   scheduleMeeting:         ['founder', 'investor', 'mentor', 'partner', 'admin'],
-  listMyTasks:             ['founder', 'investor', 'mentor', 'partner', 'admin'],
+  // /compliance route is gated to admin/founder/partner only — keep
+  // listMyTasks aligned so the CTA always lands on a page the caller
+  // can actually open. Investors/mentors hit a persona_mismatch and
+  // get a graceful refusal instead of a dead deep-link.
+  listMyTasks:             ['founder', 'partner', 'admin'],
   surfacePaywall:          ['founder', 'investor', 'mentor', 'partner', 'admin'],
 };
 

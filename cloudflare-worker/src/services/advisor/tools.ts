@@ -44,6 +44,9 @@ export interface ToolCta {
   route: string;
   primary: CtaButton;
   secondary?: CtaButton;
+  /** Optional client-side hook (e.g. 'open_paywall' to dispatch the
+   *  studioos:tier_required modal in addition to following the route). */
+  action?: 'open_paywall';
 }
 
 export interface ToolEnvelope {
@@ -110,13 +113,17 @@ const PAGE_ALLOWLIST: Record<string, string> = {
   '/onboarding/persona': 'Persona',
   '/matches': 'AI Matches',
   '/portfolio': 'Portfolio',
-  '/mentorship': 'Mentorship',
+  '/mentors': 'Mentors',
   '/partners': 'Partners',
-  '/legal-capital': 'Legal & Capital',
+  '/marketplace': 'Marketplace',
+  '/incorporate': 'Incorporate',
+  '/legal': 'Legal',
+  '/capital': 'Capital',
   '/compliance': 'Compliance',
   '/docs': 'Docs',
   '/calendar': 'Calendar',
-  '/billing': 'Billing',
+  '/settings/billing': 'Billing',
+  '/pricing/investor': 'Investor Pricing',
   '/dashboard': 'Dashboard',
 };
 
@@ -161,17 +168,20 @@ async function findMentor(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelop
   const hits = await searchByType(ctx.env, query, 'mentor', limit);
   const result = { query, count: hits.length, mentors: hitsToResult(hits) };
   const top = hits[0];
+  // Frontend route is `/mentors` (App.jsx) — not `/mentorship`.
+  const browseRoute = '/mentors';
+  const topRoute = top?.url && top.url.startsWith('/mentors') ? top.url : browseRoute;
   const cta: ToolCta = top
     ? {
         label: `Open ${top.title}`,
-        route: top.url || '/mentorship',
-        primary: { label: `Open ${top.title}`, route: top.url || '/mentorship' },
-        secondary: { label: 'Browse all mentors', route: '/mentorship' },
+        route: topRoute,
+        primary: { label: `Open ${top.title}`, route: topRoute },
+        secondary: { label: 'Browse all mentors', route: browseRoute },
       }
     : {
         label: 'Browse mentors',
-        route: '/mentorship',
-        primary: { label: 'Browse mentors', route: '/mentorship' },
+        route: browseRoute,
+        primary: { label: 'Browse mentors', route: browseRoute },
       };
   return { result, cta };
 }
@@ -203,17 +213,26 @@ async function findPartner(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelo
   const hits = await searchByType(ctx.env, query, 'partner', limit);
   const result = { query, count: hits.length, partners: hitsToResult(hits) };
   const top = hits[0];
+  // /partners is admin/partner/investor only; founders use /marketplace
+  // to discover service partners. Route per persona so the CTA always
+  // lands on a page the caller can actually open.
+  const browseRoute = ctx.persona === 'founder' ? '/marketplace' : '/partners';
+  const topRoute = top
+    ? (ctx.persona === 'founder'
+        ? `/marketplace?provider=${top.entity_id}`
+        : `/partners?user=${top.entity_id}`)
+    : browseRoute;
   const cta: ToolCta = top
     ? {
         label: `Open ${top.title}`,
-        route: top.url || '/partners',
-        primary: { label: `Open ${top.title}`, route: top.url || '/partners' },
-        secondary: { label: 'Browse all partners', route: '/partners' },
+        route: topRoute,
+        primary: { label: `Open ${top.title}`, route: topRoute },
+        secondary: { label: 'Browse all partners', route: browseRoute },
       }
     : {
         label: 'Browse partners',
-        route: '/partners',
-        primary: { label: 'Browse partners', route: '/partners' },
+        route: browseRoute,
+        primary: { label: 'Browse partners', route: browseRoute },
       };
   return { result, cta };
 }
@@ -283,14 +302,15 @@ async function bookOfficeHours(_ctx: ToolContext, args: ToolArgs): Promise<ToolE
   if (mentorId) params.set('mentor', String(mentorId));
   if (slotId) params.set('slot', String(slotId));
   params.set('book', '1');
-  const route = `/mentorship?${params.toString()}`;
+  // Frontend route is `/mentors` (App.jsx); MentorsPage reads ?mentor=&book=
+  const route = `/mentors?${params.toString()}`;
   const label = mentorId ? `Book mentor #${mentorId}` : 'Book office hours';
   return {
     result: { mentor_id: mentorId, slot_id: slotId },
     cta: {
       label, route,
       primary: { label, route },
-      secondary: { label: 'Find a different mentor', route: '/mentorship' },
+      secondary: { label: 'Find a different mentor', route: '/mentors' },
     },
   };
 }
@@ -384,17 +404,26 @@ async function listMyTasks(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelo
   };
 }
 
-async function surfacePaywall(_ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
+async function surfacePaywall(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const feature = asString(args?.feature || args?.gated_tool || 'studio', 64);
   const tier = asString(args?.required_tier || 'studio', 32);
-  const route = `/billing/upgrade?feature=${encodeURIComponent(feature)}&tier=${encodeURIComponent(tier)}`;
+  // Real upgrade entrypoints: investors land on /pricing/investor (public),
+  // everyone else on /settings/billing (open to all roles via /settings/:section).
+  // The frontend PaywallModal also listens for `studioos:tier_required`; we
+  // emit `action:'open_paywall'` so the CTA renderer can additionally dispatch
+  // that event and pop the modal in-place — but the route is always real.
+  const route = ctx.persona === 'investor'
+    ? `/pricing/investor?feature=${encodeURIComponent(feature)}&required=${encodeURIComponent(tier)}`
+    : `/settings/billing?feature=${encodeURIComponent(feature)}&required=${encodeURIComponent(tier)}`;
+  const browseRoute = ctx.persona === 'investor' ? '/pricing/investor' : '/settings/billing';
   const label = `Upgrade to ${tier === 'investor_pro' ? 'Investor Pro' : 'Studio'}`;
   return {
     result: { feature, required_tier: tier, gated: true },
     cta: {
       label, route,
+      action: 'open_paywall',
       primary: { label, route },
-      secondary: { label: 'Compare plans', route: '/billing' },
+      secondary: { label: 'Compare plans', route: browseRoute },
     },
   };
 }

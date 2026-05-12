@@ -731,6 +731,15 @@ function CtaButtons({ cta, onCtaClick }) {
   // telemetry the moment the user routes.
   if (!cta || !cta.primary) return null;
   const fire = (which) => () => {
+    // Some CTAs (surfacePaywall) request the global PaywallModal in
+    // addition to navigating; the modal listens for `studioos:tier_required`.
+    if (cta.action === 'open_paywall') {
+      try {
+        window.dispatchEvent(new CustomEvent('studioos:tier_required', {
+          detail: { required: 'tier_required' },
+        }));
+      } catch { /* non-fatal */ }
+    }
     try { onCtaClick && onCtaClick({ which, cta }); } catch { /* non-fatal */ }
   };
   return (
