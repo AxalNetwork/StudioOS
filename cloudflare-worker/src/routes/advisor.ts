@@ -61,6 +61,20 @@ import {
 } from '../services/advisor/questionBank';
 import { routeAnswer, hydrateAlreadyAnswered, recordFieldSource, type WriteResult } from '../services/advisor/writeRouter';
 import { hashEmail } from '../util/hashEmail';
+// Task #4 (AW) — 7-layer advisor guardrails.
+import {
+  ADVISOR_SYSTEM_PROMPT,
+  REFUSAL,
+  promptHash,
+  stripVerbatimLeak,
+  classifyInput,
+  gateToolCall,
+  checkKillSwitch,
+  ensureGuardrailColumns,
+  bumpAnomalyAndCheck,
+  bumpExplainsWithoutCommit,
+  writeTurnAudit,
+} from '../services/advisor/guardrails';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
@@ -365,12 +379,31 @@ function publicQuestion(q: Question | null): Record<string, unknown> | null {
 async function recordMessage(
   env: Env, conversationId: number, role: 'user' | 'assistant' | 'tool' | 'system',
   content: string, questionId?: string | null, meta?: unknown,
+  extras?: { safety_score?: number | null; sanitisation_actions?: string[] | null },
 ): Promise<void> {
   try {
-    await env.DB.prepare(
-      `INSERT INTO advisor_messages (conversation_id, role, question_id, content, meta_json)
-         VALUES (?, ?, ?, ?, ?)`,
-    ).bind(conversationId, role, questionId || null, content, meta ? JSON.stringify(meta) : null).run();
+    // Task #4 (AW) — extended row includes safety_score (L0) +
+    // sanitisation_actions_json (L3). Falls back to the legacy 5-column
+    // INSERT if the new columns aren't yet present (un-migrated dev DB).
+    try {
+      await env.DB.prepare(
+        `INSERT INTO advisor_messages (conversation_id, role, question_id, content, meta_json, safety_score, sanitisation_actions_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        conversationId, role, questionId || null, content,
+        meta ? JSON.stringify(meta) : null,
+        extras?.safety_score ?? null,
+        extras?.sanitisation_actions ? JSON.stringify(extras.sanitisation_actions) : null,
+      ).run();
+    } catch (e) {
+      // Likely "no such column: safety_score" on a stale dev DB — retry
+      // with the legacy schema so the conversation history still lands.
+      void e;
+      await env.DB.prepare(
+        `INSERT INTO advisor_messages (conversation_id, role, question_id, content, meta_json)
+           VALUES (?, ?, ?, ?, ?)`,
+      ).bind(conversationId, role, questionId || null, content, meta ? JSON.stringify(meta) : null).run();
+    }
   } catch (e) {
     console.error('[advisor] recordMessage:', (e as Error).message);
   }
@@ -449,6 +482,18 @@ advisor.post('/start', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   await ensureAdvisorWeekColumn(c.env);
+  // Task #4 (AW) L7 — kill switch (env + per-user advisor_locked).
+  await ensureGuardrailColumns(c.env);
+  const ks = await checkKillSwitch(c.env, user);
+  if (ks.blocked) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: null, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: null, sanitisationActions: [],
+      refusalReason: ks.reason || 'kill_switch', shadowFlagged: false,
+    });
+    return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
+  }
   const gate = await loadAdvisorGate(c.env, user);
 
   let conv = await getActiveConversation(c.env, user);
@@ -572,6 +617,18 @@ interface AnswerEnvelope {
 advisor.post('/answer', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
+  await ensureGuardrailColumns(c.env);
+  // Task #4 (AW) L7 — kill switch first.
+  const ks = await checkKillSwitch(c.env, user);
+  if (ks.blocked) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: null, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: null, sanitisationActions: [],
+      refusalReason: ks.reason || 'kill_switch', shadowFlagged: false,
+    });
+    return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
+  }
   const body = await readJson<AnswerBody>(c);
   const convUid = body?.conversation_id || body?.conversation_uid;
   if (!convUid || !body.question_id) {
@@ -597,8 +654,16 @@ advisor.post('/answer', async (c) => {
   const cancelIntent =
     /\b(cancel|reset)\s+(?:the\s+|my\s+|our\s+|this\s+|that\s+|all\s+|every\s+)?(account|subscription|membership|deal|contract|incorporation|filing|payment|invoice|payout|transfer|password|profile|project|entity|fund|allocation|portfolio)\b/i;
   if (destructiveIntent.test(valueStr) || cancelIntent.test(valueStr)) {
+    // Task #4 (AW) L6 — audit destructive refusal so /admin/advisor-audit
+    // surfaces the attempt alongside the safety_block / shadow_flag rows.
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: conv.id, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: null, sanitisationActions: [],
+      refusalReason: 'destructive', shadowFlagged: false,
+    });
     return c.json({
-      error: 'Destructive actions must be performed from the relevant page directly.',
+      error: REFUSAL.destructive,
       saved_to: null,
       next_question: null,
       hint: 'Open the page from the side nav and use its dedicated controls for delete / cancel / void.',
@@ -607,6 +672,28 @@ advisor.post('/answer', async (c) => {
 
   const q = questionById(body.question_id);
   if (!q) return c.json({ error: 'unknown question_id' }, 400);
+
+  // Task #4 (AW) L0 — input safety classifier (llama-guard-3-8b via
+  // aiRouter). Runs on every user-typed value before it touches the
+  // write-router or the LLM. A block returns 422 with the canonical
+  // jailbreak refusal; the routed write does NOT happen.
+  const safety = await classifyInput(c.env, user.id, valueStr);
+  if (safety.blocked) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: conv.id,
+      model: '@cf/meta/llama-guard-3-8b',
+      promptHash: await promptHash(), toolCalls: [],
+      aiSpendUsd: 0, safetyScore: safety.score,
+      sanitisationActions: [], refusalReason: 'safety_block',
+      shadowFlagged: false,
+    });
+    return c.json({
+      error: REFUSAL.jailbreak,
+      status: 'refused',
+      reason: 'safety_block',
+      category: safety.category,
+    }, 422);
+  }
 
   // Task #2 (AR) — server-side eligibility check. The client must
   // only submit questions that are currently in the VISIBLE bank
@@ -632,8 +719,44 @@ advisor.post('/answer', async (c) => {
   }
 
   // Persist the user turn first so the audit log is consistent even
-  // if a downstream step throws.
-  await recordMessage(c.env, conv.id, 'user', valueStr, q.id);
+  // if a downstream step throws. Carries the L0 safety_score so the
+  // /admin/advisor-audit page can correlate per-message risk back to
+  // the user's chat history.
+  await recordMessage(c.env, conv.id, 'user', valueStr, q.id, undefined, {
+    safety_score: safety.score,
+  });
+
+  // Task #4 (AW) L2 — gate the writeAnswer "tool" call. Persona/tier/
+  // rate/cost/arg-shape checks fire before the deterministic write so
+  // the same envelope governs scripted (curl) callers as the future
+  // LLM-driven AC-3 chat client. L3 sanitiseToolOutput is intentionally
+  // NOT wired here — the deterministic /answer flow has no tool output
+  // that loops back into a model context; that wrap is exercised by
+  // the AV chat client when tool results are fed to Anthropic.
+  const gateCtx = {
+    user,
+    persona: personaFor(user),
+    tiers: (await loadAdvisorGate(c.env, user)).tiers,
+    conversationId: conv.id,
+  };
+  const toolGate = await gateToolCall(c.env, gateCtx, 'writeAnswer', {
+    question_id: q.id, value: valueStr,
+  });
+  if (!toolGate.ok) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: conv.id, model: null,
+      promptHash: await promptHash(),
+      toolCalls: [{ name: 'writeAnswer', gate_result: toolGate.reason }],
+      aiSpendUsd: 0, safetyScore: safety.score,
+      sanitisationActions: [], refusalReason: `gate_${toolGate.reason}`,
+      shadowFlagged: false,
+    });
+    return c.json({
+      error: toolGate.detail || 'tool call rejected',
+      status: 'refused',
+      reason: toolGate.reason,
+    }, toolGate.reason === 'rate_limited' || toolGate.reason === 'cost_exceeded' ? 429 : 403);
+  }
 
   // Task #3 (AS) — pass evidence through verbatim. We deliberately
   // do NOT auto-derive evidence from the answer value, otherwise the
@@ -772,6 +895,31 @@ advisor.post('/answer', async (c) => {
   } else {
     await recordMessage(c.env, conv.id, 'assistant', next.prompt, next.id);
   }
+
+  // Task #4 (AW) L5 — a successful commit resets the per-day
+  // "explains without commit" counter so heavy legitimate explain
+  // usage doesn't trip the shadow flag.
+  if (result.status === 'saved') {
+    try {
+      const store = (c.env as unknown as { TOKENS?: KVNamespace }).TOKENS;
+      if (store) {
+        const k = `advisor:ewc:${user.id}:${new Date().toISOString().slice(0, 10)}`;
+        await store.delete(k);
+      }
+    } catch { /* best-effort */ }
+  }
+
+  // Task #4 (AW) L6 — every successful turn writes one audit row so
+  // /admin/advisor-audit can show the full conversation timeline (not
+  // just refusals).
+  await writeTurnAudit(c.env, {
+    userId: user.id, conversationId: conv.id, model: null,
+    promptHash: await promptHash(),
+    toolCalls: [{ name: 'writeAnswer', status: result.status }],
+    aiSpendUsd: 0, safetyScore: safety.score,
+    sanitisationActions: [], refusalReason: null,
+    shadowFlagged: false,
+  });
 
   const counts = await c.env.DB.prepare(
     `SELECT answered_count, skipped_count FROM advisor_conversations WHERE id = ?`,
@@ -1188,12 +1336,47 @@ function sseEvent(event: string, data: unknown): string {
 advisor.post('/explain', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
+  await ensureGuardrailColumns(c.env);
+  // Task #4 (AW) L7 — kill switch (env-wide + per-user lock).
+  const ks = await checkKillSwitch(c.env, user);
+  if (ks.blocked) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: null, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: null, sanitisationActions: [],
+      refusalReason: ks.reason || 'kill_switch', shadowFlagged: false,
+    });
+    return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
+  }
   if (!c.env.ANTHROPIC_API_KEY) {
     return c.json({ error: 'advisor explanations are not configured' }, 503);
   }
   const body = await readJson<{ topic?: string; question_id?: string; conversation_id?: string; conversation_uid?: string }>(c);
   const topic = String(body?.topic || '').trim().slice(0, 500);
   if (!topic) return c.json({ error: 'topic is required' }, 400);
+
+  // Task #4 (AW) L0 — input safety classifier on the topic.
+  const safety = await classifyInput(c.env, user.id, topic);
+  if (safety.blocked) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: null,
+      model: '@cf/meta/llama-guard-3-8b',
+      promptHash: await promptHash(), toolCalls: [],
+      aiSpendUsd: 0, safetyScore: safety.score,
+      sanitisationActions: [], refusalReason: 'safety_block',
+      shadowFlagged: false,
+    });
+    return c.json({
+      error: REFUSAL.jailbreak,
+      status: 'refused',
+      reason: 'safety_block',
+      category: safety.category,
+    }, 422);
+  }
+  // Task #4 (AW) L5 — bump anomaly counters (this user opened an explain
+  // without committing an answer right after) and check for a soft-block.
+  await bumpExplainsWithoutCommit(c.env, user.id);
+  const anomaly = await bumpAnomalyAndCheck(c.env, user.id, topic);
   // Task #2 (AR) — when an explicit `question_id` is supplied, the
   // explanation must be constrained to a question the user can
   // currently see (persona/week/tier/unlock filtered). Topic-only
@@ -1227,11 +1410,15 @@ advisor.post('/explain', async (c) => {
   // Build the prompt. We deliberately do NOT pass any sensitive answer
   // content from advisor_answers (PII, financial data) — the LLM only
   // sees the topic + persona context.
+  // Task #4 (AW) L1 — single source of truth for the system prompt
+  // lives in services/advisor/guardrails.ts (ADVISOR_SYSTEM_PROMPT).
+  // Hashed via promptHash() into advisor_turn_audit so prompt revisions
+  // can be correlated across the audit log.
   const persona = personaFor(user);
   const system = [
     {
       type: 'text' as const,
-      text: `You are the Axal StudioOS personal advisor explaining a single in-app concept to the current user. Keep replies under 120 words. Use plain language and short bullet lists. NEVER request or repeat sensitive personal data. Refuse destructive actions: explain that the user must perform delete/void/cancel from the relevant page.`,
+      text: ADVISOR_SYSTEM_PROMPT,
       cache_control: { type: 'ephemeral' as const },
     },
     { type: 'text' as const, text: `User context: role=${persona}, name=${user.name || 'unknown'}.` },
@@ -1245,7 +1432,36 @@ advisor.post('/explain', async (c) => {
     ).bind(conversationUid, user.id).first<{ id: number }>();
     if (conv) conversationId = Number(conv.id);
   }
-  if (conversationId) await recordMessage(c.env, conversationId, 'user', `[explain] ${safeTopic}`);
+  if (conversationId) {
+    await recordMessage(c.env, conversationId, 'user', `[explain] ${safeTopic}`, null, undefined, {
+      safety_score: safety.score,
+    });
+  }
+
+  // Task #4 (AW) L5 — when the per-user shadow flag is set we degrade
+  // to a templated SSE reply instead of calling Anthropic. The audit
+  // row records the soft-block so admins can see the activity in
+  // /admin/advisor-audit?flagged=1.
+  if (ks.shadow || anomaly.shadow) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: safety.score, sanitisationActions: [],
+      refusalReason: 'shadow_flag', shadowFlagged: true,
+    });
+    if (conversationId) {
+      await recordMessage(c.env, conversationId, 'assistant', REFUSAL.shadow, null, { kind: 'explain', topic: safeTopic, shadow: true });
+    }
+    const enc = new TextEncoder();
+    const body = enc.encode(sseEvent('delta', { text: REFUSAL.shadow }) + sseEvent('done', { reason: 'shadow_flag' }));
+    return new Response(body, {
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache, no-transform',
+        'x-accel-buffering': 'no',
+      },
+    });
+  }
 
   const upstream = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -1265,6 +1481,16 @@ advisor.post('/explain', async (c) => {
 
   if (!upstream.ok || !upstream.body) {
     const errBody = await upstream.text().catch(() => '');
+    // Task #4 (AW) L6 — even upstream failures get one audit row so
+    // admins can correlate Anthropic outages with refusal spikes.
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId,
+      model: c.env.ANTHROPIC_EXPLAIN_MODEL || EXPLAIN_MODEL_DEFAULT,
+      promptHash: await promptHash(), toolCalls: [],
+      aiSpendUsd: 0, safetyScore: safety.score,
+      sanitisationActions: [], refusalReason: 'upstream_error',
+      shadowFlagged: false,
+    });
     return c.json({ error: 'upstream LLM error', detail: errBody.slice(0, 200) }, 502);
   }
 
@@ -1306,10 +1532,33 @@ advisor.post('/explain', async (c) => {
             }
           }
         }
-        controller.enqueue(enc.encode(sseEvent('done', {})));
-        if (conversationId && collected) {
-          await recordMessage(c.env, conversationId, 'assistant', collected, null, { kind: 'explain', topic: safeTopic });
+        // Task #4 (AW) L1 — strip near-verbatim system-prompt leaks
+        // before persisting / acknowledging completion to the client.
+        // The streamed deltas already left the worker, but persisting
+        // the safe text means the conversation history doesn't keep
+        // the leaked copy and the next assistant turn won't include it
+        // in any context window.
+        const { text: safeOut, leaked } = stripVerbatimLeak(collected);
+        if (leaked) {
+          // Tell the client the final output was scrubbed.
+          controller.enqueue(enc.encode(sseEvent('replace', { text: safeOut })));
         }
+        controller.enqueue(enc.encode(sseEvent('done', { leaked })));
+        if (conversationId && safeOut) {
+          await recordMessage(
+            c.env, conversationId, 'assistant', safeOut, null,
+            { kind: 'explain', topic: safeTopic, leaked },
+          );
+        }
+        await writeTurnAudit(c.env, {
+          userId: user.id, conversationId,
+          model: c.env.ANTHROPIC_EXPLAIN_MODEL || EXPLAIN_MODEL_DEFAULT,
+          promptHash: await promptHash(), toolCalls: [],
+          aiSpendUsd: 0, safetyScore: safety.score,
+          sanitisationActions: leaked ? ['verbatim_leak_stripped'] : [],
+          refusalReason: leaked ? 'verbatim_leak' : null,
+          shadowFlagged: false,
+        });
       } catch (e) {
         controller.enqueue(enc.encode(sseEvent('error', { message: (e as Error).message })));
       } finally {
