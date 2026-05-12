@@ -868,6 +868,9 @@ export const api = {
   monitoringAnomalies: () => request('/monitoring/anomalies'),
   monitoringThroughput: () => request('/monitoring/throughput'),
   monitoringCleanup: () => request('/monitoring/cleanup', { method: 'POST' }),
+  // Task #1 (AX) — admin AI router usage rollup (per-day spend, fallback
+  // rate, p50/p95 latency, top 10 most expensive users).
+  monitoringAiUsage: (days = 7) => request(`/monitoring/ai-usage?days=${days}`),
 
   // ---------- Monitoring → Analytics (admin, Task #3 / Task #13) ----------
   // Task #13 — analytics reads auto-retry once on 5xx with a 1s backoff so

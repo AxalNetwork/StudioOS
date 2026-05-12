@@ -98,6 +98,20 @@ id      = "be811f14b6f342be961b8daa4513fb5b"
 [ai]
 binding = "AI"
 
+# ---------- Optional: dedicated KV namespace for AI router spend / cache ----------
+# Task #1 (AX) — When present, services/aiRouter.ts uses this namespace
+# for per-user $/day + $/month spend buckets, content-hash cache, and
+# the org-wide kill switch. When absent the router falls back to the
+# existing TOKENS namespace with `ai_spend:` / `ai_cache:` / `ai_killswitch:`
+# key prefixes — so this binding is *optional* and the router is
+# deployable without provisioning a new namespace. To attach a real
+# namespace later:
+#   npx wrangler kv namespace create AI_SPEND --env production
+# then uncomment + paste the returned id below.
+# [[kv_namespaces]]
+# binding = "AI_SPEND"
+# id      = "<paste-id-here>"
+
 # ---------- Queues (job queue) ----------
 # Native Cloudflare Queues replace the D1-polling job queue for true async
 # processing with retry + dead-letter semantics. The D1 `queue_jobs` table

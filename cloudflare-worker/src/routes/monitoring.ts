@@ -4,11 +4,27 @@ import { getSQL } from '../db';
 import { requireAuth, requireAdmin } from '../auth';
 import type { ScoreSnapshotRow, AnomalyFlag } from '../services/scoreIntegrity';
 import analytics from './monitoring_analytics';
+import { loadAiUsageReport } from '../services/aiRouter';
 
 const monitoring = new Hono<{ Bindings: Env }>();
 
 // Task #3 — admin analytics sub-router (5 sub-tabs + export).
 monitoring.route('/analytics', analytics);
+
+// Task #1 (AX) — Multi-model AI router observability.
+// Per-day spend per task class with model / latency / safety / fallback
+// breakdown + top-10 most expensive users (last 7 days). Driven by the
+// `ai_usage_logs` D1 table that aiRouter.ts writes on every call.
+monitoring.get('/ai-usage', async (c) => {
+  await requireAdmin(c);
+  const days = Math.max(1, Math.min(90, parseInt(c.req.query('days') || '7', 10) || 7));
+  try {
+    const report = await loadAiUsageReport(c.env, days);
+    return c.json(report);
+  } catch (e) {
+    return c.json({ error: (e as Error).message || 'failed to load ai usage' }, 500);
+  }
+});
 
 // ---------- /metrics ----------
 // Admin-only: returns aggregated time-series for the dashboard.

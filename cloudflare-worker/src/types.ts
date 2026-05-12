@@ -107,6 +107,16 @@ export interface Env {
   GCIP_ADMIN_BEARER_TOKEN?: string;
   SMS_COUNTRY_ALLOWLIST?: string;
   AI?: any;
+  // Task #1 (AX) — Multi-model AI router. Optional dedicated KV namespace
+  // for spend buckets, cache, and the org-wide kill switch. When absent the
+  // router falls back to the existing TOKENS namespace with `ai_spend:` /
+  // `ai_cache:` / `ai_killswitch:` prefixes so it's deployable today.
+  AI_SPEND?: KVNamespace;
+  // Per-user / org-wide spend caps for the AI router. Numeric strings;
+  // defaults: 5 / 50 / 5000 USD respectively (see services/aiRouter.ts).
+  WORKERS_AI_BUDGET_USD_DAY?: string;
+  WORKERS_AI_BUDGET_USD_MONTH?: string;
+  WORKERS_AI_BUDGET_USD_ORG_MONTH?: string;
   // R2 bucket for KYC documents and other large/private blobs.
   // Optional so unit-test envs without R2 bindings still type-check.
   FILES?: R2Bucket;
