@@ -1405,11 +1405,16 @@ advisor.get('/conversations/:id', conversationDetailHandler);
 //
 // Body: { topic: string, conversation_uid?: string }
 // Stream events:
-//   delta { text }
-//   done  {}
-//   error { message }
-// Returns 503 if ANTHROPIC_API_KEY is not configured. The /explain
-// surface is the ONLY LLM-touching endpoint in AC-1; /answer is
+//   provider { model, provider, fallback_used, cached }   (Task #16)
+//   delta    { text }
+//   done     { leaked }
+//   error    { message }
+// Routed via aiRouter task='advisor_explain'. Workers AI is the always-on
+// primary; Anthropic claude-sonnet-4-6 is the narrow last-resort fallback
+// (also retried when stripVerbatimLeak detects an unsafe Workers AI
+// completion and ANTHROPIC_API_KEY is configured). Provider can be
+// flipped via the ADVISOR_EXPLAIN_PROVIDER env (workers-ai|auto|anthropic).
+// /explain is still the ONLY free-form LLM surface in AC-1; /answer is
 // deterministic so we don't burn tokens routing structured data.
 // ---------------------------------------------------------------------------
 function sseEvent(event: string, data: unknown): string {
@@ -1586,15 +1591,49 @@ advisor.post('/explain', async (c) => {
     }, status);
   }
 
-  const collected = String(ai.output || '');
-  const { text: safeOut, leaked } = stripVerbatimLeak(collected);
+  let collected = String(ai.output || '');
+  let { text: safeOut, leaked } = stripVerbatimLeak(collected);
+  let usage = ai.usage;
+  let unsafeRetryUsed = false;
+  // Task #16 — unsafe-completion fallback. When stripVerbatimLeak
+  // flags the primary response AND we used a Workers AI model AND an
+  // Anthropic key is configured, retry once via Anthropic. Anthropic
+  // claude-sonnet-4-6 has stronger instruction-following on the
+  // "stay-on-StudioOS-scope" guardrail, so it's likely to produce a
+  // clean answer where the smaller llama leaked. If Anthropic is
+  // unavailable or also leaks we keep the original templated refusal.
+  if (
+    leaked
+    && (usage?.model || '').startsWith('@cf/')
+    && !!(c.env as unknown as { ANTHROPIC_API_KEY?: string }).ANTHROPIC_API_KEY
+  ) {
+    const retry = await aiRouterRun(c.env, {
+      task: 'advisor_explain',
+      userId: user.id,
+      systemPrompt: systemPromptText,
+      messages: [{ role: 'user', content: safeTopic }],
+      maxTokens: EXPLAIN_MAX_TOKENS,
+      forceProvider: 'anthropic',
+    });
+    if (retry.ok) {
+      const retryCollected = String(retry.output || '');
+      const retryScan = stripVerbatimLeak(retryCollected);
+      if (!retryScan.leaked) {
+        collected = retryCollected;
+        safeOut = retryScan.text;
+        leaked = false;
+        usage = retry.usage;
+        unsafeRetryUsed = true;
+      }
+    }
+  }
   // Single delta + done — the client sees a "typing finished"
   // beat instead of incremental tokens, in exchange for a hard
   // guarantee that no leaked text ever crossed the wire.
   const finalText = leaked
     ? 'I can only discuss your StudioOS data and your current advisor questions. Want me to help with one of those?'
     : safeOut;
-  const modelUsed = ai.usage?.model || 'unknown';
+  const modelUsed = usage?.model || 'unknown';
   // Task #16 — surface which model actually answered so the React UI
   // can render a small "(fallback)" badge when the Workers AI primary
   // hop missed and Anthropic (or a smaller llama sibling) was used.
@@ -1603,8 +1642,8 @@ advisor.post('/explain', async (c) => {
   const providerEvent = {
     model: modelUsed,
     provider: modelUsed.startsWith('@cf/') ? 'workers-ai' as const : 'anthropic' as const,
-    fallback_used: !!ai.usage?.fallback_used,
-    cached: !!ai.usage?.cached,
+    fallback_used: !!usage?.fallback_used || unsafeRetryUsed,
+    cached: !!usage?.cached,
   };
 
   const enc = new TextEncoder();
@@ -1626,9 +1665,12 @@ advisor.post('/explain', async (c) => {
           userId: user.id, conversationId,
           model: modelUsed,
           promptHash: await promptHash(), toolCalls: [],
-          aiSpendUsd: ai.usage?.est_cost_usd || 0,
+          aiSpendUsd: usage?.est_cost_usd || 0,
           safetyScore: safety.score,
-          sanitisationActions: leaked ? ['verbatim_leak_stripped'] : [],
+          sanitisationActions: [
+            ...(leaked ? ['verbatim_leak_stripped'] : []),
+            ...(unsafeRetryUsed ? ['unsafe_completion_anthropic_retry'] : []),
+          ],
           refusalReason: leaked ? 'verbatim_leak' : null,
           shadowFlagged: false,
         });

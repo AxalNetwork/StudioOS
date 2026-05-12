@@ -71,6 +71,16 @@ export interface RunOptions {
   // are surfaced to the caller. Cache + safety_score parsing are bypassed
   // for streams since neither is meaningful without buffering the body.
   stream?: boolean;
+  // Task #16 — force a specific provider for this call, ignoring the
+  // task's ROUTE entry. Used by the /advisor/explain unsafe-completion
+  // retry path: when the Workers AI primary returns a leak-flagged
+  // response, the route handler retries with `forceProvider: 'anthropic'`
+  // to get a clean answer from claude-sonnet-4-6 instead of returning a
+  // templated refusal. When 'anthropic' is requested but
+  // ANTHROPIC_API_KEY is not configured, the override is silently
+  // ignored (the task's default route runs instead) so misconfigured
+  // environments never hard-fail.
+  forceProvider?: 'workers-ai' | 'anthropic';
 }
 
 export interface UsageMeta {
@@ -499,6 +509,20 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         model: (env as unknown as { ANTHROPIC_EXPLAIN_MODEL?: string }).ANTHROPIC_EXPLAIN_MODEL || 'claude-sonnet-4-6',
         fallbackChain: [MID_LLAMA, SMALL_LLAMA],
       };
+    }
+  }
+  // Task #16 — explicit per-call forceProvider override. Used by the
+  // /advisor/explain unsafe-completion retry path. Ignored silently
+  // when 'anthropic' is requested without an API key.
+  if (route && opts.forceProvider) {
+    const hasAnthropic = !!(env as unknown as { ANTHROPIC_API_KEY?: string }).ANTHROPIC_API_KEY;
+    if (opts.forceProvider === 'anthropic' && hasAnthropic) {
+      route = {
+        provider: 'anthropic',
+        model: (env as unknown as { ANTHROPIC_EXPLAIN_MODEL?: string }).ANTHROPIC_EXPLAIN_MODEL || 'claude-sonnet-4-6',
+      };
+    } else if (opts.forceProvider === 'workers-ai') {
+      route = { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] };
     }
   }
   const startedAt = Date.now();
