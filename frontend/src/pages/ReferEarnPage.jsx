@@ -442,9 +442,29 @@ export default function ReferEarnPage() {
   // see "Already invited" / "Joined" badges BEFORE hitting Send. The set
   // is keyed by lowercased email; values are the matching invite row so
   // the badge can render the join date when present.
+  //
+  // Resolution rules (per second-pass review):
+  //   1. Joined rows always win — even an older joined row beats a newer
+  //      sent/opened row, because conversion is terminal.
+  //   2. Otherwise the first-seen (newest, since the API returns DESC by
+  //      sent_at) non-failed row wins, so a fresh "sent" doesn't get
+  //      shadowed by a stale earlier entry.
+  //   3. Pure-failed history is ignored — those recipients are still
+  //      retry-eligible via the bulk send flow, so leaving them
+  //      un-annotated keeps the row default-checked.
   const inviteByEmail = useMemo(() => {
     const m = new Map();
-    for (const inv of invites) m.set((inv.recipient_email || '').toLowerCase(), inv);
+    for (const inv of invites) {
+      const key = (inv.recipient_email || '').toLowerCase();
+      if (!key) continue;
+      const existing = m.get(key);
+      // Joined wins outright.
+      if (inv.signed_up_user_id) { m.set(key, inv); continue; }
+      // Skip failed-only rows so they don't produce an "Already invited" badge.
+      if (inv.status === 'failed') continue;
+      // First-seen non-failed wins (DESC order = most recent first).
+      if (!existing) m.set(key, inv);
+    }
     return m;
   }, [invites]);
   const annotateImport = (email) => {
