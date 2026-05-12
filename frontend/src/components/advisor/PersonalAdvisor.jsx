@@ -605,6 +605,19 @@ const Transcript = React.forwardRef(function Transcript({ messages, tutor, onClo
 
 function Bubble({ m }) {
   const isUser = m.role === 'user';
+  // Task #5 (AV) — render the inline CTA block produced by /advisor/tool.
+  // The envelope can arrive on `m.cta` (live tool turn) or be embedded in
+  // `m.content` as JSON when /conversations/:id rehydrates a role='tool'
+  // message from the audit log.
+  let cta = m.cta || null;
+  let toolPreview = null;
+  if (!cta && m.role === 'tool' && typeof m.content === 'string' && m.content.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(m.content);
+      cta = parsed?.cta || null;
+      toolPreview = parsed?.result || null;
+    } catch { /* leave content as-is */ }
+  }
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[85%] px-3 py-2 rounded-lg text-sm whitespace-pre-wrap ${
@@ -612,11 +625,14 @@ function Bubble({ m }) {
           ? 'bg-violet-600 text-white rounded-br-sm'
           : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-sm'
       }`}>
-        {m.content}
-        {/* Task #3 (AS) — explicit CTA control for evidence-gate /
-            paywall bubbles instead of a plain text URL. Renders only
-            on assistant bubbles that opted in via `open_url`. */}
-        {!isUser && m.open_url && (
+        {/* Tool messages: prefer rendering the human-readable CTA over the raw envelope. */}
+        {m.role === 'tool' && cta ? (
+          <ToolPreview preview={toolPreview} />
+        ) : (
+          m.content
+        )}
+        {/* Task #3 (AS) — single-link CTA for evidence-gate / paywall bubbles. */}
+        {!isUser && m.open_url && !cta && (
           <div className="mt-2">
             <a
               href={m.open_url}
@@ -626,7 +642,64 @@ function Bubble({ m }) {
             </a>
           </div>
         )}
+        {/* Task #5 (AV) — inline tool CTA: primary + optional secondary. */}
+        {!isUser && cta && <CtaButtons cta={cta} />}
       </div>
+    </div>
+  );
+}
+
+function ToolPreview({ preview }) {
+  if (!preview || typeof preview !== 'object') return null;
+  // Render the most common result shapes compactly. Falls back to a
+  // truncated JSON dump for shapes we don't know about.
+  const list =
+    preview.mentors || preview.investors || preview.partners || preview.deals || preview.tasks;
+  if (Array.isArray(list)) {
+    if (list.length === 0) {
+      return <div className="text-xs text-gray-500 dark:text-gray-400 italic">No matches yet.</div>;
+    }
+    return (
+      <ul className="text-xs space-y-1">
+        {list.slice(0, 5).map((row) => (
+          <li key={row.id} className="leading-snug">
+            <span className="font-medium">{row.title || row.name}</span>
+            {row.snippet && <span className="text-gray-600 dark:text-gray-400"> — {row.snippet}</span>}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (preview.page) {
+    return <div className="text-xs text-gray-700 dark:text-gray-300">Opening {preview.page}.</div>;
+  }
+  if (preview.gated) {
+    return <div className="text-xs text-gray-700 dark:text-gray-300">{preview.feature} requires the {preview.required_tier} tier.</div>;
+  }
+  return null;
+}
+
+function CtaButtons({ cta }) {
+  // The CTA's `route` is always a relative app-router path. We use a
+  // plain anchor (not <Link>) so the component remains usable from
+  // contexts that aren't yet wrapped in a router (e.g. story tests).
+  if (!cta || !cta.primary) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      <a
+        href={cta.primary.route}
+        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-violet-600 text-white text-xs font-medium hover:bg-violet-700 transition"
+      >
+        {cta.primary.label} <ArrowRight size={12} />
+      </a>
+      {cta.secondary && (
+        <a
+          href={cta.secondary.route}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 text-xs font-medium hover:bg-violet-50 dark:hover:bg-violet-950/40 transition"
+        >
+          {cta.secondary.label}
+        </a>
+      )}
     </div>
   );
 }

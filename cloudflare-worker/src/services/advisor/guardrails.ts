@@ -173,10 +173,33 @@ const TOOL_PERSONA_ALLOWLIST: Record<string, string[]> = {
   explainTopic: ['founder', 'investor', 'mentor', 'partner', 'admin'],
   scoreDeal:    ['investor', 'admin'],
   draftMemo:    ['investor', 'admin'],
+  // Task #5 (AV) — Find & deep-link tool registry. Each tool returns
+  // {result, cta} so the chatbot can render a one-click route button.
+  findMentor:              ['founder', 'admin'],
+  findInvestor:            ['founder', 'admin'],
+  findPartner:             ['founder', 'investor', 'admin'],
+  findDeal:                ['investor', 'partner', 'admin'],
+  startContract:           ['founder', 'admin'],
+  bookOfficeHours:         ['founder', 'admin'],
+  exploreDocs:             ['founder', 'investor', 'mentor', 'partner', 'admin'],
+  draftCofounderAgreement: ['founder', 'admin'],
+  scheduleMeeting:         ['founder', 'investor', 'mentor', 'partner', 'admin'],
+  listMyTasks:             ['founder', 'investor', 'mentor', 'partner', 'admin'],
+  surfacePaywall:          ['founder', 'investor', 'mentor', 'partner', 'admin'],
 };
 
 const TOOL_TIER_REQUIRED: Record<string, string | undefined> = {
   draftMemo: 'investor_pro',
+  // Task #5 (AV) — features behind paid tiers. The chatbot calls
+  // surfacePaywall when these gates fail so the user gets an upgrade CTA
+  // rather than a hard refusal.
+  // Canonical tier label is `subscriber` (active founder/studio
+  // subscription) — the same string `loadAdvisorGate()` adds to the
+  // user's tier set. The CTA route below maps this to the `studio`
+  // upgrade flow so the user-facing copy stays correct.
+  findInvestor:            'subscriber',
+  startContract:           'subscriber',
+  draftCofounderAgreement: 'subscriber',
 };
 
 // SQL / shell / HTML-shaped argument detectors. The advisor's tools take

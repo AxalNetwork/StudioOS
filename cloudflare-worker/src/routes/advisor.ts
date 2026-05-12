@@ -75,6 +75,13 @@ import {
   bumpExplainsWithoutCommit,
   writeTurnAudit,
 } from '../services/advisor/guardrails';
+// Task #5 (AV) — Find & deep-link tool registry.
+import {
+  isToolName,
+  executeTool,
+  TOOL_SCHEMAS,
+  type ToolEnvelope,
+} from '../services/advisor/tools';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
@@ -1608,6 +1615,160 @@ advisor.post('/explain', async (c) => {
       'cache-control': 'no-cache, no-transform',
       'x-accel-buffering': 'no',
     },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task #5 (AV) — Find & deep-link tool registry.
+// ---------------------------------------------------------------------------
+//
+// POST /api/advisor/tool — { name, args } body. Runs gateToolCall (persona
+// /tier/rate/cost/arg shape), executes the tool from the registry, audit-logs
+// to advisor_messages (role='tool') + activity_logs, and returns the tool's
+// {result, cta} envelope. Tier-failures redirect to surfacePaywall so the
+// chatbot always returns a routable CTA instead of a hard refusal.
+//
+// GET /api/advisor/tools — returns the JSON-schema list the LLM uses.
+// ---------------------------------------------------------------------------
+
+advisor.get('/tools', async (c) => {
+  await requireAuth(c);
+  return c.json({ tools: TOOL_SCHEMAS });
+});
+
+advisor.post('/tool', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  await ensureGuardrailColumns(c.env);
+
+  const body = await c.req.json().catch(() => ({} as any));
+  const name = String(body?.name || '').trim();
+  const args = (body?.args && typeof body.args === 'object') ? body.args : {};
+
+  if (!isToolName(name)) {
+    return c.json({ error: 'unknown tool', status: 'refused', reason: 'unknown_tool' }, 400);
+  }
+
+  // Re-use the active conversation so distinct-tools-per-session counters
+  // (L5 anomaly detector) are conversation-scoped. /tool can be called
+  // before /start so we lazily mint a conversation if none exists.
+  let conv = await getActiveConversation(c.env, user);
+  if (!conv) {
+    conv = await createConversation(c.env, user, 0, null);
+  }
+
+  const gate = await loadAdvisorGate(c.env, user);
+  const persona = personaFor(user);
+  const gateCtx = {
+    user,
+    persona,
+    tiers: gate.tiers,
+    conversationId: conv.id,
+  };
+  const toolCtx = { ...gateCtx, env: c.env };
+
+  // Persist the request as a user-role message so the audit trail captures
+  // intent even when the gate refuses below.
+  const reqContent = `tool:${name} ${JSON.stringify(args).slice(0, 400)}`;
+  await recordMessage(c.env, conv.id, 'user', reqContent, undefined, { tool_name: name });
+
+  const gateResult = await gateToolCall(c.env, gateCtx, name, args);
+
+  let envelope: ToolEnvelope;
+  let effectiveTool: string = name;
+  let degradedToPaywall = false;
+
+  if (!gateResult.ok) {
+    // Tier-failure → surface upgrade CTA instead of a raw refusal so the
+    // chatbot can always render a routable action.
+    if (gateResult.reason === 'tier_required' && persona !== 'admin') {
+      effectiveTool = 'surfacePaywall';
+      degradedToPaywall = true;
+      // Map the internal tier label (`subscriber`) back to the
+      // user-facing upgrade flow name (`studio`) so the CTA route
+      // points at /billing/upgrade?feature=…&tier=studio.
+      const internalTier = gateResult.detail || 'subscriber';
+      const userFacingTier = internalTier === 'subscriber' ? 'studio' : internalTier;
+      envelope = await executeTool(toolCtx, 'surfacePaywall', {
+        feature: name,
+        required_tier: userFacingTier,
+      });
+    } else {
+      const status = gateResult.reason === 'rate_limited' || gateResult.reason === 'cost_exceeded' ? 429
+        : gateResult.reason === 'no_conversation' ? 409
+        : 403;
+      await writeTurnAudit(c.env, {
+        userId: user.id, conversationId: conv.id, model: null,
+        promptHash: await promptHash(),
+        toolCalls: [{ name, gate_result: gateResult.reason }],
+        aiSpendUsd: 0, safetyScore: null,
+        sanitisationActions: [], refusalReason: `gate_${gateResult.reason}`,
+        shadowFlagged: false,
+      });
+      await recordMessage(c.env, conv.id, 'tool', `refused:${gateResult.reason}`, undefined, {
+        tool_name: name, gate_reason: gateResult.reason,
+      });
+      return c.json({
+        error: gateResult.detail || 'tool call rejected',
+        status: 'refused',
+        reason: gateResult.reason,
+      }, status);
+    }
+  } else {
+    try {
+      envelope = await executeTool(toolCtx, name, args);
+    } catch (e) {
+      console.error('[advisor.tool] execute failed', name, (e as Error).message);
+      await writeTurnAudit(c.env, {
+        userId: user.id, conversationId: conv.id, model: null,
+        promptHash: await promptHash(),
+        toolCalls: [{ name, error: (e as Error).message }],
+        aiSpendUsd: 0, safetyScore: null,
+        sanitisationActions: [], refusalReason: 'tool_error',
+        shadowFlagged: false,
+      });
+      return c.json({ error: 'tool execution failed', status: 'error' }, 500);
+    }
+  }
+
+  // Append a role='tool' message with the JSON envelope so /conversations/:id
+  // can render the CTA again after a reload.
+  await recordMessage(
+    c.env, conv.id, 'tool',
+    JSON.stringify(envelope).slice(0, 4000),
+    undefined,
+    { tool_name: effectiveTool, degraded: degradedToPaywall ? 1 : 0 },
+  );
+
+  // activity_logs row — actor is the email_hash per Task T22.1 (never plaintext).
+  try {
+    const actorHash = await hashEmail((user as User).email || '');
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind(
+      'advisor.tool',
+      JSON.stringify({ tool: effectiveTool, requested: name, route: envelope.cta?.route }).slice(0, 500),
+      actorHash, user.id,
+    ).run();
+  } catch { /* activity_logs may not exist on dev DB */ }
+
+  await writeTurnAudit(c.env, {
+    userId: user.id, conversationId: conv.id, model: null,
+    promptHash: await promptHash(),
+    toolCalls: [{ name: effectiveTool, requested: name, route: envelope.cta?.route, degraded: degradedToPaywall }],
+    aiSpendUsd: 0, safetyScore: null,
+    sanitisationActions: [], refusalReason: null,
+    shadowFlagged: false,
+  });
+
+  return c.json({
+    status: 'ok',
+    tool: effectiveTool,
+    requested_tool: name,
+    degraded_to_paywall: degradedToPaywall,
+    conversation_uid: conv.uid,
+    result: envelope.result,
+    cta: envelope.cta,
   });
 });
 

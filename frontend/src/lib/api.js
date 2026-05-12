@@ -337,6 +337,10 @@ export const api = {
     nextQuestion: (focus) =>
       request(`/advisor/next-question${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`),
     manifest: () => request('/advisor/manifest'),
+    // Task #5 (AV) — Find & deep-link tool registry.
+    tools: () => request('/advisor/tools'),
+    tool: (name, args = {}) =>
+      request('/advisor/tool', { method: 'POST', body: JSON.stringify({ name, args }) }),
     conversation: (uid) => request(`/advisor/conversations/${encodeURIComponent(uid)}`),
     explainUrl: () => '/api/advisor/explain',
     // Task #3 (AS) — list field_sources rows for the current user,

@@ -17,9 +17,9 @@ import type { Env } from '../types';
 const EMBED_MODEL = '@cf/baai/bge-base-en-v1.5';
 const MAX_INPUT_CHARS = 4000; // bge models cap around 512 tokens; ~4k chars is safe.
 
-export type EntityType = 'project' | 'deal' | 'founder' | 'partner' | 'document' | 'academy_lesson';
+export type EntityType = 'project' | 'deal' | 'founder' | 'partner' | 'document' | 'academy_lesson' | 'mentor' | 'investor';
 
-export const ALL_ENTITY_TYPES: EntityType[] = ['project', 'deal', 'founder', 'partner', 'document', 'academy_lesson'];
+export const ALL_ENTITY_TYPES: EntityType[] = ['project', 'deal', 'founder', 'partner', 'document', 'academy_lesson', 'mentor', 'investor'];
 
 export interface SearchHit {
   id: string;
@@ -220,6 +220,85 @@ export async function embedAndUpsertById(env: Env, type: EntityType, id: number)
       url: `/academy/${row.slug || id}`,
       snippet: (row.summary || '').slice(0, 200),
     });
+  }
+  if (type === 'mentor') {
+    // Task #5 (AV) — mentor index for findMentor.
+    const row = await env.DB.prepare(
+      `SELECT id, display_name, bio, expertise_json, sectors_json, hourly_rate_usd, is_active
+         FROM mentors WHERE id = ?`
+    ).bind(id).first<any>();
+    if (!row) { await deleteEntity(env, type, id); return false; }
+    let expertise: string[] = []; let sectors: string[] = [];
+    try { expertise = JSON.parse(row.expertise_json || '[]'); } catch { /* noop */ }
+    try { sectors = JSON.parse(row.sectors_json || '[]'); } catch { /* noop */ }
+    const text = [row.display_name, row.bio, expertise.join(' '), sectors.join(' ')].filter(Boolean).join('\n');
+    const sectorTag = sectors[0] || '';
+    if (!env.VECTORIZE) return false;
+    const vector = await embedText(env, text);
+    if (!vector) return false;
+    try {
+      await env.VECTORIZE.upsert([{
+        id: vectorId(type, id),
+        values: vector,
+        metadata: {
+          type, entity_id: id,
+          title: String(row.display_name || `Mentor #${id}`).slice(0, 200),
+          url: `/mentorship?mentor=${id}`,
+          snippet: `${expertise.slice(0, 3).join(', ') || 'Mentor'} • ${sectorTag || 'multi-sector'}`,
+          sector: sectorTag,
+          expertise: expertise.slice(0, 5).join(','),
+          active: row.is_active ? 1 : 0,
+          hourly_rate_usd: Number(row.hourly_rate_usd || 0),
+        },
+      }]);
+      return true;
+    } catch (e: any) {
+      console.error('vectorize.upsert mentor failed:', e?.message);
+      return false;
+    }
+  }
+  if (type === 'investor') {
+    // Task #5 (AV) — investor index for findInvestor (keyed by users.id).
+    const row = await env.DB.prepare(
+      `SELECT u.id, u.name, u.email, ip.investor_type, ip.sectors_json, ip.stages_json,
+              ip.geos_json, ip.ticket_min_usd, ip.ticket_max_usd, ip.thesis_text
+         FROM users u
+         LEFT JOIN investor_profiles ip ON ip.user_id = u.id
+        WHERE u.id = ? AND u.role = 'investor'`
+    ).bind(id).first<any>();
+    if (!row) { await deleteEntity(env, type, id); return false; }
+    let sectors: string[] = []; let stages: string[] = []; let geos: string[] = [];
+    try { sectors = JSON.parse(row.sectors_json || '[]'); } catch { /* noop */ }
+    try { stages = JSON.parse(row.stages_json || '[]'); } catch { /* noop */ }
+    try { geos = JSON.parse(row.geos_json || '[]'); } catch { /* noop */ }
+    const text = [
+      row.name, row.investor_type, row.thesis_text,
+      sectors.join(' '), stages.join(' '), geos.join(' '),
+    ].filter(Boolean).join('\n');
+    if (!env.VECTORIZE) return false;
+    const vector = await embedText(env, text);
+    if (!vector) return false;
+    try {
+      await env.VECTORIZE.upsert([{
+        id: vectorId(type, id),
+        values: vector,
+        metadata: {
+          type, entity_id: id,
+          title: String(row.name || `Investor #${id}`).slice(0, 200),
+          url: `/network?investor=${id}`,
+          snippet: `${row.investor_type || 'Investor'} • ${sectors.slice(0, 2).join(', ') || 'multi-sector'} • ${stages.slice(0, 2).join('/') || 'any stage'}`,
+          sector: sectors[0] || '',
+          stage: stages[0] || '',
+          geo: geos[0] || '',
+          ticket_min_usd: Number(row.ticket_min_usd || 0),
+          ticket_max_usd: Number(row.ticket_max_usd || 0),
+        },
+      }]);
+      return true;
+    } catch (e: any) {
+      console.error('vectorize.upsert investor failed:', e?.message);
+      return false;
+    }
   }
   if (type === 'document') {
     const row = await env.DB.prepare(

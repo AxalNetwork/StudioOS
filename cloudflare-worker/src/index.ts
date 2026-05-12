@@ -723,6 +723,68 @@ export default {
             console.error('[cron] project trash sweep failed', e);
           }
         }
+        // Task #5 (AV) — hourly Vectorize re-embed for axal-search.
+        // Walks every entity table, finds rows with id > last watermark
+        // and enqueues `embed_entity` jobs so new content lands in the
+        // search index within ~1h. Watermark stored in RATE_LIMITS KV
+        // (axal-search:watermark:<type>). Best-effort — failures here
+        // never raise; the next tick retries.
+        if (now.getUTCMinutes() === 0) {
+          try {
+            const { ALL_ENTITY_TYPES } = await import('./services/vectorize');
+            const TABLE_BY_TYPE: Record<string, string> = {
+              project: 'projects', deal: 'deals', founder: 'founders',
+              partner: 'users', document: 'legal_documents',
+              academy_lesson: 'academy_lessons', mentor: 'mentors',
+              investor: 'users',
+            };
+            const PER_TYPE_LIMIT = 200;
+            for (const type of ALL_ENTITY_TYPES) {
+              const table = TABLE_BY_TYPE[type];
+              if (!table) continue;
+              const wmKey = `axal-search:watermark:${type}`;
+              let since = 0;
+              try {
+                const v = await env.RATE_LIMITS.get(wmKey);
+                since = v ? Number(v) || 0 : 0;
+              } catch { /* best-effort */ }
+              try {
+                const where = type === 'investor'
+                  ? `id > ? AND role = 'investor' ORDER BY id ASC LIMIT ?`
+                  : `id > ? ORDER BY id ASC LIMIT ?`;
+                const rows = await env.DB.prepare(
+                  `SELECT id FROM ${table} WHERE ${where}`,
+                ).bind(since, PER_TYPE_LIMIT).all<{ id: number }>();
+                const ids = (rows.results || []).map((r) => Number(r.id));
+                if (!ids.length) continue;
+                // Only advance the watermark to the highest *successfully*
+                // enqueued ID. If an enqueue fails partway through, we
+                // stop advancing so the next tick retries the missed
+                // tail rather than silently dropping rows.
+                let lastOk = 0;
+                let failed = 0;
+                for (const id of ids) {
+                  try {
+                    await Jobs.enqueue(env, 'embed_entity', { type, id });
+                    lastOk = id;
+                  } catch (e) {
+                    failed += 1;
+                    console.error(`[cron] axal-search enqueue failed type=${type} id=${id}`, (e as Error).message);
+                    break;
+                  }
+                }
+                if (lastOk > since) {
+                  try { await env.RATE_LIMITS.put(wmKey, String(lastOk), { expirationTtl: 90 * 86400 }); } catch {}
+                }
+                console.info(`[cron] axal-search re-embed type=${type} ok=${ids.indexOf(lastOk) + 1} failed=${failed} watermark=${lastOk || since}`);
+              } catch (e) {
+                console.error(`[cron] axal-search re-embed ${type} failed`, e);
+              }
+            }
+          } catch (e) {
+            console.error('[cron] axal-search re-embed failed', e);
+          }
+        }
         // Task #2 — HubSpot 30-minute reconcile. Drift between StudioOS
         // deal stages and HubSpot pipelines gets picked up here even when
         // webhooks are dropped. Cron fires every minute; gate on minute % 30.
