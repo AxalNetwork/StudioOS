@@ -102,8 +102,12 @@ interface RouteEntry {
   // Ordered chain of smaller Workers AI siblings to retry on 5xx / >8s
   // latency. The router tries the primary, then each entry in
   // `fallbackChain` until one succeeds or the chain is exhausted.
-  // Anthropic tasks have no fallback (refusal on failure) per spec.
   fallbackChain?: string[];
+  // Anthropic last-resort hop. Spec: "Workers AI is primary; Anthropic
+  // is a narrow fallback for high-stakes synthesis only" — so this is
+  // populated only on `publication` and `dd_synthesis`. Invoked only
+  // after every Workers AI hop fails.
+  anthropicFallback?: string;
   // KV cache TTL in seconds. Undefined → no cache.
   cacheTtlSec?: number;
   // True for embedding models (response shape differs).
@@ -143,8 +147,12 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
-  publication:  { provider: 'anthropic',  model: 'claude-haiku-4-5' },
-  dd_synthesis: { provider: 'anthropic',  model: 'claude-sonnet-4-6' },
+  // High-stakes synthesis: Workers AI primary, Anthropic narrow fallback
+  // only after all WAI hops fail. Matches the spec's "Workers AI is
+  // primary; Anthropic is a narrow fallback for high-stakes synthesis only"
+  // and "Anthropic only invoked for publication and dd_synthesis".
+  publication:  { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], anthropicFallback: 'claude-haiku-4-5' },
+  dd_synthesis: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], anthropicFallback: 'claude-sonnet-4-6' },
 };
 
 // Latency budget per primary attempt before we fall back.
@@ -548,23 +556,23 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   // body may legitimately exceed 8 s). Latency budget still applies to
   // the synchronous Workers AI handshake before the stream opens because
   // ai.run() resolves only once the upstream accepts the request.
-  const callOnce = (model: string): Promise<ProviderResult> => {
-    if (route.provider === 'anthropic') return withTimeout(callAnthropic(env, model, opts), PRIMARY_TIMEOUT_MS);
+  const callWai = (model: string): Promise<ProviderResult> => {
     if (opts.stream) return callWorkersAI(env, model, opts, !!route.isEmbed);
     return withTimeout(callWorkersAI(env, model, opts, !!route.isEmbed), PRIMARY_TIMEOUT_MS);
   };
+  const callClaude = (model: string): Promise<ProviderResult> =>
+    withTimeout(callAnthropic(env, model, opts), PRIMARY_TIMEOUT_MS);
 
-  let attempt = await callOnce(route.model);
+  let attempt = await callWai(route.model);
   let modelUsed = route.model;
   let fallbackUsed = false;
   let lastError = attempt.error;
 
   // Workers AI multi-hop fallback chain (spec: tool_call → advisor_turn →
-  // role_detect, i.e. qwen32b → llama-70b → llama-8b). Anthropic tasks
-  // have no fallback by spec.
-  if (!attempt.ok && route.provider === 'workers-ai' && route.fallbackChain?.length) {
+  // role_detect, i.e. qwen32b → llama-70b → llama-8b).
+  if (!attempt.ok && route.fallbackChain?.length) {
     for (const sibling of route.fallbackChain) {
-      const next = await callOnce(sibling);
+      const next = await callWai(sibling);
       if (next.ok) {
         attempt = next;
         modelUsed = sibling;
@@ -573,6 +581,20 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         break;
       }
       lastError = next.error || lastError;
+    }
+  }
+
+  // Anthropic narrow fallback for publication / dd_synthesis only.
+  // Reached only after every Workers AI hop has failed.
+  if (!attempt.ok && route.anthropicFallback) {
+    const claude = await callClaude(route.anthropicFallback);
+    if (claude.ok) {
+      attempt = claude;
+      modelUsed = route.anthropicFallback;
+      fallbackUsed = true;
+      lastError = undefined;
+    } else {
+      lastError = claude.error || lastError;
     }
   }
 
@@ -674,6 +696,13 @@ export interface AiUsageReport {
     p95_latency_ms: number;
     fallback_rate: number;
   }>;
+  // Spec: per-day spend per task class with **model**/latency/safety/
+  // fallback breakdown. by_model satisfies the model-level cut.
+  by_model: Array<{ model: string; calls: number; total_cost_usd: number; fallback_count: number }>;
+  // llama-guard safety scoring rollup over rows where task='safety'.
+  // safe_rate is in [0,1]. evaluated counts only rows with a non-null
+  // safety_score (so cache hits / refusals don't pollute the denominator).
+  safety: { evaluated: number; safe_count: number; unsafe_count: number; safe_rate: number };
   by_day: Array<{ day: string; total_cost_usd: number; calls: number }>;
   top_users: Array<{ user_id: number | null; calls: number; total_cost_usd: number }>;
   refusals: Array<{ refusal: string; count: number }>;
@@ -750,6 +779,25 @@ export async function loadAiUsageReport(env: Env, days = 7): Promise<AiUsageRepo
        GROUP BY refusal ORDER BY count DESC`,
   ).bind(since).all<{ refusal: string; count: number }>().catch(() => ({ results: [] as Array<{ refusal: string; count: number }> }));
 
+  const byModel = await env.DB.prepare(
+    `SELECT model,
+            COUNT(*) AS calls,
+            COALESCE(SUM(est_cost_usd), 0) AS total_cost,
+            COALESCE(SUM(fallback_used), 0) AS fb
+       FROM ai_usage_logs
+      WHERE created_at >= ?
+      GROUP BY model
+      ORDER BY total_cost DESC`,
+  ).bind(since).all<{ model: string; calls: number; total_cost: number; fb: number }>().catch(() => ({ results: [] as Array<{ model: string; calls: number; total_cost: number; fb: number }> }));
+
+  const safety = await env.DB.prepare(
+    `SELECT
+        SUM(CASE WHEN safety_score IS NOT NULL THEN 1 ELSE 0 END) AS evaluated,
+        SUM(CASE WHEN safety_score >= 0.5 THEN 1 ELSE 0 END) AS safe_count,
+        SUM(CASE WHEN safety_score IS NOT NULL AND safety_score < 0.5 THEN 1 ELSE 0 END) AS unsafe_count
+       FROM ai_usage_logs WHERE created_at >= ? AND task = 'safety'`,
+  ).bind(since).first<{ evaluated: number; safe_count: number; unsafe_count: number }>().catch(() => null);
+
   const calls = Number(totals?.calls || 0);
   return {
     generated_at: new Date().toISOString(),
@@ -759,6 +807,20 @@ export async function loadAiUsageReport(env: Env, days = 7): Promise<AiUsageRepo
     fallback_rate: calls ? Number(totals?.fb || 0) / calls : 0,
     cache_hit_rate: calls ? Number(totals?.ch || 0) / calls : 0,
     by_task: byTask,
+    by_model: (byModel.results || []).map(r => ({
+      model: r.model,
+      calls: Number(r.calls) || 0,
+      total_cost_usd: Number(r.total_cost) || 0,
+      fallback_count: Number(r.fb) || 0,
+    })),
+    safety: {
+      evaluated: Number(safety?.evaluated || 0),
+      safe_count: Number(safety?.safe_count || 0),
+      unsafe_count: Number(safety?.unsafe_count || 0),
+      safe_rate: Number(safety?.evaluated || 0) > 0
+        ? Number(safety?.safe_count || 0) / Number(safety?.evaluated || 0)
+        : 0,
+    },
     by_day: (byDay.results || []).map(r => ({
       day: r.day, total_cost_usd: Number(r.total_cost) || 0, calls: Number(r.calls) || 0,
     })),
@@ -773,4 +835,13 @@ export async function loadAiUsageReport(env: Env, days = 7): Promise<AiUsageRepo
 // schema flag between scenarios.
 export function __resetForTest(): void {
   _logSchemaReady = false;
+}
+
+// Spec phrased the public entry point as `run(task, payload, opts)`.
+// Workers convention forces us to thread `env` explicitly (no module-level
+// globals), so the actual surface is `run(env, opts)`. This thin adapter
+// gives downstream features (AR/AS/AW/AV/AT/AU) a curried callable that
+// matches the conceptual signature: `const ai = bindAi(env); ai('embed', { text })`.
+export function bindAi(env: Env): (task: TaskClass, payload: Omit<RunOptions, 'task' | 'userId'> & { userId?: number }, userId?: number) => Promise<RunResult> {
+  return (task, payload, userId = 0) => run(env, { ...payload, task, userId: payload.userId ?? userId });
 }

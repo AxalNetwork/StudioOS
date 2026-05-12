@@ -160,6 +160,45 @@ export default function AiUsageTab() {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-200 text-sm font-semibold text-gray-900">Per-model breakdown</div>
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 text-gray-600 uppercase tracking-wide">
+            <tr>
+              <th className="text-left px-4 py-2">Model</th>
+              <th className="text-right px-4 py-2">Calls</th>
+              <th className="text-right px-4 py-2">Spend</th>
+              <th className="text-right px-4 py-2">Used as fallback</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(data?.by_model || []).map(m => (
+              <tr key={m.model} className="border-t border-gray-100">
+                <td className="px-4 py-2 font-mono text-gray-900">{m.model}</td>
+                <td className="px-4 py-2 text-right">{m.calls}</td>
+                <td className="px-4 py-2 text-right">{fmtUsd(m.total_cost_usd)}</td>
+                <td className="px-4 py-2 text-right">{m.fallback_count}</td>
+              </tr>
+            ))}
+            {(data?.by_model || []).length === 0 && (
+              <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400">No model invocations in this window.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {data?.safety && data.safety.evaluated > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="text-sm font-semibold text-gray-900 mb-3">Guardrail safety (llama-guard)</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard icon={Sparkles} label="Evaluated" value={data.safety.evaluated} sub="task=safety calls" />
+            <StatCard icon={Sparkles} label="Safe" value={data.safety.safe_count} accent="emerald" />
+            <StatCard icon={AlertTriangle} label="Unsafe" value={data.safety.unsafe_count} accent="red" />
+            <StatCard icon={Zap} label="Safe rate" value={fmtPct(data.safety.safe_rate)} accent="emerald" />
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200 text-sm font-semibold text-gray-900">Top 10 users by spend</div>
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-600 uppercase tracking-wide">
