@@ -111,7 +111,7 @@ async function loadHelper(notifyImpl) {
     .replace(/: number/g, '')
     .replace(/:\s*any\[\]\s*=/g, ' =')
     .replace(/:\s*any/g, '')
-    .replace(/ as any/g, '');
+    .replace(/ as any/g, '').replace(/new Set<[^>]+>/g, 'new Set').replace(/let pending = rows;/, 'let pending = rows;').replace(/:s*Set<[^>]+>/g, '');
   // Replace the dynamic notify import with our injected stub.
   body = body.replace(
     /const \{ notify \} = await import\('\.\.\/services\/notify'\);/,
@@ -163,10 +163,14 @@ test('idempotent — second call after stamp fires nothing', async () => {
   });
 
   await fn({ DB }, 5);
+  // Run twice — second call must be a no-op (idempotency).
+
   assert.equal(calls.length, 1);
 
   // Re-run — invite is now stamped, so nothing should fire.
   await fn({ DB }, 5);
+  // Run twice — second call must be a no-op (idempotency).
+
   assert.equal(calls.length, 1, 'second call must not re-notify');
   assert.equal(state.invites[0].joined_notified_at != null, true);
 });
@@ -204,4 +208,46 @@ test('does not self-notify if invite somehow points sender at the new user', asy
   });
   await fn({ DB }, 42);
   assert.equal(calls.length, 0);
+});
+
+test('race-safe — skips notify when UPDATE reports 0 changes (concurrent worker)', async () => {
+  // Simulate a concurrent worker that already stamped joined_notified_at
+  // between our SELECT and our UPDATE: the SELECT returned the row, but
+  // the UPDATE matches 0 rows because joined_notified_at is no longer NULL.
+  const calls = [];
+  const fn = await loadHelper(async (_e, a) => { calls.push(a); });
+  // Custom DB that returns row in SELECT but 0 changes in UPDATE.
+  const DB = {
+    prepare(rawSql) {
+      const sql = String(rawSql).replace(/\s+/g, ' ').trim();
+      let bindings = [];
+      return {
+        bind(...args) { bindings = args; return this; },
+        async first() {
+          if (sql.startsWith('SELECT id, email, COALESCE(name, email)')) {
+            return { id: 1, email: 'a@b.co', name: 'A' };
+          }
+          throw new Error('unexpected first: ' + sql);
+        },
+        async all() {
+          if (sql.startsWith('SELECT id, sender_user_id FROM referral_invites')) {
+            // First call returns the row; subsequent re-page returns empty.
+            if (this._returned) return { results: [] };
+            this._returned = true;
+            return { results: [{ id: 99, sender_user_id: 7 }] };
+          }
+          throw new Error('unexpected all: ' + sql);
+        },
+        async run() {
+          // Concurrent worker won the race — UPDATE matches no rows.
+          if (sql.startsWith('UPDATE referral_invites SET joined_notified_at')) {
+            return { meta: { changes: 0 } };
+          }
+          throw new Error('unexpected run: ' + sql);
+        },
+      };
+    },
+  };
+  await fn({ DB }, 1);
+  assert.equal(calls.length, 0, 'must NOT notify when UPDATE changes=0');
 });

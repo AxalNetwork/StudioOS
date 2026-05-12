@@ -215,34 +215,69 @@ async function fireJoinedInviteNotifications(env: Env, newUserId: number): Promi
   }
   if (!rows.length) return;
   const { notify } = await import('../services/notify');
-  for (const row of rows) {
-    const senderId = Number(row.sender_user_id);
-    if (!Number.isFinite(senderId) || senderId === newUserId) continue;
-    // Stamp first — even on notify() failure the inviter won't get a
-    // duplicate "they joined!" celebration on the next signup attempt.
-    try {
-      await env.DB.prepare(
-        `UPDATE referral_invites
-            SET joined_notified_at = CURRENT_TIMESTAMP
-          WHERE id = ? AND joined_notified_at IS NULL`
-      ).bind(row.id).run();
-    } catch (e: any) {
-      console.error('[attachReferral] joined_notified_at stamp failed:', e?.message);
-      continue;
+  const seenIds = new Set<number>();
+  let pending = rows;
+  // Loop in pages of 50 (the SELECT cap) until no more eligible rows
+  // remain. Belt-and-suspenders against the rare case where one
+  // recipient has been invited by >50 senders. `seenIds` defends
+  // against an infinite loop if the stamp UPDATE ever fails to mark a
+  // row (e.g. transient D1 error).
+  let safety = 0;
+  while (pending.length && safety++ < 20) {
+    for (const row of pending) {
+      const inviteId = Number(row.id);
+      if (seenIds.has(inviteId)) continue;
+      seenIds.add(inviteId);
+      const senderId = Number(row.sender_user_id);
+      if (!Number.isFinite(senderId) || senderId === newUserId) continue;
+      // Race-safe idempotency: stamp FIRST, and only fire notify() if
+      // THIS execution actually flipped joined_notified_at from NULL
+      // (meta.changes === 1). Concurrent attachReferral calls for the
+      // same recipient — possible on retried registrations — will see
+      // changes === 0 here and skip the notify, even though their
+      // earlier SELECT returned the same row.
+      let changed = 0;
+      try {
+        const r: any = await env.DB.prepare(
+          `UPDATE referral_invites
+              SET joined_notified_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND joined_notified_at IS NULL`
+        ).bind(inviteId).run();
+        changed = Number(r?.meta?.changes ?? 0);
+      } catch (e: any) {
+        console.error('[attachReferral] joined_notified_at stamp failed:', e?.message);
+        continue;
+      }
+      if (changed === 0) continue; // another worker already notified
+      try {
+        await notify(env, {
+          userId: senderId,
+          type: 'referral_invite_joined',
+          category: 'proactive_nudges',
+          title: `${recipientName} just joined via your invite`,
+          body: `${recipientName} signed up using your referral link — you'll earn $50 when they complete KYC, plus 2% on any deal they fund. Track progress on your referrals page.`,
+          link: '/referrals',
+          payload: { invite_id: inviteId, joined_user_id: newUserId },
+          channels: ['in_app', 'email'],
+        });
+      } catch (e: any) {
+        console.error('[attachReferral] notify referral_invite_joined failed:', e?.message);
+      }
     }
+    // Re-page in case >50 inviters exist for this recipient.
     try {
-      await notify(env, {
-        userId: senderId,
-        type: 'referral_invite_joined',
-        category: 'proactive_nudges',
-        title: `${recipientName} just joined via your invite`,
-        body: `${recipientName} signed up using your referral link. You'll earn commissions as they engage on the platform — track progress on your referrals page.`,
-        link: '/referrals',
-        payload: { invite_id: row.id, joined_user_id: newUserId },
-        channels: ['in_app', 'email'],
-      });
-    } catch (e: any) {
-      console.error('[attachReferral] notify referral_invite_joined failed:', e?.message);
+      const r: any = await env.DB.prepare(
+        `SELECT id, sender_user_id
+           FROM referral_invites
+          WHERE LOWER(recipient_email) = LOWER(?)
+            AND status = 'joined'
+            AND signed_up_user_id = ?
+            AND joined_notified_at IS NULL
+          LIMIT 50`
+      ).bind(recipientRow.email, newUserId).all();
+      pending = r?.results || [];
+    } catch {
+      pending = [];
     }
   }
 }
