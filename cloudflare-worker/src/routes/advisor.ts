@@ -215,7 +215,7 @@ function selectBank(
   user: User,
   answered: Set<string>,
   gate: AdvisorGate,
-  focusSection?: string,
+  focus?: string,
 ): { visible: Question[]; deferred: ReturnType<typeof filterByContext>['deferred'] } {
   const persona = personaFor(user);
   const detectorAnswered = DETECTOR_IDS.filter((id) => answered.has(id)).length;
@@ -223,12 +223,17 @@ function selectBank(
   if (persona === 'unknown') return { visible: ROLE_DETECTOR, deferred: [] };
 
   const personaBank = bankFor(persona, { spinoutLabActive: gate.spinoutLabActive });
+  // `focus` accepts either a section label (BUILD/CAPITAL/LEGAL/…)
+  // or a page_target path (e.g. `/build/discovery`). Section labels
+  // are uppercase ASCII; anything else is treated as a page.
+  const isPageFocus = !!focus && (focus.startsWith('/') || focus.includes('/'));
   const filtered = filterByContext(personaBank, {
     persona,
     week: gate.week,
     tiers: gate.tiers,
     completedMilestones: gate.completedMilestones,
-    focusSection,
+    focusSection: focus && !isPageFocus ? focus : undefined,
+    focusPage: focus && isPageFocus ? focus : undefined,
   });
   // Critical-first sort within section keeps the most important
   // questions ahead of nice-to-haves.

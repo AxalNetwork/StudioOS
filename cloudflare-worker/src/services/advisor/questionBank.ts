@@ -173,6 +173,7 @@ export interface FilterContext {
   tiers?: Set<string>;            // active billing tiers (e.g. 'investor_pro')
   completedMilestones?: Set<string>;
   focusSection?: string;          // pin to one section
+  focusPage?: string;             // pin to one page_target (e.g. '/build/discovery')
 }
 
 export interface DeferredQuestion {
@@ -199,8 +200,12 @@ export function filterByContext(bank: Question[], ctx: FilterContext): FilteredB
       deferred.push({ question: q, reason: 'persona_filter' });
       continue;
     }
-    // section focus
+    // focus pin — supports either section (BUILD/CAPITAL/…) or
+    // page_target (`/build/discovery`). When set we silently exclude
+    // off-focus questions from BOTH visible and deferred so the
+    // /next-question?focus= envelope only contains in-focus rows.
     if (ctx.focusSection && q.section && q.section !== ctx.focusSection) continue;
+    if (ctx.focusPage && q.page_target && q.page_target !== ctx.focusPage) continue;
 
     // week gate
     const u = q.unlock_required;
@@ -220,15 +225,14 @@ export function filterByContext(bank: Question[], ctx: FilterContext): FilteredB
         continue;
       }
     }
-    // tier gate (advisor still surfaces these — write-router returns
-    // `paywalled` envelope when the user submits — so do NOT defer
-    // unless we want to hide them entirely. We hide tier-gated
-    // questions only when explicitly missing the tier flag.)
+    // tier gate — Task #2 (AR) hides tier-locked questions entirely
+    // from the served bank. They appear only in the manifest's
+    // `deferred` list so the upgrade CTA can render with copy, but
+    // /next-question / /answer / /skip / /progress treat them as
+    // not present until the user upgrades.
     if (q.tier_required && !tiers.has(q.tier_required)) {
-      // Surface anyway so the user sees the upgrade CTA via the
-      // existing /answer paywalled path. Mark deferred metadata for
-      // the manifest consumers.
       deferred.push({ question: q, reason: 'tier', detail: `Requires ${q.tier_required}.` });
+      continue;
     }
     visible.push(q);
   }

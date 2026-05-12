@@ -13,21 +13,19 @@
 -- worker also runs `ensureAdvisorWeekColumn()` lazily at request
 -- time so dev/SQLite works without running this file.
 
--- Marker-only file: D1 has no `IF NOT EXISTS` for ADD COLUMN, and
--- the column already exists on prod (added historically via
--- `wrangler d1 execute --command`). Applying a raw ALTER here would
--- fail with `duplicate column name`. The worker self-heals dev/SQLite
--- on first /advisor request via `ensureAdvisorWeekColumn()`.
---
--- To apply the column on a fresh D1 instance, run:
---   wrangler d1 execute studioos-db --remote \
---     --command "ALTER TABLE users ADD COLUMN spinout_lab_week INTEGER DEFAULT 1"
---
--- The marker-row insert below is the safe portion of this migration
--- and is idempotent.
+-- Marker-table FIRST so the apply tool records that this migration
+-- ran even if the ALTER fails on an environment where the column
+-- already exists. The actual column add follows; on FRESH instances
+-- (including dev SQLite) it succeeds; on prod it errors with
+-- `duplicate column name spinout_lab_week` (expected — see replit.md
+-- gotcha for migration 024). The worker also runs a lazy
+-- `ensureAdvisorWeekColumn()` PRAGMA-check at request time as a
+-- belt-and-braces fallback for dev DBs.
 CREATE TABLE IF NOT EXISTS _migrations_applied (
   name TEXT PRIMARY KEY,
   applied_at TEXT DEFAULT (datetime('now'))
 );
 INSERT OR IGNORE INTO _migrations_applied (name)
   VALUES ('041_advisor_week_gating');
+
+ALTER TABLE users ADD COLUMN spinout_lab_week INTEGER DEFAULT 1;
