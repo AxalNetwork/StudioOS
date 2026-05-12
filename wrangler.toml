@@ -181,6 +181,15 @@ index_name = "axal-search"
 binding     = "FILES"
 bucket_name = "studioos-files"
 
+# Task #2 (AU) — Admin Publication Exports. Holds rendered PDF/CSV/PNG
+# artifacts under key prefix `publications/<id>/<isoTs>-<rand>.<ext>`.
+# Bucket is private — downloads are gated through the Worker via 24h
+# HMAC-signed URLs (no S3-compat presigning, no public R2 access).
+# Provision: `npx wrangler r2 bucket create studioos-publications`.
+[[r2_buckets]]
+binding     = "PUBLICATIONS"
+bucket_name = "studioos-publications"
+
 # ---------- Workers Analytics Engine ----------
 # Task #13 — write a data point per HTTP request from the observability
 # middleware (cloudflare-worker/src/middleware/observability.ts) so the
@@ -327,6 +336,10 @@ index_name = "axal-search"
 binding     = "FILES"
 bucket_name = "studioos-files"
 
+[[env.production.r2_buckets]]
+binding     = "PUBLICATIONS"
+bucket_name = "studioos-publications"
+
 [[env.production.analytics_engine_datasets]]
 binding = "ANALYTICS"
 dataset = "studioos_metrics"
@@ -425,6 +438,10 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 [[env.preview.r2_buckets]]
 binding     = "FILES"
 bucket_name = "studioos-files-preview"
+
+[[env.preview.r2_buckets]]
+binding     = "PUBLICATIONS"
+bucket_name = "studioos-publications-preview"
 
 [[env.preview.analytics_engine_datasets]]
 binding = "ANALYTICS"

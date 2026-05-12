@@ -124,6 +124,15 @@ export interface Env {
   // R2 bucket for KYC documents and other large/private blobs.
   // Optional so unit-test envs without R2 bindings still type-check.
   FILES?: R2Bucket;
+  // Task #2 (AU) — R2 bucket for admin-composed publication artifacts
+  // (PDF/CSV/PNG). Public access is OFF; downloads are gated through the
+  // Worker via 24h HMAC-signed URLs. Falls back to FILES on dev envs
+  // where the dedicated bucket isn't bound.
+  PUBLICATIONS?: R2Bucket;
+  // Task #2 (AU) / Task #13 — Cloudflare Browser Rendering binding used
+  // by both the analytics export PDF path and admin publication renders.
+  // When undefined the publication render falls back to inline HTML.
+  BROWSER?: { fetch: (input: string, init?: RequestInit) => Promise<Response> };
   // Native Cloudflare Queues binding. Optional so unit-test envs and
   // older deploys that haven't been re-deployed against the updated
   // wrangler.toml don't crash on absence — the producer falls back to

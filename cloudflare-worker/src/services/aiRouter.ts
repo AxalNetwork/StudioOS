@@ -159,7 +159,12 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // only after all WAI hops fail. Matches the spec's "Workers AI is
   // primary; Anthropic is a narrow fallback for high-stakes synthesis only"
   // and "Anthropic only invoked for publication and dd_synthesis".
-  publication:  { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], anthropicFallback: 'claude-haiku-4-5' },
+  // Task #2 (AU): admin publication summaries are deterministic
+  // headline synthesis. Spec mandates Anthropic claude-haiku-4-5 with
+  // prompt caching as the PRIMARY model (not a fallback) so admins get
+  // consistent voice/quality on every render. Workers AI llamas remain
+  // as the cost-bounded fallback chain.
+  publication:  { provider: 'anthropic', model: 'claude-haiku-4-5', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
   dd_synthesis: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], anthropicFallback: 'claude-sonnet-4-6' },
 };
 
@@ -571,13 +576,20 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   const callClaude = (model: string): Promise<ProviderResult> =>
     withTimeout(callAnthropic(env, model, opts), PRIMARY_TIMEOUT_MS);
 
-  let attempt = await callWai(route.model);
+  // Pick the primary call based on route.provider. Anthropic-primary
+  // tasks (Task #2 AU publication) call Claude first; Workers AI
+  // siblings in `fallbackChain` are the cost-bounded retries.
+  let attempt = route.provider === 'anthropic'
+    ? await callClaude(route.model)
+    : await callWai(route.model);
   let modelUsed = route.model;
   let fallbackUsed = false;
   let lastError = attempt.error;
 
   // Workers AI multi-hop fallback chain (spec: tool_call → advisor_turn →
-  // role_detect, i.e. qwen32b → llama-70b → llama-8b).
+  // role_detect, i.e. qwen32b → llama-70b → llama-8b). Also used as the
+  // anthropic-primary fallback chain (publication: haiku-4-5 → llama-70b
+  // → llama-8b) so the SPA never blocks on Anthropic outages.
   if (!attempt.ok && route.fallbackChain?.length) {
     for (const sibling of route.fallbackChain) {
       const next = await callWai(sibling);

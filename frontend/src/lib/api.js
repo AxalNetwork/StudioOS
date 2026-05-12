@@ -1563,6 +1563,57 @@ export const dd = {
   },
 };
 
+// Task #2 (AU) — Admin Publication Exports.
+export const publications = {
+  list: (status) => request(`/admin/publications${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  get: (id) => request(`/admin/publications/${id}`),
+  draft: (payload) => request('/admin/publications/draft', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id, patch) => request(`/admin/publications/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  // Render returns the artifact bytes directly (PDF/CSV/PNG) with the
+  // shareable 24h HMAC link in the `X-Download-URL` response header.
+  // We trigger an immediate browser download via an object URL and
+  // surface the shareable link to the caller for "copy share URL" UX.
+  render: async (id, format) => {
+    const res = await fetch(`/api/admin/publications/${id}/render`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ format }),
+    });
+    if (!res.ok) {
+      let msg = res.statusText || `Render failed (${res.status})`;
+      try { const j = await res.json(); msg = j.message || j.error || msg; } catch { /* not json */ }
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    // Trigger download with a server-derived filename so the user gets
+    // the slug-based name (e.g. q2-sector-heat-brief.pdf), not a UUID.
+    const cd = res.headers.get('content-disposition') || '';
+    const m = /filename="?([^"]+)"?/i.exec(cd);
+    const filename = m ? m[1] : `publication-${id}.${format}`;
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    return {
+      format: res.headers.get('x-render-format') || format,
+      filename,
+      download_url: res.headers.get('x-download-url') || null,
+      expires_in_seconds: parseInt(res.headers.get('x-download-expires-in') || '0', 10) || null,
+      blob_size: blob.size,
+    };
+  },
+  publish: (id) => request(`/admin/publications/${id}/publish`, { method: 'POST', body: JSON.stringify({}) }),
+  // Public read uses /api/market-intel-public so it sits OUTSIDE the
+  // /api/admin/* CF Access perimeter — anonymous visitors must be able
+  // to load /insights/public/:slug without an Axal session.
+  publicGet: (slug) => request(`/market-intel-public/publications/${slug}`),
+};
+
 // Spin-Out Lab — 4-week guided sprint for pre-incorporation founders.
 // Namespaced separately from `api` to keep the surface small and obvious
 // for the call sites that wire milestone completion in feature pages.

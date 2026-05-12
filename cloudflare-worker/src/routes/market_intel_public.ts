@@ -12,6 +12,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { ensureMarketIntelSchema } from '../services/market_intel/schema';
 import { verifyUnsubscribeToken } from '../services/market_intel/digest';
+import { loadSectionAggregates, periodLabel, K_MIN, verifyPublicationToken } from '../services/publications';
 
 const marketIntelPublic = new Hono<{ Bindings: Env }>();
 
@@ -136,5 +137,89 @@ function unsubscribePage(message: string): string {
 </head><body><h1 style="font-weight:600">Axal StudioOS</h1>
 <p>${message.replace(/</g, '&lt;')}</p></body></html>`;
 }
+
+// Task #2 (AU) — Public read for an admin-published Axal-VC publication.
+// Mounted under /api/market-intel-public, which sits OUTSIDE the
+// /api/admin/* CF Access perimeter, so anonymous visitors can read a
+// published report at /insights/public/:slug without an Axal session.
+marketIntelPublic.get('/publications/:slug', async (c) => {
+  const slug = c.req.param('slug');
+  if (!slug || !/^[a-z0-9-]{1,80}$/i.test(slug)) {
+    return c.json({ error: 'invalid_slug' }, 400);
+  }
+  // Lazy schema bootstrap — the admin route also runs this; safe to skip
+  // if the table doesn't exist (just returns 404).
+  let pub;
+  try {
+    pub = await c.env.DB.prepare(
+      "SELECT id, slug, title, subtitle, audience, section, filters_json, summary_text, status, published_at FROM admin_publications WHERE slug = ? AND status = 'published' LIMIT 1",
+    ).bind(slug).first<{
+      id: number; slug: string; title: string; subtitle: string | null;
+      audience: string; section: string; filters_json: string;
+      summary_text: string; status: string; published_at: string | null;
+    }>();
+  } catch (e) {
+    console.warn('[mi public] publications query failed:', (e as Error).message);
+    return c.json({ error: 'not_found' }, 404);
+  }
+  if (!pub) return c.json({ error: 'not_found' }, 404);
+  let filters: Record<string, unknown> = {};
+  try { filters = JSON.parse(pub.filters_json || '{}') as Record<string, unknown>; } catch { /* keep {} */ }
+  const internalAggregates = await loadSectionAggregates(c.env, pub.section, filters);
+  // Strict allow-list for the public read shape. The internal
+  // AggregateRow includes `payload` (raw payload_json blobs that may
+  // carry sample-row metadata, internal scoring labels, or partner
+  // notes); per spec the public endpoint must expose ONLY the four
+  // k-anonymized aggregate fields. Returning `payload` here would be a
+  // PII / internal-data exposure on an endpoint that sits outside the
+  // CF Access perimeter and is reachable by anyone with the slug.
+  const aggregates = internalAggregates.map(r => ({
+    dimension_key: r.dimension_key,
+    period_key: r.period_key,
+    n: r.n,
+    value: r.value,
+  }));
+  return c.json({
+    publication: {
+      slug: pub.slug,
+      title: pub.title,
+      subtitle: pub.subtitle,
+      audience: pub.audience,
+      section: pub.section,
+      filters,
+      summary_text: pub.summary_text,
+      published_at: pub.published_at,
+      og: {
+        title: `${pub.title} · Axal VC`,
+        description: (pub.subtitle || pub.summary_text || '')
+          .replace(/^-\s*\[[^\]]*\]\s*/, '')
+          .replace(/\s*\(\d{4}-W?\d+\)\s*$/, '')
+          .slice(0, 200),
+        site_name: 'Axal Venture Studio',
+      },
+    },
+    aggregates,
+    period_label: periodLabel(internalAggregates),
+    k_min: K_MIN,
+  });
+});
+
+// Task #2 (AU) — HMAC-gated download for any publication render artifact
+// in R2. The token (24h TTL, prefix-locked to "publications/") IS the
+// authorisation, so this lives outside the CF Access perimeter to allow
+// admins to forward render links by email to LPs/founders/media.
+marketIntelPublic.get('/publications/download/:token', async (c) => {
+  const v = await verifyPublicationToken(c.env, c.req.param('token'));
+  if (!v) return c.json({ error: 'link_expired_or_invalid' }, 403);
+  const bucket = c.env.PUBLICATIONS || c.env.FILES || null;
+  if (!bucket) return c.json({ error: 'r2_unavailable' }, 503);
+  const obj = await bucket.get(v.key);
+  if (!obj) return c.json({ error: 'not_found' }, 404);
+  const headers = new Headers();
+  obj.writeHttpMetadata(headers);
+  headers.set('Cache-Control', 'private, max-age=0, no-store');
+  headers.set('Content-Disposition', `attachment; filename="${v.key.split('/').pop()}"`);
+  return new Response(obj.body, { headers });
+});
 
 export default marketIntelPublic;

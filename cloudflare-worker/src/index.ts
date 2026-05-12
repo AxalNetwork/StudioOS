@@ -30,6 +30,7 @@ import legal from './routes/legal';
 import legalcap from './routes/legalcap';
 import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
+import adminPublications from './routes/admin_publications';
 import partnerOnboarding from './routes/partner_onboarding';
 import partnerPortal from './routes/partner_portal';
 // Task #10 (AC-1) — Personal advisor backend + write-router.
@@ -291,6 +292,7 @@ app.route('/api/partners', partners);
 // /api/admin/partners (separate from legacy /api/partners) and the
 // public token-gated onboarding flow under /api/partner-onboard.
 app.route('/api/admin/partners', adminPartners);
+app.route('/api/admin/publications', adminPublications);
 app.route('/api/partner-onboard', partnerOnboarding);
 app.route('/api/partner-portal', partnerPortal);
 // Task #10 (AC-1) — Personal advisor (dashboard chatbot + write-router).
