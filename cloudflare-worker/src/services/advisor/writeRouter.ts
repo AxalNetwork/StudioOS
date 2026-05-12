@@ -463,10 +463,12 @@ export async function routeAnswer(
   // bundle is overkill for ~6 fields; the shape is small and the
   // page Zod schemas live in a separate package.
   const NUMERIC_FIELDS: Record<string, { min: number; max?: number; label: string }> = {
-    'founder.financials.runway_months':   { min: 0, max: 600,        label: 'months of runway' },
-    'founder.financials.monthly_burn':    { min: 0, max: 100_000_000, label: 'monthly burn (USD)' },
-    'founder.financials.mrr':             { min: 0, max: 1_000_000_000, label: 'MRR (USD)' },
-    'founder.raise.target_usd':           { min: 0, max: 1_000_000_000, label: 'raise target (USD)' },
+    // Note: keys must match the canonical bank IDs in
+    // banks/existingFounder.ts (USD-suffixed columns; capital section).
+    'founder.financials.runway_months':     { min: 0, max: 600,        label: 'months of runway' },
+    'founder.financials.monthly_burn_usd':  { min: 0, max: 100_000_000, label: 'monthly burn (USD)' },
+    'founder.financials.mrr_usd':           { min: 0, max: 1_000_000_000, label: 'MRR (USD)' },
+    'founder.capital.raise_target_usd':     { min: 0, max: 1_000_000_000, label: 'raise target (USD)' },
   };
   const numSpec = NUMERIC_FIELDS[questionId];
   if (numSpec) {

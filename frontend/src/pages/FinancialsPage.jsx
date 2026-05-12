@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import PageExplainer from '../components/PageExplainer';
+import AdvisorFilledBanner from '../components/advisor/AdvisorFilledBanner';
 import { Link, useSearchParams } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid, Legend } from 'recharts';
 import { Save, Download, RefreshCw, AlertCircle, TrendingUp, Target, Wallet, Activity, FolderPlus, Plus } from 'lucide-react';
@@ -177,6 +178,9 @@ export default function FinancialsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Task #3 (AS) — surface advisor-sourced fills with one-line
+          citations so founders can audit what the advisor wrote. */}
+      <AdvisorFilledBanner page="/build/financials" />
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Financial Model</h1>

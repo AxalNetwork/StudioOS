@@ -666,18 +666,58 @@ advisor.post('/answer', async (c) => {
     }, 422);
   }
 
-  await recordAnswer(c.env, conv, user, q.id, valueStr, result);
-  // Task #3 (AS) — audit row for per-page <AdvisorFilledBanner>
-  // + activity_logs hook so the global activity stream attributes
-  // each advisor-driven write to the user.
-  if (result.status === 'saved') {
-    await recordFieldSource(
-      c.env, user.id, q.id, q.page_target || null,
-      result.saved_to || null, 'advisor', evidenceStr,
-    );
-    try {
+  // Task #3 (AS) — atomic post-write batch. D1 doesn't expose
+  // BEGIN/COMMIT for raw SQL but `env.DB.batch([...])` runs the
+  // statements in a single implicit transaction (all-or-nothing
+  // commit). We batch advisor_answers + (on saved) field_sources
+  // + activity_logs so a partial-write can't leave the audit
+  // tables out of sync with the routed write above. The routed
+  // write itself already happened inside routeAnswer; if any of
+  // these fail we log but don't roll the routed write back, since
+  // re-trying the user's chat turn would otherwise duplicate it.
+  try {
+    const stmts: D1PreparedStatement[] = [];
+    stmts.push(c.env.DB.prepare(
+      `INSERT INTO advisor_answers
+         (conversation_id, user_id, question_id, raw_value, saved_to_table, saved_to_column, saved_to_id, saved_status, saved_error)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(conversation_id, question_id) DO UPDATE SET
+         raw_value = excluded.raw_value,
+         saved_to_table = excluded.saved_to_table,
+         saved_to_column = excluded.saved_to_column,
+         saved_to_id = excluded.saved_to_id,
+         saved_status = excluded.saved_status,
+         saved_error = excluded.saved_error`,
+    ).bind(
+      conv.id, user.id, q.id, valueStr,
+      result.saved_to?.table || null,
+      result.saved_to?.column || null,
+      result.saved_to?.id != null ? String(result.saved_to.id) : null,
+      result.status,
+      result.error || null,
+    ));
+    if (result.status === 'saved') {
+      stmts.push(c.env.DB.prepare(
+        `INSERT INTO field_sources
+           (user_id, question_id, page_target, saved_to_table, saved_to_column, saved_to_id, source, evidence_text, filled_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'advisor', ?, datetime('now'))
+         ON CONFLICT(user_id, question_id) DO UPDATE SET
+           page_target = excluded.page_target,
+           saved_to_table = excluded.saved_to_table,
+           saved_to_column = excluded.saved_to_column,
+           saved_to_id = excluded.saved_to_id,
+           source = excluded.source,
+           evidence_text = excluded.evidence_text,
+           filled_at = excluded.filled_at`,
+      ).bind(
+        user.id, q.id, q.page_target || null,
+        result.saved_to?.table || null,
+        result.saved_to?.column || null,
+        result.saved_to?.id != null ? String(result.saved_to.id) : null,
+        evidenceStr,
+      ));
       const actorHash = await hashEmail(user.email || '');
-      await c.env.DB.prepare(
+      stmts.push(c.env.DB.prepare(
         `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
       ).bind(
         'advisor_field_filled',
@@ -689,9 +729,21 @@ advisor.post('/answer', async (c) => {
         }),
         actorHash,
         user.id,
-      ).run();
-    } catch (e) {
-      console.warn('[advisor] activity_logs insert failed', (e as Error).message);
+      ));
+    }
+    await c.env.DB.batch(stmts);
+  } catch (e) {
+    // Best-effort fallback: if the batch failed (e.g. legacy DB
+    // without field_sources before ensureSchema ran), retry the
+    // bare advisor_answers write so the conversation history is
+    // still persisted.
+    console.warn('[advisor] post-answer batch failed', (e as Error).message);
+    await recordAnswer(c.env, conv, user, q.id, valueStr, result);
+    if (result.status === 'saved') {
+      await recordFieldSource(
+        c.env, user.id, q.id, q.page_target || null,
+        result.saved_to || null, 'advisor', evidenceStr,
+      );
     }
   }
 
