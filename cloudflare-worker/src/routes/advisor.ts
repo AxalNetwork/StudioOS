@@ -1019,9 +1019,29 @@ advisor.post('/explain', async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) {
     return c.json({ error: 'advisor explanations are not configured' }, 503);
   }
-  const body = await readJson<{ topic?: string; conversation_id?: string; conversation_uid?: string }>(c);
+  const body = await readJson<{ topic?: string; question_id?: string; conversation_id?: string; conversation_uid?: string }>(c);
   const topic = String(body?.topic || '').trim().slice(0, 500);
   if (!topic) return c.json({ error: 'topic is required' }, 400);
+  // Task #2 (AR) — when an explicit `question_id` is supplied, the
+  // explanation must be constrained to a question the user can
+  // currently see (persona/week/tier/unlock filtered). Topic-only
+  // requests remain free-form for backward compatibility (e.g.
+  // explaining a doc anchor or page concept), but if a caller
+  // names a specific question we refuse to explain hidden ones —
+  // otherwise the LLM would leak the existence of upgrade-gated
+  // or future-week content.
+  const requestedQid = body?.question_id ? String(body.question_id).trim() : '';
+  if (requestedQid) {
+    const answeredRows = await c.env.DB.prepare(
+      `SELECT question_id FROM advisor_answers WHERE user_id = ?`,
+    ).bind(user.id).all<{ question_id: string }>();
+    const answered = new Set<string>((answeredRows.results || []).map((r) => r.question_id));
+    const gate = await loadAdvisorGate(c.env, user);
+    const { visible } = selectBank(user, answered, gate, undefined);
+    if (!visible.some((q) => q.id === requestedQid)) {
+      return c.json({ error: 'question_not_available' }, 409);
+    }
+  }
   // Per AC-1 the LLM is shown only the topic + persona context — never
   // free-form user-typed answer text. Strip prompt-injection markers
   // (system tags, role overrides) defensively before they reach

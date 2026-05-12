@@ -27,7 +27,7 @@
  *   GET  /advisor/conversations/:id → { messages, answers, progress }
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Sparkles, Send, X, Minus, HelpCircle, Loader2, CheckCircle2,
   ArrowRight, MessageSquare, ChevronRight, SkipForward, BookOpen,
@@ -69,6 +69,7 @@ function useIsDesktop() {
 
 export default function PersonalAdvisor() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const persisted = useMemo(() => safeReadJSON(STORAGE_KEY, { minimised: false }) || { minimised: false }, []);
   const [minimised, setMinimised] = useState(!!persisted.minimised);
   const [conversationId, setConversationId] = useState(persisted.conversation_id || null);
@@ -459,33 +460,24 @@ export default function PersonalAdvisor() {
               ) : (
                 <div className="space-y-2">
                   {ringStats.map((r) => (
-                    <div
+                    // Single click on a progress bar → both pin
+                    // advisor focus to this page AND navigate to it.
+                    // Per task brief: "clicking a bar deep-links to
+                    // that page and pins advisor focus" as one action.
+                    <button
                       key={r.page}
-                      className="p-2 rounded-lg hover:bg-white dark:hover:bg-gray-900 border border-transparent hover:border-gray-200 dark:hover:border-gray-800 transition-colors"
+                      type="button"
+                      onClick={() => { pickFocus(r.page); navigate(r.page); }}
+                      className="w-full text-left p-2 rounded-lg hover:bg-white dark:hover:bg-gray-900 border border-transparent hover:border-gray-200 dark:hover:border-gray-800 transition-colors"
+                      title={`Focus advisor on ${r.label} and open the page`}
                     >
                       <div className="flex items-center gap-2 mb-1">
-                        {/* Click the LABEL → set advisor focus to this
-                            page's section so the next question pins
-                            here. The arrow → navigates to the page. */}
-                        <button
-                          type="button"
-                          onClick={() => pickFocus(r.page)}
-                          className="flex-1 min-w-0 text-left text-xs font-medium text-gray-900 dark:text-gray-100 truncate hover:text-violet-700 dark:hover:text-violet-300"
-                          title={`Focus advisor on ${r.label}`}
-                        >
-                          {r.label}
-                        </button>
+                        <div className="flex-1 min-w-0 text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{r.label}</div>
                         <div className="text-[10px] text-gray-500 dark:text-gray-400 flex-shrink-0">{r.done} / {r.total}</div>
-                        <Link
-                          to={r.page}
-                          className="text-gray-400 hover:text-violet-600 flex-shrink-0"
-                          title={`Open ${r.label}`}
-                        >
-                          <ChevronRight size={12} />
-                        </Link>
+                        <ChevronRight size={12} className="text-gray-400 flex-shrink-0" />
                       </div>
                       <ProgressBar percent={r.percent} done={r.done === r.total && r.total > 0} />
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
