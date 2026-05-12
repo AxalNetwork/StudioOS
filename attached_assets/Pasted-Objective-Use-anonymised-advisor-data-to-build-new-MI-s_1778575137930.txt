@@ -1,0 +1,117 @@
+Objective
+  Use anonymised advisor data to build new MI sections that founders
+  and investors can use to position themselves. All extractions
+  happen server-side; no raw user content leaves /api/market-intel.
+  k-anonymity ≥ 5 enforced on every cell.
+
+New sections (each lives as a tab on MarketIntelPage.jsx)
+
+  1. Axal Investor Signals
+       Aggregated investor thesis fields → sector heatmap, average
+       ticket, top thesis n-grams. (Already specced in Prompt E;
+       wire the advisor data into it now.)
+
+  2. Founder Sentiment
+       From every advisor answer flagged as `sentiment_eligible`
+       (free-text fields like problem urgency, customer pain, blocker
+       reasons), run bge-base-en-v1.5 → 768-dim embedding +
+       llama-3.3-70b classifier returning {valence: -1..1, energy:
+       0..1, topic_tag}.
+       Aggregate per sector and per week.
+       Surface chart: rolling 30-day sentiment line + top blockers
+       word cloud + top excitements.
+
+  3. Technology Adoption Lifecycle (TALC) positioning
+       Question bank asks each founder where they think they are on
+       the TALC (Innovators / Early Adopters / Early Majority / Late
+       Majority / Laggards) and where their product/sector is.
+       Investors answer where they prefer to deploy.
+       Output: stacked bar of where users self-position by sector;
+       gap chart of "founder belief vs investor preference"
+       (chasm-crossing readiness).
+
+  4. Demand & Supply Atlas
+       Founders' service needs (mentors, lawyers, designers, GTM,
+       data engineering) vs Operating Partners' offered services
+       and Investors' connected service partners. Output: two-sided
+       heatmap per sector with shortage / surplus pills.
+
+  5. Founder-Investor Fit
+       Cosine similarity between founder thesis embeddings (from
+       advisor answers) and investor thesis embeddings.
+       Per founder: top-5 matching active investors (de-identified
+       until NDA per Prompt Y).
+       Per investor: top-N deals matching thesis.
+
+  6. Partner Marketplace Pulse
+       From Operating Partner offer bank: average rate cards,
+       capacity by skill, distribution of compensation models
+       (cash/equity/revshare).
+       From founder needs: time-to-fill, success rate of intros.
+
+  7. Sector Heat (composite)
+       Combines: external sources (Crunchbase, EDGAR, Trends, etc.)
+       × internal signals (founder activity counts, investor
+       inquiries per sector). Single composite "Axal Sector Heat"
+       index per sector + sub-sector.
+
+  8. Sentiment Geography
+       Map view: per-country sentiment + activity count.
+
+  9. Capital Velocity
+       From investor advisor answers (deployment target, follow-on
+       reserve, current deployment pace) + actual deal flow on
+       platform — a per-quarter velocity index.
+
+Pipelines
+  cloudflare-worker/src/services/market_intel/extractors/
+    sentiment.ts                  bge + llama-3.3-70b classifier
+    talc_position.ts              parses TALC self-position questions
+    thesis_embedding.ts           bge embeddings for founder+investor thesis
+    demand_supply.ts              normalises needs vs offers
+    fit_match.ts                  cosine + threshold
+    sector_heat.ts                composite formula
+
+  Each extractor runs:
+    - on every advisor_answer insert via a queue job (idempotent),
+    - and as a nightly batch reconciliation cron.
+
+Storage
+  market_intel_signals (id, source='advisor', metric_key, sector,
+                        geo, persona, value, payload_json,
+                        snapshot_ts)
+  market_intel_aggregates (sector, metric_key, granularity, ts,
+                           value, n, ci_lower, ci_upper)
+  market_intel_embeddings (entity_type, entity_id, vector BLOB,
+                            ts)
+  Aggregates are computed nightly; reads always go to the
+  aggregates table (fast).
+
+Endpoints
+  GET /api/market-intel/sentiment?sector=&window=
+  GET /api/market-intel/talc?sector=
+  GET /api/market-intel/demand-supply?sector=
+  GET /api/market-intel/fit/founder/:project_id
+  GET /api/market-intel/fit/investor/me
+  GET /api/market-intel/partner-pulse
+  GET /api/market-intel/sector-heat
+  GET /api/market-intel/sentiment-geo
+  GET /api/market-intel/capital-velocity
+
+Privacy
+  - Suppress cells with n < 5.
+  - Investor identities never disclosed without signed pairwise NDA.
+  - Free-text excerpts shown in dashboards are paraphrased by
+    llama-3.3-70b, never raw user text. Paraphrases stored in
+    market_intel_snippets with origin redacted.
+  - Per-user opt-out toggle (Settings > Privacy → "Contribute my
+    advisor answers to anonymised Market Intelligence", default on).
+
+Acceptance
+  - Each new MI tab renders with real (anonymised) numbers after the
+    first nightly aggregation.
+  - Sentiment + TALC charts update within minutes of new advisor
+    answers.
+  - Founder Fit returns matching investors only after a signed NDA
+    is in place; otherwise hashed identifiers.
+  - Opt-out toggle removes a user's contribution within 24h.

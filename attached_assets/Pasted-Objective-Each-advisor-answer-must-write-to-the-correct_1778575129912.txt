@@ -1,0 +1,68 @@
+Objective
+  Each advisor answer must write to the correct database column /
+  page resource, respecting auth + IDOR + tier. Existing founders
+  should be able to populate Projects, Pipeline, Studio Ops, Brand,
+  Pitch Deck, Financial Model, Customer Discovery, Roadmap, Metrics
+  without leaving the dashboard.
+
+Write router
+  cloudflare-worker/src/services/advisor/writeRouter.ts
+  Single source of truth mapping question_id → write fn:
+    {
+      'founder.build.project.problem'    : writeProjectField('problem_statement'),
+      'founder.build.project.solution'   : writeProjectField('solution'),
+      'founder.build.pipeline.stage_name': writePipelineColumn(),
+      'founder.build.studioops.cadence'  : writeStudioOpsCadence(),
+      'founder.build.brand.tagline'      : writeBrandField('tagline'),
+      'founder.build.deck.slide.problem' : writeDeckSlide('problem'),
+      'founder.build.financials.mrr'     : writeFinancialField('mrr_usd', requireEvidence),
+      'founder.build.discovery.interview': createDiscoveryInterview(),
+      'founder.build.roadmap.okr'        : createRoadmapOkr(),
+      'founder.build.metrics.dau'        : writeMetric('dau'),
+      'investor.thesis.line'             : writeInvestorProfile('thesis_text'),
+      'investor.watchlist.seed'          : createWatchlistItem(),
+      'partner.offer.services'           : writePartnerProfile('services_offered_json'),
+      … (one mapping per question_id across all banks)
+    }
+  Each write fn:
+    - Resolves the target row via user.role + user.founder_id +
+      project context.
+    - Auto-creates the parent row if it doesn't exist (e.g. first
+      project for a brand-new founder).
+    - Validates the value with the same Zod schema used by the
+      page's PUT endpoint.
+    - For evidence-required fields (Prompt T anti-cheat), refuses
+      the write and returns { needs_evidence: true } so the advisor
+      asks for upload or integration connect.
+    - Persists in a transaction; logs to activity_logs +
+      advisor_answers.
+
+Tool-use binding
+  When the advisor LLM call returns, the model emits a tool-call
+  `writeAnswer({question_id, value})`. The Worker executes the
+  matching writeRouter entry. The model never writes directly.
+
+Optimistic UI
+  frontend/src/lib/advisor/router.js mirrors the write router for
+  optimistic UI updates. On 4xx, roll back the optimistic state and
+  surface the error inside the advisor card, with a "Open the page"
+  CTA.
+
+Page hydration
+  When the user opens a page (e.g. Projects) that the advisor has
+  been populating, the page hydrates from the database and shows a
+  small banner "Filled by Personal Advisor — review and edit if
+  needed." Each advisor-filled field carries a sparkle icon.
+
+Acceptance
+  - Existing founder running through the BUILD bank ends with a
+    populated Project row, 3+ Customer Discovery interviews, 3+
+    OKRs, brand basics, financial model seed (with evidence flags
+    where required), deck outline rows.
+  - Investor completing thesis bank populates investor_profiles +
+    seeds 1+ watchlist items.
+  - Operating partner completing offer bank populates
+    partner_profiles + creates draft partner_deals proposals.
+  - Field-level write errors surface inline; never a generic toast.
+  - Sparkle icons appear on filled-by-advisor fields; hovering shows
+    the source advisor turn.
