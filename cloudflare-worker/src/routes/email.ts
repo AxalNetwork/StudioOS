@@ -43,6 +43,10 @@ async function ensureSchema(env: Env) {
     // and harmless once the column exists.
     `ALTER TABLE referral_invites ADD COLUMN reminder_count INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE referral_invites ADD COLUMN last_reminded_at TIMESTAMP`,
+    // Task #10 — per-invite "joined" notification idempotency stamp.
+    // Mirrors sql/migrations/047_invite_joined_notified.sql so dev/preview
+    // envs that haven't run wrangler d1 execute still work.
+    `ALTER TABLE referral_invites ADD COLUMN joined_notified_at TIMESTAMP`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch {}

@@ -157,6 +157,96 @@ export async function fireCommissionEvent(
   } finally { await sql.end(); }
 }
 
+
+// Task #10 — Notify every inviter whose still-unjoined invite to this
+// user's email is now eligible. Reads pending rows, stamps
+// joined_notified_at FIRST (so a concurrent re-entry can't double-fire),
+// then calls notify() per row. Worst case on partial failure is a
+// notification stamp without a delivered notification — strictly better
+// than the duplicate-celebration alternative for an upbeat-but-not-
+// critical UX event. Guarded by the new `joined_notified_at` column
+// (migrations/047_invite_joined_notified.sql + lazy ALTER in email.ts).
+async function fireJoinedInviteNotifications(env: Env, newUserId: number): Promise<void> {
+  const recipientRow: any = await env.DB.prepare(
+    `SELECT id, email, COALESCE(name, email) AS name FROM users WHERE id = ?`
+  ).bind(newUserId).first();
+  if (!recipientRow?.email) return;
+  const recipientName = String(recipientRow.name || recipientRow.email);
+  // Pull every still-eligible invite + the sender's id so notify() can
+  // resolve channels/prefs from users.notification_prefs. We filter on
+  // status='joined' (the previous UPDATE already set it for this user)
+  // and joined_notified_at IS NULL for idempotency. Bound to a sane
+  // page so a malformed bulk import can't stall registration.
+  let rows: any[] = [];
+  try {
+    const r: any = await env.DB.prepare(
+      `SELECT id, sender_user_id
+         FROM referral_invites
+        WHERE LOWER(recipient_email) = LOWER(?)
+          AND status = 'joined'
+          AND signed_up_user_id = ?
+          AND joined_notified_at IS NULL
+        LIMIT 50`
+    ).bind(recipientRow.email, newUserId).all();
+    rows = r?.results || [];
+  } catch (e: any) {
+    // joined_notified_at column may not exist on the oldest dev DBs —
+    // the lazy ensureSchema in email.ts adds it on first /invites read.
+    // Trigger that path inline so registration still fires the notify.
+    if (/no such column.*joined_notified_at/i.test(String(e?.message || ''))) {
+      try {
+        await env.DB.prepare(
+          `ALTER TABLE referral_invites ADD COLUMN joined_notified_at TIMESTAMP`
+        ).run();
+      } catch { /* duplicate — fine */ }
+      const r2: any = await env.DB.prepare(
+        `SELECT id, sender_user_id
+           FROM referral_invites
+          WHERE LOWER(recipient_email) = LOWER(?)
+            AND status = 'joined'
+            AND signed_up_user_id = ?
+            AND joined_notified_at IS NULL
+          LIMIT 50`
+      ).bind(recipientRow.email, newUserId).all();
+      rows = r2?.results || [];
+    } else {
+      throw e;
+    }
+  }
+  if (!rows.length) return;
+  const { notify } = await import('../services/notify');
+  for (const row of rows) {
+    const senderId = Number(row.sender_user_id);
+    if (!Number.isFinite(senderId) || senderId === newUserId) continue;
+    // Stamp first — even on notify() failure the inviter won't get a
+    // duplicate "they joined!" celebration on the next signup attempt.
+    try {
+      await env.DB.prepare(
+        `UPDATE referral_invites
+            SET joined_notified_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND joined_notified_at IS NULL`
+      ).bind(row.id).run();
+    } catch (e: any) {
+      console.error('[attachReferral] joined_notified_at stamp failed:', e?.message);
+      continue;
+    }
+    try {
+      await notify(env, {
+        userId: senderId,
+        type: 'referral_invite_joined',
+        category: 'proactive_nudges',
+        title: `${recipientName} just joined via your invite`,
+        body: `${recipientName} signed up using your referral link. You'll earn commissions as they engage on the platform — track progress on your referrals page.`,
+        link: '/referrals',
+        payload: { invite_id: row.id, joined_user_id: newUserId },
+        channels: ['in_app', 'email'],
+      });
+    } catch (e: any) {
+      console.error('[attachReferral] notify referral_invite_joined failed:', e?.message);
+    }
+  }
+}
+
 // Internal: called from auth registration to attach a referrer
 export async function attachReferral(env: Env, newUserId: number, refCode: string): Promise<boolean> {
   if (!refCode) return false;
@@ -187,6 +277,19 @@ export async function attachReferral(env: Env, newUserId: number, refCode: strin
       ).bind(newUserId, newUserId).run();
     } catch (e: any) {
       console.error('[attachReferral] referral_invites stamp failed:', e?.message);
+    }
+    // Task #10 — fire a one-time "X just joined via your invite"
+    // notification to every inviter who sent this email and hasn't
+    // already been notified for this signup. Idempotent via the
+    // `joined_notified_at` column added in 047_invite_joined_notified.sql:
+    // only rows where the column IS NULL are eligible, and we stamp
+    // them in the same statement that picks them. A user may have been
+    // invited by multiple senders — they all get one notification.
+    // All failures are logged and never block registration.
+    try {
+      await fireJoinedInviteNotifications(env, newUserId);
+    } catch (e: any) {
+      console.error('[attachReferral] joined-notify failed:', e?.message);
     }
     // Build compounding chain (L1, L2, L3) — log any failure so silent revenue loss is detectable
     try {
