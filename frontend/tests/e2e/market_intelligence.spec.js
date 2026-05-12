@@ -53,9 +53,11 @@ const FIXTURES_POPULATED = {
   },
   '/api/market-intel/demand-supply': {
     items: [
-      { sector: 'fintech', topic: 'gtm', side: 'demand', value: 8, n: 8 },
-      { sector: 'fintech', topic: 'gtm', side: 'supply', value: 5, n: 5 },
-      { sector: 'fintech', topic: 'engineering', side: 'demand', value: 12, n: 12 },
+      // Worker returns `count` (mapped from row.value); frontend sums
+      // `it.count`. Using `value` here would silently zero the chips.
+      { sector: 'fintech', topic: 'gtm', side: 'demand', count: 8, n: 8 },
+      { sector: 'fintech', topic: 'gtm', side: 'supply', count: 5, n: 5 },
+      { sector: 'fintech', topic: 'engineering', side: 'demand', count: 12, n: 12 },
     ],
     k_min: 5,
   },
@@ -271,26 +273,25 @@ test.describe('Market Intelligence — AT-2 advisor-derived tabs', () => {
     await page.getByTestId('mi-tab-mi_fit').click();
     await expect(root).toHaveAttribute('data-active-tab', 'mi_fit');
 
-    // Founder path: either the project picker is visible (founder owns
-    // ≥2 projects) OR the auto-selected first project triggers the fit
-    // load and renders "Top investor matches", OR the no-projects
-    // guard text appears. All three are valid for the seeded founder
-    // — the regression we're guarding against is the previous bug
-    // where admins/investors and founders saw the same view.
-    const picker = root.locator('select');
-    const investorMatches = root.getByText(/Top investor matches/i);
-    const guard = root.getByText(/Sign in as a founder or investor/i);
-    const empty = root.getByText(/Not enough data yet/i);
-    const visibleCount =
-      (await picker.count()) +
-      (await investorMatches.count()) +
-      (await guard.count()) +
-      (await empty.count());
-    expect(visibleCount,
-      'founder fit view rendered neither picker, investor-matches, guard, nor empty state',
+    // Founder path: at least one of the founder-branch surfaces must
+    // render — either the project picker (founder owns ≥2 projects)
+    // OR the "Top investor matches" card (auto-selected first project
+    // triggered a fit load). The "no projects" guard or empty state
+    // are also acceptable for a fresh founder. The investor-side
+    // "Top founder matches" title MUST NEVER render — that was the
+    // regression where founders and investors saw the same view.
+    const founderSurfaces =
+      (await root.locator('select').count()) +
+      (await root.getByText(/Top investor matches/i).count()) +
+      (await root.getByText(/Sign in as a founder or investor/i).count()) +
+      (await root.getByText(/Not enough data yet/i).count());
+    expect(founderSurfaces,
+      'founder fit view rendered no founder-branch surface',
     ).toBeGreaterThan(0);
-    // Critically, the founder MUST NOT see the investor-side title.
     await expect(root.getByText(/Top founder matches/i)).toHaveCount(0);
+    // No `founder_id_hash` should appear in the founder view (those
+    // are emitted only by the investor-side endpoint).
+    await expect(root.getByText(/founder_id_hash/i)).toHaveCount(0);
   });
 
   test('Capital Velocity sector table picks the latest period (regression guard)', async ({ page }) => {
