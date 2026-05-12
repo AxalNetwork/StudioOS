@@ -59,7 +59,7 @@ import {
   type Persona,
   type Question,
 } from '../services/advisor/questionBank';
-import { routeAnswer, hydrateAlreadyAnswered, type WriteResult } from '../services/advisor/writeRouter';
+import { routeAnswer, hydrateAlreadyAnswered, recordFieldSource, type WriteResult } from '../services/advisor/writeRouter';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
@@ -88,6 +88,14 @@ async function ensureSchema(env: Env): Promise<void> {
       "CREATE TABLE IF NOT EXISTS advisor_answers (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL REFERENCES advisor_conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL, question_id TEXT NOT NULL, raw_value TEXT, saved_to_table TEXT, saved_to_column TEXT, saved_to_id TEXT, saved_status TEXT NOT NULL, saved_error TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(conversation_id, question_id))"
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_answers_user_q ON advisor_answers(user_id, question_id)");
+    // Task #3 (AS) — field_sources audit table for the per-page
+    // <AdvisorFilledBanner> + sparkle attribution icons. Mirrors
+    // sql/migrations/042_advisor_field_sources.sql so a dev D1
+    // without that migration applied still serves /sources.
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS field_sources (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, question_id TEXT NOT NULL, page_target TEXT, saved_to_table TEXT, saved_to_column TEXT, saved_to_id TEXT, source TEXT NOT NULL DEFAULT 'advisor', evidence_text TEXT, filled_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(user_id, question_id))"
+    );
+    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_field_sources_user_page ON field_sources(user_id, page_target)");
     _schemaReady = true;
   } catch (e) {
     console.error('[advisor] schema:', (e as Error).message);
@@ -347,6 +355,9 @@ function publicQuestion(q: Question | null): Record<string, unknown> | null {
     unlock_required: q.unlock_required || null,
     followups: Array.isArray(q.followups) ? q.followups : null,
     validate: q.validate || null,
+    // Task #3 (AS) — surface evidence requirement to the chat UI
+    // so it can prompt for a citation before submitting.
+    requires_evidence: q.requires_evidence === true,
   };
 }
 
@@ -508,6 +519,12 @@ interface AnswerBody {
   conversation_uid?: string;
   question_id?: string;
   value?: unknown;
+  // Task #3 (AS) — optional citation/justification supplied by the
+  // LLM `writeAnswer` tool when auto-filling high-risk fields
+  // (anything with `requires_evidence: true` on the bank). Direct
+  // UI submissions can omit this — the writeRouter falls back to
+  // the user-typed value when no question requires evidence.
+  evidence?: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -617,10 +634,27 @@ advisor.post('/answer', async (c) => {
   // if a downstream step throws.
   await recordMessage(c.env, conv.id, 'user', valueStr, q.id);
 
+  // Task #3 (AS) — for direct UI submissions on `requires_evidence`
+  // questions, treat the user-typed value as its own justification
+  // when the client doesn't supply a separate `evidence` field.
+  // The LLM `writeAnswer` tool path is expected to attach a real
+  // citation; the chat-input path doesn't and shouldn't be blocked
+  // by the evidence gate.
+  let evidenceStr = body.evidence != null ? String(body.evidence).trim() : null;
+  if (!evidenceStr && q.requires_evidence === true && valueStr) {
+    evidenceStr = valueStr;
+  }
   const result: WriteResult = valueStr
-    ? await routeAnswer(c.env, user, q.id, valueStr)
+    ? await routeAnswer(c.env, user, q.id, valueStr, evidenceStr)
     : { status: 'skipped' };
   await recordAnswer(c.env, conv, user, q.id, valueStr, result);
+  // Task #3 (AS) — audit row for per-page <AdvisorFilledBanner>.
+  if (result.status === 'saved') {
+    await recordFieldSource(
+      c.env, user.id, q.id, q.page_target || null,
+      result.saved_to || null, 'advisor', evidenceStr,
+    );
+  }
 
   // Re-fetch the user if the role-detector just changed persona so
   // the next bank reflects the new role.
@@ -781,6 +815,53 @@ advisor.post('/skip', async (c) => {
       percent: bank.length > 0 ? Math.round(((ans + skp) / bank.length) * 100) : 100,
     },
   });
+});
+
+// ---------------------------------------------------------------------------
+// GET /sources  —  Task #3 (AS) field-source attribution for the
+// per-page <AdvisorFilledBanner> + sparkle icons. Optional ?page=
+// query filters to a single page_target so the dashboard can fan
+// out one-call-per-page without overpulling.
+// ---------------------------------------------------------------------------
+advisor.get('/sources', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const page = (c.req.query('page') || '').trim() || null;
+  try {
+    const stmt = page
+      ? c.env.DB.prepare(
+          `SELECT question_id, page_target, saved_to_table, saved_to_column, saved_to_id,
+                  source, evidence_text, filled_at
+             FROM field_sources WHERE user_id = ? AND page_target = ?
+             ORDER BY filled_at DESC LIMIT 200`,
+        ).bind(user.id, page)
+      : c.env.DB.prepare(
+          `SELECT question_id, page_target, saved_to_table, saved_to_column, saved_to_id,
+                  source, evidence_text, filled_at
+             FROM field_sources WHERE user_id = ?
+             ORDER BY filled_at DESC LIMIT 500`,
+        ).bind(user.id);
+    const rows = await stmt.all<{
+      question_id: string; page_target: string | null;
+      saved_to_table: string | null; saved_to_column: string | null;
+      saved_to_id: string | null; source: string; evidence_text: string | null;
+      filled_at: string;
+    }>();
+    // Decorate with the bank's human-readable prompt so the
+    // banner can list field labels without a second round-trip.
+    const sources = (rows.results || []).map((r) => {
+      const q = questionById(r.question_id);
+      return {
+        ...r,
+        label: q?.prompt || r.question_id,
+        section: q?.section || null,
+      };
+    });
+    return c.json({ page, sources });
+  } catch (e) {
+    console.error('[advisor] /sources:', (e as Error).message);
+    return c.json({ page, sources: [] });
+  }
 });
 
 // ---------------------------------------------------------------------------

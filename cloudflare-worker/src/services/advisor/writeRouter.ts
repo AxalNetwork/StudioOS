@@ -143,6 +143,184 @@ function parseList(s: string): string[] {
   return s.split(',').map(t => t.trim()).filter(Boolean);
 }
 
+/**
+ * Task #3 (AS) — resolve (or lazy-create) the partner_profiles row
+ * owned by `user`. Mirrors ensureMentorRow's defensive pattern:
+ *   1. Look up by user_id (claimed-invitation case).
+ *   2. Look up by email match against partner_invitations.recipient_email
+ *      and bind the user_id (admin invited the partner directly).
+ *   3. Otherwise synthesise an admin-side invitation stub +
+ *      partner_profiles row so advisor answers have somewhere to land.
+ * The advisor never creates real `partner_invitations.token` rows
+ * that can be redeemed externally — synthesised stubs are flagged
+ * `status='advisor_stub'` so admin lists can filter them out.
+ */
+async function ensurePartnerProfile(env: Env, user: User): Promise<{ id: number; invitation_id: number } | null> {
+  try {
+    // (1) Already-claimed profile.
+    const claimed = await env.DB.prepare(
+      `SELECT id, invitation_id FROM partner_profiles WHERE user_id = ? LIMIT 1`,
+    ).bind(user.id).first<{ id: number; invitation_id: number }>();
+    if (claimed?.id) return { id: Number(claimed.id), invitation_id: Number(claimed.invitation_id) };
+
+    // (2) Bind by email.
+    const inv = await env.DB.prepare(
+      `SELECT id FROM partner_invitations WHERE LOWER(recipient_email) = LOWER(?) LIMIT 1`,
+    ).bind(user.email).first<{ id: number }>().catch(() => null);
+    if (inv?.id) {
+      // Bind user to existing invitation; create profile if missing.
+      const existing = await env.DB.prepare(
+        `SELECT id, user_id FROM partner_profiles WHERE invitation_id = ?`,
+      ).bind(inv.id).first<{ id: number; user_id: number | null }>().catch(() => null);
+      if (existing?.id) {
+        // Access-control guard: only bind user_id when it's NULL or
+        // already this user. Refuse to silently rebind a profile
+        // currently owned by someone else (e.g. duplicate emails or
+        // a prior partner who claimed the invitation) — the advisor
+        // should never reassign profile ownership.
+        const currentOwner = existing.user_id == null ? null : Number(existing.user_id);
+        if (currentOwner != null && currentOwner !== user.id) {
+          return null;
+        }
+        if (currentOwner == null) {
+          await env.DB.prepare(
+            `UPDATE partner_profiles SET user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id IS NULL`,
+          ).bind(user.id, existing.id).run();
+        }
+        return { id: Number(existing.id), invitation_id: Number(inv.id) };
+      }
+      const r = await env.DB.prepare(
+        `INSERT INTO partner_profiles (invitation_id, user_id, full_name)
+           VALUES (?, ?, ?)`,
+      ).bind(inv.id, user.id, user.name || user.email).run();
+      const newId = Number((r as { meta?: { last_row_id?: number } }).meta?.last_row_id || 0);
+      if (newId) return { id: newId, invitation_id: Number(inv.id) };
+    }
+
+    // (3) Stub invitation + profile so advisor writes have a target.
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const invIns = await env.DB.prepare(
+      `INSERT INTO partner_invitations (recipient_email, token, status, invited_by_user_id)
+         VALUES (?, ?, 'advisor_stub', ?)`,
+    ).bind(user.email, token, user.id).run().catch(() => null);
+    const invId = Number((invIns as { meta?: { last_row_id?: number } } | null)?.meta?.last_row_id || 0);
+    if (!invId) return null;
+    const profIns = await env.DB.prepare(
+      `INSERT INTO partner_profiles (invitation_id, user_id, full_name)
+         VALUES (?, ?, ?)`,
+    ).bind(invId, user.id, user.name || user.email).run();
+    const profId = Number((profIns as { meta?: { last_row_id?: number } }).meta?.last_row_id || 0);
+    if (!profId) return null;
+    return { id: profId, invitation_id: invId };
+  } catch (e) {
+    console.error('[advisor] ensurePartnerProfile:', (e as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Task #3 (AS) — merge a single value into projects.advisor_extras_json
+ * keyed by question_id. This is the catch-all column for free-form
+ * founder answers that don't have a canonical column yet (e.g.
+ * compliance.status, captable.ownership). Returns true on success.
+ */
+async function mergeProjectExtras(
+  env: Env, projectId: number, key: string, value: string,
+): Promise<boolean> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT advisor_extras_json FROM projects WHERE id = ?`,
+    ).bind(projectId).first<{ advisor_extras_json: string | null }>().catch(() => null);
+    let extras: Record<string, string> = {};
+    if (row?.advisor_extras_json) {
+      try {
+        const parsed = JSON.parse(row.advisor_extras_json);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          extras = parsed as Record<string, string>;
+        }
+      } catch { /* malformed — overwrite */ }
+    }
+    extras[key] = value;
+    await env.DB.prepare(
+      `UPDATE projects SET advisor_extras_json = ?, updated_at = datetime('now') WHERE id = ?`,
+    ).bind(JSON.stringify(extras), projectId).run();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Same shape as mergeProjectExtras but for cross-project (users) extras. */
+async function mergeUserExtras(env: Env, userId: number, key: string, value: string): Promise<boolean> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT advisor_extras_json FROM users WHERE id = ?`,
+    ).bind(userId).first<{ advisor_extras_json: string | null }>().catch(() => null);
+    let extras: Record<string, string> = {};
+    if (row?.advisor_extras_json) {
+      try {
+        const parsed = JSON.parse(row.advisor_extras_json);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          extras = parsed as Record<string, string>;
+        }
+      } catch { /* malformed — overwrite */ }
+    }
+    extras[key] = value;
+    await env.DB.prepare(
+      `UPDATE users SET advisor_extras_json = ? WHERE id = ?`,
+    ).bind(JSON.stringify(extras), userId).run();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Task #3 (AS) — record a field_sources audit row whenever the
+ * router successfully persists an advisor answer. Idempotent via
+ * UNIQUE(user_id, question_id) — a re-answer overwrites the prior
+ * row's `evidence_text` + `filled_at` so the page banner reflects
+ * the most recent value.
+ *
+ * Best-effort: schema not migrated → silently ignore so the
+ * /answer envelope still returns success to the caller.
+ */
+export async function recordFieldSource(
+  env: Env, userId: number, questionId: string,
+  pageTarget: string | null,
+  saved: { table?: string; column?: string; id?: string | number } | null,
+  source: 'advisor' | 'manual' | 'import',
+  evidence: string | null,
+): Promise<void> {
+  try {
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS field_sources (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, question_id TEXT NOT NULL, page_target TEXT, saved_to_table TEXT, saved_to_column TEXT, saved_to_id TEXT, source TEXT NOT NULL DEFAULT 'advisor', evidence_text TEXT, filled_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(user_id, question_id))",
+    );
+    await env.DB.prepare(
+      `INSERT INTO field_sources
+         (user_id, question_id, page_target, saved_to_table, saved_to_column, saved_to_id, source, evidence_text, filled_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(user_id, question_id) DO UPDATE SET
+         page_target = excluded.page_target,
+         saved_to_table = excluded.saved_to_table,
+         saved_to_column = excluded.saved_to_column,
+         saved_to_id = excluded.saved_to_id,
+         source = excluded.source,
+         evidence_text = excluded.evidence_text,
+         filled_at = excluded.filled_at`,
+    ).bind(
+      userId, questionId, pageTarget,
+      saved?.table || null, saved?.column || null,
+      saved?.id != null ? String(saved.id) : null,
+      source, evidence,
+    ).run();
+  } catch (e) {
+    console.error('[advisor] recordFieldSource:', (e as Error).message);
+  }
+}
+
 // Lazy partial-unique indexes for the AC-2 founder bank "slot"
 // upserts (discovery interviews + roadmap OKRs). Scoped via
 // `WHERE col LIKE 'advisor:%'` so they never collide with
@@ -248,11 +426,26 @@ export async function routeAnswer(
   user: User,
   questionId: string,
   rawValue: string,
+  evidence?: string | null,
 ): Promise<WriteResult> {
   const q = questionById(questionId);
   if (!q) return { status: 'failed', error: 'unknown question_id' };
   const value = String(rawValue ?? '').trim();
   if (!value) return { status: 'skipped' };
+
+  // Task #3 (AS) — evidence gate. Bank questions flagged
+  // `requires_evidence` (high-risk financial fields) refuse to
+  // persist without a non-empty `evidence` string from the caller.
+  // The advisor system prompt instructs the LLM to attach a one-line
+  // citation when it auto-fills these from the chat transcript;
+  // direct UI submissions can pass the user-typed answer itself.
+  if (q.requires_evidence && !String(evidence ?? '').trim()) {
+    return {
+      status: 'failed',
+      error: 'evidence_required',
+      hint: 'This field needs a short citation or justification before we can save it.',
+    };
+  }
 
   // ---- Role detector --------------------------------------------------
   if (questionId === 'role_detect.primary') {
@@ -534,18 +727,69 @@ export async function routeAnswer(
       'founder.project.sector':   'sector',
       'founder.project.stage':    'stage',
       'founder.project.traction': 'growth_signals',
+      // Task #3 (AS) — financials + capital + cap-table columns
+      // added by migration 042. The catch-block below silently
+      // falls through to the advisor_extras_json fallback if the
+      // column hasn't been migrated yet on this DB.
+      'founder.financials.runway_months':    'runway_months',
+      'founder.financials.monthly_burn_usd': 'monthly_burn_usd',
+      'founder.financials.mrr_usd':          'mrr_usd',
+      'founder.capital.raise_active':        'raise_active',
+      'founder.capital.raise_target_usd':    'raise_target_usd',
+      'founder.captable.entity':             'entity_label',
     };
     const column = colMap[questionId];
-    if (!column) return { status: 'noop' };
+    // Task #3 (AS) — free-form founder fields that don't have a
+    // canonical column land in projects.advisor_extras_json keyed by
+    // question_id. Covers compliance.status, captable.ownership,
+    // mentors.needs, team.cofounders, pipeline.top_deals.
+    const FOUNDER_EXTRAS = new Set<string>([
+      'founder.captable.ownership',
+      'founder.compliance.status',
+      'founder.mentors.needs',
+      'founder.team.cofounders',
+      'founder.pipeline.top_deals',
+    ]);
+    if (!column) {
+      if (FOUNDER_EXTRAS.has(questionId)) {
+        const ok = await mergeProjectExtras(env, ctx.project_id, questionId, value);
+        if (!ok) return { status: 'failed', error: 'could not persist extras' };
+        return {
+          status: 'saved',
+          saved_to: { table: 'projects', column: 'advisor_extras_json', id: ctx.project_id, page_url: q.page_target || `/projects/${ctx.project_id}` },
+        };
+      }
+      return { status: 'noop' };
+    }
+    // Coerce numerics for the new financial columns so they store as
+    // REAL/INTEGER instead of TEXT.
+    let dbValue: string | number = value;
+    if (column === 'runway_months') {
+      const n = parseInt(value.replace(/[^0-9-]/g, ''), 10);
+      dbValue = Number.isFinite(n) ? n : value;
+    } else if (column === 'monthly_burn_usd' || column === 'mrr_usd' || column === 'raise_target_usd') {
+      const n = parseFloat(value.replace(/[^0-9.\-]/g, ''));
+      dbValue = Number.isFinite(n) ? n : value;
+    }
     try {
       await env.DB.prepare(
         `UPDATE projects SET ${column} = ?, updated_at = datetime('now') WHERE id = ? AND founder_id = ?`,
-      ).bind(value, ctx.project_id, ctx.founder_id).run();
+      ).bind(dbValue, ctx.project_id, ctx.founder_id).run();
       return {
         status: 'saved',
-        saved_to: { table: 'projects', column, id: ctx.project_id, page_url: `/projects/${ctx.project_id}` },
+        saved_to: { table: 'projects', column, id: ctx.project_id, page_url: q.page_target || `/projects/${ctx.project_id}` },
       };
     } catch (e) {
+      // Column may not be migrated yet on this dev DB — fall back
+      // to advisor_extras_json so the value isn't lost.
+      const ok = await mergeProjectExtras(env, ctx.project_id, questionId, value);
+      if (ok) {
+        return {
+          status: 'saved',
+          saved_to: { table: 'projects', column: 'advisor_extras_json', id: ctx.project_id, page_url: q.page_target || `/projects/${ctx.project_id}` },
+          hint: 'Saved as a chat note (column not yet migrated).',
+        };
+      }
       return { status: 'failed', error: (e as Error).message };
     }
   }
@@ -574,6 +818,12 @@ export async function routeAnswer(
       'investor.profile.stages':        { col: 'stages_json',  serialise: (v) => JSON.stringify(parseList(v)) },
       'investor.profile.ticket_band':   { col: 'ticket_band' },
       'investor.profile.thesis':        { col: 'thesis_text' },
+      // Task #3 (AS) — pipeline / coinvest / seed-watchlist columns
+      // added by migration 042. The columns may be missing on
+      // legacy dev DBs — the catch below falls through to noop.
+      'investor.pipeline.deal_volume':       { col: 'deal_volume_band' },
+      'investor.coinvest.preferences':       { col: 'coinvest_pref_text' },
+      'investor.watchlist.seed_companies':   { col: 'watchlist_seed_text' },
     };
     const m = map[questionId];
     if (!m) return { status: 'noop' };
@@ -587,6 +837,16 @@ export async function routeAnswer(
         saved_to: { table: 'investor_profiles', column: m.col, id: user.id, page_url: '/investor-profile' },
       };
     } catch (e) {
+      // Column may not be migrated yet on legacy dev DBs — fall back
+      // to users.advisor_extras_json so the value isn't lost.
+      const ok = await mergeUserExtras(env, user.id, questionId, value);
+      if (ok) {
+        return {
+          status: 'saved',
+          saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id, page_url: '/investor-profile' },
+          hint: 'Saved as a chat note (column not yet migrated).',
+        };
+      }
       return { status: 'failed', error: (e as Error).message };
     }
   }
@@ -611,6 +871,10 @@ export async function routeAnswer(
       'mentor.profile.expertise':       { col: 'expertise_json', coerce: (v) => JSON.stringify(parseList(v)) },
       'mentor.profile.hourly_rate_usd': { col: 'hourly_rate_usd', coerce: (v) => Math.max(0, parseFloat(v) || 0) },
       'mentor.profile.linkedin_url':    { col: 'linkedin_url' },
+      // Task #3 (AS) — topics + calendar columns added by migration 042.
+      'mentor.topics.willing':          { col: 'topics_willing_json',   coerce: (v) => JSON.stringify(parseList(v)) },
+      'mentor.topics.unwilling':        { col: 'topics_unwilling_json', coerce: (v) => JSON.stringify(parseList(v)) },
+      'mentor.calendar.weekly_hours':   { col: 'weekly_hours_band' },
     };
     const m = map[questionId];
     if (!m) return { status: 'noop' };
@@ -624,16 +888,91 @@ export async function routeAnswer(
         saved_to: { table: 'mentors', column: m.col, id: mentor.id, page_url: '/mentors/me' },
       };
     } catch (e) {
+      // Column may not be migrated yet on legacy dev DBs — fall back
+      // to users.advisor_extras_json sidecar.
+      const ok = await mergeUserExtras(env, user.id, questionId, value);
+      if (ok) {
+        return {
+          status: 'saved',
+          saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id, page_url: '/mentors/me' },
+          hint: 'Saved as a chat note (column not yet migrated).',
+        };
+      }
       return { status: 'failed', error: (e as Error).message };
     }
   }
 
   // ---- Partner bank ---------------------------------------------------
   if (q.persona === 'partner') {
-    // Partner profile is owned by the partner-onboarding wizard
-    // (Task #9). Within the advisor we just record the ambient note
-    // without touching the binding partner_profiles row.
-    return { status: 'noop', hint: 'Partner profile fields live in the Partner Portal — opening it for you.' };
+    const pole = String(user.role || '');
+    if (pole !== 'partner' && pole !== 'admin') {
+      return { status: 'failed', error: 'partner questions require partner role' };
+    }
+    // Special case: partner.profile.focus is cross-deal so it lives
+    // on users.advisor_extras_json instead of a single partner_profile.
+    if (questionId === 'partner.profile.focus') {
+      const okFocus = await mergeUserExtras(env, user.id, questionId, value);
+      if (okFocus) {
+        return {
+          status: 'saved',
+          saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id, page_url: '/partner-portal' },
+        };
+      }
+      // Fallback: stash on partner_profiles.raw_chat_json so the
+      // answer isn't lost on a dev DB without users.advisor_extras_json.
+      const profile = await ensurePartnerProfile(env, user);
+      if (profile) {
+        try {
+          await env.DB.prepare(
+            `UPDATE partner_profiles SET raw_chat_json = json_set(COALESCE(raw_chat_json,'{}'), '$.' || ?, ?) WHERE id = ?`,
+          ).bind('partner_profile_focus', value, profile.id).run();
+          return {
+            status: 'saved',
+            saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.id, page_url: '/partner-portal' },
+            hint: 'Saved as a chat note (column not yet migrated).',
+          };
+        } catch { /* fall through */ }
+      }
+      return { status: 'failed', error: 'could not persist focus' };
+    }
+    const profile = await ensurePartnerProfile(env, user);
+    if (!profile) {
+      return { status: 'noop', hint: 'Partner profile not bound yet — accept your invitation from the Partner Portal first.' };
+    }
+    const partnerMap: Record<string, string> = {
+      'partner.firm.name':         'organization',
+      'partner.role.kind':         'role_title',
+      'partner.services.offered':  'services_offered',
+      'partner.deals.interest':    'motivation',
+      'partner.dealflow.channels': 'dealflow_channels',
+      'partner.conflicts.list':    'conflicts_text',
+    };
+    const pcol = partnerMap[questionId];
+    if (!pcol) return { status: 'noop' };
+    try {
+      await env.DB.prepare(
+        `UPDATE partner_profiles SET ${pcol} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      ).bind(value, profile.id).run();
+      return {
+        status: 'saved',
+        saved_to: { table: 'partner_profiles', column: pcol, id: profile.id, page_url: '/partner-portal' },
+      };
+    } catch (e) {
+      // Column may not be migrated on legacy dev — fall back to
+      // raw_chat_json so the value isn't lost.
+      try {
+        await env.DB.prepare(
+          `UPDATE partner_profiles SET raw_chat_json = json_set(COALESCE(raw_chat_json,'{}'), '$.' || ?, ?) WHERE id = ?`,
+        ).bind(questionId.replace(/[^a-zA-Z0-9_]/g, '_'), value, profile.id).run();
+        return {
+          status: 'saved',
+          saved_to: { table: 'partner_profiles', column: 'raw_chat_json', id: profile.id, page_url: '/partner-portal' },
+          hint: 'Saved as a chat note (column not yet migrated).',
+        };
+      } catch {
+        return { status: 'failed', error: (e as Error).message };
+      }
+    }
   }
 
   // ---- Admin bank -----------------------------------------------------
@@ -770,24 +1109,28 @@ export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<
   }
 
   if (role === 'investor' || role === 'admin') {
+    // Task #3 (AS) — also read the new pipeline / coinvest / watchlist
+    // columns. Use SELECT * + column-existence check so legacy dev
+    // DBs without migration 042 still hydrate the base columns.
     const inv = await env.DB.prepare(
-      `SELECT investor_type, sectors_json, stages_json, ticket_band, thesis_text
-         FROM investor_profiles WHERE user_id = ?`,
-    ).bind(user.id).first<{ investor_type: string | null; sectors_json: string | null; stages_json: string | null; ticket_band: string | null; thesis_text: string | null }>().catch(() => null);
+      `SELECT * FROM investor_profiles WHERE user_id = ?`,
+    ).bind(user.id).first<Record<string, unknown>>().catch(() => null);
     if (inv) {
       if (inv.investor_type) answered.add('investor.profile.investor_type');
       if (inv.sectors_json && inv.sectors_json !== '[]') answered.add('investor.profile.sectors');
       if (inv.stages_json  && inv.stages_json  !== '[]') answered.add('investor.profile.stages');
       if (inv.ticket_band)   answered.add('investor.profile.ticket_band');
       if (inv.thesis_text)   answered.add('investor.profile.thesis');
+      if (inv.deal_volume_band)    answered.add('investor.pipeline.deal_volume');
+      if (inv.coinvest_pref_text)  answered.add('investor.coinvest.preferences');
+      if (inv.watchlist_seed_text) answered.add('investor.watchlist.seed_companies');
     }
   }
 
   if (role === 'mentor' || role === 'admin') {
     const m = await env.DB.prepare(
-      `SELECT display_name, bio, sectors_json, expertise_json, hourly_rate_usd, linkedin_url
-         FROM mentors WHERE user_id = ?`,
-    ).bind(user.id).first<{ display_name: string | null; bio: string | null; sectors_json: string | null; expertise_json: string | null; hourly_rate_usd: number | null; linkedin_url: string | null }>().catch(() => null);
+      `SELECT * FROM mentors WHERE user_id = ?`,
+    ).bind(user.id).first<Record<string, unknown>>().catch(() => null);
     if (m) {
       if (m.display_name && m.display_name !== (user.name || user.email)) answered.add('mentor.profile.display_name');
       if (m.bio) answered.add('mentor.profile.bio');
@@ -795,7 +1138,43 @@ export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<
       if (m.expertise_json && m.expertise_json !== '[]') answered.add('mentor.profile.expertise');
       if (m.hourly_rate_usd != null) answered.add('mentor.profile.hourly_rate_usd');
       if (m.linkedin_url)  answered.add('mentor.profile.linkedin_url');
+      // Task #3 (AS) — topics / calendar.
+      if (m.topics_willing_json && m.topics_willing_json !== '[]')     answered.add('mentor.topics.willing');
+      if (m.topics_unwilling_json && m.topics_unwilling_json !== '[]') answered.add('mentor.topics.unwilling');
+      if (m.weekly_hours_band) answered.add('mentor.calendar.weekly_hours');
     }
+  }
+
+  // Task #3 (AS) — partner bank hydration via partner_profiles.
+  if (role === 'partner' || role === 'admin') {
+    try {
+      const p = await env.DB.prepare(
+        `SELECT * FROM partner_profiles WHERE user_id = ? LIMIT 1`,
+      ).bind(user.id).first<Record<string, unknown>>().catch(() => null);
+      if (p) {
+        if (p.organization)      answered.add('partner.firm.name');
+        if (p.role_title)        answered.add('partner.role.kind');
+        if (p.services_offered)  answered.add('partner.services.offered');
+        if (p.motivation)        answered.add('partner.deals.interest');
+        if (p.dealflow_channels) answered.add('partner.dealflow.channels');
+        if (p.conflicts_text)    answered.add('partner.conflicts.list');
+      }
+    } catch { /* partner_profiles missing on dev */ }
+    try {
+      const u = await env.DB.prepare(
+        `SELECT advisor_extras_json FROM users WHERE id = ?`,
+      ).bind(user.id).first<{ advisor_extras_json: string | null }>().catch(() => null);
+      if (u?.advisor_extras_json) {
+        try {
+          const parsed = JSON.parse(u.advisor_extras_json) as Record<string, unknown>;
+          if (parsed && typeof parsed === 'object') {
+            for (const k of Object.keys(parsed)) {
+              if (k.startsWith('partner.') && parsed[k]) answered.add(k);
+            }
+          }
+        } catch { /* malformed — ignore */ }
+      }
+    } catch { /* users.advisor_extras_json not migrated */ }
   }
 
   return answered;

@@ -103,4 +103,20 @@ export function pageLabel(path) {
   return seg.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * Task #3 (AS) — given a list of `field_sources` rows from
+ * GET /api/advisor/sources, return the set of question_ids that
+ * land on `page` so callers can drive sparkle icons + the
+ * <AdvisorFilledBanner> filter without re-walking the bank.
+ */
+export function questionsFilledOnPage(page, sources) {
+  const out = new Set();
+  if (!page || !Array.isArray(sources)) return out;
+  for (const s of sources) {
+    if (!s || s.page_target !== page) continue;
+    if (s.question_id) out.add(s.question_id);
+  }
+  return out;
+}
+
 export default predictTarget;

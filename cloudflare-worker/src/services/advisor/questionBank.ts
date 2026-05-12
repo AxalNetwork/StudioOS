@@ -53,6 +53,11 @@ export interface Question {
   unlock_required?: UnlockRequirement;
   followups?: string[];
   validate?: ValidateKind;
+  // Task #3 (AS) — when true, the writeRouter requires the caller
+  // (LLM tool or UI) to attach an `evidence` string before the
+  // answer is persisted. Surfaces in publicQuestion + on the
+  // /answer rejection envelope when the gate fails.
+  requires_evidence?: boolean;
 }
 
 // ---------------------------------------------------------------------------

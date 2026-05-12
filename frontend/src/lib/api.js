@@ -332,6 +332,11 @@ export const api = {
     manifest: () => request('/advisor/manifest'),
     conversation: (uid) => request(`/advisor/conversations/${encodeURIComponent(uid)}`),
     explainUrl: () => '/api/advisor/explain',
+    // Task #3 (AS) — list field_sources rows for the current user,
+    // optionally filtered to a single page_target. Used by
+    // <AdvisorFilledBanner> + the per-field sparkle icons.
+    sources: (page) =>
+      request(`/advisor/sources${page ? `?page=${encodeURIComponent(page)}` : ''}`),
   },
 
   listPartners: () => request('/partners'),
