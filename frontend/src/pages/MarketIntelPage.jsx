@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, LineChart, Line, CartesianGrid, Legend, PieChart, Pie } from 'recharts';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
+import { getPersonaKey } from '../lib/advisor/persona';
 
 export default function MarketIntelPage() {
   const { user } = useAuth();
@@ -2079,9 +2080,12 @@ function DemandSupplyAtlasTab() {
 
 // ── 4. Founder–Investor Fit ─────────────────────────────────────────────────
 function FounderInvestorFitTab({ user }) {
-  const role = String(user?.role || '').toLowerCase();
-  const isInvestor = role === 'investor' || role === 'admin';
-  const isFounder = role === 'founder';
+  // Persona derived via the shared advisor/persona helper so this stays in
+  // lock-step with the question-bank/persona logic the rest of the app uses
+  // — never re-derive `user.role` inline (Task #1 AT-2 review feedback).
+  const persona = getPersonaKey(user);
+  const isInvestor = persona === 'investor' || persona === 'admin';
+  const isFounder = persona === 'founder';
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [projects, setProjects] = useState([]);
@@ -2141,9 +2145,11 @@ function FounderInvestorFitTab({ user }) {
         <MIInsufficientData section="Fit matches" kMin={data.k_min} />
       )}
       {data && (data.matches || []).length > 0 && (
-        <MICard title={isInvestor ? 'Top founder matches' : 'Top investor matches'}>
+        <MICard title={isInvestor ? `Top founder matches (${data.matches.length})` : 'Top investor matches'}>
+          {/* Founders see the top-5 most-relevant investor matches; investors
+              get the full top-N the backend returns (no client-side cap). */}
           <ol className="divide-y divide-gray-100 dark:divide-gray-800">
-            {data.matches.slice(0, 5).map((m, i) => {
+            {(isInvestor ? data.matches : data.matches.slice(0, 5)).map((m, i) => {
               const idShown = isInvestor ? m.founder_user_id : m.investor_user_id;
               const idHash = isInvestor ? m.founder_id_hash : m.investor_id_hash;
               const scorePct = Math.round((m.score || 0) * 100);
@@ -2245,11 +2251,75 @@ function PartnerMarketplacePulseTab() {
           </MICard>
         </div>
       )}
-      {data && capacity.length > 0 && (
-        <MICard title="Rate-card averages">
-          <p className="text-xs text-gray-600 dark:text-gray-400 italic">
-            Rate-card stats and comp-model breakdowns will populate here once enough partners answer dedicated comp questions in the advisor (k ≥ {data.k_min} required).
-          </p>
+      {data && (
+        <MICard title="Rate-card averages by skill">
+          {(data.rate_cards || []).length === 0
+            ? <MIInsufficientData section="Partner rate cards" kMin={data.k_min} />
+            : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-gray-500 dark:text-gray-400">
+                    <tr>
+                      <th className="text-left py-2 pr-3 font-medium">Sector</th>
+                      <th className="text-left py-2 pr-3 font-medium">Skill</th>
+                      <th className="text-right py-2 pr-3 font-medium">Median /hr</th>
+                      <th className="text-right py-2 pr-3 font-medium">IQR /hr</th>
+                      <th className="text-right py-2 pr-3 font-medium">Median /project</th>
+                      <th className="text-right py-2 pr-3 font-medium">n</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {data.rate_cards.map((r, i) => (
+                      <tr key={i}>
+                        <td className="py-1.5 pr-3 text-gray-900 dark:text-gray-100">{r.sector}</td>
+                        <td className="py-1.5 pr-3 text-gray-700 dark:text-gray-300">{r.topic}</td>
+                        <td className="py-1.5 pr-3 text-right text-gray-900 dark:text-gray-100 font-semibold">{r.median_hourly != null ? `$${r.median_hourly}` : '—'}</td>
+                        <td className="py-1.5 pr-3 text-right text-gray-500 dark:text-gray-400">{r.p25_hourly != null && r.p75_hourly != null ? `$${r.p25_hourly}–${r.p75_hourly}` : '—'}</td>
+                        <td className="py-1.5 pr-3 text-right text-gray-700 dark:text-gray-300">{r.median_project != null ? `$${r.median_project.toLocaleString()}` : '—'}</td>
+                        <td className="py-1.5 pr-3 text-right text-gray-500 dark:text-gray-400">{r.n}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+        </MICard>
+      )}
+      {data && (
+        <MICard title="Comp-model distribution">
+          {(() => {
+            const cms = data.comp_models || [];
+            if (cms.length === 0) return <MIInsufficientData section="Partner comp models" kMin={data.k_min} />;
+            // Aggregate distribution across sectors (latest period per sector).
+            const latest = new Map();
+            for (const r of cms) {
+              const prev = latest.get(r.sector);
+              if (!prev || (prev.period_key || '') < (r.period_key || '')) latest.set(r.sector, r);
+            }
+            const agg = {};
+            for (const r of latest.values()) {
+              for (const [k, v] of Object.entries(r.distribution || {})) {
+                agg[k] = (agg[k] || 0) + Number(v || 0);
+              }
+            }
+            const total = Object.values(agg).reduce((s, v) => s + v, 0) || 1;
+            const slices = Object.entries(agg).map(([name, value]) => ({ name, value }))
+              .sort((a, b) => b.value - a.value);
+            const colors = ['#7c3aed', '#60a5fa', '#34d399', '#f59e0b', '#f472b6', '#94a3b8'];
+            return (
+              <div style={{ width: '100%', height: 240 }}>
+                <ResponsiveContainer>
+                  <PieChart>
+                    <Pie data={slices} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={2}>
+                      {slices.map((s, i) => <Cell key={s.name} fill={colors[i % colors.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v, n) => [`${v} (${Math.round((v / total) * 100)}%)`, n]} contentStyle={{ fontSize: 11 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            );
+          })()}
         </MICard>
       )}
     </div>
@@ -2267,16 +2337,29 @@ function SectorHeatTab() {
   }, []);
 
   const items = data?.items || [];
-  // Group by sector with sparkline of heat across periods.
+  // Group by sector (top-level rows have sub_sector === null) with a
+  // sparkline of heat across periods, plus an inner sub-sector table for
+  // any `sub_sector` rows the reducer emits (dimension_key='sector:X:Y').
   const bySector = new Map();
   for (const it of items) {
-    const e = bySector.get(it.sector) || { sector: it.sector, points: [], latest: 0, contributions: 0 };
-    e.points.push({ period: it.period_key, heat: it.heat });
+    const e = bySector.get(it.sector) || { sector: it.sector, points: [], latest: 0, subs: new Map() };
+    if (!it.sub_sector) {
+      e.points.push({ period: it.period_key, heat: it.heat });
+    } else {
+      const sub = e.subs.get(it.sub_sector) || { sub_sector: it.sub_sector, points: [], latest: 0 };
+      sub.points.push({ period: it.period_key, heat: it.heat });
+      e.subs.set(it.sub_sector, sub);
+    }
     bySector.set(it.sector, e);
   }
   const rows = Array.from(bySector.values()).map((s) => {
     s.points.sort((a, b) => (a.period < b.period ? -1 : 1));
     s.latest = s.points[s.points.length - 1]?.heat ?? 0;
+    s.subs = Array.from(s.subs.values()).map((sub) => {
+      sub.points.sort((a, b) => (a.period < b.period ? -1 : 1));
+      sub.latest = sub.points[sub.points.length - 1]?.heat ?? 0;
+      return sub;
+    }).sort((a, b) => b.latest - a.latest);
     return s;
   }).sort((a, b) => b.latest - a.latest);
 
@@ -2286,21 +2369,34 @@ function SectorHeatTab() {
       <MIErr err={err} />
       {!err && !data && <MILoading label="Loading sector heat…" />}
       {data && rows.length === 0 && <MIInsufficientData section="Sector heat" kMin={data.k_min} />}
-      {data && rows.length > 0 && (
-        <MICard title="Composite heat by sector">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="text-gray-500 dark:text-gray-400">
-                <tr>
-                  <th className="text-left py-2 pr-3 font-medium">Sector</th>
-                  <th className="text-right py-2 pr-3 font-medium">Latest heat</th>
-                  <th className="text-left py-2 pr-3 font-medium">Trend (12w)</th>
-                  <th className="text-right py-2 pr-3 font-medium">Periods</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {rows.map((s) => (
-                  <tr key={s.sector}>
+      {data && rows.length > 0 && <SectorHeatTable rows={rows} />}
+    </div>
+  );
+}
+
+function SectorHeatTable({ rows }) {
+  const [open, setOpen] = useState(null);
+  return (
+    <MICard title="Composite heat by sector and sub-sector">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="text-gray-500 dark:text-gray-400">
+            <tr>
+              <th className="text-left py-2 pr-3 font-medium">Sector</th>
+              <th className="text-right py-2 pr-3 font-medium">Latest heat</th>
+              <th className="text-left py-2 pr-3 font-medium">Trend (12w)</th>
+              <th className="text-right py-2 pr-3 font-medium">Periods</th>
+              <th className="text-right py-2 pr-3 font-medium">Sub-sectors</th>
+              <th className="px-2 py-2"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            {rows.map((s) => {
+              const expandable = s.subs.length > 0;
+              const isOpen = open === s.sector;
+              return (
+                <React.Fragment key={s.sector}>
+                  <tr className={expandable ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/40' : ''} onClick={() => expandable && setOpen(isOpen ? null : s.sector)}>
                     <td className="py-2 pr-3 text-gray-900 dark:text-gray-100 font-medium whitespace-nowrap">{s.sector}</td>
                     <td className="py-2 pr-3 text-right">
                       <span className={`inline-block px-2 py-0.5 rounded font-bold text-sm ${heatColor(Math.min(100, s.latest * 20))}`}>{s.latest.toFixed(2)}</span>
@@ -2315,14 +2411,45 @@ function SectorHeatTab() {
                       </div>
                     </td>
                     <td className="py-2 pr-3 text-right text-gray-500 dark:text-gray-400">{s.points.length}</td>
+                    <td className="py-2 pr-3 text-right text-gray-500 dark:text-gray-400">{s.subs.length || '—'}</td>
+                    <td className="py-2 pr-2 text-right">
+                      {expandable && <ChevronDown size={14} className={`inline text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />}
+                    </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </MICard>
-      )}
-    </div>
+                  {expandable && isOpen && (
+                    <tr><td colSpan={6} className="p-0">
+                      <table className="w-full text-[11px] bg-gray-50/60 dark:bg-gray-800/40">
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                          {s.subs.map((sub) => (
+                            <tr key={sub.sub_sector}>
+                              <td className="pl-8 py-1.5 pr-3 text-gray-700 dark:text-gray-300">↳ {sub.sub_sector}</td>
+                              <td className="py-1.5 pr-3 text-right">
+                                <span className={`inline-block px-2 py-0.5 rounded font-bold ${heatColor(Math.min(100, sub.latest * 20))}`}>{sub.latest.toFixed(2)}</span>
+                              </td>
+                              <td className="py-1.5 pr-3" style={{ width: 160 }}>
+                                <div style={{ width: 160, height: 30 }}>
+                                  <ResponsiveContainer>
+                                    <LineChart data={sub.points} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+                                      <Line type="monotone" dataKey="heat" stroke="#a78bfa" strokeWidth={1.5} dot={false} />
+                                    </LineChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              </td>
+                              <td className="py-1.5 pr-3 text-right text-gray-500 dark:text-gray-400">{sub.points.length}</td>
+                              <td colSpan={2}></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </td></tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </MICard>
   );
 }
 

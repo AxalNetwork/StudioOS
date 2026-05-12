@@ -596,7 +596,8 @@ marketIntel.get('/demand-supply', async (c) => {
   return c.json({ items, k_min: K_MIN });
 });
 
-// 4. /sector-heat — composite "heat" index per sector per week.
+// 4. /sector-heat — composite "heat" index per sector (and sub-sector
+//    when the reducer emits dimension_key='sector:X:Y' rows) per week.
 marketIntel.get('/sector-heat', async (c) => {
   const weeks = clampPeriods(c.req.query('weeks'), 8);
   const rows = await c.env.DB.prepare(
@@ -604,10 +605,15 @@ marketIntel.get('/sector-heat', async (c) => {
        FROM market_intel_aggregates
        WHERE extractor='sector_heat' AND n >= ?
        ORDER BY period_key DESC, value DESC LIMIT ?`,
-  ).bind(K_MIN, weeks * 32).all();
+  ).bind(K_MIN, weeks * 64).all();
   const items = (rows.results || []).map((r: any) => {
     const p = safeJson(r.payload_json);
-    return { sector: String(r.dimension_key).replace(/^sector:/, ''),
+    // dimension_key is either `sector:X` (top-level) or `sector:X:Y`
+    // (sub-sector). Split so the frontend can render expandable sub-rows.
+    const parts = String(r.dimension_key).split(':');
+    const sector = parts[1] || '';
+    const sub_sector = parts.length > 2 ? parts.slice(2).join(':') : null;
+    return { sector, sub_sector,
              period_key: r.period_key, heat: r.value,
              contributions: p.contributions ?? null, mean_valence: p.mean_valence ?? null, n: r.n };
   });
@@ -662,7 +668,42 @@ marketIntel.get('/partner-pulse', async (c) => {
     const [sector, , topic] = String(r.dimension_key).split(':');
     return { sector, topic, period_key: r.period_key, supply_count: r.value, n: r.n };
   });
-  return c.json({ items, k_min: K_MIN });
+  // Rate-card averages and comp-model histograms surface here once the
+  // partner advisor bank ships compensation questions and the matching
+  // extractors land. Until then these queries return [] and the frontend
+  // shows the k-anonymity insufficient-data block.
+  const rateRows = await c.env.DB.prepare(
+    `SELECT dimension_key, period_key, n, value, payload_json FROM market_intel_aggregates
+       WHERE extractor='partner_rate_card' AND n >= ?
+       ORDER BY period_key DESC LIMIT 100`,
+  ).bind(K_MIN).all().catch(() => ({ results: [] as any[] }));
+  const rate_cards = ((rateRows as any).results || []).map((r: any) => {
+    const [sector, topic] = String(r.dimension_key).split(':');
+    const p = safeJson(r.payload_json);
+    return {
+      sector, topic, period_key: r.period_key,
+      median_hourly: p.median_hourly ?? null,
+      p25_hourly: p.p25_hourly ?? null,
+      p75_hourly: p.p75_hourly ?? null,
+      median_project: p.median_project ?? null,
+      n: r.n,
+    };
+  });
+  const compRows = await c.env.DB.prepare(
+    `SELECT dimension_key, period_key, n, value, payload_json FROM market_intel_aggregates
+       WHERE extractor='partner_comp_model' AND n >= ?
+       ORDER BY period_key DESC LIMIT 100`,
+  ).bind(K_MIN).all().catch(() => ({ results: [] as any[] }));
+  const comp_models = ((compRows as any).results || []).map((r: any) => {
+    const [sector] = String(r.dimension_key).split(':');
+    const p = safeJson(r.payload_json);
+    return {
+      sector, period_key: r.period_key,
+      distribution: p.distribution || {},
+      n: r.n,
+    };
+  });
+  return c.json({ items, rate_cards, comp_models, k_min: K_MIN });
 });
 
 // 8. /fit/founder/:project_id — top investor matches for this founder's

@@ -53,6 +53,21 @@ export function pickPersonaBank(user, spinoutLabActiveOverride) {
   }
 }
 
+/**
+ * Persona key getter used by Market Intelligence (Task #1 AT-2) for
+ * routing decisions like founder vs investor fit lookups. Returns one
+ * of: 'founder' | 'investor' | 'mentor' | 'partner' | 'admin' | null.
+ *
+ * Centralised here so callers don't re-derive persona from `user.role`
+ * inline (which would drift from the bank-picking rules above).
+ */
+export function getPersonaKey(user) {
+  const role = String(user?.role || '').toLowerCase();
+  if (role === 'founder' || role === 'investor' || role === 'mentor' ||
+      role === 'partner' || role === 'admin') return role;
+  return null;
+}
+
 export const BANKS = {
   newFounder: NEW_FOUNDER_BANK,
   existingFounder: EXISTING_FOUNDER_BANK,
