@@ -88,10 +88,15 @@ const FIXTURES_POPULATED = {
     k_min: 5,
   },
   '/api/market-intel/partner-pulse': {
+    // rate_cards intentionally populated so the rate-card table render path
+    // is exercised (Task #2 deeper-assertion work). The empty-rate-cards
+    // negative-shape variant is asserted separately further down.
     items: [
       { sector: 'fintech', topic: 'gtm', period_key: '2026-W19', supply_count: 6, n: 6 },
     ],
-    rate_cards: [],
+    rate_cards: [
+      { sector: 'fintech', topic: 'gtm', median_hourly: 250, p25_hourly: 200, p75_hourly: 300, median_project: 25000, n: 7 },
+    ],
     comp_models: [],
     k_min: 5,
   },
@@ -334,5 +339,160 @@ test.describe('Market Intelligence — AT-2 advisor-derived tabs', () => {
     // 'fintech' must be on the gap chart's Y-axis; 'health' must not.
     await expect(gapCard.getByText(/fintech/i).first()).toBeVisible();
     await expect(gapCard.getByText(/^\s*health\s*$/i)).toHaveCount(0);
+  });
+
+  test('Founder Sentiment ranks excitements by mean energy and pins valence text', async ({ page }) => {
+    // Fixture: fintech has 2 weeks (energy 0.55, 0.61 → mean 0.58; valence
+    // 0.42, 0.51 → mean 0.465 → "0.47"). health: energy 0.40, valence -0.18.
+    // Excitements list (sorted DESC by energy) must rank fintech first with
+    // the formatted "energy 0.58 · valence 0.47" suffix. Blockers list
+    // (sorted ASC by valence) must surface health (negative valence) first.
+    // A regression that swaps the sort or drops the energy aggregation
+    // would flip the order or change the displayed numbers.
+    await mockMI(page, FIXTURES_POPULATED);
+    await loginAs(page, 'admin');
+    await page.goto('/market-intel');
+    const root = page.getByTestId('market-intel-page');
+    await page.getByTestId('mi-tab-mi_sentiment').click();
+    await expect(root).toHaveAttribute('data-active-tab', 'mi_sentiment');
+
+    const excitements = root.locator('[data-card]', { hasText: 'Top excitements' });
+    await expect(excitements).toBeVisible();
+    const firstExcitement = excitements.locator('ol > li').first();
+    await expect(firstExcitement).toContainText(/fintech/i);
+    await expect(firstExcitement).toContainText('energy 0.58');
+    await expect(firstExcitement).toContainText('valence 0.47');
+
+    const blockers = root.locator('[data-card]', { hasText: 'Top blockers' });
+    await expect(blockers).toBeVisible();
+    // Blockers render as inline spans, sorted ascending by valence; the
+    // first (most-negative) sector must be health.
+    const blockerSpans = blockers.locator('span[title^="valence"]');
+    await expect(blockerSpans.first()).toHaveText(/health/i);
+  });
+
+  test('Demand & Supply Atlas computes shortage delta from unmatched demand', async ({ page }) => {
+    // Fixture: fintech×engineering has demand=12 with NO supply row →
+    // delta = +12 → "Shortage +12" chip. fintech×gtm has demand=8,
+    // supply=5 → delta = +3 → "Shortage +3". A regression that uses
+    // `value` instead of `count`, or that defaults missing supply to
+    // demand, would zero or flip these numbers.
+    await mockMI(page, FIXTURES_POPULATED);
+    await loginAs(page, 'admin');
+    await page.goto('/market-intel');
+    const root = page.getByTestId('market-intel-page');
+    await page.getByTestId('mi-tab-mi_demand_supply').click();
+    await expect(root).toHaveAttribute('data-active-tab', 'mi_demand_supply');
+
+    const fintechCard = root.locator('[data-card]', { hasText: 'fintech' }).first();
+    await expect(fintechCard).toBeVisible();
+    const engRow = fintechCard.locator('tr', { hasText: /engineering/i });
+    await expect(engRow).toBeVisible();
+    await expect(engRow).toContainText('Shortage +12');
+    const gtmRow = fintechCard.locator('tr', { hasText: /^gtm/i }).first();
+    await expect(gtmRow).toContainText('Shortage +3');
+  });
+
+  test('Partner Marketplace Pulse renders rate-card rows when fixtures supply them', async ({ page }) => {
+    // Fixture supplies a single rate_card (gtm, median_hourly 250, IQR
+    // 200–300, median_project 25,000, n=7). Pin the formatted dollar
+    // values so a regression that swaps median for IQR, drops the `$`
+    // formatting, or uses the wrong field would fail loudly.
+    await mockMI(page, FIXTURES_POPULATED);
+    await loginAs(page, 'admin');
+    await page.goto('/market-intel');
+    const root = page.getByTestId('market-intel-page');
+    await page.getByTestId('mi-tab-mi_partner_pulse').click();
+    await expect(root).toHaveAttribute('data-active-tab', 'mi_partner_pulse');
+
+    const rateCard = root.locator('[data-card]', { hasText: 'Rate-card averages by skill' });
+    await expect(rateCard).toBeVisible();
+    const row = rateCard.locator('tbody tr').first();
+    await expect(row).toContainText('fintech');
+    await expect(row).toContainText('gtm');
+    await expect(row).toContainText('$250');
+    await expect(row).toContainText('$200–300');
+    await expect(row).toContainText('$25,000');
+    // Inside the rate-card section there must NOT be the insufficient block.
+    await expect(rateCard.getByText(/Not enough data yet/i)).toHaveCount(0);
+  });
+
+  test('Partner Marketplace Pulse rate-card section degrades to insufficient state when rate_cards is empty', async ({ page }) => {
+    // Negative-shape variant: keep capacity items populated (so the
+    // capacity card still renders) but strip rate_cards. The Capacity
+    // card must still appear, the Rate-card card must show the
+    // insufficient block — without fabricating empty table rows.
+    await mockMI(page, {
+      ...FIXTURES_POPULATED,
+      '/api/market-intel/partner-pulse': {
+        items: [{ sector: 'fintech', topic: 'gtm', period_key: '2026-W19', supply_count: 6, n: 6 }],
+        rate_cards: [],
+        comp_models: [],
+        k_min: 5,
+      },
+    });
+    await loginAs(page, 'admin');
+    await page.goto('/market-intel');
+    const root = page.getByTestId('market-intel-page');
+    await page.getByTestId('mi-tab-mi_partner_pulse').click();
+    await expect(root).toHaveAttribute('data-active-tab', 'mi_partner_pulse');
+
+    // Capacity card still present (positive control).
+    await expect(root.locator('[data-card]', { hasText: 'Capacity by skill' })).toBeVisible();
+    // Rate-card card present, but its body is the insufficient block,
+    // not a fabricated zero-row table.
+    const rateCard = root.locator('[data-card]', { hasText: 'Rate-card averages by skill' });
+    await expect(rateCard).toBeVisible();
+    await expect(rateCard.getByText(/Not enough data yet/i)).toBeVisible();
+    await expect(rateCard.locator('tbody tr')).toHaveCount(0);
+  });
+
+  test('Sector Heat picks the latest period for the top-level row and counts sub-sectors', async ({ page }) => {
+    // Fixture: fintech has 2 top-level periods (2026-W18 heat 2.4,
+    // 2026-W19 heat 2.8) plus one sub-sector ('payments'). The latest
+    // heat column must show 2.80 (not 2.40 — that would be the older
+    // period leaking through), and Periods=2, Sub-sectors=1.
+    await mockMI(page, FIXTURES_POPULATED);
+    await loginAs(page, 'admin');
+    await page.goto('/market-intel');
+    const root = page.getByTestId('market-intel-page');
+    await page.getByTestId('mi-tab-mi_sector_heat').click();
+    await expect(root).toHaveAttribute('data-active-tab', 'mi_sector_heat');
+
+    const heatCard = root.locator('[data-card]', { hasText: 'Composite heat by sector' });
+    await expect(heatCard).toBeVisible();
+    const fintechRow = heatCard.locator('tbody > tr', { hasText: /fintech/i }).first();
+    await expect(fintechRow).toBeVisible();
+    await expect(fintechRow).toContainText('2.80');
+    await expect(fintechRow).not.toContainText('2.40');
+    // Last two columns: Periods=2, Sub-sectors=1. Use cell-level matches
+    // so the sparkline column doesn't confuse the assertion.
+    const cells = fintechRow.locator('td');
+    await expect(cells.nth(3)).toHaveText('2');
+    await expect(cells.nth(4)).toHaveText('1');
+  });
+
+  test('Sentiment Geography renders one card per geo with valence and contributor counts', async ({ page }) => {
+    // Fixture: us×fintech valence +0.50 n=14; eu×health valence -0.10 n=8.
+    // Cards sort DESC by total contributors → us (n=14) first, then eu.
+    // Pin the formatted '+0.50' chip so a regression that drops the
+    // sign or rounds to a different precision fails.
+    await mockMI(page, FIXTURES_POPULATED);
+    await loginAs(page, 'admin');
+    await page.goto('/market-intel');
+    const root = page.getByTestId('market-intel-page');
+    await page.getByTestId('mi-tab-mi_sentiment_geo').click();
+    await expect(root).toHaveAttribute('data-active-tab', 'mi_sentiment_geo');
+
+    const usCard = root.locator('[data-card]', { hasText: /^\s*us\s*$|^us\b/i }).first();
+    await expect(usCard).toBeVisible();
+    await expect(usCard).toContainText('14 contributors');
+    const fintechRow = usCard.locator('li', { hasText: /fintech/i });
+    await expect(fintechRow).toContainText('+0.50');
+    await expect(fintechRow).toContainText('n=14');
+
+    const euCard = root.locator('[data-card]', { hasText: /^eu\b/i }).first();
+    await expect(euCard).toContainText('8 contributors');
+    await expect(euCard.locator('li', { hasText: /health/i })).toContainText('-0.10');
   });
 });
