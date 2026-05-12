@@ -578,6 +578,29 @@ advisor.post('/answer', async (c) => {
   const q = questionById(body.question_id);
   if (!q) return c.json({ error: 'unknown question_id' }, 400);
 
+  // Task #2 (AR) — server-side eligibility check. The client must
+  // only submit questions that are currently in the VISIBLE bank
+  // (post week/tier/unlock filtering). Detector questions and
+  // already-answered IDs are always allowed (re-answer is permitted
+  // as an idempotent overwrite). This closes the access-control
+  // gap that let a curl client answer a Week-3 question while
+  // still on Week-1.
+  {
+    await ensureAdvisorWeekColumn(c.env);
+    const gateNow = await loadAdvisorGate(c.env, user);
+    const answeredNow = await effectiveAnsweredSet(c.env, user, conv.id);
+    const { visible: visibleNow } = selectBank(user, answeredNow, gateNow);
+    const isVisible = visibleNow.some((vq) => vq.id === q.id);
+    const isDetector = DETECTOR_IDS.includes(q.id);
+    const isReAnswer = answeredNow.has(q.id);
+    if (!isVisible && !isDetector && !isReAnswer) {
+      return c.json({
+        error: 'question_not_available',
+        message: 'This question isn\'t available yet — finish earlier milestones first.',
+      }, 409);
+    }
+  }
+
   // Persist the user turn first so the audit log is consistent even
   // if a downstream step throws.
   await recordMessage(c.env, conv.id, 'user', valueStr, q.id);
@@ -695,14 +718,28 @@ advisor.post('/skip', async (c) => {
   if (!q) return c.json({ error: 'unknown question_id' }, 400);
   if (q.skip_allowed === false) return c.json({ error: 'this question cannot be skipped' }, 400);
 
+  // Task #2 (AR) — same eligibility gate as /answer.
+  await ensureAdvisorWeekColumn(c.env);
+  const gate = await loadAdvisorGate(c.env, user);
+  {
+    const answeredNow = await effectiveAnsweredSet(c.env, user, conv.id);
+    const { visible: visibleNow } = selectBank(user, answeredNow, gate);
+    const isVisible = visibleNow.some((vq) => vq.id === q.id);
+    const isDetector = DETECTOR_IDS.includes(q.id);
+    if (!isVisible && !isDetector) {
+      return c.json({
+        error: 'question_not_available',
+        message: 'This question isn\'t available yet — finish earlier milestones first.',
+      }, 409);
+    }
+  }
+
   await recordAnswer(c.env, conv, user, q.id, '', { status: 'skipped' });
   await recordMessage(c.env, conv.id, 'user', '(skipped)', q.id);
 
   // Use the shared selectBank helper so skipping detector question
   // 2 does not let the user jump into the persona bank before
   // detector question 3 is served.
-  await ensureAdvisorWeekColumn(c.env);
-  const gate = await loadAdvisorGate(c.env, user);
   const answered = await effectiveAnsweredSet(c.env, user, conv.id);
   const { visible: bank } = selectBank(user, answered, gate);
   const next = nextUnansweredQuestion(bank, answered);

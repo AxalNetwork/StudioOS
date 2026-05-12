@@ -459,19 +459,33 @@ export default function PersonalAdvisor() {
               ) : (
                 <div className="space-y-2">
                   {ringStats.map((r) => (
-                    <Link
+                    <div
                       key={r.page}
-                      to={r.page}
-                      className="block p-2 rounded-lg hover:bg-white dark:hover:bg-gray-900 border border-transparent hover:border-gray-200 dark:hover:border-gray-800 transition-colors"
-                      title={`${r.done} of ${r.total} answered`}
+                      className="p-2 rounded-lg hover:bg-white dark:hover:bg-gray-900 border border-transparent hover:border-gray-200 dark:hover:border-gray-800 transition-colors"
                     >
                       <div className="flex items-center gap-2 mb-1">
-                        <div className="flex-1 min-w-0 text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{r.label}</div>
+                        {/* Click the LABEL → set advisor focus to this
+                            page's section so the next question pins
+                            here. The arrow → navigates to the page. */}
+                        <button
+                          type="button"
+                          onClick={() => pickFocus(r.page)}
+                          className="flex-1 min-w-0 text-left text-xs font-medium text-gray-900 dark:text-gray-100 truncate hover:text-violet-700 dark:hover:text-violet-300"
+                          title={`Focus advisor on ${r.label}`}
+                        >
+                          {r.label}
+                        </button>
                         <div className="text-[10px] text-gray-500 dark:text-gray-400 flex-shrink-0">{r.done} / {r.total}</div>
-                        <ChevronRight size={12} className="text-gray-400 flex-shrink-0" />
+                        <Link
+                          to={r.page}
+                          className="text-gray-400 hover:text-violet-600 flex-shrink-0"
+                          title={`Open ${r.label}`}
+                        >
+                          <ChevronRight size={12} />
+                        </Link>
                       </div>
                       <ProgressBar percent={r.percent} done={r.done === r.total && r.total > 0} />
-                    </Link>
+                    </div>
                   ))}
                 </div>
               )}
@@ -693,20 +707,34 @@ function ProgressBar({ percent, done }) {
 function WeekBanner({ week }) {
   const w = Math.max(1, Math.min(4, Number(week) || 1));
   const labels = { 1: 'Customer Discovery', 2: 'Build', 3: 'Network', 4: 'Incorporate' };
+  // Task #2 (AR) — explicit unlock copy so founders see what they
+  // need to do to advance. Mirrors the MILESTONES catalog in
+  // routes/spinout_lab.ts so the language stays in sync.
+  const unlockCopy = {
+    1: 'Brand basics & landing page unlock once you create your project and log 3 customer interviews.',
+    2: 'Network features unlock once you fill in your brand basics.',
+    3: 'Incorporation tools unlock once you complete your network milestones.',
+    4: 'Finish incorporation to graduate from the Spin-Out Lab.',
+  };
   return (
-    <div className="px-4 py-2 border-b border-violet-100 dark:border-violet-900/40 bg-gradient-to-r from-violet-100/60 to-indigo-100/60 dark:from-violet-900/20 dark:to-indigo-900/20 flex items-center justify-between">
-      <div className="flex items-center gap-2 text-xs">
-        <span className="font-semibold text-violet-800 dark:text-violet-200">Spin-Out Lab · Week {w}</span>
-        <span className="text-violet-700/80 dark:text-violet-300/80">{labels[w] || ''}</span>
+    <div className="px-4 py-2 border-b border-violet-100 dark:border-violet-900/40 bg-gradient-to-r from-violet-100/60 to-indigo-100/60 dark:from-violet-900/20 dark:to-indigo-900/20">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs min-w-0">
+          <span className="font-semibold text-violet-800 dark:text-violet-200 flex-shrink-0">Spin-Out Lab · Week {w}</span>
+          <span className="text-violet-700/80 dark:text-violet-300/80 truncate">{labels[w] || ''}</span>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {[1, 2, 3, 4].map((n) => (
+            <span
+              key={n}
+              className={`w-6 h-1 rounded-full ${n <= w ? 'bg-violet-600' : 'bg-violet-200 dark:bg-violet-900/50'}`}
+              title={`Week ${n}`}
+            />
+          ))}
+        </div>
       </div>
-      <div className="flex items-center gap-1">
-        {[1, 2, 3, 4].map((n) => (
-          <span
-            key={n}
-            className={`w-6 h-1 rounded-full ${n <= w ? 'bg-violet-600' : 'bg-violet-200 dark:bg-violet-900/50'}`}
-            title={`Week ${n}`}
-          />
-        ))}
+      <div className="mt-1 text-[11px] text-violet-700/80 dark:text-violet-300/80">
+        {unlockCopy[w]}
       </div>
     </div>
   );

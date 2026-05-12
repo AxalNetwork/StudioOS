@@ -148,6 +148,60 @@ function parseList(s: string): string[] {
 // `WHERE col LIKE 'advisor:%'` so they never collide with
 // user-typed values in the same column. Created once per isolate.
 let _slotIndexesReady = false;
+// ---------------------------------------------------------------------------
+// Spin-Out milestone helper (Task #2 AR).
+//
+// Mirrors the auto-advance loop from `routes/spinout_lab.ts:recordMilestone`
+// using env.DB directly so writeRouter (which has no postgres `Sql` tag)
+// can keep `users.spinout_lab_week` in lockstep with milestone writes
+// triggered by advisor answers. Without this, week-gated questions
+// stayed locked forever because the column never advanced.
+//
+// Best-effort: lab inactive / table missing / etc. swallow silently
+// — these writes are side-effects of normal answer plumbing and must
+// never block the user-facing /answer response.
+// ---------------------------------------------------------------------------
+const WEEK_REQUIRED: Record<number, { all: string[]; any: string[] }> = {
+  1: { all: ['project_created'], any: ['customer_interview_logged_1', 'customer_interview_logged_2', 'customer_interview_logged_3'] },
+  2: { all: ['brand_basics_filled'], any: [] },
+  3: { all: [], any: [] },
+  4: { all: ['incorporation_completed'], any: [] },
+};
+function weekIsMet(week: number, completed: Set<string>): boolean {
+  const def = WEEK_REQUIRED[week];
+  if (!def) return false;
+  for (const k of def.all) if (!completed.has(k)) return false;
+  if (def.any.length > 0 && !def.any.some((k) => completed.has(k))) return false;
+  return true;
+}
+async function recordSpinoutMilestoneAndAdvance(
+  env: Env, userId: number, key: string, week: number,
+): Promise<void> {
+  // Insert is idempotent via UNIQUE(user_id, milestone_key).
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key)
+     VALUES (?, ?, ?)`,
+  ).bind(userId, week, key).run();
+  // Re-read user lab state. Bail if lab inactive — we never want to
+  // advance a non-active lab from a side-effect path.
+  const u = await env.DB.prepare(
+    `SELECT spinout_lab_active, spinout_lab_week FROM users WHERE id = ?`,
+  ).bind(userId).first<{ spinout_lab_active: number | null; spinout_lab_week: number | null }>();
+  if (!u || Number(u.spinout_lab_active) !== 1) return;
+  const rows = await env.DB.prepare(
+    `SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = ?`,
+  ).bind(userId).all<{ milestone_key: string }>();
+  const completed = new Set<string>((rows.results || []).map((r) => r.milestone_key));
+  let newWeek = Math.max(1, Math.min(4, Number(u.spinout_lab_week ?? 1)));
+  while (newWeek < 4 && weekIsMet(newWeek, completed)) newWeek += 1;
+  if (newWeek !== Number(u.spinout_lab_week)) {
+    await env.DB.prepare(`UPDATE users SET spinout_lab_week = ? WHERE id = ?`).bind(newWeek, userId).run();
+  }
+  if (newWeek === 4 && weekIsMet(4, completed)) {
+    await env.DB.prepare(`UPDATE users SET spinout_lab_active = 0, is_incorporated = 1 WHERE id = ?`).bind(userId).run();
+  }
+}
+
 async function ensureAdvisorSlotIndexes(env: Env): Promise<void> {
   if (_slotIndexesReady) return;
   try {
@@ -292,10 +346,9 @@ export async function routeAnswer(
         // anything else would silently fail to advance the week.
         // INSERT OR IGNORE keeps it idempotent.
         try {
-          await env.DB.prepare(
-            `INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key)
-               VALUES (?, 1, ?)`,
-          ).bind(user.id, `customer_interview_logged_${discoveryMatch[1]}`).run();
+          await recordSpinoutMilestoneAndAdvance(
+            env, user.id, `customer_interview_logged_${discoveryMatch[1]}`, 1,
+          );
         } catch { /* milestones table may not exist on legacy dev DBs */ }
         return {
           status: 'saved',
@@ -436,11 +489,17 @@ export async function routeAnswer(
     // INSERT OR IGNORE is idempotent — see routes/spinout_lab.ts.
     if (questionId === 'founder.project.name') {
       try {
-        await env.DB.prepare(
-          `INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key)
-             VALUES (?, 1, 'project_created')`,
-        ).bind(user.id).run();
+        await recordSpinoutMilestoneAndAdvance(env, user.id, 'project_created', 1);
       } catch { /* milestones table may not exist on legacy dev DBs */ }
+    }
+    // Brand basics + incorporation milestones are also Spin-Out Lab
+    // gating signals — feeding them through the auto-advance helper
+    // keeps users.spinout_lab_week in lockstep with milestone writes.
+    if (questionId === 'founder.brand.tagline' || questionId === 'founder.brand.theme_color') {
+      try { await recordSpinoutMilestoneAndAdvance(env, user.id, 'brand_basics_filled', 2); } catch { /* legacy dev */ }
+    }
+    if (questionId === 'founder.legal.incorporation_state') {
+      try { await recordSpinoutMilestoneAndAdvance(env, user.id, 'incorporation_completed', 4); } catch { /* legacy dev */ }
     }
     // Side-effect (best-effort): bump projects.updated_at on every
     // founder write so the e-sign contract auto-fill (which keys its
