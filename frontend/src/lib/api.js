@@ -321,8 +321,15 @@ export const api = {
   // instead of wrapping it through request() (which buffers JSON).
   advisor: {
     start: () => request('/advisor/start', { method: 'POST', body: JSON.stringify({}) }),
-    answer: (conversation_id, question_id, value) =>
-      request('/advisor/answer', { method: 'POST', body: JSON.stringify({ conversation_id, question_id, value }) }),
+    answer: (conversation_id, question_id, value, evidence) =>
+      request('/advisor/answer', {
+        method: 'POST',
+        body: JSON.stringify(
+          evidence != null && String(evidence).trim()
+            ? { conversation_id, question_id, value, evidence: String(evidence).trim() }
+            : { conversation_id, question_id, value },
+        ),
+      }),
     skip: (conversation_id, question_id) =>
       request('/advisor/skip', { method: 'POST', body: JSON.stringify({ conversation_id, question_id }) }),
     progress: () => request('/advisor/progress'),

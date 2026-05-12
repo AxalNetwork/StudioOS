@@ -60,6 +60,7 @@ import {
   type Question,
 } from '../services/advisor/questionBank';
 import { routeAnswer, hydrateAlreadyAnswered, recordFieldSource, type WriteResult } from '../services/advisor/writeRouter';
+import { hashEmail } from '../util/hashEmail';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
@@ -634,26 +635,64 @@ advisor.post('/answer', async (c) => {
   // if a downstream step throws.
   await recordMessage(c.env, conv.id, 'user', valueStr, q.id);
 
-  // Task #3 (AS) — for direct UI submissions on `requires_evidence`
-  // questions, treat the user-typed value as its own justification
-  // when the client doesn't supply a separate `evidence` field.
-  // The LLM `writeAnswer` tool path is expected to attach a real
-  // citation; the chat-input path doesn't and shouldn't be blocked
-  // by the evidence gate.
-  let evidenceStr = body.evidence != null ? String(body.evidence).trim() : null;
-  if (!evidenceStr && q.requires_evidence === true && valueStr) {
-    evidenceStr = valueStr;
-  }
+  // Task #3 (AS) — pass evidence through verbatim. We deliberately
+  // do NOT auto-derive evidence from the answer value, otherwise the
+  // gate becomes a no-op for direct UI submissions. When the client
+  // omits evidence on a `requires_evidence` question the router
+  // returns `status:'needs_evidence'` and we surface a 422 below so
+  // the chat UI can render a follow-up prompt.
+  const evidenceStr = body.evidence != null ? String(body.evidence).trim() : null;
   const result: WriteResult = valueStr
     ? await routeAnswer(c.env, user, q.id, valueStr, evidenceStr)
     : { status: 'skipped' };
+
+  // Surface evidence-gate / schema-invalid as 4xx so the frontend
+  // can run optimistic-rollback + inline retry instead of treating
+  // it as a successful turn. We still record the user message above
+  // for the audit trail; we do NOT call recordAnswer/advance here.
+  if (result.status === 'needs_evidence' || result.status === 'invalid') {
+    return c.json({
+      conversation_id: conv.uid,
+      conversation_uid: conv.uid,
+      status: result.status,
+      error: result.error,
+      hint: result.hint,
+      evidence_kind: result.evidence_kind,
+      field: result.field || q.id,
+      open_url: result.open_url || q.page_target || null,
+      saved_to: null,
+      next_question: publicQuestion(q),
+      next: publicQuestion(q),
+    }, 422);
+  }
+
   await recordAnswer(c.env, conv, user, q.id, valueStr, result);
-  // Task #3 (AS) — audit row for per-page <AdvisorFilledBanner>.
+  // Task #3 (AS) — audit row for per-page <AdvisorFilledBanner>
+  // + activity_logs hook so the global activity stream attributes
+  // each advisor-driven write to the user.
   if (result.status === 'saved') {
     await recordFieldSource(
       c.env, user.id, q.id, q.page_target || null,
       result.saved_to || null, 'advisor', evidenceStr,
     );
+    try {
+      const actorHash = await hashEmail(user.email || '');
+      await c.env.DB.prepare(
+        `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+      ).bind(
+        'advisor_field_filled',
+        JSON.stringify({
+          question_id: q.id,
+          page: q.page_target || null,
+          saved_to: result.saved_to || null,
+          conversation_uid: conv.uid,
+        }),
+        actorHash,
+        user.id,
+      ).run();
+    } catch (e) {
+      console.warn('[advisor] activity_logs insert failed', (e as Error).message);
+    }
   }
 
   // Re-fetch the user if the role-detector just changed persona so

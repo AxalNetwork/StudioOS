@@ -93,6 +93,10 @@ export default function PersonalAdvisor() {
   const [progressDetail, setProgressDetail] = useState({ by_page: [], by_section: [], overall: null, spinout_lab: null });
   const [labState, setLabState] = useState(null); // { active, week, ... } from /api/spinout-lab/state
   const [focusSection, setFocusSection] = useState(null);
+  // Task #3 (AS) — when the server returns `needs_evidence`/`invalid`,
+  // we pin the original value here so the user's next reply is sent
+  // as `evidence` for the same question instead of a new answer.
+  const [pendingEvidence, setPendingEvidence] = useState(null);
 
   // Tutor mode state.
   const [tutor, setTutor] = useState(null); // { topic, text, doc_anchor, page_target, streaming }
@@ -177,29 +181,56 @@ export default function PersonalAdvisor() {
   }, [messages, question, tutor]);
 
   // ---------- Send answer -------------------------------------------------
-  const submit = useCallback(async (rawValue) => {
-    const value = String(rawValue ?? input ?? '').trim();
-    if (!value || !conversationId || !question || busy) return;
+  const submit = useCallback(async (rawValue, evidenceArg) => {
+    const userText = String(rawValue ?? input ?? '').trim();
+    if (!userText || !conversationId || !question || busy) return;
+    // Task #3 (AS) — if the previous turn returned needs_evidence
+    // for this same question, treat this reply as the evidence and
+    // re-submit the original value.
+    let value = userText;
+    let evidence = evidenceArg;
+    if (pendingEvidence && pendingEvidence.qid === question.id && evidenceArg == null) {
+      value = pendingEvidence.value;
+      evidence = userText;
+    }
     setBusy(true);
     // Optimistic transcript update + ring update.
     const qid = question.id;
     const qPrompt = question.prompt;
+    const qPage = question.page_target || null;
     setMessages((m) => [
       ...m,
-      // The question itself isn't in the transcript yet on first turn — add for context.
       ...(m.find((x) => x.question_id === qid && x.role === 'assistant') ? [] : [{ role: 'assistant', content: qPrompt, question_id: qid }]),
       { role: 'user', content: value, question_id: qid },
     ]);
     setAnsweredIds((ids) => (ids.includes(qid) ? ids : [...ids, qid]));
     setInput('');
     try {
-      const r = await api.advisor.answer(conversationId, qid, value);
-      // Server is the source of truth — reconcile.
-      // Only `saved` answers belong in the per-page ring tally; roll
-      // back the optimistic add for any other terminal status so the
-      // ring doesn't overstate completion.
+      const r = await api.advisor.answer(conversationId, qid, value, evidence);
+      // Server is the source of truth — reconcile. Roll back the
+      // optimistic ring add for any non-saved status.
       if (r.status !== 'saved') {
         setAnsweredIds((ids) => ids.filter((x) => x !== qid));
+      }
+      // Task #3 (AS) — evidence gate / schema-invalid: re-prompt
+      // inline. Stash the pending value so the next submit() call
+      // re-uses it, attaching the user's evidence reply.
+      if (r.status === 'needs_evidence' || r.status === 'invalid') {
+        const cta = r.open_url || qPage
+          ? `\n\nOr open the page directly: ${r.open_url || qPage}`
+          : '';
+        setMessages((m) => [...m, {
+          role: 'assistant',
+          content: `${r.hint || 'I need a quick clarification before saving that.'}${cta}`,
+          question_id: qid,
+          needs_evidence: r.status === 'needs_evidence',
+          pending_value: value,
+          open_url: r.open_url || qPage || null,
+        }]);
+        // Keep the same question pinned — the next user reply is
+        // treated as evidence for the same value.
+        setPendingEvidence({ qid, value, open_url: r.open_url || qPage || null });
+        return;
       }
       if (r.status === 'paywalled') {
         setMessages((m) => [...m, {
@@ -209,22 +240,39 @@ export default function PersonalAdvisor() {
       } else if (r.status === 'failed' && r.error) {
         setMessages((m) => [...m, { role: 'assistant', content: `I couldn't save that — ${r.error}` }]);
       }
+      setPendingEvidence(null);
       const next = r.next_question || r.next || null;
       setQuestion(next);
       setProgress(r.progress || progress);
       if (next) setMessages((m) => [...m, { role: 'assistant', content: next.prompt, question_id: next.id }]);
-      // Refresh server-driven per-page rings + lab week (a saved
-      // milestone may have advanced the lab to the next week).
       refreshProgress();
       refreshLabState();
     } catch (e) {
-      setMessages((m) => [...m, { role: 'assistant', content: `Error: ${e?.message || 'send failed'}` }]);
-      // Roll back the optimistic answeredIds entry.
+      // Task #3 (AS) — request() throws on non-2xx. The /answer
+      // endpoint returns 422 with a structured payload for the
+      // evidence gate / schema-invalid path; surface it as an
+      // inline retry instead of a generic error toast.
+      const data = e?.data || null;
+      const is422 = e?.status === 422 && data && (data.status === 'needs_evidence' || data.status === 'invalid');
       setAnsweredIds((ids) => ids.filter((x) => x !== qid));
+      if (is422) {
+        const cta = data.open_url ? `\n\nOr open the page directly: ${data.open_url}` : '';
+        setMessages((m) => [...m, {
+          role: 'assistant',
+          content: `${data.hint || 'I need a quick clarification before saving that.'}${cta}`,
+          question_id: qid,
+          needs_evidence: data.status === 'needs_evidence',
+          pending_value: value,
+          open_url: data.open_url || null,
+        }]);
+        setPendingEvidence({ qid, value, open_url: data.open_url || null });
+      } else {
+        setMessages((m) => [...m, { role: 'assistant', content: `Error: ${e?.message || 'send failed'}` }]);
+      }
     } finally {
       setBusy(false);
     }
-  }, [busy, conversationId, input, question, progress, refreshProgress, refreshLabState]);
+  }, [busy, conversationId, input, question, progress, refreshProgress, refreshLabState, pendingEvidence]);
 
   const skip = useCallback(async () => {
     if (!question || !conversationId || busy) return;

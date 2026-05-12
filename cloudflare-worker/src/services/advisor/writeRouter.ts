@@ -20,7 +20,7 @@ import type { Env } from '../../types';
 import type { User } from '../../types';
 import { questionById, mapRoleAnswer } from './questionBank';
 
-export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop';
+export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
 
 export interface WriteResult {
   status: WriteStatus;
@@ -28,6 +28,12 @@ export interface WriteResult {
   hint?: string;
   upgrade_link?: string;
   error?: string;
+  // Task #3 (AS) — surfaced for evidence-gate (`needs_evidence`) and
+  // schema-validation (`invalid`) statuses so the UI can render a
+  // targeted retry prompt instead of a generic error.
+  evidence_kind?: 'citation' | 'numeric' | 'date' | 'url' | 'free_text';
+  open_url?: string;
+  field?: string;
 }
 
 // Subscription columns hang off the users row but are not part of the
@@ -441,10 +447,41 @@ export async function routeAnswer(
   // direct UI submissions can pass the user-typed answer itself.
   if (q.requires_evidence && !String(evidence ?? '').trim()) {
     return {
-      status: 'failed',
+      status: 'needs_evidence',
       error: 'evidence_required',
-      hint: 'This field needs a short citation or justification before we can save it.',
+      hint: 'This number changes scoring + cap-table — please paste a one-line source (bank balance date, MRR report row, term-sheet line, etc.) so we can cite it.',
+      evidence_kind: 'citation',
+      field: questionId,
+      open_url: q.page_target || undefined,
     };
+  }
+
+  // Task #3 (AS) — lightweight schema-style validation for high-risk
+  // numeric fields. Mirrors the page PUT validators (financials,
+  // raise) so the advisor can't write nonsense like "soon" into a
+  // dollar column. Done inline because adding `zod` to the worker
+  // bundle is overkill for ~6 fields; the shape is small and the
+  // page Zod schemas live in a separate package.
+  const NUMERIC_FIELDS: Record<string, { min: number; max?: number; label: string }> = {
+    'founder.financials.runway_months':   { min: 0, max: 600,        label: 'months of runway' },
+    'founder.financials.monthly_burn':    { min: 0, max: 100_000_000, label: 'monthly burn (USD)' },
+    'founder.financials.mrr':             { min: 0, max: 1_000_000_000, label: 'MRR (USD)' },
+    'founder.raise.target_usd':           { min: 0, max: 1_000_000_000, label: 'raise target (USD)' },
+  };
+  const numSpec = NUMERIC_FIELDS[questionId];
+  if (numSpec) {
+    const cleaned = value.replace(/[$,\s]/g, '');
+    const n = Number(cleaned);
+    if (!Number.isFinite(n) || n < numSpec.min || (numSpec.max != null && n > numSpec.max)) {
+      return {
+        status: 'invalid',
+        error: 'schema_validation_failed',
+        hint: `Please enter a number for ${numSpec.label} between ${numSpec.min} and ${numSpec.max ?? '∞'}.`,
+        evidence_kind: 'numeric',
+        field: questionId,
+        open_url: q.page_target || undefined,
+      };
+    }
   }
 
   // ---- Role detector --------------------------------------------------
