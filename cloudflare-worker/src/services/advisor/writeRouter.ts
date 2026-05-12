@@ -157,26 +157,32 @@ let _slotIndexesReady = false;
 // triggered by advisor answers. Without this, week-gated questions
 // stayed locked forever because the column never advanced.
 //
+// Reuses the canonical `MILESTONES` catalog + `weekMet` predicate
+// from routes/spinout_lab.ts so the gating logic stays in one place
+// — divergence here would silently let the week advance on the
+// wrong milestone set.
+//
 // Best-effort: lab inactive / table missing / etc. swallow silently
 // — these writes are side-effects of normal answer plumbing and must
 // never block the user-facing /answer response.
 // ---------------------------------------------------------------------------
-const WEEK_REQUIRED: Record<number, { all: string[]; any: string[] }> = {
-  1: { all: ['project_created'], any: ['customer_interview_logged_1', 'customer_interview_logged_2', 'customer_interview_logged_3'] },
-  2: { all: ['brand_basics_filled'], any: [] },
-  3: { all: [], any: [] },
-  4: { all: ['incorporation_completed'], any: [] },
-};
-function weekIsMet(week: number, completed: Set<string>): boolean {
-  const def = WEEK_REQUIRED[week];
-  if (!def) return false;
-  for (const k of def.all) if (!completed.has(k)) return false;
-  if (def.any.length > 0 && !def.any.some((k) => completed.has(k))) return false;
-  return true;
+import { MILESTONES, weekMet as canonicalWeekMet } from '../../routes/spinout_lab';
+
+function weekForMilestoneKey(key: string): number | null {
+  for (const w of MILESTONES) {
+    if (w.requiredAll.includes(key) || (w.requiredAny ?? []).includes(key)) return w.week;
+  }
+  return null;
 }
+
 async function recordSpinoutMilestoneAndAdvance(
-  env: Env, userId: number, key: string, week: number,
+  env: Env, userId: number, key: string, _hintWeek: number,
 ): Promise<void> {
+  // Resolve the canonical week for this key. If the key isn't in
+  // the MILESTONES catalog (e.g. typo in a future bank entry) we
+  // bail out — never advance on an unknown milestone.
+  const week = weekForMilestoneKey(key);
+  if (!week) return;
   // Insert is idempotent via UNIQUE(user_id, milestone_key).
   await env.DB.prepare(
     `INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key)
@@ -193,11 +199,11 @@ async function recordSpinoutMilestoneAndAdvance(
   ).bind(userId).all<{ milestone_key: string }>();
   const completed = new Set<string>((rows.results || []).map((r) => r.milestone_key));
   let newWeek = Math.max(1, Math.min(4, Number(u.spinout_lab_week ?? 1)));
-  while (newWeek < 4 && weekIsMet(newWeek, completed)) newWeek += 1;
+  while (newWeek < 4 && canonicalWeekMet(newWeek, completed)) newWeek += 1;
   if (newWeek !== Number(u.spinout_lab_week)) {
     await env.DB.prepare(`UPDATE users SET spinout_lab_week = ? WHERE id = ?`).bind(newWeek, userId).run();
   }
-  if (newWeek === 4 && weekIsMet(4, completed)) {
+  if (newWeek === 4 && canonicalWeekMet(4, completed)) {
     await env.DB.prepare(`UPDATE users SET spinout_lab_active = 0, is_incorporated = 1 WHERE id = ?`).bind(userId).run();
   }
 }
@@ -495,11 +501,24 @@ export async function routeAnswer(
     // Brand basics + incorporation milestones are also Spin-Out Lab
     // gating signals — feeding them through the auto-advance helper
     // keeps users.spinout_lab_week in lockstep with milestone writes.
+    // Question IDs here MUST match the bank in
+    // services/advisor/banks/newFounderSpinout.ts; mismatches would
+    // silently fail to advance the week.
     if (questionId === 'founder.brand.tagline' || questionId === 'founder.brand.theme_color') {
       try { await recordSpinoutMilestoneAndAdvance(env, user.id, 'brand_basics_filled', 2); } catch { /* legacy dev */ }
     }
-    if (questionId === 'founder.legal.incorporation_state') {
+    // The new-founder bank's legal/incorporation question is
+    // `founder.captable.entity` (page_target /legal/incorporation).
+    if (questionId === 'founder.captable.entity') {
       try { await recordSpinoutMilestoneAndAdvance(env, user.id, 'incorporation_completed', 4); } catch { /* legacy dev */ }
+    }
+    // Roadmap OKR slot completion → 'okrs_created' milestone (Week 2).
+    if (/^founder\.okrs\.q1_objective[1-3]$/.test(questionId)) {
+      try { await recordSpinoutMilestoneAndAdvance(env, user.id, 'okrs_created', 2); } catch { /* legacy dev */ }
+    }
+    // Pitch deck draft seeds → 'pitch_deck_drafted' milestone (Week 2).
+    if (questionId === 'founder.deck.problem' || questionId === 'founder.deck.market') {
+      try { await recordSpinoutMilestoneAndAdvance(env, user.id, 'pitch_deck_drafted', 2); } catch { /* legacy dev */ }
     }
     // Side-effect (best-effort): bump projects.updated_at on every
     // founder write so the e-sign contract auto-fill (which keys its
