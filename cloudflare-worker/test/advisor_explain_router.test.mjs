@@ -144,6 +144,42 @@ test('advisor_explain default route uses Workers AI without touching Anthropic',
     assert.equal(r.output, 'workers ai answer');
     assert.equal(ai.calls.length, 1);
     assert.equal(stub.calls.length, 0, 'Anthropic API must not be called on default route');
+    // Regression guard (Task #16 review-2): when the caller passes
+    // both systemPrompt and messages, callWorkersAI must inject the
+    // systemPrompt as a leading system message. Previously dropped
+    // silently on the WAI path while preserved on Anthropic.
+    const sentMessages = ai.calls[0].payload.messages;
+    assert.ok(Array.isArray(sentMessages));
+    assert.equal(sentMessages[0]?.role, 'system');
+    assert.equal(sentMessages[0]?.content, 'sys');
+    assert.equal(sentMessages[1]?.role, 'user');
+  } finally {
+    stub.restore();
+  }
+});
+
+// Regression guard for the dual case: when the caller already supplied
+// a system message inline, we must NOT prepend a duplicate.
+test('advisor_explain Workers AI does not duplicate system message when caller already supplied one', async () => {
+  const { run, __resetForTest } = await loadRouter();
+  __resetForTest();
+  const ai = makeAI([
+    () => ({ response: 'ok', usage: { prompt_tokens: 1, completion_tokens: 1 } }),
+  ]);
+  const stub = stubAnthropicFetch();
+  try {
+    await run(baseEnv({ ai, kv: makeKV(), db: makeDB() }), {
+      task: 'advisor_explain',
+      userId: 99,
+      systemPrompt: 'OUTER-SYSTEM',
+      messages: [
+        { role: 'system', content: 'INLINE-SYSTEM' },
+        { role: 'user', content: 'hi' },
+      ],
+    });
+    const sent = ai.calls[0].payload.messages;
+    assert.equal(sent.length, 2, 'must not duplicate system message');
+    assert.equal(sent[0].content, 'INLINE-SYSTEM');
   } finally {
     stub.restore();
   }

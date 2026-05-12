@@ -392,8 +392,19 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       if (!vec) return { ok: false, status: 502, error: 'unexpected embed response' };
       return { ok: true, output: '', embedding: vec, prompt_tokens: estTokens(text), completion_tokens: 0 };
     }
+    // When the caller supplies `messages`, honor them — but still
+    // inject `systemPrompt` as a leading system message unless the
+    // caller already included one. Without this, /advisor/explain
+    // (which always passes both systemPrompt + a single user message)
+    // would silently drop ADVISOR_SYSTEM_PROMPT + persona context on
+    // the Workers AI path while keeping it on the Anthropic path,
+    // producing diverging guardrail behavior across providers.
     const messages = opts.messages?.length
-      ? opts.messages
+      ? (
+          opts.systemPrompt && !opts.messages.some((m) => m.role === 'system')
+            ? [{ role: 'system' as const, content: opts.systemPrompt }, ...opts.messages]
+            : opts.messages
+        )
       : [
           ...(opts.systemPrompt ? [{ role: 'system' as const, content: opts.systemPrompt }] : []),
           { role: 'user' as const, content: opts.text || '' },
