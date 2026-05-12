@@ -38,6 +38,15 @@ export interface Env {
   // returns 503 instead of streaming, so the UI can degrade gracefully.
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_EXPLAIN_MODEL?: string;
+  // Task #16 — chooses the provider for the Personal Advisor /explain
+  // SSE endpoint. Values:
+  //   'workers-ai' (default) — Cloudflare Workers AI primary; Anthropic
+  //                            narrow fallback only when WAI hops fail.
+  //   'anthropic'            — Anthropic primary; WAI llamas as fallback.
+  //   'auto'                 — alias of 'workers-ai'.
+  // Removes the legacy hard 503 when ANTHROPIC_API_KEY is unset since
+  // Workers AI is always reachable via the `AI` binding.
+  ADVISOR_EXPLAIN_PROVIDER?: 'workers-ai' | 'anthropic' | 'auto' | string;
   // Task #4 (AW) — global advisor kill switch. When set to "1" or "true"
   // every /api/advisor/{start,answer,explain} short-circuits with the
   // canonical REFUSAL.disabled message. Per-user kill is users.advisor_locked.

@@ -18,9 +18,12 @@
  *                                         row and advances.
  *   POST   /explain                     — SSE stream; LLM-generated
  *                                         explanation of the current /
- *                                         requested topic. Optional —
- *                                         returns 503 if ANTHROPIC_API_KEY
- *                                         is not configured.
+ *                                         requested topic. Routed via
+ *                                         aiRouter task='advisor_explain'
+ *                                         (Workers AI primary; Anthropic
+ *                                         narrow fallback). Provider can
+ *                                         be flipped via the
+ *                                         ADVISOR_EXPLAIN_PROVIDER env.
  *   GET    /progress                    — { persona, total, answered, skipped, percent }
  *   GET    /conversations/:uid          — full Q&A history (most recent first).
  *
@@ -88,9 +91,10 @@ import { enqueueJob } from '../services/queue';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
-// LLM model used for /explain. AC-1 specifies claude-sonnet-4-6 for
-// the explain surface; overridable via ANTHROPIC_EXPLAIN_MODEL.
-const EXPLAIN_MODEL_DEFAULT = 'claude-sonnet-4-6';
+// Per-call output cap for /explain. AC-1 caps replies to ≤120 words so
+// the buffered stripVerbatimLeak post-processing stays cheap; 512 tokens
+// is a generous ceiling that fits that bound for both Workers AI llama
+// models and Anthropic claude-sonnet-4-6 (Task #16 fallback).
 const EXPLAIN_MAX_TOKENS = 512;
 
 // ---------------------------------------------------------------------------
@@ -1427,9 +1431,10 @@ advisor.post('/explain', async (c) => {
     });
     return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
   }
-  if (!c.env.ANTHROPIC_API_KEY) {
-    return c.json({ error: 'advisor explanations are not configured' }, 503);
-  }
+  // Task #16 — Workers AI primary; the legacy 503-when-no-Anthropic-key
+  // guard is gone because env.AI is universally bound on the worker.
+  // The aiRouter still gracefully refuses (with budget/refusal usage
+  // rows) if every model in the chain fails.
   const body = await readJson<{ topic?: string; question_id?: string; conversation_id?: string; conversation_uid?: string }>(c);
   const topic = String(body?.topic || '').trim().slice(0, 500);
   if (!topic) return c.json({ error: 'topic is required' }, 400);
@@ -1479,8 +1484,8 @@ advisor.post('/explain', async (c) => {
   }
   // Per AC-1 the LLM is shown only the topic + persona context — never
   // free-form user-typed answer text. Strip prompt-injection markers
-  // (system tags, role overrides) defensively before they reach
-  // Anthropic.
+  // (system tags, role overrides) defensively before they reach the
+  // model (Workers AI primary, Anthropic fallback).
   const safeTopic = topic
     .replace(/<\/?(system|assistant|user|tool[^>]*)>/gi, '')
     .replace(/```[\s\S]*?```/g, '')
@@ -1495,14 +1500,7 @@ advisor.post('/explain', async (c) => {
   // Hashed via promptHash() into advisor_turn_audit so prompt revisions
   // can be correlated across the audit log.
   const persona = personaFor(user);
-  const system = [
-    {
-      type: 'text' as const,
-      text: ADVISOR_SYSTEM_PROMPT,
-      cache_control: { type: 'ephemeral' as const },
-    },
-    { type: 'text' as const, text: `User context: role=${persona}, name=${user.name || 'unknown'}.` },
-  ];
+  const systemPromptText = `${ADVISOR_SYSTEM_PROMPT}\n\nUser context: role=${persona}, name=${user.name || 'unknown'}.`;
 
   const conversationUid = (body?.conversation_id || body?.conversation_uid) ? String(body?.conversation_id || body?.conversation_uid) : null;
   let conversationId: number | null = null;
@@ -1546,85 +1544,74 @@ advisor.post('/explain', async (c) => {
     });
   }
 
-  const upstream = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': c.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: c.env.ANTHROPIC_EXPLAIN_MODEL || EXPLAIN_MODEL_DEFAULT,
-      max_tokens: EXPLAIN_MAX_TOKENS,
-      system,
-      messages: [{ role: 'user', content: safeTopic }],
-      stream: true,
-    }),
+  // Task #16 — Route through aiRouter. Workers AI is the always-on
+  // primary; Anthropic claude-sonnet-4-6 is the narrow last-resort
+  // fallback (or primary if ADVISOR_EXPLAIN_PROVIDER='anthropic'). We
+  // intentionally do NOT request a streaming response: Task #4 (AW) L1
+  // requires the full text be buffered before stripVerbatimLeak runs,
+  // and explanations are capped at ~120 words so the wall-clock cost
+  // of buffering is negligible (sub-second on llama-3.3-70b-fp8-fast).
+  // The output below is then re-emitted as a single SSE delta event so
+  // the React consumer's wire format is unchanged.
+  const ai = await aiRouterRun(c.env, {
+    task: 'advisor_explain',
+    userId: user.id,
+    systemPrompt: systemPromptText,
+    messages: [{ role: 'user', content: safeTopic }],
+    maxTokens: EXPLAIN_MAX_TOKENS,
   });
 
-  if (!upstream.ok || !upstream.body) {
-    const errBody = await upstream.text().catch(() => '');
+  if (!ai.ok) {
     // Task #4 (AW) L6 — even upstream failures get one audit row so
-    // admins can correlate Anthropic outages with refusal spikes.
+    // admins can correlate model outages / budget refusals with
+    // user-visible 502s.
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId,
-      model: c.env.ANTHROPIC_EXPLAIN_MODEL || EXPLAIN_MODEL_DEFAULT,
+      model: ai.usage?.model || null,
       promptHash: await promptHash(), toolCalls: [],
-      aiSpendUsd: 0, safetyScore: safety.score,
-      sanitisationActions: [], refusalReason: 'upstream_error',
+      aiSpendUsd: ai.usage?.est_cost_usd || 0,
+      safetyScore: safety.score,
+      sanitisationActions: [],
+      refusalReason: ai.refusal || 'upstream_error',
       shadowFlagged: false,
     });
-    return c.json({ error: 'upstream LLM error', detail: errBody.slice(0, 200) }, 502);
+    const status = ai.refusal && ai.refusal.startsWith('budget_') ? 429
+      : ai.refusal === 'kill_switch' ? 423
+      : 502;
+    return c.json({
+      error: ai.refusal === 'kill_switch'
+        ? 'AI budget exhausted — try again later.'
+        : (ai.error || 'upstream LLM error'),
+      reason: ai.refusal || 'upstream_error',
+    }, status);
   }
 
-  // Pipe Anthropic's SSE stream into our wire format. We translate
-  // their `content_block_delta` text events to our `delta` events and
-  // collect the full text for persistence in advisor_messages.
-  // The reader is hoisted into closure scope so the stream's
-  // cancel() hook can release the upstream socket if the client
-  // disconnects mid-stream.
-  const reader = upstream.body!.getReader();
+  const collected = String(ai.output || '');
+  const { text: safeOut, leaked } = stripVerbatimLeak(collected);
+  // Single delta + done — the client sees a "typing finished"
+  // beat instead of incremental tokens, in exchange for a hard
+  // guarantee that no leaked text ever crossed the wire.
+  const finalText = leaked
+    ? 'I can only discuss your StudioOS data and your current advisor questions. Want me to help with one of those?'
+    : safeOut;
+  const modelUsed = ai.usage?.model || 'unknown';
+  // Task #16 — surface which model actually answered so the React UI
+  // can render a small "(fallback)" badge when the Workers AI primary
+  // hop missed and Anthropic (or a smaller llama sibling) was used.
+  // Cached responses (cached:true) come back without fallback_used so
+  // the badge stays accurate.
+  const providerEvent = {
+    model: modelUsed,
+    provider: modelUsed.startsWith('@cf/') ? 'workers-ai' as const : 'anthropic' as const,
+    fallback_used: !!ai.usage?.fallback_used,
+    cached: !!ai.usage?.cached,
+  };
+
+  const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const enc = new TextEncoder();
-      const dec = new TextDecoder();
-      let buffer = '';
-      let collected = '';
       try {
-        // Task #4 (AW) L1 — DO NOT stream raw deltas. Buffer the full
-        // upstream response, scan with stripVerbatimLeak, and only
-        // emit text after scrubbing. /explain replies are bounded to
-        // ≤120 words so the latency cost is negligible, and this is
-        // the only way to guarantee leaked system-prompt fragments
-        // never reach the client. (Drop the per-chunk delta emission.)
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += dec.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-          for (const line of lines) {
-            if (!line.startsWith('data:')) continue;
-            const payload = line.slice(5).trim();
-            if (!payload) continue;
-            try {
-              const evt = JSON.parse(payload);
-              if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
-                const t = String(evt.delta.text || '');
-                if (t) collected += t;
-              }
-            } catch {
-              // ignore unparseable lines
-            }
-          }
-        }
-        const { text: safeOut, leaked } = stripVerbatimLeak(collected);
-        // Single delta + done — the client sees a "typing finished"
-        // beat instead of incremental tokens, in exchange for a
-        // hard guarantee that no leaked text ever crossed the wire.
-        const finalText = leaked
-          ? 'I can only discuss your StudioOS data and your current advisor questions. Want me to help with one of those?'
-          : safeOut;
+        controller.enqueue(enc.encode(sseEvent('provider', providerEvent)));
         if (finalText) {
           controller.enqueue(enc.encode(sseEvent('delta', { text: finalText })));
         }
@@ -1632,14 +1619,15 @@ advisor.post('/explain', async (c) => {
         if (conversationId && finalText) {
           await recordMessage(
             c.env, conversationId, 'assistant', finalText, null,
-            { kind: 'explain', topic: safeTopic, leaked },
+            { kind: 'explain', topic: safeTopic, leaked, model: modelUsed, provider: providerEvent.provider },
           );
         }
         await writeTurnAudit(c.env, {
           userId: user.id, conversationId,
-          model: c.env.ANTHROPIC_EXPLAIN_MODEL || EXPLAIN_MODEL_DEFAULT,
+          model: modelUsed,
           promptHash: await promptHash(), toolCalls: [],
-          aiSpendUsd: 0, safetyScore: safety.score,
+          aiSpendUsd: ai.usage?.est_cost_usd || 0,
+          safetyScore: safety.score,
           sanitisationActions: leaked ? ['verbatim_leak_stripped'] : [],
           refusalReason: leaked ? 'verbatim_leak' : null,
           shadowFlagged: false,
@@ -1647,14 +1635,8 @@ advisor.post('/explain', async (c) => {
       } catch (e) {
         controller.enqueue(enc.encode(sseEvent('error', { message: (e as Error).message })));
       } finally {
-        try { reader.releaseLock(); } catch {}
         controller.close();
       }
-    },
-    async cancel() {
-      // Client hung up — release the upstream Anthropic socket so we
-      // don't leak the read on the worker isolate.
-      try { await reader.cancel(); } catch {}
     },
   });
   return new Response(stream, {

@@ -34,6 +34,7 @@ export type TaskClass =
   | 'tool_call'
   | 'rerank'
   | 'explain'
+  | 'advisor_explain'
   | 'sentiment'
   | 'embed'
   | 'paraphrase'
@@ -152,6 +153,16 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // total chain failure still yields a valid next question.
   rerank:       { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
   explain:      { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 7 * 86400 },
+  // Task #16 — Personal Advisor free-form "explain" SSE endpoint.
+  // Workers AI is the always-on primary (env.AI binding is universally
+  // available, so the legacy 503-when-no-Anthropic-key failure mode is
+  // gone). Anthropic claude-sonnet-4-6 is kept as a narrow last-resort
+  // fallback to preserve the original AC-1 quality bar when both
+  // llama hops fail. Per-call provider preference can flip primary <->
+  // fallback via the ADVISOR_EXPLAIN_PROVIDER env var (handled inside
+  // run() so we don't have to mutate this const). No cache: each
+  // explanation is persona/topic-specific and short-lived.
+  advisor_explain: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], anthropicFallback: 'claude-sonnet-4-6' },
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
@@ -473,7 +484,23 @@ function withTimeout(p: Promise<ProviderResult>, ms: number): Promise<ProviderRe
 // Public: run()
 // ---------------------------------------------------------------------------
 export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
-  const route = ROUTE[opts.task];
+  let route = ROUTE[opts.task];
+  // Task #16 — ADVISOR_EXPLAIN_PROVIDER lets ops flip the advisor /explain
+  // primary between Workers AI (default) and Anthropic without a code
+  // deploy. 'anthropic' requires ANTHROPIC_API_KEY; if absent we silently
+  // ignore the override and stay on the WAI primary so the surface never
+  // hard-fails on misconfiguration.
+  if (route && opts.task === 'advisor_explain') {
+    const pref = String(((env as unknown as Record<string, string | undefined>).ADVISOR_EXPLAIN_PROVIDER || 'workers-ai')).toLowerCase();
+    const hasAnthropic = !!(env as unknown as { ANTHROPIC_API_KEY?: string }).ANTHROPIC_API_KEY;
+    if (pref === 'anthropic' && hasAnthropic) {
+      route = {
+        provider: 'anthropic',
+        model: (env as unknown as { ANTHROPIC_EXPLAIN_MODEL?: string }).ANTHROPIC_EXPLAIN_MODEL || 'claude-sonnet-4-6',
+        fallbackChain: [MID_LLAMA, SMALL_LLAMA],
+      };
+    }
+  }
   const startedAt = Date.now();
 
   if (!route) {

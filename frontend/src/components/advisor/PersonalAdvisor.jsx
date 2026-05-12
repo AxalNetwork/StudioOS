@@ -357,6 +357,19 @@ export default function PersonalAdvisor() {
           if (event === 'delta') {
             assembled += data.text || '';
             setTutor((t) => (t ? { ...t, text: assembled } : t));
+          } else if (event === 'provider') {
+            // Task #16 — show a "(fallback)" badge when the Workers AI
+            // primary missed and a smaller sibling or Anthropic answered.
+            // `cached` and `provider` ('workers-ai' | 'anthropic') are
+            // also surfaced so power users can see which model
+            // produced the response.
+            setTutor((t) => (t ? {
+              ...t,
+              provider: data.provider || null,
+              model: data.model || null,
+              fallback_used: !!data.fallback_used,
+              cached: !!data.cached,
+            } : t));
           } else if (event === 'error') {
             throw new Error(data.message || 'explain stream error');
           }
@@ -857,7 +870,25 @@ function TutorPanel({ tutor, onClose }) {
       <div className="flex items-start gap-2 mb-1">
         <BookOpen size={14} className="text-violet-700 dark:text-violet-300 mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="text-[11px] uppercase tracking-wider text-violet-700 dark:text-violet-300 font-semibold">Tutor</div>
+          <div className="text-[11px] uppercase tracking-wider text-violet-700 dark:text-violet-300 font-semibold flex items-center gap-1.5">
+            <span>Tutor</span>
+            {tutor.fallback_used && !tutor.streaming && (
+              <span
+                title={`Primary model unavailable — answered by ${tutor.model || 'fallback'}`}
+                className="px-1 py-px rounded bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 text-[9px] font-medium normal-case tracking-normal"
+              >
+                fallback
+              </span>
+            )}
+            {tutor.cached && !tutor.streaming && (
+              <span
+                title="Served from cache"
+                className="px-1 py-px rounded bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300 text-[9px] font-medium normal-case tracking-normal"
+              >
+                cached
+              </span>
+            )}
+          </div>
           <div className="text-xs text-gray-600 dark:text-gray-400 truncate">{tutor.topic}</div>
         </div>
         <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-900 dark:hover:text-gray-100" title="Close">
