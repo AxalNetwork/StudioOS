@@ -60,6 +60,11 @@ export async function runReducer(env: Env, opts?: { sinceIso?: string }): Promis
     valenceSum: number; valenceN: number;
     energySum: number; energyN: number;
     countByKey: Map<string, number>;     // generic counter (talc stages, demand topics, …)
+    // Per-user latest numeric samples — partner_rate_card uses this to
+    // compute medians/IQR over distinct contributors (one sample per user).
+    perUserNumeric: Map<number, { hourly?: number; project?: number }>;
+    // Per-user latest categorical choice — partner_comp_model histogram.
+    perUserChoice: Map<number, string>;
   };
   const buckets = new Map<string, Bucket>();
   function bucketFor(extractor: string, dimension_key: string, period_key: string): Bucket {
@@ -67,7 +72,8 @@ export async function runReducer(env: Env, opts?: { sinceIso?: string }): Promis
     let b = buckets.get(k);
     if (!b) {
       b = { extractor, dimension_key, period_key, users: new Set(),
-            valenceSum: 0, valenceN: 0, energySum: 0, energyN: 0, countByKey: new Map() };
+            valenceSum: 0, valenceN: 0, energySum: 0, energyN: 0, countByKey: new Map(),
+            perUserNumeric: new Map(), perUserChoice: new Map() };
       buckets.set(k, b);
     }
     return b;
@@ -104,6 +110,18 @@ export async function runReducer(env: Env, opts?: { sinceIso?: string }): Promis
       b.users.add(r.user_id);
       if (typeof p.valence === 'number') { b.valenceSum += p.valence; b.valenceN++; }
       b.countByKey.set('contributions', (b.countByKey.get('contributions') || 0) + 1);
+    } else if (r.extractor === 'partner_rate_card') {
+      const topic = String(p.topic || 'general');
+      const b = bucketFor('partner_rate_card', `${sectorKey}:${topic}`, r.period_key);
+      b.users.add(r.user_id);
+      const cur = b.perUserNumeric.get(r.user_id) || {};
+      if (typeof p.hourly === 'number' && p.hourly >= 0) cur.hourly = p.hourly;
+      if (typeof p.project === 'number' && p.project > 0) cur.project = p.project;
+      b.perUserNumeric.set(r.user_id, cur);
+    } else if (r.extractor === 'partner_comp_model') {
+      const b = bucketFor('partner_comp_model', `${sectorKey}`, r.period_key);
+      b.users.add(r.user_id);
+      if (typeof p.model === 'string') b.perUserChoice.set(r.user_id, p.model);
     }
   }
 
@@ -137,6 +155,42 @@ export async function runReducer(env: Env, opts?: { sinceIso?: string }): Promis
       value = Math.sqrt(contrib) * (1 + Math.abs(meanVal));
       payload.contributions = contrib;
       payload.mean_valence = meanVal;
+    } else if (b.extractor === 'partner_rate_card') {
+      const samples = Array.from(b.perUserNumeric.values());
+      const hourlies = samples.map((v) => v.hourly).filter((x): x is number => typeof x === 'number');
+      const projects = samples.map((v) => v.project).filter((x): x is number => typeof x === 'number');
+      const median = (arr: number[]): number | null => {
+        if (!arr.length) return null;
+        const s = [...arr].sort((a, b) => a - b);
+        const mid = Math.floor(s.length / 2);
+        return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+      };
+      const pct = (arr: number[], q: number): number | null => {
+        if (!arr.length) return null;
+        const s = [...arr].sort((a, b) => a - b);
+        const idx = Math.min(s.length - 1, Math.max(0, Math.floor(q * s.length)));
+        return s[idx];
+      };
+      // Per-metric k≥5: only emit a metric when at least K_MIN distinct
+      // partners contributed that specific metric. Cell-level n already
+      // passed the outer K_MIN gate above.
+      const hourlyOk = hourlies.length >= K_ANONYMITY_MIN;
+      const projectOk = projects.length >= K_ANONYMITY_MIN;
+      payload.median_hourly  = hourlyOk  ? Math.round(median(hourlies)!)  : null;
+      payload.p25_hourly     = hourlyOk  ? Math.round(pct(hourlies, 0.25)!) : null;
+      payload.p75_hourly     = hourlyOk  ? Math.round(pct(hourlies, 0.75)!) : null;
+      payload.median_project = projectOk ? Math.round(median(projects)!)  : null;
+      value = (payload.median_hourly as number | null);
+      // Cell with no usable metric — suppress.
+      if (!hourlyOk && !projectOk) { stats.cells_suppressed++; continue; }
+    } else if (b.extractor === 'partner_comp_model') {
+      const dist: Record<string, number> = {};
+      for (const choice of b.perUserChoice.values()) {
+        dist[choice] = (dist[choice] || 0) + 1;
+      }
+      payload.distribution = dist;
+      // value = modal-bucket count, useful for ORDER BY value DESC.
+      value = Object.values(dist).reduce((m, v) => Math.max(m, v), 0);
     }
     payload.n = n;
     writes.push(
@@ -222,7 +276,8 @@ export async function runReducer(env: Env, opts?: { sinceIso?: string }): Promis
   try {
     await env.DB.prepare(
       `DELETE FROM market_intel_aggregates WHERE extractor IN
-         ('sentiment','sentiment_geo','talc','demand_supply','sector_heat','fit_match')`,
+         ('sentiment','sentiment_geo','talc','demand_supply','sector_heat','fit_match',
+          'partner_rate_card','partner_comp_model')`,
     ).run();
   } catch (e) { console.warn('[mi.reducer] pre-write purge failed:', (e as Error).message); }
 

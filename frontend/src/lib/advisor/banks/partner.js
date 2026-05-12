@@ -13,10 +13,11 @@
  * AC-3 will surface it on the Partner Portal as a “quarterly focus”
  * banner.
  */
-import { all, required, minChars, maxChars, csvNonEmpty, oneOf } from '../validators';
+import { all, required, minChars, maxChars, csvNonEmpty, oneOf, nonNegativeNumber } from '../validators';
 
 const ROLES = ['Investor', 'Service Provider', 'Mentor / Advisor', 'Strategic Partner', 'Other'];
 const SERVICES = ['Capital', 'Engineering', 'Design', 'Legal', 'Sales / GTM', 'Marketing', 'Recruiting', 'Operations', 'Other'];
+const COMP_MODELS = ['Cash', 'Equity', 'Hybrid', 'Pro Bono'];
 
 export const PARTNER_BANK = [
   // --- Firm ------------------------------------------------------------
@@ -95,6 +96,42 @@ export const PARTNER_BANK = [
     doc_anchor: 'network/partners',
     page_target: '/partner-portal',
     validate: maxChars(500),
+  },
+
+  // --- Compensation: rate-card & comp model ---------------------------
+  // These three questions feed Marketplace Pulse rate-card medians and
+  // the comp-model donut on the Market Intel page. Answers are
+  // anonymised and aggregated with k≥5 suppression — the partner's
+  // identity never appears in the output. Asked AFTER `partner.services.offered`
+  // because the rate-card extractor uses the most recent services answer
+  // to derive the topic (skill) the rate is bucketed under.
+  {
+    id: 'partner.rate.hourly',
+    label: 'What is your typical hourly rate in USD? (Enter a number, e.g. 250)',
+    type: 'short',
+    explainer: 'Aggregated anonymously into the Marketplace Pulse rate-card medians (k≥5 suppression).',
+    doc_anchor: 'network/partners',
+    page_target: '/partner-portal',
+    validate: all(required, nonNegativeNumber),
+  },
+  {
+    id: 'partner.rate.project',
+    label: 'What is your typical per-project rate in USD? (Optional — enter 0 if you only do hourly.)',
+    type: 'short',
+    explainer: 'Used alongside hourly rates in the anonymised marketplace pulse.',
+    doc_anchor: 'network/partners',
+    page_target: '/partner-portal',
+    validate: nonNegativeNumber,
+  },
+  {
+    id: 'partner.comp.model',
+    label: 'How are you typically compensated for partner work?',
+    type: 'select',
+    options: COMP_MODELS,
+    explainer: 'Aggregated into the comp-model distribution donut on Marketplace Pulse.',
+    doc_anchor: 'network/partners',
+    page_target: '/partner-portal',
+    validate: all(required, oneOf(COMP_MODELS)),
   },
 ];
 

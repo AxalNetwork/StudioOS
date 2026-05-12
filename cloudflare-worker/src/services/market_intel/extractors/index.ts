@@ -23,6 +23,7 @@ import { extractTalcPosition } from './talc_position';
 import { extractDemandSupply } from './demand_supply';
 import { extractSectorHeat } from './sector_heat';
 import { extractThesisEmbedding } from './thesis_embedding';
+import { extractPartnerRateCard, extractPartnerCompModel } from './partner_compensation';
 
 export { resolveUserSector, weekKey, monthKey, shortHash } from './shared';
 export { scoreSentiment } from './sentiment';
@@ -85,6 +86,8 @@ export async function runExtractorsForAnswer(input: ExtractorInput): Promise<Ext
   signals += await extractTalcPosition(ctx);
   signals += await extractDemandSupply(ctx);
   signals += await extractSectorHeat(ctx, sentiment.sentiment.valence);
+  signals += await extractPartnerRateCard(ctx);
+  signals += await extractPartnerCompModel(ctx);
   embeds  += await extractThesisEmbedding(ctx);
   // fit_match is computed lazily in the reducer — no per-answer write.
 

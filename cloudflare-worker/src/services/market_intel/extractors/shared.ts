@@ -8,6 +8,7 @@ import { SECTORS } from '../aggregator';
 
 export const SIGNAL_EXTRACTORS = [
   'sentiment', 'talc', 'demand_supply', 'sector_heat',
+  'partner_rate_card', 'partner_comp_model',
 ] as const;
 export type SignalExtractor = typeof SIGNAL_EXTRACTORS[number];
 
