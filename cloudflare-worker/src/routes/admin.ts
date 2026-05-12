@@ -167,6 +167,74 @@ admin.get('/users/:user_id/profile', async (c) => {
     integrations = ires?.results || [];
   } catch {}
 
+  // ----- Personal Advisor transcripts (Task #11) -----
+  // Surfaces TWO advisor sessions for the admin user-profile drawer:
+  //   • onboarding_conversation: the FIRST advisor session created for the
+  //     user (week-1 / sign-up flow). Powers the "Onboarding Conversation"
+  //     tab which previously always rendered "0 messages".
+  //   • ongoing_conversation:    the MOST RECENT advisor session by
+  //     updated_at. Powers the new "Ongoing Conversation" tab.
+  // When the user has only one session both keys point at the same row.
+  // Defensive try/catch — advisor_* tables may be missing in older D1
+  // envs (migration 029 not yet applied), in which case we degrade to
+  // empty objects rather than 500-ing the whole profile load.
+  let onboardingConversation: any = null;
+  let ongoingConversation: any = null;
+  try {
+    // Architect-flagged: order in SQL with `datetime(...)`, not JS string
+    // sort, so timezone-suffixed / mixed-precision timestamps still order
+    // deterministically. Two cheap point-lookups beat fetching all rows
+    // and sorting client-side; both share idx_advisor_conv_user.
+    const CONV_COLS = `id, uid, persona, state, current_question_id,
+              total_questions, answered_count, skipped_count,
+              created_at, updated_at`;
+    const first: any = await c.env.DB.prepare(
+      `SELECT ${CONV_COLS}
+         FROM advisor_conversations
+        WHERE user_id = ?
+        ORDER BY datetime(created_at) ASC, id ASC
+        LIMIT 1`
+    ).bind(userId).first();
+    if (first) {
+      const last: any = await c.env.DB.prepare(
+        `SELECT ${CONV_COLS}
+           FROM advisor_conversations
+          WHERE user_id = ?
+          ORDER BY datetime(updated_at) DESC, id DESC
+          LIMIT 1`
+      ).bind(userId).first();
+      // Helper — pull up to 500 messages for a conversation in chronological
+      // order. We deliberately omit meta_json from the response to keep the
+      // payload small; admins only need the visible transcript here.
+      const fetchMessages = async (convId: number) => {
+        const r: any = await c.env.DB.prepare(
+          `SELECT role, question_id, content, created_at
+             FROM advisor_messages
+            WHERE conversation_id = ?
+            ORDER BY id ASC
+            LIMIT 500`
+        ).bind(convId).all();
+        return (r?.results || []).map((m: any) => ({
+          role: m.role,
+          content: m.content,
+          ts: m.created_at,
+          question_id: m.question_id || null,
+        }));
+      };
+      onboardingConversation = {
+        conversation: first,
+        messages: await fetchMessages(first.id),
+      };
+      // Avoid an extra round-trip when first === last (single conversation).
+      ongoingConversation = !last || first.id === last.id
+        ? onboardingConversation
+        : { conversation: last, messages: await fetchMessages(last.id) };
+    }
+  } catch (e: any) {
+    // Silent degrade — log for ops visibility but never break the profile load.
+    console.error('[admin/profile] advisor transcripts query failed:', e?.message);
+  }
+
   // ----- Linked founder / partner row -----
   let founder: any = null;
   if (userRow.founder_id) {
@@ -212,6 +280,11 @@ admin.get('/users/:user_id/profile', async (c) => {
     integrations,
     founder,
     partner,
+    // Task #11 — Personal Advisor transcripts for the admin user-profile drawer.
+    // See the fetch block above for shape; either may be null when the user
+    // has never started an advisor session.
+    onboarding_conversation: onboardingConversation,
+    ongoing_conversation: ongoingConversation,
     stats: {
       activity_count: activity.length,
       ticket_count: tickets.length,

@@ -757,17 +757,26 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
         )}
 
         <div className="px-6 pt-3 border-b border-gray-200 flex gap-1 overflow-x-auto">
-          {['profile', 'registration', 'onboarding', 'kyc', 'agreements', 'activity', 'notes'].map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px capitalize whitespace-nowrap transition-colors ${tab === t ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-              {t === 'kyc' ? 'KYC & Verification' :
-               t === 'registration' ? `Registration${(data?.timeline?.length ?? 0) ? ` · ${data.timeline.length}` : ''}` :
-               t === 'agreements' ? `Agreements${(data?.agreements?.length ?? 0) ? ` · ${data.agreements.length}` : ''}` :
-               t === 'onboarding' ? `Onboarding${(data?.onboarding?.length ?? 0) ? ` · ${data.onboarding.length}` : ''}` :
-               t === 'activity' ? `Activity${(data?.activity?.length ?? 0) ? ` · ${data.activity.length}` : ''}` :
-               t}
-            </button>
-          ))}
+          {['profile', 'registration', 'onboarding', 'advisor', 'kyc', 'agreements', 'activity', 'notes'].map(t => {
+            // Task #11 — onboarding tab now reads from the user's first
+            // advisor conversation; the new 'advisor' tab reads from their
+            // most-recent. Fall back to the legacy `data.onboarding` shape
+            // for safety so a stale worker response still renders something.
+            const onboardingMsgs = data?.onboarding_conversation?.messages || data?.onboarding || [];
+            const ongoingMsgs = data?.ongoing_conversation?.messages || [];
+            return (
+              <button key={t} onClick={() => setTab(t)}
+                className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px capitalize whitespace-nowrap transition-colors ${tab === t ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+                {t === 'kyc' ? 'KYC & Verification' :
+                 t === 'registration' ? `Registration${(data?.timeline?.length ?? 0) ? ` · ${data.timeline.length}` : ''}` :
+                 t === 'agreements' ? `Agreements${(data?.agreements?.length ?? 0) ? ` · ${data.agreements.length}` : ''}` :
+                 t === 'onboarding' ? `Onboarding${onboardingMsgs.length ? ` · ${onboardingMsgs.length}` : ''}` :
+                 t === 'advisor' ? `Ongoing Conversation${ongoingMsgs.length ? ` · ${ongoingMsgs.length}` : ''}` :
+                 t === 'activity' ? `Activity${(data?.activity?.length ?? 0) ? ` · ${data.activity.length}` : ''}` :
+                 t}
+              </button>
+            );
+          })}
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
@@ -893,45 +902,78 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
             </div>
           )}
 
-          {data && tab === 'onboarding' && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <MessageSquare size={14} className="text-gray-600" />
-                <h4 className="text-sm font-semibold text-gray-900">Onboarding Conversation</h4>
-                <span className="ml-auto text-[11px] text-gray-500">
-                  {(data.onboarding || []).length} message{(data.onboarding || []).length === 1 ? '' : 's'}
-                </span>
-              </div>
-              {(data.onboarding || []).length === 0 ? (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-xs text-gray-500">
-                  No transcript stored for this user yet. Conversations from the sign-up bot
-                  sync here once the user completes their first turn.
+          {data && (tab === 'onboarding' || tab === 'advisor') && (() => {
+            // Task #11 — both tabs share the exact same chat-bubble layout.
+            // Onboarding = user's FIRST advisor session (week-1 / sign-up).
+            // Ongoing    = user's MOST RECENT advisor session by updated_at.
+            // The worker returns BOTH, even if they point at the same row.
+            const isOnboarding = tab === 'onboarding';
+            const slice = isOnboarding
+              ? (data.onboarding_conversation || (data.onboarding ? { messages: data.onboarding } : null))
+              : data.ongoing_conversation;
+            const msgs = slice?.messages || [];
+            const conv = slice?.conversation || null;
+            const title = isOnboarding ? 'Onboarding Conversation' : 'Ongoing Conversation';
+            const emptyText = isOnboarding
+              ? 'No transcript stored for this user yet. Conversations sync here once the user answers their first Personal Advisor question.'
+              : 'No active Personal Advisor conversation for this user yet.';
+            return (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <MessageSquare size={14} className="text-gray-600" />
+                  <h4 className="text-sm font-semibold text-gray-900">{title}</h4>
+                  {conv && (
+                    <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-700">
+                      {conv.persona} · {conv.state}
+                    </span>
+                  )}
+                  <span className="ml-auto text-[11px] text-gray-500">
+                    {msgs.length} message{msgs.length === 1 ? '' : 's'}
+                  </span>
                 </div>
-              ) : (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-[60vh] overflow-y-auto space-y-2">
-                  {(data.onboarding || []).map((m, i) => (
-                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[85%] text-xs px-3 py-2 rounded-lg whitespace-pre-wrap ${
-                        m.role === 'user'
-                          ? 'bg-violet-600 text-white'
-                          : m.role === 'system'
-                          ? 'bg-amber-50 border border-amber-200 text-amber-800'
-                          : 'bg-white border border-gray-200 text-gray-800'
-                      }`}>
-                        <div>{m.content}</div>
-                        {m.ts && (
-                          <div className={`mt-1 text-[10px] ${m.role === 'user' ? 'text-violet-100' : 'text-gray-400'}`}>
-                            {new Date(m.ts).toLocaleString()}
-                            {m.extracted_persona ? ` · persona: ${m.extracted_persona}` : ''}
-                          </div>
-                        )}
+                {msgs.length === 0 ? (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-xs text-gray-500">
+                    {emptyText}
+                  </div>
+                ) : (
+                  <>
+                    {conv && (
+                      <div className="text-[11px] text-gray-500 mb-2">
+                        Started {conv.created_at ? new Date(conv.created_at).toLocaleString() : '—'}
+                        {' · '}
+                        {conv.answered_count}/{conv.total_questions} answered
+                        {conv.skipped_count ? ` · ${conv.skipped_count} skipped` : ''}
                       </div>
+                    )}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-[60vh] overflow-y-auto space-y-2">
+                      {msgs.map((m, i) => (
+                        <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[85%] text-xs px-3 py-2 rounded-lg whitespace-pre-wrap ${
+                            m.role === 'user'
+                              ? 'bg-violet-600 text-white'
+                              : m.role === 'system'
+                              ? 'bg-amber-50 border border-amber-200 text-amber-800'
+                              : m.role === 'tool'
+                              ? 'bg-blue-50 border border-blue-200 text-blue-800'
+                              : 'bg-white border border-gray-200 text-gray-800'
+                          }`}>
+                            <div>{m.content}</div>
+                            {m.ts && (
+                              <div className={`mt-1 text-[10px] ${m.role === 'user' ? 'text-violet-100' : 'text-gray-400'}`}>
+                                {new Date(m.ts).toLocaleString()}
+                                {m.question_id ? ` · ${m.question_id}` : ''}
+                                {m.extracted_persona ? ` · persona: ${m.extracted_persona}` : ''}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {data && tab === 'kyc' && (
             <div className="space-y-3 text-sm">
