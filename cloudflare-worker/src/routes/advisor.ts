@@ -235,13 +235,20 @@ function selectBank(
     focusSection: focus && !isPageFocus ? focus : undefined,
     focusPage: focus && isPageFocus ? focus : undefined,
   });
-  // Critical-first sort within section keeps the most important
-  // questions ahead of nice-to-haves.
-  const sorted = sortByImportance(filtered.visible);
+  // Authored bank order is the canonical sequencing for each
+  // persona (investor: identity → sectors/stages → ticket → thesis →
+  // pipeline; operating partner: demand → supply; mentor onboarding;
+  // new-founder weekly flow). We only re-rank critical-first INSIDE
+  // a single focused section — when the user pins one section we
+  // want their critical questions for that section to surface first.
+  // Without a focus we preserve authored order verbatim.
+  const ranked = focus && !isPageFocus
+    ? sortByImportance(filtered.visible)
+    : filtered.visible;
   if (detectorPending) {
-    return { visible: [...ROLE_DETECTOR, ...sorted], deferred: filtered.deferred };
+    return { visible: [...ROLE_DETECTOR, ...ranked], deferred: filtered.deferred };
   }
-  return { visible: sorted, deferred: filtered.deferred };
+  return { visible: ranked, deferred: filtered.deferred };
 }
 
 // ---------------------------------------------------------------------------
