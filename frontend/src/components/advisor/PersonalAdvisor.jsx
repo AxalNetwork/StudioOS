@@ -736,7 +736,7 @@ function CtaButtons({ cta, onCtaClick }) {
     if (cta.action === 'open_paywall') {
       try {
         window.dispatchEvent(new CustomEvent('studioos:tier_required', {
-          detail: { required: 'tier_required' },
+          detail: { required: cta.required_tier || 'tier_required' },
         }));
       } catch { /* non-fatal */ }
     }

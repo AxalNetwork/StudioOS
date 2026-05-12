@@ -47,6 +47,9 @@ export interface ToolCta {
   /** Optional client-side hook (e.g. 'open_paywall' to dispatch the
    *  studioos:tier_required modal in addition to following the route). */
   action?: 'open_paywall';
+  /** Tier name (`studio` | `investor_pro` | `growth` | …) the modal
+   *  should preselect when `action === 'open_paywall'`. */
+  required_tier?: string;
 }
 
 export interface ToolEnvelope {
@@ -118,6 +121,7 @@ const PAGE_ALLOWLIST: Record<string, string> = {
   '/marketplace': 'Marketplace',
   '/incorporate': 'Incorporate',
   '/legal': 'Legal',
+  '/legal-capital': 'Legal & Capital',
   '/capital': 'Capital',
   '/compliance': 'Compliance',
   '/docs': 'Docs',
@@ -422,6 +426,7 @@ async function surfacePaywall(ctx: ToolContext, args: ToolArgs): Promise<ToolEnv
     cta: {
       label, route,
       action: 'open_paywall',
+      required_tier: tier,
       primary: { label, route },
       secondary: { label: 'Compare plans', route: browseRoute },
     },
