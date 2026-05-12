@@ -1,31 +1,24 @@
 -- Task #2 (AR) — Persona Banks + Spin-Out Week Gating.
 --
--- Ensures `users.spinout_lab_week` exists (already used by
--- routes/spinout_lab.ts but never had a numbered migration in this
--- repo). The advisor next-question filter reads this column to gate
--- new-founder bank questions to the user's current Spin-Out week.
+-- Documentation-only / no-op migration.
 --
--- D1 does not support `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, so
--- this file is intended to be applied ONCE. If the column already
--- exists (it does on the live D1 — added historically via
--- `wrangler d1 execute --command`), this migration is a no-op marker
--- and will report `duplicate column name`; that is expected. The
--- worker also runs `ensureAdvisorWeekColumn()` lazily at request
--- time so dev/SQLite works without running this file.
+-- The advisor's week-gated bank reads `users.spinout_lab_week`.
+-- This column was already added to the live D1 database before this
+-- migration was numbered, via:
+--   wrangler d1 execute studioos-db --remote \
+--     --command "ALTER TABLE users ADD COLUMN spinout_lab_week INTEGER DEFAULT 1"
+--
+-- D1/SQLite has no `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, so
+-- including a raw ALTER here would fail on prod with `duplicate
+-- column name` and roll the whole file back. To keep the migration
+-- runner clean on every environment, this file is intentionally a
+-- no-op (`SELECT 1`).
+--
+-- For fresh D1/SQLite instances, the worker's
+-- `ensureAdvisorWeekColumn()` helper (cloudflare-worker/src/routes/
+-- advisor.ts) performs a lazy `PRAGMA table_info(users)` check on
+-- the first /advisor request and runs the ALTER if the column is
+-- missing. Local pytest fixtures and dev SQLite are also covered
+-- by that helper.
 
--- Marker-table FIRST so the apply tool records that this migration
--- ran even if the ALTER fails on an environment where the column
--- already exists. The actual column add follows; on FRESH instances
--- (including dev SQLite) it succeeds; on prod it errors with
--- `duplicate column name spinout_lab_week` (expected — see replit.md
--- gotcha for migration 024). The worker also runs a lazy
--- `ensureAdvisorWeekColumn()` PRAGMA-check at request time as a
--- belt-and-braces fallback for dev DBs.
-CREATE TABLE IF NOT EXISTS _migrations_applied (
-  name TEXT PRIMARY KEY,
-  applied_at TEXT DEFAULT (datetime('now'))
-);
-INSERT OR IGNORE INTO _migrations_applied (name)
-  VALUES ('041_advisor_week_gating');
-
-ALTER TABLE users ADD COLUMN spinout_lab_week INTEGER DEFAULT 1;
+SELECT 1;
