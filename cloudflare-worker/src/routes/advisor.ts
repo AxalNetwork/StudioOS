@@ -494,6 +494,18 @@ advisor.post('/start', async (c) => {
     });
     return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
   }
+  // Task #4 (AW) L5 — shadow-flag degradation. Surface the templated
+  // refusal across the WHOLE advisor surface, not just /explain, so a
+  // flagged user can't sneak in answer writes.
+  if (ks.shadow) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: null, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: null, sanitisationActions: [],
+      refusalReason: 'shadow_flag', shadowFlagged: true,
+    });
+    return c.json({ error: ks.message, status: 'refused', reason: 'shadow_flag' }, 423);
+  }
   const gate = await loadAdvisorGate(c.env, user);
 
   let conv = await getActiveConversation(c.env, user);
@@ -628,6 +640,18 @@ advisor.post('/answer', async (c) => {
       refusalReason: ks.reason || 'kill_switch', shadowFlagged: false,
     });
     return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
+  }
+  // Task #4 (AW) L5 — shadow-flag degradation. /answer writes user data,
+  // so a flagged user must NOT be able to commit answers until an admin
+  // clears the flag via /api/admin/advisor-audit/clear-shadow.
+  if (ks.shadow) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: null, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: null, sanitisationActions: [],
+      refusalReason: 'shadow_flag', shadowFlagged: true,
+    });
+    return c.json({ error: ks.message, status: 'refused', reason: 'shadow_flag' }, 423);
   }
   const body = await readJson<AnswerBody>(c);
   const convUid = body?.conversation_id || body?.conversation_uid;
@@ -1373,10 +1397,11 @@ advisor.post('/explain', async (c) => {
       category: safety.category,
     }, 422);
   }
-  // Task #4 (AW) L5 — bump anomaly counters (this user opened an explain
-  // without committing an answer right after) and check for a soft-block.
+  // Task #4 (AW) L5 — bump the explains-without-commit counter now;
+  // the full anomaly check (which needs conversationId for the
+  // distinct-tools-this-session signal) runs once we've resolved the
+  // conversation row below.
   await bumpExplainsWithoutCommit(c.env, user.id);
-  const anomaly = await bumpAnomalyAndCheck(c.env, user.id, topic);
   // Task #2 (AR) — when an explicit `question_id` is supplied, the
   // explanation must be constrained to a question the user can
   // currently see (persona/week/tier/unlock filtered). Topic-only
@@ -1437,6 +1462,9 @@ advisor.post('/explain', async (c) => {
       safety_score: safety.score,
     });
   }
+
+  // Task #4 (AW) L5 — full anomaly check now that conversationId is known.
+  const anomaly = await bumpAnomalyAndCheck(c.env, user.id, topic, conversationId);
 
   // Task #4 (AW) L5 — when the per-user shadow flag is set we degrade
   // to a templated SSE reply instead of calling Anthropic. The audit
@@ -1508,6 +1536,12 @@ advisor.post('/explain', async (c) => {
       let buffer = '';
       let collected = '';
       try {
+        // Task #4 (AW) L1 — DO NOT stream raw deltas. Buffer the full
+        // upstream response, scan with stripVerbatimLeak, and only
+        // emit text after scrubbing. /explain replies are bounded to
+        // ≤120 words so the latency cost is negligible, and this is
+        // the only way to guarantee leaked system-prompt fragments
+        // never reach the client. (Drop the per-chunk delta emission.)
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
@@ -1522,31 +1556,27 @@ advisor.post('/explain', async (c) => {
               const evt = JSON.parse(payload);
               if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
                 const t = String(evt.delta.text || '');
-                if (t) {
-                  collected += t;
-                  controller.enqueue(enc.encode(sseEvent('delta', { text: t })));
-                }
+                if (t) collected += t;
               }
             } catch {
               // ignore unparseable lines
             }
           }
         }
-        // Task #4 (AW) L1 — strip near-verbatim system-prompt leaks
-        // before persisting / acknowledging completion to the client.
-        // The streamed deltas already left the worker, but persisting
-        // the safe text means the conversation history doesn't keep
-        // the leaked copy and the next assistant turn won't include it
-        // in any context window.
         const { text: safeOut, leaked } = stripVerbatimLeak(collected);
-        if (leaked) {
-          // Tell the client the final output was scrubbed.
-          controller.enqueue(enc.encode(sseEvent('replace', { text: safeOut })));
+        // Single delta + done — the client sees a "typing finished"
+        // beat instead of incremental tokens, in exchange for a
+        // hard guarantee that no leaked text ever crossed the wire.
+        const finalText = leaked
+          ? 'I can only discuss your StudioOS data and your current advisor questions. Want me to help with one of those?'
+          : safeOut;
+        if (finalText) {
+          controller.enqueue(enc.encode(sseEvent('delta', { text: finalText })));
         }
         controller.enqueue(enc.encode(sseEvent('done', { leaked })));
-        if (conversationId && safeOut) {
+        if (conversationId && finalText) {
           await recordMessage(
-            c.env, conversationId, 'assistant', safeOut, null,
+            c.env, conversationId, 'assistant', finalText, null,
             { kind: 'explain', topic: safeTopic, leaked },
           );
         }

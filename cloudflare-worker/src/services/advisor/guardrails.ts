@@ -215,6 +215,19 @@ export async function gateToolCall(
       return { ok: false, reason: 'invalid_args', detail: `arg pattern: ${p.label}` };
     }
   }
+  // Entity ownership — any user_id / owner_user_id / target_user_id field
+  // in the tool args MUST equal ctx.user.id (admins excepted, since they
+  // legitimately operate on other users via /api/admin). Stops a tool
+  // from being weaponised to mutate someone else's row.
+  if (ctx.persona !== 'admin' && args && typeof args === 'object') {
+    const argsObj = args as Record<string, unknown>;
+    for (const k of ['user_id', 'owner_user_id', 'target_user_id', 'founder_user_id']) {
+      const v = argsObj[k];
+      if (v != null && Number(v) !== ctx.user.id) {
+        return { ok: false, reason: 'entity_forbidden', detail: `${k} mismatch` };
+      }
+    }
+  }
   // Rate + cost via KV. Best-effort — KV unavailability does not bypass
   // the persona/tier/arg checks above.
   const store = (env as unknown as { TOKENS?: KVNamespace }).TOKENS;
@@ -236,6 +249,20 @@ export async function gateToolCall(
         return { ok: false, reason: 'cost_exceeded', detail: 'daily AI budget ($0.05) reached' };
       }
     } catch { /* best-effort */ }
+    // Track distinct tools per conversation so L5 can flag a single
+    // session that hops across many tool surfaces — a classic abuse
+    // pattern. Stored as a comma-separated set with a 6-hour TTL.
+    if (ctx.conversationId) {
+      try {
+        const dtKey = `advisor:tools_seen:${ctx.user.id}:${ctx.conversationId}`;
+        const cur = (await store.get(dtKey)) || '';
+        const seen = new Set(cur.split(',').filter(Boolean));
+        if (!seen.has(tool)) {
+          seen.add(tool);
+          await store.put(dtKey, Array.from(seen).join(','), { expirationTtl: 21_600 });
+        }
+      } catch { /* best-effort */ }
+    }
   }
   return { ok: true };
 }
@@ -331,7 +358,7 @@ export function isAnomalous(s: AnomalySignals): boolean {
  * never raises.
  */
 export async function bumpAnomalyAndCheck(
-  env: Env, userId: number, message: string,
+  env: Env, userId: number, message: string, conversationId?: number | null,
 ): Promise<{ shadow: boolean; signals: AnomalySignals }> {
   const blobLen = (message.match(/[A-Za-z0-9+/=]{64,}/g) || []).join('').length;
   const signals: AnomalySignals = {
@@ -350,6 +377,13 @@ export async function bumpAnomalyAndCheck(
       const ewcKey = `advisor:ewc:${userId}:${new Date().toISOString().slice(0, 10)}`;
       signals.explainsWithoutCommit = Number((await store.get(ewcKey)) || '0') || 0;
     } catch { /* best-effort */ }
+    if (conversationId) {
+      try {
+        const dtKey = `advisor:tools_seen:${userId}:${conversationId}`;
+        const cur = (await store.get(dtKey)) || '';
+        signals.distinctToolsThisSession = cur.split(',').filter(Boolean).length;
+      } catch { /* best-effort */ }
+    }
   }
   const shadow = isAnomalous(signals);
   if (shadow) {
