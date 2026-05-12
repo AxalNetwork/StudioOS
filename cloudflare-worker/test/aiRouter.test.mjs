@@ -121,11 +121,14 @@ function baseEnv({ ai, kv, db, budgets = {} }) {
 // `tool_call` primary = qwen2.5-coder; fallback = llama-3.3-70b.
 // We make the qwen call throw and assert llama-3.3-70b is invoked next.
 // --------------------------------------------------------------------------
-test('primary 5xx triggers smaller-model fallback', async () => {
+test('primary 5xx triggers smaller-model fallback (one hop)', async () => {
   const { run, ROUTE, __resetForTest } = await loadRouter();
   __resetForTest();
   assert.equal(ROUTE.tool_call.model, '@cf/qwen/qwen2.5-coder-32b-instruct');
-  assert.equal(ROUTE.tool_call.fallback, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+  assert.deepEqual(ROUTE.tool_call.fallbackChain, [
+    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    '@cf/meta/llama-3.1-8b-instruct',
+  ]);
 
   const ai = makeAI([
     () => { throw new Error('500 internal error'); },              // primary fails
@@ -148,10 +151,33 @@ test('primary 5xx triggers smaller-model fallback', async () => {
   assert.equal(ai.calls[0].model, '@cf/qwen/qwen2.5-coder-32b-instruct');
   assert.equal(ai.calls[1].model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
   assert.equal(result.output, 'fallback answer');
-  // log row written with fallback_used=1
   assert.equal(db._rows.length, 1);
   assert.equal(db._rows[0].fallback_used, 1);
   assert.equal(db._rows[0].refusal, null);
+});
+
+// Spec step 3: multi-hop fallback "tool_call → advisor_turn → role_detect"
+// (qwen32b → llama-70b → llama-8b). Verifies the second hop is reached
+// when both the primary and the first sibling fail.
+test('multi-hop fallback chain reaches second sibling on cascading failure', async () => {
+  const { run, __resetForTest } = await loadRouter();
+  __resetForTest();
+  const ai = makeAI([
+    () => { throw new Error('qwen 502'); },
+    () => { throw new Error('llama-70b 503'); },
+    () => ({ response: 'small-llama saved the day', usage: { prompt_tokens: 5, completion_tokens: 4 } }),
+  ]);
+  const kv = makeKV();
+  const db = makeDB();
+  const env = baseEnv({ ai, kv, db });
+
+  const r = await run(env, { task: 'tool_call', userId: 11, text: 'do thing' });
+  assert.equal(r.ok, true);
+  assert.equal(r.usage.fallback_used, true);
+  assert.equal(r.usage.model, '@cf/meta/llama-3.1-8b-instruct');
+  assert.equal(ai.calls.length, 3);
+  assert.equal(ai.calls[2].model, '@cf/meta/llama-3.1-8b-instruct');
+  assert.equal(r.output, 'small-llama saved the day');
 });
 
 // --------------------------------------------------------------------------

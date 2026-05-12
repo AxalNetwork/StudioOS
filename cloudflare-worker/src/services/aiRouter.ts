@@ -63,6 +63,12 @@ export interface RunOptions {
   // For explainer caching: a stable topic key so different phrasings of the
   // same topic share the cached response.
   topic?: string;
+  // Streaming pass-through (Workers AI only). When true the result carries
+  // a `stream: ReadableStream` instead of `output`. Fallback applies only
+  // to synchronous failures before the stream opens; mid-stream errors
+  // are surfaced to the caller. Cache + safety_score parsing are bypassed
+  // for streams since neither is meaningful without buffering the body.
+  stream?: boolean;
 }
 
 export interface UsageMeta {
@@ -81,6 +87,7 @@ export interface RunResult {
   ok: boolean;
   output?: string;             // assistant text or stringified JSON for tool_call
   embedding?: number[];        // populated for task='embed'
+  stream?: ReadableStream;     // populated only when opts.stream === true
   refusal?: RefusalReason;
   error?: string;
   usage: UsageMeta;
@@ -92,9 +99,11 @@ export interface RunResult {
 interface RouteEntry {
   provider: 'workers-ai' | 'anthropic';
   model: string;
-  // Smaller Workers AI sibling to retry on 5xx / >8s latency. Anthropic
-  // tasks have no fallback (refusal on failure).
-  fallback?: string;
+  // Ordered chain of smaller Workers AI siblings to retry on 5xx / >8s
+  // latency. The router tries the primary, then each entry in
+  // `fallbackChain` until one succeeds or the chain is exhausted.
+  // Anthropic tasks have no fallback (refusal on failure) per spec.
+  fallbackChain?: string[];
   // KV cache TTL in seconds. Undefined → no cache.
   cacheTtlSec?: number;
   // True for embedding models (response shape differs).
@@ -117,15 +126,23 @@ export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }
   'claude-sonnet-4-6':                        { in: 3.00, out: 15.00 },
 };
 
+// Spec step 3: "fall back to a smaller Workers AI sibling
+// (tool_call → advisor_turn → role_detect; 70b → 8b)". The chain below
+// implements that two-step degradation for tool_call (qwen32b →
+// llama-3.3-70b → llama-3.1-8b) and one-step for everything else that
+// has a smaller sibling.
+const SMALL_LLAMA = '@cf/meta/llama-3.1-8b-instruct';
+const MID_LLAMA   = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+
 export const ROUTE: Record<TaskClass, RouteEntry> = {
   safety:       { provider: 'workers-ai', model: '@cf/meta/llama-guard-3-8b' },
-  role_detect:  { provider: 'workers-ai', model: '@cf/meta/llama-3.1-8b-instruct' },
-  advisor_turn: { provider: 'workers-ai', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', fallback: '@cf/meta/llama-3.1-8b-instruct' },
-  tool_call:    { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct',      fallback: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
-  explain:      { provider: 'workers-ai', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', fallback: '@cf/meta/llama-3.1-8b-instruct', cacheTtlSec: 7 * 86400 },
-  sentiment:    { provider: 'workers-ai', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', fallback: '@cf/meta/llama-3.1-8b-instruct', cacheTtlSec: 30 * 86400 },
+  role_detect:  { provider: 'workers-ai', model: SMALL_LLAMA },
+  advisor_turn: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  tool_call:    { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
+  explain:      { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 7 * 86400 },
+  sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
-  paraphrase:   { provider: 'workers-ai', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', fallback: '@cf/meta/llama-3.1-8b-instruct' },
+  paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   publication:  { provider: 'anthropic',  model: 'claude-haiku-4-5' },
   dd_synthesis: { provider: 'anthropic',  model: 'claude-sonnet-4-6' },
 };
@@ -309,6 +326,7 @@ interface ProviderResult {
   status?: number;
   output?: string;
   embedding?: number[];
+  stream?: ReadableStream;
   prompt_tokens?: number;
   completion_tokens?: number;
   error?: string;
@@ -343,7 +361,16 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       max_tokens: opts.maxTokens || 512,
     };
     if (opts.temperature != null) payload.temperature = opts.temperature;
+    if (opts.stream) payload.stream = true;
     const raw = await ai.run(model, payload);
+    // Streaming pass-through: Workers AI returns a ReadableStream of
+    // SSE-formatted chunks when stream:true is set. We forward it
+    // verbatim to the caller; cost accounting falls back to estimated
+    // prompt tokens only since we don't see the completion side.
+    if (opts.stream && raw && typeof (raw as ReadableStream).getReader === 'function') {
+      const promptTok = estTokens(messages.map(m => m.content).join('\n'));
+      return { ok: true, stream: raw as ReadableStream, prompt_tokens: promptTok, completion_tokens: 0 };
+    }
     // Workers AI chat models return { response: string } or
     // { choices: [{ message: { content } }] } depending on model.
     const r = raw as {
@@ -442,7 +469,9 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   const caps = budgetCaps(env);
 
   // ---- Cache lookup ----------------------------------------------------
-  if (store && route.cacheTtlSec) {
+  // Streaming requests bypass the cache (caching a stream would require
+  // buffering the entire response, defeating the latency benefit).
+  if (store && route.cacheTtlSec && !opts.stream) {
     const ck = await cacheKeyFor(opts);
     if (ck) {
       try {
@@ -514,9 +543,14 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     }
   }
 
-  // ---- Primary call ----------------------------------------------------
+  // ---- Primary call + fallback chain ----------------------------------
+  // Streaming bypasses the latency timeout (the stream opens fast but the
+  // body may legitimately exceed 8 s). Latency budget still applies to
+  // the synchronous Workers AI handshake before the stream opens because
+  // ai.run() resolves only once the upstream accepts the request.
   const callOnce = (model: string): Promise<ProviderResult> => {
     if (route.provider === 'anthropic') return withTimeout(callAnthropic(env, model, opts), PRIMARY_TIMEOUT_MS);
+    if (opts.stream) return callWorkersAI(env, model, opts, !!route.isEmbed);
     return withTimeout(callWorkersAI(env, model, opts, !!route.isEmbed), PRIMARY_TIMEOUT_MS);
   };
 
@@ -525,15 +559,20 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   let fallbackUsed = false;
   let lastError = attempt.error;
 
-  // Workers AI fallback chain. Anthropic tasks have no fallback by spec.
-  if (!attempt.ok && route.fallback && route.provider === 'workers-ai') {
-    const second = await callOnce(route.fallback);
-    if (second.ok) {
-      attempt = second;
-      modelUsed = route.fallback;
-      fallbackUsed = true;
-    } else {
-      lastError = second.error || lastError;
+  // Workers AI multi-hop fallback chain (spec: tool_call → advisor_turn →
+  // role_detect, i.e. qwen32b → llama-70b → llama-8b). Anthropic tasks
+  // have no fallback by spec.
+  if (!attempt.ok && route.provider === 'workers-ai' && route.fallbackChain?.length) {
+    for (const sibling of route.fallbackChain) {
+      const next = await callOnce(sibling);
+      if (next.ok) {
+        attempt = next;
+        modelUsed = sibling;
+        fallbackUsed = true;
+        lastError = undefined;
+        break;
+      }
+      lastError = next.error || lastError;
     }
   }
 
@@ -592,7 +631,8 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   }
 
   // ---- Cache write -----------------------------------------------------
-  if (store && route.cacheTtlSec) {
+  // Skip cache write for streamed responses (see cache-lookup note above).
+  if (store && route.cacheTtlSec && !opts.stream && attempt.stream == null) {
     const ck = await cacheKeyFor(opts);
     if (ck) {
       try {
@@ -611,6 +651,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     ok: true,
     output: attempt.output,
     embedding: attempt.embedding,
+    stream: attempt.stream,
     usage,
   };
 }
