@@ -428,6 +428,14 @@ export const api = {
   getInvestorProfile: () => request('/investor-profile/me'),
   saveInvestorProfile: (data) => request('/investor-profile/me', { method: 'PUT', body: JSON.stringify(data) }),
 
+  // Task #6 (AT-1) — Market Intelligence per-user contribution opt-out.
+  // Backend purges the user's signals + embeddings within 24h via the
+  // nightly reducer (or sooner if the queue runs first).
+  miContributionOptoutGet: () => request('/market-intel/contribution-optout'),
+  miContributionOptoutSet: (opt_out) => request('/market-intel/contribution-optout', {
+    method: 'POST', body: JSON.stringify({ opt_out: !!opt_out }),
+  }),
+
   // ── Task #5 — Dashboard personal assistant. The /message endpoint is
   // SSE; consume it via fetch + ReadableStream in the component, NOT
   // through this helper. Everything else is plain JSON.

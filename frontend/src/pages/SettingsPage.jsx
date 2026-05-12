@@ -286,6 +286,7 @@ export default function SettingsPage() {
             <>
               <PrivacyCoreCard flash={flash} />
               <InvestorSignalsContributionCard flash={flash} role={data?.role} />
+              <MarketIntelContributionCard flash={flash} />
               <PrivacySection data={data} patch={patch} flash={flash} reload={() => api.getSettings().then(setData)} hideAccountDelete />
             </>
           )}
@@ -2495,6 +2496,62 @@ function InvestorSignalsContributionCard({ flash, role }) {
         </label>
         <p className="text-xs text-gray-500 dark:text-gray-400">
           Opting out removes your contribution within 6 hours, the next time the aggregator runs.
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+// Task #6 (AT-1) — Market Intelligence contribution opt-out. Lives in
+// Privacy alongside the Investor Signals toggle. Default is opt-IN
+// (contribute). Flipping the toggle calls the worker which purges the
+// user's signals + embeddings within 24h via the nightly reducer
+// (or sooner the next time the mi_reduce queue job runs).
+function MarketIntelContributionCard({ flash }) {
+  const [optedOut, setOptedOut] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.miContributionOptoutGet()
+      .then(r => { if (!cancelled) setOptedOut(!!r.opted_out); })
+      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const toggle = async (contribute) => {
+    const next = !contribute; // checkbox = "contribute"; flag stored = "opt_out"
+    setBusy(true);
+    try {
+      const r = await api.miContributionOptoutSet(next);
+      setOptedOut(!!r.opted_out);
+      flash(next
+        ? 'Opted out — your contributions will be purged within 24 hours'
+        : 'Now contributing to anonymized Market Intelligence');
+    } catch (e) {
+      flash(e.message || 'Failed to save', 'error');
+    } finally { setBusy(false); }
+  };
+
+  if (err) return <Card title="Market Intelligence"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (optedOut === null) return <Card title="Market Intelligence"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
+
+  const contribute = !optedOut;
+  return (
+    <Card
+      title="Anonymized Market Intelligence"
+      description="Your advisor answers can power platform-wide sentiment, sector-heat, demand/supply and fit-match dashboards. Cells are only published when at least 5 contributors share the same answer; identifiers are never exposed."
+    >
+      <div className="space-y-3">
+        <label className="flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200">
+          <input type="checkbox" checked={contribute} disabled={busy}
+            onChange={e => toggle(e.target.checked)}
+            className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
+          Contribute my advisor answers to anonymised Market Intelligence (k ≥ 5)
+        </label>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Opting out removes your contribution within 24 hours, the next time the nightly aggregator runs.
         </p>
       </div>
     </Card>
