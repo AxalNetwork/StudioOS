@@ -341,6 +341,11 @@ export const api = {
     tools: () => request('/advisor/tools'),
     tool: (name, args = {}) =>
       request('/advisor/tool', { method: 'POST', body: JSON.stringify({ name, args }) }),
+    // LLM tool-binding entry point. The user types a free-form message;
+    // the worker calls aiRouter.run('tool_call') to pick a tool, validates
+    // the envelope, and dispatches via the same gated pipeline as `tool()`.
+    toolAuto: (message) =>
+      request('/advisor/tool/auto', { method: 'POST', body: JSON.stringify({ message }) }),
     conversation: (uid) => request(`/advisor/conversations/${encodeURIComponent(uid)}`),
     explainUrl: () => '/api/advisor/explain',
     // Task #3 (AS) — list field_sources rows for the current user,

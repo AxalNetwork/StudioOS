@@ -82,6 +82,7 @@ import {
   TOOL_SCHEMAS,
   type ToolEnvelope,
 } from '../services/advisor/tools';
+import { run as aiRouterRun } from '../services/aiRouter';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
@@ -1766,6 +1767,142 @@ advisor.post('/tool', async (c) => {
     tool: effectiveTool,
     requested_tool: name,
     degraded_to_paywall: degradedToPaywall,
+    conversation_uid: conv.uid,
+    result: envelope.result,
+    cta: envelope.cta,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/advisor/tool/auto — LLM tool-binding entry point.
+//
+// Body: { message: string }
+// The router calls aiRouter.run({ task: 'tool_call', … }) with TOOL_SCHEMAS
+// in the system prompt; the model returns a strict JSON {name, args}
+// envelope which we validate, then dispatch through the same gated
+// pipeline as POST /tool. On parse / validation failure we degrade to
+// `openPage` with the user's text as the search topic so the chatbot still
+// produces a routable CTA. This is the wired entry point that satisfies
+// the Task #5 (AV) requirement for aiRouter.run('tool_call') tool-binding.
+// ---------------------------------------------------------------------------
+const TOOL_CALL_SYSTEM_PROMPT = [
+  'You are the Axal StudioOS routing layer. The user types a free-form request;',
+  'you choose ONE tool from the registry that best satisfies it. Reply with',
+  'STRICT JSON only — no prose, no code fences — of the form',
+  '{"name":"<toolName>","args":{...}}. The args object MUST conform to the',
+  'tool\'s JSON schema. If nothing fits, return',
+  '{"name":"openPage","args":{"page":"dashboard"}}.',
+  '',
+  'Available tools:',
+  TOOL_SCHEMAS.map((t) => `- ${t.name}: ${t.description}\n  args schema: ${JSON.stringify(t.parameters)}`).join('\n'),
+].join('\n');
+
+advisor.post('/tool/auto', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  await ensureGuardrailColumns(c.env);
+
+  const body = await c.req.json().catch(() => ({} as any));
+  const message = String(body?.message || '').trim();
+  if (!message || message.length > 2000) {
+    return c.json({ error: 'message required (1..2000 chars)' }, 400);
+  }
+
+  // Step 1 — let the LLM pick the tool.
+  let pickedName: import('../services/advisor/tools').ToolName = 'openPage';
+  let pickedArgs: Record<string, unknown> = { page: 'dashboard' };
+  let llmRefusal: string | null = null;
+  try {
+    const r = await aiRouterRun(c.env, {
+      task: 'tool_call',
+      userId: user.id,
+      systemPrompt: TOOL_CALL_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: message }],
+      maxTokens: 256,
+      temperature: 0,
+    });
+    if (!r.ok) {
+      llmRefusal = r.refusal || 'router_failed';
+    } else {
+      const raw = (r.output || '').trim();
+      // Strip ``` fences if the model added them despite the system prompt.
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string' && isToolName(parsed.name)) {
+        pickedName = parsed.name;
+        pickedArgs = (parsed.args && typeof parsed.args === 'object') ? parsed.args : {};
+      } else {
+        llmRefusal = 'invalid_tool_envelope';
+      }
+    }
+  } catch (e) {
+    llmRefusal = `parse_failed:${(e as Error).message.slice(0, 80)}`;
+  }
+
+  // Step 2 — dispatch through the same gated pipeline as POST /tool.
+  let conv = await getActiveConversation(c.env, user);
+  if (!conv) conv = await createConversation(c.env, user, 0, null);
+
+  const gate = await loadAdvisorGate(c.env, user);
+  const persona = personaFor(user);
+  const gateCtx = { user, persona, tiers: gate.tiers, conversationId: conv.id };
+  const toolCtx = { ...gateCtx, env: c.env };
+
+  await recordMessage(c.env, conv.id, 'user', message, undefined, {
+    via: 'tool_auto',
+    llm_picked: pickedName,
+    llm_refusal: llmRefusal,
+  });
+
+  const gateResult = await gateToolCall(c.env, gateCtx, pickedName, pickedArgs);
+  let envelope: ToolEnvelope;
+  let effectiveTool = pickedName;
+  let degradedToPaywall = false;
+
+  if (!gateResult.ok) {
+    if (gateResult.reason === 'tier_required' && persona !== 'admin') {
+      effectiveTool = 'surfacePaywall';
+      degradedToPaywall = true;
+      const internalTier = gateResult.detail || 'subscriber';
+      const userFacingTier = internalTier === 'subscriber' ? 'studio' : internalTier;
+      envelope = await executeTool(toolCtx, 'surfacePaywall', {
+        feature: pickedName,
+        required_tier: userFacingTier,
+      });
+    } else {
+      const status = gateResult.reason === 'rate_limited' || gateResult.reason === 'cost_exceeded' ? 429
+        : gateResult.reason === 'no_conversation' ? 409 : 403;
+      await recordMessage(c.env, conv.id, 'tool', `refused:${gateResult.reason}`, undefined, {
+        tool_name: pickedName, gate_reason: gateResult.reason, via: 'tool_auto',
+      });
+      return c.json({
+        error: gateResult.detail || 'tool call rejected',
+        status: 'refused', reason: gateResult.reason,
+        requested_tool: pickedName, llm_refusal: llmRefusal,
+      }, status);
+    }
+  } else {
+    try {
+      envelope = await executeTool(toolCtx, pickedName, pickedArgs);
+    } catch (e) {
+      console.error('[advisor.tool/auto] execute failed', pickedName, (e as Error).message);
+      return c.json({ error: 'tool execution failed', status: 'error', requested_tool: pickedName }, 500);
+    }
+  }
+
+  await recordMessage(
+    c.env, conv.id, 'tool',
+    JSON.stringify(envelope).slice(0, 4000),
+    undefined,
+    { tool_name: effectiveTool, degraded: degradedToPaywall ? 1 : 0, via: 'tool_auto' },
+  );
+
+  return c.json({
+    status: 'ok',
+    tool: effectiveTool,
+    requested_tool: pickedName,
+    degraded_to_paywall: degradedToPaywall,
+    llm_refusal: llmRefusal,
     conversation_uid: conv.uid,
     result: envelope.result,
     cta: envelope.cta,

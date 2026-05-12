@@ -171,8 +171,14 @@ search.post('/backfill', async (c) => {
     if (remaining <= 0) { counts[type] = 0; nextSince[type] = sinceIn[type] ?? 0; continue; }
     const table = TABLE_BY_TYPE[type];
     const since = Number(sinceIn[type] ?? 0);
+    // Task #5 (AV) — `users` is shared by partner+investor; filter by
+    // role so each backfill type only enqueues the right rows instead
+    // of re-embedding the entire users table per type.
+    const where = type === 'investor' ? `id > ? AND role = 'investor'`
+      : type === 'partner' ? `id > ? AND role = 'partner'`
+      : `id > ?`;
     const rows = await c.env.DB.prepare(
-      `SELECT id FROM ${table} WHERE id > ? ORDER BY id ASC LIMIT ?`
+      `SELECT id FROM ${table} WHERE ${where} ORDER BY id ASC LIMIT ?`
     ).bind(since, remaining).all<{ id: number }>();
     const ids = (rows.results || []).map(r => r.id);
     for (const id of ids) {
