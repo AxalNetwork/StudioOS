@@ -8,11 +8,15 @@
  * on the Dashboard.
  *
  * Behaviour:
- *  - Mobile (`< md`): full-screen takeover when open, floating bubble
- *    when minimised.
+ *  - Mobile (`< md`): inline card in the dashboard slot, with the chat
+ *    column capped at `max-h-[60vh]` so the transcript scrolls inside
+ *    the widget instead of taking over the viewport. Floating bubble
+ *    when minimised. (Previously this was a `fixed inset-0` full-screen
+ *    takeover; removed because it hid the rest of the dashboard.)
  *  - Desktop (`md+`): pinned card in the dashboard slot when open,
  *    fixed-position floating bubble in the bottom-right when
- *    minimised.
+ *    minimised. Right rail (section focus + per-page rings) is
+ *    desktop-only.
  *  - Conversation state persists across reloads via the
  *    `advisor:state` localStorage key (open/closed + last seen
  *    conversation_id) — the actual transcript lives server-side and
