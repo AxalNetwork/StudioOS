@@ -458,9 +458,13 @@ export default function PersonalAdvisor() {
 
   if (minimised) return <MinimisedBubble onOpen={() => setMinimised(false)} percent={progress.percent} />;
 
-  const containerClass = isDesktop
-    ? 'bg-white dark:bg-gray-900 border border-violet-200 dark:border-violet-900/50 rounded-xl shadow-sm overflow-hidden'
-    : 'fixed inset-0 z-50 bg-white dark:bg-gray-950 flex flex-col';
+  // Mobile no longer takes over the viewport. The advisor renders as an
+  // inline, height-capped card so the rest of the dashboard (Quick Stats,
+  // Performance Analytics, etc.) stays scrollable around it. Users who
+  // want it out of the way can tap Minimise to collapse to the floating
+  // bubble (same UX as desktop).
+  const containerClass =
+    'bg-white dark:bg-gray-900 border border-violet-200 dark:border-violet-900/50 rounded-xl shadow-sm overflow-hidden flex flex-col';
 
   return (
     <div data-card className={containerClass}>
@@ -472,9 +476,11 @@ export default function PersonalAdvisor() {
       />
       {weekBanner && <WeekBanner week={weekBanner.week} />}
 
-      <div className={isDesktop ? 'grid grid-cols-1 lg:grid-cols-3' : 'flex-1 flex flex-col overflow-hidden'}>
-        {/* Chat column */}
-        <div className={isDesktop ? 'lg:col-span-2 flex flex-col border-r border-gray-100 dark:border-gray-800 min-h-[420px]' : 'flex-1 flex flex-col min-h-0'}>
+      <div className={isDesktop ? 'grid grid-cols-1 lg:grid-cols-3' : 'flex flex-col'}>
+        {/* Chat column. On mobile we cap the height to ~60vh so the chat
+            transcript scrolls inside the card instead of pushing the rest
+            of the dashboard off screen. */}
+        <div className={isDesktop ? 'lg:col-span-2 flex flex-col border-r border-gray-100 dark:border-gray-800 min-h-[420px]' : 'flex flex-col min-h-0 max-h-[60vh]'}>
           <Transcript
             ref={scrollerRef}
             messages={messages}
