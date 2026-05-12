@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
-import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, ChevronDown, Info, Lightbulb, Users, Database, ExternalLink, Compass, Target, MapPin, BookOpen, Bookmark, Lock, Trash2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, ChevronDown, Info, Lightbulb, Users, Database, ExternalLink, Compass, Target, MapPin, BookOpen, Bookmark, Lock, Trash2, Activity, Layers, GitMerge, Handshake, Flame, MapIcon, Wind, ShieldAlert } from 'lucide-react';
 import { openPaywall } from '../components/PaywallModal';
 import { Link } from 'react-router-dom';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, LineChart, Line, CartesianGrid, Legend, PieChart, Pie } from 'recharts';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 
@@ -80,6 +80,17 @@ export default function MarketIntelPage() {
     { key: 'conviction', label: 'High Conviction', icon: TrendingUp },
     { key: 'studio', label: 'Studio Benchmarks', icon: BarChart3 },
     { key: 'investor_signals', label: 'Axal Investor Signals', icon: Users },
+    // Task #1 (AT-2) — 8 new advisor-derived MI tabs (Axal Investor Signals
+    // above is the 9th, pre-existing). All read from AT-1 endpoints; cells
+    // with n<5 are suppressed server-side and surface <MIInsufficientData />.
+    { key: 'mi_sentiment', label: 'Founder Sentiment', icon: Activity },
+    { key: 'mi_talc', label: 'TALC Positioning', icon: Layers },
+    { key: 'mi_demand_supply', label: 'Demand & Supply Atlas', icon: GitMerge },
+    { key: 'mi_fit', label: 'Founder–Investor Fit', icon: Target },
+    { key: 'mi_partner_pulse', label: 'Partner Marketplace Pulse', icon: Handshake },
+    { key: 'mi_sector_heat', label: 'Sector Heat', icon: Flame },
+    { key: 'mi_sentiment_geo', label: 'Sentiment Geography', icon: MapIcon },
+    { key: 'mi_capital_velocity', label: 'Capital Velocity', icon: Wind },
   ];
 
   return (
@@ -383,6 +394,14 @@ export default function MarketIntelPage() {
       )}
 
       {tab === 'investor_signals' && <InvestorSignalsTab />}
+      {tab === 'mi_sentiment' && <FounderSentimentTab />}
+      {tab === 'mi_talc' && <TalcPositioningTab />}
+      {tab === 'mi_demand_supply' && <DemandSupplyAtlasTab />}
+      {tab === 'mi_fit' && <FounderInvestorFitTab user={user} />}
+      {tab === 'mi_partner_pulse' && <PartnerMarketplacePulseTab />}
+      {tab === 'mi_sector_heat' && <SectorHeatTab />}
+      {tab === 'mi_sentiment_geo' && <SentimentGeographyTab />}
+      {tab === 'mi_capital_velocity' && <CapitalVelocityTab />}
       {tab === 'compass' && <SectorCompassTab user={user} />}
       {tab === 'founder_lens' && <FounderLensTab user={user} />}
       {tab === 'investor_lens' && <InvestorLensTab user={user} />}
@@ -1694,6 +1713,781 @@ function WatchlistTab({ user: _user }) {
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+// ─── Task #1 (AT-2) — 8 advisor-derived MI tabs ──────────────────────────────
+//
+// All tabs read pre-aggregated cells from AT-1 endpoints. The reducer
+// suppresses any cell with n<5 server-side; tabs surface
+// `<MIInsufficientData />` whenever a section has zero passing cells.
+// Reuses recharts (already imported) — no new chart libs introduced.
+// -----------------------------------------------------------------------------
+
+/** Reusable "no data yet" block for k-anonymity-suppressed sections. */
+function MIInsufficientData({ section, kMin = 5 }) {
+  return (
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center">
+      <ShieldAlert size={20} className="mx-auto text-violet-500 mb-2" />
+      <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Not enough data yet</div>
+      <p className="text-xs text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+        {section ? `${section} ` : ''}requires at least <span className="font-semibold">{kMin} contributors</span> per cell to be published. Cells under that threshold are suppressed to protect anonymity. Check back as more advisor answers come in.
+      </p>
+    </div>
+  );
+}
+
+/** Common loading state. */
+function MILoading({ label = 'Loading…' }) {
+  return <div className="text-sm text-gray-500 dark:text-gray-400 py-8 text-center">{label}</div>;
+}
+
+/** Common error block. */
+function MIErr({ err }) {
+  if (!err) return null;
+  return (
+    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm rounded-md px-3 py-2">
+      {err.message || 'Failed to load'}
+    </div>
+  );
+}
+
+/** Compact card wrapper used by all 8 tabs. */
+function MICard({ title, action, children, className = '' }) {
+  return (
+    <div data-card className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5 ${className}`}>
+      {(title || action) && (
+        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+          {title && <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>}
+          {action}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+// ── 1. Founder Sentiment ────────────────────────────────────────────────────
+function FounderSentimentTab() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const [weeks, setWeeks] = useState(8);
+  const [sectorFilter, setSectorFilter] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setData(null);
+    setErr(null);
+    api.miSentiment(weeks)
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, [weeks]);
+
+  const items = (data?.items || []).filter((it) => !sectorFilter || it.sector === sectorFilter);
+  const sectors = Array.from(new Set((data?.items || []).map((i) => i.sector))).sort();
+
+  // Roll up valence per period for the line chart (mean across visible sectors).
+  const byPeriod = new Map();
+  for (const it of items) {
+    const e = byPeriod.get(it.period_key) || { period: it.period_key, sum: 0, n: 0 };
+    if (typeof it.valence === 'number') { e.sum += it.valence; e.n++; }
+    byPeriod.set(it.period_key, e);
+  }
+  const trend = Array.from(byPeriod.values())
+    .map((e) => ({ period: e.period, valence: e.n ? +(e.sum / e.n).toFixed(3) : null }))
+    .sort((a, b) => (a.period < b.period ? -1 : 1));
+
+  // Top blockers = sectors with most negative mean valence; excitements = highest energy.
+  const sectorAgg = new Map();
+  for (const it of items) {
+    const e = sectorAgg.get(it.sector) || { sector: it.sector, vSum: 0, vN: 0, eSum: 0, eN: 0 };
+    if (typeof it.valence === 'number') { e.vSum += it.valence; e.vN++; }
+    if (typeof it.energy === 'number') { e.eSum += it.energy; e.eN++; }
+    sectorAgg.set(it.sector, e);
+  }
+  const sectorRows = Array.from(sectorAgg.values()).map((s) => ({
+    sector: s.sector,
+    valence: s.vN ? s.vSum / s.vN : 0,
+    energy: s.eN ? s.eSum / s.eN : 0,
+  }));
+  const blockers = [...sectorRows].sort((a, b) => a.valence - b.valence).slice(0, 6);
+  const excitements = [...sectorRows].sort((a, b) => b.energy - a.energy).slice(0, 6);
+
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="Founder sentiment rolled up across all advisor answers. Line chart tracks mean valence per week; the cloud highlights sectors where founders are most blocked, and the list ranks where they are most energised." />
+      <div className="flex items-center gap-3 flex-wrap">
+        <label className="text-xs text-gray-600 dark:text-gray-400">Window:</label>
+        <select value={weeks} onChange={(e) => setWeeks(Number(e.target.value))} className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900">
+          <option value={4}>4 weeks</option><option value={8}>8 weeks</option><option value={12}>12 weeks</option><option value={26}>26 weeks</option>
+        </select>
+        <label className="text-xs text-gray-600 dark:text-gray-400 ml-2">Sector:</label>
+        <select value={sectorFilter} onChange={(e) => setSectorFilter(e.target.value)} className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900">
+          <option value="">All sectors</option>
+          {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+      <MIErr err={err} />
+      {!err && !data && <MILoading label="Loading sentiment…" />}
+      {data && items.length === 0 && <MIInsufficientData section="Founder sentiment" kMin={data.k_min} />}
+      {data && items.length > 0 && (
+        <>
+          <MICard title="Rolling mean valence">
+            <div style={{ width: '100%', height: 220 }}>
+              <ResponsiveContainer>
+                <LineChart data={trend} margin={{ left: 4, right: 12, top: 8, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="period" tick={{ fontSize: 10, fill: '#6b7280' }} />
+                  <YAxis domain={[-1, 1]} tick={{ fontSize: 10, fill: '#6b7280' }} />
+                  <Tooltip contentStyle={{ fontSize: 11 }} />
+                  <Line type="monotone" dataKey="valence" stroke="#7c3aed" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </MICard>
+          <div className="grid md:grid-cols-2 gap-4">
+            <MICard title="Top blockers (lowest valence sectors)">
+              {blockers.length === 0 ? <MIInsufficientData section="Blockers" kMin={data.k_min} /> : (
+                <div className="flex flex-wrap gap-2 items-baseline">
+                  {blockers.map((b) => {
+                    const scale = 0.85 + 0.6 * Math.min(1, Math.abs(b.valence));
+                    return <span key={b.sector} className="text-red-600 dark:text-red-400" style={{ fontSize: `${scale}rem` }} title={`valence ${b.valence.toFixed(2)}`}>{b.sector}</span>;
+                  })}
+                </div>
+              )}
+            </MICard>
+            <MICard title="Top excitements (highest energy sectors)">
+              {excitements.length === 0 ? <MIInsufficientData section="Excitements" kMin={data.k_min} /> : (
+                <ol className="space-y-1.5 text-xs">
+                  {excitements.map((e, i) => (
+                    <li key={e.sector} className="flex items-center justify-between gap-2">
+                      <span><span className="text-emerald-600 dark:text-emerald-400 font-semibold mr-2">{i + 1}.</span><span className="text-gray-900 dark:text-gray-100">{e.sector}</span></span>
+                      <span className="text-gray-600 dark:text-gray-400">energy {e.energy.toFixed(2)} · valence {e.valence.toFixed(2)}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </MICard>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── 2. TALC Positioning ─────────────────────────────────────────────────────
+const TALC_STAGES = ['discovery', 'building', 'scaling', 'distributing'];
+const TALC_COLORS = { discovery: '#a78bfa', building: '#60a5fa', scaling: '#34d399', distributing: '#f59e0b' };
+
+function TalcPositioningTab() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.miTalc(6).then((d) => { if (!cancelled) setData(d); }).catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const items = data?.items || [];
+  // Latest period per (persona, sector).
+  const latest = new Map();
+  for (const it of items) {
+    const k = `${it.persona}|${it.sector}`;
+    const prev = latest.get(k);
+    if (!prev || prev.period_key < it.period_key) latest.set(k, it);
+  }
+  const founderRows = [];
+  const investorRows = [];
+  for (const it of latest.values()) {
+    const dist = it.distribution || {};
+    const total = TALC_STAGES.reduce((s, k) => s + (dist[k] || 0), 0) || 1;
+    const row = { sector: it.sector };
+    for (const k of TALC_STAGES) row[k] = ((dist[k] || 0) / total) * 100;
+    if (it.persona === 'founder') founderRows.push(row);
+    else if (it.persona === 'investor') investorRows.push(row);
+  }
+  founderRows.sort((a, b) => a.sector.localeCompare(b.sector));
+  investorRows.sort((a, b) => a.sector.localeCompare(b.sector));
+
+  // Chasm-readiness gap = founder mode (modal stage index) - investor mode.
+  // Positive = founders self-position later than investors prefer.
+  const stageIdx = (s) => TALC_STAGES.indexOf(s);
+  const fMode = new Map();
+  const iMode = new Map();
+  for (const it of latest.values()) {
+    const m = stageIdx(it.mode);
+    if (m < 0) continue;
+    if (it.persona === 'founder') fMode.set(it.sector, m);
+    else if (it.persona === 'investor') iMode.set(it.sector, m);
+  }
+  // Only show gap rows where BOTH personas published a mode for the sector
+  // — otherwise the missing side defaults to 0 ("discovery") and we'd fabricate
+  // an artificial gap against a suppressed/absent cell, violating k-anonymity
+  // semantics.
+  const gapRows = Array.from(fMode.keys())
+    .filter((sector) => iMode.has(sector))
+    .map((sector) => ({ sector, gap: fMode.get(sector) - iMode.get(sector) }))
+    .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="Where founders self-position on the technology adoption life-cycle vs where investors prefer to deploy. Stacked bar = stage distribution per sector; chasm-readiness gap chart highlights sectors with the largest founder/investor mismatch." />
+      <MIErr err={err} />
+      {!err && !data && <MILoading label="Loading TALC positioning…" />}
+      {data && (founderRows.length === 0 && investorRows.length === 0) && (
+        <MIInsufficientData section="TALC positioning" kMin={data.k_min} />
+      )}
+      {data && (founderRows.length > 0 || investorRows.length > 0) && (
+        <>
+          {founderRows.length > 0 && (
+            <MICard title="Founder self-positioning by sector (% of contributors)">
+              <div style={{ width: '100%', height: Math.max(160, founderRows.length * 32) }}>
+                <ResponsiveContainer>
+                  <BarChart layout="vertical" data={founderRows} margin={{ left: 8, right: 12, top: 4, bottom: 4 }} stackOffset="expand">
+                    <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} tickFormatter={(v) => `${Math.round(v * 100)}%`} domain={[0, 1]} />
+                    <YAxis dataKey="sector" type="category" width={120} tick={{ fontSize: 10, fill: '#374151' }} />
+                    <Tooltip contentStyle={{ fontSize: 11 }} formatter={(v) => `${Math.round(v)}%`} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {TALC_STAGES.map((s) => <Bar key={s} dataKey={s} stackId="a" fill={TALC_COLORS[s]} />)}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </MICard>
+          )}
+          {gapRows.length > 0 && (
+            <MICard title="Chasm-readiness gap (founder belief − investor preference, stages)">
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">Negative = founders behind investor preference; positive = ahead. ±1 = one TALC stage off.</p>
+              <div style={{ width: '100%', height: Math.max(140, gapRows.length * 28) }}>
+                <ResponsiveContainer>
+                  <BarChart layout="vertical" data={gapRows} margin={{ left: 8, right: 12, top: 4, bottom: 4 }}>
+                    <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} domain={[-3, 3]} />
+                    <YAxis dataKey="sector" type="category" width={120} tick={{ fontSize: 10, fill: '#374151' }} />
+                    <Tooltip contentStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="gap">
+                      {gapRows.map((r, i) => (
+                        <Cell key={i} fill={r.gap > 0 ? '#f59e0b' : r.gap < 0 ? '#7c3aed' : '#9ca3af'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </MICard>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── 3. Demand & Supply Atlas ────────────────────────────────────────────────
+function DemandSupplyAtlasTab() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const [sectorFilter, setSectorFilter] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setData(null); setErr(null);
+    api.miDemandSupply(sectorFilter || undefined)
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, [sectorFilter]);
+
+  const items = data?.items || [];
+  // Aggregate: pick most-recent period per (sector, side, topic).
+  const latest = new Map();
+  for (const it of items) {
+    const k = `${it.sector}|${it.side}|${it.topic}`;
+    const prev = latest.get(k);
+    if (!prev || prev.period_key < it.period_key) latest.set(k, it);
+  }
+  // Build sector × topic matrix with demand/supply counts.
+  const sectorMap = new Map();
+  for (const it of latest.values()) {
+    const sec = sectorMap.get(it.sector) || { sector: it.sector, topics: new Map() };
+    const t = sec.topics.get(it.topic) || { topic: it.topic, demand: 0, supply: 0 };
+    if (it.side === 'demand') t.demand += it.count || 0;
+    else if (it.side === 'supply') t.supply += it.count || 0;
+    sec.topics.set(it.topic, t);
+    sectorMap.set(it.sector, sec);
+  }
+  const sectors = Array.from(sectorMap.values()).map((s) => ({
+    ...s,
+    topics: Array.from(s.topics.values()).sort((a, b) => (b.demand + b.supply) - (a.demand + a.supply)),
+  })).sort((a, b) => a.sector.localeCompare(b.sector));
+  const allSectors = Array.from(new Set(items.map((i) => i.sector))).sort();
+
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="Per-sector heatmap of which topics founders are asking about (demand) vs which mentors/partners are offering (supply). Shortage chips flag where founders are blocked; surplus chips flag where the studio has spare capacity." />
+      <div className="flex items-center gap-3 flex-wrap">
+        <label className="text-xs text-gray-600 dark:text-gray-400">Sector:</label>
+        <select value={sectorFilter} onChange={(e) => setSectorFilter(e.target.value)} className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900">
+          <option value="">All sectors</option>
+          {allSectors.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+      <MIErr err={err} />
+      {!err && !data && <MILoading label="Loading demand & supply…" />}
+      {data && sectors.length === 0 && <MIInsufficientData section="Demand & supply" kMin={data.k_min} />}
+      {data && sectors.length > 0 && (
+        <div className="space-y-3">
+          {sectors.map((sec) => (
+            <MICard key={sec.sector} title={sec.sector}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-gray-500 dark:text-gray-400">
+                      <th className="text-left py-1 pr-3 font-medium">Topic</th>
+                      <th className="text-right py-1 pr-3 font-medium">Demand</th>
+                      <th className="text-right py-1 pr-3 font-medium">Supply</th>
+                      <th className="text-left py-1 pr-3 font-medium">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {sec.topics.map((t) => {
+                      const delta = t.demand - t.supply;
+                      const cls = delta > 0
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                        : delta < 0
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                          : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
+                      const lbl = delta > 0 ? `Shortage +${delta}` : delta < 0 ? `Surplus ${delta}` : 'Balanced';
+                      return (
+                        <tr key={t.topic}>
+                          <td className="py-1.5 pr-3 text-gray-900 dark:text-gray-100">{t.topic}</td>
+                          <td className="py-1.5 pr-3 text-right text-gray-700 dark:text-gray-300">{t.demand}</td>
+                          <td className="py-1.5 pr-3 text-right text-gray-700 dark:text-gray-300">{t.supply}</td>
+                          <td className="py-1.5 pr-3"><span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded-full ${cls}`}>{lbl}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </MICard>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 4. Founder–Investor Fit ─────────────────────────────────────────────────
+function FounderInvestorFitTab({ user }) {
+  const role = String(user?.role || '').toLowerCase();
+  const isInvestor = role === 'investor' || role === 'admin';
+  const isFounder = role === 'founder';
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [projectId, setProjectId] = useState(null);
+
+  // Founders need a project to query against.
+  useEffect(() => {
+    if (!isFounder) return;
+    let cancelled = false;
+    api.listProjects().then((rows) => {
+      if (cancelled) return;
+      const owned = (Array.isArray(rows) ? rows : []).filter((p) => p.founder_id === user?.founder_id || p.user_id === user?.id);
+      const list = owned.length ? owned : (Array.isArray(rows) ? rows : []);
+      setProjects(list);
+      if (list[0]) setProjectId(list[0].id);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [isFounder, user?.id, user?.founder_id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setData(null); setErr(null);
+    const p = isInvestor ? api.miFitInvestor() : (isFounder && projectId ? api.miFitFounder(projectId) : null);
+    if (!p) return;
+    p.then((d) => { if (!cancelled) setData(d); }).catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, [isInvestor, isFounder, projectId, user?.id]);
+
+  if (!isInvestor && !isFounder) {
+    return (
+      <div className="space-y-4">
+        <TabExplainer text="Founder–Investor Fit ranks the strongest cross-side matches based on thesis × discovery embeddings. Available to founders (top investor matches per project) and investors (top founder matches)." />
+        <MICard title="Persona required">
+          <p className="text-sm text-gray-600 dark:text-gray-400">Sign in as a founder or investor to view fit matches.</p>
+        </MICard>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <TabExplainer text={isInvestor
+        ? "Top founder matches for your investor thesis. Counter-party identifiers stay hashed until a pairwise NDA is active between you and the founder."
+        : "Top investor matches for this project's discovery answers. Counter-party identifiers stay hashed until a pairwise NDA is active between you and the investor."} />
+      {isFounder && projects.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <label className="text-xs text-gray-600 dark:text-gray-400">Project:</label>
+          <select value={projectId || ''} onChange={(e) => setProjectId(Number(e.target.value))} className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900">
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+      )}
+      {isFounder && !projectId && <MILoading label="Resolving your project…" />}
+      <MIErr err={err} />
+      {!err && (isInvestor || projectId) && !data && <MILoading label="Loading fit matches…" />}
+      {data && (data.matches || []).length === 0 && (
+        <MIInsufficientData section="Fit matches" kMin={data.k_min} />
+      )}
+      {data && (data.matches || []).length > 0 && (
+        <MICard title={isInvestor ? 'Top founder matches' : 'Top investor matches'}>
+          <ol className="divide-y divide-gray-100 dark:divide-gray-800">
+            {data.matches.slice(0, 5).map((m, i) => {
+              const idShown = isInvestor ? m.founder_user_id : m.investor_user_id;
+              const idHash = isInvestor ? m.founder_id_hash : m.investor_id_hash;
+              const scorePct = Math.round((m.score || 0) * 100);
+              return (
+                <li key={i} className="py-2.5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-violet-600 dark:text-violet-400 font-bold w-6">{i + 1}.</span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {idShown != null ? `${isInvestor ? 'Founder' : 'Investor'} #${idShown}` : (
+                          <span className="font-mono text-xs text-gray-700 dark:text-gray-300">{idHash || 'hidden'}</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1.5 mt-0.5">
+                        {m.nda_required ? (
+                          <><Lock size={10} /> NDA required to reveal identity</>
+                        ) : (
+                          <span className="text-emerald-600 dark:text-emerald-400">Active NDA — identity disclosed</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-lg font-bold text-violet-600 dark:text-violet-400">{scorePct}</div>
+                    <div className="text-[10px] text-gray-500 dark:text-gray-400">cosine ×100</div>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+          {data.note && <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-400 italic">{data.note}</p>}
+        </MICard>
+      )}
+    </div>
+  );
+}
+
+// ── 5. Partner Marketplace Pulse ────────────────────────────────────────────
+function PartnerMarketplacePulseTab() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.miPartnerPulse().then((d) => { if (!cancelled) setData(d); }).catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const items = data?.items || [];
+  const latest = new Map();
+  for (const it of items) {
+    const k = `${it.sector}|${it.topic}`;
+    const prev = latest.get(k);
+    if (!prev || prev.period_key < it.period_key) latest.set(k, it);
+  }
+  // Capacity by skill (topic) — sum supply_count across sectors.
+  const byTopic = new Map();
+  for (const it of latest.values()) {
+    const e = byTopic.get(it.topic) || { topic: it.topic, supply: 0 };
+    e.supply += it.supply_count || 0;
+    byTopic.set(it.topic, e);
+  }
+  const capacity = Array.from(byTopic.values()).sort((a, b) => b.supply - a.supply);
+  const total = capacity.reduce((s, c) => s + c.supply, 0) || 1;
+  const donut = capacity.slice(0, 6).map((c) => ({ name: c.topic, value: c.supply }));
+  const donutColors = ['#7c3aed', '#60a5fa', '#34d399', '#f59e0b', '#f472b6', '#94a3b8'];
+
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="What capacity the mentor + partner network is offering. Topics ranked by aggregate supply across sectors; the donut shows the top-6 skill mix. Rate-card averages and comp-model breakdowns surface here as more partners answer comp questions." />
+      <MIErr err={err} />
+      {!err && !data && <MILoading label="Loading partner pulse…" />}
+      {data && capacity.length === 0 && <MIInsufficientData section="Partner pulse" kMin={data.k_min} />}
+      {data && capacity.length > 0 && (
+        <div className="grid md:grid-cols-2 gap-4">
+          <MICard title="Capacity by skill">
+            <div style={{ width: '100%', height: Math.max(180, capacity.length * 28) }}>
+              <ResponsiveContainer>
+                <BarChart layout="vertical" data={capacity} margin={{ left: 8, right: 12, top: 4, bottom: 4 }}>
+                  <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} />
+                  <YAxis dataKey="topic" type="category" width={100} tick={{ fontSize: 10, fill: '#374151' }} />
+                  <Tooltip contentStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="supply" fill="#7c3aed" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </MICard>
+          <MICard title="Skill-mix distribution (top 6)">
+            <div style={{ width: '100%', height: 240 }}>
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie data={donut} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={2}>
+                    {donut.map((d, i) => <Cell key={d.name} fill={donutColors[i % donutColors.length]} />)}
+                  </Pie>
+                  <Tooltip formatter={(v, n) => [`${v} (${Math.round((v / total) * 100)}%)`, n]} contentStyle={{ fontSize: 11 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </MICard>
+        </div>
+      )}
+      {data && capacity.length > 0 && (
+        <MICard title="Rate-card averages">
+          <p className="text-xs text-gray-600 dark:text-gray-400 italic">
+            Rate-card stats and comp-model breakdowns will populate here once enough partners answer dedicated comp questions in the advisor (k ≥ {data.k_min} required).
+          </p>
+        </MICard>
+      )}
+    </div>
+  );
+}
+
+// ── 6. Sector Heat ──────────────────────────────────────────────────────────
+function SectorHeatTab() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.miSectorHeat(12).then((d) => { if (!cancelled) setData(d); }).catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const items = data?.items || [];
+  // Group by sector with sparkline of heat across periods.
+  const bySector = new Map();
+  for (const it of items) {
+    const e = bySector.get(it.sector) || { sector: it.sector, points: [], latest: 0, contributions: 0 };
+    e.points.push({ period: it.period_key, heat: it.heat });
+    bySector.set(it.sector, e);
+  }
+  const rows = Array.from(bySector.values()).map((s) => {
+    s.points.sort((a, b) => (a.period < b.period ? -1 : 1));
+    s.latest = s.points[s.points.length - 1]?.heat ?? 0;
+    return s;
+  }).sort((a, b) => b.latest - a.latest);
+
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="Composite 'heat' index per sector — sqrt(contributions) × (1 + |mean valence|). Higher = more activity AND more polarised opinion. Sparklines track the last 12 weeks." />
+      <MIErr err={err} />
+      {!err && !data && <MILoading label="Loading sector heat…" />}
+      {data && rows.length === 0 && <MIInsufficientData section="Sector heat" kMin={data.k_min} />}
+      {data && rows.length > 0 && (
+        <MICard title="Composite heat by sector">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-gray-500 dark:text-gray-400">
+                <tr>
+                  <th className="text-left py-2 pr-3 font-medium">Sector</th>
+                  <th className="text-right py-2 pr-3 font-medium">Latest heat</th>
+                  <th className="text-left py-2 pr-3 font-medium">Trend (12w)</th>
+                  <th className="text-right py-2 pr-3 font-medium">Periods</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {rows.map((s) => (
+                  <tr key={s.sector}>
+                    <td className="py-2 pr-3 text-gray-900 dark:text-gray-100 font-medium whitespace-nowrap">{s.sector}</td>
+                    <td className="py-2 pr-3 text-right">
+                      <span className={`inline-block px-2 py-0.5 rounded font-bold text-sm ${heatColor(Math.min(100, s.latest * 20))}`}>{s.latest.toFixed(2)}</span>
+                    </td>
+                    <td className="py-2 pr-3" style={{ width: 160 }}>
+                      <div style={{ width: 160, height: 36 }}>
+                        <ResponsiveContainer>
+                          <LineChart data={s.points} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+                            <Line type="monotone" dataKey="heat" stroke="#7c3aed" strokeWidth={1.5} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </td>
+                    <td className="py-2 pr-3 text-right text-gray-500 dark:text-gray-400">{s.points.length}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </MICard>
+      )}
+    </div>
+  );
+}
+
+// ── 7. Sentiment Geography ──────────────────────────────────────────────────
+function SentimentGeographyTab() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.miSentimentGeo(8).then((d) => { if (!cancelled) setData(d); }).catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const items = data?.items || [];
+  // Latest per (geo, sector).
+  const latest = new Map();
+  for (const it of items) {
+    const k = `${it.geo}|${it.sector}`;
+    const prev = latest.get(k);
+    if (!prev || prev.period_key < it.period_key) latest.set(k, it);
+  }
+  const byGeo = new Map();
+  for (const it of latest.values()) {
+    const e = byGeo.get(it.geo) || { geo: it.geo, rows: [], n: 0 };
+    e.rows.push({ sector: it.sector, valence: it.valence, n: it.n });
+    e.n += it.n;
+    byGeo.set(it.geo, e);
+  }
+  const geos = Array.from(byGeo.values()).map((g) => {
+    g.rows.sort((a, b) => b.valence - a.valence);
+    return g;
+  }).sort((a, b) => b.n - a.n);
+
+  // Map valence [-1,1] → 0-100 for heatColor.
+  const heat = (v) => Math.round(((v + 1) / 2) * 100);
+
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="Sentiment broken down by geography × sector. Per-country valence ranges from -1 (negative) to +1 (positive) with activity counts shown alongside. Cells with fewer than 5 contributors are suppressed." />
+      <MIErr err={err} />
+      {!err && !data && <MILoading label="Loading geography…" />}
+      {data && geos.length === 0 && <MIInsufficientData section="Sentiment geography" kMin={data.k_min} />}
+      {data && geos.length > 0 && (
+        <div className="grid md:grid-cols-2 gap-4">
+          {geos.map((g) => (
+            <MICard key={g.geo} title={g.geo === 'global' ? 'Global' : g.geo} action={<span className="text-[10px] text-gray-500 dark:text-gray-400">{g.n} contributors</span>}>
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                {g.rows.map((r) => (
+                  <li key={r.sector} className="py-1.5 flex items-center justify-between gap-3 text-xs">
+                    <span className="text-gray-900 dark:text-gray-100 truncate">{r.sector}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`inline-block px-2 py-0.5 rounded font-bold ${heatColor(heat(r.valence))}`}>
+                        {r.valence > 0 ? '+' : ''}{r.valence.toFixed(2)}
+                      </span>
+                      <span className="text-gray-500 dark:text-gray-400 w-10 text-right">n={r.n}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </MICard>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 8. Capital Velocity ─────────────────────────────────────────────────────
+const CAPITAL_VELOCITY_TARGET = 0.55; // deployment-target overlay (configurable per-firm later)
+
+function CapitalVelocityTab() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.miCapitalVelocity(12).then((d) => { if (!cancelled) setData(d); }).catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const items = data?.items || [];
+  // Roll up to a per-period mean velocity across sectors.
+  const byPeriod = new Map();
+  for (const it of items) {
+    const e = byPeriod.get(it.period_key) || { period: it.period_key, sum: 0, n: 0, dist: 0, dN: 0 };
+    if (typeof it.velocity === 'number') { e.sum += it.velocity; e.n++; }
+    if (typeof it.distributing_share === 'number') { e.dist += it.distributing_share; e.dN++; }
+    byPeriod.set(it.period_key, e);
+  }
+  const trend = Array.from(byPeriod.values())
+    .map((e) => ({
+      period: e.period,
+      velocity: e.n ? +(e.sum / e.n).toFixed(3) : null,
+      distributing: e.dN ? +(e.dist / e.dN).toFixed(3) : null,
+      target: CAPITAL_VELOCITY_TARGET,
+    }))
+    .sort((a, b) => (a.period < b.period ? -1 : 1));
+
+  // Pick the latest (max period_key) row per sector — `/capital-velocity`
+  // returns rows ordered DESC, but a naive Map(items.map(...)) keeps the
+  // last seen entry which would be the oldest. Compare period_key explicitly.
+  const latestBySector = new Map();
+  for (const it of items) {
+    const prev = latestBySector.get(it.sector);
+    if (!prev || (prev.period_key || '') < (it.period_key || '')) latestBySector.set(it.sector, it);
+  }
+  const sectorRows = Array.from(latestBySector.values())
+    .sort((a, b) => (b.velocity || 0) - (a.velocity || 0));
+
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="Investor-side capital recycling proxy. Velocity = distributing-share + 0.5 × scaling-share (per the TALC distribution); higher = more capital cycling out. Dashed line is the deployment target — falling below it for several periods is an early warning of capital overhang." />
+      <MIErr err={err} />
+      {!err && !data && <MILoading label="Loading capital velocity…" />}
+      {data && trend.length === 0 && <MIInsufficientData section="Capital velocity" kMin={data.k_min} />}
+      {data && trend.length > 0 && (
+        <>
+          <MICard title="Velocity trend">
+            <div style={{ width: '100%', height: 240 }}>
+              <ResponsiveContainer>
+                <LineChart data={trend} margin={{ left: 4, right: 12, top: 8, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="period" tick={{ fontSize: 10, fill: '#6b7280' }} />
+                  <YAxis domain={[0, 1]} tick={{ fontSize: 10, fill: '#6b7280' }} />
+                  <Tooltip contentStyle={{ fontSize: 11 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Line type="monotone" dataKey="velocity" stroke="#7c3aed" strokeWidth={2} name="Velocity" dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="distributing" stroke="#34d399" strokeWidth={1.5} name="Distributing share" dot={false} />
+                  <Line type="monotone" dataKey="target" stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1.5} name="Deployment target" dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </MICard>
+          {sectorRows.length > 0 && (
+            <MICard title="Latest velocity by sector">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-gray-500 dark:text-gray-400">
+                    <tr>
+                      <th className="text-left py-2 pr-3 font-medium">Sector</th>
+                      <th className="text-right py-2 pr-3 font-medium">Velocity</th>
+                      <th className="text-right py-2 pr-3 font-medium">Distributing</th>
+                      <th className="text-right py-2 pr-3 font-medium">Scaling</th>
+                      <th className="text-right py-2 pr-3 font-medium">vs Target</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {sectorRows.map((s) => {
+                      const dv = (s.velocity ?? 0) - CAPITAL_VELOCITY_TARGET;
+                      const cls = dv >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+                      return (
+                        <tr key={s.sector}>
+                          <td className="py-1.5 pr-3 text-gray-900 dark:text-gray-100">{s.sector}</td>
+                          <td className="py-1.5 pr-3 text-right text-gray-700 dark:text-gray-300">{(s.velocity ?? 0).toFixed(2)}</td>
+                          <td className="py-1.5 pr-3 text-right text-gray-700 dark:text-gray-300">{(s.distributing_share ?? 0).toFixed(2)}</td>
+                          <td className="py-1.5 pr-3 text-right text-gray-700 dark:text-gray-300">{(s.scaling_share ?? 0).toFixed(2)}</td>
+                          <td className={`py-1.5 pr-3 text-right font-semibold ${cls}`}>{dv >= 0 ? '+' : ''}{dv.toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </MICard>
+          )}
+        </>
       )}
     </div>
   );

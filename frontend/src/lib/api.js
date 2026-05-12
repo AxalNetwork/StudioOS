@@ -436,6 +436,21 @@ export const api = {
     method: 'POST', body: JSON.stringify({ opt_out: !!opt_out }),
   }),
 
+  // Task #1 (AT-2) — Read endpoints for the 8 new MI tabs. All return
+  // `{ items: [...], k_min: 5 }` (or `{ matches, note?, k_min }` for fit
+  // endpoints). Cells with n<5 are suppressed server-side; tabs surface
+  // `<MIInsufficientData />` whenever items[] is empty or every cell is
+  // suppressed.
+  miSentiment: (weeks = 8) => request(`/market-intel/sentiment?weeks=${weeks}`),
+  miTalc: (months = 6) => request(`/market-intel/talc?months=${months}`),
+  miDemandSupply: (sector) => request(`/market-intel/demand-supply${sector ? `?sector=${encodeURIComponent(sector)}` : ''}`),
+  miSectorHeat: (weeks = 8) => request(`/market-intel/sector-heat?weeks=${weeks}`),
+  miSentimentGeo: (weeks = 4) => request(`/market-intel/sentiment-geo?weeks=${weeks}`),
+  miCapitalVelocity: (months = 6) => request(`/market-intel/capital-velocity?months=${months}`),
+  miPartnerPulse: () => request('/market-intel/partner-pulse'),
+  miFitFounder: (projectId) => request(`/market-intel/fit/founder/${projectId}`),
+  miFitInvestor: () => request('/market-intel/fit/investor/me'),
+
   // ── Task #5 — Dashboard personal assistant. The /message endpoint is
   // SSE; consume it via fetch + ReadableStream in the component, NOT
   // through this helper. Everything else is plain JSON.
