@@ -1,0 +1,65 @@
+Objective
+  Wire the multi-model strategy so each task uses the cheapest model
+  that meets quality. Deterministic fallbacks if a model fails or
+  costs spike. Cap monthly spend.
+
+Router (cloudflare-worker/src/services/advisor/aiRouter.ts)
+  const ROUTE = {
+    safety:        '@cf/meta/llama-guard-3-8b',
+    role_detect:   '@cf/meta/llama-3.1-8b-instruct',
+    advisor_turn:  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    tool_call:     '@cf/qwen/qwen2.5-coder-32b-instruct',
+    explain:       '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    sentiment:     '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    embed:         '@cf/baai/bge-base-en-v1.5',
+    paraphrase:    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    publication:   'anthropic://claude-haiku-4-5-20251001',  // fallback fetch
+    dd_synthesis:  'anthropic://claude-sonnet-4-6',
+  };
+  export async function run(task, payload, opts={}) { … }
+
+  Behaviour:
+    - Workers AI first.
+    - On non-2xx or > 8s latency, fall back to a smaller Workers AI
+      model (e.g. tool_call → advisor_turn → role_detect).
+    - For `publication` and `dd_synthesis`, fall back to Anthropic
+      via fetch with prompt caching enabled (cache the system
+      prompt ≥ 1024 tokens). API key in ANTHROPIC_API_KEY secret.
+    - Stream the response when the upstream supports it.
+
+Budgeting
+  KV bucket `ai_spend:<user_id>:<yyyy-mm-dd>` increments by an
+  estimated cost per call (token count × model unit price). Hard
+  cap per user/day, soft cap per user/month with admin alert.
+  Org-wide kill switch when monthly cap reached.
+
+Caching
+  - Embeddings cached by content hash in KV for 30 days.
+  - Explainers cached by topic key for 7 days.
+  - Sentiment classifications cached by content hash for 30 days.
+
+Observability
+  Each call logs: task, chosen model, latency, prompt_tokens,
+  completion_tokens, estimated_cost_usd, safety_score, fallback_used.
+  Surfaced in Monitoring > AI Usage (admin tab).
+
+Testing
+  cloudflare-worker/test/aiRouter.test.ts
+    - Forces a 500 from primary model; asserts fallback hit.
+    - Forces budget exhaustion; asserts refusal.
+    - Verifies embedding cache hit on second call.
+
+Config
+  wrangler.toml secrets:
+    ANTHROPIC_API_KEY                 (only for fallback synthesis)
+  Optional override per environment via WORKERS_AI_BUDGET_USD_DAY,
+  WORKERS_AI_BUDGET_USD_MONTH.
+
+Acceptance
+  - Default advisor turn served by llama-3.3-70b-fp8-fast under
+    1.5s p95.
+  - Tool calls routed to qwen2.5-coder; falls back smoothly when
+    the model is slow.
+  - DD report synthesis only uses Anthropic; cost cached.
+  - Spend caps enforced; admin alert fires before hard cap.
+  - AI Usage tab visible in Monitoring with per-day spend per task.

@@ -32,6 +32,7 @@ export type TaskClass =
   | 'role_detect'
   | 'advisor_turn'
   | 'tool_call'
+  | 'rerank'
   | 'explain'
   | 'sentiment'
   | 'embed'
@@ -143,6 +144,13 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   role_detect:  { provider: 'workers-ai', model: SMALL_LLAMA },
   advisor_turn: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   tool_call:    { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
+  // Personal Advisor next-question re-ranker (advisor/rerank.ts).
+  // Structured JSON pick over a bounded candidate list — qwen-coder
+  // is the strongest at obeying the {"id": "..."} schema; fall back
+  // to MID then SMALL llama if qwen 5xxs / times out. The route layer
+  // ALWAYS treats a router miss as deterministic-first-in-bank, so a
+  // total chain failure still yields a valid next question.
+  rerank:       { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
   explain:      { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 7 * 86400 },
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },

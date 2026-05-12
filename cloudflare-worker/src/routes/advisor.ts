@@ -83,6 +83,7 @@ import {
   type ToolEnvelope,
 } from '../services/advisor/tools';
 import { run as aiRouterRun } from '../services/aiRouter';
+import { pickNextQuestion } from '../services/advisor/rerank';
 import { enqueueJob } from '../services/queue';
 
 const advisor = new Hono<{ Bindings: Env }>();
@@ -533,7 +534,17 @@ advisor.post('/start', async (c) => {
   // the detector triplet is still served before the persona bank.
   const answered = await effectiveAnsweredSet(c.env, user, conv.id);
   const { visible: bank } = selectBank(user, answered, gate);
-  const next = nextUnansweredQuestion(bank, answered);
+  // Workers AI re-ranker (advisor/rerank.ts) on top of the deterministic
+  // bank — picks the most contextually relevant unanswered question and
+  // suppresses re-asking ids surfaced in the last few turns. Falls back
+  // to the legacy first-in-bank order on any failure.
+  // pinnedId honours conv.current_question_id so the re-open/refresh
+  // path returns the SAME pending question. Without this the rerank
+  // recency filter would suppress the just-recorded firstQ assistant
+  // message and return a different question (architect-flagged regression).
+  const next = await pickNextQuestion(c.env, user.id, conv.id, bank, answered, {
+    pinnedId: conv.current_question_id,
+  });
 
   // Refresh counts now that hydration may have inserted new rows.
   await syncBankTotal(c.env, conv, bank.length, personaFor(user));
@@ -942,7 +953,8 @@ advisor.post('/answer', async (c) => {
   const gate = await loadAdvisorGate(c.env, liveUser);
   const answered = await effectiveAnsweredSet(c.env, liveUser, conv.id);
   const { visible: bank } = selectBank(liveUser, answered, gate);
-  const next = nextUnansweredQuestion(bank, answered);
+  // Re-rank via Workers AI (see rerank.ts) — answer-handler path.
+  const next = await pickNextQuestion(c.env, liveUser.id, conv.id, bank, answered);
   await syncBankTotal(c.env, conv, bank.length, personaFor(liveUser));
   await refreshCounts(c.env, conv.id, next?.id || null);
 
@@ -1085,7 +1097,8 @@ advisor.post('/skip', async (c) => {
   // detector question 3 is served.
   const answered = await effectiveAnsweredSet(c.env, user, conv.id);
   const { visible: bank } = selectBank(user, answered, gate);
-  const next = nextUnansweredQuestion(bank, answered);
+  // Re-rank via Workers AI (see rerank.ts) — skip-handler path.
+  const next = await pickNextQuestion(c.env, user.id, conv.id, bank, answered);
   await syncBankTotal(c.env, conv, bank.length, personaFor(user));
   await refreshCounts(c.env, conv.id, next?.id || null);
   if (!next) {
@@ -1179,7 +1192,15 @@ advisor.get('/next-question', async (c) => {
   }
   const answered = await effectiveAnsweredSet(c.env, user, conv.id);
   const { visible: bank } = selectBank(user, answered, gate, focus);
-  const next = nextUnansweredQuestion(bank, answered);
+  // Re-rank via Workers AI (see rerank.ts) — focused /next-question path.
+  // pinnedId honours conv.current_question_id so a poll/refresh before
+  // /answer or /skip returns the SAME pending question (idempotence).
+  // When focus is set, only honour the pin if the pinned question is
+  // in-focus (selectBank already applied the focus filter to `bank`,
+  // so the helper's "pinnedId must be in bank" check handles this).
+  const next = await pickNextQuestion(c.env, user.id, conv.id, bank, answered, {
+    pinnedId: conv.current_question_id,
+  });
   return c.json({
     persona: personaFor(user),
     focus: focus || null,
