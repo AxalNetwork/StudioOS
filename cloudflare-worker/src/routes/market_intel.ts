@@ -668,10 +668,13 @@ marketIntel.get('/partner-pulse', async (c) => {
     const [sector, , topic] = String(r.dimension_key).split(':');
     return { sector, topic, period_key: r.period_key, supply_count: r.value, n: r.n };
   });
-  // Rate-card averages and comp-model histograms surface here once the
-  // partner advisor bank ships compensation questions and the matching
-  // extractors land. Until then these queries return [] and the frontend
-  // shows the k-anonymity insufficient-data block.
+  // Rate-card averages and comp-model histograms — populated by
+  // the `partner_rate_card` / `partner_comp_model` extractors
+  // (Task #1). Field names are snake_case (`rate_cards`, `comp_models`)
+  // to match the rest of this route's response shape; the frontend
+  // PartnerMarketplacePulseTab consumes them directly. Empty arrays
+  // until k≥5 contributors per cell, in which case the frontend
+  // renders the insufficient-data block.
   const rateRows = await c.env.DB.prepare(
     `SELECT dimension_key, period_key, n, value, payload_json FROM market_intel_aggregates
        WHERE extractor='partner_rate_card' AND n >= ?

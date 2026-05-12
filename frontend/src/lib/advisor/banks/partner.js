@@ -17,6 +17,10 @@ import { all, required, minChars, maxChars, csvNonEmpty, oneOf, nonNegativeNumbe
 
 const ROLES = ['Investor', 'Service Provider', 'Mentor / Advisor', 'Strategic Partner', 'Other'];
 const SERVICES = ['Capital', 'Engineering', 'Design', 'Legal', 'Sales / GTM', 'Marketing', 'Recruiting', 'Operations', 'Other'];
+// Cash / Equity / Hybrid are the three core comp models from the
+// task spec; `Pro Bono` is an intentional fourth bucket so partners
+// who don't charge can still answer (and the histogram shows the
+// genuine compensation mix instead of forcing them into "Cash").
 const COMP_MODELS = ['Cash', 'Equity', 'Hybrid', 'Pro Bono'];
 
 export const PARTNER_BANK = [
