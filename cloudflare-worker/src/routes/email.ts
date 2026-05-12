@@ -145,13 +145,19 @@ email.post('/send-referral-invites', async (c) => {
   ).bind(...cleaned.map(c => c.email)).all();
   const existingSet = new Set<string>((existingUsers?.results || []).map((r: any) => r.email));
 
-  // Task #4 — permanent dedupe: any prior invite from this sender to this
-  // recipient is treated as a duplicate, regardless of how long ago. The
-  // 30-day window let users silently re-invite the same people on every
-  // CSV upload; now they must use the explicit Reminder action instead.
+  // Task #4 — permanent dedupe: any prior SUCCESSFUL invite from this
+  // sender to this recipient is treated as a duplicate, regardless of how
+  // long ago. The 30-day window let users silently re-invite the same
+  // people on every CSV upload; now they must use the explicit Reminder
+  // action instead. We deliberately EXCLUDE status='failed' rows so a
+  // bounced/provider-rejected initial send can be retried via the same
+  // bulk-upload flow — otherwise failed invites would be a dead-end
+  // (remind endpoint also refuses failed rows).
   const priorInvites: any = await c.env.DB.prepare(
     `SELECT LOWER(recipient_email) AS email FROM referral_invites
-     WHERE sender_user_id = ? AND LOWER(recipient_email) IN (${placeholders})`
+     WHERE sender_user_id = ?
+       AND status != 'failed'
+       AND LOWER(recipient_email) IN (${placeholders})`
   ).bind(user.id, ...cleaned.map(c => c.email)).all();
   const priorSet = new Set<string>((priorInvites?.results || []).map((r: any) => r.email));
 
