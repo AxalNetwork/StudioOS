@@ -96,6 +96,10 @@ export default function ReferEarnPage() {
   // both success and error feedback on the reminder action.
   const [invites, setInvites] = useState([]);
   const [invitesLoading, setInvitesLoading] = useState(false);
+  // Task #11 — Sent Invitations filter pill. 'all' is the default; the
+  // other values mirror the status badges shown per-row so users can
+  // drill into "what's still unopened?" without scanning the whole list.
+  const [inviteFilter, setInviteFilter] = useState('all');
   const [remindBusy, setRemindBusy] = useState(null);
   const [inviteFlash, setInviteFlash] = useState(null); // {kind:'ok'|'err', msg}
   const qrRef = useRef(null);
@@ -437,6 +441,47 @@ export default function ReferEarnPage() {
     }
   };
 
+  // Task #11 — Aggregate counters for the Sent Invitations summary
+  // header. We deliberately count joined-by-signup (signed_up_user_id)
+  // rather than status='joined' so a row that the server hasn't
+  // re-stamped yet (rare race with backfill) still reads correctly.
+  // `opened` excludes joined rows so the funnel reads sent → opened →
+  // joined without double-counting. Conversion = joined / sent
+  // (excluding failed rows from the denominator since those never
+  // had a real chance to convert).
+  const inviteStats = useMemo(() => {
+    let total = 0, sent = 0, opened = 0, joined = 0, failed = 0, reminders = 0;
+    for (const inv of invites) {
+      total++;
+      const isJoined = !!inv.signed_up_user_id;
+      const isFailed = inv.status === 'failed';
+      if (isJoined) joined++;
+      else if (isFailed) failed++;
+      else if (inv.opened_at) opened++;
+      else sent++;
+      reminders += Number(inv.reminder_count || 0);
+    }
+    const eligible = total - failed;
+    const conversionPct = eligible > 0 ? Math.round((joined / eligible) * 100) : 0;
+    return { total, sent, opened, joined, failed, reminders, conversionPct, eligible };
+  }, [invites]);
+
+  // Task #11 — Status filter applied to the rendered table. Keeps the
+  // raw `invites` list intact so aggregate counters always reflect the
+  // full dataset, not the current view.
+  const filteredInvites = useMemo(() => {
+    if (inviteFilter === 'all') return invites;
+    return invites.filter(inv => {
+      const isJoined = !!inv.signed_up_user_id;
+      const isFailed = inv.status === 'failed';
+      if (inviteFilter === 'joined') return isJoined;
+      if (inviteFilter === 'failed') return isFailed;
+      if (inviteFilter === 'opened') return !isJoined && !isFailed && !!inv.opened_at;
+      if (inviteFilter === 'sent')   return !isJoined && !isFailed && !inv.opened_at;
+      return true;
+    });
+  }, [invites, inviteFilter]);
+
   // Task #4 — annotation maps for the import preview. We cross-reference
   // the locally-cached invite list (refreshed after each send) so users
   // see "Already invited" / "Joined" badges BEFORE hitting Send. The set
@@ -607,7 +652,7 @@ export default function ReferEarnPage() {
             <p className="text-xs text-gray-500 mt-0.5">
               {invitesLoading
                 ? 'Loading…'
-                : `${invites.length} invite${invites.length === 1 ? '' : 's'} · ${invites.filter(i => i.signed_up_user_id).length} joined`}
+                : `${inviteStats.total} invite${inviteStats.total === 1 ? '' : 's'} · ${inviteStats.opened} opened · ${inviteStats.joined} joined · ${inviteStats.reminders} reminder${inviteStats.reminders === 1 ? '' : 's'} sent`}
             </p>
           </div>
           <button
@@ -618,6 +663,62 @@ export default function ReferEarnPage() {
             Refresh
           </button>
         </div>
+        {/* Task #11 — Summary chips + status filter. Hidden on the empty
+            state since there's nothing to summarise or filter yet. */}
+        {!invitesLoading && inviteStats.total > 0 && (
+          <div className="px-6 py-3 border-b border-gray-100 bg-gray-50/60 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-700">
+                <span className="font-semibold text-gray-900">{inviteStats.total}</span> sent
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800">
+                <span className="font-semibold">{inviteStats.opened}</span> opened
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800">
+                <span className="font-semibold">{inviteStats.joined}</span> joined
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 border border-violet-200 text-violet-800">
+                <span className="font-semibold">{inviteStats.reminders}</span> reminders
+              </span>
+              {inviteStats.failed > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-800">
+                  <span className="font-semibold">{inviteStats.failed}</span> failed
+                </span>
+              )}
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-900 font-semibold"
+                title={`${inviteStats.joined} joined out of ${inviteStats.eligible} eligible (failed sends excluded)`}
+              >
+                {inviteStats.conversionPct}% conversion
+              </span>
+            </div>
+            <div className="ml-auto flex items-center gap-1 text-[11px]">
+              <span className="text-gray-500 mr-1">Filter:</span>
+              {[
+                { k: 'all',    label: 'All',     n: inviteStats.total },
+                { k: 'sent',   label: 'Sent',    n: inviteStats.sent },
+                { k: 'opened', label: 'Opened',  n: inviteStats.opened },
+                { k: 'joined', label: 'Joined',  n: inviteStats.joined },
+                { k: 'failed', label: 'Failed',  n: inviteStats.failed },
+              ].map(opt => (
+                <button
+                  key={opt.k}
+                  type="button"
+                  onClick={() => setInviteFilter(opt.k)}
+                  disabled={opt.n === 0 && opt.k !== 'all'}
+                  className={
+                    'px-2 py-0.5 rounded-md border transition-colors ' +
+                    (inviteFilter === opt.k
+                      ? 'bg-violet-600 text-white border-violet-600'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed disabled:hover:bg-white')
+                  }
+                >
+                  {opt.label}{opt.n > 0 ? ` · ${opt.n}` : ''}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {inviteFlash && (
           <div className={`px-6 py-2 text-xs flex items-center gap-2 border-b ${
             inviteFlash.kind === 'ok'
@@ -632,6 +733,11 @@ export default function ReferEarnPage() {
           <div className="p-8 text-center text-xs text-gray-500">
             No invites sent yet. Use Import Contacts below to send your first batch.
           </div>
+        ) : filteredInvites.length === 0 ? (
+          <div className="p-8 text-center text-xs text-gray-500">
+            No invites match the current filter.{' '}
+            <button onClick={() => setInviteFilter('all')} className="text-violet-600 hover:underline">Show all</button>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -645,7 +751,7 @@ export default function ReferEarnPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {invites.map(inv => {
+                {filteredInvites.map(inv => {
                   const joined = !!inv.signed_up_user_id;
                   const failed = inv.status === 'failed';
                   // Cooldown computed client-side from `last_reminded_at`.
