@@ -159,7 +159,8 @@ export default function ReferEarnPage() {
         const s = await api.linkedinStatus();
         setLinkedinStatus(s || { configured: false, connected: false });
       } catch (e) {
-        if (e?.status === 404 || (e?.message || '').toLowerCase() === 'not found') {
+        const message = String(e?.message || '').toLowerCase();
+        if (e?.status === 404 || message.includes('not found')) {
           setLinkedinStatus({ configured: false, connected: false });
         }
         // Other errors (e.g. 401) are silent — user just doesn't see status.
