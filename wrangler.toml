@@ -69,6 +69,18 @@ ENVIRONMENT       = "production"
 # `queue_jobs` cron drain stays alive in parallel so any in-flight legacy
 # jobs finish. Flip to "false" to roll back to D1-only.
 USE_CF_QUEUE      = "true"
+# Task #4 (CG) — Personal Advisor AI Gateway slug. The advisor calls
+# `env.AI.run(model, payload, { gateway: { id: CF_AI_GATEWAY_SLUG_ADVISOR } })`
+# so its analytics, cache, and rate limits are tracked independently of
+# the onboarding chatbot. The gateway must be created in the Cloudflare
+# dashboard (slug `advisor-ongoing`, cache TTL 5m / 0, RL 60-rpm/user
+# 200-rpm/account) before deploy; when the slug is missing or unknown
+# Cloudflare silently treats the call as un-gatewayed (no breakage).
+CF_AI_GATEWAY_SLUG_ADVISOR = "advisor-ongoing"
+# Task #4 (CG) — daily turn cap per user for the advisor. Soft-warn at
+# 80%, hard-block at 100%. Counted in KV under
+# `ai_spend:advisor_turns:{user_id}:{yyyy-mm-dd}`.
+WORKERS_AI_ADVISOR_BUDGET_PER_DAY = "100"
 
 # ---------- Cloudflare Turnstile (bot protection) ----------
 # The Worker only needs the SECRET (set via `wrangler secret put TURNSTILE_SECRET_KEY`);
@@ -282,6 +294,10 @@ GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
 ENVIRONMENT       = "production"
 USE_CF_QUEUE      = "true"
+# Task #4 (CG) — see top-level [vars] for the rationale. Mirrored here
+# because Wrangler env tables don't inherit from the top-level [vars].
+CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"
+WORKERS_AI_ADVISOR_BUDGET_PER_DAY = "100"
 # T22.4 — leave EXTRA_DEV_ORIGINS UNSET in production. The CORS allowlist
 # in cloudflare-worker/src/index.ts only adds origins from this var when
 # present; an empty value here ensures the workers.dev sandbox URL never
@@ -392,6 +408,11 @@ workers_dev = true
 APP_URL           = "https://studioos-preview.workers.dev"
 ENVIRONMENT       = "preview"
 USE_CF_QUEUE      = "true"
+# Task #4 (CG) — preview env can use a separate gateway slug (e.g.
+# `advisor-ongoing-preview`) created in the dashboard. Defaults to the
+# prod slug so the binding still works before a preview gateway exists.
+CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"
+WORKERS_AI_ADVISOR_BUDGET_PER_DAY = "100"
 # Preview is allowed to widen CORS so PR review deploys can talk to
 # localhost SPAs and the workers.dev sandbox URL.
 EXTRA_DEV_ORIGINS = "https://studioos-preview.workers.dev,http://localhost:5000,http://localhost:5173"

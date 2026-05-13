@@ -375,7 +375,23 @@ interface ProviderResult {
 }
 
 interface WorkersAIBinding {
-  run(model: string, payload: unknown): Promise<unknown>;
+  run(
+    model: string,
+    payload: unknown,
+    options?: { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number } },
+  ): Promise<unknown>;
+}
+
+// Task #4 (CG) — advisor tasks (`advisor_turn`, `advisor_explain`)
+// route through the dedicated advisor AI Gateway slug so their
+// analytics, cache and rate limits are tracked separately from the
+// onboarding chatbot. Returns undefined when the env var is missing
+// (call falls through to the un-gatewayed Workers AI path).
+function gatewayOptionFor(env: Env, task: TaskClass): { gateway: { id: string } } | undefined {
+  if (task !== 'advisor_turn' && task !== 'advisor_explain') return undefined;
+  const slug = (env as unknown as Record<string, string | undefined>).CF_AI_GATEWAY_SLUG_ADVISOR;
+  if (!slug || !slug.trim()) return undefined;
+  return { gateway: { id: slug.trim() } };
 }
 
 async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed: boolean): Promise<ProviderResult> {
@@ -383,10 +399,11 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
   if (!ai || typeof ai.run !== 'function') {
     return { ok: false, status: 0, error: 'AI binding not configured' };
   }
+  const gatewayOpt = gatewayOptionFor(env, opts.task);
   try {
     if (isEmbed) {
       const text = opts.text ?? defaultContentBlob(opts);
-      const out = await ai.run(model, { text }) as { data?: number[][]; shape?: number[] } | unknown;
+      const out = await ai.run(model, { text }, gatewayOpt) as { data?: number[][]; shape?: number[] } | unknown;
       const data = (out as { data?: number[][] })?.data;
       const vec = Array.isArray(data) && Array.isArray(data[0]) ? data[0] : null;
       if (!vec) return { ok: false, status: 502, error: 'unexpected embed response' };
@@ -415,7 +432,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
     };
     if (opts.temperature != null) payload.temperature = opts.temperature;
     if (opts.stream) payload.stream = true;
-    const raw = await ai.run(model, payload);
+    const raw = await ai.run(model, payload, gatewayOpt);
     // Streaming pass-through: Workers AI returns a ReadableStream of
     // SSE-formatted chunks when stream:true is set. We forward it
     // verbatim to the caller; cost accounting falls back to estimated

@@ -47,6 +47,26 @@ export interface Env {
   // Removes the legacy hard 503 when ANTHROPIC_API_KEY is unset since
   // Workers AI is always reachable via the `AI` binding.
   ADVISOR_EXPLAIN_PROVIDER?: 'workers-ai' | 'anthropic' | 'auto' | string;
+  // Task #4 (CG) — Personal Advisor AI Gateway slug. Routes every
+  // advisor LLM call (advisor_explain today, advisor_turn from CB
+  // onwards) through a dedicated Cloudflare AI Gateway so spend,
+  // latency, rate limits and cache analytics for the advisor surface
+  // are tracked independently of the onboarding chatbot. The gateway
+  // itself must be created by the operator in the Cloudflare dashboard
+  // (Workers AI → AI Gateway → New gateway, slug `advisor-ongoing`,
+  // cache TTL 5m for explainers / 0 for turns, rate limit 60/min/user
+  // and 200/min/account). When unset, advisor calls fall through to
+  // the default `env.AI` binding without gateway routing — analytics
+  // simply mix in with the onboarding traffic, but no functionality
+  // breaks. Default: `advisor-ongoing` once wrangler.toml is deployed.
+  CF_AI_GATEWAY_SLUG_ADVISOR?: string;
+  // Task #4 (CG) — per-user daily advisor turn cap. Counts /api/advisor
+  // turns (chat completions, not /explain) in KV bucket
+  // `ai_spend:advisor_turns:{user_id}:{yyyy-mm-dd}` and hard-blocks at
+  // this number, surfacing a friendly throttle message. Soft-warn fires
+  // at 80% so the UI can show a "approaching daily cap" hint. Default
+  // 100 turns/day per spec.
+  WORKERS_AI_ADVISOR_BUDGET_PER_DAY?: string;
   // Task #4 (AW) — global advisor kill switch. When set to "1" or "true"
   // every /api/advisor/{start,answer,explain} short-circuits with the
   // canonical REFUSAL.disabled message. Per-user kill is users.advisor_locked.
