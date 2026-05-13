@@ -1,63 +1,79 @@
-// Task #1 (DB) — smoke test for the dotted-path merge resolver used
-// by the e-sign envelope render path. Verifies that
-// {{counterparty.founder_id}} / {{counterparty.partner_id}} resolve
-// from a nested object on the merge scope and that unresolved
-// placeholders are preserved verbatim (so a missing public id
-// surfaces visibly in the rendered contract instead of vanishing).
+// Task #1 (DB) — smoke test for the e-sign envelope merge-field
+// resolver. Exercises the *production* `applyMergeFields` exported
+// from cloudflare-worker/src/services/legalTemplates.ts so any
+// regression in the dotted-path lookup, missing-token preservation,
+// or the regex itself surfaces here before the next contract send
+// leaks an empty AXF-id.
+//
+// We can't import `renderLegalTemplate` directly because it depends
+// on Wrangler's `?raw` import suffix to load the markdown template
+// bundle (node has no equivalent loader). So we drive a representative
+// template fragment through `applyMergeFields`, which is the same
+// function `renderLegalTemplate` calls internally — coverage of the
+// merge layer is identical.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+// Import the pure resolver module directly (no template `?raw` deps)
+// so the test runs under `node --test` without a Wrangler bundler.
+import { applyMergeFields } from '../src/services/mergeFields.ts';
 
-// We don't import the worker module directly (it pulls in the full
-// AgreementTemplate/D1 universe); we re-implement the resolver
-// contract here and assert behaviour identical to
-// services/legalTemplates.ts::renderLegalTemplate's dotted lookup.
-// If the renderer's behaviour drifts, this test is the canary that
-// fires before the next contract send leaks an empty AXF-id.
-function resolve(scope, path) {
-  const parts = path.split('.');
-  let cur = scope;
-  for (const p of parts) {
-    if (cur == null || typeof cur !== 'object') return undefined;
-    cur = cur[p];
-  }
-  return cur;
-}
+const TEMPLATE = `
+COUNTERPARTY DESIGNATION
 
-function render(template, scope) {
-  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (m, key) => {
-    const v = resolve(scope, key);
-    return v == null ? m : String(v);
-  });
-}
+This Agreement is entered into between Axal Studio Inc. and the
+counterparty identified below.
 
-test('counterparty.founder_id resolves via dotted path', () => {
-  const out = render('Founder ID: {{counterparty.founder_id}}', {
+Counterparty Name: {{recipient_name}}
+Counterparty Email: {{recipient_email}}
+Founder ID:        {{counterparty.founder_id}}
+Partner ID:        {{counterparty.partner_id}}
+Effective Date:    {{effective_date}}
+`.trim();
+
+test('applyMergeFields resolves counterparty.founder_id (envelope path)', () => {
+  const out = applyMergeFields(TEMPLATE, {
+    recipient_name: 'Alice Founder',
+    recipient_email: 'alice@example.com',
+    effective_date: '2026-05-13',
     counterparty: { founder_id: 'AXF-000123', partner_id: null, user_id: 7 },
   });
-  assert.equal(out, 'Founder ID: AXF-000123');
+  assert.match(out, /Founder ID:\s+AXF-000123/);
+  assert.match(out, /Counterparty Name:\s+Alice Founder/);
+  // Unset partner id is preserved verbatim, not silently emptied.
+  assert.match(out, /Partner ID:\s+\{\{counterparty\.partner_id\}\}/);
 });
 
-test('counterparty.partner_id resolves via dotted path', () => {
-  const out = render('Partner ID: {{counterparty.partner_id}}', {
+test('applyMergeFields resolves counterparty.partner_id (envelope path)', () => {
+  const out = applyMergeFields(TEMPLATE, {
+    recipient_name: 'Bob Partner',
+    recipient_email: 'bob@example.com',
+    effective_date: '2026-05-13',
     counterparty: { founder_id: null, partner_id: 'AXP-0000A0', user_id: 9 },
   });
-  assert.equal(out, 'Partner ID: AXP-0000A0');
+  assert.match(out, /Partner ID:\s+AXP-0000A0/);
+  assert.match(out, /Founder ID:\s+\{\{counterparty\.founder_id\}\}/);
 });
 
-test('unresolved dotted token is preserved verbatim', () => {
-  const out = render('ID: {{counterparty.founder_id}}', {
-    counterparty: { partner_id: 'AXP-0000A0' },
+test('applyMergeFields preserves unresolved tokens as literal placeholders', () => {
+  const out = applyMergeFields(TEMPLATE, {
+    recipient_name: 'X',
+    recipient_email: 'x@y.com',
+    effective_date: '2026-05-13',
+    // counterparty omitted entirely
   });
-  assert.equal(out, 'ID: {{counterparty.founder_id}}');
+  assert.match(out, /Founder ID:\s+\{\{counterparty\.founder_id\}\}/);
+  assert.match(out, /Partner ID:\s+\{\{counterparty\.partner_id\}\}/);
 });
 
-test('flat keys still resolve', () => {
-  const out = render('Hello {{recipient_name}}', { recipient_name: 'Alice' });
-  assert.equal(out, 'Hello Alice');
+test('applyMergeFields supports flat top-level keys', () => {
+  const out = applyMergeFields('Hello {{name}}!', { name: 'Alice' });
+  assert.equal(out, 'Hello Alice!');
 });
 
-test('missing intermediate object yields placeholder preservation', () => {
-  const out = render('ID: {{counterparty.founder_id}}', {});
-  assert.equal(out, 'ID: {{counterparty.founder_id}}');
+test('applyMergeFields handles whitespace inside the placeholder', () => {
+  const out = applyMergeFields('ID={{  counterparty.founder_id  }}', {
+    counterparty: { founder_id: 'AXF-000123' },
+  });
+  assert.equal(out, 'ID=AXF-000123');
 });

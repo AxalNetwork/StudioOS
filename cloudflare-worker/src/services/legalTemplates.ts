@@ -56,29 +56,16 @@ export function getLegalTemplateBody(key: LegalTemplateKey): string {
  * keys are left as-is so reviewers spot the omission immediately
  * (and the audit trail keeps the literal placeholder for evidence).
  */
+// Pure resolver lives in `./mergeFields.ts` so node-test can import it
+// without dragging in Wrangler-only `?raw` markdown imports.
+import { applyMergeFields } from './mergeFields';
+export { applyMergeFields } from './mergeFields';
+
 export async function renderLegalTemplate(
   key: LegalTemplateKey,
   merge: Record<string, unknown>,
 ): Promise<string> {
-  const body = getLegalTemplateBody(key);
-  // Task #1 (DB) — accept dotted-path tokens like
-  // `{{counterparty.founder_id}}`. The lookup walks nested objects;
-  // a flat key like `{{recipient_name}}` continues to work because
-  // the path of length 1 falls through to the top-level `merge[k]`.
-  return body.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (_, path: string) => {
-    const v = resolveDotted(merge, path);
-    return v == null ? `{{${path}}}` : String(v);
-  });
-}
-
-function resolveDotted(scope: Record<string, unknown>, path: string): unknown {
-  const parts = path.split('.');
-  let cur: unknown = scope;
-  for (const p of parts) {
-    if (cur == null || typeof cur !== 'object') return undefined;
-    cur = (cur as Record<string, unknown>)[p];
-  }
-  return cur;
+  return applyMergeFields(getLegalTemplateBody(key), merge);
 }
 
 export const ALL_TEMPLATE_KEYS: LegalTemplateKey[] = Object.keys(TEMPLATES) as LegalTemplateKey[];

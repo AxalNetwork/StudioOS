@@ -318,11 +318,28 @@ admin.get('/users/:user_id/profile', async (c) => {
 // admin_audit_log + activity_logs so we have a per-conversation view trail.
 // ---------------------------------------------------------------------------
 
+// Generic admin_audit_log (export / publication actions). Re-declared
+// here as a lazy bootstrap because the auditConversationView bridge
+// below writes into it as the canonical Trust-Center oversight surface
+// in addition to the dedicated admin_profile_audit table.
+let adminAuditLogTableReady = false;
+async function ensureAdminAuditLogTable(env: Env): Promise<void> {
+  if (adminAuditLogTableReady) return;
+  try {
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS admin_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL REFERENCES users(id), action TEXT NOT NULL, report_type TEXT, format TEXT, filters_json TEXT, storage_key TEXT, download_url TEXT, exported_at TEXT NOT NULL DEFAULT (datetime('now')))",
+    );
+    await env.DB.exec(
+      'CREATE INDEX IF NOT EXISTS idx_admin_audit_user_ts ON admin_audit_log(admin_user_id, exported_at DESC)',
+    );
+  } catch {}
+  adminAuditLogTableReady = true;
+}
+
 // Task #1 (DB) — dedicated profile-view audit trail with first-class
 // columns (admin_user_id, viewed_user_id, conversation_id, viewed_at)
-// instead of stuffing target/conversation into a JSON blob on the
-// generic admin_audit_log (which is for export / publication actions).
-// Provisioned by migration 049; the lazy CREATE here self-heals dev.
+// for SQL-friendly investigator queries. Bridged into admin_audit_log
+// above so existing oversight reports keep working unchanged.
 let adminProfileAuditReady = false;
 async function ensureAdminProfileAuditTable(env: Env): Promise<void> {
   if (adminProfileAuditReady) return;
@@ -354,6 +371,24 @@ async function auditConversationView(
     ).bind(adminUser.id, targetUserId, conversationId, action).run();
   } catch (e) {
     console.error('[admin/audit] admin_profile_audit insert failed', (e as Error).message);
+  }
+  // Task #1 (DB) — also bridge into the canonical admin_audit_log so
+  // existing Trust Center oversight + admin export reporting picks up
+  // these per-view events without a parallel ingestion path. The
+  // dedicated admin_profile_audit table above is the SQL-friendly
+  // surface for investigators (first-class viewed_user_id /
+  // conversation_id columns); this row is the report-friendly mirror.
+  try {
+    await ensureAdminAuditLogTable(env);
+    await env.DB.prepare(
+      `INSERT INTO admin_audit_log (admin_user_id, action, filters_json) VALUES (?, ?, ?)`,
+    ).bind(
+      adminUser.id,
+      action,
+      JSON.stringify({ target_user_id: targetUserId, conversation_id: conversationId }),
+    ).run();
+  } catch (e) {
+    console.error('[admin/audit] admin_audit_log bridge insert failed', (e as Error).message);
   }
   try {
     const adminHash = await hashEmail(adminUser.email);

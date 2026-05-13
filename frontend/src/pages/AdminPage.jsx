@@ -732,10 +732,13 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
   const integrations = data?.integrations || [];
   const kyc = data?.kyc || {};
 
-  // Task #1 (DB) — Ongoing Conversation tab uses dedicated transcript
-  // endpoints with a left-rail conversation list + right-pane drilldown,
+  // Task #1 (DB) — Onboarding + Ongoing Conversation tabs both fetch
+  // through the dedicated, audited transcript endpoints. The Ongoing
+  // tab uses a left-rail conversation list + right-pane drilldown,
   // search/date filters, CSV export, and per-message sparkle indicators
   // for messages that triggered a domain write (advisor_answers row).
+  const [onboardingDetail, setOnboardingDetail] = useState(null);
+  const [onboardingLoading, setOnboardingLoading] = useState(false);
   const [advisorList, setAdvisorList] = useState([]);
   const [advisorListLoading, setAdvisorListLoading] = useState(false);
   const [selectedConvId, setSelectedConvId] = useState(null);
@@ -744,6 +747,24 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
   const [advisorSearch, setAdvisorSearch] = useState('');
   const [advisorSince, setAdvisorSince] = useState('');
   const [advisorUntil, setAdvisorUntil] = useState('');
+
+  useEffect(() => {
+    if (tab !== 'onboarding') return;
+    let alive = true;
+    setOnboardingLoading(true);
+    (async () => {
+      try {
+        const res = await api.adminUserOnboardingConversation(userRow.id);
+        if (alive) setOnboardingDetail(res);
+      } catch (e) {
+        if (alive) flash('err', e.message || 'Failed to load onboarding transcript');
+      } finally {
+        if (alive) setOnboardingLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, userRow.id]);
 
   useEffect(() => {
     if (tab !== 'advisor') return;
@@ -961,23 +982,19 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
             </div>
           )}
 
-          {data && tab === 'onboarding' && (() => {
-            // Onboarding = user's FIRST advisor session (week-1 / sign-up).
-            // Sourced from the embedded /profile payload so this tab works
-            // even when the dedicated /conversations/onboarding endpoint
-            // hasn't been touched yet.
-            const slice = data.onboarding_conversation || (data.onboarding ? { messages: data.onboarding } : null);
-            const msgs = slice?.messages || [];
-            const conv = slice?.conversation || null;
-            const total = Number(conv?.total_questions) || 0;
-            const answered = Number(conv?.answered_count) || 0;
-            const completionPct = total > 0 ? Math.round((answered / total) * 100) : 0;
-            const summary = (() => {
-              if (!msgs.length) return null;
-              const last = [...msgs].reverse().find(m => m.role === 'assistant' && m.content);
-              const seed = (last?.content || msgs[0]?.content || '').replace(/\s+/g, ' ').trim();
-              return seed ? (seed.length > 200 ? `${seed.slice(0, 197)}…` : seed) : null;
-            })();
+          {tab === 'onboarding' && (() => {
+            // Task #1 (DB) — Onboarding tab fetches via the dedicated
+            // /api/admin/users/:id/conversations/onboarding endpoint so
+            // every view is recorded in admin_profile_audit +
+            // admin_audit_log. Worker returns summary + completion_pct
+            // pre-computed; no client-side derivation.
+            if (onboardingLoading && !onboardingDetail) {
+              return <div className="text-xs text-gray-500 p-4">Loading onboarding transcript…</div>;
+            }
+            const msgs = onboardingDetail?.messages || [];
+            const conv = onboardingDetail?.conversation || null;
+            const completionPct = onboardingDetail?.completion_pct ?? 0;
+            const summary = onboardingDetail?.summary || null;
             return (
               <div>
                 <div className="flex items-center gap-2 mb-3">
