@@ -97,6 +97,8 @@ async function runExplainInBrowser(page: import('@playwright/test').Page) {
           out.provider = {
             model: data.model as string | undefined,
             provider: data.provider as string | undefined,
+            // SSE fields may be absent or non-boolean; normalize to strict booleans
+            // to match PersonalAdvisor parser behavior and keep wire-contract handling stable.
             fallback_used: !!data.fallback_used,
             cached: !!data.cached,
           };
