@@ -12,8 +12,14 @@ script for turning the dial across calendar time.
 
 ## 0. Prerequisites (do once, before Phase 1)
 
-1. **Node 22 on PATH** (wrangler requires ≥22, default Replit Node is 20):
+1. **Node 22 on PATH** (wrangler requires ≥22, default Replit Node is 20).
+   Use whatever version manager your machine has — examples below; the
+   only requirement is `node -v` reports `v22.x` before running wrangler:
    ```bash
+   nvm use 22                     # nvm
+   mise use node@22               # mise / asdf
+   # Replit Nix sandbox fallback (hardcoded path — replace if the store
+   # hash drifts; check `nix-store -q --references $(which node)`):
    export PATH=/nix/store/51gywl5jn4nna7al9waj142pw4vfhy0k-nodejs-22.19.0/bin:$PATH
    node -v   # → v22.x
    ```
@@ -226,7 +232,9 @@ AI Gateway checks as Phase 2. After 7 clean days, hand off to
 
 ## Rollback procedure (any phase)
 
-1. **Hard kill (instant, all users → polite 503/423):**
+1. **Hard kill (instant, all users → polite 503 from `rolloutDecision()`;
+   the per-user 423 lock from `checkKillSwitch()` is a different,
+   user-scoped path that does NOT trigger globally):**
    ```bash
    wrangler secret put ADVISOR_V2_DISABLED --env production
    # paste:  1
