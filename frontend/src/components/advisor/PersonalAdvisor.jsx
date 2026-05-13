@@ -34,13 +34,15 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Sparkles, Send, X, Minus, HelpCircle, Loader2, CheckCircle2,
-  ArrowRight, MessageSquare, ChevronRight, SkipForward, BookOpen,
+  ArrowRight, MessageSquare, SkipForward, BookOpen,
 } from 'lucide-react';
 import { api, spinoutLab as spinoutLabApi } from '../../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
 import { useAuth } from '../../hooks/useAuthSync';
 import { useEscapeClose } from '../useEscapeClose';
-import { predictTarget, pageLabel } from '../../lib/advisor/router';
+import { predictTarget } from '../../lib/advisor/router';
+import { useWebSocket } from '../../hooks/useWebSocket';
+import AdvisorProgressWidget from './AdvisorProgressWidget';
 
 const STORAGE_KEY = 'advisor:state';
 
@@ -101,6 +103,13 @@ export default function PersonalAdvisor() {
   // we pin the original value here so the user's next reply is sent
   // as `evidence` for the same question instead of a new answer.
   const [pendingEvidence, setPendingEvidence] = useState(null);
+
+  // Task #2 (CC) — bump token incremented every time the OnboardingChat
+  // WebSocket emits an `advisor-progress` or `page-fill` frame. The
+  // right-rail progress widget watches this token and re-fetches its
+  // queue + sources without polling.
+  const [progressBumpToken, setProgressBumpToken] = useState(0);
+  const bumpProgress = useCallback(() => setProgressBumpToken((n) => n + 1), []);
 
   // Tutor mode state.
   const [tutor, setTutor] = useState(null); // { topic, text, doc_anchor, page_target, streaming }
@@ -177,6 +186,42 @@ export default function PersonalAdvisor() {
     refreshProgress();
     refreshLabState();
   }, [user, refreshProgress, refreshLabState]);
+
+  // Task #2 (CC) — subscribe to the per-user OnboardingChat DO so
+  // milestone unlocks and tier changes re-order the right-rail widget
+  // without a manual refresh. `notifyAdvisorProgress` and
+  // `notifyAdvisorPageFill` post system frames whose JSON-encoded
+  // content carries `kind: 'advisor-progress' | 'page-fill'`.
+  const wsPath = user?.id ? `/api/onboarding/ws/${user.id}` : null;
+  useWebSocket(wsPath, {
+    enabled: !!user?.id && !minimised,
+    onMessage: (msg) => {
+      if (!msg) return;
+      // The DO wraps payloads as chat_message frames with role='system'
+      // and a JSON body in `content`. We also accept top-level kind in
+      // case the DO is upgraded to forward decoded payloads later.
+      let body = null;
+      if (msg.type === 'chat_message' && msg.message?.role === 'system') {
+        try { body = JSON.parse(msg.message.content || '{}'); } catch { /* ignore */ }
+      } else if (msg.kind) {
+        body = msg;
+      }
+      if (!body) return;
+      if (body.kind === 'advisor-progress' || body.kind === 'page-fill') {
+        bumpProgress();
+        // Also reconcile the dashboard ring percentage immediately.
+        if (body.kind === 'advisor-progress' && typeof body.percent === 'number') {
+          setProgress((p) => ({
+            ...p,
+            total: body.total ?? p.total,
+            answered: body.answered ?? p.answered,
+            skipped: body.skipped ?? p.skipped,
+            percent: body.percent,
+          }));
+        }
+      }
+    },
+  });
 
   // Auto-scroll the transcript on new messages / streaming tokens.
   useEffect(() => {
@@ -267,6 +312,7 @@ export default function PersonalAdvisor() {
       if (next) setMessages((m) => [...m, { role: 'assistant', content: next.prompt, question_id: next.id }]);
       refreshProgress();
       refreshLabState();
+      bumpProgress();
     } catch (e) {
       // Task #3 (AS) — request() throws on non-2xx. The /answer
       // endpoint returns 422 with a structured payload for the
@@ -312,12 +358,13 @@ export default function PersonalAdvisor() {
       }
       if (next) setMessages((m) => [...m, { role: 'assistant', content: next.prompt, question_id: next.id }]);
       refreshProgress();
+      bumpProgress();
     } catch (e) {
       setMessages((m) => [...m, { role: 'assistant', content: `Error: ${e?.message || 'skip failed'}` }]);
     } finally {
       setBusy(false);
     }
-  }, [question, conversationId, busy, refreshProgress]);
+  }, [question, conversationId, busy, refreshProgress, bumpProgress]);
 
   // ---------- Section focus — fetch the next pinned question -------------
   const pickFocus = useCallback(async (section) => {
@@ -460,21 +507,10 @@ export default function PersonalAdvisor() {
   // Cleanup any in-flight stream on unmount.
   useEffect(() => () => { if (tutorAbortRef.current) tutorAbortRef.current.abort(); }, []);
 
-  // ---------- Right rail completion rings (server-driven) ----------------
-  // Task #2 (AR) — the right rail consumes /progress.by_page directly,
-  // making the server the source of truth for per-page totals. Falls
-  // back to an empty list while progressDetail is still loading.
-  const ringStats = useMemo(() => {
-    return (progressDetail.by_page || []).map((p) => ({
-      page: p.page,
-      doc_anchor: p.doc_anchor || null,
-      label: pageLabel(p.page),
-      total: p.total,
-      done: p.answered,
-      percent: p.percent || 0,
-    }));
-  }, [progressDetail.by_page]);
-
+  // ---------- Right rail (Task #2 CC) ------------------------------------
+  // Section-focus chips still consume /progress.by_section directly. The
+  // per-page progress bars were superseded by the AdvisorProgressWidget
+  // (Proposed / Pending / Completed buckets driven off /api/advisor/queue).
   const sectionStats = useMemo(() => progressDetail.by_section || [], [progressDetail.by_section]);
 
   // Spin-Out Week banner: prefer dedicated lab state when available,
@@ -557,11 +593,13 @@ export default function PersonalAdvisor() {
           />
         </div>
 
-        {/* Right rail — section focus + per-page progress bars */}
+        {/* Right rail — Task #2 (CC) progress widget. Sticky-on-scroll
+            on desktop so the three buckets (Proposed / Pending /
+            Completed) stay visible as the chat transcript grows. */}
         {isDesktop && (
-          <aside className="p-4 bg-gray-50 dark:bg-gray-950/40 max-h-[600px] overflow-y-auto space-y-4">
+          <aside className="p-4 bg-gray-50 dark:bg-gray-950/40 max-h-[640px] overflow-y-auto sticky top-4">
             {sectionStats.length > 1 && (
-              <div>
+              <div className="mb-3">
                 <div className="text-[11px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-2">Focus a section</div>
                 <div className="flex flex-wrap gap-1.5">
                   {sectionStats.map((s) => {
@@ -584,35 +622,34 @@ export default function PersonalAdvisor() {
                 </div>
               </div>
             )}
-            <div>
-              <div className="text-[11px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-2">Your progress</div>
-              {ringStats.length === 0 ? (
-                <div className="text-xs text-gray-500 dark:text-gray-400">We'll show page-by-page progress here once we know your role.</div>
-              ) : (
-                <div className="space-y-2">
-                  {ringStats.map((r) => (
-                    // Single click on a progress bar → both pin
-                    // advisor focus to this page AND navigate to it.
-                    // Per task brief: "clicking a bar deep-links to
-                    // that page and pins advisor focus" as one action.
-                    <button
-                      key={r.page}
-                      type="button"
-                      onClick={() => { pickFocus(r.page); navigate(r.page); }}
-                      className="w-full text-left p-2 rounded-lg hover:bg-white dark:hover:bg-gray-900 border border-transparent hover:border-gray-200 dark:hover:border-gray-800 transition-colors"
-                      title={`Focus advisor on ${r.label} and open the page`}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="flex-1 min-w-0 text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{r.label}</div>
-                        <div className="text-[10px] text-gray-500 dark:text-gray-400 flex-shrink-0">{r.done} / {r.total}</div>
-                        <ChevronRight size={12} className="text-gray-400 flex-shrink-0" />
-                      </div>
-                      <ProgressBar percent={r.percent} done={r.done === r.total && r.total > 0} />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <AdvisorProgressWidget
+              focusSection={focusSection}
+              pendingEvidence={pendingEvidence}
+              currentQuestion={question}
+              labState={labState}
+              progressBumpToken={progressBumpToken}
+              onPickQuestion={(q) => {
+                // Set the chat to this exact question by id. The queue
+                // item carries enough shape ({id, prompt, page_target,
+                // section}) to drive the existing free-text input flow;
+                // submit() reads question.id to attribute the answer.
+                // focusSection is a SECTION key (e.g. "BUILD"), never a
+                // route path — assigning a path here would poison the
+                // /queue + /next-question focus filter downstream.
+                if (!q || !q.id) return;
+                setQuestion({
+                  id: q.id,
+                  prompt: q.prompt,
+                  page_target: q.page_target || null,
+                  section: q.section || null,
+                  skip_allowed: q.skip_allowed !== false,
+                });
+                setMessages((m) => [...m, { role: 'assistant', content: q.prompt, question_id: q.id }]);
+                if (q.section && q.section !== focusSection) {
+                  setFocusSection(q.section);
+                }
+              }}
+            />
           </aside>
         )}
       </div>

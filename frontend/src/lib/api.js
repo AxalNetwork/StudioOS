@@ -336,6 +336,11 @@ export const api = {
     // Task #2 (AR) — pinned next-question fetch + canonical manifest.
     nextQuestion: (focus) =>
       request(`/advisor/next-question${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`),
+    // Task #2 (CC) — read-only ranked queue used by the right-rail
+    // progress widget. Mirrors /turn output but never registers an
+    // "asked" timestamp so the widget can re-poll freely.
+    queue: (focus) =>
+      request(`/advisor/queue${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`),
     manifest: () => request('/advisor/manifest'),
     // Task #5 (AV) — Find & deep-link tool registry.
     tools: () => request('/advisor/tools'),
