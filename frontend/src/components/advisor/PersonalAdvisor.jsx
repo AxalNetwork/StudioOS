@@ -216,6 +216,25 @@ export default function PersonalAdvisor() {
       if (r.status !== 'saved') {
         setAnsweredIds((ids) => ids.filter((x) => x !== qid));
       }
+      // Task #1 (CD) — broadcast a same-tab DOM event so any page
+      // currently rendering the AdvisorFilledBanner / sparkle icons
+      // re-fetches /api/advisor/sources without waiting for navigation.
+      // Mirrors the worker-side `page-fill:{user_id}:{page}` DO event
+      // for the in-tab case (the cross-tab path uses the OnboardingChat
+      // WebSocket); broadcasting both is harmless because subscribers
+      // dedupe by question_id + filled_at.
+      if (r.status === 'saved') {
+        try {
+          window.dispatchEvent(new CustomEvent('advisor:page-fill', {
+            detail: {
+              question_id: qid,
+              page: qPage,
+              saved_to: r.saved_to || null,
+              ts: Date.now(),
+            },
+          }));
+        } catch { /* SSR / non-DOM env — ignore */ }
+      }
       // Task #3 (AS) — evidence gate / schema-invalid: re-prompt
       // inline. Stash the pending value so the next submit() call
       // re-uses it, attaching the user's evidence reply.

@@ -91,3 +91,60 @@ export async function getActiveWS(env: Env): Promise<number> {
     return 0;
   }
 }
+
+/**
+ * Task #1 (CD) — Personal Advisor write-router realtime fan-out.
+ *
+ * Emits `page-fill:{user_id}:{page}` and `advisor-progress:{user_id}`
+ * style events through the existing OnboardingChat DO (which already
+ * has per-user room scoping via `user:{id}` and the WebSocket
+ * subscription path at `/api/onboarding/ws/:user_id`). We piggyback
+ * on the DO's existing chat-message envelope by using the `system`
+ * role and a JSON-encoded content body the frontend can demux.
+ *
+ * Spec line item:
+ *   "Each write inserts an activity_logs row tagged source='advisor'
+ *    and emits page-fill:{user_id}:{page} + advisor-progress:{user_id}
+ *    Durable Object events"
+ *
+ * Best-effort by design — failures are swallowed so they can never
+ * block the user's chat turn.
+ */
+export async function notifyAdvisorPageFill(
+  env: Env,
+  userId: number,
+  page: string | null,
+  payload: { question_id: string; saved_to?: unknown },
+): Promise<void> {
+  if (!env.ONBOARDING_CHAT) return;
+  await postToDO(env.ONBOARDING_CHAT, `user:${userId}`, {
+    role: 'system',
+    content: JSON.stringify({
+      kind: 'page-fill',
+      channel: page ? `page-fill:${userId}:${page}` : `page-fill:${userId}`,
+      user_id: userId,
+      page,
+      question_id: payload.question_id,
+      saved_to: payload.saved_to ?? null,
+      ts: Date.now(),
+    }),
+  });
+}
+
+export async function notifyAdvisorProgress(
+  env: Env,
+  userId: number,
+  payload: { total: number; answered: number; skipped: number; percent: number },
+): Promise<void> {
+  if (!env.ONBOARDING_CHAT) return;
+  await postToDO(env.ONBOARDING_CHAT, `user:${userId}`, {
+    role: 'system',
+    content: JSON.stringify({
+      kind: 'advisor-progress',
+      channel: `advisor-progress:${userId}`,
+      user_id: userId,
+      ...payload,
+      ts: Date.now(),
+    }),
+  });
+}

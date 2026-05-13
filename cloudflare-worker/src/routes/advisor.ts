@@ -95,6 +95,7 @@ import {
   paywallCtas as smPaywallCtas,
 } from '../services/advisor/stateMachine';
 import { enqueueJob } from '../services/queue';
+import { notifyAdvisorPageFill, notifyAdvisorProgress } from '../services/realtime';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
@@ -1033,6 +1034,30 @@ advisor.post('/answer', async (c) => {
   const ans = Number(counts?.answered_count || 0);
   const skp = Number(counts?.skipped_count || 0);
   const nextPub = publicQuestion(next);
+
+  // Task #1 (CD) — fan out page-fill + advisor-progress events to the
+  // OnboardingChat DO (per-user room) so any page subscribed via
+  // /api/onboarding/ws/:user_id can re-hydrate its sparkle indicators
+  // and the dashboard progress ring updates without polling. Best-effort
+  // — failures are swallowed inside notify*; we still wrap in try/catch
+  // so an exception in the awaited Promise can't break the answer turn.
+  if (result.status === 'saved') {
+    const total = conv.total_questions || bank.length || 0;
+    const percent = total > 0 ? Math.round(((ans + skp) / total) * 100) : 0;
+    try {
+      await Promise.allSettled([
+        notifyAdvisorPageFill(c.env, user.id, q.page_target || null, {
+          question_id: q.id,
+          saved_to: result.saved_to || null,
+        }),
+        notifyAdvisorProgress(c.env, user.id, {
+          total, answered: ans, skipped: skp, percent,
+        }),
+      ]);
+    } catch (e) {
+      console.warn('[advisor] notify failed', (e as Error).message);
+    }
+  }
 
   const envelope: AnswerEnvelope = {
     conversation_id: conv.uid,

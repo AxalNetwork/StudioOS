@@ -28,13 +28,27 @@ export default function AdvisorFilledBanner({ page, onOpenAdvisor }) {
   useEffect(() => {
     let cancelled = false;
     if (!page) return undefined;
-    (async () => {
+    const load = async () => {
       try {
         const r = await api.advisor.sources(page);
         if (!cancelled) setSources(Array.isArray(r?.sources) ? r.sources : []);
       } catch { /* advisor unavailable — silently hide */ }
-    })();
-    return () => { cancelled = true; };
+    };
+    load();
+    // Task #1 (CD) — re-fetch on the same-tab `advisor:page-fill`
+    // event dispatched by PersonalAdvisor when /answer succeeds, and
+    // also un-dismiss the banner so the founder sees the new entry.
+    const onFill = (e) => {
+      const target = e?.detail?.page || null;
+      if (target && target !== page) return;
+      setDismissed(false);
+      load();
+    };
+    window.addEventListener('advisor:page-fill', onFill);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('advisor:page-fill', onFill);
+    };
   }, [page]);
 
   if (!page || dismissed || sources.length === 0) return null;
