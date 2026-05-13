@@ -1,0 +1,37 @@
+#7 - CD — Personal Advisor write-router (answer → platform injection)
+
+What & Why
+
+Every advisor answer must land as a real change on the right platform page (Projects, Pipeline, Roadmap, Cap Table, Financials, Brand, Deck, Investor / Partner / Mentor profile, Settings), not just sit as text in the chat. Build a server-side router that maps each question's page_target to a typed handler, plus a mirror client for optimistic UI and live page hydration. Depends on CB (the state machine that produces commits) and the bank (CH) for the page_target taxonomy.
+
+Done looks like
+
+A founder running the BUILD bank ends with a populated Project row, ≥3 Customer Discovery interviews, ≥3 OKRs, brand basics, deck outline, and seeded financials (with evidence flags) — all visible on the corresponding pages
+An investor running the thesis bank ends with investor_profiles populated and ≥1 watchlist item seeded
+An operating partner running the partner bank ends with partner_profiles populated and proposed partner_deals drafts
+Sparkle ✨ icons + "Filled by Personal Advisor" tooltips appear on advisor-filled fields, hover shows source advisor turn
+Field-level errors surface inline in the advisor card with an "Open the page" CTA — no generic toasts
+Every write goes through the same auth / IDOR / tier / Zod validation as the page's own PUT endpoint
+Evidence-required financial fields refuse without an evidence row and return { needs_evidence, integration_hint, upload_hint } so the advisor can ask for it
+Each write inserts an activity_logs row tagged source='advisor' and emits page-fill:{user_id}:{page} + advisor-progress:{user_id} Durable Object events
+Out of scope
+
+Adding new questions (CH) or changing the state machine (CB)
+MI signal extraction (CE)
+Steps
+
+Server router — Build cloudflare-worker/src/services/advisor/writeRouter.ts with the full page_target → handler map listed in the spec (projects, discovery_interviews, roadmap_okrs, pipeline_stages, studioops, brand, deck_slides, financials, metrics_snapshots, corporate_profiles, captable_holders, rounds, investor/partner/mentor profiles, cofounder_preferences, mentor_requests).
+Handler hardening — Each handler re-checks auth/IDOR/tier, runs the page's existing Zod schema, persists in a transaction, writes the activity log row, and emits the two Durable Object events.
+Evidence gating — Implement the needs_evidence response shape for financials and any other evidence-required questions; return integration / upload hints.
+Mirror client — Add frontend/src/lib/advisor/router.js with the same map for optimistic UI; on 4xx, roll back optimistic state and surface the inline error with the "Open the page" CTA.
+Page hydration — On every owning page, hydrate from DB on mount and subscribe to the corresponding page-fill:{user_id}:{page} channel; render the sparkle icon + tooltip for advisor-sourced values.
+End-to-end check — Manually walk a founder, investor, and operating-partner persona through the bank and confirm the acceptance bullets land.
+Relevant files
+
+cloudflare-worker/src/services/advisor/writeRouter.ts (new)
+frontend/src/lib/advisor/router.js (new)
+Page modules under frontend/src/pages/ that own target columns
+Dependencies
+
+CB — Personal Advisor conversation state machine
+Open task
