@@ -1483,6 +1483,10 @@ advisor.get('/manifest', async (c) => {
 // outside the worker).
 async function conversationDetailHandler(c: Context<{ Bindings: Env }>): Promise<Response> {
   const user = await requireAuth(c);
+  // Gate runs BEFORE the schema probe so non-phase / kill-switch users
+  // never touch D1 from this read endpoint either.
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
   await ensureSchema(c.env);
   const uid = c.req.param('id') || c.req.param('uid');
   if (!uid) return c.json({ error: 'conversation id required' }, 400);
@@ -2181,10 +2185,15 @@ async function buildVisibleBank(c: Context<{ Bindings: Env }>, focus: string | n
 }
 
 advisor.post('/turn', async (c) => {
+  // Gate evaluates rollout + kill-switch BEFORE any D1 schema probe or
+  // bank hydration (`buildVisibleBank` runs ensureSchema +
+  // ensureAdvisorWeekColumn + several reads). Per Task #5 spec, blocked
+  // users must short-circuit without touching the DB.
+  const earlyUser = await requireAuth(c);
+  const blocked = await applyAdvisorGate(c, earlyUser);
+  if (blocked) return blocked;
   const focus = (c.req.query('focus') || '').trim() || null;
   const { user, visible, deferred, answered, gate, focusPage } = await buildVisibleBank(c, focus);
-  const blocked = await applyAdvisorGate(c, user);
-  if (blocked) return blocked;
   const result = await smNextTurn(c.env, user.id, visible, {
     focusPage,
     week: gate.week,
@@ -2204,10 +2213,12 @@ advisor.post('/turn', async (c) => {
 });
 
 advisor.get('/queue', async (c) => {
+  // Gate BEFORE buildVisibleBank — see /turn for the same rationale.
+  const earlyUser = await requireAuth(c);
+  const blocked = await applyAdvisorGate(c, earlyUser);
+  if (blocked) return blocked;
   const focus = (c.req.query('focus') || '').trim() || null;
   const { user, visible, deferred, answered, gate, focusPage } = await buildVisibleBank(c, focus);
-  const blocked = await applyAdvisorGate(c, user);
-  if (blocked) return blocked;
   // /queue is a read-only peek — we want the ranking but NOT to
   // register an asked-at timestamp (that would spuriously suppress
   // the same questions on the next /turn). So we replicate nextTurn's

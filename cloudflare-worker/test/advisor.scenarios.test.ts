@@ -364,16 +364,44 @@ async function runScenario(
 
   // (6) writes-land-in-correct-tables — every scenario flagged
   //     `expects_saved_writes` must produce ≥1 routeAnswer with
-  //     status='saved' and a populated saved_to.{table,column}. This
-  //     enforces the spec's "all writes land in the correct tables"
-  //     contract across ALL personas (no per-persona exemptions).
+  //     status='saved' and a populated saved_to.{table,column}. AND
+  //     every saved write must land in a table allowed for that
+  //     persona — a founder answer must NOT end up in `mentors` or
+  //     `partner_profiles`, an investor answer must NOT end up in
+  //     `projects`, etc. This is the "correct tables" half of the spec
+  //     contract that the previous version of this assertion missed.
+  const ALLOWED_TABLES_PER_PERSONA: Record<Persona, Set<string>> = {
+    founder: new Set([
+      'projects', 'founders', 'founder_profiles', 'discovery_interviews',
+      'roadmap_okrs', 'cap_table_entries', 'compliance_items',
+      'spinout_lab_milestones', 'project_extras', 'founder_extras',
+      'advisor_extras_json',
+    ]),
+    investor: new Set([
+      'investor_profiles', 'users', 'investor_extras',
+      'advisor_extras_json',
+    ]),
+    partner: new Set([
+      'partner_profiles', 'users', 'partner_extras',
+      'advisor_extras_json',
+    ]),
+    mentor: new Set([
+      'mentors', 'mentor_profiles', 'users', 'mentor_extras',
+      'advisor_extras_json',
+    ]),
+    unknown: new Set(['advisor_extras_json']),
+  };
   const savedWrites = writeResults.filter((w) => w.status === 'saved' && w.saved_to);
   if (s.expectsSavedWrites) {
     assert.ok(savedWrites.length > 0,
       `${s.name}: expected ≥1 saved write to a domain table, got ${JSON.stringify(writeResults.slice(0, 5))}`);
+    const allowed = ALLOWED_TABLES_PER_PERSONA[s.persona];
     for (const w of savedWrites) {
       assert.ok(w.saved_to!.table && w.saved_to!.column,
         `${s.name}: saved write missing table/column: ${JSON.stringify(w)}`);
+      assert.ok(allowed.has(w.saved_to!.table),
+        `${s.name}: write for q=${w.id} landed in disallowed table "${w.saved_to!.table}" ` +
+        `(allowed for ${s.persona}: ${[...allowed].join(', ')})`);
     }
   }
 
