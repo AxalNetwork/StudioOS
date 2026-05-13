@@ -2527,7 +2527,7 @@ function MarketIntelContributionCard({ flash }) {
       const r = await api.miContributionOptoutSet(next);
       setOptedOut(!!r.opted_out);
       flash(next
-        ? 'Opted out — your contributions will be purged within 24 hours'
+        ? 'Opted out — your contributions will be purged within 6 hours'
         : 'Now contributing to anonymized Market Intelligence');
     } catch (e) {
       flash(e.message || 'Failed to save', 'error');
@@ -2551,7 +2551,7 @@ function MarketIntelContributionCard({ flash }) {
           Contribute my advisor answers to anonymised Market Intelligence (k ≥ 5)
         </label>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Opting out removes your contribution within 24 hours, the next time the nightly aggregator runs.
+          Opting out removes your contribution within 6 hours — the aggregator runs every 6 hours and purges opted-out contributors before rebuilding cells.
         </p>
       </div>
     </Card>

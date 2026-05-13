@@ -558,7 +558,11 @@ marketIntel.get('/sentiment', async (c) => {
     energy: safeJson(r.payload_json).energy ?? null,
     n: r.n,
   }));
-  return c.json({ items, k_min: K_MIN });
+  // Task #3 (CE) — `source: 'advisor'` tags this response as the
+  // community-derived series. Frontend renders it as a second line
+  // alongside the external series surfaced by /market-pulse,
+  // /private-rounds, etc. — never as a replacement.
+  return c.json({ items, k_min: K_MIN, source: 'advisor' });
 });
 
 // 2. /talc — TALC stage distribution per persona × sector.
@@ -576,7 +580,7 @@ marketIntel.get('/talc', async (c) => {
     return { persona, sector, period_key: r.period_key, mode: p.mode || null,
              distribution: p.distribution || {}, dominance: r.value, n: r.n };
   });
-  return c.json({ items, k_min: K_MIN });
+  return c.json({ items, k_min: K_MIN, source: 'advisor' });
 });
 
 // 3. /demand-supply — counts by sector × side × topic.
@@ -593,7 +597,7 @@ marketIntel.get('/demand-supply', async (c) => {
     const [sec, side, topic] = String(r.dimension_key).split(':');
     return { sector: sec, side, topic, period_key: r.period_key, count: r.value, n: r.n };
   });
-  return c.json({ items, k_min: K_MIN });
+  return c.json({ items, k_min: K_MIN, source: 'advisor' });
 });
 
 // 4. /sector-heat — composite "heat" index per sector (and sub-sector
@@ -617,7 +621,7 @@ marketIntel.get('/sector-heat', async (c) => {
              period_key: r.period_key, heat: r.value,
              contributions: p.contributions ?? null, mean_valence: p.mean_valence ?? null, n: r.n };
   });
-  return c.json({ items, k_min: K_MIN });
+  return c.json({ items, k_min: K_MIN, source: 'advisor' });
 });
 
 // 5. /sentiment-geo — geo × sector cross-tab.
@@ -632,7 +636,7 @@ marketIntel.get('/sentiment-geo', async (c) => {
     const [, geo, sector] = String(r.dimension_key).split(':');
     return { geo, sector, period_key: r.period_key, valence: r.value, n: r.n };
   });
-  return c.json({ items, k_min: K_MIN });
+  return c.json({ items, k_min: K_MIN, source: 'advisor' });
 });
 
 // 6. /capital-velocity — derived: investor-side TALC distribution shift
@@ -654,7 +658,7 @@ marketIntel.get('/capital-velocity', async (c) => {
     return { sector, period_key: r.period_key, velocity: round(distributing + 0.5 * scaling),
              distributing_share: round(distributing), scaling_share: round(scaling), n: r.n };
   });
-  return c.json({ items, k_min: K_MIN });
+  return c.json({ items, k_min: K_MIN, source: 'advisor' });
 });
 
 // 7. /partner-pulse — rolling supply-side topics aggregated across mentors+partners.
@@ -706,7 +710,7 @@ marketIntel.get('/partner-pulse', async (c) => {
       n: r.n,
     };
   });
-  return c.json({ items, rate_cards, comp_models, k_min: K_MIN });
+  return c.json({ items, rate_cards, comp_models, k_min: K_MIN, source: 'advisor' });
 });
 
 // 8. /fit/founder/:project_id — top investor matches for this founder's
@@ -729,7 +733,7 @@ marketIntel.get('/fit/founder/:project_id', async (c) => {
        WHERE extractor='fit_match' AND dimension_key = ?`,
   ).bind(`founder:${owner.user_id}`).first<{ n: number; value: number; payload_json: string }>();
   if (!cell || (cell.n ?? 0) < K_MIN) {
-    return c.json({ matches: [], note: cell ? 'k_anonymity_suppressed' : 'no_fit_yet', k_min: K_MIN });
+    return c.json({ matches: [], note: cell ? 'k_anonymity_suppressed' : 'no_fit_yet', k_min: K_MIN, source: 'advisor' });
   }
   const matches = (safeJson(cell.payload_json).matches || []) as Array<{ user_id: number; score: number }>;
   const disclosed = await disclosedIdentities(c.env, user.id, matches.map((m) => m.user_id));
@@ -741,6 +745,7 @@ marketIntel.get('/fit/founder/:project_id', async (c) => {
       nda_required: !disclosed.has(m.user_id),
     }))),
     k_min: K_MIN,
+    source: 'advisor',
   });
 });
 
@@ -755,7 +760,7 @@ marketIntel.get('/fit/investor/me', async (c) => {
        WHERE extractor='fit_match' AND dimension_key = ?`,
   ).bind(`investor:${user.id}`).first<{ n: number; value: number; payload_json: string }>();
   if (!cell || (cell.n ?? 0) < K_MIN) {
-    return c.json({ matches: [], note: cell ? 'k_anonymity_suppressed' : 'no_fit_yet', k_min: K_MIN });
+    return c.json({ matches: [], note: cell ? 'k_anonymity_suppressed' : 'no_fit_yet', k_min: K_MIN, source: 'advisor' });
   }
   const matches = (safeJson(cell.payload_json).matches || []) as Array<{ user_id: number; score: number }>;
   const disclosed = await disclosedIdentities(c.env, user.id, matches.map((m) => m.user_id));
@@ -767,6 +772,7 @@ marketIntel.get('/fit/investor/me', async (c) => {
       nda_required: !disclosed.has(m.user_id),
     }))),
     k_min: K_MIN,
+    source: 'advisor',
   });
 });
 
@@ -782,7 +788,25 @@ marketIntel.post('/contribution-optout', async (c) => {
   const body = await c.req.json().catch(() => ({} as { opt_out?: boolean }));
   const flag = body.opt_out ? 1 : 0;
   await c.env.DB.prepare(`UPDATE users SET mi_contribution_optout = ? WHERE id = ?`).bind(flag, user.id).run();
-  return c.json({ ok: true, opted_out: flag === 1, note: 'Existing contributions purged within 24h by nightly reducer.' });
+  return c.json({ ok: true, opted_out: flag === 1, note: 'Existing contributions purged within 6h by the next reducer pass.' });
+});
+
+// Task #3 (CE) — admin-triggered immediate refresh. Enqueues an
+// `mi_reduce` job so the next queue-drain tick rebuilds aggregates
+// within minutes (vs the 6h cron). Admin/partner only.
+marketIntel.post('/admin/reduce', async (c) => {
+  const user = (await requireAuth(c)) as MIUser;
+  const role = (user.role || '').toLowerCase();
+  if (role !== 'admin' && role !== 'partner') {
+    return c.json({ error: 'forbidden', required_role: 'admin' }, 403);
+  }
+  try {
+    const { Jobs } = await import('../models/jobs');
+    await Jobs.enqueue(c.env, 'mi_reduce', { triggered_by: user.id, source: 'admin_refresh' });
+    return c.json({ ok: true, enqueued: 'mi_reduce' });
+  } catch (e) {
+    return c.json({ error: 'enqueue_failed', detail: (e as Error).message }, 500);
+  }
 });
 
 function round(x: number | null): number | null { return x == null ? null : Math.round(x * 1000) / 1000; }
