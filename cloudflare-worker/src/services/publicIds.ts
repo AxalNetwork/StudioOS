@@ -87,6 +87,10 @@ async function assignPublicId(
   column: 'founder_public_id' | 'partner_public_id',
 ): Promise<string | null> {
   if (!Number.isFinite(userId)) return null;
+  // Self-heal partial / un-migrated environments: ensure the new
+  // columns + id_sequences table exist BEFORE we read or update them.
+  // No-op once-per-isolate after the first call (sentinel below).
+  await ensurePublicIdColumns(env);
   try {
     const row = await env.DB.prepare(
       `SELECT ${column} AS pid FROM users WHERE id = ?`,

@@ -257,6 +257,13 @@ export async function createAndSendEnvelope(
     };
     if (opts.recipientUserId) {
       try {
+        // Self-heal partial / un-migrated environments BEFORE the
+        // SELECT below references founder_public_id / partner_public_id.
+        // Idempotent (sentinel-cached after first call per isolate).
+        try {
+          const { ensurePublicIdColumns } = await import('../services/publicIds');
+          await ensurePublicIdColumns(env);
+        } catch {}
         const row = await env.DB.prepare(
           `SELECT role, founder_id, partner_id, founder_public_id, partner_public_id
              FROM users WHERE id = ?`,

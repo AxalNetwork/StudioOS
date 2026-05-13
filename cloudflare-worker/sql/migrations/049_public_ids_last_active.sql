@@ -1,27 +1,21 @@
 -- Task #1 (DB) — Admin user-profile detail.
 --
--- Idempotent migration. Re-runnable with no errors and no side effects
--- the second time. We deliberately do NOT use `ALTER TABLE ... ADD
--- COLUMN` here because D1 / SQLite have no `IF NOT EXISTS` form for
--- column adds, which would make the file abort on the second run with
--- "duplicate column name". Instead, the new columns are added by
--- runtime PRAGMA-guarded bootstraps that run on every relevant request:
+-- Adds the three new `users` columns (founder_public_id,
+-- partner_public_id, last_active_at), the id_sequences counter table,
+-- and the dedicated admin_profile_audit per-view trail.
 --
---   * users.founder_public_id / partner_public_id —
---       services/publicIds.ts::ensurePublicIdColumns()
---   * users.last_active_at —
---       middleware/lastActive.ts::ensureLastActiveColumn()
---   * admin_audit_log.viewed_user_id / conversation_id / viewed_at —
---       routes/admin.ts::ensureAdminAuditLogTable()
---
--- Each helper PRAGMA-checks the table and only issues `ALTER TABLE
--- ADD COLUMN` for columns that do not yet exist, so partial runs in
--- any environment self-heal.
---
--- This file therefore only creates new tables / indexes (CREATE …
--- IF NOT EXISTS), seeds the id-sequence rows (INSERT OR IGNORE), and
--- is safe to apply against an empty DB, a freshly-bootstrapped DB, or
--- a DB that already has every object below.
+-- Idempotency strategy:
+--   * CREATE TABLE / INDEX statements all use IF NOT EXISTS — safe.
+--   * The three `ALTER TABLE users ADD COLUMN` statements have no
+--     native IF NOT EXISTS form in SQLite/D1, so on a SECOND apply the
+--     engine reports "duplicate column name" and the file aborts. To
+--     keep the migration deterministically safe to re-run, the column
+--     adds are also performed at runtime by a PRAGMA-guarded helper
+--     (services/publicIds.ts::ensurePublicIdColumns), which is invoked
+--     by every assign / select call site BEFORE it touches the new
+--     columns. Operators apply this file ONCE on a fresh prod DB; the
+--     runtime helper covers re-applies, dev, preview, and any partial
+--     prod state.
 --
 -- Apply on a new environment via:
 --   wrangler d1 execute studioos-db --remote \
@@ -29,13 +23,16 @@
 -- Then optionally backfill ids for legacy rows via the admin endpoint:
 --   POST /api/admin/maintenance/public-ids/backfill?limit=5000
 
--- The unique partial indexes on the new public-id columns are created
--- here AFTER the lazy column-add helper has had a chance to run; if
--- the columns don't yet exist the CREATE INDEX statements fail. We
--- therefore guard them by emitting them only conditionally in app
--- code via ensurePublicIdColumns(), and KEEP THIS FILE limited to
--- objects that don't depend on the new columns. The helper creates
--- the indexes on the same code path.
+ALTER TABLE users ADD COLUMN founder_public_id TEXT;
+ALTER TABLE users ADD COLUMN partner_public_id TEXT;
+ALTER TABLE users ADD COLUMN last_active_at TIMESTAMP;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_founder_public_id
+  ON users(founder_public_id) WHERE founder_public_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_partner_public_id
+  ON users(partner_public_id) WHERE partner_public_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_last_active
+  ON users(last_active_at);
 
 CREATE TABLE IF NOT EXISTS id_sequences (
   name        TEXT PRIMARY KEY,
@@ -45,10 +42,10 @@ INSERT OR IGNORE INTO id_sequences (name, next_value) VALUES ('axf', 1);
 INSERT OR IGNORE INTO id_sequences (name, next_value) VALUES ('axp', 1);
 
 -- Per-conversation profile-view audit trail with first-class columns.
--- Mirrored into admin_audit_log by routes/admin.ts::auditConversationView
--- so existing Trust-Center oversight reports continue to work, but
--- this table is the SQL-friendly investigator surface ("who looked at
--- whose transcript when").
+-- routes/admin.ts::auditConversationView writes a row HERE for the
+-- SQL-friendly investigator surface AND mirrors the same data into
+-- admin_audit_log.{viewed_user_id,conversation_id,viewed_at} for the
+-- canonical Trust-Center oversight reports.
 CREATE TABLE IF NOT EXISTS admin_profile_audit (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   admin_user_id   INTEGER NOT NULL REFERENCES users(id),

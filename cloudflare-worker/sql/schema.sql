@@ -106,8 +106,22 @@ CREATE TABLE IF NOT EXISTS users (
     postal_code TEXT,
     country TEXT,
     profile_completion_pct INTEGER DEFAULT 0,
+    -- Task #1 (DB) — public FOUNDER_ID / PARTNER_ID surfaced in legal
+    -- contracts (via {{counterparty.founder_id}} merge field). Allocated
+    -- on first role grant (services/publicIds.ts) from id_sequences.
+    founder_public_id TEXT,
+    partner_public_id TEXT,
+    -- Task #1 (DB) — last-active stamp; updated by middleware/lastActive.ts
+    -- with a 5-min KV throttle.
+    last_active_at TIMESTAMP,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_founder_public_id
+  ON users(founder_public_id) WHERE founder_public_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_partner_public_id
+  ON users(partner_public_id) WHERE partner_public_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_last_active
+  ON users(last_active_at);
 
 -- Task #16 — Profile expansion (corporate block, one per user).
 CREATE TABLE IF NOT EXISTS corporate_profiles (
