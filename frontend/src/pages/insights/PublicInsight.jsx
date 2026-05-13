@@ -3,6 +3,9 @@ import { useParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { publications } from '../../lib/api';
 
+const BRAND_TITLE_SUFFIX = 'Axal VC';
+const BRAND_SITE_NAME = 'Axal Venture Studio';
+
 export default function PublicInsight() {
   const { slug } = useParams();
   const [data, setData] = useState(null);
@@ -29,9 +32,9 @@ export default function PublicInsight() {
   useEffect(() => {
     if (!data?.publication) return undefined;
     const og = data.publication.og || {};
-    const ogTitle = og.title || `${data.publication.title} · Axal VC`;
+    const ogTitle = og.title || `${data.publication.title} · ${BRAND_TITLE_SUFFIX}`;
     const ogDesc = og.description || data.publication.subtitle || '';
-    const siteName = og.site_name || 'Axal Venture Studio';
+    const siteName = og.site_name || BRAND_SITE_NAME;
     const url = typeof window !== 'undefined' ? window.location.href : '';
     const prevTitle = document.title;
     document.title = ogTitle;
