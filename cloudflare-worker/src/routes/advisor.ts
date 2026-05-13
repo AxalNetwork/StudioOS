@@ -86,6 +86,8 @@ import {
   type ToolEnvelope,
 } from '../services/advisor/tools';
 import { run as aiRouterRun } from '../services/aiRouter';
+// Task #5 — staged rollout gate.
+import { rolloutDecision } from '../services/advisor/rollout';
 import { pickNextQuestion } from '../services/advisor/rerank';
 import {
   nextTurn as smNextTurn,
@@ -502,6 +504,13 @@ async function refreshCounts(env: Env, conversationId: number, currentQid: strin
 // ---------------------------------------------------------------------------
 advisor.post('/start', async (c) => {
   const user = await requireAuth(c);
+  // Task #5 — staged rollout gate runs FIRST, before any D1 schema
+  // probe or column-ensure call, so a user not yet in the rollout phase
+  // sees a polite 503 without ever touching the DB.
+  const rollout = rolloutDecision(c.env, user);
+  if (!rollout.allowed) {
+    return c.json({ error: rollout.message, status: 'unavailable', reason: rollout.reason }, 503);
+  }
   await ensureSchema(c.env);
   await ensureAdvisorWeekColumn(c.env);
   // Task #4 (AW) L7 — kill switch (env + per-user advisor_locked).
@@ -660,6 +669,11 @@ interface AnswerEnvelope {
 }
 advisor.post('/answer', async (c) => {
   const user = await requireAuth(c);
+  // Task #5 — staged rollout gate runs FIRST, before any D1 work.
+  const rollout = rolloutDecision(c.env, user);
+  if (!rollout.allowed) {
+    return c.json({ error: rollout.message, status: 'unavailable', reason: rollout.reason }, 503);
+  }
   await ensureSchema(c.env);
   await ensureGuardrailColumns(c.env);
   // Task #4 (AW) L7 — kill switch first.
@@ -1486,6 +1500,11 @@ function sseEvent(event: string, data: unknown): string {
 
 advisor.post('/explain', async (c) => {
   const user = await requireAuth(c);
+  // Task #5 — staged rollout gate runs FIRST, before any D1 work.
+  const rollout = rolloutDecision(c.env, user);
+  if (!rollout.allowed) {
+    return c.json({ error: rollout.message, status: 'unavailable', reason: rollout.reason }, 503);
+  }
   await ensureSchema(c.env);
   await ensureGuardrailColumns(c.env);
   // Task #4 (AW) L7 — kill switch (env-wide + per-user lock).

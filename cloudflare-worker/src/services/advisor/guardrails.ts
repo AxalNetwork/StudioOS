@@ -531,8 +531,13 @@ export interface KillSwitchResult {
 }
 
 export async function checkKillSwitch(env: Env, user: User): Promise<KillSwitchResult> {
-  const e = env as unknown as { ADVISOR_DISABLED?: string };
-  if (e.ADVISOR_DISABLED === '1' || e.ADVISOR_DISABLED === 'true') {
+  // Task #5 — either ADVISOR_V2_DISABLED or ADVISOR_DISABLED disables the
+  // advisor. Logical OR (NOT precedence by presence) so a stale
+  // `ADVISOR_V2_DISABLED=0` can't silently override an operator's
+  // `ADVISOR_DISABLED=1` during incident response.
+  const e = env as unknown as { ADVISOR_DISABLED?: string; ADVISOR_V2_DISABLED?: string };
+  const truthy = (v: string | undefined) => v === '1' || v === 'true';
+  if (truthy(e.ADVISOR_V2_DISABLED) || truthy(e.ADVISOR_DISABLED)) {
     return { blocked: true, shadow: false, reason: 'env_disabled', message: REFUSAL.disabled };
   }
   await ensureGuardrailColumns(env);

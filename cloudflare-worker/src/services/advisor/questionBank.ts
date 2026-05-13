@@ -155,11 +155,11 @@ export function mapRoleAnswer(answerText: string): Persona | null {
 // ---------------------------------------------------------------------------
 // Bank registry — imports the canonical TS modules under ./banks/.
 // ---------------------------------------------------------------------------
-import { NEW_FOUNDER_SPINOUT_BANK } from './banks/newFounderSpinout';
-import { EXISTING_FOUNDER_BANK } from './banks/existingFounder';
-import { INVESTOR_BANK } from './banks/investor';
-import { OPERATING_PARTNER_BANK } from './banks/operatingPartner';
-import { MENTOR_BANK } from './banks/mentor';
+import { NEW_FOUNDER_SPINOUT_BANK } from './banks/newFounderSpinout.ts';
+import { EXISTING_FOUNDER_BANK } from './banks/existingFounder.ts';
+import { INVESTOR_BANK } from './banks/investor.ts';
+import { OPERATING_PARTNER_BANK } from './banks/operatingPartner.ts';
+import { MENTOR_BANK } from './banks/mentor.ts';
 
 export type BankName =
   | 'newFounderSpinout' | 'existingFounder'

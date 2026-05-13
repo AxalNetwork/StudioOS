@@ -75,6 +75,14 @@ export interface Env {
   // every /api/advisor/{start,answer,explain} short-circuits with the
   // canonical REFUSAL.disabled message. Per-user kill is users.advisor_locked.
   ADVISOR_DISABLED?: string;
+  // Task #5 — Personal Advisor V2 rollout gate. ADVISOR_V2_DISABLED is the
+  // instant kill switch (alias of ADVISOR_DISABLED — either name flips both).
+  // ADVISOR_V2_ALLOWLIST is a CSV of user ids granted V2 in Phase 1 (admins
+  // are implicitly included). ADVISOR_V2_ROLLOUT_PCT is an integer 0..100
+  // controlling the deterministic-hash rollout for Phase 2 (10) → Phase 3 (100).
+  ADVISOR_V2_DISABLED?: string;
+  ADVISOR_V2_ALLOWLIST?: string;
+  ADVISOR_V2_ROLLOUT_PCT?: string;
   GITHUB_ACCESS_TOKEN?: string;
   GITHUB_REPO_OWNER?: string;
   GITHUB_REPO_NAME?: string;
