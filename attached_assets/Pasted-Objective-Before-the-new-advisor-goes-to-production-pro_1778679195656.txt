@@ -1,0 +1,80 @@
+Objective
+  Before the new advisor goes to production, prove (a) it doesn't loop,
+  (b) it picks reasonable next questions, (c) write-router writes
+  actually land, (d) MI signals materialize, (e) the budget cap works.
+
+Tests (cloudflare-worker/test/advisor/)
+  scenarios/
+    new_founder_week_1.json
+    new_founder_week_3.json
+    existing_founder_growth_tier.json
+    existing_founder_studio_tier.json
+    investor_pro_tier.json
+    investor_inst_tier.json
+    op_partner_services.json
+    op_partner_capital.json
+    op_partner_sourcing.json
+    mentor.json
+  Each scenario:
+    - seeds advisor_answers + platform side-state for the persona
+    - runs N turns through the state machine + write-router
+    - asserts: zero repeats, zero blocked-by-tier surfaces, zero
+      unlock-violation surfaces, all writes land in correct tables,
+      progress widget reflects expected buckets.
+
+Eval (scripts/eval/advisor.mjs)
+  Curated 50-prompt bank, runs through the live advisor against a
+  staging account. Outputs scripts/eval/results/<date>.json with:
+    turn count, repetition rate, write success rate, p95 latency,
+    cost per conversation, MI signal coverage delta.
+
+Production rollout
+  Phase 1: enable for admin-impersonated test users only (env flag
+    ADVISOR_V2_ALLOWLIST). Run for 3 days. Read eval results.
+  Phase 2: enable for 10% of new signups via deterministic hash on
+    user_id. Run for 1 week.
+  Phase 3: enable for all users. Old advisor code removed in the
+  follow-up PR.
+
+Kill switch
+  Env var ADVISOR_V2_DISABLED. Setting to '1' instantly routes back
+  to the old advisor or returns a polite "advisor temporarily
+  unavailable" message.
+
+Acceptance
+  - All 10 scenarios green in CI.
+  - Eval run shows 0% repetition rate across 50 prompts × 10 personas.
+  - Phase 3 reached without rollback.
+  - Old advisor code removed in the follow-up PR.  Objective
+  Before the new advisor goes to production, prove (a) it doesn't loop,
+  (b) it picks reasonable next questions, (c) write-router writes
+  actually land, (d) MI signals materialize, (e) the budget cap works.
+
+Tests (cloudflare-worker/test/advisor/)
+  scenarios/
+    new_founder_week_1.json
+    new_founder_week_3.json
+    existing_founder_growth_tier.json
+    existing_founder_studio_tier.json
+    investor_pro_tier.json
+    investor_inst_tier.json
+    op_partner_services.json
+    op_partner_capital.json
+    op_partner_sourcing.json
+    mentor.json
+  Each scenario:
+    - seeds advisor_answers + platform side-state for the persona
+    - runs N turns through the state machine + write-router
+    - asserts: zero repeats, zero blocked-by-tier surfaces, zero
+      unlock-violation surfaces, all writes land in correct tables,
+      progress widget reflects expected buckets.
+
+Eval (scripts/eval/advisor.mjs)
+  Curated 50-prompt bank, runs through the live advisor against a
+  staging account. Outputs scripts/eval/results/<date>.json with:
+    turn count, repetition rate, write success rate, p95 latency,
+    cost per conversation, MI signal coverage delta.
+
+Production rollout
+  Phase 1: enable for admin-impersonated test users only (env flag
+    ADVISOR_V2_ALLOWLIST). Run for 3 days. Read eval results.
