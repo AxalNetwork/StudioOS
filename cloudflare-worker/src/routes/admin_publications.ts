@@ -213,7 +213,7 @@ r.get('/', async (c: AppCtx) => {
 r.get('/:id{[0-9]+}', async (c: AppCtx) => {
   await requireAdmin(c);
   await ensureSchema(c.env);
-  const id = parseInt(c.req.param('id'), 10);
+  const id = parseInt(c.req.param('id') ?? '', 10);
   const pub = await loadPub(c.env, id);
   if (!pub) return c.json({ error: 'not_found' }, 404);
   const aggregates = await loadSectionAggregates(c.env, pub.section, safeParse(pub.filters_json) as Record<string, unknown>);
@@ -250,7 +250,7 @@ r.get('/:id{[0-9]+}', async (c: AppCtx) => {
 r.put('/:id{[0-9]+}', async (c: AppCtx) => {
   const admin = await requireAdmin(c);
   await ensureSchema(c.env);
-  const id = parseInt(c.req.param('id'), 10);
+  const id = parseInt(c.req.param('id') ?? '', 10);
   const pub = await loadPub(c.env, id);
   if (!pub) return c.json({ error: 'not_found' }, 404);
   if (pub.status === 'published')
@@ -304,7 +304,7 @@ r.put('/:id{[0-9]+}', async (c: AppCtx) => {
 r.post('/:id{[0-9]+}/render', async (c: AppCtx) => {
   const admin = await requireAdmin(c);
   await ensureSchema(c.env);
-  const id = parseInt(c.req.param('id'), 10);
+  const id = parseInt(c.req.param('id') ?? '', 10);
   const pub = await loadPub(c.env, id);
   if (!pub) return c.json({ error: 'not_found' }, 404);
   let body: Record<string, unknown> = {};
@@ -413,7 +413,7 @@ r.post('/:id{[0-9]+}/render', async (c: AppCtx) => {
 r.post('/:id{[0-9]+}/publish', async (c: AppCtx) => {
   const admin = await requireAdmin(c);
   await ensureSchema(c.env);
-  const id = parseInt(c.req.param('id'), 10);
+  const id = parseInt(c.req.param('id') ?? '', 10);
   const pub = await loadPub(c.env, id);
   if (!pub) return c.json({ error: 'not_found' }, 404);
   if (pub.status === 'published') {
