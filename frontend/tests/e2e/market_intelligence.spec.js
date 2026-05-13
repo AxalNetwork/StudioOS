@@ -11,6 +11,10 @@ const MI_TAB_KEYS_AT2 = [
   'mi_partner_pulse', 'mi_sector_heat', 'mi_sentiment_geo', 'mi_capital_velocity',
 ];
 
+// Keep empty-state copy variants centralized. Update this regex when
+// MI empty-state text changes so tab smoke assertions remain accurate.
+const EMPTY_STATE_TEXT_RE = /No data|Insufficient|coming soon|No results|nothing here|Not enough data/i;
+
 // Populated AT-1 fixtures, one per tab. Shapes mirror the worker
 // responses in cloudflare-worker/src/routes/market_intel.ts so the
 // front-end render paths exercise the same code as production.
@@ -173,7 +177,7 @@ test.describe('Market Intelligence (post-AO verification)', () => {
       await btn.first().click();
       await expect(root).toHaveAttribute('data-active-tab', key);
       const hasContent = await root.locator('h1, h2, h3, table, [role="table"]').count();
-      const hasEmpty = await root.getByText(/No data|Insufficient|coming soon|No results|nothing here|Not enough data/i).count();
+      const hasEmpty = await root.getByText(EMPTY_STATE_TEXT_RE).count();
       const hasError = await root.getByText(/error loading|failed to load|something went wrong/i).count();
       expect(hasError, `MI tab ${key} surfaced an error`).toBe(0);
       expect(hasContent + hasEmpty, `MI tab ${key} rendered nothing`).toBeGreaterThan(0);
