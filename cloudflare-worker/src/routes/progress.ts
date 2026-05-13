@@ -821,8 +821,15 @@ progress.post('/metrics/:projectId', async (c) => {
       .bind(r.meta.last_row_id).first<MetricsSnapshot>();
     return c.json(serializeSnap(fresh as MetricsSnapshot));
   } catch (e) {
-    console.error('[progress] metrics POST:', (e as Error).message);
-    return c.json({ detail: 'Failed to save snapshot', error: (e as Error).message }, 500);
+    const msg = (e as Error).message || '';
+    console.error('[progress] metrics POST:', msg);
+    // Schema drift (missing table/column) is recoverable from the FE
+    // perspective — surface as 503 + retry hint instead of an opaque 500.
+    const drift = /no such (table|column)/i.test(msg);
+    return c.json(
+      { detail: drift ? 'Metrics store not ready, please retry.' : 'Failed to save snapshot', error: msg, code: drift ? 'schema_drift' : 'write_failed' },
+      drift ? 503 : 500,
+    );
   }
 });
 
@@ -864,7 +871,12 @@ progress.put('/metrics/snapshot/:id', async (c) => {
   try {
     await c.env.DB.prepare(`UPDATE metrics_snapshots SET ${sets.join(', ')} WHERE id = ?`).bind(...binds).run();
   } catch (e) {
-    return c.json({ detail: 'Failed to update snapshot', error: (e as Error).message }, 500);
+    const msg = (e as Error).message || '';
+    const drift = /no such (table|column)/i.test(msg);
+    return c.json(
+      { detail: drift ? 'Metrics store not ready, please retry.' : 'Failed to update snapshot', error: msg, code: drift ? 'schema_drift' : 'write_failed' },
+      drift ? 503 : 500,
+    );
   }
   const fresh = await c.env.DB.prepare('SELECT * FROM metrics_snapshots WHERE id = ?').bind(id).first<MetricsSnapshot>();
   return c.json(serializeSnap(fresh as MetricsSnapshot));

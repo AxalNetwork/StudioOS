@@ -16,23 +16,26 @@
  *   GET    /:projectId/series        — `{series:[{date,value}]}` for charts
  */
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Env } from '../types';
 import progress from './progress';
 
+type Ctx = Context<{ Bindings: Env }>;
 const metrics = new Hono<{ Bindings: Env }>();
 
 // Reuse the progress router's handlers via internal sub-requests so the
 // validation/auth/schema-ensure logic stays in one place.
-async function relay(c: any, path: string, init?: RequestInit): Promise<Response> {
+async function relay(c: Ctx, path: string): Promise<Response> {
   const url = new URL(c.req.url);
   url.pathname = path;
-  const headers = new Headers(c.req.raw.headers);
+  const method = c.req.method.toUpperCase();
+  const body = method === 'GET' || method === 'HEAD'
+    ? undefined
+    : await c.req.raw.clone().arrayBuffer();
   const req = new Request(url.toString(), {
-    method: init?.method || c.req.method,
-    headers,
-    body: ['GET', 'HEAD'].includes((init?.method || c.req.method).toUpperCase())
-      ? undefined
-      : await c.req.raw.clone().arrayBuffer(),
+    method,
+    headers: new Headers(c.req.raw.headers),
+    body,
   });
   return progress.fetch(req, c.env, c.executionCtx);
 }
