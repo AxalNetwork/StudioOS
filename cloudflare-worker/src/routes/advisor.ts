@@ -87,6 +87,12 @@ import {
 } from '../services/advisor/tools';
 import { run as aiRouterRun } from '../services/aiRouter';
 import { pickNextQuestion } from '../services/advisor/rerank';
+import {
+  nextTurn as smNextTurn,
+  onAnswered as smOnAnswered,
+  publicCandidate as smPublicCandidate,
+  loadAnsweredForUser as smLoadAnsweredForUser,
+} from '../services/advisor/stateMachine';
 import { enqueueJob } from '../services/queue';
 
 const advisor = new Hono<{ Bindings: Env }>();
@@ -915,6 +921,18 @@ advisor.post('/answer', async (c) => {
         c.env, user.id, q.id, q.page_target || null,
         result.saved_to || null, 'advisor', evidenceStr,
       );
+    }
+  }
+
+  // Task #6 (CB) — state-machine side effects (counter bump,
+  // advisor.answered activity_log emit, optional week advancement).
+  // Best-effort: failures here MUST NOT break the user's chat turn.
+  if (result.status === 'saved') {
+    try {
+      const gateForSE = await loadAdvisorGate(c.env, user);
+      await smOnAnswered(c.env, user.id, q, valueStr, gateForSE.week);
+    } catch (e) {
+      console.warn('[advisor] smOnAnswered failed', (e as Error).message);
     }
   }
 
@@ -2010,5 +2028,93 @@ advisor.post('/tool/auto', async (c) => {
     cta: envelope.cta,
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task #6 (CB) — Personal Advisor conversation state machine endpoints.
+//
+// These two routes wrap the deterministic selector in
+// `services/advisor/stateMachine.ts`. They co-exist with the legacy
+// `/start`, `/next-question`, `/progress` endpoints (which the AC-3
+// chat client still polls) so the rollout is additive — no client
+// breakage. New clients call /turn for the next question + a queue
+// preview; /queue returns the same ranking without registering an
+// "asked" timestamp (purely a peek).
+// ---------------------------------------------------------------------------
+async function buildVisibleBank(c: Context<{ Bindings: Env }>, focus: string | null) {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  await ensureAdvisorWeekColumn(c.env);
+  const gate = await loadAdvisorGate(c.env, user);
+  // Build the answered set from BOTH (a) advisor_answers across every
+  // conversation this user has had and (b) hydration of existing
+  // domain-table values. Architect flagged that the prior call to
+  // effectiveAnsweredSet(..., -1) silently dropped hydrated answers
+  // when the user had no active conversation — /turn would then
+  // re-surface questions whose data already lives on a domain row.
+  // We deliberately bypass the synthetic advisor_answers write that
+  // effectiveAnsweredSet does (it requires a real conversation FK);
+  // /turn is read-only on its hydration path.
+  const conv = await getActiveConversation(c.env, user);
+  const fromAnswers = conv
+    ? await effectiveAnsweredSet(c.env, user, conv.id).catch(() => new Set<string>())
+    : await smLoadAnsweredForUser(c.env, user.id);
+  const fromDomain = conv ? new Set<string>() : await hydrateAlreadyAnswered(c.env, user).catch(() => new Set<string>());
+  const answered = new Set<string>([...fromAnswers, ...fromDomain]);
+  const { visible } = selectBank(user, answered, gate, focus || undefined);
+  // Treat focus as a page only when it looks page-shaped (starts with
+  // `/`) — otherwise the state machine's focus_boost would never fire
+  // (it compares against page_target). Section-pinned flows already
+  // got their critical-first ordering inside selectBank().
+  const focusPage = focus && (focus.startsWith('/') || focus.includes('/')) ? focus : null;
+  return { user, visible, gate, focusPage };
+}
+
+advisor.post('/turn', async (c) => {
+  const focus = (c.req.query('focus') || '').trim() || null;
+  const { user, visible, gate, focusPage } = await buildVisibleBank(c, focus);
+  const result = await smNextTurn(c.env, user.id, visible, {
+    focusPage,
+    week: gate.week,
+    completedMilestones: gate.completedMilestones,
+  });
+  return c.json({
+    persona: personaFor(user),
+    focus: focus || null,
+    next_question: publicQuestion(result.next_question),
+    queue: result.queue.map(smPublicCandidate),
+    complete: !result.next_question,
+  });
+});
+
+advisor.get('/queue', async (c) => {
+  const focus = (c.req.query('focus') || '').trim() || null;
+  const { user, visible, gate, focusPage } = await buildVisibleBank(c, focus);
+  // /queue is a read-only peek — we want the ranking but NOT to
+  // register an asked-at timestamp (that would spuriously suppress
+  // the same questions on the next /turn). So we replicate nextTurn's
+  // pure path without calling markAsked.
+  const { pickNext, loadAnsweredForUser, loadRecentlyAsked, ANTI_REPEAT_WINDOW_MS } =
+    await import('../services/advisor/stateMachine');
+  const now = Date.now();
+  const answered = await loadAnsweredForUser(c.env, user.id);
+  const recentlyAsked = await loadRecentlyAsked(c.env, user.id, now - ANTI_REPEAT_WINDOW_MS);
+  const result = pickNext(visible, answered, {
+    focusPage,
+    week: gate.week,
+    completedMilestones: gate.completedMilestones,
+    recentlyAsked,
+    now,
+  });
+  return c.json({
+    persona: personaFor(user),
+    focus: focus || null,
+    next_question: publicQuestion(result.next),
+    queue: result.queue.map(smPublicCandidate),
+    complete: !result.next,
+  });
+});
+
+// Re-export for tests / debug.
+export { smNextTurn, smOnAnswered };
 
 export default advisor;
