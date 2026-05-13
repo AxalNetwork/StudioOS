@@ -1227,29 +1227,50 @@ marketIntel.get('/platform-personas/export', async (c) => {
     const s = v == null ? '' : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  for (const b of (payload.role_donut?.buckets || [])) {
-    lines.push(['role_donut', b.group, b.label, b.n, ''].map(esc).join(','));
+  // Each chart is `Maybe<X> = X | GatedChart`. We narrow with the
+  // existing `isGated()` type-guard before reaching into chart-specific
+  // fields (.buckets / .cells / .rows). Tier-gated charts contribute
+  // zero rows to the CSV — this matches the PDF renderer's behaviour
+  // (lines 1292-1299) and keeps the export tier-safe end-to-end.
+  if (!isGated(payload.role_donut)) {
+    for (const b of (payload.role_donut.buckets || [])) {
+      lines.push(['role_donut', b.group, b.label, b.n, ''].map(esc).join(','));
+    }
   }
-  for (const b of (payload.sector_heatmap?.cells || [])) {
-    lines.push(['sector_heatmap', b.persona, b.sector, b.n, ''].map(esc).join(','));
+  if (!isGated(payload.sector_heatmap)) {
+    for (const b of (payload.sector_heatmap.cells || [])) {
+      lines.push(['sector_heatmap', b.persona, b.sector, b.n, ''].map(esc).join(','));
+    }
   }
-  for (const b of (payload.stage_focus?.rows || [])) {
-    lines.push(['stage_focus', b.role, b.stage, b.n, ''].map(esc).join(','));
+  if (!isGated(payload.stage_focus)) {
+    for (const b of (payload.stage_focus.rows || [])) {
+      lines.push(['stage_focus', b.role, b.stage, b.n, ''].map(esc).join(','));
+    }
   }
-  for (const b of (payload.geo_distribution?.rows || [])) {
-    lines.push(['geo_distribution', '', b.country, b.n, ''].map(esc).join(','));
+  if (!isGated(payload.geo_distribution)) {
+    for (const b of (payload.geo_distribution.rows || [])) {
+      lines.push(['geo_distribution', '', b.country, b.n, ''].map(esc).join(','));
+    }
   }
-  for (const b of (payload.activity_composite?.rows || [])) {
-    lines.push(['activity_composite', b.role, 'events_per_user', b.active_users, b.events_per_user].map(esc).join(','));
+  if (!isGated(payload.activity_composite)) {
+    for (const b of (payload.activity_composite.rows || [])) {
+      lines.push(['activity_composite', b.role, 'events_per_user', b.active_users, b.events_per_user].map(esc).join(','));
+    }
   }
-  for (const b of (payload.spinout_lab_funnel?.rows || [])) {
-    lines.push(['spinout_lab_funnel', '', `week_${b.week}`, b.n, ''].map(esc).join(','));
+  if (!isGated(payload.spinout_lab_funnel)) {
+    for (const b of (payload.spinout_lab_funnel.rows || [])) {
+      lines.push(['spinout_lab_funnel', '', `week_${b.week}`, b.n, ''].map(esc).join(','));
+    }
   }
-  for (const b of (payload.signups_trend?.rows || [])) {
-    lines.push(['signups_trend', b.role, b.week, b.n, ''].map(esc).join(','));
+  if (!isGated(payload.signups_trend)) {
+    for (const b of (payload.signups_trend.rows || [])) {
+      lines.push(['signups_trend', b.role, b.week, b.n, ''].map(esc).join(','));
+    }
   }
-  for (const b of (payload.pipeline_coverage?.rows || [])) {
-    lines.push(['pipeline_coverage', b.tier_bucket, 'investors', b.n, b.weighted_coverage].map(esc).join(','));
+  if (!isGated(payload.pipeline_coverage)) {
+    for (const b of (payload.pipeline_coverage.rows || [])) {
+      lines.push(['pipeline_coverage', b.tier_bucket, 'investors', b.n, b.weighted_coverage].map(esc).join(','));
+    }
   }
   return new Response(lines.join('\n'), {
     headers: {
