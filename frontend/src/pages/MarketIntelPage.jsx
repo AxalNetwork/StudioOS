@@ -80,6 +80,10 @@ export default function MarketIntelPage() {
     { key: 'conviction', label: 'High Conviction', icon: TrendingUp },
     { key: 'studio', label: 'Studio Benchmarks', icon: BarChart3 },
     { key: 'investor_signals', label: 'Axal Investor Signals', icon: Users },
+    // Task #4 (CF) — Platform Personas: anonymised composition of platform
+    // users across all roles. Free callers see the donut + heatmap; the
+    // remaining 6 charts gate behind Growth / Investor Pro.
+    { key: 'platform_personas', label: 'Platform Personas', icon: Users },
     // Task #1 (AT-2) — 8 new advisor-derived MI tabs (Axal Investor Signals
     // above is the 9th, pre-existing). All read from AT-1 endpoints; cells
     // with n<5 are suppressed server-side and surface <MIInsufficientData />.
@@ -364,6 +368,7 @@ export default function MarketIntelPage() {
       )}
 
       {tab === 'investor_signals' && <InvestorSignalsTab />}
+      {tab === 'platform_personas' && <PlatformPersonasTab />}
       {tab === 'mi_sentiment' && <FounderSentimentTab />}
       {tab === 'mi_talc' && <TalcPositioningTab />}
       {tab === 'mi_demand_supply' && <DemandSupplyAtlasTab />}
@@ -2585,6 +2590,311 @@ function CapitalVelocityTab() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// ── Platform Personas (Task #4 CF) ─────────────────────────────────────────
+// Single endpoint → 8 charts. Free callers see the donut + sector heatmap;
+// remaining 6 charts surface a paywall teaser. Studio / Institutional /
+// admin / partner / mentor see CSV + PDF export buttons.
+const ROLE_COLORS = ['#7c3aed', '#2563eb', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#a78bfa', '#fb7185'];
+
+function PersonasPaywall({ section }) {
+  return (
+    <MICard title={section}>
+      <div className="text-center py-6">
+        <Lock size={20} className="mx-auto text-violet-500 mb-2" />
+        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Upgrade to see this chart</div>
+        <p className="text-xs text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-3">
+          Available on Growth, Investor Pro, and above. Free callers see the role donut and the sector heatmap.
+        </p>
+        <button
+          onClick={() => openPaywall({ tier: 'growth', source: 'platform_personas' })}
+          className="text-xs bg-violet-600 hover:bg-violet-700 text-white font-medium px-4 py-1.5 rounded-md"
+        >
+          Upgrade
+        </button>
+      </div>
+    </MICard>
+  );
+}
+
+function PlatformPersonasTab() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.miPlatformPersonas()
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => { if (!cancelled) setErr(e); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (err) return <MIErr err={err} />;
+  if (!data) return <MILoading label="Loading platform personas…" />;
+
+  const isPaywalled = (chart) => chart && typeof chart === 'object' && chart.tier_required;
+
+  const donutBuckets = (data.role_donut?.buckets || []).filter((b) => b.group === 'role');
+  const subBuckets = (data.role_donut?.buckets || []).filter((b) => b.group !== 'role');
+
+  const heatCells = data.sector_heatmap?.cells || [];
+  const heatSectors = Array.from(new Set(heatCells.map((c) => c.sector))).sort();
+  const heatPersonas = ['founder', 'investor'];
+  const heatLookup = new Map();
+  for (const c of heatCells) heatLookup.set(`${c.sector}|${c.persona}`, c.n);
+  const maxHeat = Math.max(1, ...heatCells.map((c) => Number(c.n) || 0));
+
+  return (
+    <div className="space-y-4">
+      <TabExplainer text="Anonymised composition of platform users — who is on Axal, by role, sector, stage, geography, and activity. Every cell needs ≥ 5 contributors before it's published, so cohorts under that threshold stay hidden." />
+
+      {data.tier === 'export' && data.exports && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <a href={data.exports.csv_url} download className="text-xs bg-violet-600 hover:bg-violet-700 text-white font-medium px-3 py-1.5 rounded-md inline-flex items-center gap-1.5">
+            <Database size={12} /> Export CSV
+          </a>
+          <a href={data.exports.pdf_url} download className="text-xs bg-white dark:bg-gray-900 border border-violet-300 text-violet-700 dark:text-violet-300 hover:bg-violet-50 font-medium px-3 py-1.5 rounded-md inline-flex items-center gap-1.5">
+            <ExternalLink size={12} /> Export PDF
+          </a>
+          <span className="text-xs text-gray-500 dark:text-gray-400">Studio &amp; Institutional only</span>
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <MICard title="Role distribution">
+          {donutBuckets.length === 0 ? (
+            <MIInsufficientData section="Role distribution" kMin={data.k_min} />
+          ) : (
+            <div style={{ width: '100%', height: 240 }}>
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie data={donutBuckets} dataKey="n" nameKey="label" innerRadius={50} outerRadius={90} label>
+                    {donutBuckets.map((_, i) => <Cell key={i} fill={ROLE_COLORS[i % ROLE_COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ fontSize: 11 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          {subBuckets.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+              <div className="text-[10px] uppercase tracking-widest text-gray-500 dark:text-gray-400 font-semibold mb-2">Sub-buckets</div>
+              <ul className="space-y-1 text-xs">
+                {subBuckets.map((b) => (
+                  <li key={`${b.group}-${b.label}`} className="flex justify-between">
+                    <span className="text-gray-700 dark:text-gray-300">
+                      <span className="text-gray-500 mr-1">[{b.group}]</span>{b.label}
+                    </span>
+                    <span className="text-gray-900 dark:text-gray-100 font-semibold">{b.n}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </MICard>
+
+        <MICard title="Sector × role heatmap">
+          {heatSectors.length === 0 ? (
+            <MIInsufficientData section="Sector heatmap" kMin={data.k_min} />
+          ) : (
+            <div className="overflow-auto">
+              <table className="text-xs w-full">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="text-left py-1.5 pr-3 text-gray-600 dark:text-gray-400 font-medium">Sector</th>
+                    {heatPersonas.map((p) => (
+                      <th key={p} className="text-right py-1.5 pr-3 text-gray-600 dark:text-gray-400 font-medium capitalize">{p}s</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {heatSectors.map((s) => (
+                    <tr key={s} className="border-b border-gray-100 dark:border-gray-800">
+                      <td className="py-1.5 pr-3 text-gray-900 dark:text-gray-100">{s}</td>
+                      {heatPersonas.map((p) => {
+                        const n = heatLookup.get(`${s}|${p}`);
+                        const intensity = n ? Math.min(1, n / maxHeat) : 0;
+                        const bg = n ? `rgba(124,58,237,${0.15 + intensity * 0.6})` : 'transparent';
+                        return (
+                          <td key={p} className="py-1.5 pr-3 text-right" style={{ backgroundColor: bg }}>
+                            {n ? <span className="text-gray-900 dark:text-gray-100 font-medium">{n}</span> : <span className="text-gray-400">—</span>}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-2">Cells with fewer than {data.k_min} contributors are hidden.</div>
+            </div>
+          )}
+        </MICard>
+
+        {isPaywalled(data.stage_focus) ? <PersonasPaywall section="Stage focus" /> : (
+          <MICard title="Stage focus by role">
+            {(data.stage_focus?.rows || []).length === 0 ? (
+              <MIInsufficientData section="Stage focus" kMin={data.k_min} />
+            ) : (
+              <div style={{ width: '100%', height: 240 }}>
+                <ResponsiveContainer>
+                  <BarChart data={Object.values((data.stage_focus.rows || []).reduce((acc, r) => {
+                    acc[r.stage] = acc[r.stage] || { stage: r.stage };
+                    acc[r.stage][r.role] = (acc[r.stage][r.role] || 0) + r.n;
+                    return acc;
+                  }, {}))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="stage" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip contentStyle={{ fontSize: 11 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {['founder', 'investor', 'partner', 'mentor', 'admin'].map((role, i) => (
+                      <Bar key={role} dataKey={role} stackId="s" fill={ROLE_COLORS[i % ROLE_COLORS.length]} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </MICard>
+        )}
+
+        {isPaywalled(data.geo_distribution) ? <PersonasPaywall section="Geography" /> : (
+          <MICard title="Geography distribution">
+            {(data.geo_distribution?.rows || []).length === 0 ? (
+              <MIInsufficientData section="Geography" kMin={data.k_min} />
+            ) : (
+              <div style={{ width: '100%', height: 240 }}>
+                <ResponsiveContainer>
+                  <PieChart>
+                    <Pie data={data.geo_distribution.rows} dataKey="n" nameKey="country" outerRadius={90} label>
+                      {data.geo_distribution.rows.map((_, i) => <Cell key={i} fill={ROLE_COLORS[i % ROLE_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ fontSize: 11 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </MICard>
+        )}
+
+        {isPaywalled(data.activity_composite) ? <PersonasPaywall section="Activity" /> : (
+          <MICard title="Activity composite (last 30 days)">
+            {(data.activity_composite?.rows || []).length === 0 ? (
+              <MIInsufficientData section="Activity" kMin={data.k_min} />
+            ) : (
+              <div className="space-y-2 text-xs">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-gray-700">
+                      <th className="text-left py-1.5 text-gray-600 dark:text-gray-400 font-medium">Role</th>
+                      <th className="text-right py-1.5 text-gray-600 dark:text-gray-400 font-medium">Active users</th>
+                      <th className="text-right py-1.5 text-gray-600 dark:text-gray-400 font-medium">Events / user</th>
+                      <th className="text-left py-1.5 pl-3 text-gray-600 dark:text-gray-400 font-medium">Top action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.activity_composite.rows.map((r) => {
+                      const top = (data.activity_composite.top_features || []).find((t) => t.role === r.role);
+                      return (
+                        <tr key={r.role} className="border-b border-gray-100 dark:border-gray-800">
+                          <td className="py-1.5 text-gray-900 dark:text-gray-100 capitalize">{r.role}</td>
+                          <td className="py-1.5 text-right text-gray-700 dark:text-gray-300">{r.active_users}</td>
+                          <td className="py-1.5 text-right text-gray-700 dark:text-gray-300">{r.events_per_user}</td>
+                          <td className="py-1.5 pl-3 text-gray-700 dark:text-gray-300">{top ? top.action : '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </MICard>
+        )}
+
+        {isPaywalled(data.spinout_lab_funnel) ? <PersonasPaywall section="Spin-Out Lab funnel" /> : (
+          <MICard title="Spin-Out Lab funnel">
+            {(data.spinout_lab_funnel?.rows || []).length === 0 ? (
+              <MIInsufficientData section="Spin-Out Lab" kMin={data.k_min} />
+            ) : (
+              <>
+                <div style={{ width: '100%', height: 200 }}>
+                  <ResponsiveContainer>
+                    <BarChart data={[...data.spinout_lab_funnel.rows].sort((a, b) => a.week - b.week)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="week" tickFormatter={(w) => `Week ${w}`} tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip contentStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="n" fill="#7c3aed" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="text-xs text-gray-700 dark:text-gray-300 mt-2">
+                  Completion rate: <span className="font-semibold text-emerald-600">{data.spinout_lab_funnel.completion_rate ?? '—'}%</span>
+                  {data.spinout_lab_funnel.total_started != null && (
+                    <span className="text-gray-500 dark:text-gray-400 ml-2">({data.spinout_lab_funnel.total_started} founders started)</span>
+                  )}
+                </div>
+              </>
+            )}
+          </MICard>
+        )}
+
+        {isPaywalled(data.signups_trend) ? <PersonasPaywall section="Signups trend" /> : (
+          <MICard title="Weekly signups by role">
+            {(data.signups_trend?.rows || []).length === 0 ? (
+              <MIInsufficientData section="Signups trend" kMin={data.k_min} />
+            ) : (
+              <div style={{ width: '100%', height: 240 }}>
+                <ResponsiveContainer>
+                  <LineChart data={Object.values((data.signups_trend.rows || []).reduce((acc, r) => {
+                    acc[r.week] = acc[r.week] || { week: r.week };
+                    acc[r.week][r.role] = (acc[r.week][r.role] || 0) + r.n;
+                    return acc;
+                  }, {}))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="week" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip contentStyle={{ fontSize: 11 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {['founder', 'investor', 'partner', 'mentor', 'admin'].map((role, i) => (
+                      <Line key={role} type="monotone" dataKey={role} stroke={ROLE_COLORS[i % ROLE_COLORS.length]} strokeWidth={2} dot={false} />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </MICard>
+        )}
+
+        {isPaywalled(data.pipeline_coverage) ? <PersonasPaywall section="Pipeline coverage" /> : (
+          <MICard title="Active investor pipeline coverage">
+            {(data.pipeline_coverage?.rows || []).length === 0 ? (
+              <MIInsufficientData section="Pipeline coverage" kMin={data.k_min} />
+            ) : (
+              <div style={{ width: '100%', height: 240 }}>
+                <ResponsiveContainer>
+                  <BarChart data={data.pipeline_coverage.rows} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis type="number" tick={{ fontSize: 10 }} />
+                    <YAxis type="category" dataKey="tier_bucket" tick={{ fontSize: 10 }} width={90} />
+                    <Tooltip contentStyle={{ fontSize: 11 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="n" name="Investors" fill="#7c3aed" />
+                    <Bar dataKey="weighted_coverage" name="Weighted coverage" fill="#10b981" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </MICard>
+        )}
+      </div>
+
+      <div className="text-[11px] text-gray-500 dark:text-gray-400">
+        Refreshed {new Date(data.generated_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · cached for 5 minutes · k ≥ {data.k_min} per cell.
+      </div>
     </div>
   );
 }

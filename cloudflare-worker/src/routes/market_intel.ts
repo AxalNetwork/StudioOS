@@ -852,5 +852,349 @@ async function disclosedIdentities(env: Env, viewerId: number, targetUserIds: nu
   return out;
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Task #4 (CF) — Platform Personas tab.
+//
+// Single endpoint returns 8 chart payloads describing the anonymised
+// composition of platform users (founders, investors, mentors, partners).
+// Every cell enforces k ≥ 5; sub-K cells are suppressed (returned as
+// `null` or omitted from the payload entirely).
+//
+// Tier surfacing (rendered inline in the response so the UI doesn't
+// have to know the rules):
+//   • Free               → `role_donut` + `sector_heatmap` populated,
+//                          all other charts return `{ tier_required: 'growth' }`
+//   • Growth / Investor Pro / bypass roles → all 8 populated
+//   • Studio / Institutional → adds `exports.csv_url` + `exports.pdf_url`
+//
+// Cached for 5 minutes via the existing MI KV layer; admin-trigger
+// refresh is the same `POST /admin/reduce` enqueue route (the reducer
+// purge runs first, then the next read recomputes from D1 on cache miss).
+// ─────────────────────────────────────────────────────────────────────────
+
+interface PlatformPersonasPayload {
+  generated_at: string;
+  k_min: number;
+  source: 'platform';
+  role_donut: any;
+  sector_heatmap: any;
+  stage_focus: any;
+  geo_distribution: any;
+  activity_composite: any;
+  spinout_lab_funnel: any;
+  signups_trend: any;
+  pipeline_coverage: any;
+  exports?: { csv_url: string; pdf_url: string };
+  tier: 'free' | 'full' | 'export';
+}
+
+const PERSONAS_KMIN = 5;
+
+function suppressBelowK<T extends { n: number }>(rows: T[]): T[] {
+  return rows.filter((r) => Number(r.n || 0) >= PERSONAS_KMIN);
+}
+
+function tierKind(user: MIUser): 'free' | 'full' | 'export' {
+  const role = String(user.role || '').toLowerCase();
+  if (role === 'admin' || role === 'partner' || role === 'mentor') return 'export';
+  if (role === 'investor') {
+    const t = effectiveInvestorTier(user as InvestorUser);
+    if (t === 'institutional') return 'export';
+    if (t === 'professional') return 'full';
+    return 'free';
+  }
+  const sub = String(user.subscription_tier ?? 'free').toLowerCase();
+  if (sub === 'studio' || sub === 'institutional') return 'export';
+  if (sub === 'growth' || sub === 'pro') return 'full';
+  return 'free';
+}
+
+async function buildPersonasPayload(env: Env): Promise<PlatformPersonasPayload> {
+  const now = new Date();
+  const safe = async <T,>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+    try { return await fn(); } catch (e) {
+      console.warn('[mi.personas] sub-query failed:', (e as Error).message);
+      return fallback;
+    }
+  };
+
+  // 1. Role distribution donut — role × sub-bucket.
+  const role_donut = await safe(async () => {
+    const roleRows = (await env.DB.prepare(
+      `SELECT role, COUNT(*) AS n FROM users WHERE is_active = 1 GROUP BY role`,
+    ).all<{ role: string; n: number }>()).results || [];
+    const founderSplit = (await env.DB.prepare(
+      `SELECT persona_id AS bucket, COUNT(DISTINCT user_id) AS n
+         FROM user_personas
+        WHERE persona_id IN ('founder_new','founder_existing')
+        GROUP BY persona_id`,
+    ).all<{ bucket: string; n: number }>()).results || [];
+    const investorTierRows = (await env.DB.prepare(
+      `SELECT COALESCE(LOWER(subscription_tier),'free') AS bucket, COUNT(*) AS n
+         FROM users WHERE role='investor' AND is_active=1 GROUP BY bucket`,
+    ).all<{ bucket: string; n: number }>()).results || [];
+    const partnerSubtypes = (await env.DB.prepare(
+      `SELECT persona_id AS bucket, COUNT(DISTINCT user_id) AS n
+         FROM user_personas
+        WHERE persona_id IN ('service_provider','operator_advisor','corporate_vc','gp_external','sovereign_family_office')
+        GROUP BY persona_id`,
+    ).all<{ bucket: string; n: number }>()).results || [];
+    const buckets = [
+      ...suppressBelowK(roleRows).map((r) => ({ group: 'role', label: r.role, n: r.n })),
+      ...suppressBelowK(founderSplit).map((r) => ({ group: 'founder_subtype', label: r.bucket, n: r.n })),
+      ...suppressBelowK(investorTierRows).map((r) => ({ group: 'investor_tier', label: r.bucket, n: r.n })),
+      ...suppressBelowK(partnerSubtypes).map((r) => ({ group: 'partner_subtype', label: r.bucket, n: r.n })),
+    ];
+    return { buckets, total: roleRows.reduce((s, r) => s + Number(r.n || 0), 0) };
+  }, { buckets: [], total: 0 });
+
+  // 2. Sector × Role heatmap — founders vs investors.
+  const sector_heatmap = await safe(async () => {
+    const rows = (await env.DB.prepare(
+      `SELECT sector, persona, COUNT(DISTINCT user_id) AS n
+         FROM market_intel_signals
+        WHERE persona IN ('founder','investor') AND sector IS NOT NULL
+        GROUP BY sector, persona`,
+    ).all<{ sector: string; persona: string; n: number }>()).results || [];
+    const cells = suppressBelowK(rows);
+    return { cells, k_min: PERSONAS_KMIN };
+  }, { cells: [], k_min: PERSONAS_KMIN });
+
+  // 3. Stage focus stacked bar — founder project stage by role.
+  const stage_focus = await safe(async () => {
+    const rows = (await env.DB.prepare(
+      `SELECT COALESCE(p.stage,'unknown') AS stage,
+              u.role AS role,
+              COUNT(DISTINCT u.id) AS n
+         FROM users u
+         LEFT JOIN projects p
+           ON (p.founder_id = u.founder_id OR p.owner_user_id = u.id)
+        WHERE u.is_active = 1
+        GROUP BY stage, role`,
+    ).all<{ stage: string; role: string; n: number }>()).results || [];
+    return { rows: suppressBelowK(rows) };
+  }, { rows: [] });
+
+  // 4. Geo distribution pie.
+  const geo_distribution = await safe(async () => {
+    const rows = (await env.DB.prepare(
+      `SELECT COALESCE(country,'unknown') AS country, COUNT(*) AS n
+         FROM users WHERE is_active=1 GROUP BY country`,
+    ).all<{ country: string; n: number }>()).results || [];
+    return { rows: suppressBelowK(rows) };
+  }, { rows: [] });
+
+  // 5. Activity composite — events-per-active-user per role + top feature.
+  const activity_composite = await safe(async () => {
+    const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const events = (await env.DB.prepare(
+      `SELECT u.role AS role,
+              COUNT(*) AS events,
+              COUNT(DISTINCT a.user_id) AS active_users
+         FROM activity_logs a JOIN users u ON u.id = a.user_id
+        WHERE a.created_at >= ? AND u.is_active = 1
+        GROUP BY u.role`,
+    ).bind(cutoff).all<{ role: string; events: number; active_users: number }>()).results || [];
+    const rows = events.filter((r) => Number(r.active_users || 0) >= PERSONAS_KMIN).map((r) => ({
+      role: r.role,
+      active_users: r.active_users,
+      events_per_user: r.active_users ? Math.round((r.events / r.active_users) * 10) / 10 : 0,
+    }));
+    const top = (await env.DB.prepare(
+      `SELECT u.role AS role, a.action AS action, COUNT(DISTINCT a.user_id) AS n
+         FROM activity_logs a JOIN users u ON u.id = a.user_id
+        WHERE a.created_at >= ? AND u.is_active = 1
+        GROUP BY u.role, a.action`,
+    ).bind(cutoff).all<{ role: string; action: string; n: number }>()).results || [];
+    const byRole = new Map<string, { role: string; action: string; n: number }>();
+    for (const r of suppressBelowK(top)) {
+      const cur = byRole.get(r.role);
+      if (!cur || r.n > cur.n) byRole.set(r.role, r);
+    }
+    return { rows, top_features: Array.from(byRole.values()) };
+  }, { rows: [], top_features: [] });
+
+  // 6. Spin-Out Lab funnel — count per week + completion rate.
+  const spinout_lab_funnel = await safe(async () => {
+    const rows = (await env.DB.prepare(
+      `SELECT spinout_lab_week AS week, COUNT(*) AS n
+         FROM users WHERE role='founder' AND spinout_lab_active=1 AND is_active=1
+        GROUP BY spinout_lab_week`,
+    ).all<{ week: number; n: number }>()).results || [];
+    const completedRow = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM users
+        WHERE role='founder' AND spinout_lab_active=1 AND is_incorporated=1`,
+    ).first<{ n: number }>();
+    const startedRow = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM users
+        WHERE role='founder' AND spinout_lab_active=1`,
+    ).first<{ n: number }>();
+    const completed = Number(completedRow?.n || 0);
+    const started = Number(startedRow?.n || 0);
+    const completion_rate = started >= PERSONAS_KMIN
+      ? Math.round((completed / started) * 1000) / 10
+      : null;
+    return {
+      rows: suppressBelowK(rows),
+      completion_rate,
+      total_started: started >= PERSONAS_KMIN ? started : null,
+    };
+  }, { rows: [], completion_rate: null, total_started: null });
+
+  // 7. New signups trend — weekly counts by role over last 12 weeks.
+  const signups_trend = await safe(async () => {
+    const cutoff = new Date(Date.now() - 12 * 7 * 86_400_000).toISOString();
+    const rows = (await env.DB.prepare(
+      `SELECT strftime('%Y-%W', created_at) AS week,
+              role,
+              COUNT(*) AS n
+         FROM users
+        WHERE created_at >= ?
+        GROUP BY week, role
+        ORDER BY week ASC`,
+    ).bind(cutoff).all<{ week: string; role: string; n: number }>()).results || [];
+    return { rows: suppressBelowK(rows) };
+  }, { rows: [] });
+
+  // 8. Active investor pipeline coverage — investors weighted by tier × deals watched.
+  const pipeline_coverage = await safe(async () => {
+    const rows = (await env.DB.prepare(
+      `SELECT COALESCE(LOWER(u.subscription_tier),'free') AS tier_bucket,
+              COUNT(DISTINCT u.id) AS investors,
+              COUNT(w.id) AS deals_watched
+         FROM users u
+         LEFT JOIN market_intel_watchlist w ON w.user_id = u.id
+        WHERE u.role='investor' AND u.is_active=1
+        GROUP BY tier_bucket`,
+    ).all<{ tier_bucket: string; investors: number; deals_watched: number }>()).results || [];
+    const weights: Record<string, number> = {
+      institutional: 10, professional: 3, pro: 3, growth: 2, free: 1,
+    };
+    const cells = rows
+      .filter((r) => Number(r.investors || 0) >= PERSONAS_KMIN)
+      .map((r) => ({
+        tier_bucket: r.tier_bucket,
+        n: Number(r.investors),
+        deals_watched: Number(r.deals_watched || 0),
+        weighted_coverage: Number(r.investors) * (weights[r.tier_bucket] ?? 1)
+                          + Number(r.deals_watched || 0),
+      }));
+    return { rows: cells };
+  }, { rows: [] });
+
+  return {
+    generated_at: now.toISOString(),
+    k_min: PERSONAS_KMIN,
+    source: 'platform',
+    role_donut,
+    sector_heatmap,
+    stage_focus,
+    geo_distribution,
+    activity_composite,
+    spinout_lab_funnel,
+    signups_trend,
+    pipeline_coverage,
+    tier: 'full',
+  };
+}
+
+marketIntel.get('/platform-personas', async (c) => {
+  const user = (await requireAuth(c)) as MIUser;
+  const tier = tierKind(user);
+
+  // 5-minute KV cache so all callers share one D1 read pass.
+  let payload = await readKv<PlatformPersonasPayload>(c.env, 'personas:platform');
+  if (!payload) {
+    payload = await buildPersonasPayload(c.env);
+    await writeKv(c.env, 'personas:platform', payload, 5 * 60);
+  }
+
+  // Free callers see only chart 1 + chart 2; the rest are gated.
+  if (tier === 'free') {
+    const gated = { tier_required: 'growth', upgrade_path: '/billing' };
+    payload = {
+      ...payload,
+      stage_focus: gated,
+      geo_distribution: gated,
+      activity_composite: gated,
+      spinout_lab_funnel: gated,
+      signups_trend: gated,
+      pipeline_coverage: gated,
+      tier: 'free',
+    };
+  } else if (tier === 'export') {
+    payload = {
+      ...payload,
+      tier: 'export',
+      exports: {
+        csv_url: '/api/market-intel/platform-personas/export?format=csv',
+        pdf_url: '/api/market-intel/platform-personas/export?format=pdf',
+      },
+    };
+  }
+  return c.json(payload);
+});
+
+marketIntel.get('/platform-personas/export', async (c) => {
+  const user = (await requireAuth(c)) as MIUser;
+  const tier = tierKind(user);
+  if (tier !== 'export') {
+    return c.json({ error: 'tier_required', required: 'studio' }, 402);
+  }
+  const fmt = (c.req.query('format') || 'csv').toLowerCase();
+  let payload = await readKv<PlatformPersonasPayload>(c.env, 'personas:platform');
+  if (!payload) {
+    payload = await buildPersonasPayload(c.env);
+    await writeKv(c.env, 'personas:platform', payload, 5 * 60);
+  }
+  if (fmt === 'pdf') {
+    // PDF rendering is a separate concern (Studio digest worker handles
+    // it). For now we surface the JSON so a downstream printer can pick
+    // it up; the Content-Type makes intent explicit.
+    return new Response(JSON.stringify(payload, null, 2), {
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Disposition': `attachment; filename="platform-personas-${new Date().toISOString().slice(0,10)}.json"`,
+      },
+    });
+  }
+  // CSV: flatten every chart into long-format rows.
+  const lines = ['chart,group,label,n,extra'];
+  const esc = (v: unknown) => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  for (const b of (payload.role_donut?.buckets || [])) {
+    lines.push(['role_donut', b.group, b.label, b.n, ''].map(esc).join(','));
+  }
+  for (const b of (payload.sector_heatmap?.cells || [])) {
+    lines.push(['sector_heatmap', b.persona, b.sector, b.n, ''].map(esc).join(','));
+  }
+  for (const b of (payload.stage_focus?.rows || [])) {
+    lines.push(['stage_focus', b.role, b.stage, b.n, ''].map(esc).join(','));
+  }
+  for (const b of (payload.geo_distribution?.rows || [])) {
+    lines.push(['geo_distribution', '', b.country, b.n, ''].map(esc).join(','));
+  }
+  for (const b of (payload.activity_composite?.rows || [])) {
+    lines.push(['activity_composite', b.role, 'events_per_user', b.active_users, b.events_per_user].map(esc).join(','));
+  }
+  for (const b of (payload.spinout_lab_funnel?.rows || [])) {
+    lines.push(['spinout_lab_funnel', '', `week_${b.week}`, b.n, ''].map(esc).join(','));
+  }
+  for (const b of (payload.signups_trend?.rows || [])) {
+    lines.push(['signups_trend', b.role, b.week, b.n, ''].map(esc).join(','));
+  }
+  for (const b of (payload.pipeline_coverage?.rows || [])) {
+    lines.push(['pipeline_coverage', b.tier_bucket, 'investors', b.n, b.weighted_coverage].map(esc).join(','));
+  }
+  return new Response(lines.join('\n'), {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="platform-personas-${new Date().toISOString().slice(0,10)}.csv"`,
+    },
+  });
+});
+
 export { MARKET_PULSE, STUDIO_BENCHMARKS };
 export default marketIntel;

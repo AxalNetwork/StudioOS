@@ -450,6 +450,9 @@ export const api = {
   miPartnerPulse: () => request('/market-intel/partner-pulse'),
   miFitFounder: (projectId) => request(`/market-intel/fit/founder/${projectId}`),
   miFitInvestor: () => request('/market-intel/fit/investor/me'),
+  miPlatformPersonas: () => request('/market-intel/platform-personas'),
+  miPlatformPersonasExportUrl: (format = 'csv') =>
+    `/api/market-intel/platform-personas/export?format=${encodeURIComponent(format)}`,
 
   // ── Task #5 — Dashboard personal assistant. The /message endpoint is
   // SSE; consume it via fetch + ReadableStream in the component, NOT
