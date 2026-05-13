@@ -5,6 +5,10 @@ import { requirePreview, loginAs } from './_helpers.js';
 // post-AO smoke coverage; the second array is the 8 advisor-derived
 // tabs added in Task #1 (AT-2). Keep them separate so the legacy assert
 // loop and the new AT-1-fixture-driven flow can each evolve independently.
+// NOTE: `investor_signals` may be role-gated in some environments.
+// Tests that validate tab visibility should treat it as conditionally
+// present: visible for authorized roles, and intentionally absent for
+// unauthorized roles (absence is expected behavior, not a regression).
 const MI_TAB_KEYS_LEGACY = ['compass', 'pulse', 'macro', 'private', 'studio', 'investor_signals'];
 const MI_TAB_KEYS_AT2 = [
   'mi_sentiment', 'mi_talc', 'mi_demand_supply', 'mi_fit',
