@@ -38,6 +38,44 @@ export const SECTIONS = [
 // with anything still importing buildSearchIndex from this module;
 // new callers should use `frontend/src/lib/docs/search.js` which
 // includes pitfalls and related-link labels in the corpus.
+// Task #2 (DD) — Helper to filter manifest sections (and their
+// subsections) based on the viewer's role. Sections OR subsections
+// without an explicit `roles` array are public. Sections whose
+// `roles` array is set are only included when the viewer's role is
+// in the array; subsections are filtered the same way. A section
+// whose every subsection is filtered out is dropped entirely so the
+// rail doesn't render an empty group.
+export function filterSectionsForRole(sections, role) {
+  const r = String(role || '').toLowerCase();
+  const out = [];
+  for (const section of sections) {
+    if (Array.isArray(section.roles) && !section.roles.includes(r)) continue;
+    const subs = section.subsections.filter(
+      (sub) => !Array.isArray(sub.roles) || sub.roles.includes(r),
+    );
+    if (subs.length === 0) continue;
+    out.push({ ...section, subsections: subs });
+  }
+  return out;
+}
+
+// Set of every section/subsection anchor that is admin-only. Used by
+// DocsLayout to 404-style guard direct hash navigation by non-admin
+// viewers without leaking the page's existence.
+export function adminOnlyAnchors() {
+  const anchors = new Set();
+  for (const section of SECTIONS) {
+    const sectionAdmin = Array.isArray(section.roles) && section.roles.length === 1 && section.roles[0] === 'admin';
+    for (const sub of section.subsections) {
+      const subAdmin = Array.isArray(sub.roles) && sub.roles.length === 1 && sub.roles[0] === 'admin';
+      if (sectionAdmin || subAdmin) {
+        anchors.add(`${section.id}/${sub.id}`);
+      }
+    }
+  }
+  return anchors;
+}
+
 export function buildSearchIndex() {
   const records = [];
   for (const section of SECTIONS) {

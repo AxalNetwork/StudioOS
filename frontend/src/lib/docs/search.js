@@ -4,16 +4,22 @@
 // returned snippet text in its own JSX <mark> highlighter.
 
 import Fuse from 'fuse.js';
-import { SECTIONS } from '../../pages/docs/sections';
+import { SECTIONS, filterSectionsForRole } from '../../pages/docs/sections';
 
 // Build a flat list of search records — one per subsection — with a
 // `text` blob fuse can score against. The blob folds in the overview,
 // how-to steps, tips, pitfalls, and related-link labels so a query
 // like "vesting cliff" matches the cap-table page even when the term
 // only appears inside a how-to step.
-export function buildDocsRecords() {
+export function buildDocsRecords(role) {
   const records = [];
-  for (const section of SECTIONS) {
+  // Task #2 (DD) — when a role is provided, exclude admin-tagged
+  // sections/subsections from the search corpus so non-admins never
+  // see admin pages in results. When `role` is undefined, the full
+  // unfiltered index is returned (back-compat for callers that pass
+  // nothing).
+  const visible = role ? filterSectionsForRole(SECTIONS, role) : SECTIONS;
+  for (const section of visible) {
     for (const sub of section.subsections) {
       const text = [
         sub.title,
@@ -38,8 +44,8 @@ export function buildDocsRecords() {
 
 // Build a configured Fuse instance. Threshold 0.35 + ignoreLocation
 // gives forgiving matches without flooding the rail with noise.
-export function createDocsFuse() {
-  return new Fuse(buildDocsRecords(), {
+export function createDocsFuse(role) {
+  return new Fuse(buildDocsRecords(role), {
     keys: [
       { name: 'subsectionTitle', weight: 0.5 },
       { name: 'sectionTitle', weight: 0.2 },

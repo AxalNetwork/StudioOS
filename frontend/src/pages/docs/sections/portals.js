@@ -98,6 +98,9 @@ export default {
     },
     {
       id: 'admin',
+      // Task #2 (DD) — Admin Console overview is admin-only even
+      // though it lives in the public Portals section.
+      roles: ['admin'],
       title: 'Admin Console (overview)',
       overview:
         "The Admin Console is the studio operator’s portal: users, roles, projects, deals, badges, contracts, audit trail, and feature flags. Most actions are reversible; destructive ones (delete user, void contract) require a typed confirmation.",

@@ -46,6 +46,9 @@ AI scoring; legal entity formation; cap-table simulator + fund mgmt + waterfall;
 - Prioritize security best practices and robust error handling.
 - API keys UI is gated behind a server-driven feature flag.
 
+## Doc visibility
+- Admin docs are admin-only. Sections/subsections in `frontend/src/pages/docs/sections/*.js` may carry `roles: ['admin']` (currently the entire `admin` section + the `admin` subsection inside `portals.js`). DocsLayout filters the rail, the body, and the right "On this page" list by `useAuth().role`; `lib/docs/search.js::createDocsFuse(role)` filters the search corpus the same way; and the hash-deep-link guard in DocsLayout strips admin anchors for non-admins (true 404-by-omission — the section literally isn't rendered). Never link to `#admin/*` from public-facing docs, marketing pages, or non-admin onboarding flows. Adding a new admin doc = add `roles: ['admin']` on the new section/subsection; no other wiring required.
+
 ## Persistent gotchas (always relevant)
 ### Backend / Worker
 - **FastAPI is dev-only** — never attempt to deploy it.

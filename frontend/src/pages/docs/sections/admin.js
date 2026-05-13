@@ -2,6 +2,9 @@ export default {
   id: 'admin',
   title: 'Admin',
   icon: 'LayoutDashboard',
+  // Task #2 (DD) — admin-only docs section. DocsLayout filters this
+  // out for non-admin viewers; search index excludes it as well.
+  roles: ['admin'],
   subsections: [
     {
       id: 'overview',

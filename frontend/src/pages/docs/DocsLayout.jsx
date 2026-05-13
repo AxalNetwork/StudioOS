@@ -5,8 +5,9 @@ import {
   Compass, Rocket, Hammer, TrendingUp, DollarSign, Scale,
   Network, LayoutDashboard, UserCircle, LifeBuoy, FileText,
 } from 'lucide-react';
-import { SECTIONS } from './sections';
+import { SECTIONS, filterSectionsForRole, adminOnlyAnchors } from './sections';
 import { createDocsFuse, splitForHighlight, snippet } from '../../lib/docs/search';
+import { useAuth } from '../../hooks/useAuthSync';
 
 // Wrap the pure-JS split helper into a JSX-friendly highlighter. Kept
 // inside the layout so the search module stays JSX-free.
@@ -109,10 +110,30 @@ export default function DocsLayout() {
   const contentRef = useRef(null);
   const searchInputRef = useRef(null);
   const [query, setQuery] = useState('');
-  const [activeAnchor, setActiveAnchor] = useState(`${SECTIONS[0].id}/${SECTIONS[0].subsections[0].id}`);
+  const { role } = useAuth() || {};
 
-  // Lazily build the fuse.js index. Stable across renders.
-  const fuse = useMemo(() => createDocsFuse(), []);
+  // Task #2 (DD) — Filter the docs manifest down to what the current
+  // viewer's role is allowed to see. Admin sections/subsections are
+  // hidden from the rail, the right "On this page" list, and the
+  // body content for non-admin viewers.
+  const visibleSections = useMemo(
+    () => filterSectionsForRole(SECTIONS, role),
+    [role],
+  );
+
+  // Stable set of admin-only anchors (computed once from the static
+  // manifest). Used to guard direct hash navigation below.
+  const restrictedAnchors = useMemo(() => adminOnlyAnchors(), []);
+  const isAdmin = role === 'admin';
+
+  const firstAnchor = visibleSections.length > 0
+    ? `${visibleSections[0].id}/${visibleSections[0].subsections[0].id}`
+    : '';
+  const [activeAnchor, setActiveAnchor] = useState(firstAnchor);
+
+  // Lazily build the fuse.js index, role-scoped so non-admins never
+  // see admin pages in search results.
+  const fuse = useMemo(() => createDocsFuse(role), [role]);
 
   const trimmedQuery = query.trim();
   const searchResults = useMemo(() => {
@@ -140,15 +161,23 @@ export default function DocsLayout() {
   }, []);
 
   // Scroll-to-anchor on initial load and when the URL hash changes.
+  // Task #2 (DD) — When a non-admin tries to deep-link to an admin
+  // anchor (e.g. `#admin/users`), strip the hash so the page behaves
+  // as if the anchor doesn't exist (the section is also absent from
+  // the rail and content body, so this is a true 404-by-omission).
   useEffect(() => {
     const hash = decodeURIComponent(location.hash.replace(/^#/, ''));
     if (!hash) return;
+    if (!isAdmin && restrictedAnchors.has(hash)) {
+      navigate('/docs', { replace: true });
+      return;
+    }
     const el = document.querySelector(`[data-anchor="${hash}"]`);
     if (el) {
       requestAnimationFrame(() => el.scrollIntoView({ behavior: 'auto', block: 'start' }));
       setActiveAnchor(hash);
     }
-  }, [location.hash]);
+  }, [location.hash, isAdmin, restrictedAnchors, navigate]);
 
   // Track which subsection is currently in view to highlight the rail.
   useEffect(() => {
@@ -179,7 +208,7 @@ export default function DocsLayout() {
 
   // Activated section in the rail derives from the activeAnchor's section prefix.
   const activeSectionId = activeAnchor.split('/')[0];
-  const activeSection = SECTIONS.find(s => s.id === activeSectionId) || SECTIONS[0];
+  const activeSection = visibleSections.find(s => s.id === activeSectionId) || visibleSections[0];
 
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden -mx-6 -my-6">
@@ -242,7 +271,7 @@ export default function DocsLayout() {
           </div>
         ) : (
           <nav aria-label="Documentation contents">
-            {SECTIONS.map(section => {
+            {visibleSections.map(section => {
               const isActive = section.id === activeSectionId;
               return (
                 <div key={section.id} className="mb-3">
@@ -316,7 +345,7 @@ export default function DocsLayout() {
           <details className="mt-2">
             <summary className="text-[11px] text-gray-600 cursor-pointer select-none">Browse all sections</summary>
             <nav className="mt-2 max-h-72 overflow-y-auto bg-white border border-gray-200 rounded-md p-2">
-              {SECTIONS.map(section => (
+              {visibleSections.map(section => (
                 <div key={section.id} className="mb-2">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 px-1 mb-0.5">{section.title}</div>
                   <ul>
@@ -356,7 +385,7 @@ export default function DocsLayout() {
               </p>
             </header>
 
-            {SECTIONS.map(section => (
+            {visibleSections.map(section => (
               <div key={section.id}>
                 <div
                   id={section.id}
