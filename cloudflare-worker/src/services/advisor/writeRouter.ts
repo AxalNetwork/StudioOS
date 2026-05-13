@@ -1041,11 +1041,19 @@ export async function routeAnswer(
 // the underlying domain table, so /start doesn't re-ask the user for
 // data they entered through normal pages.
 //
-// Returns the set of question_ids the route layer should treat as
-// "already answered" for the purpose of nextUnansweredQuestion().
-// Per-persona reads only — no writes — so it's safe to call on every
-// /start invocation.
+// DEPRECATED (Task #7): the new advisor flow no longer calls this
+// function — it owns the conversation state end-to-end via
+// `advisor_answers`, so synthesising "already answered" rows from
+// domain reads was both redundant and a source of subtle drift
+// between the two stores. The implementation is retained (unused) to
+// keep the writeRouter test surface stable and document the legacy
+// hydration set; callers wanting to suppress re-asks for already-
+// captured fields should rely on the writeRouter on the /answer path
+// instead.
+//
+// Per-persona reads only — no writes.
 // ---------------------------------------------------------------------------
+/** @deprecated Task #7 — legacy advisor shim, no longer called. */
 export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<string>> {
   const answered = new Set<string>();
   const role = String(user.role || '');

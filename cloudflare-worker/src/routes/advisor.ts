@@ -62,7 +62,7 @@ import {
   type Persona,
   type Question,
 } from '../services/advisor/questionBank';
-import { routeAnswer, hydrateAlreadyAnswered, recordFieldSource, type WriteResult } from '../services/advisor/writeRouter';
+import { routeAnswer, recordFieldSource, type WriteResult } from '../services/advisor/writeRouter';
 import { hashEmail } from '../util/hashEmail';
 // Task #4 (AW) — 7-layer advisor guardrails.
 import {
@@ -86,8 +86,9 @@ import {
   type ToolEnvelope,
 } from '../services/advisor/tools';
 import { run as aiRouterRun } from '../services/aiRouter';
-// Task #5 — staged rollout gate.
-import { rolloutDecision } from '../services/advisor/rollout';
+// Advisor kill switch (Task #5 staged rollout retired in Task #7 — only
+// ADVISOR_V2_DISABLED / ADVISOR_DISABLED env flags remain).
+import { isAdvisorDisabled, ADVISOR_DISABLED_MESSAGE } from '../services/advisor/rollout';
 import { pickNextQuestion } from '../services/advisor/rerank';
 import {
   nextTurn as smNextTurn,
@@ -344,30 +345,17 @@ async function answeredQuestionIds(env: Env, conversationId: number): Promise<Se
 }
 
 /**
- * Combine in-conversation answers with hydration from existing
- * domain tables so questions whose data is already present aren't
- * re-asked. Hydrated questions get a synthetic `advisor_answers` row
- * with saved_status='saved' on first /start so subsequent visits
- * remain consistent.
+ * Set of question_ids the user has already answered (or skipped) in
+ * the given conversation. Task #7 removed the legacy
+ * `hydrateAlreadyAnswered` shim that synthesised "answered" rows from
+ * domain tables — the advisor now relies exclusively on the answers
+ * recorded through its own /answer endpoint, so the question bank
+ * always sees the canonical conversation state.
  */
 async function effectiveAnsweredSet(
-  env: Env, user: User, conversationId: number,
+  env: Env, _user: User, conversationId: number,
 ): Promise<Set<string>> {
-  const fromConv = await answeredQuestionIds(env, conversationId);
-  const fromDomain = await hydrateAlreadyAnswered(env, user);
-  for (const id of fromDomain) {
-    if (fromConv.has(id)) continue;
-    try {
-      await env.DB.prepare(
-        `INSERT INTO advisor_answers
-           (conversation_id, user_id, question_id, raw_value, saved_status)
-           VALUES (?, ?, ?, '', 'saved')
-         ON CONFLICT(conversation_id, question_id) DO NOTHING`,
-      ).bind(conversationId, user.id, id).run();
-      fromConv.add(id);
-    } catch { /* race on the unique index — safe to ignore */ }
-  }
-  return fromConv;
+  return answeredQuestionIds(env, conversationId);
 }
 
 function nextUnansweredQuestion(bank: Question[], answered: Set<string>): Question | null {
@@ -513,9 +501,8 @@ async function refreshCounts(env: Env, conversationId: number, currentQid: strin
 // `ADVISOR_V2_DISABLED=1` actually shuts every door, not just three.
 // ---------------------------------------------------------------------------
 async function applyAdvisorGate(c: Context<{ Bindings: Env }>, user: User): Promise<Response | null> {
-  const rollout = rolloutDecision(c.env, user);
-  if (!rollout.allowed) {
-    return c.json({ error: rollout.message, status: 'unavailable', reason: rollout.reason }, 503);
+  if (isAdvisorDisabled(c.env)) {
+    return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
   }
   await ensureGuardrailColumns(c.env);
   const ks = await checkKillSwitch(c.env, user);
@@ -530,12 +517,10 @@ async function applyAdvisorGate(c: Context<{ Bindings: Env }>, user: User): Prom
 // ---------------------------------------------------------------------------
 advisor.post('/start', async (c) => {
   const user = await requireAuth(c);
-  // Task #5 — staged rollout gate runs FIRST, before any D1 schema
-  // probe or column-ensure call, so a user not yet in the rollout phase
-  // sees a polite 503 without ever touching the DB.
-  const rollout = rolloutDecision(c.env, user);
-  if (!rollout.allowed) {
-    return c.json({ error: rollout.message, status: 'unavailable', reason: rollout.reason }, 503);
+  // Kill switch runs FIRST, before any D1 schema probe / column-ensure
+  // call, so a disabled advisor short-circuits without touching the DB.
+  if (isAdvisorDisabled(c.env)) {
+    return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
   }
   await ensureSchema(c.env);
   await ensureAdvisorWeekColumn(c.env);
@@ -695,14 +680,13 @@ interface AnswerEnvelope {
 }
 advisor.post('/answer', async (c) => {
   const user = await requireAuth(c);
-  // Task #5 — staged rollout gate runs FIRST, before any D1 work.
-  const rollout = rolloutDecision(c.env, user);
-  if (!rollout.allowed) {
-    return c.json({ error: rollout.message, status: 'unavailable', reason: rollout.reason }, 503);
+  // Kill switch (Task #5 → Task #7) runs FIRST, before any D1 work.
+  if (isAdvisorDisabled(c.env)) {
+    return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
   }
   await ensureSchema(c.env);
   await ensureGuardrailColumns(c.env);
-  // Task #4 (AW) L7 — kill switch first.
+  // Task #4 (AW) L7 — per-user kill switch (advisor_locked).
   const ks = await checkKillSwitch(c.env, user);
   if (ks.blocked) {
     await writeTurnAudit(c.env, {
@@ -1540,14 +1524,13 @@ function sseEvent(event: string, data: unknown): string {
 
 advisor.post('/explain', async (c) => {
   const user = await requireAuth(c);
-  // Task #5 — staged rollout gate runs FIRST, before any D1 work.
-  const rollout = rolloutDecision(c.env, user);
-  if (!rollout.allowed) {
-    return c.json({ error: rollout.message, status: 'unavailable', reason: rollout.reason }, 503);
+  // Kill switch (Task #5 → Task #7) runs FIRST, before any D1 work.
+  if (isAdvisorDisabled(c.env)) {
+    return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
   }
   await ensureSchema(c.env);
   await ensureGuardrailColumns(c.env);
-  // Task #4 (AW) L7 — kill switch (env-wide + per-user lock).
+  // Task #4 (AW) L7 — per-user kill switch (advisor_locked).
   const ks = await checkKillSwitch(c.env, user);
   if (ks.blocked) {
     await writeTurnAudit(c.env, {
@@ -2155,26 +2138,14 @@ async function buildVisibleBank(c: Context<{ Bindings: Env }>, focus: string | n
   await ensureSchema(c.env);
   await ensureAdvisorWeekColumn(c.env);
   const gate = await loadAdvisorGate(c.env, user);
-  // Build the answered set from BOTH (a) advisor_answers across every
-  // conversation this user has had and (b) hydration of existing
-  // domain-table values. Architect flagged that the prior call to
-  // effectiveAnsweredSet(..., -1) silently dropped hydrated answers
-  // when the user had no active conversation — /turn would then
-  // re-surface questions whose data already lives on a domain row.
-  // We deliberately bypass the synthetic advisor_answers write that
-  // effectiveAnsweredSet does (it requires a real conversation FK);
-  // /turn is read-only on its hydration path.
+  // Active-conversation answers when one exists; otherwise fall back
+  // to the cross-conversation set loaded from advisor_answers (so a
+  // user who already answered some questions in a now-archived
+  // conversation isn't re-asked them on a fresh /turn).
   const conv = await getActiveConversation(c.env, user);
-  const fromAnswers = conv
+  const answered = conv
     ? await effectiveAnsweredSet(c.env, user, conv.id).catch(() => new Set<string>())
     : await smLoadAnsweredForUser(c.env, user.id);
-  // Hydrate domain-table answers regardless of whether a conversation
-  // exists. effectiveAnsweredSet already does this for the
-  // active-conv path, but the hydrated row write requires a real
-  // conversation FK; we still want those ids in the answered set so
-  // ranking never re-asks them — architect review item #1.
-  const fromDomain = await hydrateAlreadyAnswered(c.env, user).catch(() => new Set<string>());
-  const answered = new Set<string>([...fromAnswers, ...fromDomain]);
   const { visible, deferred } = selectBank(user, answered, gate, focus || undefined);
   // Treat focus as a page only when it looks page-shaped (starts with
   // `/`) — otherwise the state machine's focus_boost would never fire

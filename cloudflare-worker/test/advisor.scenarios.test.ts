@@ -49,7 +49,7 @@ import {
   type Persona,
 } from '../src/services/advisor/questionBank.ts';
 import { routeAnswer } from '../src/services/advisor/writeRouter.ts';
-import { rolloutDecision, userBucket, fnv1a } from '../src/services/advisor/rollout.ts';
+import { isAdvisorDisabled } from '../src/services/advisor/rollout.ts';
 
 // ---------------------------------------------------------------------------
 // In-memory D1 mock — minimal SELECT/INSERT/UPDATE/PRAGMA surface.
@@ -470,112 +470,32 @@ for (const s of SCENARIOS) {
 }
 
 // ---------------------------------------------------------------------------
-// Rollout-gate sanity tests. The deterministic-hash bucket is the
-// load-bearing piece for Phase 2 (10%), so it gets its own coverage.
+// Kill-switch tests. Task #7 retired the staged-rollout machinery
+// (allowlist + percentage + new-signups-after cutoff); only the
+// explicit ADVISOR_V2_DISABLED / ADVISOR_DISABLED env flags remain.
 // ---------------------------------------------------------------------------
-test('rollout: ADVISOR_V2_DISABLED short-circuits even for admin', () => {
-  const env = { ADVISOR_V2_DISABLED: '1' } as any;
-  const d = rolloutDecision(env, { id: 1, role: 'admin', email: 'a@a' } as any);
-  assert.equal(d.allowed, false);
-  if (!d.allowed) assert.equal(d.reason, 'disabled');
+test('kill switch: ADVISOR_V2_DISABLED=1 disables the advisor', () => {
+  assert.equal(isAdvisorDisabled({ ADVISOR_V2_DISABLED: '1' } as any), true);
+  assert.equal(isAdvisorDisabled({ ADVISOR_V2_DISABLED: 'true' } as any), true);
 });
 
-test('rollout: admins always allowed when not disabled', () => {
-  const env = {} as any;
-  const d = rolloutDecision(env, { id: 1, role: 'admin', email: 'a@a' } as any);
-  assert.equal(d.allowed, true);
+test('kill switch: ADVISOR_DISABLED=1 disables the advisor (legacy alias)', () => {
+  assert.equal(isAdvisorDisabled({ ADVISOR_DISABLED: '1' } as any), true);
+  assert.equal(isAdvisorDisabled({ ADVISOR_DISABLED: 'true' } as any), true);
 });
 
-test('rollout: explicit allowlist overrides 0% rollout', () => {
-  const env = { ADVISOR_V2_ALLOWLIST: '5,7,11', ADVISOR_V2_ROLLOUT_PCT: '0' } as any;
-  const yes = rolloutDecision(env, { id: 7, role: 'founder', email: 'f@f' } as any);
-  const no  = rolloutDecision(env, { id: 8, role: 'founder', email: 'g@g' } as any);
-  assert.equal(yes.allowed, true);
-  assert.equal(no.allowed, false);
+test('kill switch: both flags absent or "0" leaves the advisor enabled', () => {
+  assert.equal(isAdvisorDisabled({} as any), false);
+  assert.equal(isAdvisorDisabled({ ADVISOR_V2_DISABLED: '0', ADVISOR_DISABLED: '0' } as any), false);
+  assert.equal(isAdvisorDisabled({ ADVISOR_V2_DISABLED: 'false' } as any), false);
 });
 
-test('rollout: 100% lets everyone in', () => {
-  const env = { ADVISOR_V2_ROLLOUT_PCT: '100' } as any;
-  for (const id of [1, 100, 9_999, 100_000]) {
-    const d = rolloutDecision(env, { id, role: 'founder', email: 'x' } as any);
-    assert.equal(d.allowed, true, `id ${id} should be allowed at 100%`);
-  }
-});
-
-test('rollout: percentage gate is deterministic and roughly uniform', () => {
-  // With 1000 ids and pct=10, expect ~100 allowed within 5x slack.
-  let allowed = 0;
-  const env = { ADVISOR_V2_ROLLOUT_PCT: '10' } as any;
-  for (let i = 1; i <= 1000; i++) {
-    const d = rolloutDecision(env, { id: i, role: 'founder', email: 'x' } as any);
-    if (d.allowed) allowed++;
-  }
-  assert.ok(allowed > 50 && allowed < 200, `expected ~100 allowed, got ${allowed}`);
-
-  // Determinism: same input → same answer.
-  const a = rolloutDecision(env, { id: 42, role: 'founder', email: 'x' } as any);
-  const b = rolloutDecision(env, { id: 42, role: 'founder', email: 'x' } as any);
-  assert.equal(a.allowed, b.allowed);
-});
-
-test('rollout: ADVISOR_DISABLED=1 alone disables (legacy flag still works)', () => {
-  const env = { ADVISOR_DISABLED: '1' } as any;
-  const d = rolloutDecision(env, { id: 1, role: 'admin', email: 'a@a' } as any);
-  assert.equal(d.allowed, false);
-  if (!d.allowed) assert.equal(d.reason, 'disabled');
-});
-
-test('rollout: conflicting env (ADVISOR_DISABLED=1 + ADVISOR_V2_DISABLED=0) stays disabled — OR not precedence', () => {
-  // Code-review regression: a stale `ADVISOR_V2_DISABLED=0` must NOT
-  // silently override an operator's emergency `ADVISOR_DISABLED=1`.
-  const env = { ADVISOR_DISABLED: '1', ADVISOR_V2_DISABLED: '0' } as any;
-  const d = rolloutDecision(env, { id: 1, role: 'admin', email: 'a@a' } as any);
-  assert.equal(d.allowed, false, 'either flag truthy => disabled');
-  if (!d.allowed) assert.equal(d.reason, 'disabled');
-
-  const env2 = { ADVISOR_DISABLED: 'false', ADVISOR_V2_DISABLED: '1' } as any;
-  const d2 = rolloutDecision(env2, { id: 1, role: 'admin', email: 'a@a' } as any);
-  assert.equal(d2.allowed, false, 'reverse direction also OR-disabled');
-});
-
-test('rollout: phase-2 ADVISOR_V2_NEW_SIGNUPS_AFTER excludes pre-existing users', () => {
-  // Spec: "10% of new signups via deterministic user_id hash". With the
-  // cutoff env set, pre-existing users (created_at < cutoff) MUST NOT
-  // be eligible for the percentage gate, even if their hash bucket
-  // would otherwise admit them.
-  const env = {
-    ADVISOR_V2_ROLLOUT_PCT: '100',                  // would normally let everyone in
-    ADVISOR_V2_NEW_SIGNUPS_AFTER: '2026-05-01T00:00:00Z',
-  } as any;
-  // Note: pct=100 short-circuits to allowed('full') BEFORE the cutoff
-  // check by design (Phase 3). Use pct=50 to actually exercise the
-  // narrowing rule.
-  const env2 = {
-    ADVISOR_V2_ROLLOUT_PCT: '50',
-    ADVISOR_V2_NEW_SIGNUPS_AFTER: '2026-05-01T00:00:00Z',
-  } as any;
-  const oldUser = { id: 7, role: 'founder', email: 'old@e', created_at: '2025-01-01T00:00:00Z' } as any;
-  const newUser = { id: 7, role: 'founder', email: 'new@e', created_at: '2026-05-10T00:00:00Z' } as any;
-  // Same id 7 means same bucket — bucket determinism. With pct=50 and
-  // FNV-1a('7') % 100 = 25 (verified empirically), bucket < pct passes.
-  const newDecision = rolloutDecision(env2, newUser);
-  assert.equal(newDecision.allowed, true, 'new signup with bucket<pct should be allowed');
-  const oldDecision = rolloutDecision(env2, oldUser);
-  assert.equal(oldDecision.allowed, false, 'pre-existing user should be excluded by cutoff');
-  if (!oldDecision.allowed) assert.equal(oldDecision.reason, 'not_in_phase');
-
-  // Phase-3 sanity: pct=100 still admits pre-existing users (cutoff
-  // doesn't apply once full rollout is on).
-  assert.equal(rolloutDecision(env, oldUser).allowed, true, 'pct=100 short-circuits cutoff for full rollout');
-});
-
-test('rollout: bucket helper is in [0,100)', () => {
-  for (let i = 0; i < 50; i++) {
-    const b = userBucket(i);
-    assert.ok(b >= 0 && b < 100, `bucket ${b} out of range`);
-  }
-  // FNV-1a hash sanity: empty + non-empty distinct.
-  assert.notEqual(fnv1a(''), fnv1a('1'));
+test('kill switch: stale ADVISOR_V2_DISABLED=0 cannot override ADVISOR_DISABLED=1', () => {
+  // Logical OR (NOT precedence by presence) — an operator's emergency
+  // ADVISOR_DISABLED=1 must win over a stale ADVISOR_V2_DISABLED=0 and
+  // vice versa.
+  assert.equal(isAdvisorDisabled({ ADVISOR_DISABLED: '1', ADVISOR_V2_DISABLED: '0' } as any), true);
+  assert.equal(isAdvisorDisabled({ ADVISOR_DISABLED: 'false', ADVISOR_V2_DISABLED: '1' } as any), true);
 });
 
 // keep ts-strip-types happy

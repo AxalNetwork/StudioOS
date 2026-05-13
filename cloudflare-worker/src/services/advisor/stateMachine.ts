@@ -328,11 +328,11 @@ export interface NextTurnContext {
   focusPage?: string | null;
   week: number;
   completedMilestones: Set<string>;
-  /** Additional answered ids the route layer already knows about
-   *  (e.g. from `hydrateAlreadyAnswered` against domain tables). They
-   *  are unioned with the cross-conversation set loaded from
-   *  `advisor_answers` so questions whose data lives only on a
-   *  domain row are NEVER re-asked — architect review item #1. */
+  /** Additional answered ids the route layer already knows about.
+   *  Historically this carried domain-table hydration from the
+   *  legacy `hydrateAlreadyAnswered` shim; Task #7 retired that
+   *  shim, but the field is still honoured so callers (e.g. tests)
+   *  can pre-seed answered ids without touching the DB. */
   extraAnswered?: Set<string>;
   /** Pre-loaded recent activity pages. When omitted, nextTurn
    *  loads them itself via `loadRecentActivityPages`. */

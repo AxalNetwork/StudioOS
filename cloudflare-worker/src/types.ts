@@ -71,19 +71,17 @@ export interface Env {
   // `WORKERS_AI_ADVISOR_BUDGET_PER_DAY` alias for back-compat.
   WORKERS_AI_ADVISOR_BUDGET_USD_DAY?: string;
   WORKERS_AI_ADVISOR_BUDGET_PER_DAY?: string;
-  // Task #4 (AW) — global advisor kill switch. When set to "1" or "true"
-  // every /api/advisor/{start,answer,explain} short-circuits with the
-  // canonical REFUSAL.disabled message. Per-user kill is users.advisor_locked.
+  // Global advisor kill switch (Task #4 AW + Task #5). When either name
+  // is set to "1" or "true" every /api/advisor/* route short-circuits
+  // with a 503 + the canonical "temporarily unavailable" message.
+  // Both names are honoured (logical OR) so a stale
+  // `ADVISOR_V2_DISABLED=0` cannot silently override an operator's
+  // emergency `ADVISOR_DISABLED=1`. Per-user kill lives separately on
+  // `users.advisor_locked`. The Task #5 staged-rollout knobs
+  // (allowlist / percentage / new-signups-after cutoff) were retired
+  // in Task #7 once Phase 3 stuck at 100%.
   ADVISOR_DISABLED?: string;
-  // Task #5 — Personal Advisor V2 rollout gate. ADVISOR_V2_DISABLED is the
-  // instant kill switch (alias of ADVISOR_DISABLED — either name flips both).
-  // ADVISOR_V2_ALLOWLIST is a CSV of user ids granted V2 in Phase 1 (admins
-  // are implicitly included). ADVISOR_V2_ROLLOUT_PCT is an integer 0..100
-  // controlling the deterministic-hash rollout for Phase 2 (10) → Phase 3 (100).
   ADVISOR_V2_DISABLED?: string;
-  ADVISOR_V2_ALLOWLIST?: string;
-  ADVISOR_V2_NEW_SIGNUPS_AFTER?: string;
-  ADVISOR_V2_ROLLOUT_PCT?: string;
   GITHUB_ACCESS_TOKEN?: string;
   GITHUB_REPO_OWNER?: string;
   GITHUB_REPO_NAME?: string;
