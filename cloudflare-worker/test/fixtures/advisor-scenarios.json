@@ -1,0 +1,95 @@
+[
+  {
+    "name": "new_founder_week_1",
+    "persona": "founder",
+    "user": { "id": 101, "role": "founder", "founder_id": 1, "project_id": 11 },
+    "gate": { "spinoutLabActive": true, "week": 1, "completed": [], "tiers": [] },
+    "turns": 8,
+    "expects_saved_writes": true
+  },
+  {
+    "name": "new_founder_week_3",
+    "persona": "founder",
+    "user": { "id": 102, "role": "founder", "founder_id": 2, "project_id": 12 },
+    "gate": {
+      "spinoutLabActive": true,
+      "week": 3,
+      "completed": [
+        "project_created",
+        "customer_interview_logged_1",
+        "customer_interview_logged_2",
+        "customer_interview_logged_3",
+        "pricing_drafted",
+        "revenue_model_drafted"
+      ],
+      "tiers": []
+    },
+    "turns": 8,
+    "expects_saved_writes": true
+  },
+  {
+    "name": "existing_founder_growth",
+    "persona": "founder",
+    "user": { "id": 103, "role": "founder", "founder_id": 3, "project_id": 13 },
+    "gate": { "spinoutLabActive": false, "week": 1, "completed": [], "tiers": ["subscriber"] },
+    "turns": 12,
+    "expects_saved_writes": true
+  },
+  {
+    "name": "existing_founder_studio",
+    "persona": "founder",
+    "user": { "id": 104, "role": "founder", "founder_id": 4, "project_id": 14 },
+    "gate": { "spinoutLabActive": false, "week": 1, "completed": [], "tiers": ["subscriber"] },
+    "turns": 12,
+    "expects_saved_writes": true
+  },
+  {
+    "name": "investor_pro",
+    "persona": "investor",
+    "user": { "id": 201, "role": "investor" },
+    "gate": { "spinoutLabActive": false, "week": 1, "completed": [], "tiers": ["investor_pro"] },
+    "turns": 12,
+    "expects_saved_writes": true
+  },
+  {
+    "name": "investor_institutional",
+    "persona": "investor",
+    "user": { "id": 202, "role": "investor" },
+    "gate": { "spinoutLabActive": false, "week": 1, "completed": [], "tiers": ["investor_pro", "subscriber"] },
+    "turns": 12,
+    "expects_saved_writes": true
+  },
+  {
+    "name": "op_partner_services",
+    "persona": "partner",
+    "user": { "id": 301, "role": "partner" },
+    "gate": { "spinoutLabActive": false, "week": 1, "completed": [], "tiers": [] },
+    "turns": 8,
+    "focusPage": null,
+    "expects_saved_writes": true
+  },
+  {
+    "name": "op_partner_capital",
+    "persona": "partner",
+    "user": { "id": 302, "role": "partner" },
+    "gate": { "spinoutLabActive": false, "week": 1, "completed": [], "tiers": [] },
+    "turns": 8,
+    "expects_saved_writes": true
+  },
+  {
+    "name": "op_partner_sourcing",
+    "persona": "partner",
+    "user": { "id": 303, "role": "partner" },
+    "gate": { "spinoutLabActive": false, "week": 1, "completed": [], "tiers": [] },
+    "turns": 8,
+    "expects_saved_writes": true
+  },
+  {
+    "name": "mentor",
+    "persona": "mentor",
+    "user": { "id": 401, "role": "mentor" },
+    "gate": { "spinoutLabActive": false, "week": 1, "completed": [], "tiers": [] },
+    "turns": 8,
+    "expects_saved_writes": true
+  }
+]

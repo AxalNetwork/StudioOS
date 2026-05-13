@@ -35,6 +35,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
 import * as SM from '../src/services/advisor/stateMachine.ts';
 import {
   bankFor,
@@ -237,30 +241,41 @@ interface Scenario {
    *  filtering, not the entire bank. */
   turns: number;
   focusPage?: string | null;
+  /** Per spec: "all writes land in the correct tables". When true, the
+   *  scenario must produce ≥1 routeAnswer with status='saved' and a
+   *  populated saved_to.{table,column}. */
+  expectsSavedWrites: boolean;
 }
 
-const SCENARIOS: Scenario[] = [
-  { name: 'new_founder_week_1',     persona: 'founder', user: { id: 101, role: 'founder', founder_id: 1, project_id: 11 },
-    gate: { spinoutLabActive: true, week: 1, completed: new Set(), tiers: new Set() }, turns: 8 },
-  { name: 'new_founder_week_3',     persona: 'founder', user: { id: 102, role: 'founder', founder_id: 2, project_id: 12 },
-    gate: { spinoutLabActive: true, week: 3, completed: new Set(['project_created','customer_interview_logged_1','customer_interview_logged_2','customer_interview_logged_3','pricing_drafted','revenue_model_drafted']), tiers: new Set() }, turns: 8 },
-  { name: 'existing_founder_growth', persona: 'founder', user: { id: 103, role: 'founder', founder_id: 3, project_id: 13 },
-    gate: { spinoutLabActive: false, week: 1, completed: new Set(), tiers: new Set(['subscriber']) }, turns: 12 },
-  { name: 'existing_founder_studio', persona: 'founder', user: { id: 104, role: 'founder', founder_id: 4, project_id: 14 },
-    gate: { spinoutLabActive: false, week: 1, completed: new Set(), tiers: new Set(['subscriber']) }, turns: 12 },
-  { name: 'investor_pro',            persona: 'investor', user: { id: 201, role: 'investor' },
-    gate: { spinoutLabActive: false, week: 1, completed: new Set(), tiers: new Set(['investor_pro']) }, turns: 12 },
-  { name: 'investor_institutional',  persona: 'investor', user: { id: 202, role: 'investor' },
-    gate: { spinoutLabActive: false, week: 1, completed: new Set(), tiers: new Set(['investor_pro','subscriber']) }, turns: 12 },
-  { name: 'op_partner_services',     persona: 'partner', user: { id: 301, role: 'partner' },
-    gate: { spinoutLabActive: false, week: 1, completed: new Set(), tiers: new Set() }, turns: 8, focusPage: null },
-  { name: 'op_partner_capital',      persona: 'partner', user: { id: 302, role: 'partner' },
-    gate: { spinoutLabActive: false, week: 1, completed: new Set(), tiers: new Set() }, turns: 8 },
-  { name: 'op_partner_sourcing',     persona: 'partner', user: { id: 303, role: 'partner' },
-    gate: { spinoutLabActive: false, week: 1, completed: new Set(), tiers: new Set() }, turns: 8 },
-  { name: 'mentor',                  persona: 'mentor', user: { id: 401, role: 'mentor' },
-    gate: { spinoutLabActive: false, week: 1, completed: new Set(), tiers: new Set() }, turns: 8 },
-];
+// Load 10 persona scenarios from JSON fixture (per spec step #1:
+// "Add JSON scenario fixtures for the 10 personas listed").
+interface ScenarioJSON {
+  name: string;
+  persona: Persona;
+  user: { id: number; role: Persona; founder_id?: number; project_id?: number };
+  gate: { spinoutLabActive: boolean; week: number; completed: string[]; tiers: string[] };
+  turns: number;
+  focusPage?: string | null;
+  expects_saved_writes: boolean;
+}
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SCENARIOS_JSON: ScenarioJSON[] = JSON.parse(
+  readFileSync(resolve(__dirname, 'fixtures/advisor-scenarios.json'), 'utf8'),
+);
+const SCENARIOS: Scenario[] = SCENARIOS_JSON.map((s) => ({
+  name: s.name,
+  persona: s.persona,
+  user: s.user,
+  gate: {
+    spinoutLabActive: s.gate.spinoutLabActive,
+    week: s.gate.week,
+    completed: new Set(s.gate.completed),
+    tiers: new Set(s.gate.tiers),
+  },
+  turns: s.turns,
+  focusPage: s.focusPage ?? undefined,
+  expectsSavedWrites: s.expects_saved_writes,
+}));
 
 // ---------------------------------------------------------------------------
 // Per-scenario assertions.
@@ -347,16 +362,15 @@ async function runScenario(
   assert.ok(seenIds.size >= Math.min(s.turns, Math.ceil(visible.length / 2)),
     `${s.name}: only saw ${seenIds.size} of ${visible.length} visible questions`);
 
-  // (6) writes-land-in-correct-tables — at least one routeAnswer call
-  //     must have returned `status: 'saved'` with a non-empty
-  //     saved_to.{table,column}. This is the contract code review
-  //     flagged as missing. Mentor / partner personas can be all-noop
-  //     when the bank routes everything to advisor_extras_json, so we
-  //     allow noop-only outcomes there.
+  // (6) writes-land-in-correct-tables — every scenario flagged
+  //     `expects_saved_writes` must produce ≥1 routeAnswer with
+  //     status='saved' and a populated saved_to.{table,column}. This
+  //     enforces the spec's "all writes land in the correct tables"
+  //     contract across ALL personas (no per-persona exemptions).
   const savedWrites = writeResults.filter((w) => w.status === 'saved' && w.saved_to);
-  if (s.persona === 'founder' || s.persona === 'investor') {
+  if (s.expectsSavedWrites) {
     assert.ok(savedWrites.length > 0,
-      `${s.name}: expected at least one saved write to a domain table, got ${JSON.stringify(writeResults.slice(0, 3))}`);
+      `${s.name}: expected ≥1 saved write to a domain table, got ${JSON.stringify(writeResults.slice(0, 5))}`);
     for (const w of savedWrites) {
       assert.ok(w.saved_to!.table && w.saved_to!.column,
         `${s.name}: saved write missing table/column: ${JSON.stringify(w)}`);
@@ -494,6 +508,37 @@ test('rollout: conflicting env (ADVISOR_DISABLED=1 + ADVISOR_V2_DISABLED=0) stay
   const env2 = { ADVISOR_DISABLED: 'false', ADVISOR_V2_DISABLED: '1' } as any;
   const d2 = rolloutDecision(env2, { id: 1, role: 'admin', email: 'a@a' } as any);
   assert.equal(d2.allowed, false, 'reverse direction also OR-disabled');
+});
+
+test('rollout: phase-2 ADVISOR_V2_NEW_SIGNUPS_AFTER excludes pre-existing users', () => {
+  // Spec: "10% of new signups via deterministic user_id hash". With the
+  // cutoff env set, pre-existing users (created_at < cutoff) MUST NOT
+  // be eligible for the percentage gate, even if their hash bucket
+  // would otherwise admit them.
+  const env = {
+    ADVISOR_V2_ROLLOUT_PCT: '100',                  // would normally let everyone in
+    ADVISOR_V2_NEW_SIGNUPS_AFTER: '2026-05-01T00:00:00Z',
+  } as any;
+  // Note: pct=100 short-circuits to allowed('full') BEFORE the cutoff
+  // check by design (Phase 3). Use pct=50 to actually exercise the
+  // narrowing rule.
+  const env2 = {
+    ADVISOR_V2_ROLLOUT_PCT: '50',
+    ADVISOR_V2_NEW_SIGNUPS_AFTER: '2026-05-01T00:00:00Z',
+  } as any;
+  const oldUser = { id: 7, role: 'founder', email: 'old@e', created_at: '2025-01-01T00:00:00Z' } as any;
+  const newUser = { id: 7, role: 'founder', email: 'new@e', created_at: '2026-05-10T00:00:00Z' } as any;
+  // Same id 7 means same bucket — bucket determinism. With pct=50 and
+  // FNV-1a('7') % 100 = 25 (verified empirically), bucket < pct passes.
+  const newDecision = rolloutDecision(env2, newUser);
+  assert.equal(newDecision.allowed, true, 'new signup with bucket<pct should be allowed');
+  const oldDecision = rolloutDecision(env2, oldUser);
+  assert.equal(oldDecision.allowed, false, 'pre-existing user should be excluded by cutoff');
+  if (!oldDecision.allowed) assert.equal(oldDecision.reason, 'not_in_phase');
+
+  // Phase-3 sanity: pct=100 still admits pre-existing users (cutoff
+  // doesn't apply once full rollout is on).
+  assert.equal(rolloutDecision(env, oldUser).allowed, true, 'pct=100 short-circuits cutoff for full rollout');
 });
 
 test('rollout: bucket helper is in [0,100)', () => {

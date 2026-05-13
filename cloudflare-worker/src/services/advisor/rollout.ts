@@ -73,17 +73,32 @@ function isDisabled(env: Env): boolean {
   return truthy(e.ADVISOR_V2_DISABLED) || truthy(e.ADVISOR_DISABLED);
 }
 
+/** Parse an ISO timestamp env to epoch ms. Returns 0 on absent/invalid. */
+function parseTs(v: string | undefined): number {
+  if (!v) return 0;
+  const n = Date.parse(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
 /**
  * Compute the rollout decision for `user`. Pure — depends only on env
- * vars + user.id + user.role.
+ * vars + user.id + user.role + user.created_at.
  *
  * Decision order (first match wins):
  *   - DISABLED env  → blocked('disabled')
  *   - admin role    → allowed('admin')        — admins always see V2
  *   - in allowlist  → allowed('allowlist')    — Phase 1
  *   - pct >= 100    → allowed('full')         — Phase 3
- *   - bucket < pct  → allowed('percentage')   — Phase 2
- *   - otherwise     → blocked('not_in_phase')
+ *   - bucket < pct  → allowed('percentage')   — Phase 2 (10% gate)
+ *
+ * Phase-2 narrowing (spec: "10% of new signups via deterministic
+ * user_id hash"):
+ *   When `ADVISOR_V2_NEW_SIGNUPS_AFTER` is set (ISO timestamp), the
+ *   percentage gate ONLY applies to users with
+ *   `created_at >= cutoff`. Pre-existing users stay on the legacy
+ *   advisor until pct=100 (Phase 3) flips them in. Without the cutoff
+ *   set, the percentage gate applies to all users — that's the
+ *   permanent post-rollout configuration.
  */
 export function rolloutDecision(env: Env, user: User): RolloutDecision {
   if (isDisabled(env)) {
@@ -92,7 +107,11 @@ export function rolloutDecision(env: Env, user: User): RolloutDecision {
   if ((user.role || '').toLowerCase() === 'admin') {
     return { allowed: true, reason: 'admin' };
   }
-  const e = env as unknown as { ADVISOR_V2_ALLOWLIST?: string; ADVISOR_V2_ROLLOUT_PCT?: string };
+  const e = env as unknown as {
+    ADVISOR_V2_ALLOWLIST?: string;
+    ADVISOR_V2_ROLLOUT_PCT?: string;
+    ADVISOR_V2_NEW_SIGNUPS_AFTER?: string;
+  };
   const allow = parseAllowlist(e.ADVISOR_V2_ALLOWLIST);
   if (allow.has(String(user.id))) {
     return { allowed: true, reason: 'allowlist' };
@@ -101,6 +120,16 @@ export function rolloutDecision(env: Env, user: User): RolloutDecision {
   if (pct >= 100) return { allowed: true, reason: 'full' };
   if (pct <= 0) {
     return { allowed: false, reason: 'not_in_phase', message: TEMPORARILY_UNAVAILABLE_MESSAGE };
+  }
+  // Phase-2 "new signups only" narrowing: when the cutoff env is set,
+  // the percentage gate only applies to users created on/after the
+  // cutoff. Pre-existing users wait for Phase 3 (pct=100).
+  const cutoff = parseTs(e.ADVISOR_V2_NEW_SIGNUPS_AFTER);
+  if (cutoff > 0) {
+    const created = parseTs(user.created_at);
+    if (!created || created < cutoff) {
+      return { allowed: false, reason: 'not_in_phase', message: TEMPORARILY_UNAVAILABLE_MESSAGE };
+    }
   }
   if (userBucket(user.id) < pct) {
     return { allowed: true, reason: 'percentage' };

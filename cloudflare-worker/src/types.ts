@@ -82,6 +82,7 @@ export interface Env {
   // controlling the deterministic-hash rollout for Phase 2 (10) → Phase 3 (100).
   ADVISOR_V2_DISABLED?: string;
   ADVISOR_V2_ALLOWLIST?: string;
+  ADVISOR_V2_NEW_SIGNUPS_AFTER?: string;
   ADVISOR_V2_ROLLOUT_PCT?: string;
   GITHUB_ACCESS_TOKEN?: string;
   GITHUB_REPO_OWNER?: string;

@@ -152,6 +152,7 @@ async function runPrompt(p) {
   let costUsd = 0;             // sum of est_cost_usd across the conversation
   let sectionMatched = 0;      // turns where the served question's section matched expected_section
   let sectionAttempted = 0;    // turns where expected_section was declared
+  let budgetBlockedTurns = 0;  // turns where the daily budget cap fired (429 / cost_exceeded)
   const turnRecords = [];      // per-turn detail (q_id, section, latency, cost, write_status)
 
   // Open / resume.
@@ -202,6 +203,14 @@ async function runPrompt(p) {
     if (ans.status === 200 && (ans.body?.saved_to || ans.body?.status === 'paywalled' || ans.body?.status === 'noop')) {
       writeSuccess++;
     }
+    // Daily-budget-cap signal — when WORKERS_AI_ADVISOR_BUDGET_USD_DAY
+    // is exhausted, the advisor returns HTTP 429 with reason
+    // 'cost_exceeded' (or 'rate_limited'). We surface a per-prompt
+    // counter so the summary can flag whether the cap fired during
+    // this run.
+    const budgetBlocked = ans.status === 429 || ans.body?.reason === 'cost_exceeded' || ans.body?.reason === 'rate_limited';
+    if (budgetBlocked) budgetBlockedTurns++;
+
     turnRecords.push({
       q_id: nextQ.id,
       served_section: servedSection,
@@ -209,7 +218,9 @@ async function runPrompt(p) {
       section_hit: sectionHit,
       latency_ms: Math.round(ans.ms),
       cost_usd: turnCost,
+      http_status: ans.status,
       write_status: ans.body?.status || (ans.body?.saved_to ? 'saved' : null),
+      budget_blocked: budgetBlocked,
     });
     nextQ = ans.body?.next || null;
   }
@@ -223,6 +234,7 @@ async function runPrompt(p) {
     repeats: [...seenIds].filter((s) => s.endsWith(':REPEAT')).length,
     writes: { attempted: writeAttempts, succeeded: writeSuccess },
     cost_usd_per_conversation: Number(costUsd.toFixed(6)),
+    budget_blocked_turns: budgetBlockedTurns,
     expected_section_match: sectionAttempted > 0
       ? { matched: sectionMatched, attempted: sectionAttempted, rate: Number((sectionMatched / sectionAttempted).toFixed(4)) }
       : null,
@@ -291,10 +303,12 @@ async function main() {
       : null;
   }
 
-  // Aggregate cost + section across all personas.
+  // Aggregate cost + section + budget-cap across all personas.
   const costTotal = ok.reduce((s, r) => s + (r.cost_usd_per_conversation || 0), 0);
   const sectionMatchedTotal = ok.reduce((s, r) => s + (r.expected_section_match?.matched || 0), 0);
   const sectionAttemptedTotal = ok.reduce((s, r) => s + (r.expected_section_match?.attempted || 0), 0);
+  const budgetBlockedTotal = ok.reduce((s, r) => s + (r.budget_blocked_turns || 0), 0);
+  const turnsTotalAll = ok.reduce((s, r) => s + (r.turns || 0), 0);
 
   const summary = {
     prompts_run: ok.length,
@@ -318,6 +332,20 @@ async function main() {
       max: Math.round(Math.max(0, ...allLatencies)),
     },
     mi_signal_coverage: { before: miBefore, after: miAfter, delta: miAfter - miBefore },
+    // Daily-budget-cap verification — per spec "(e) the daily budget
+    // cap works". Reports whether the per-day Workers-AI budget guard
+    // (`WORKERS_AI_ADVISOR_BUDGET_USD_DAY`) fired during this run. A
+    // non-zero `cap_observed` count is a positive signal that the gate
+    // is active under load. Zero across a fresh run is expected; to
+    // intentionally trip it, lower the env to a small number (e.g. 5)
+    // and rerun the eval — the surplus turns should report
+    // `cap_observed > 0`.
+    daily_budget: {
+      blocked_turns: budgetBlockedTotal,
+      total_turns: turnsTotalAll,
+      cap_observed: budgetBlockedTotal > 0,
+      block_rate: turnsTotalAll === 0 ? 0 : Number((budgetBlockedTotal / turnsTotalAll).toFixed(4)),
+    },
   };
 
   const report = {
