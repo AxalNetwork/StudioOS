@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "test:drift": "node scripts/check-api-drift.mjs && node --test cloudflare-worker/test/api_drift.test.mjs",
+    "test:drift": "node scripts/check-api-drift.mjs && node --test cloudflare-worker/test/api_drift.test.mjs && node scripts/check-advisor-bank-drift.mjs",
     "test:e2e": "playwright test",
     "build": "cd frontend && npm run build",
     "deploy": "wrangler deploy --env production",

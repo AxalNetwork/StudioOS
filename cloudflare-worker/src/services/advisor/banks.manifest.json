@@ -1,0 +1,1580 @@
+{
+  "generated_at": "__pinned__",
+  "banks": {
+    "newFounderSpinout": [
+      {
+        "id": "founder.project.name"
+      },
+      {
+        "id": "founder.project.pitch"
+      },
+      {
+        "id": "founder.project.sector"
+      },
+      {
+        "id": "founder.project.stage"
+      },
+      {
+        "id": "founder.discovery.interview1.name"
+      },
+      {
+        "id": "founder.discovery.interview1.pains"
+      },
+      {
+        "id": "founder.discovery.interview2.name"
+      },
+      {
+        "id": "founder.discovery.interview2.pains"
+      },
+      {
+        "id": "founder.discovery.interview3.name"
+      },
+      {
+        "id": "founder.discovery.interview3.pains"
+      },
+      {
+        "id": "founder.okrs.q1_objective1"
+      },
+      {
+        "id": "founder.okrs.q1_objective2"
+      },
+      {
+        "id": "founder.okrs.q1_objective3"
+      },
+      {
+        "id": "founder.brand.tagline"
+      },
+      {
+        "id": "founder.brand.theme_color"
+      },
+      {
+        "id": "founder.deck.problem"
+      },
+      {
+        "id": "founder.deck.market"
+      },
+      {
+        "id": "founder.team.cofounders"
+      },
+      {
+        "id": "founder.mentors.needs"
+      },
+      {
+        "id": "founder.captable.entity"
+      },
+      {
+        "id": "founder.captable.ownership"
+      },
+      {
+        "id": "founder.lab.discovery.icp_v1"
+      },
+      {
+        "id": "founder.lab.discovery.icp_buyer_vs_user"
+      },
+      {
+        "id": "founder.lab.discovery.willingness_to_pay"
+      },
+      {
+        "id": "founder.lab.discovery.alternatives"
+      },
+      {
+        "id": "founder.lab.discovery.deal_breaker"
+      },
+      {
+        "id": "founder.lab.discovery.signal_score"
+      },
+      {
+        "id": "founder.lab.discovery.pivot_signal"
+      },
+      {
+        "id": "founder.lab.discovery.followup_scheduled"
+      },
+      {
+        "id": "founder.lab.deck.solution"
+      },
+      {
+        "id": "founder.lab.deck.why_now"
+      },
+      {
+        "id": "founder.lab.deck.business_model"
+      },
+      {
+        "id": "founder.lab.deck.go_to_market"
+      },
+      {
+        "id": "founder.lab.deck.moat"
+      },
+      {
+        "id": "founder.lab.deck.team_slide"
+      },
+      {
+        "id": "founder.lab.deck.ask"
+      },
+      {
+        "id": "founder.lab.deck.competition_map"
+      },
+      {
+        "id": "founder.lab.deck.demo_link"
+      },
+      {
+        "id": "founder.lab.roadmap.kr_for_obj1"
+      },
+      {
+        "id": "founder.lab.roadmap.kr_for_obj2"
+      },
+      {
+        "id": "founder.lab.roadmap.kr_for_obj3"
+      },
+      {
+        "id": "founder.lab.roadmap.weekly_cadence"
+      },
+      {
+        "id": "founder.lab.mentors.priority1"
+      },
+      {
+        "id": "founder.lab.mentors.intro_target"
+      },
+      {
+        "id": "founder.lab.mentors.warm_path"
+      },
+      {
+        "id": "founder.lab.mentors.cadence"
+      },
+      {
+        "id": "founder.lab.mentors.style"
+      },
+      {
+        "id": "founder.lab.team.cofounder_gap"
+      },
+      {
+        "id": "founder.lab.team.dealbreakers"
+      },
+      {
+        "id": "founder.lab.team.equity_philosophy"
+      },
+      {
+        "id": "founder.lab.team.first_5_hires"
+      },
+      {
+        "id": "founder.lab.team.remote_or_office"
+      },
+      {
+        "id": "founder.lab.legal.state"
+      },
+      {
+        "id": "founder.lab.legal.83b_planned"
+      },
+      {
+        "id": "founder.lab.legal.ip_assignment"
+      },
+      {
+        "id": "founder.lab.legal.prior_employer_ip"
+      },
+      {
+        "id": "founder.lab.legal.advisor_seats"
+      },
+      {
+        "id": "founder.lab.capital.first_raise_target"
+      },
+      {
+        "id": "founder.lab.capital.runway_target_months"
+      },
+      {
+        "id": "founder.lab.capital.instrument"
+      },
+      {
+        "id": "founder.lab.capital.target_investors"
+      },
+      {
+        "id": "founder.lab.capital.warm_intros"
+      },
+      {
+        "id": "founder.lab.capital.lead_investor"
+      },
+      {
+        "id": "founder.lab.wellbeing.energy"
+      },
+      {
+        "id": "founder.lab.wellbeing.support"
+      },
+      {
+        "id": "founder.lab.wellbeing.biggest_blocker"
+      },
+      {
+        "id": "founder.lab.wellbeing.sleep_hours"
+      },
+      {
+        "id": "founder.lab.wellbeing.exercise_freq"
+      },
+      {
+        "id": "founder.lab.wellbeing.cofounder_pulse"
+      },
+      {
+        "id": "founder.lab.wellbeing.scary_question"
+      },
+      {
+        "id": "founder.lab.metrics.first_north_star"
+      },
+      {
+        "id": "founder.lab.metrics.weekly_target"
+      },
+      {
+        "id": "founder.lab.metrics.tracking_tool"
+      },
+      {
+        "id": "founder.lab.metrics.signal_v_noise"
+      },
+      {
+        "id": "founder.lab.ops.weekly_review"
+      },
+      {
+        "id": "founder.lab.ops.first_hire_role"
+      },
+      {
+        "id": "founder.lab.ops.first_hire_when"
+      },
+      {
+        "id": "founder.lab.ops.first_hire_comp"
+      },
+      {
+        "id": "founder.lab.ops.budget_template"
+      },
+      {
+        "id": "founder.lab.ops.bank_setup"
+      },
+      {
+        "id": "founder.lab.ops.payroll_provider"
+      },
+      {
+        "id": "founder.lab.ops.accounting_provider"
+      },
+      {
+        "id": "founder.lab.ops.governance_doc"
+      },
+      {
+        "id": "founder.lab.ops.communication_norm"
+      }
+    ],
+    "existingFounder": [
+      {
+        "id": "founder.project.name"
+      },
+      {
+        "id": "founder.project.pitch"
+      },
+      {
+        "id": "founder.project.sector"
+      },
+      {
+        "id": "founder.project.stage"
+      },
+      {
+        "id": "founder.project.traction"
+      },
+      {
+        "id": "founder.product.what_works"
+      },
+      {
+        "id": "founder.product.what_breaks"
+      },
+      {
+        "id": "founder.product.next_big_bet"
+      },
+      {
+        "id": "founder.product.dev_velocity"
+      },
+      {
+        "id": "founder.product.tech_debt_score"
+      },
+      {
+        "id": "founder.product.qa_coverage"
+      },
+      {
+        "id": "founder.product.platform_choice"
+      },
+      {
+        "id": "founder.fit.icp_statement"
+      },
+      {
+        "id": "founder.fit.icp_v_buyer"
+      },
+      {
+        "id": "founder.fit.icp_segments"
+      },
+      {
+        "id": "founder.fit.activation_definition"
+      },
+      {
+        "id": "founder.fit.activation_rate_pct"
+      },
+      {
+        "id": "founder.fit.retention_30d_pct"
+      },
+      {
+        "id": "founder.fit.nps_or_csat"
+      },
+      {
+        "id": "founder.fit.ipspf_signal"
+      },
+      {
+        "id": "founder.fit.churn_top_reason"
+      },
+      {
+        "id": "founder.fit.expansion_signal"
+      },
+      {
+        "id": "founder.fit.adoption_curve"
+      },
+      {
+        "id": "founder.fit.discovery_volume_qtr"
+      },
+      {
+        "id": "founder.financials.runway_months"
+      },
+      {
+        "id": "founder.financials.monthly_burn_usd"
+      },
+      {
+        "id": "founder.financials.mrr_usd"
+      },
+      {
+        "id": "founder.financials.arr_usd"
+      },
+      {
+        "id": "founder.financials.gross_margin_pct"
+      },
+      {
+        "id": "founder.financials.cac_usd"
+      },
+      {
+        "id": "founder.financials.ltv_usd"
+      },
+      {
+        "id": "founder.financials.payback_months"
+      },
+      {
+        "id": "founder.financials.net_revenue_retention_pct"
+      },
+      {
+        "id": "founder.financials.gross_revenue_retention_pct"
+      },
+      {
+        "id": "founder.financials.magic_number"
+      },
+      {
+        "id": "founder.financials.bookings_qtr_usd"
+      },
+      {
+        "id": "founder.financials.budget_vs_actual"
+      },
+      {
+        "id": "founder.financials.financial_model_link"
+      },
+      {
+        "id": "founder.pipeline.top_deals"
+      },
+      {
+        "id": "founder.pipeline.size_usd"
+      },
+      {
+        "id": "founder.pipeline.avg_sales_cycle_days"
+      },
+      {
+        "id": "founder.pipeline.win_rate_pct"
+      },
+      {
+        "id": "founder.gtm.primary_channel"
+      },
+      {
+        "id": "founder.gtm.channel_cac_split"
+      },
+      {
+        "id": "founder.gtm.outbound_volume_wk"
+      },
+      {
+        "id": "founder.gtm.inbound_lead_volume_wk"
+      },
+      {
+        "id": "founder.gtm.first_call_to_close_pct"
+      },
+      {
+        "id": "founder.gtm.avg_acv_usd"
+      },
+      {
+        "id": "founder.gtm.pricing_model"
+      },
+      {
+        "id": "founder.gtm.pricing_changes_planned"
+      },
+      {
+        "id": "founder.gtm.brand_awareness"
+      },
+      {
+        "id": "founder.gtm.community_motion"
+      },
+      {
+        "id": "founder.gtm.customer_advisory_board"
+      },
+      {
+        "id": "founder.capital.raise_active"
+      },
+      {
+        "id": "founder.capital.raise_target_usd"
+      },
+      {
+        "id": "founder.capital.target_close_date"
+      },
+      {
+        "id": "founder.capital.lead_status"
+      },
+      {
+        "id": "founder.capital.valuation_target_usd"
+      },
+      {
+        "id": "founder.capital.previous_round_usd"
+      },
+      {
+        "id": "founder.capital.previous_round_post_usd"
+      },
+      {
+        "id": "founder.capital.investors_on_captable"
+      },
+      {
+        "id": "founder.capital.bridge_likely"
+      },
+      {
+        "id": "founder.capital.preferred_lead_funds"
+      },
+      {
+        "id": "founder.capital.warm_intro_count"
+      },
+      {
+        "id": "founder.capital.use_of_funds"
+      },
+      {
+        "id": "founder.capital.dilution_floor_pct"
+      },
+      {
+        "id": "founder.capital.option_pool_pct"
+      },
+      {
+        "id": "founder.capital.runway_after_raise_months"
+      },
+      {
+        "id": "founder.captable.entity"
+      },
+      {
+        "id": "founder.captable.ownership"
+      },
+      {
+        "id": "founder.compliance.status"
+      },
+      {
+        "id": "founder.legal.ip_assignment_status"
+      },
+      {
+        "id": "founder.legal.trademarks_filed"
+      },
+      {
+        "id": "founder.legal.patents_filed"
+      },
+      {
+        "id": "founder.legal.dpa_template"
+      },
+      {
+        "id": "founder.legal.privacy_policy"
+      },
+      {
+        "id": "founder.legal.security_certs"
+      },
+      {
+        "id": "founder.legal.litigation_active"
+      },
+      {
+        "id": "founder.legal.foreign_subsidiaries"
+      },
+      {
+        "id": "founder.legal.terms_of_service_current"
+      },
+      {
+        "id": "founder.legal.export_controls"
+      },
+      {
+        "id": "founder.team.headcount_total"
+      },
+      {
+        "id": "founder.team.headcount_by_function"
+      },
+      {
+        "id": "founder.team.hires_planned_qtr"
+      },
+      {
+        "id": "founder.team.cofounders"
+      },
+      {
+        "id": "founder.team.first_eng_hired"
+      },
+      {
+        "id": "founder.team.attrition_12m"
+      },
+      {
+        "id": "founder.team.diversity_snapshot"
+      },
+      {
+        "id": "founder.team.compensation_philosophy"
+      },
+      {
+        "id": "founder.team.equity_refresh_policy"
+      },
+      {
+        "id": "founder.team.remote_policy"
+      },
+      {
+        "id": "founder.team.culture_doc_link"
+      },
+      {
+        "id": "founder.team.exec_team_complete"
+      },
+      {
+        "id": "founder.ops.tooling_stack"
+      },
+      {
+        "id": "founder.ops.weekly_metric_cadence"
+      },
+      {
+        "id": "founder.ops.board_cadence"
+      },
+      {
+        "id": "founder.ops.allhands_cadence"
+      },
+      {
+        "id": "founder.ops.okrs_cadence"
+      },
+      {
+        "id": "founder.ops.standup_format"
+      },
+      {
+        "id": "founder.ops.bug_triage_sla_hrs"
+      },
+      {
+        "id": "founder.ops.oncall_rotation"
+      },
+      {
+        "id": "founder.ops.knowledge_base"
+      },
+      {
+        "id": "founder.mentors.needs"
+      },
+      {
+        "id": "founder.mentors.current_advisors"
+      },
+      {
+        "id": "founder.mentors.most_valuable"
+      },
+      {
+        "id": "founder.mentors.gap_areas"
+      },
+      {
+        "id": "founder.mentors.intro_priority"
+      },
+      {
+        "id": "founder.partners.active_count"
+      },
+      {
+        "id": "founder.partners.health_score"
+      },
+      {
+        "id": "founder.partners.biggest_friction"
+      },
+      {
+        "id": "founder.wellbeing.energy_score"
+      },
+      {
+        "id": "founder.wellbeing.sleep_hours"
+      },
+      {
+        "id": "founder.wellbeing.support_system"
+      },
+      {
+        "id": "founder.wellbeing.biggest_stressor"
+      },
+      {
+        "id": "founder.wellbeing.therapist_or_coach"
+      },
+      {
+        "id": "founder.wellbeing.vacation_planned"
+      },
+      {
+        "id": "founder.dd.fintech_kyc"
+      },
+      {
+        "id": "founder.dd.fintech_licensing"
+      },
+      {
+        "id": "founder.dd.fintech_chargeback_pct"
+      },
+      {
+        "id": "founder.dd.ai_inference_cost_per_1k"
+      },
+      {
+        "id": "founder.dd.ai_model_strategy"
+      },
+      {
+        "id": "founder.dd.ai_data_moat"
+      },
+      {
+        "id": "founder.dd.healthcare_hipaa_status"
+      },
+      {
+        "id": "founder.dd.consumer_cac_payback_months"
+      },
+      {
+        "id": "founder.dd.consumer_d30_retention_pct"
+      },
+      {
+        "id": "founder.dd.b2b_saas_logos_paid"
+      },
+      {
+        "id": "founder.dd.b2b_saas_seat_expansion"
+      },
+      {
+        "id": "founder.dd.climate_carbon_metric"
+      },
+      {
+        "id": "founder.dd.deeptech_tech_readiness"
+      },
+      {
+        "id": "founder.dd.preseed_lois"
+      },
+      {
+        "id": "founder.dd.seriesa_cohort_retention"
+      },
+      {
+        "id": "founder.dd.seriesb_growth_rate"
+      }
+    ],
+    "investor": [
+      {
+        "id": "investor.profile.investor_type"
+      },
+      {
+        "id": "investor.profile.sectors"
+      },
+      {
+        "id": "investor.profile.stages"
+      },
+      {
+        "id": "investor.profile.ticket_band"
+      },
+      {
+        "id": "investor.profile.fund_size_usd"
+      },
+      {
+        "id": "investor.profile.fund_vintage"
+      },
+      {
+        "id": "investor.profile.geo_focus"
+      },
+      {
+        "id": "investor.profile.lp_base"
+      },
+      {
+        "id": "investor.profile.thesis"
+      },
+      {
+        "id": "investor.thesis.macro_trends"
+      },
+      {
+        "id": "investor.thesis.contrarian_view"
+      },
+      {
+        "id": "investor.thesis.passes_recent"
+      },
+      {
+        "id": "investor.thesis.must_haves"
+      },
+      {
+        "id": "investor.thesis.deal_breakers"
+      },
+      {
+        "id": "investor.thesis.adoption_curve_focus"
+      },
+      {
+        "id": "investor.thesis.market_size_floor_usd"
+      },
+      {
+        "id": "investor.thesis.founder_archetype"
+      },
+      {
+        "id": "investor.pipeline.deal_volume"
+      },
+      {
+        "id": "investor.pipeline.first_meetings_qtr"
+      },
+      {
+        "id": "investor.pipeline.term_sheets_qtr"
+      },
+      {
+        "id": "investor.pipeline.investments_closed_qtr"
+      },
+      {
+        "id": "investor.pipeline.avg_dd_days"
+      },
+      {
+        "id": "investor.pipeline.source_split"
+      },
+      {
+        "id": "investor.pipeline.scout_program"
+      },
+      {
+        "id": "investor.pipeline.deals_per_partner"
+      },
+      {
+        "id": "investor.coinvest.preferences"
+      },
+      {
+        "id": "investor.coinvest.preferred_partners"
+      },
+      {
+        "id": "investor.coinvest.minimum_lead_check_usd"
+      },
+      {
+        "id": "investor.dd.checklist_link"
+      },
+      {
+        "id": "investor.dd.references_required"
+      },
+      {
+        "id": "investor.dd.customer_calls_required"
+      },
+      {
+        "id": "investor.dd.legal_review_outsourced"
+      },
+      {
+        "id": "investor.dd.tech_diligence_partner"
+      },
+      {
+        "id": "investor.dd.financial_diligence_depth"
+      },
+      {
+        "id": "investor.dd.background_checks"
+      },
+      {
+        "id": "investor.dd.competitive_diligence_method"
+      },
+      {
+        "id": "investor.dd.valuation_framework"
+      },
+      {
+        "id": "investor.dd.red_flags_recent"
+      },
+      {
+        "id": "investor.portfolio.total_companies"
+      },
+      {
+        "id": "investor.portfolio.board_seats"
+      },
+      {
+        "id": "investor.portfolio.observer_seats"
+      },
+      {
+        "id": "investor.portfolio.review_cadence"
+      },
+      {
+        "id": "investor.portfolio.support_offered"
+      },
+      {
+        "id": "investor.portfolio.intros_made_qtr"
+      },
+      {
+        "id": "investor.portfolio.followon_reserves_pct"
+      },
+      {
+        "id": "investor.portfolio.exits_to_date"
+      },
+      {
+        "id": "investor.lp.report_cadence"
+      },
+      {
+        "id": "investor.lp.report_format"
+      },
+      {
+        "id": "investor.lp.next_fund_planning"
+      },
+      {
+        "id": "investor.lp.dpi_to_date_x"
+      },
+      {
+        "id": "investor.lp.tvpi_to_date_x"
+      },
+      {
+        "id": "investor.lp.communication_pain"
+      },
+      {
+        "id": "investor.watchlist.seed_companies"
+      },
+      {
+        "id": "investor.watchlist.alert_cadence"
+      },
+      {
+        "id": "investor.watchlist.signals_of_interest"
+      },
+      {
+        "id": "investor.watchlist.shadow_companies"
+      },
+      {
+        "id": "investor.sector.ai_inference_econ"
+      },
+      {
+        "id": "investor.sector.fintech_regulatory"
+      },
+      {
+        "id": "investor.sector.climate_metric_required"
+      },
+      {
+        "id": "investor.sector.healthcare_reimbursement"
+      },
+      {
+        "id": "investor.sector.deeptech_capital_intensity"
+      },
+      {
+        "id": "investor.sector.consumer_payback_floor"
+      }
+    ],
+    "operatingPartner": [
+      {
+        "id": "partner.firm.name"
+      },
+      {
+        "id": "partner.role.kind"
+      },
+      {
+        "id": "partner.services.offered"
+      },
+      {
+        "id": "partner.deals.interest"
+      },
+      {
+        "id": "partner.dealflow.channels"
+      },
+      {
+        "id": "partner.conflicts.list"
+      },
+      {
+        "id": "partner.profile.focus"
+      },
+      {
+        "id": "partner.rate.hourly"
+      },
+      {
+        "id": "partner.rate.project"
+      },
+      {
+        "id": "partner.comp.model"
+      },
+      {
+        "id": "partner.sp.firm_type"
+      },
+      {
+        "id": "partner.sp.years_in_business"
+      },
+      {
+        "id": "partner.sp.team_size"
+      },
+      {
+        "id": "partner.sp.startup_team_size"
+      },
+      {
+        "id": "partner.sp.headquarter_geo"
+      },
+      {
+        "id": "partner.sp.geos_served"
+      },
+      {
+        "id": "partner.sp.services_detailed"
+      },
+      {
+        "id": "partner.sp.signature_offering"
+      },
+      {
+        "id": "partner.sp.scope_minimum_usd"
+      },
+      {
+        "id": "partner.sp.pricing_model"
+      },
+      {
+        "id": "partner.sp.startup_discount_pct"
+      },
+      {
+        "id": "partner.sp.deferred_fees_open"
+      },
+      {
+        "id": "partner.sp.sla_response_hours"
+      },
+      {
+        "id": "partner.sp.case_study_link"
+      },
+      {
+        "id": "partner.sp.references_count"
+      },
+      {
+        "id": "partner.sp.tooling_used"
+      },
+      {
+        "id": "partner.sp.target_stages"
+      },
+      {
+        "id": "partner.sp.target_sectors"
+      },
+      {
+        "id": "partner.sp.deal_volume_pref_qtr"
+      },
+      {
+        "id": "partner.sp.current_capacity_pct"
+      },
+      {
+        "id": "partner.sp.intro_friendly"
+      },
+      {
+        "id": "partner.sp.cold_inbound_open"
+      },
+      {
+        "id": "partner.sp.intake_process"
+      },
+      {
+        "id": "partner.sp.kickoff_time_days"
+      },
+      {
+        "id": "partner.sp.conflicts_companies"
+      },
+      {
+        "id": "partner.sp.conflicts_sectors"
+      },
+      {
+        "id": "partner.sp.exclusivity_clauses"
+      },
+      {
+        "id": "partner.sp.confidentiality_walls"
+      },
+      {
+        "id": "partner.sp.priority_focus_qtr"
+      },
+      {
+        "id": "partner.sp.expansion_goal"
+      },
+      {
+        "id": "partner.sp.success_metric"
+      },
+      {
+        "id": "partner.sp.escalation_contact"
+      },
+      {
+        "id": "partner.sp.preferred_comms_channel"
+      },
+      {
+        "id": "partner.sp.weekly_digest_optin"
+      },
+      {
+        "id": "partner.sp.case_study_consent"
+      },
+      {
+        "id": "partner.sp.availability_office_hours"
+      },
+      {
+        "id": "partner.sp.satisfaction_score"
+      },
+      {
+        "id": "partner.sp.referral_nps"
+      },
+      {
+        "id": "partner.sp.biggest_friction"
+      },
+      {
+        "id": "partner.sp.improvement_suggestion"
+      },
+      {
+        "id": "partner.sp.dd.fintech_specialty"
+      },
+      {
+        "id": "partner.sp.dd.healthcare_specialty"
+      },
+      {
+        "id": "partner.sp.dd.ai_specialty"
+      },
+      {
+        "id": "partner.sp.dd.intl_expansion"
+      },
+      {
+        "id": "partner.sp.dd.licensing_held"
+      },
+      {
+        "id": "partner.sp.dd.security_compliance"
+      },
+      {
+        "id": "partner.sp.dd.data_handling"
+      },
+      {
+        "id": "partner.sp.dd.team_seniority_mix"
+      },
+      {
+        "id": "partner.sp.dd.tooling_integrations"
+      },
+      {
+        "id": "partner.sp.dd.engagement_kpi"
+      },
+      {
+        "id": "partner.ma.role_type"
+      },
+      {
+        "id": "partner.ma.years_operating"
+      },
+      {
+        "id": "partner.ma.notable_outcomes"
+      },
+      {
+        "id": "partner.ma.current_advisor_seats"
+      },
+      {
+        "id": "partner.ma.current_eir_engagements"
+      },
+      {
+        "id": "partner.ma.geos_active"
+      },
+      {
+        "id": "partner.ma.functional_expertise"
+      },
+      {
+        "id": "partner.ma.signature_topic"
+      },
+      {
+        "id": "partner.ma.session_length_min"
+      },
+      {
+        "id": "partner.ma.async_or_sync"
+      },
+      {
+        "id": "partner.ma.pricing_model"
+      },
+      {
+        "id": "partner.ma.equity_floor_pct"
+      },
+      {
+        "id": "partner.ma.cash_rate_usd_hr"
+      },
+      {
+        "id": "partner.ma.weekly_hours_open"
+      },
+      {
+        "id": "partner.ma.intros_offered_qtr"
+      },
+      {
+        "id": "partner.ma.coaching_credentials"
+      },
+      {
+        "id": "partner.ma.target_stages"
+      },
+      {
+        "id": "partner.ma.target_sectors"
+      },
+      {
+        "id": "partner.ma.adoption_curve"
+      },
+      {
+        "id": "partner.ma.founder_archetype"
+      },
+      {
+        "id": "partner.ma.intake_process"
+      },
+      {
+        "id": "partner.ma.minimum_engagement_months"
+      },
+      {
+        "id": "partner.ma.conflicts_companies"
+      },
+      {
+        "id": "partner.ma.conflicts_funds"
+      },
+      {
+        "id": "partner.ma.confidentiality_practice"
+      },
+      {
+        "id": "partner.ma.quarter_focus"
+      },
+      {
+        "id": "partner.ma.success_metric"
+      },
+      {
+        "id": "partner.ma.case_studies_open"
+      },
+      {
+        "id": "partner.ma.community_participation"
+      },
+      {
+        "id": "partner.ma.calendar_link"
+      },
+      {
+        "id": "partner.ma.preferred_comms"
+      },
+      {
+        "id": "partner.ma.weekly_digest_optin"
+      },
+      {
+        "id": "partner.ma.satisfaction_score"
+      },
+      {
+        "id": "partner.ma.referral_nps"
+      },
+      {
+        "id": "partner.ma.biggest_friction"
+      },
+      {
+        "id": "partner.ma.suggestion_for_studio"
+      },
+      {
+        "id": "partner.ma.dd.go_to_market"
+      },
+      {
+        "id": "partner.ma.dd.product_strategy"
+      },
+      {
+        "id": "partner.ma.dd.fundraising_help"
+      },
+      {
+        "id": "partner.ma.dd.hiring_help"
+      },
+      {
+        "id": "partner.ma.dd.crisis_support"
+      },
+      {
+        "id": "partner.ma.dd.board_observer_open"
+      },
+      {
+        "id": "partner.ma.dd.podcast_or_writing_consent"
+      },
+      {
+        "id": "partner.ma.dd.intl_geo_expertise"
+      },
+      {
+        "id": "partner.ma.dd.regulatory_navigation"
+      },
+      {
+        "id": "partner.ma.dd.exec_search_partners"
+      },
+      {
+        "id": "partner.ma.dd.workshops_offered"
+      },
+      {
+        "id": "partner.ma.dd.feedback_style"
+      },
+      {
+        "id": "partner.ma.dd.preferred_meeting_format"
+      },
+      {
+        "id": "partner.ma.dd.public_speaking_open"
+      },
+      {
+        "id": "partner.st.partnership_type"
+      },
+      {
+        "id": "partner.st.parent_company"
+      },
+      {
+        "id": "partner.st.industry"
+      },
+      {
+        "id": "partner.st.regions_active"
+      },
+      {
+        "id": "partner.st.team_dedicated_to_partnerships"
+      },
+      {
+        "id": "partner.st.years_in_partnerships"
+      },
+      {
+        "id": "partner.st.assets_offered"
+      },
+      {
+        "id": "partner.st.audience_reach"
+      },
+      {
+        "id": "partner.st.api_or_marketplace"
+      },
+      {
+        "id": "partner.st.referral_economics"
+      },
+      {
+        "id": "partner.st.commercial_minimums"
+      },
+      {
+        "id": "partner.st.case_study_link"
+      },
+      {
+        "id": "partner.st.brand_assets_available"
+      },
+      {
+        "id": "partner.st.legal_template_speed_days"
+      },
+      {
+        "id": "partner.st.exclusivity_offered"
+      },
+      {
+        "id": "partner.st.success_examples_count"
+      },
+      {
+        "id": "partner.st.target_stages"
+      },
+      {
+        "id": "partner.st.target_sectors"
+      },
+      {
+        "id": "partner.st.partnership_volume_qtr"
+      },
+      {
+        "id": "partner.st.qualifying_traction"
+      },
+      {
+        "id": "partner.st.warm_intro_required"
+      },
+      {
+        "id": "partner.st.ideal_partner_archetype"
+      },
+      {
+        "id": "partner.st.conflicts_competitors"
+      },
+      {
+        "id": "partner.st.conflicts_existing_partners"
+      },
+      {
+        "id": "partner.st.compliance_constraints"
+      },
+      {
+        "id": "partner.st.quarter_focus"
+      },
+      {
+        "id": "partner.st.executive_sponsor"
+      },
+      {
+        "id": "partner.st.budget_band_usd"
+      },
+      {
+        "id": "partner.st.success_metric"
+      },
+      {
+        "id": "partner.st.kpi_north_star"
+      },
+      {
+        "id": "partner.st.preferred_comms"
+      },
+      {
+        "id": "partner.st.review_cadence"
+      },
+      {
+        "id": "partner.st.weekly_digest_optin"
+      },
+      {
+        "id": "partner.st.satisfaction_score"
+      },
+      {
+        "id": "partner.st.referral_nps"
+      },
+      {
+        "id": "partner.st.biggest_friction"
+      },
+      {
+        "id": "partner.st.suggestion_for_studio"
+      },
+      {
+        "id": "partner.st.dd.api_access_program"
+      },
+      {
+        "id": "partner.st.dd.intl_expansion_help"
+      },
+      {
+        "id": "partner.st.dd.regulatory_help"
+      },
+      {
+        "id": "partner.st.dd.brand_co_marketing_examples"
+      },
+      {
+        "id": "partner.st.dd.event_co_hosting"
+      },
+      {
+        "id": "partner.st.dd.data_sharing_open"
+      },
+      {
+        "id": "partner.st.dd.executive_intros"
+      },
+      {
+        "id": "partner.st.dd.procurement_path"
+      },
+      {
+        "id": "partner.st.dd.poc_funding_available"
+      },
+      {
+        "id": "partner.st.dd.ip_licensing_open"
+      },
+      {
+        "id": "partner.st.dd.sustainability_priorities"
+      },
+      {
+        "id": "partner.st.dd.competitive_intel_share"
+      },
+      {
+        "id": "partner.st.dd.warm_intro_quota"
+      },
+      {
+        "id": "partner.cv.parent_company"
+      },
+      {
+        "id": "partner.cv.cvc_unit_age_years"
+      },
+      {
+        "id": "partner.cv.cvc_team_size"
+      },
+      {
+        "id": "partner.cv.fund_size_usd"
+      },
+      {
+        "id": "partner.cv.geos_active"
+      },
+      {
+        "id": "partner.cv.balance_sheet_or_separate"
+      },
+      {
+        "id": "partner.cv.thesis_one_line"
+      },
+      {
+        "id": "partner.cv.target_sectors"
+      },
+      {
+        "id": "partner.cv.target_stages"
+      },
+      {
+        "id": "partner.cv.ticket_band_usd"
+      },
+      {
+        "id": "partner.cv.followon_reserve_pct"
+      },
+      {
+        "id": "partner.cv.lead_or_follow"
+      },
+      {
+        "id": "partner.cv.commercial_bundle_offered"
+      },
+      {
+        "id": "partner.cv.dilution_neutral_clauses"
+      },
+      {
+        "id": "partner.cv.investments_per_yr"
+      },
+      {
+        "id": "partner.cv.support_offered"
+      },
+      {
+        "id": "partner.cv.deals_screened_qtr"
+      },
+      {
+        "id": "partner.cv.deals_closed_qtr"
+      },
+      {
+        "id": "partner.cv.average_dd_days"
+      },
+      {
+        "id": "partner.cv.warm_intro_required"
+      },
+      {
+        "id": "partner.cv.coinvest_partners"
+      },
+      {
+        "id": "partner.cv.lps_or_internal_committee"
+      },
+      {
+        "id": "partner.cv.conflicts_competitors"
+      },
+      {
+        "id": "partner.cv.conflicts_existing_portcos"
+      },
+      {
+        "id": "partner.cv.regulatory_constraints"
+      },
+      {
+        "id": "partner.cv.strategic_vs_financial"
+      },
+      {
+        "id": "partner.cv.quarter_focus"
+      },
+      {
+        "id": "partner.cv.executive_sponsor"
+      },
+      {
+        "id": "partner.cv.success_metric"
+      },
+      {
+        "id": "partner.cv.next_year_priorities"
+      },
+      {
+        "id": "partner.cv.preferred_comms"
+      },
+      {
+        "id": "partner.cv.weekly_digest_optin"
+      },
+      {
+        "id": "partner.cv.review_cadence"
+      },
+      {
+        "id": "partner.cv.satisfaction_score"
+      },
+      {
+        "id": "partner.cv.referral_nps"
+      },
+      {
+        "id": "partner.cv.biggest_friction"
+      },
+      {
+        "id": "partner.cv.suggestion_for_studio"
+      },
+      {
+        "id": "partner.cv.dd.commercial_signoff_required"
+      },
+      {
+        "id": "partner.cv.dd.preferred_exit_path"
+      },
+      {
+        "id": "partner.cv.dd.right_of_first_refusal"
+      },
+      {
+        "id": "partner.cv.dd.brand_use_restrictions"
+      },
+      {
+        "id": "partner.cv.dd.commercial_velocity_days"
+      },
+      {
+        "id": "partner.cv.dd.followon_signal_window"
+      },
+      {
+        "id": "partner.cv.dd.board_seats_required"
+      },
+      {
+        "id": "partner.cv.dd.commercial_team_intros"
+      },
+      {
+        "id": "partner.cv.dd.pro_rata_intent"
+      },
+      {
+        "id": "partner.cv.dd.bridge_support"
+      },
+      {
+        "id": "partner.cv.dd.lp_communication_role"
+      },
+      {
+        "id": "partner.cv.dd.public_pr_consent"
+      },
+      {
+        "id": "partner.cv.dd.product_roadmap_input"
+      }
+    ],
+    "mentor": [
+      {
+        "id": "mentor.profile.display_name"
+      },
+      {
+        "id": "mentor.profile.bio"
+      },
+      {
+        "id": "mentor.profile.linkedin_url"
+      },
+      {
+        "id": "mentor.profile.years_operating"
+      },
+      {
+        "id": "mentor.profile.exits_or_outcomes"
+      },
+      {
+        "id": "mentor.profile.public_writing"
+      },
+      {
+        "id": "mentor.profile.sectors"
+      },
+      {
+        "id": "mentor.profile.expertise"
+      },
+      {
+        "id": "mentor.expertise.stages"
+      },
+      {
+        "id": "mentor.expertise.geographies"
+      },
+      {
+        "id": "mentor.expertise.adoption_curve"
+      },
+      {
+        "id": "mentor.expertise.depth_or_breadth"
+      },
+      {
+        "id": "mentor.topics.willing"
+      },
+      {
+        "id": "mentor.topics.unwilling"
+      },
+      {
+        "id": "mentor.topics.signature_session"
+      },
+      {
+        "id": "mentor.topics.recent_wins"
+      },
+      {
+        "id": "mentor.topics.preferred_session_length_min"
+      },
+      {
+        "id": "mentor.topics.async_vs_sync"
+      },
+      {
+        "id": "mentor.profile.hourly_rate_usd"
+      },
+      {
+        "id": "mentor.comp.equity_open"
+      },
+      {
+        "id": "mentor.comp.minimum_engagement_hours"
+      },
+      {
+        "id": "mentor.calendar.weekly_hours"
+      },
+      {
+        "id": "mentor.calendar.timezones_covered"
+      },
+      {
+        "id": "mentor.calendar.notice_required_hours"
+      },
+      {
+        "id": "mentor.calendar.office_hours_window"
+      },
+      {
+        "id": "mentor.engagement.active_founders"
+      },
+      {
+        "id": "mentor.engagement.satisfaction"
+      },
+      {
+        "id": "mentor.engagement.intros_made_qtr"
+      },
+      {
+        "id": "mentor.engagement.biggest_friction"
+      },
+      {
+        "id": "mentor.engagement.referral_likely"
+      }
+    ],
+    "roleDetector": [
+      {
+        "id": "role_detect.primary"
+      },
+      {
+        "id": "role_detect.organization"
+      },
+      {
+        "id": "role_detect.headline"
+      }
+    ]
+  }
+}

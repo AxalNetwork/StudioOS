@@ -35,6 +35,30 @@ export interface UnlockRequirement {
   milestones?: string[];  // milestone keys that must all be completed
 }
 
+// Task #5 (CH) — Market Intelligence section tags. Every MI section
+// in the dashboard must have ≥3 source questions across personas so
+// the CE extractor (Task #?) has enough signal. Add tags freely; the
+// drift CI script asserts coverage.
+export type MISection =
+  | 'sentiment'           // founder/operator mood, NPS-like signals
+  | 'talc'                // tech-adoption-life-cycle stage of buyers
+  | 'demand_supply'       // pipeline volume + supplier capacity
+  | 'fit'                 // ICP / persona alignment
+  | 'partner_pulse'       // partner engagement health
+  | 'capital_velocity'    // round timing, deployment pace
+  | 'sector_heat'         // which sectors are warming/cooling
+  | 'sentiment_geo'       // geographic sentiment skew
+  | 'investor_signals';   // thesis shifts, ticket-band moves
+
+// Task #5 (CH) — operating-partner sub-types so the bank can split
+// into 4 streams (each ≥50) without proliferating top-level banks.
+// 'investor' is its own persona, so it isn't a partner sub-type.
+export type PartnerSubtype =
+  | 'service_provider'    // legal, accounting, design, PR, recruiting
+  | 'mentor_advisor'      // formal advisor seats, EIRs, fractional
+  | 'strategic'           // corporate / channel / distribution partner
+  | 'corporate_venture';  // CVC investment + commercial bundle
+
 export interface Question {
   id: string;
   persona: Persona;
@@ -58,7 +82,28 @@ export interface Question {
   // answer is persisted. Surfaces in publicQuestion + on the
   // /answer rejection envelope when the gate fails.
   requires_evidence?: boolean;
+  // Task #5 (CH) — MI extractor tag. The CE extractor (downstream
+  // task) groups answers by mi_section to compute dashboard signals.
+  mi_section?: MISection;
+  // Task #5 (CH) — operating-partner sub-type. Only meaningful on
+  // OPERATING_PARTNER_BANK rows; ignored elsewhere.
+  partner_subtype?: PartnerSubtype;
+  // Task #5 (CH) — sentiment / TALC eligibility flags so the CE
+  // extractor + scoring layer can pick eligible answers without
+  // re-classifying every question by id pattern.
+  sentiment_eligible?: boolean;
+  talc_eligible?: boolean;
 }
+
+// Task #5 (CH) — per-persona size targets enforced by the drift CI
+// script. Authored from the spec so changes flow through CI.
+export const BANK_SIZE_TARGETS = {
+  newFounderSpinout: 80,
+  existingFounder: 120,
+  investor: 60,
+  mentor: 30,
+  operatingPartnerPerSubtype: 50, // ×4 sub-types = 200 total
+} as const;
 
 // ---------------------------------------------------------------------------
 // Role detector — surfaced when users.role is null.
