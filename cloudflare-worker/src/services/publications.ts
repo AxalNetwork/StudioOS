@@ -77,7 +77,7 @@ export async function loadSectionAggregates(
     console.warn('[publications] aggregate query failed:', (e as Error).message);
     return [];
   }
-  return (res.results as RawRow[] || []).map((r) => ({
+  return ((res.results as unknown as RawRow[]) || []).map((r) => ({
     dimension_key: String(r.dimension_key),
     period_key: String(r.period_key),
     n: Number(r.n) || 0,
