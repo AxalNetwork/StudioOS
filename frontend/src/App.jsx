@@ -903,6 +903,11 @@ function AppInner() {
           granted tiers, redemption count). Distinct from the legacy
           /partner-portal which keeps the LP/capital-call surface. */}
       <Route path="/partners/portal" element={guard(['admin', 'partner'], <PartnerDealPortal />)} />
+      {/* Task #2 (DD) — Direct-URL guard for admin docs. Non-admins
+          (or anonymous visitors) hitting /docs/admin/* see a Not Found
+          screen so the page literally pretends not to exist; admins are
+          redirected into the hash-anchored docs surface. */}
+      <Route path="/docs/admin/*" element={<AdminDocsPathGuard />} />
       <Route path="/docs" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <DocsPage />)} />
       <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SettingsPage />)} />
 
@@ -938,6 +943,31 @@ function GlobalAssistantMount() {
 function GlobalPaywallMount() {
   const { user } = useAuth();
   return <PaywallModal user={user} />;
+}
+
+// Task #2 (DD) — Direct-URL guard for /docs/admin/* paths.
+// Non-admins (and anonymous visitors) get a Not Found screen with no
+// hint that admin docs exist. Admins are redirected to the hash-
+// anchored docs surface (`/docs#admin/<sub>`), preserving the
+// trailing path as the anchor's subsection id when present.
+function AdminDocsPathGuard() {
+  const { user, role, loading } = useAuth() || {};
+  const location = useLocation();
+  if (loading) return null;
+  const isAdmin = !!user && role === 'admin';
+  if (isAdmin) {
+    const sub = location.pathname.replace(/^\/docs\/admin\/?/, '').split('/')[0] || 'overview';
+    return <Navigate to={`/docs#admin/${encodeURIComponent(sub)}`} replace />;
+  }
+  return (
+    <div className="max-w-xl mx-auto py-24 px-6 text-center">
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">Page not found</h1>
+      <p className="text-sm text-gray-600">
+        The page you’re looking for doesn’t exist. Head back to the{' '}
+        <a className="text-violet-700 hover:underline" href="/docs">documentation home</a>.
+      </p>
+    </div>
+  );
 }
 
 export default function App() {
