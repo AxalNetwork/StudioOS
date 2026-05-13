@@ -828,7 +828,7 @@ progress.post('/metrics/:projectId', async (c) => {
     // perspective — surface as 503 + retry hint instead of an opaque 500.
     const drift = /no such (table|column)/i.test(msg);
     return c.json(
-      { detail: drift ? 'Metrics store not ready, please retry.' : 'Failed to save snapshot', error: msg, code: drift ? 'schema_drift' : 'write_failed' },
+      { detail: drift ? 'Metrics store not ready, please retry.' : 'Failed to save snapshot', code: drift ? 'schema_drift' : 'write_failed' },
       drift ? 503 : 500,
     );
   }
@@ -874,8 +874,9 @@ progress.put('/metrics/snapshot/:id', async (c) => {
   } catch (e) {
     const msg = (e as Error).message || '';
     const drift = /no such (table|column)/i.test(msg);
+    console.error('[progress] metrics PUT:', msg);
     return c.json(
-      { detail: drift ? 'Metrics store not ready, please retry.' : 'Failed to update snapshot', error: msg, code: drift ? 'schema_drift' : 'write_failed' },
+      { detail: drift ? 'Metrics store not ready, please retry.' : 'Failed to update snapshot', code: drift ? 'schema_drift' : 'write_failed' },
       drift ? 503 : 500,
     );
   }
