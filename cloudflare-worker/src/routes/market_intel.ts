@@ -793,11 +793,11 @@ marketIntel.post('/contribution-optout', async (c) => {
 
 // Task #3 (CE) — admin-triggered immediate refresh. Enqueues an
 // `mi_reduce` job so the next queue-drain tick rebuilds aggregates
-// within minutes (vs the 6h cron). Admin/partner only.
+// within minutes (vs the 6h cron). Admin only.
 marketIntel.post('/admin/reduce', async (c) => {
   const user = (await requireAuth(c)) as MIUser;
   const role = (user.role || '').toLowerCase();
-  if (role !== 'admin' && role !== 'partner') {
+  if (role !== 'admin') {
     return c.json({ error: 'forbidden', required_role: 'admin' }, 403);
   }
   try {
