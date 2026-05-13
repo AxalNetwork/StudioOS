@@ -38,6 +38,10 @@ async function loadSource() {
   return await readFile(srcPath, 'utf8');
 }
 
+function formatDBTimestamp(date) {
+  return date.toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
+}
+
 function extractConst(src, name) {
   const m = src.match(new RegExp(`const\\s+${name}\\s*=\\s*([^;]+);`));
   assert.ok(m, `${name} const not found`);
@@ -284,7 +288,7 @@ test('400 — original send failed cannot be reminded (must re-send)', async () 
 test('429 — cooldown: last_reminded_at within 7d window', async () => {
   const { fn, REMINDER_COOLDOWN_HOURS } = await loadHandler({ user: SENDER_USER, hashEmail: fakeHash, sendReferralInviteEmail: okSend });
   // Pretend the last reminder was 1 hour ago — well inside the cooldown.
-  const oneHourAgo = new Date(Date.now() - 3600 * 1000).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
+  const oneHourAgo = formatDBTimestamp(new Date(Date.now() - 3600 * 1000));
   const kv = makeKV();
   const { DB } = makeDB({
     invite: { id: 15, sender_user_id: 7, recipient_email: 'a@b.co', status: 'sent',
