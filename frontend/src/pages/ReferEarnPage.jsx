@@ -1083,16 +1083,19 @@ function LinkedInImportModal({ status, tab, setTab, busy, flash, onClose, onConn
           {tabBtn('csv', '2. Upload Connections.csv')}
         </div>
 
-        {flash && (
-          <div className={`mx-6 mt-4 px-3 py-2 text-xs rounded-md flex items-start gap-2 ${
-            /fail|error|could not/i.test(flash)
-              ? 'bg-red-50 border border-red-200 text-red-700'
-              : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-          }`}>
-            {/fail|error|could not/i.test(flash) ? <AlertCircle size={12} className="mt-0.5 shrink-0" /> : <Check size={12} className="mt-0.5 shrink-0" />}
-            <span>{flash}</span>
-          </div>
-        )}
+        {flash && (() => {
+          const isErrorFlash = /fail|error|could not/i.test(flash || '');
+          return (
+            <div className={`mx-6 mt-4 px-3 py-2 text-xs rounded-md flex items-start gap-2 ${
+              isErrorFlash
+                ? 'bg-red-50 border border-red-200 text-red-700'
+                : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+            }`}>
+              {isErrorFlash ? <AlertCircle size={12} className="mt-0.5 shrink-0" /> : <Check size={12} className="mt-0.5 shrink-0" />}
+              <span>{flash}</span>
+            </div>
+          );
+        })()}
 
         {tab === 'signin' && (
           <div className="p-6 space-y-4">
