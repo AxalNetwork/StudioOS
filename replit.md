@@ -71,15 +71,18 @@ AI scoring; legal entity formation; cap-table simulator + fund mgmt + waterfall;
 ### Ops items still owned by user (not in code)
 - (a) Disable R2 public access + add 90-day lifecycle rule to Standard-IA.
 - (b) Verify search/backfill cron in prod.
-- (c) **JWT_SECRET rotation (2026-05-11 + 2026-05-12).** A production-grade
-  `JWT_SECRET` was committed to `.replit` TWICE: first at commit
-  `e5ba56538b542a3f0ae4784f7c6f776c879aa2f7` (Task #51, 2026-05-11) and
-  again — with a new value — at commit
+- (c) **JWT_SECRET rotation (2026-05-11 + 2026-05-12 ×2).** A
+  production-grade `JWT_SECRET` was committed to `.replit` THREE times
+  in 24h: first at commit
+  `e5ba56538b542a3f0ae4784f7c6f776c879aa2f7` (Task #51, 2026-05-11),
+  again at commit
   `d9da1be1a41c216028cc8edb17ae6f02e1b0248d` (Task #2 AU Admin
-  Publication Exports, 2026-05-12). Both lines were removed from
-  `.replit` via `deleteEnvVars` and both commits added to
-  `.gitleaks.toml`'s historical-leak allowlist. **Both leaked values
-  must be considered burned.** Required follow-up: (1) re-add a freshly
+  Publication Exports, 2026-05-12), and a THIRD time at commit
+  `11e262ebc153a3540e80fd5c39a56ae479fccbad` (MI analysis / Task #2
+  AT-1/AT-2+AU bundle, 2026-05-12). All three lines were removed from
+  `.replit` via `deleteEnvVars` and all three commits added to
+  `.gitleaks.toml`'s historical-leak allowlist. **All three leaked
+  values must be considered burned.** Required follow-up: (1) re-add a freshly
   generated `JWT_SECRET` as a Replit Secret (Secrets pane, NOT `[env]`
   in `.replit` — committing it there is what causes the recurring
   gitleaks failure); (2) push the same fresh value to the production
