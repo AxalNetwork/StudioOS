@@ -270,6 +270,21 @@ export const REGISTRY: ProviderDescriptor[] = [
     icon: 'Database',
   },
   {
+    key: 'stripe',
+    display_name: 'Stripe',
+    integration_type: 'data_feed',
+    description: 'Pull live MRR, ARR, paying customers and churn from your Stripe account into the Metrics + scoring engine. Read-only.',
+    // Task #6 (DG) — flipped to 'live' on 2026-05-13. Provider module is
+    // side-effect imported from index.ts so registerProvider() runs at boot.
+    status: 'live',
+    tier: 'growth',
+    auth_type: 'oauth2',
+    capabilities: ['Pull MRR/ARR', 'Customer count', 'Churn analytics', 'Webhook deltas'],
+    docs_url: 'https://stripe.com/docs/connect/standard-accounts',
+    icon: 'CreditCard',
+    oauth_scopes: ['read_only'],
+  },
+  {
     key: 'affinity',
     display_name: 'Affinity',
     integration_type: 'crm',

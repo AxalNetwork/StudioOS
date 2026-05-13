@@ -100,6 +100,11 @@ export interface Env {
   // falls back to a dev /dev-upgrade flow and Atlas calls are stubbed.
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
+  // Task #6 (DG) — Stripe Connect platform OAuth client id (`ca_…`).
+  // Issued from the platform's Connect Settings page in the Stripe
+  // dashboard. Together with STRIPE_SECRET_KEY this drives the founder
+  // OAuth handshake at /api/integrations/oauth/stripe/{start,callback}.
+  STRIPE_CONNECT_CLIENT_ID?: string;
   STRIPE_ATLAS_API_KEY?: string;
   // Task #6 — founder subscription tier price ids (Stripe).
   STRIPE_PRICE_GROWTH?: string;

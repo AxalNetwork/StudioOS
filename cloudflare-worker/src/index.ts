@@ -83,6 +83,8 @@ import { syncAllDocusignIntegrations } from './integrations/providers/docusign';
 // Slack is send-only, driven by services/notify.ts.
 import './integrations/providers/slack';
 import './integrations/providers/crunchbase';
+// Task #6 (DG) — Stripe provider. Side-effect import so registerProvider() runs at boot.
+import { syncAllStripeIntegrations, handleStripeConnectEvent } from './integrations/providers/stripe';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import networkfx from './routes/networkfx';
