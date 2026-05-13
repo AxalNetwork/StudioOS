@@ -1,0 +1,35 @@
+#9 - CE — Market Intelligence extractor (advisor data → MI signals)
+
+What & Why
+
+Anonymised advisor answers should feed the existing MI sections (Investor Signals, Founder Sentiment, TALC, Demand/Supply Atlas, Founder–Investor Fit, Partner Marketplace Pulse, Sector Heat, Sentiment Geography, Capital Velocity) additively alongside the external pipeline (Crunchbase, EDGAR, GDELT, USPTO, etc.). Never replaces external data. Depends on CD because we need write commits to hook into and the question bank's eligibility flags to be in place.
+
+Done looks like
+
+Every applicable MI tab shows TWO data series: "external" and "community (advisor)"
+Aggregates update within hours of new advisor answers via a nightly cron, or minutes when an admin triggers a refresh
+Cells with n < 5 render "Insufficient data" (no zero ghosts); suppression happens at READ time so retroactive opt-out is correct
+k-anonymity ≥ 5 enforced on every aggregate; raw free-text never leaves /api/market-intel (LLM paraphrases excerpts before display)
+User opt-out lives in Settings → Privacy ("Contribute my advisor answers to anonymised Market Intelligence"), defaults ON, and removes contributions within 6 hours
+Investor identities masked behind hashed IDs until a signed pairwise NDA exists
+Out of scope
+
+The Platform Personas tab (that's CF)
+Re-architecting the existing external-source pipeline
+Steps
+
+Extractor pipeline — Build the six extractors in cloudflare-worker/src/services/market_intel/extractors/: advisor_sentiment.ts, advisor_talc.ts, advisor_thesis_embedding.ts, advisor_demand_supply.ts, advisor_capital_velocity.ts, advisor_partner_pulse.ts. Each runs on advisor-answer commit when the question carries the matching eligibility flag.
+Embeddings + classifications — Use @cf/baai/bge-base-en-v1.5 for embeddings and @cf/meta/llama-3.3-70b-instruct-fp8-fast for valence/energy/topic classification; persist into market_intel_signals with source='advisor' and the appropriate dimensions (sector/geo/persona/value/snapshot_ts).
+Aggregator cron — Add a nightly cron computing market_intel_aggregates rows for every MI section across granularities {1d, 7d, 30d, 90d} with n / ci_lower / ci_upper. Read-time suppression for n<5.
+Endpoint wiring — Extend cloudflare-worker/src/routes/market_intel.ts (sentiment, talc, demand-supply, fit, partner-pulse, sector-heat, capital-velocity, sentiment-geo) to read advisor-sourced rows as a second source_kind line alongside external sources.
+Privacy controls — Add the Settings → Privacy opt-out (default ON) and ensure the aggregator skips opted-out users on the next pass within 6 hours.
+Acceptance check — Verify by removing a test user's opt-in and confirming their data drops out of the next aggregation.
+Relevant files
+
+cloudflare-worker/src/services/market_intel/extractors/ (new directory)
+cloudflare-worker/src/routes/market_intel.ts
+frontend/src/pages/SettingsPage.jsx (privacy toggle)
+Dependencies
+
+CD — Personal Advisor write-router (answer → platform injection)
+Main

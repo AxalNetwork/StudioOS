@@ -1,0 +1,43 @@
+#6 - CB — Personal Advisor conversation state machine
+
+What & Why
+
+Today's advisor loops on the same questions, doesn't track progress, and doesn't respect persona/week/tier gating. Replace its routing brain with a deterministic state machine that (a) never re-asks something already answered (in advisor_answers or in platform side-state), (b) picks the highest-priority unanswered question for the current persona / Spin-Out-Lab week / tier / page focus, and (c) reacts to milestone unlocks. Depends on the dedicated AI surface (CG) and the expanded bank (CH).
+
+Done looks like
+
+Advisor never asks a question whose answer already exists, in either advisor_answers or matching platform side-state (existing project rows, OKRs, etc.)
+Selection is deterministic for the same user state: same inputs → same next question
+Persona / unlock_required / tier_required filters all enforced; tier-blocked questions surface as paywall CTAs, not as questions
+Composite ranking respects: focus-page boost (×2), importance (4/3/2/1), unlock proximity (+5 for Spin-Out milestone unblockers), recent platform activity
+Anti-repeat guard demotes a question by 100 points if it was just asked < 5 min ago without a new answer
+Side-effect hooks update Spin-Out week, advisor counters, and emit advisor.answered notification
+Five endpoints implemented: POST /api/advisor/turn, POST /api/advisor/answer, POST /api/advisor/skip, POST /api/advisor/explain, GET /api/advisor/queue
+Unit tests cover the five scenarios in the spec with > 80% branch coverage on stateMachine.ts
+Out of scope
+
+Writing answers to platform tables (that's CD)
+Rendering the progress widget (that's CC)
+Feeding MI extractors (that's CE)
+Replacing the AI provider (already done in CG)
+Steps
+
+Schema — Add the advisor_answers and advisor_state tables via a numbered D1 migration (apply to remote with the standard wrangler flow). UNIQUE(user_id, question_id) on answers.
+State machine module — Implement cloudflare-worker/src/services/advisor/stateMachine.ts with the selection rules from the spec (filter → rank → anti-repeat) and a single nextTurn(userCtx) entry point returning { next_question, queue }.
+Side-effect hooks — On every answer commit: detect Spin-Out milestone unlocks, advance users.spinout_lab_week if all weekly milestones are met, update advisor counters, emit advisor.answered.
+Endpoints — Replace the existing routes in cloudflare-worker/src/routes/advisor.ts with the five endpoints listed in the spec; preserve /explain SSE wire format already established for advisor.
+Tests — Author the five unit tests called out in the spec (never repeats over 50 turns, unlock_required respected, tier respected, focus boost works, no-questions-left state) in cloudflare-worker/test/advisor.stateMachine.test.ts.
+Coverage gate — Wire branch-coverage measurement on stateMachine.ts and fail CI under 80%.
+Relevant files
+
+cloudflare-worker/src/services/advisor/stateMachine.ts (new)
+cloudflare-worker/src/routes/advisor.ts
+cloudflare-worker/sql/migrations/ (new numbered migration)
+cloudflare-worker/test/advisor.stateMachine.test.ts (new)
+Dependencies
+
+CG — Workers AI binding + AI Gateway for Personal Advisor
+Open task
+
+CH — Personal Advisor question-bank expansion
+Open task
