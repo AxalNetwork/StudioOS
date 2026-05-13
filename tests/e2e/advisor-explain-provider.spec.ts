@@ -51,7 +51,10 @@ async function stubExplain(page: import('@playwright/test').Page, body: string) 
   });
 }
 
-// In-browser SSE consumer mirroring PersonalAdvisor.jsx's parser.
+// In-browser SSE consumer mirroring frontend/src/components/advisor/PersonalAdvisor.jsx
+// parser loop (currently lines 339-377 in that file).
+// KEEP IN SYNC: if the SSE parsing logic or event/data field handling changes in
+// PersonalAdvisor.jsx, update this function in the same PR and re-check this test.
 // Returns { provider, deltas, done } for the test to assert.
 async function runExplainInBrowser(page: import('@playwright/test').Page) {
   return await page.evaluate(async () => {
@@ -97,6 +100,8 @@ async function runExplainInBrowser(page: import('@playwright/test').Page) {
           out.provider = {
             model: data.model as string | undefined,
             provider: data.provider as string | undefined,
+            // SSE fields may be absent or non-boolean; normalize to strict booleans
+            // to match PersonalAdvisor parser behavior and keep wire-contract handling stable.
             fallback_used: !!data.fallback_used,
             cached: !!data.cached,
           };
@@ -136,7 +141,7 @@ test.describe('Personal Advisor /explain — SSE provider routing', () => {
     expect(r.error).toBeNull();
     expect(r.provider).not.toBeNull();
     expect(r.provider!.provider).toBe('workers-ai');
-    expect(r.provider!.model).toMatch(/^@cf\/meta\/llama-3\.3-70b/);
+    expect(r.provider!.model).toBe('@cf/meta/llama-3.3-70b-instruct-fp8-fast');
     expect(r.provider!.fallback_used).toBe(false);
     expect(r.provider!.cached).toBe(false);
     expect(r.deltas.join('')).toContain('Simple Agreement for Future Equity');
