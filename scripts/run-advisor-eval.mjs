@@ -149,6 +149,10 @@ async function runPrompt(p) {
   let writeAttempts = 0;
   let turns = 0;
   let conversationUid = null;
+  let costUsd = 0;             // sum of est_cost_usd across the conversation
+  let sectionMatched = 0;      // turns where the served question's section matched expected_section
+  let sectionAttempted = 0;    // turns where expected_section was declared
+  const turnRecords = [];      // per-turn detail (q_id, section, latency, cost, write_status)
 
   // Open / resume.
   const start = await api('POST', '/api/advisor/start', {});
@@ -169,15 +173,44 @@ async function runPrompt(p) {
     seenIds.add(nextQ.id);
     turns++;
     writeAttempts++;
+
+    // expected_section enforcement — match the served question's
+    // section/mi_section/page against the prompt's declared expectation
+    // so we can report "did persona-specific routing actually happen?"
+    // rather than just "did anything get served?".
+    const servedSection = nextQ.section || nextQ.mi_section || nextQ.page_target || nextQ.page || null;
+    let sectionHit = null;
+    if (p.expected_section) {
+      sectionAttempted++;
+      sectionHit = servedSection && String(servedSection).toUpperCase().includes(String(p.expected_section).toUpperCase());
+      if (sectionHit) sectionMatched++;
+    }
+
     const ans = await api('POST', '/api/advisor/answer', {
       conversation_uid: conversationUid,
       question_id: nextQ.id,
       value: p.prompt.slice(0, 200),
     });
     latencies.push(ans.ms);
+    // cost surfaces on AI-augmented responses (advisor /turn audit
+    // exposes est_cost_usd; deterministic /answer typically reports 0
+    // because the write path is rule-based, not model-routed). We sum
+    // both so the per-conversation cost is comprehensive when the worker
+    // does upgrade to model-augmented answers.
+    const turnCost = Number(ans.body?.est_cost_usd ?? ans.body?.cost_usd ?? ans.body?.usage?.est_cost_usd ?? 0) || 0;
+    costUsd += turnCost;
     if (ans.status === 200 && (ans.body?.saved_to || ans.body?.status === 'paywalled' || ans.body?.status === 'noop')) {
       writeSuccess++;
     }
+    turnRecords.push({
+      q_id: nextQ.id,
+      served_section: servedSection,
+      expected_section: p.expected_section || null,
+      section_hit: sectionHit,
+      latency_ms: Math.round(ans.ms),
+      cost_usd: turnCost,
+      write_status: ans.body?.status || (ans.body?.saved_to ? 'saved' : null),
+    });
     nextQ = ans.body?.next || null;
   }
 
@@ -185,10 +218,16 @@ async function runPrompt(p) {
     ok: true,
     persona: p.persona,
     prompt: p.prompt,
+    expected_section: p.expected_section || null,
     turns,
     repeats: [...seenIds].filter((s) => s.endsWith(':REPEAT')).length,
     writes: { attempted: writeAttempts, succeeded: writeSuccess },
+    cost_usd_per_conversation: Number(costUsd.toFixed(6)),
+    expected_section_match: sectionAttempted > 0
+      ? { matched: sectionMatched, attempted: sectionAttempted, rate: Number((sectionMatched / sectionAttempted).toFixed(4)) }
+      : null,
     latencies,
+    turn_records: turnRecords,
   };
 }
 
@@ -229,17 +268,50 @@ async function main() {
 
   const perPersonaMap = new Map();
   for (const r of ok) {
-    const m = perPersonaMap.get(r.persona) || { persona: r.persona, prompts: 0, turns: 0, repeats: 0, write_attempts: 0, write_successes: 0 };
+    const m = perPersonaMap.get(r.persona) || {
+      persona: r.persona, prompts: 0, turns: 0, repeats: 0,
+      write_attempts: 0, write_successes: 0,
+      cost_usd_total: 0,
+      section_matched: 0, section_attempted: 0,
+    };
     m.prompts++; m.turns += r.turns; m.repeats += r.repeats;
     m.write_attempts += r.writes.attempted; m.write_successes += r.writes.succeeded;
+    m.cost_usd_total += r.cost_usd_per_conversation || 0;
+    if (r.expected_section_match) {
+      m.section_matched += r.expected_section_match.matched;
+      m.section_attempted += r.expected_section_match.attempted;
+    }
     perPersonaMap.set(r.persona, m);
   }
+  // Add derived per-persona rates.
+  for (const m of perPersonaMap.values()) {
+    m.cost_usd_avg_per_conversation = m.prompts > 0 ? Number((m.cost_usd_total / m.prompts).toFixed(6)) : 0;
+    m.expected_section_match_rate = m.section_attempted > 0
+      ? Number((m.section_matched / m.section_attempted).toFixed(4))
+      : null;
+  }
+
+  // Aggregate cost + section across all personas.
+  const costTotal = ok.reduce((s, r) => s + (r.cost_usd_per_conversation || 0), 0);
+  const sectionMatchedTotal = ok.reduce((s, r) => s + (r.expected_section_match?.matched || 0), 0);
+  const sectionAttemptedTotal = ok.reduce((s, r) => s + (r.expected_section_match?.attempted || 0), 0);
 
   const summary = {
     prompts_run: ok.length,
     turns_total: turnsTotal,
     repetition_rate: turnsTotal === 0 ? 0 : Number((repeatsTotal / turnsTotal).toFixed(4)),
     write_success_rate: writesAttempted === 0 ? 0 : Number((writesSucceeded / writesAttempted).toFixed(4)),
+    cost_usd: {
+      total: Number(costTotal.toFixed(6)),
+      avg_per_conversation: ok.length > 0 ? Number((costTotal / ok.length).toFixed(6)) : 0,
+    },
+    expected_section_match: sectionAttemptedTotal > 0
+      ? {
+          matched: sectionMatchedTotal,
+          attempted: sectionAttemptedTotal,
+          rate: Number((sectionMatchedTotal / sectionAttemptedTotal).toFixed(4)),
+        }
+      : null,
     latency_ms: {
       p50: percentile(allLatencies, 0.50),
       p95: percentile(allLatencies, 0.95),
@@ -255,6 +327,7 @@ async function main() {
     persona_filter: PERSONA_ARG,
     summary,
     per_persona: [...perPersonaMap.values()],
+    per_prompt: results,        // full per-prompt detail (incl. turn_records) for offline analysis
     failures: results.filter((r) => !r.ok),
   };
 

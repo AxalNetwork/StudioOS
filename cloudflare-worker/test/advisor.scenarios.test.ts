@@ -39,9 +39,12 @@ import * as SM from '../src/services/advisor/stateMachine.ts';
 import {
   bankFor,
   filterByContext,
+  groupByPage,
+  groupBySection,
   type Question,
   type Persona,
 } from '../src/services/advisor/questionBank.ts';
+import { routeAnswer } from '../src/services/advisor/writeRouter.ts';
 import { rolloutDecision, userBucket, fnv1a } from '../src/services/advisor/rollout.ts';
 
 // ---------------------------------------------------------------------------
@@ -262,7 +265,12 @@ const SCENARIOS: Scenario[] = [
 // ---------------------------------------------------------------------------
 // Per-scenario assertions.
 // ---------------------------------------------------------------------------
-async function runScenario(s: Scenario) {
+async function runScenario(
+  s: Scenario,
+  env: any,
+  userObj: any,
+  writeResults: Array<{ id: string; status: string; saved_to?: { table: string; column: string } }>,
+) {
   // Build the visible bank exactly as routes/advisor.ts does.
   const personaBank = bankFor(s.persona, { spinoutLabActive: s.gate.spinoutLabActive });
   const filtered = filterByContext(personaBank, {
@@ -310,12 +318,24 @@ async function runScenario(s: Scenario) {
     assert.equal(next.persona === s.persona || next.persona === 'unknown', true,
       `${s.name}: persona mismatch ${next.persona} vs ${s.persona} on ${next.id}`);
 
-    // Answer it. We don't drive routeAnswer here (it depends on the
-    // full D1/auth surface) — instead we mark the question answered
-    // in the state-machine sense and verify the SCHEDULER's contract,
-    // which is the eval gate's actual subject. The route-layer write
-    // path is covered by the existing writeRouter unit tests + the
-    // (separate) eval harness against staging.
+    // Drive the REAL write path through routeAnswer against the
+    // in-memory D1 mock. Code-review fix: the scheduler-only test
+    // didn't prove writes land in the correct domain tables; this
+    // closes that gap.
+    const value = synthAnswer(next);
+    const evidence = next.requires_evidence ? 'eval-harness:test-evidence' : null;
+    const wr = await routeAnswer(env, userObj, next.id, value, evidence);
+    writeResults.push({ id: next.id, status: wr.status, saved_to: wr.saved_to });
+    // (5) writes land — every answered question must return a
+    //     non-failed status. `saved` is the happy path; `noop` is
+    //     allowed for catch-all extras-bag fields; `paywalled`
+    //     surfaces only when the persona's tier_required isn't met
+    //     (already guarded above). `needs_evidence`/`invalid` shouldn't
+    //     fire because we synthesise valid values + evidence.
+    assert.notEqual(wr.status, 'failed',
+      `${s.name}: routeAnswer failed for ${next.id}: ${wr.error}`);
+    assert.ok(['saved', 'noop', 'paywalled', 'skipped'].includes(wr.status),
+      `${s.name}: unexpected write status ${wr.status} for ${next.id}`);
     answered.add(next.id);
     recentlyAsked.set(next.id, now);
     now += 60_000; // +1 minute between turns
@@ -326,10 +346,85 @@ async function runScenario(s: Scenario) {
   // see far fewer surfaces).
   assert.ok(seenIds.size >= Math.min(s.turns, Math.ceil(visible.length / 2)),
     `${s.name}: only saw ${seenIds.size} of ${visible.length} visible questions`);
+
+  // (6) writes-land-in-correct-tables — at least one routeAnswer call
+  //     must have returned `status: 'saved'` with a non-empty
+  //     saved_to.{table,column}. This is the contract code review
+  //     flagged as missing. Mentor / partner personas can be all-noop
+  //     when the bank routes everything to advisor_extras_json, so we
+  //     allow noop-only outcomes there.
+  const savedWrites = writeResults.filter((w) => w.status === 'saved' && w.saved_to);
+  if (s.persona === 'founder' || s.persona === 'investor') {
+    assert.ok(savedWrites.length > 0,
+      `${s.name}: expected at least one saved write to a domain table, got ${JSON.stringify(writeResults.slice(0, 3))}`);
+    for (const w of savedWrites) {
+      assert.ok(w.saved_to!.table && w.saved_to!.column,
+        `${s.name}: saved write missing table/column: ${JSON.stringify(w)}`);
+    }
+  }
+
+  // (7) progress widget buckets — replicate the /progress per-page +
+  //     per-section computation locally (same helpers the route uses)
+  //     and assert the answered count fans out into the right buckets.
+  const savedSet = new Set(savedWrites.map((w) => w.id));
+  const byPage = groupByPage(visible).map((g) => ({
+    page: g.page,
+    total: g.ids.length,
+    answered: g.ids.filter((id) => savedSet.has(id)).length,
+  }));
+  const bySection = groupBySection(visible).map((g) => ({
+    section: g.section,
+    total: g.ids.length,
+    answered: g.ids.filter((id) => savedSet.has(id)).length,
+  }));
+  const pageAnswered = byPage.reduce((sum, b) => sum + b.answered, 0);
+  const sectionAnswered = bySection.reduce((sum, b) => sum + b.answered, 0);
+  // Bucket totals must agree with the saved set.
+  assert.equal(pageAnswered, savedSet.size,
+    `${s.name}: per-page bucket sum ${pageAnswered} != saved ${savedSet.size}`);
+  assert.equal(sectionAnswered, savedSet.size,
+    `${s.name}: per-section bucket sum ${sectionAnswered} != saved ${savedSet.size}`);
+  // No bucket can over-count its own total.
+  for (const b of byPage)    assert.ok(b.answered <= b.total, `${s.name}: page ${b.page} over-counted`);
+  for (const b of bySection) assert.ok(b.answered <= b.total, `${s.name}: section ${b.section} over-counted`);
+}
+
+// Synthesise a plausible answer for each question type so routeAnswer
+// passes its inline schema validators (numeric fields, evidence gates).
+function synthAnswer(q: Question): string {
+  // Numeric high-risk fields — match the NUMERIC_FIELDS map in writeRouter.
+  if (q.id === 'founder.financials.runway_months')    return '12';
+  if (q.id === 'founder.financials.monthly_burn_usd') return '50000';
+  if (q.id === 'founder.financials.mrr_usd')          return '8000';
+  if (q.id === 'founder.capital.raise_target_usd')    return '1500000';
+  // Generic numeric heuristic: id contains "_usd" or "_months" or "_count".
+  if (/_usd$|_months$|_count$|_pct$/i.test(q.id)) return '10';
+  // Email-shaped fields.
+  if (/email/i.test(q.id)) return 'eval@example.com';
+  // URL-shaped fields.
+  if (/_url$|website|deck/i.test(q.id)) return 'https://example.com';
+  // Default: a short prose answer that satisfies the catch-all string columns.
+  return 'eval-harness synthetic answer';
 }
 
 for (const s of SCENARIOS) {
-  test(`scenario: ${s.name}`, async () => { await runScenario(s); });
+  test(`scenario: ${s.name}`, async () => {
+    const env = makeDb({
+      user_id: s.user.id,
+      user_role: s.persona,
+      project_id: s.user.project_id,
+      founder_id: s.user.founder_id,
+    });
+    const userObj = {
+      id: s.user.id,
+      role: s.persona,
+      email: `u${s.user.id}@eval`,
+      name: 'eval',
+      founder_id: s.user.founder_id ?? null,
+    } as any;
+    const writeResults: Array<{ id: string; status: string; saved_to?: { table: string; column: string } }> = [];
+    await runScenario(s, env, userObj, writeResults);
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -18,7 +18,7 @@
  */
 import type { Env } from '../../types';
 import type { User } from '../../types';
-import { questionById, mapRoleAnswer } from './questionBank';
+import { questionById, mapRoleAnswer } from './questionBank.ts';
 
 export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
 
@@ -350,7 +350,10 @@ let _slotIndexesReady = false;
 // — these writes are side-effects of normal answer plumbing and must
 // never block the user-facing /answer response.
 // ---------------------------------------------------------------------------
-import { MILESTONES, weekMet as canonicalWeekMet } from '../../routes/spinout_lab';
+// Pull from the pure catalog module (NOT routes/spinout_lab) so this
+// file doesn't drag Hono / auth / db into non-route consumers (e.g.
+// the advisor scenario test under --experimental-strip-types).
+import { MILESTONES, weekMet as canonicalWeekMet } from '../spinoutLabCatalog.ts';
 
 function weekForMilestoneKey(key: string): number | null {
   for (const w of MILESTONES) {

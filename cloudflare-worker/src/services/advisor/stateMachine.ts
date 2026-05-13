@@ -39,7 +39,7 @@
  * coverage without any D1 round-trips.
  */
 import type { Env } from '../../types';
-import type { Question, Importance } from './questionBank';
+import type { Question, Importance } from './questionBank.ts';
 // Re-use the canonical Spin-Out Lab milestone catalog so the
 // "advance week when all weekly milestones are met" rule (architect
 // review item #2) stays in lock-step with /api/spinout-lab. Routes
