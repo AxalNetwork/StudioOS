@@ -99,10 +99,11 @@ async function ensureFounder(env: Env, user: User): Promise<number | null> {
 }
 
 async function ensurePartner(env: Env, user: User): Promise<number | null> {
-  // Match the AXAL-XXXXXXXX referral-code pattern used by
-  // routes/partners.ts so the admin partner directory stays
-  // consistent.
-  const refCode = `AXAL-${crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+  // Task #4 (DH) — Short-form Crockford base32 referral code. Legacy
+  // AXAL-XXXXXXXX rows in the partners table continue to resolve via
+  // services/referrals/resolveCode.ts.
+  const { generateShortReferralCode } = await import('./referrals/codes');
+  const refCode = generateShortReferralCode();
   try {
     const ins = await env.DB.prepare(
       `INSERT INTO partners (name, email, referral_code) VALUES (?, ?, ?) RETURNING id`,

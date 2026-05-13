@@ -3,6 +3,8 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
+import { generateUniqueShortReferralCode } from '../services/referrals/codes';
+import { resolveReferralCode } from '../services/referrals/resolveCode';
 
 const network = new Hono<{ Bindings: Env }>();
 
@@ -12,6 +14,11 @@ async function ensureSchema(env: Env) {
   const db = env.DB;
   const stmts = [
     `ALTER TABLE users ADD COLUMN referral_code TEXT`,
+    // Task #4 (DH) — back-compat column for historical AXAL-XXXXXXXX
+    // codes. Defensive ALTER + index here so dev/SQLite stays self-
+    // healing even before migration 051 is applied to remote D1.
+    `ALTER TABLE users ADD COLUMN legacy_referral_code TEXT`,
+    `CREATE INDEX IF NOT EXISTS idx_users_legacy_referral_code ON users(legacy_referral_code)`,
     `CREATE TABLE IF NOT EXISTS referrals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       referrer_id INTEGER NOT NULL,
@@ -80,31 +87,37 @@ async function ensureSchema(env: Env) {
   migrated = true;
 }
 
-function genCode(seed: number): string {
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  let out = '';
-  const bytes = new Uint8Array(6);
-  crypto.getRandomValues(bytes);
-  for (const b of bytes) out += chars[b % chars.length];
-  return `AXAL-${out}`;
-}
-
+// Task #4 (DH) — Brand-new codes use the 6-char Crockford-base32 short
+// form (no AXAL- prefix). Pre-existing users keep their (truncated) short
+// code in users.referral_code and the original `AXAL-XXXXXXXX` in
+// users.legacy_referral_code (via migration 051) so historical invite
+// URLs still resolve via resolveReferralCode().
 async function ensureReferralCode(env: Env, userId: number): Promise<string> {
-  const sql = getSQL(env);
-  const rows = await sql`SELECT referral_code FROM users WHERE id = ${userId}`;
-  if (rows[0]?.referral_code) { await sql.end(); return rows[0].referral_code; }
-  // Generate unique code (retry up to 5x on collision)
-  for (let i = 0; i < 5; i++) {
-    const code = genCode(userId);
-    const conflict = await sql`SELECT id FROM users WHERE referral_code = ${code}`;
-    if (conflict.length === 0) {
-      await sql`UPDATE users SET referral_code = ${code} WHERE id = ${userId}`;
-      await sql.end();
-      return code;
-    }
+  const row = await env.DB
+    .prepare(`SELECT referral_code FROM users WHERE id = ?`)
+    .bind(userId)
+    .first<{ referral_code: string | null }>();
+  const existing = row?.referral_code || '';
+  // Detect codes still in the old `AXAL-XXXXXXXX` shape (e.g. dev DBs
+  // that haven't run migration 051 yet) and rotate them to the short
+  // form transparently — the legacy value is moved to
+  // legacy_referral_code so back-compat resolution keeps working.
+  if (existing && !existing.startsWith('AXAL-') && existing.length <= 32) {
+    return existing;
   }
-  await sql.end();
-  throw new Error('Unable to generate unique referral code');
+  const fresh = await generateUniqueShortReferralCode(env);
+  if (existing.startsWith('AXAL-')) {
+    await env.DB
+      .prepare(`UPDATE users SET legacy_referral_code = COALESCE(legacy_referral_code, ?), referral_code = ? WHERE id = ?`)
+      .bind(existing, fresh, userId)
+      .run();
+  } else {
+    await env.DB
+      .prepare(`UPDATE users SET referral_code = ? WHERE id = ?`)
+      .bind(fresh, userId)
+      .run();
+  }
+  return fresh;
 }
 
 // Internal: called by other routes (kyc.ts, etc.) when a milestone fires.
@@ -286,12 +299,13 @@ async function fireJoinedInviteNotifications(env: Env, newUserId: number): Promi
 export async function attachReferral(env: Env, newUserId: number, refCode: string): Promise<boolean> {
   if (!refCode) return false;
   await ensureSchema(env);
+  // Task #4 (DH) — resolve through the back-compat helper so historical
+  // `AXAL-XXXXXXXX` invite URLs still attach correctly.
+  const referrerId = await resolveReferralCode(env, refCode);
+  if (!referrerId) return false;
+  if (referrerId === newUserId) return false; // self-referral guard
   const sql = getSQL(env);
   try {
-    const refUsers = await sql`SELECT id FROM users WHERE referral_code = ${refCode}`;
-    if (!refUsers.length) return false;
-    const referrerId: number = refUsers[0].id;
-    if (referrerId === newUserId) return false; // self-referral guard
     const existing = await sql`SELECT id FROM referrals WHERE referred_id = ${newUserId}`;
     if (existing.length) return false;
     await sql`INSERT INTO referrals (referrer_id, referred_id, referral_code, status) VALUES (${referrerId}, ${newUserId}, ${refCode}, 'pending')`;
@@ -344,8 +358,21 @@ network.get('/referral/code', async (c) => {
   await ensureSchema(c.env);
   const code = await ensureReferralCode(c.env, user.id);
   const baseUrl = c.env.APP_URL || 'https://axal.vc';
+  // Task #4 (DH) — surface the legacy AXAL- code (if present) so the
+  // Refer & Earn UI can show the "Previous code also works" tooltip.
+  let legacyCode: string | null = null;
+  try {
+    const row = await c.env.DB
+      .prepare(`SELECT legacy_referral_code FROM users WHERE id = ?`)
+      .bind(user.id)
+      .first<{ legacy_referral_code: string | null }>();
+    legacyCode = row?.legacy_referral_code || null;
+  } catch {
+    // Column missing on a very stale dev DB — treat as "no legacy code".
+  }
   return c.json({
     code,
+    legacy_code: legacyCode,
     link: `${baseUrl}/?ref=${code}`,
     register_link: `${baseUrl}/register?ref=${code}`,
   });

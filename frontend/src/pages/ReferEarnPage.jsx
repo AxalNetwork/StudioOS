@@ -579,6 +579,15 @@ export default function ReferEarnPage() {
           <div className="text-xs text-gray-600 mb-2">Referral code</div>
           <div className="bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-lg p-4 text-center mb-4">
             <div className="text-2xl font-mono font-bold text-violet-700 tracking-wider">{code}</div>
+            {data?.legacy_code && (
+              <div
+                className="text-[11px] text-gray-500 mt-2"
+                title="Both codes resolve to your account. Old links you've already shared keep working."
+              >
+                Previous code also works:{' '}
+                <span className="font-mono text-gray-700">{data.legacy_code}</span>
+              </div>
+            )}
           </div>
 
           {/* Quick share */}

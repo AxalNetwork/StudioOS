@@ -31,7 +31,12 @@ export default function RegisterPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const r = params.get('ref');
-    if (r) setRefCode(r.toUpperCase());
+    if (r) {
+      // Task #4 (DH) — Normalise to the new short form for display.
+      // Both formats still work server-side via resolveReferralCode().
+      const normalised = r.trim().toUpperCase().replace(/^AXAL[-_]?/, '').replace(/[^A-Z0-9]/g, '');
+      setRefCode(normalised || r.toUpperCase());
+    }
     const l = params.get('lane');
     if (l && ['partner', 'investor', 'lp', 'founder'].includes(l)) {
       setLane(l);
