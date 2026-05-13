@@ -20,15 +20,26 @@ script for turning the dial across calendar time.
 2. **Wrangler authenticated** to the StudioOS Cloudflare account
    (`wrangler whoami`). You need `Workers Scripts: Edit` and
    `AI Gateway: Edit` on that account.
-3. **Confirm the eval harness builds and runs against staging** —
-   one dry run before Phase 1 starts:
+3. **Eval harness env vars set in your shell** — the script reads
+   ONLY env vars (no CLI flags besides optional `--persona=…`). It
+   no-ops with `process.exit(0)` if either is missing, so a missing
+   var silently produces no report:
    ```bash
-   node scripts/run-advisor-eval.mjs --env staging --dry-run
+   export ADVISOR_EVAL_BASE_URL="https://studioos-staging.<your-acct>.workers.dev"
+   export ADVISOR_EVAL_JWT="<long-lived dogfood JWT for a staging user>"
    ```
-   Output should be a dated JSON in `eval-results/`.
+   Sanity-check by running a single-persona pass and confirming a
+   dated file lands under `eval-results/`:
+   ```bash
+   node scripts/run-advisor-eval.mjs --persona=founder
+   ls -la eval-results/advisor-eval-$(date -u +%F).json
+   ```
 4. **Confirm the gate code is live in prod** — hit any advisor
    route with a non-allowlisted user while `ADVISOR_V2_DISABLED=1`
-   is temporarily set; expect HTTP 423. Unset immediately after.
+   is temporarily set; expect **HTTP 503** (the kill switch is
+   evaluated by `rolloutDecision()` first, which returns 503; the
+   per-user lock path that returns 423 is a different code path).
+   Unset immediately after.
 5. **Have the abort command in another terminal, ready to paste:**
    ```bash
    wrangler secret put ADVISOR_V2_DISABLED --env production
@@ -45,13 +56,14 @@ typo doesn't get committed).
 
 | Flag                              | Meaning                                                                 |
 | --------------------------------- | ----------------------------------------------------------------------- |
-| `ADVISOR_V2_DISABLED=1`           | Instant kill switch. Returns 423 on every advisor route. **Use first if anything looks wrong.** |
+| `ADVISOR_V2_DISABLED=1`           | Instant kill switch. Routes via `rolloutDecision()` → returns **503** on every advisor route. **Use first if anything looks wrong.** |
 | `ADVISOR_V2_ALLOWLIST=u1,u2,…`    | CSV of user ids that get v2 regardless of percentage. Admins are implicitly allowlisted in code. |
 | `ADVISOR_V2_ROLLOUT_PCT=N`        | 0–100. Deterministic FNV-1a bucket of `user_id`. Same user always lands in the same bucket. |
 | `ADVISOR_V2_NEW_SIGNUPS_AFTER=ISO`| Optional. Only users created after this timestamp are eligible. |
 | `ADVISOR_DISABLED=1`              | Legacy alias — OR'd with `ADVISOR_V2_DISABLED` for incident-response safety. |
 
-Routes enforced by the gate (rollout decision → 503, kill switch → 423):
+Routes enforced by the gate (rollout decision → 503 [includes
+`ADVISOR_V2_DISABLED`], per-user guardrail lock → 423):
 `/start`, `/answer`, `/explain`, `/skip`, `/sources`, `/next-question`,
 `/progress`, `/manifest`, `/conversations/:id`, `/tools`, `/tool`,
 `/tool/auto`, `/turn`, `/queue`.
@@ -81,11 +93,17 @@ user sees v2.
    # paste:  0
    wrangler secret delete ADVISOR_V2_DISABLED --env production || true
    ```
-3. Capture a baseline eval against staging:
+3. Capture a baseline eval against staging. The script writes to
+   `eval-results/advisor-eval-YYYY-MM-DD.json` (date stamp only — no
+   `--label` flag exists). Rename the output yourself to label it:
    ```bash
-   node scripts/run-advisor-eval.mjs --env staging --label phase1-start
+   # ADVISOR_EVAL_BASE_URL + ADVISOR_EVAL_JWT must already be exported.
+   node scripts/run-advisor-eval.mjs
+   mv eval-results/advisor-eval-$(date -u +%F).json \
+      eval-results/advisor-eval-$(date -u +%F)-phase1-start.json
    ```
-   Save the path to the dated JSON; it is the comparison anchor.
+   Keep this file path — it is the comparison anchor for the rest of
+   the rollout.
 
 ### Daily during the 3-day window
 
@@ -105,17 +123,23 @@ user sees v2.
 
 Re-run the eval and compare against the Phase 1 baseline JSON:
 ```bash
-node scripts/run-advisor-eval.mjs --env staging --label phase1-end
+node scripts/run-advisor-eval.mjs
+mv eval-results/advisor-eval-$(date -u +%F).json \
+   eval-results/advisor-eval-$(date -u +%F)-phase1-end.json
 ```
 
-| Metric                 | Threshold     |
-| ---------------------- | ------------- |
-| `repetition_rate`      | **≤ 0%**      |
-| `write_success_rate`   | **≥ 95%**     |
-| `p95_latency_ms`       | **≤ 4000**    |
-| `mi_signal_coverage_delta` | **≥ 0** (no regression) |
-| `cost_per_conversation_usd` | within 20% of baseline |
-| Any `kill_switch_activations` in `activity_logs` | **0** unintentional |
+Field paths refer to the `summary` object in the JSON report
+(see `scripts/run-advisor-eval.mjs` lines 313-349 for the exact shape):
+
+| JSON field                              | Threshold |
+| --------------------------------------- | --------- |
+| `summary.repetition_rate`               | **≤ 0.00** (i.e. zero repeated questions) |
+| `summary.write_success_rate`            | **≥ 0.95** |
+| `summary.latency_ms.p95`                | **≤ 4000** ms |
+| `summary.mi_signal_coverage.delta`      | **≥ 0** (no regression vs baseline) |
+| `summary.cost_usd.avg_per_conversation` | within ±20% of baseline |
+| `summary.daily_budget.cap_observed`     | **false** (or only `true` on intentional cap-test runs) |
+| `activity_logs` rows where `action='advisor.kill_switch_blocked'` | **0** unintentional |
 
 If ANY threshold misses → flip `ADVISOR_V2_DISABLED=1`, file a bug,
 do not advance.
@@ -145,7 +169,9 @@ wrangler secret put ADVISOR_V2_NEW_SIGNUPS_AFTER --env production
 ### Daily during the 7-day window
 
 ```bash
-node scripts/run-advisor-eval.mjs --env staging --label phase2-day-N
+node scripts/run-advisor-eval.mjs
+mv eval-results/advisor-eval-$(date -u +%F).json \
+   eval-results/advisor-eval-$(date -u +%F)-phase2-dayN.json
 ```
 
 Per-persona answer rate sanity check (run nightly):
@@ -166,12 +192,13 @@ rate-limit rejections. Flag anything > 1% error or > 5s p95.
 
 ### Gates to enter Phase 3
 
-Same metric thresholds as end of Phase 1, **plus**:
+Same `summary.*` thresholds as end of Phase 1, **plus**:
 - No spike in 4xx/5xx on advisor routes vs. the prior 7 days.
-- No spike in `WORKERS_AI_ADVISOR_BUDGET_USD_DAY` cap-hits in
-  `activity_logs` (`advisor.budget_blocked`).
-- ≤ 0.5% of users hit the kill switch path (`423`) — anything more
-  means the gate is mis-routing.
+- No spike in `WORKERS_AI_ADVISOR_BUDGET_USD_DAY` cap-hits — verify
+  via `summary.daily_budget.blocked_turns` in the daily eval AND
+  `activity_logs` rows where `action='advisor.budget_blocked'`.
+- ≤ 0.5% of advisor requests hit the rollout/kill `503` path —
+  anything more means the gate is mis-routing.
 
 If anything misses → drop pct back to 0 (allowlist still serves dogfood),
 investigate, do NOT flip the kill switch unless prod is actively broken.
