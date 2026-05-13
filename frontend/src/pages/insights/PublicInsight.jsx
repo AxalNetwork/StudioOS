@@ -61,7 +61,7 @@ export default function PublicInsight() {
     return () => {
       document.title = prevTitle;
       created.forEach(({ el, existed, prev }) => {
-        if (!existed) el.parentNode && el.parentNode.removeChild(el);
+        if (!existed) el.parentNode?.removeChild(el);
         else if (prev !== null) el.setAttribute('content', prev);
       });
     };
