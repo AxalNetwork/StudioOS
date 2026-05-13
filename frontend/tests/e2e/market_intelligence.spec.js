@@ -5,11 +5,19 @@ import { requirePreview, loginAs } from './_helpers.js';
 // post-AO smoke coverage; the second array is the 8 advisor-derived
 // tabs added in Task #1 (AT-2). Keep them separate so the legacy assert
 // loop and the new AT-1-fixture-driven flow can each evolve independently.
+// NOTE: `investor_signals` may be role-gated in some environments.
+// Tests that validate tab visibility should treat it as conditionally
+// present: visible for authorized roles, and intentionally absent for
+// unauthorized roles (absence is expected behavior, not a regression).
 const MI_TAB_KEYS_LEGACY = ['compass', 'pulse', 'macro', 'private', 'studio', 'investor_signals'];
 const MI_TAB_KEYS_AT2 = [
   'mi_sentiment', 'mi_talc', 'mi_demand_supply', 'mi_fit',
   'mi_partner_pulse', 'mi_sector_heat', 'mi_sentiment_geo', 'mi_capital_velocity',
 ];
+
+// Keep empty-state copy variants centralized. Update this regex when
+// MI empty-state text changes so tab smoke assertions remain accurate.
+const EMPTY_STATE_TEXT_RE = /No data|Insufficient|coming soon|No results|nothing here|Not enough data/i;
 
 // Populated AT-1 fixtures, one per tab. Shapes mirror the worker
 // responses in cloudflare-worker/src/routes/market_intel.ts so the
@@ -173,7 +181,7 @@ test.describe('Market Intelligence (post-AO verification)', () => {
       await btn.first().click();
       await expect(root).toHaveAttribute('data-active-tab', key);
       const hasContent = await root.locator('h1, h2, h3, table, [role="table"]').count();
-      const hasEmpty = await root.getByText(/No data|Insufficient|coming soon|No results|nothing here|Not enough data/i).count();
+      const hasEmpty = await root.getByText(EMPTY_STATE_TEXT_RE).count();
       const hasError = await root.getByText(/error loading|failed to load|something went wrong/i).count();
       expect(hasError, `MI tab ${key} surfaced an error`).toBe(0);
       expect(hasContent + hasEmpty, `MI tab ${key} rendered nothing`).toBeGreaterThan(0);
@@ -338,7 +346,8 @@ test.describe('Market Intelligence — AT-2 advisor-derived tabs', () => {
     await expect(gapCard).toBeVisible();
     // 'fintech' must be on the gap chart's Y-axis; 'health' must not.
     await expect(gapCard.getByText(/fintech/i).first()).toBeVisible();
-    await expect(gapCard.getByText(/^\s*health\s*$/i)).toHaveCount(0);
+    const gapRows = gapCard.locator('li');
+    await expect(gapRows.filter({ hasText: /\bhealth\b/i })).toHaveCount(0);
   });
 
   test('Founder Sentiment ranks excitements by mean energy and pins valence text', async ({ page }) => {
@@ -465,11 +474,18 @@ test.describe('Market Intelligence — AT-2 advisor-derived tabs', () => {
     await expect(fintechRow).toBeVisible();
     await expect(fintechRow).toContainText('2.80');
     await expect(fintechRow).not.toContainText('2.40');
-    // Last two columns: Periods=2, Sub-sectors=1. Use cell-level matches
-    // so the sparkline column doesn't confuse the assertion.
+    // Assert by semantic column names instead of hard-coded positions.
+    const table = heatCard.locator('table').first();
+    const headers = await table.locator('thead th').allTextContents();
+    const normalizedHeaders = headers.map((h) => h.trim().toLowerCase());
+    const periodsIdx = normalizedHeaders.findIndex((h) => h === 'periods');
+    const subSectorsIdx = normalizedHeaders.findIndex((h) => h === 'sub-sectors' || h === 'sub-sectors');
+    expect(periodsIdx).toBeGreaterThanOrEqual(0);
+    expect(subSectorsIdx).toBeGreaterThanOrEqual(0);
+
     const cells = fintechRow.locator('td');
-    await expect(cells.nth(3)).toHaveText('2');
-    await expect(cells.nth(4)).toHaveText('1');
+    await expect(cells.nth(periodsIdx)).toHaveText('2');
+    await expect(cells.nth(subSectorsIdx)).toHaveText('1');
   });
 
   test('Sentiment Geography renders one card per geo with valence and contributor counts', async ({ page }) => {
