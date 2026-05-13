@@ -250,6 +250,12 @@ export default function ReferEarnPage() {
     localStorage.removeItem(TEMPLATE_STORAGE_KEY);
   };
 
+  const buildPersonalizedInviteLink = (baseLink, refCode, inviteeEmail) => {
+    const params = new URLSearchParams({ ref: refCode });
+    if (inviteeEmail) params.set('invitee', inviteeEmail);
+    return `${baseLink.split('?')[0]}?${params.toString()}`;
+  };
+
   const handleCsvUpload = async (e) => {
     setImportError('');
     const file = e.target.files?.[0];
@@ -271,9 +277,7 @@ export default function ReferEarnPage() {
       // Backend caps a single send-invites request at 100 contacts; keep the
       // import preview aligned so users don't queue invites we'd reject.
       const personalized = rows.slice(0, 100).map(r => {
-        const params = new URLSearchParams({ ref: code });
-        if (r.email) params.set('invitee', r.email);
-        const personalizedLink = `${link.split('?')[0]}?${params.toString()}`;
+        const personalizedLink = buildPersonalizedInviteLink(link, code, r.email);
         return {
           name: r.name || '',
           email: r.email || '',
