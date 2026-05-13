@@ -1,0 +1,65 @@
+Objective
+  New referral codes use the short form: 55PVAE. URL becomes
+  https://axal.vc/register?ref=55PVAE. Already-distributed codes
+  in the AXAL-XXXXXX form must still work — redirect to the short
+  form transparently so historical invites don't break.
+
+Tasks
+  1. cloudflare-worker/src/services/referrals/codes.ts
+     New generator:
+       function generateCode(): string {
+         // 6-char base32 (Crockford), no AXAL- prefix
+         const chars = '23456789ABCDEFGHJKMNPQRSTVWXYZ';
+         let out = '';
+         for (let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+         return out;
+       }
+     Collision check against existing users.referral_code; retry on
+     conflict (vanishingly rare with 30^6 ≈ 729M codes).
+
+  2. Migration:
+     - Add column users.legacy_referral_code (nullable).
+     - For every existing user whose referral_code starts with 'AXAL-':
+         legacy_referral_code = referral_code           (preserve old)
+         referral_code        = substr(referral_code, 5) (short form)
+     - Index: CREATE INDEX idx_users_legacy_ref ON users(legacy_referral_code);
+     - Index: CREATE INDEX idx_users_ref ON users(referral_code);
+
+  3. Lookup logic — single point of resolution:
+     cloudflare-worker/src/services/referrals/resolveCode.ts
+       async function resolveReferralCode(env, code: string) {
+         // Strip 'AXAL-' prefix if present, normalise to upper.
+         const normalised = code.replace(/^AXAL-/i, '').toUpperCase();
+         // Lookup by new format first, fall back to legacy.
+         return await sql`
+           SELECT id, referral_code, legacy_referral_code FROM users
+             WHERE referral_code = ${normalised}
+                OR legacy_referral_code = ${'AXAL-' + normalised}
+             LIMIT 1
+         `;
+       }
+     Use this resolver everywhere a referral code is consumed
+     (register, email send-invites, dashboard attribution).
+
+  4. URL handling:
+     Frontend route /register?ref=XXXXXX accepts both 'AXAL-55PVAE'
+     and '55PVAE'. RegisterPage normalises to the short form for
+     display + storage, but resolution always goes through the resolver.
+
+  5. Email templates (cloudflare-worker/src/templates/email/):
+     All new invite emails generate the short-form URL. Old emails
+     already in inboxes still work because of the resolver.
+
+  6. UI:
+     Refer & Earn page shows the short code prominently and the
+     URL in the short form. If the user has a legacy_referral_code
+     (i.e. they were issued an AXAL- code historically), show a small
+     "Previous code also works: AXAL-55PVAE" tooltip.
+
+Acceptance
+  - Brand-new users get short-form codes only.
+  - Existing AXAL-XXXXXX codes still redeem successfully (test with
+    a known historical code).
+  - Email send-invites uses short form.
+  - Register page accepts both forms in the ?ref query parameter.
+  - No data loss; every old code has a legacy_referral_code row.

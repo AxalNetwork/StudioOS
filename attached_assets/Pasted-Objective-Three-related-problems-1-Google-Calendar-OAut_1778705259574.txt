@@ -1,0 +1,124 @@
+Objective
+  Three related problems:
+  1. Google Calendar OAuth callback fails — invalid redirect_uri,
+     token-exchange step never completes.
+  2. Outlook / Microsoft 365 OAuth is not configured.
+  3. OAuth callback URLs currently expose *.workers.dev URLs which
+     look unprofessional to end users connecting LinkedIn (Refer &
+     Earn) and Calendar accounts. Move all callbacks to axal.vc.
+
+Custom domain
+  In Cloudflare Dashboard > Workers > studioos > Triggers:
+    Add custom domain: axal.vc/api/*  (or api.axal.vc, then route
+    /* to axal.vc/api/* via Cloudflare Pages rules)
+  In wrangler.toml:
+    routes = [
+      { pattern = "axal.vc/api/*", custom_domain = true }
+    ]
+  Verify the cert provisions; remove any reliance on
+  guillaumelauzier.workers.dev or studioos.guillaumelauzier.workers.dev
+  in production code paths. Keep the workers.dev URL accessible only
+  for preview / debugging.
+
+  Then ALL OAuth callbacks become:
+    Google:   https://axal.vc/api/calendar/google/callback
+    Outlook:  https://axal.vc/api/calendar/outlook/callback
+    LinkedIn: https://axal.vc/api/refer-earn/linkedin/callback
+
+  No, this is NOT a problem provided you update each provider's
+  registered redirect URI list to match. The two affected apps:
+    Google Cloud Console > APIs & Services > Credentials >
+      OAuth 2.0 Client > Authorized redirect URIs: add the new URL.
+      Remove the old workers.dev one.
+    Microsoft Entra ID > App registrations > <studioos> >
+      Authentication > Redirect URIs: add Web type with the new URL.
+    LinkedIn Developers > <app> > Auth > Authorized redirect URLs:
+      add the new URL.
+
+Google Calendar OAuth fix
+  Likely cause of the current failure (verify in Worker logs):
+    a. redirect_uri sent at /authorize doesn't match the registered
+       URI exactly (trailing slash, http vs https, subdomain drift).
+    b. The state parameter isn't being verified server-side so
+       Google falls back to an error path.
+    c. The token endpoint POST is sending Content-Type:
+       application/json instead of application/x-www-form-urlencoded.
+
+  cloudflare-worker/src/routes/calendar.ts:
+    GET /google/start
+      → builds authorize URL with:
+         response_type=code
+         client_id=env.GOOGLE_CLIENT_ID
+         redirect_uri=https://axal.vc/api/calendar/google/callback
+         scope=https://www.googleapis.com/auth/calendar.events
+               https://www.googleapis.com/auth/calendar.readonly
+               openid email profile
+         access_type=offline   prompt=consent
+         state=<HMAC(user_id, nonce, env.JWT_SECRET)>
+      → returns { redirect_url }
+    GET /google/callback?code=&state=
+      → verify state HMAC; exchange code at
+         POST https://oauth2.googleapis.com/token
+         body: application/x-www-form-urlencoded
+         { code, client_id, client_secret, redirect_uri, grant_type:
+           'authorization_code' }
+      → persist refresh_token (encrypted), access_token, expires_at,
+         scope, remote_account_id into calendar_google_tokens.
+      → 302 redirect back to /calendar?connected=google
+
+  Token refresh: separate helper that runs on every calendar read
+  request, refreshing 5 minutes before expiry.
+
+Outlook / Microsoft 365 OAuth (new)
+  cloudflare-worker/src/routes/calendar.ts:
+    GET /outlook/start
+      → https://login.microsoftonline.com/common/oauth2/v2.0/authorize
+         client_id=env.MS_CLIENT_ID
+         response_type=code
+         redirect_uri=https://axal.vc/api/calendar/outlook/callback
+         response_mode=query
+         scope=offline_access Calendars.ReadWrite User.Read
+         state=<HMAC>
+    GET /outlook/callback
+      → exchange at
+         POST https://login.microsoftonline.com/common/oauth2/v2.0/token
+         body application/x-www-form-urlencoded
+         { client_id, scope, code, redirect_uri,
+           grant_type: 'authorization_code',
+           client_secret: env.MS_CLIENT_SECRET }
+      → persist into calendar_outlook_tokens (same shape as Google).
+
+  Microsoft Graph wrapper:
+    cloudflare-worker/src/services/calendar/outlook.ts
+      listEvents(user, range)
+      createEvent(user, event)
+      deleteEvent(user, event_id)
+
+  Frontend CalendarPage.jsx gets a second "Connect Outlook" button
+  alongside Google. The events list shows a small provider badge per
+  event.
+
+Secrets to set
+  wrangler secret put GOOGLE_CLIENT_ID
+  wrangler secret put GOOGLE_CLIENT_SECRET
+  wrangler secret put MS_CLIENT_ID
+  wrangler secret put MS_CLIENT_SECRET
+  wrangler secret put LINKEDIN_CLIENT_ID
+  wrangler secret put LINKEDIN_CLIENT_SECRET
+
+LinkedIn (Refer & Earn) callback rewrite
+  cloudflare-worker/src/routes/refer_earn.ts (or linkedin.ts):
+    Same pattern: redirect_uri now points at axal.vc. Update the
+    LinkedIn app's authorized redirect URI list.
+
+Acceptance
+  - Connecting Google Calendar succeeds; events appear within 30s.
+  - Token refresh works without re-prompting the user for 90 days.
+  - Connecting Outlook succeeds; events appear; create + delete
+    round-trip.
+  - LinkedIn connect from Refer & Earn shows axal.vc in the consent
+    screen, not workers.dev.
+  - All redirect URIs registered with the three providers point only
+    at axal.vc.
+  - Old workers.dev URLs no longer accept production callbacks
+    (route removed or returns 410 Gone).

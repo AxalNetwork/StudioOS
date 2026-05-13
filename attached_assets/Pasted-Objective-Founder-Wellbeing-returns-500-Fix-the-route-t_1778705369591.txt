@@ -1,0 +1,207 @@
+Objective
+  Founder Wellbeing returns 500. Fix the route, then expand the
+  feature into a real expert directory covering advisors, mentors,
+  and wellness specialists. Match by category × rating × language ×
+  availability, and let founders book directly.
+
+Part 1 — Fix the 500
+  cloudflare-worker/src/routes/wellbeing.ts
+    Same defensive pattern as Prompt DF: GET endpoints return hydrated
+    defaults; never 5xx on missing rows.
+  Schema:
+    CREATE TABLE IF NOT EXISTS wellbeing_checkins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      mood_1to10 INTEGER, stress_1to10 INTEGER,
+      sleep_hours REAL, energy_1to10 INTEGER,
+      focus_1to10 INTEGER, social_1to10 INTEGER,
+      free_text TEXT,
+      tags_json TEXT
+    );
+
+Part 2 — Expert categories + directory
+  Schema:
+    CREATE TABLE IF NOT EXISTS experts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,                     -- platform user if applicable
+      name TEXT NOT NULL,
+      title TEXT,
+      bio TEXT,
+      categories_json TEXT NOT NULL,        -- e.g. ['executive_coach','sleep_specialist']
+      sectors_json TEXT,
+      languages_json TEXT,
+      timezones_json TEXT,
+      countries_json TEXT,
+      modalities_json TEXT,                  -- ['video','voice','in_person']
+      pricing_model TEXT,                   -- 'pro_bono','equity','cash','sliding','mixed'
+      hourly_rate_usd REAL,
+      first_session_free INTEGER DEFAULT 0,
+      booking_calendly_url TEXT,
+      booking_google_url TEXT,
+      verified INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS expert_ratings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      expert_id INTEGER NOT NULL,
+      rated_by_user_id INTEGER NOT NULL,
+      score INTEGER NOT NULL,                -- 1..5
+      review_text TEXT,
+      category_match_pct INTEGER,            -- 0..100 self-reported
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(expert_id, rated_by_user_id)
+    );
+    CREATE TABLE IF NOT EXISTS expert_bookings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      expert_id INTEGER NOT NULL,
+      booked_by_user_id INTEGER NOT NULL,
+      scheduled_at DATETIME,
+      duration_min INTEGER,
+      status TEXT,                            -- 'requested','confirmed','completed','cancelled'
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+Exhaustive category list (commit as
+  cloudflare-worker/src/data/expertCategories.ts)
+
+  Advisory:
+    startup_advisor_general
+    sector_advisor (sub-tags: ai, fintech, climate, health, …)
+    technical_advisor
+    gtm_advisor
+    sales_advisor
+    marketing_advisor
+    product_advisor
+    operations_advisor
+    finance_advisor / fractional_cfo
+    legal_advisor
+    hr_people_advisor
+    strategy_advisor
+    ma_advisor
+    ir_communications_advisor
+    board_advisor
+    compliance_regulatory_advisor
+    pricing_advisor
+    international_expansion_advisor
+
+  Mentorship:
+    peer_founder_mentor (similar stage)
+    domain_expert_mentor
+    career_mentor
+    technical_mentor
+    sales_mentor
+    fundraising_mentor
+    scaling_mentor
+    exit_mentor
+    first_time_founder_mentor
+    second_time_founder_mentor
+    immigrant_founder_mentor
+    minority_founder_mentor
+
+  Wellness — Mental & Emotional:
+    executive_coach
+    performance_coach
+    life_coach
+    psychotherapist
+    clinical_psychologist
+    counsellor
+    couples_therapist
+    family_therapist
+    trauma_specialist
+    grief_counsellor
+    burnout_recovery_specialist
+    addiction_counsellor
+    sobriety_recovery_coach
+    sport_psychologist
+
+  Wellness — Physical:
+    nutritionist
+    registered_dietitian
+    fitness_trainer
+    movement_coach
+    yoga_instructor
+    meditation_mindfulness_instructor
+    breathwork_practitioner
+    somatic_therapist
+    posture_ergonomics_specialist
+    massage_therapist
+    chiropractor
+    physiotherapist
+
+  Wellness — Clinical / Functional:
+    sleep_specialist_physician
+    functional_medicine_doctor
+    integrative_health_coach
+    neurofeedback_practitioner
+    nutritional_psychiatrist
+    hormone_specialist
+
+  Wellness — Lifestyle & Practical:
+    stress_management_coach
+    productivity_coach
+    time_management_coach
+    financial_wellness_coach
+    relationship_coach
+    parenting_coach
+    spiritual_philosophical_advisor
+
+  Cross-cutting:
+    diversity_inclusion_advisor
+    immigration_visa_advisor
+    tax_personal_advisor
+    estate_planning_advisor
+
+  An expert can hold multiple categories — schema is JSON array.
+
+Matching methodology
+  cloudflare-worker/src/services/wellbeing/match.ts
+    Scoring formula per (founder, expert):
+      base_match    = categorical_overlap(founder_needs, expert_categories)
+      rating_score  = bayes_avg(expert_ratings, prior_mean=4.2, prior_n=3)
+      language_match = expert.languages ∩ founder.languages ? 1 : 0
+      tz_match       = abs(expert_tz - founder_tz) <= 3h ? 1 : 0.5
+      availability   = has_calendar_slots_in_next_14_days ? 1 : 0.3
+      price_match    = founder_budget_compatible ? 1 : 0.5
+    composite = 0.35*base_match + 0.25*rating_score + 0.10*language_match
+              + 0.10*tz_match + 0.10*availability + 0.10*price_match
+
+  Top-N (default 6) returned to the page as cards.
+
+Wellbeing page UX
+  Top: today's quick check-in (mood/stress/sleep/energy sliders),
+  saved instantly.
+  Below: "Experts matched to you" — 6 cards based on the most recent
+  check-in tags + persona answers from Personal Advisor. Each card:
+    - photo, name, title, top categories
+    - "First session free" badge if applicable
+    - rating + count
+    - languages
+    - "Book consultation" → opens Calendly / booked-by-platform flow
+  Filters: category, language, modality, price.
+  "Why these matches?" link expands the score breakdown.
+
+Onboarding + Advisor integration
+  - Onboarding chatbot asks the founder about wellness goals at the end
+    of the persona flow (low-priority section, optional).
+  - Personal Advisor asks weekly "How's your wellbeing?" check-in
+    questions and tags answers for category routing.
+  - Founder can self-declare expertise to become an expert themselves;
+    admin verifies.
+
+Privacy
+  Wellbeing data is the most sensitive on the platform. Encrypted at
+  column level (Prompt B). Never feeds Market Intelligence aggregates
+  unless explicitly opted in. Free-text free_text fields paraphrased
+  before any internal display.
+
+Acceptance
+  - Page loads without 500 on a fresh account.
+  - Daily check-in saves; chart of last 30 days renders.
+  - 6 expert cards rendered with sane matches.
+  - Filter + search work.
+  - Booking flow opens the expert's Calendly (or internal scheduling
+    if Calendly not configured).
+  - Free founder gets unlimited check-ins + 3 matched expert profile
+    views/month; Growth/Studio unlock unlimited matches.
