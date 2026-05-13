@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { TrendingUp, TrendingDown, Minus, Globe, BarChart3, Zap, Building2, ChevronDown, Info, Lightbulb, Users, Database, ExternalLink, Compass, Target, MapPin, BookOpen, Bookmark, Lock, Trash2, Activity, Layers, GitMerge, Handshake, Flame, MapIcon, Wind, ShieldAlert } from 'lucide-react';
 import { openPaywall } from '../components/PaywallModal';
@@ -2600,21 +2600,61 @@ function CapitalVelocityTab() {
 // admin / partner / mentor see CSV + PDF export buttons.
 const ROLE_COLORS = ['#7c3aed', '#2563eb', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#a78bfa', '#fb7185'];
 
-function PersonasPaywall({ section }) {
+// Blurred teaser per spec: synthesized fake data rendered with a heavy
+// CSS blur so users see the SHAPE of the chart they're missing, with an
+// "Upgrade" CTA layered on top. Never derived from real platform data.
+function PersonasPaywall({ section, kind = 'bar' }) {
+  const fake = useMemo(() => {
+    if (kind === 'pie') {
+      return Array.from({ length: 5 }, (_, i) => ({ label: `slice-${i}`, n: 30 + ((i * 17) % 40) }));
+    }
+    if (kind === 'line') {
+      return Array.from({ length: 8 }, (_, i) => ({
+        week: `w${i}`,
+        founder: 20 + ((i * 7) % 25),
+        investor: 12 + ((i * 11) % 18),
+      }));
+    }
+    return Array.from({ length: 6 }, (_, i) => ({ label: `bucket-${i}`, n: 15 + ((i * 13) % 35) }));
+  }, [kind]);
   return (
     <MICard title={section}>
-      <div className="text-center py-6">
-        <Lock size={20} className="mx-auto text-violet-500 mb-2" />
-        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Upgrade to see this chart</div>
-        <p className="text-xs text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-3">
-          Available on Growth, Investor Pro, and above. Free callers see the role donut and the sector heatmap.
-        </p>
-        <button
-          onClick={() => openPaywall({ tier: 'growth', source: 'platform_personas' })}
-          className="text-xs bg-violet-600 hover:bg-violet-700 text-white font-medium px-4 py-1.5 rounded-md"
-        >
-          Upgrade
-        </button>
+      <div className="relative" style={{ minHeight: 200 }}>
+        <div aria-hidden style={{ filter: 'blur(8px)', opacity: 0.55, pointerEvents: 'none' }}>
+          <div style={{ width: '100%', height: 200 }}>
+            <ResponsiveContainer>
+              {kind === 'pie' ? (
+                <PieChart>
+                  <Pie data={fake} dataKey="n" nameKey="label" outerRadius={75}>
+                    {fake.map((_, i) => <Cell key={i} fill={ROLE_COLORS[i % ROLE_COLORS.length]} />)}
+                  </Pie>
+                </PieChart>
+              ) : kind === 'line' ? (
+                <LineChart data={fake}>
+                  <Line type="monotone" dataKey="founder" stroke={ROLE_COLORS[0]} strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="investor" stroke={ROLE_COLORS[1]} strokeWidth={2} dot={false} />
+                </LineChart>
+              ) : (
+                <BarChart data={fake}>
+                  <Bar dataKey="n" fill={ROLE_COLORS[0]} />
+                </BarChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6 bg-white/40 dark:bg-gray-900/40">
+          <Lock size={20} className="text-violet-500 mb-2" />
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Upgrade to unlock</div>
+          <p className="text-xs text-gray-600 dark:text-gray-300 max-w-xs mb-3">
+            Available on Growth, Investor Pro, and above.
+          </p>
+          <button
+            onClick={() => openPaywall({ tier: 'growth', source: 'platform_personas' })}
+            className="text-xs bg-violet-600 hover:bg-violet-700 text-white font-medium px-4 py-1.5 rounded-md"
+          >
+            Upgrade
+          </button>
+        </div>
       </div>
     </MICard>
   );
@@ -2733,7 +2773,7 @@ function PlatformPersonasTab() {
           )}
         </MICard>
 
-        {isPaywalled(data.stage_focus) ? <PersonasPaywall section="Stage focus" /> : (
+        {isPaywalled(data.stage_focus) ? <PersonasPaywall section="Stage focus" kind="bar" /> : (
           <MICard title="Stage focus by role">
             {(data.stage_focus?.rows || []).length === 0 ? (
               <MIInsufficientData section="Stage focus" kMin={data.k_min} />
@@ -2760,7 +2800,7 @@ function PlatformPersonasTab() {
           </MICard>
         )}
 
-        {isPaywalled(data.geo_distribution) ? <PersonasPaywall section="Geography" /> : (
+        {isPaywalled(data.geo_distribution) ? <PersonasPaywall section="Geography" kind="pie" /> : (
           <MICard title="Geography distribution">
             {(data.geo_distribution?.rows || []).length === 0 ? (
               <MIInsufficientData section="Geography" kMin={data.k_min} />
@@ -2780,7 +2820,7 @@ function PlatformPersonasTab() {
           </MICard>
         )}
 
-        {isPaywalled(data.activity_composite) ? <PersonasPaywall section="Activity" /> : (
+        {isPaywalled(data.activity_composite) ? <PersonasPaywall section="Activity" kind="bar" /> : (
           <MICard title="Activity composite (last 30 days)">
             {(data.activity_composite?.rows || []).length === 0 ? (
               <MIInsufficientData section="Activity" kMin={data.k_min} />
@@ -2814,7 +2854,7 @@ function PlatformPersonasTab() {
           </MICard>
         )}
 
-        {isPaywalled(data.spinout_lab_funnel) ? <PersonasPaywall section="Spin-Out Lab funnel" /> : (
+        {isPaywalled(data.spinout_lab_funnel) ? <PersonasPaywall section="Spin-Out Lab funnel" kind="bar" /> : (
           <MICard title="Spin-Out Lab funnel">
             {(data.spinout_lab_funnel?.rows || []).length === 0 ? (
               <MIInsufficientData section="Spin-Out Lab" kMin={data.k_min} />
@@ -2831,10 +2871,17 @@ function PlatformPersonasTab() {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="text-xs text-gray-700 dark:text-gray-300 mt-2">
-                  Completion rate: <span className="font-semibold text-emerald-600">{data.spinout_lab_funnel.completion_rate ?? '—'}%</span>
-                  {data.spinout_lab_funnel.total_started != null && (
-                    <span className="text-gray-500 dark:text-gray-400 ml-2">({data.spinout_lab_funnel.total_started} founders started)</span>
+                <div className="text-xs text-gray-700 dark:text-gray-300 mt-2 space-y-0.5">
+                  <div>
+                    Completion rate:{' '}
+                    {data.spinout_lab_funnel.completion_rate != null ? (
+                      <span className="font-semibold text-emerald-600">{data.spinout_lab_funnel.completion_rate}%</span>
+                    ) : (
+                      <span className="text-gray-400 italic" title={`Suppressed — needs ≥ ${data.k_min} in both completed and not-completed sub-cohorts.`}>hidden (k&lt;{data.k_min})</span>
+                    )}
+                  </div>
+                  {data.spinout_lab_funnel.started_band && (
+                    <div className="text-gray-500 dark:text-gray-400">Cohort size: {data.spinout_lab_funnel.started_band} founders started</div>
                   )}
                 </div>
               </>
@@ -2842,7 +2889,7 @@ function PlatformPersonasTab() {
           </MICard>
         )}
 
-        {isPaywalled(data.signups_trend) ? <PersonasPaywall section="Signups trend" /> : (
+        {isPaywalled(data.signups_trend) ? <PersonasPaywall section="Signups trend" kind="line" /> : (
           <MICard title="Weekly signups by role">
             {(data.signups_trend?.rows || []).length === 0 ? (
               <MIInsufficientData section="Signups trend" kMin={data.k_min} />
@@ -2869,7 +2916,7 @@ function PlatformPersonasTab() {
           </MICard>
         )}
 
-        {isPaywalled(data.pipeline_coverage) ? <PersonasPaywall section="Pipeline coverage" /> : (
+        {isPaywalled(data.pipeline_coverage) ? <PersonasPaywall section="Pipeline coverage" kind="bar" /> : (
           <MICard title="Active investor pipeline coverage">
             {(data.pipeline_coverage?.rows || []).length === 0 ? (
               <MIInsufficientData section="Pipeline coverage" kMin={data.k_min} />

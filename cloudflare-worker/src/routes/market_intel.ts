@@ -886,6 +886,8 @@ interface PlatformPersonasPayload {
   pipeline_coverage: any;
   exports?: { csv_url: string; pdf_url: string };
   tier: 'free' | 'full' | 'export';
+  /** Free-tier hint so the frontend can render blurred chart teasers. */
+  free_teaser?: { gated_charts: string[]; reason: string };
 }
 
 const PERSONAS_KMIN = 5;
@@ -1031,15 +1033,31 @@ async function buildPersonasPayload(env: Env): Promise<PlatformPersonasPayload> 
     ).first<{ n: number }>();
     const completed = Number(completedRow?.n || 0);
     const started = Number(startedRow?.n || 0);
-    const completion_rate = started >= PERSONAS_KMIN
+    // K-anonymity: suppress completion_rate unless BOTH the completed
+    // and not-completed sub-cohorts each clear K. Otherwise a viewer
+    // can back-solve the missing count from rate × started (e.g.
+    // started=5, rate=20% ⇒ completed=1). Same reason we band started
+    // into a coarse range instead of returning the exact integer.
+    const notCompleted = Math.max(0, started - completed);
+    const safeForRate = completed >= PERSONAS_KMIN && notCompleted >= PERSONAS_KMIN;
+    const completion_rate = safeForRate
       ? Math.round((completed / started) * 1000) / 10
       : null;
+    const startedBand = (() => {
+      if (started < PERSONAS_KMIN) return null;
+      if (started < 10) return '5-9';
+      if (started < 25) return '10-24';
+      if (started < 50) return '25-49';
+      if (started < 100) return '50-99';
+      if (started < 250) return '100-249';
+      return '250+';
+    })();
     return {
       rows: suppressBelowK(rows),
       completion_rate,
-      total_started: started >= PERSONAS_KMIN ? started : null,
+      started_band: startedBand,
     };
-  }, { rows: [], completion_rate: null, total_started: null });
+  }, { rows: [], completion_rate: null, started_band: null });
 
   // 7. New signups trend — weekly counts by role over last 12 weeks.
   const signups_trend = await safe(async () => {
@@ -1110,8 +1128,11 @@ marketIntel.get('/platform-personas', async (c) => {
   }
 
   // Free callers see only chart 1 + chart 2; the rest are gated.
+  // We surface a `free_teaser` hint so the frontend renders a blurred
+  // skeleton (per spec) rather than a hard paywall card. Each gated
+  // chart still carries `tier_required` so client code can decide.
   if (tier === 'free') {
-    const gated = { tier_required: 'growth', upgrade_path: '/billing' };
+    const gated = { tier_required: 'growth', upgrade_path: '/billing', blurred: true };
     payload = {
       ...payload,
       stage_focus: gated,
@@ -1121,6 +1142,13 @@ marketIntel.get('/platform-personas', async (c) => {
       signups_trend: gated,
       pipeline_coverage: gated,
       tier: 'free',
+      free_teaser: {
+        gated_charts: [
+          'stage_focus', 'geo_distribution', 'activity_composite',
+          'spinout_lab_funnel', 'signups_trend', 'pipeline_coverage',
+        ],
+        reason: 'Available on Growth, Investor Pro, and above.',
+      },
     };
   } else if (tier === 'export') {
     payload = {
@@ -1148,13 +1176,11 @@ marketIntel.get('/platform-personas/export', async (c) => {
     await writeKv(c.env, 'personas:platform', payload, 5 * 60);
   }
   if (fmt === 'pdf') {
-    // PDF rendering is a separate concern (Studio digest worker handles
-    // it). For now we surface the JSON so a downstream printer can pick
-    // it up; the Content-Type makes intent explicit.
-    return new Response(JSON.stringify(payload, null, 2), {
+    const pdf = renderPersonasPdf(payload);
+    return new Response(pdf, {
       headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Content-Disposition': `attachment; filename="platform-personas-${new Date().toISOString().slice(0,10)}.json"`,
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="platform-personas-${new Date().toISOString().slice(0,10)}.pdf"`,
       },
     });
   }
@@ -1195,6 +1221,154 @@ marketIntel.get('/platform-personas/export', async (c) => {
     },
   });
 });
+
+// ─── Minimal PDF renderer for Platform Personas export ────────────────
+// Hand-rolled PDF 1.4 writer — no external lib (CF Workers can't easily
+// pull pdf-lib). One Helvetica page, content auto-paginates at ~52 lines.
+// Output is a real `application/pdf` byte stream that Acrobat / Chrome /
+// Preview render natively.
+function renderPersonasPdf(payload: PlatformPersonasPayload): Uint8Array {
+  const enc = new TextEncoder();
+  const escTxt = (s: string) => s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  const lines: string[] = [];
+  lines.push('Axal StudioOS — Platform Personas');
+  lines.push(`Generated: ${payload.generated_at}`);
+  lines.push(`k-anonymity threshold: ${payload.k_min}`);
+  lines.push('');
+  const section = (title: string, body: string[]) => {
+    lines.push(`== ${title} ==`);
+    if (body.length === 0) lines.push('  (no cohort cleared k threshold)');
+    else for (const b of body) lines.push(`  ${b}`);
+    lines.push('');
+  };
+  section('Role distribution', (payload.role_donut?.buckets || []).map((b: any) =>
+    `[${b.group}] ${b.label}: n=${b.n}`));
+  section('Sector x role heatmap', (payload.sector_heatmap?.cells || []).map((c: any) =>
+    `${c.sector} / ${c.persona}: n=${c.n}`));
+  section('Stage focus', (payload.stage_focus?.rows || []).map((r: any) =>
+    `${r.stage} / ${r.role}: n=${r.n}`));
+  section('Geography', (payload.geo_distribution?.rows || []).map((r: any) =>
+    `${r.country}: n=${r.n}`));
+  section('Activity (last 30d)', (payload.activity_composite?.rows || []).map((r: any) =>
+    `${r.role}: active=${r.active_users} events/user=${r.events_per_user}`));
+  const fnl = payload.spinout_lab_funnel || {};
+  const funnelRows = (fnl.rows || []).map((r: any) => `Week ${r.week}: n=${r.n}`);
+  if (fnl.completion_rate != null) funnelRows.push(`Completion rate: ${fnl.completion_rate}%`);
+  if (fnl.started_band) funnelRows.push(`Cohort size band: ${fnl.started_band}`);
+  section('Spin-Out Lab funnel', funnelRows);
+  section('Weekly signups', (payload.signups_trend?.rows || []).map((r: any) =>
+    `${r.week} / ${r.role}: n=${r.n}`));
+  section('Investor pipeline coverage', (payload.pipeline_coverage?.rows || []).map((r: any) =>
+    `${r.tier_bucket}: n=${r.n} weighted=${r.weighted_coverage}`));
+
+  // Pageify — 52 lines per page, leave room for header.
+  const PER_PAGE = 52;
+  const pages: string[][] = [];
+  for (let i = 0; i < lines.length; i += PER_PAGE) pages.push(lines.slice(i, i + PER_PAGE));
+  if (pages.length === 0) pages.push(['(empty)']);
+
+  // Build the PDF body manually so we can compute the xref byte offsets.
+  const objs: string[] = [];
+  const pageObjIds: number[] = [];
+  const contentObjIds: number[] = [];
+  // 1 catalog, 2 pages, 3 font, 4..(4+2N-1) page+content pairs.
+  const fontId = 3;
+  const pagesId = 2;
+  const catalogId = 1;
+  pages.forEach((pageLines, idx) => {
+    const pageId = 4 + idx * 2;
+    const contentId = 5 + idx * 2;
+    pageObjIds.push(pageId);
+    contentObjIds.push(contentId);
+    let stream = 'BT /F1 10 Tf 12 TL 50 760 Td\n';
+    for (const ln of pageLines) {
+      stream += `(${escTxt(ln)}) Tj T*\n`;
+    }
+    stream += 'ET';
+    const contentObj = `${contentId} 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`;
+    const pageObj = `${pageId} 0 obj\n<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>\nendobj\n`;
+    objs[pageId] = pageObj;
+    objs[contentId] = contentObj;
+  });
+  objs[catalogId] = `${catalogId} 0 obj\n<< /Type /Catalog /Pages ${pagesId} 0 R >>\nendobj\n`;
+  objs[pagesId] = `${pagesId} 0 obj\n<< /Type /Pages /Kids [${pageObjIds.map((i) => `${i} 0 R`).join(' ')}] /Count ${pageObjIds.length} >>\nendobj\n`;
+  objs[fontId] = `${fontId} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`;
+
+  const totalObjs = 3 + pages.length * 2;
+  let body = '%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n';
+  const offsets: number[] = [0];
+  for (let i = 1; i <= totalObjs; i++) {
+    offsets.push(body.length);
+    body += objs[i] || '';
+  }
+  const xrefStart = body.length;
+  let xref = `xref\n0 ${totalObjs + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i <= totalObjs; i++) {
+    xref += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+  }
+  body += xref;
+  body += `trailer\n<< /Size ${totalObjs + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+  return enc.encode(body);
+}
+
+/**
+ * Weekly digest for Studio / Institutional callers (Task #4 CF). Sends
+ * one in-app + email notification per eligible user with a link back to
+ * the Platform Personas tab. Idempotent: KV marker `personas:digest:<iso-week>`
+ * blocks duplicate sends in the same ISO week.
+ */
+export async function sendPlatformPersonasDigest(env: Env): Promise<{ scanned: number; sent: number; skipped: boolean }> {
+  const now = new Date();
+  const isoWeek = (() => {
+    // YYYY-Www — Monday-anchored.
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const day = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86_400_000) + 1) / 7);
+    return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+  })();
+  const markerKey = `personas:digest:${isoWeek}`;
+  try {
+    const existing = await env.RATE_LIMITS.get(markerKey);
+    if (existing) return { scanned: 0, sent: 0, skipped: true };
+  } catch { /* best-effort */ }
+  const { notify } = await import('../services/notify');
+  let scanned = 0; let sent = 0;
+  try {
+    const rows = (await env.DB.prepare(
+      `SELECT id, COALESCE(LOWER(subscription_tier),'free') AS tier, role
+         FROM users
+        WHERE is_active = 1
+          AND (
+            LOWER(COALESCE(subscription_tier,'')) IN ('studio','institutional')
+            OR LOWER(role) IN ('admin','partner','mentor')
+          )`,
+    ).all<{ id: number; tier: string; role: string }>()).results || [];
+    scanned = rows.length;
+    for (const r of rows) {
+      try {
+        await notify(env, {
+          userId: Number(r.id),
+          type: 'mi_personas_weekly_digest',
+          title: 'Platform Personas — weekly snapshot',
+          body: 'New anonymised composition charts (k≥5 per cell) are ready in Market Intelligence.',
+          link: '/market-intel?tab=platform_personas',
+          channels: ['in_app', 'email'],
+          category: 'product',
+          payload: { iso_week: isoWeek },
+        });
+        sent += 1;
+      } catch (e) {
+        console.warn('[personas digest] notify failed', { user: r.id, err: String(e) });
+      }
+    }
+    try { await env.RATE_LIMITS.put(markerKey, String(now.toISOString()), { expirationTtl: 14 * 86400 }); } catch { /* best-effort */ }
+  } catch (e) {
+    console.error('[personas digest] sweep failed', e);
+  }
+  return { scanned, sent, skipped: false };
+}
 
 export { MARKET_PULSE, STUDIO_BENCHMARKS };
 export default marketIntel;

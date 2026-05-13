@@ -724,6 +724,18 @@ export default {
           try { await Jobs.enqueue(env, 'mi_reduce', {}); }
           catch (e) { console.error('[cron] mi_reduce enqueue failed', e); }
         }
+        // Task #4 (CF) — Platform Personas weekly digest. Mondays 09:00 UTC.
+        // Fan-outs to Studio/Institutional + admin/partner/mentor only.
+        // Idempotent via ISO-week KV marker inside the helper.
+        if (now.getUTCDay() === 1 && now.getUTCHours() === 9 && now.getUTCMinutes() === 0) {
+          try {
+            const { sendPlatformPersonasDigest } = await import('./routes/market_intel');
+            const r = await sendPlatformPersonasDigest(env);
+            if (!r.skipped) {
+              console.info(`[cron] personas digest scanned=${r.scanned} sent=${r.sent}`);
+            }
+          } catch (e) { console.error('[cron] personas digest failed', e); }
+        }
         if (now.getUTCHours() === 4 && now.getUTCMinutes() === 30) {
           try {
             const { sweepTrashedProjects } = await import('./services/projectTrash');
