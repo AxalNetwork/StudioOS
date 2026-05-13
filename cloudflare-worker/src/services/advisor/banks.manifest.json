@@ -1,1579 +1,3844 @@
 {
-  "generated_at": "__pinned__",
+  "schema": 1,
   "banks": {
     "newFounderSpinout": [
       {
-        "id": "founder.project.name"
+        "persona": "founder",
+        "id": "founder.project.name",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "section": "BUILD"
       },
       {
-        "id": "founder.project.pitch"
+        "persona": "founder",
+        "id": "founder.project.pitch",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "section": "BUILD"
       },
       {
-        "id": "founder.project.sector"
+        "persona": "founder",
+        "id": "founder.project.sector",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "section": "BUILD",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "founder.project.stage"
+        "persona": "founder",
+        "id": "founder.project.stage",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "section": "BUILD",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "founder.discovery.interview1.name"
+        "persona": "founder",
+        "id": "founder.discovery.interview1.name",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "section": "BUILD"
       },
       {
-        "id": "founder.discovery.interview1.pains"
+        "persona": "founder",
+        "id": "founder.discovery.interview1.pains",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "section": "BUILD"
       },
       {
-        "id": "founder.discovery.interview2.name"
+        "persona": "founder",
+        "id": "founder.discovery.interview2.name",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "section": "BUILD"
       },
       {
-        "id": "founder.discovery.interview2.pains"
+        "persona": "founder",
+        "id": "founder.discovery.interview2.pains",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "section": "BUILD"
       },
       {
-        "id": "founder.discovery.interview3.name"
+        "persona": "founder",
+        "id": "founder.discovery.interview3.name",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "section": "BUILD"
       },
       {
-        "id": "founder.discovery.interview3.pains"
+        "persona": "founder",
+        "id": "founder.discovery.interview3.pains",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "section": "BUILD"
       },
       {
-        "id": "founder.okrs.q1_objective1"
+        "persona": "founder",
+        "id": "founder.okrs.q1_objective1",
+        "page_target": "/build/roadmap",
+        "doc_anchor": "build/roadmap",
+        "section": "BUILD"
       },
       {
-        "id": "founder.okrs.q1_objective2"
+        "persona": "founder",
+        "id": "founder.okrs.q1_objective2",
+        "page_target": "/build/roadmap",
+        "doc_anchor": "build/roadmap",
+        "section": "BUILD"
       },
       {
-        "id": "founder.okrs.q1_objective3"
+        "persona": "founder",
+        "id": "founder.okrs.q1_objective3",
+        "page_target": "/build/roadmap",
+        "doc_anchor": "build/roadmap",
+        "section": "BUILD"
       },
       {
-        "id": "founder.brand.tagline"
+        "persona": "founder",
+        "id": "founder.brand.tagline",
+        "page_target": "/build/brand",
+        "doc_anchor": "build/brand-builder",
+        "section": "BUILD"
       },
       {
-        "id": "founder.brand.theme_color"
+        "persona": "founder",
+        "id": "founder.brand.theme_color",
+        "page_target": "/build/brand",
+        "doc_anchor": "build/brand-builder",
+        "section": "BUILD"
       },
       {
-        "id": "founder.deck.problem"
+        "persona": "founder",
+        "id": "founder.deck.problem",
+        "page_target": "/build/deck",
+        "doc_anchor": "build/pitch-deck",
+        "section": "BUILD"
       },
       {
-        "id": "founder.deck.market"
+        "persona": "founder",
+        "id": "founder.deck.market",
+        "page_target": "/build/deck",
+        "doc_anchor": "build/pitch-deck",
+        "section": "BUILD"
       },
       {
-        "id": "founder.team.cofounders"
+        "persona": "founder",
+        "id": "founder.team.cofounders",
+        "page_target": "/cofounder-match",
+        "doc_anchor": "getting-started/invite-team",
+        "section": "NETWORK"
       },
       {
-        "id": "founder.mentors.needs"
+        "persona": "founder",
+        "id": "founder.mentors.needs",
+        "page_target": "/mentors",
+        "doc_anchor": "portals/mentor",
+        "section": "NETWORK"
       },
       {
-        "id": "founder.captable.entity"
+        "persona": "founder",
+        "id": "founder.captable.entity",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
+        "section": "LEGAL"
       },
       {
-        "id": "founder.captable.ownership"
+        "persona": "founder",
+        "id": "founder.captable.ownership",
+        "page_target": "/build/captable",
+        "doc_anchor": "capital/cap-table",
+        "section": "CAPITAL"
       },
       {
-        "id": "founder.lab.discovery.icp_v1"
+        "persona": "founder",
+        "id": "founder.lab.discovery.icp_v1",
+        "mi_section": "fit"
       },
       {
-        "id": "founder.lab.discovery.icp_buyer_vs_user"
+        "persona": "founder",
+        "id": "founder.lab.discovery.icp_buyer_vs_user",
+        "mi_section": "fit"
       },
       {
-        "id": "founder.lab.discovery.willingness_to_pay"
+        "persona": "founder",
+        "id": "founder.lab.discovery.willingness_to_pay",
+        "mi_section": "sentiment"
       },
       {
-        "id": "founder.lab.discovery.alternatives"
+        "persona": "founder",
+        "id": "founder.lab.discovery.alternatives",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.discovery.deal_breaker"
       },
       {
-        "id": "founder.lab.discovery.signal_score"
+        "persona": "founder",
+        "id": "founder.lab.discovery.signal_score",
+        "mi_section": "sentiment"
       },
       {
-        "id": "founder.lab.discovery.pivot_signal"
+        "persona": "founder",
+        "id": "founder.lab.discovery.pivot_signal",
+        "mi_section": "demand_supply"
       },
       {
-        "id": "founder.lab.discovery.followup_scheduled"
+        "persona": "founder",
+        "id": "founder.lab.discovery.followup_scheduled",
+        "mi_section": "sentiment"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.deck.solution"
       },
       {
-        "id": "founder.lab.deck.why_now"
+        "persona": "founder",
+        "id": "founder.lab.deck.why_now",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "founder.lab.deck.business_model"
+        "persona": "founder",
+        "id": "founder.lab.deck.business_model",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "founder.lab.deck.go_to_market"
+        "persona": "founder",
+        "id": "founder.lab.deck.go_to_market",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.deck.moat"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.deck.team_slide"
       },
       {
-        "id": "founder.lab.deck.ask"
+        "persona": "founder",
+        "id": "founder.lab.deck.ask",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "founder.lab.deck.competition_map"
+        "persona": "founder",
+        "id": "founder.lab.deck.competition_map",
+        "mi_section": "sector_heat"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.deck.demo_link"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.roadmap.kr_for_obj1"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.roadmap.kr_for_obj2"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.roadmap.kr_for_obj3"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.roadmap.weekly_cadence"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.mentors.priority1"
       },
       {
-        "id": "founder.lab.mentors.intro_target"
+        "persona": "founder",
+        "id": "founder.lab.mentors.intro_target",
+        "mi_section": "partner_pulse"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.mentors.warm_path"
       },
       {
-        "id": "founder.lab.mentors.cadence"
+        "persona": "founder",
+        "id": "founder.lab.mentors.cadence",
+        "mi_section": "partner_pulse"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.mentors.style"
       },
       {
-        "id": "founder.lab.team.cofounder_gap"
+        "persona": "founder",
+        "id": "founder.lab.team.cofounder_gap",
+        "mi_section": "fit"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.team.dealbreakers"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.team.equity_philosophy"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.team.first_5_hires"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.team.remote_or_office"
       },
       {
-        "id": "founder.lab.legal.state"
+        "persona": "founder",
+        "id": "founder.lab.legal.state",
+        "mi_section": "sentiment_geo"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.legal.83b_planned"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.legal.ip_assignment"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.legal.prior_employer_ip"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.legal.advisor_seats"
       },
       {
-        "id": "founder.lab.capital.first_raise_target"
+        "persona": "founder",
+        "id": "founder.lab.capital.first_raise_target",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "founder.lab.capital.runway_target_months"
+        "persona": "founder",
+        "id": "founder.lab.capital.runway_target_months",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "founder.lab.capital.instrument"
+        "persona": "founder",
+        "id": "founder.lab.capital.instrument",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.capital.target_investors"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.capital.warm_intros"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.capital.lead_investor"
       },
       {
-        "id": "founder.lab.wellbeing.energy"
+        "persona": "founder",
+        "id": "founder.lab.wellbeing.energy",
+        "mi_section": "sentiment"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.wellbeing.support"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.wellbeing.biggest_blocker"
       },
       {
-        "id": "founder.lab.wellbeing.sleep_hours"
+        "persona": "founder",
+        "id": "founder.lab.wellbeing.sleep_hours",
+        "mi_section": "sentiment"
       },
       {
-        "id": "founder.lab.wellbeing.exercise_freq"
+        "persona": "founder",
+        "id": "founder.lab.wellbeing.exercise_freq",
+        "mi_section": "sentiment"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.wellbeing.cofounder_pulse"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.wellbeing.scary_question"
       },
       {
-        "id": "founder.lab.metrics.first_north_star"
+        "persona": "founder",
+        "id": "founder.lab.metrics.first_north_star",
+        "mi_section": "demand_supply"
       },
       {
-        "id": "founder.lab.metrics.weekly_target"
+        "persona": "founder",
+        "id": "founder.lab.metrics.weekly_target",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.metrics.tracking_tool"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.metrics.signal_v_noise"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.ops.weekly_review"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.ops.first_hire_role"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.ops.first_hire_when"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.ops.first_hire_comp"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.ops.budget_template"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.ops.bank_setup"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.ops.payroll_provider"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.ops.accounting_provider"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.ops.governance_doc"
       },
       {
+        "persona": "founder",
         "id": "founder.lab.ops.communication_norm"
       }
     ],
     "existingFounder": [
       {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
         "id": "founder.project.name"
       },
       {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
         "id": "founder.project.pitch"
       },
       {
-        "id": "founder.project.sector"
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "id": "founder.project.sector",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "founder.project.stage"
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "id": "founder.project.stage",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "founder.project.traction"
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "id": "founder.project.traction",
+        "mi_section": "demand_supply"
       },
       {
-        "id": "founder.product.what_works"
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "id": "founder.product.what_works",
+        "mi_section": "sentiment"
       },
       {
-        "id": "founder.product.what_breaks"
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "id": "founder.product.what_breaks",
+        "mi_section": "sentiment"
       },
       {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
         "id": "founder.product.next_big_bet"
       },
       {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
         "id": "founder.product.dev_velocity"
       },
       {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
         "id": "founder.product.tech_debt_score"
       },
       {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
         "id": "founder.product.qa_coverage"
       },
       {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
         "id": "founder.product.platform_choice"
       },
       {
-        "id": "founder.fit.icp_statement"
+        "persona": "founder",
+        "section": "FIT",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "id": "founder.fit.icp_statement",
+        "mi_section": "fit"
       },
       {
-        "id": "founder.fit.icp_v_buyer"
+        "persona": "founder",
+        "section": "FIT",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "id": "founder.fit.icp_v_buyer",
+        "mi_section": "fit"
       },
       {
-        "id": "founder.fit.icp_segments"
+        "persona": "founder",
+        "section": "FIT",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "id": "founder.fit.icp_segments",
+        "mi_section": "fit"
       },
       {
+        "persona": "founder",
+        "section": "FIT",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.activation_definition"
       },
       {
-        "id": "founder.fit.activation_rate_pct"
+        "persona": "founder",
+        "section": "FIT",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "id": "founder.fit.activation_rate_pct",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "founder",
+        "section": "FIT",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.retention_30d_pct"
       },
       {
-        "id": "founder.fit.nps_or_csat"
+        "persona": "founder",
+        "section": "FIT",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "id": "founder.fit.nps_or_csat",
+        "mi_section": "sentiment"
       },
       {
-        "id": "founder.fit.ipspf_signal"
+        "persona": "founder",
+        "section": "FIT",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "id": "founder.fit.ipspf_signal",
+        "mi_section": "sentiment"
       },
       {
-        "id": "founder.fit.churn_top_reason"
+        "persona": "founder",
+        "section": "FIT",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "id": "founder.fit.churn_top_reason",
+        "mi_section": "sentiment"
       },
       {
-        "id": "founder.fit.expansion_signal"
+        "persona": "founder",
+        "section": "FIT",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "id": "founder.fit.expansion_signal",
+        "mi_section": "demand_supply"
       },
       {
-        "id": "founder.fit.adoption_curve"
+        "persona": "founder",
+        "section": "FIT",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
+        "id": "founder.fit.adoption_curve",
+        "mi_section": "talc"
       },
       {
+        "persona": "founder",
+        "section": "FIT",
+        "page_target": "/build/discovery",
+        "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.discovery_volume_qtr"
       },
       {
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
         "id": "founder.financials.runway_months"
       },
       {
-        "id": "founder.financials.monthly_burn_usd"
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
+        "id": "founder.financials.monthly_burn_usd",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "founder.financials.mrr_usd"
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
+        "id": "founder.financials.mrr_usd",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
         "id": "founder.financials.arr_usd"
       },
       {
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
         "id": "founder.financials.gross_margin_pct"
       },
       {
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
         "id": "founder.financials.cac_usd"
       },
       {
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
         "id": "founder.financials.ltv_usd"
       },
       {
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
         "id": "founder.financials.payback_months"
       },
       {
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
         "id": "founder.financials.net_revenue_retention_pct"
       },
       {
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
         "id": "founder.financials.gross_revenue_retention_pct"
       },
       {
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
         "id": "founder.financials.magic_number"
       },
       {
-        "id": "founder.financials.bookings_qtr_usd"
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
+        "id": "founder.financials.bookings_qtr_usd",
+        "mi_section": "demand_supply"
       },
       {
-        "id": "founder.financials.budget_vs_actual"
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
+        "id": "founder.financials.budget_vs_actual",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "founder",
+        "section": "METRICS",
+        "page_target": "/build/financials",
+        "doc_anchor": "capital/metrics",
         "id": "founder.financials.financial_model_link"
       },
       {
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.pipeline.top_deals"
       },
       {
-        "id": "founder.pipeline.size_usd"
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
+        "id": "founder.pipeline.size_usd",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.pipeline.avg_sales_cycle_days"
       },
       {
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.pipeline.win_rate_pct"
       },
       {
-        "id": "founder.gtm.primary_channel"
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
+        "id": "founder.gtm.primary_channel",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.gtm.channel_cac_split"
       },
       {
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.gtm.outbound_volume_wk"
       },
       {
-        "id": "founder.gtm.inbound_lead_volume_wk"
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
+        "id": "founder.gtm.inbound_lead_volume_wk",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.gtm.first_call_to_close_pct"
       },
       {
-        "id": "founder.gtm.avg_acv_usd"
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
+        "id": "founder.gtm.avg_acv_usd",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.gtm.pricing_model"
       },
       {
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.gtm.pricing_changes_planned"
       },
       {
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.gtm.brand_awareness"
       },
       {
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.gtm.community_motion"
       },
       {
+        "persona": "founder",
+        "section": "GTM",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.gtm.customer_advisory_board"
       },
       {
-        "id": "founder.capital.raise_active"
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
+        "id": "founder.capital.raise_active",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "founder.capital.raise_target_usd"
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
+        "id": "founder.capital.raise_target_usd",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "founder.capital.target_close_date"
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
+        "id": "founder.capital.target_close_date",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "founder.capital.lead_status"
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
+        "id": "founder.capital.lead_status",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "founder.capital.valuation_target_usd"
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
+        "id": "founder.capital.valuation_target_usd",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
         "id": "founder.capital.previous_round_usd"
       },
       {
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
         "id": "founder.capital.previous_round_post_usd"
       },
       {
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
         "id": "founder.capital.investors_on_captable"
       },
       {
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
         "id": "founder.capital.bridge_likely"
       },
       {
-        "id": "founder.capital.preferred_lead_funds"
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
+        "id": "founder.capital.preferred_lead_funds",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
         "id": "founder.capital.warm_intro_count"
       },
       {
-        "id": "founder.capital.use_of_funds"
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
+        "id": "founder.capital.use_of_funds",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
         "id": "founder.capital.dilution_floor_pct"
       },
       {
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
         "id": "founder.capital.option_pool_pct"
       },
       {
-        "id": "founder.capital.runway_after_raise_months"
+        "persona": "founder",
+        "section": "CAPITAL",
+        "page_target": "/capital/fundraise",
+        "doc_anchor": "capital/fundraise",
+        "id": "founder.capital.runway_after_raise_months",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "founder",
+        "section": "LEGAL",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
         "id": "founder.captable.entity"
       },
       {
+        "persona": "founder",
+        "section": "LEGAL",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
         "id": "founder.captable.ownership"
       },
       {
+        "persona": "founder",
+        "section": "LEGAL",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
         "id": "founder.compliance.status"
       },
       {
+        "persona": "founder",
+        "section": "LEGAL",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
         "id": "founder.legal.ip_assignment_status"
       },
       {
+        "persona": "founder",
+        "section": "LEGAL",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
         "id": "founder.legal.trademarks_filed"
       },
       {
+        "persona": "founder",
+        "section": "LEGAL",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
         "id": "founder.legal.patents_filed"
       },
       {
+        "persona": "founder",
+        "section": "LEGAL",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
         "id": "founder.legal.dpa_template"
       },
       {
+        "persona": "founder",
+        "section": "LEGAL",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
         "id": "founder.legal.privacy_policy"
       },
       {
+        "persona": "founder",
+        "section": "LEGAL",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
         "id": "founder.legal.security_certs"
       },
       {
+        "persona": "founder",
+        "section": "LEGAL",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
         "id": "founder.legal.litigation_active"
       },
       {
-        "id": "founder.legal.foreign_subsidiaries"
+        "persona": "founder",
+        "section": "LEGAL",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
+        "id": "founder.legal.foreign_subsidiaries",
+        "mi_section": "sentiment_geo"
       },
       {
+        "persona": "founder",
+        "section": "LEGAL",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
         "id": "founder.legal.terms_of_service_current"
       },
       {
-        "id": "founder.legal.export_controls"
+        "persona": "founder",
+        "section": "LEGAL",
+        "page_target": "/legal/incorporation",
+        "doc_anchor": "legal/incorporation",
+        "id": "founder.legal.export_controls",
+        "mi_section": "sentiment_geo"
       },
       {
+        "persona": "founder",
+        "section": "HIRING",
+        "page_target": "/network",
+        "doc_anchor": "getting-started/invite-team",
         "id": "founder.team.headcount_total"
       },
       {
+        "persona": "founder",
+        "section": "HIRING",
+        "page_target": "/network",
+        "doc_anchor": "getting-started/invite-team",
         "id": "founder.team.headcount_by_function"
       },
       {
+        "persona": "founder",
+        "section": "HIRING",
+        "page_target": "/network",
+        "doc_anchor": "getting-started/invite-team",
         "id": "founder.team.hires_planned_qtr"
       },
       {
+        "persona": "founder",
+        "section": "HIRING",
+        "page_target": "/network",
+        "doc_anchor": "getting-started/invite-team",
         "id": "founder.team.cofounders"
       },
       {
+        "persona": "founder",
+        "section": "HIRING",
+        "page_target": "/network",
+        "doc_anchor": "getting-started/invite-team",
         "id": "founder.team.first_eng_hired"
       },
       {
+        "persona": "founder",
+        "section": "HIRING",
+        "page_target": "/network",
+        "doc_anchor": "getting-started/invite-team",
         "id": "founder.team.attrition_12m"
       },
       {
+        "persona": "founder",
+        "section": "HIRING",
+        "page_target": "/network",
+        "doc_anchor": "getting-started/invite-team",
         "id": "founder.team.diversity_snapshot"
       },
       {
+        "persona": "founder",
+        "section": "HIRING",
+        "page_target": "/network",
+        "doc_anchor": "getting-started/invite-team",
         "id": "founder.team.compensation_philosophy"
       },
       {
+        "persona": "founder",
+        "section": "HIRING",
+        "page_target": "/network",
+        "doc_anchor": "getting-started/invite-team",
         "id": "founder.team.equity_refresh_policy"
       },
       {
+        "persona": "founder",
+        "section": "HIRING",
+        "page_target": "/network",
+        "doc_anchor": "getting-started/invite-team",
         "id": "founder.team.remote_policy"
       },
       {
+        "persona": "founder",
+        "section": "HIRING",
+        "page_target": "/network",
+        "doc_anchor": "getting-started/invite-team",
         "id": "founder.team.culture_doc_link"
       },
       {
+        "persona": "founder",
+        "section": "HIRING",
+        "page_target": "/network",
+        "doc_anchor": "getting-started/invite-team",
         "id": "founder.team.exec_team_complete"
       },
       {
+        "persona": "founder",
+        "section": "OPS",
+        "page_target": "/settings",
+        "doc_anchor": "getting-started/personas",
         "id": "founder.ops.tooling_stack"
       },
       {
+        "persona": "founder",
+        "section": "OPS",
+        "page_target": "/settings",
+        "doc_anchor": "getting-started/personas",
         "id": "founder.ops.weekly_metric_cadence"
       },
       {
-        "id": "founder.ops.board_cadence"
+        "persona": "founder",
+        "section": "OPS",
+        "page_target": "/settings",
+        "doc_anchor": "getting-started/personas",
+        "id": "founder.ops.board_cadence",
+        "mi_section": "partner_pulse"
       },
       {
+        "persona": "founder",
+        "section": "OPS",
+        "page_target": "/settings",
+        "doc_anchor": "getting-started/personas",
         "id": "founder.ops.allhands_cadence"
       },
       {
+        "persona": "founder",
+        "section": "OPS",
+        "page_target": "/settings",
+        "doc_anchor": "getting-started/personas",
         "id": "founder.ops.okrs_cadence"
       },
       {
+        "persona": "founder",
+        "section": "OPS",
+        "page_target": "/settings",
+        "doc_anchor": "getting-started/personas",
         "id": "founder.ops.standup_format"
       },
       {
+        "persona": "founder",
+        "section": "OPS",
+        "page_target": "/settings",
+        "doc_anchor": "getting-started/personas",
         "id": "founder.ops.bug_triage_sla_hrs"
       },
       {
+        "persona": "founder",
+        "section": "OPS",
+        "page_target": "/settings",
+        "doc_anchor": "getting-started/personas",
         "id": "founder.ops.oncall_rotation"
       },
       {
+        "persona": "founder",
+        "section": "OPS",
+        "page_target": "/settings",
+        "doc_anchor": "getting-started/personas",
         "id": "founder.ops.knowledge_base"
       },
       {
+        "persona": "founder",
+        "section": "NETWORK",
+        "page_target": "/mentors",
+        "doc_anchor": "portals/mentor",
         "id": "founder.mentors.needs"
       },
       {
-        "id": "founder.mentors.current_advisors"
+        "persona": "founder",
+        "section": "NETWORK",
+        "page_target": "/mentors",
+        "doc_anchor": "portals/mentor",
+        "id": "founder.mentors.current_advisors",
+        "mi_section": "partner_pulse"
       },
       {
-        "id": "founder.mentors.most_valuable"
+        "persona": "founder",
+        "section": "NETWORK",
+        "page_target": "/mentors",
+        "doc_anchor": "portals/mentor",
+        "id": "founder.mentors.most_valuable",
+        "mi_section": "partner_pulse"
       },
       {
+        "persona": "founder",
+        "section": "NETWORK",
+        "page_target": "/mentors",
+        "doc_anchor": "portals/mentor",
         "id": "founder.mentors.gap_areas"
       },
       {
+        "persona": "founder",
+        "section": "NETWORK",
+        "page_target": "/mentors",
+        "doc_anchor": "portals/mentor",
         "id": "founder.mentors.intro_priority"
       },
       {
-        "id": "founder.partners.active_count"
+        "persona": "founder",
+        "section": "NETWORK",
+        "page_target": "/mentors",
+        "doc_anchor": "portals/mentor",
+        "id": "founder.partners.active_count",
+        "mi_section": "partner_pulse"
       },
       {
-        "id": "founder.partners.health_score"
+        "persona": "founder",
+        "section": "NETWORK",
+        "page_target": "/mentors",
+        "doc_anchor": "portals/mentor",
+        "id": "founder.partners.health_score",
+        "mi_section": "partner_pulse"
       },
       {
-        "id": "founder.partners.biggest_friction"
+        "persona": "founder",
+        "section": "NETWORK",
+        "page_target": "/mentors",
+        "doc_anchor": "portals/mentor",
+        "id": "founder.partners.biggest_friction",
+        "mi_section": "partner_pulse"
       },
       {
-        "id": "founder.wellbeing.energy_score"
+        "persona": "founder",
+        "section": "WELLBEING",
+        "page_target": "/wellbeing",
+        "doc_anchor": "support/wellbeing",
+        "id": "founder.wellbeing.energy_score",
+        "mi_section": "sentiment"
       },
       {
-        "id": "founder.wellbeing.sleep_hours"
+        "persona": "founder",
+        "section": "WELLBEING",
+        "page_target": "/wellbeing",
+        "doc_anchor": "support/wellbeing",
+        "id": "founder.wellbeing.sleep_hours",
+        "mi_section": "sentiment"
       },
       {
+        "persona": "founder",
+        "section": "WELLBEING",
+        "page_target": "/wellbeing",
+        "doc_anchor": "support/wellbeing",
         "id": "founder.wellbeing.support_system"
       },
       {
-        "id": "founder.wellbeing.biggest_stressor"
+        "persona": "founder",
+        "section": "WELLBEING",
+        "page_target": "/wellbeing",
+        "doc_anchor": "support/wellbeing",
+        "id": "founder.wellbeing.biggest_stressor",
+        "mi_section": "sentiment"
       },
       {
+        "persona": "founder",
+        "section": "WELLBEING",
+        "page_target": "/wellbeing",
+        "doc_anchor": "support/wellbeing",
         "id": "founder.wellbeing.therapist_or_coach"
       },
       {
+        "persona": "founder",
+        "section": "WELLBEING",
+        "page_target": "/wellbeing",
+        "doc_anchor": "support/wellbeing",
         "id": "founder.wellbeing.vacation_planned"
       },
       {
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.dd.fintech_kyc"
       },
       {
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.dd.fintech_licensing"
       },
       {
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.dd.fintech_chargeback_pct"
       },
       {
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.dd.ai_inference_cost_per_1k"
       },
       {
-        "id": "founder.dd.ai_model_strategy"
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
+        "id": "founder.dd.ai_model_strategy",
+        "mi_section": "sector_heat"
       },
       {
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.dd.ai_data_moat"
       },
       {
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.dd.healthcare_hipaa_status"
       },
       {
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.dd.consumer_cac_payback_months"
       },
       {
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.dd.consumer_d30_retention_pct"
       },
       {
-        "id": "founder.dd.b2b_saas_logos_paid"
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
+        "id": "founder.dd.b2b_saas_logos_paid",
+        "mi_section": "demand_supply"
       },
       {
-        "id": "founder.dd.b2b_saas_seat_expansion"
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
+        "id": "founder.dd.b2b_saas_seat_expansion",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.dd.climate_carbon_metric"
       },
       {
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.dd.deeptech_tech_readiness"
       },
       {
-        "id": "founder.dd.preseed_lois"
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
+        "id": "founder.dd.preseed_lois",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
         "id": "founder.dd.seriesa_cohort_retention"
       },
       {
-        "id": "founder.dd.seriesb_growth_rate"
+        "persona": "founder",
+        "section": "DEEP_DIVE",
+        "page_target": "/build/metrics",
+        "doc_anchor": "capital/metrics",
+        "id": "founder.dd.seriesb_growth_rate",
+        "mi_section": "capital_velocity"
       }
     ],
     "investor": [
       {
+        "persona": "investor",
+        "section": "PROFILE",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.profile.investor_type"
       },
       {
-        "id": "investor.profile.sectors"
+        "persona": "investor",
+        "section": "PROFILE",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.profile.sectors",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "investor.profile.stages"
+        "persona": "investor",
+        "section": "PROFILE",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.profile.stages",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "investor.profile.ticket_band"
+        "persona": "investor",
+        "section": "PROFILE",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.profile.ticket_band",
+        "mi_section": "investor_signals"
       },
       {
-        "id": "investor.profile.fund_size_usd"
+        "persona": "investor",
+        "section": "PROFILE",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.profile.fund_size_usd",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "investor",
+        "section": "PROFILE",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.profile.fund_vintage"
       },
       {
-        "id": "investor.profile.geo_focus"
+        "persona": "investor",
+        "section": "PROFILE",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.profile.geo_focus",
+        "mi_section": "sentiment_geo"
       },
       {
+        "persona": "investor",
+        "section": "PROFILE",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.profile.lp_base"
       },
       {
+        "persona": "investor",
+        "section": "THESIS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.profile.thesis"
       },
       {
-        "id": "investor.thesis.macro_trends"
+        "persona": "investor",
+        "section": "THESIS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.thesis.macro_trends",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "investor.thesis.contrarian_view"
+        "persona": "investor",
+        "section": "THESIS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.thesis.contrarian_view",
+        "mi_section": "investor_signals"
       },
       {
-        "id": "investor.thesis.passes_recent"
+        "persona": "investor",
+        "section": "THESIS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.thesis.passes_recent",
+        "mi_section": "investor_signals"
       },
       {
+        "persona": "investor",
+        "section": "THESIS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.thesis.must_haves"
       },
       {
+        "persona": "investor",
+        "section": "THESIS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.thesis.deal_breakers"
       },
       {
-        "id": "investor.thesis.adoption_curve_focus"
+        "persona": "investor",
+        "section": "THESIS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.thesis.adoption_curve_focus",
+        "mi_section": "talc"
       },
       {
+        "persona": "investor",
+        "section": "THESIS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.thesis.market_size_floor_usd"
       },
       {
+        "persona": "investor",
+        "section": "THESIS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.thesis.founder_archetype"
       },
       {
-        "id": "investor.pipeline.deal_volume"
+        "persona": "investor",
+        "section": "PIPELINE",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.pipeline.deal_volume",
+        "mi_section": "demand_supply"
       },
       {
-        "id": "investor.pipeline.first_meetings_qtr"
+        "persona": "investor",
+        "section": "PIPELINE",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.pipeline.first_meetings_qtr",
+        "mi_section": "demand_supply"
       },
       {
-        "id": "investor.pipeline.term_sheets_qtr"
+        "persona": "investor",
+        "section": "PIPELINE",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.pipeline.term_sheets_qtr",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "investor.pipeline.investments_closed_qtr"
+        "persona": "investor",
+        "section": "PIPELINE",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.pipeline.investments_closed_qtr",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "investor",
+        "section": "PIPELINE",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.pipeline.avg_dd_days"
       },
       {
+        "persona": "investor",
+        "section": "PIPELINE",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.pipeline.source_split"
       },
       {
+        "persona": "investor",
+        "section": "PIPELINE",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.pipeline.scout_program"
       },
       {
+        "persona": "investor",
+        "section": "PIPELINE",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.pipeline.deals_per_partner"
       },
       {
+        "persona": "investor",
+        "section": "PIPELINE",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.coinvest.preferences"
       },
       {
+        "persona": "investor",
+        "section": "PIPELINE",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.coinvest.preferred_partners"
       },
       {
+        "persona": "investor",
+        "section": "PIPELINE",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.coinvest.minimum_lead_check_usd"
       },
       {
+        "persona": "investor",
+        "section": "DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.dd.checklist_link"
       },
       {
+        "persona": "investor",
+        "section": "DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.dd.references_required"
       },
       {
+        "persona": "investor",
+        "section": "DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.dd.customer_calls_required"
       },
       {
+        "persona": "investor",
+        "section": "DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.dd.legal_review_outsourced"
       },
       {
+        "persona": "investor",
+        "section": "DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.dd.tech_diligence_partner"
       },
       {
+        "persona": "investor",
+        "section": "DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.dd.financial_diligence_depth"
       },
       {
+        "persona": "investor",
+        "section": "DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.dd.background_checks"
       },
       {
+        "persona": "investor",
+        "section": "DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.dd.competitive_diligence_method"
       },
       {
+        "persona": "investor",
+        "section": "DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.dd.valuation_framework"
       },
       {
-        "id": "investor.dd.red_flags_recent"
+        "persona": "investor",
+        "section": "DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.dd.red_flags_recent",
+        "mi_section": "investor_signals"
       },
       {
+        "persona": "investor",
+        "section": "PORTFOLIO",
+        "page_target": "/portfolio",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.portfolio.total_companies"
       },
       {
+        "persona": "investor",
+        "section": "PORTFOLIO",
+        "page_target": "/portfolio",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.portfolio.board_seats"
       },
       {
+        "persona": "investor",
+        "section": "PORTFOLIO",
+        "page_target": "/portfolio",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.portfolio.observer_seats"
       },
       {
-        "id": "investor.portfolio.review_cadence"
+        "persona": "investor",
+        "section": "PORTFOLIO",
+        "page_target": "/portfolio",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.portfolio.review_cadence",
+        "mi_section": "partner_pulse"
       },
       {
+        "persona": "investor",
+        "section": "PORTFOLIO",
+        "page_target": "/portfolio",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.portfolio.support_offered"
       },
       {
-        "id": "investor.portfolio.intros_made_qtr"
+        "persona": "investor",
+        "section": "PORTFOLIO",
+        "page_target": "/portfolio",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.portfolio.intros_made_qtr",
+        "mi_section": "partner_pulse"
       },
       {
-        "id": "investor.portfolio.followon_reserves_pct"
+        "persona": "investor",
+        "section": "PORTFOLIO",
+        "page_target": "/portfolio",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.portfolio.followon_reserves_pct",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "investor",
+        "section": "PORTFOLIO",
+        "page_target": "/portfolio",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.portfolio.exits_to_date"
       },
       {
+        "persona": "investor",
+        "section": "LP_COMMS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.lp.report_cadence"
       },
       {
+        "persona": "investor",
+        "section": "LP_COMMS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.lp.report_format"
       },
       {
-        "id": "investor.lp.next_fund_planning"
+        "persona": "investor",
+        "section": "LP_COMMS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.lp.next_fund_planning",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "investor",
+        "section": "LP_COMMS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.lp.dpi_to_date_x"
       },
       {
+        "persona": "investor",
+        "section": "LP_COMMS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.lp.tvpi_to_date_x"
       },
       {
-        "id": "investor.lp.communication_pain"
+        "persona": "investor",
+        "section": "LP_COMMS",
+        "page_target": "/investor-profile",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.lp.communication_pain",
+        "mi_section": "sentiment"
       },
       {
+        "persona": "investor",
+        "section": "WATCHLIST",
+        "page_target": "/portfolio",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.watchlist.seed_companies"
       },
       {
+        "persona": "investor",
+        "section": "WATCHLIST",
+        "page_target": "/portfolio",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.watchlist.alert_cadence"
       },
       {
+        "persona": "investor",
+        "section": "WATCHLIST",
+        "page_target": "/portfolio",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.watchlist.signals_of_interest"
       },
       {
-        "id": "investor.watchlist.shadow_companies"
+        "persona": "investor",
+        "section": "WATCHLIST",
+        "page_target": "/portfolio",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.watchlist.shadow_companies",
+        "mi_section": "investor_signals"
       },
       {
-        "id": "investor.sector.ai_inference_econ"
+        "persona": "investor",
+        "section": "SECTOR_DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.sector.ai_inference_econ",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "investor.sector.fintech_regulatory"
+        "persona": "investor",
+        "section": "SECTOR_DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.sector.fintech_regulatory",
+        "mi_section": "sentiment_geo"
       },
       {
-        "id": "investor.sector.climate_metric_required"
+        "persona": "investor",
+        "section": "SECTOR_DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.sector.climate_metric_required",
+        "mi_section": "sector_heat"
       },
       {
+        "persona": "investor",
+        "section": "SECTOR_DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.sector.healthcare_reimbursement"
       },
       {
-        "id": "investor.sector.deeptech_capital_intensity"
+        "persona": "investor",
+        "section": "SECTOR_DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
+        "id": "investor.sector.deeptech_capital_intensity",
+        "mi_section": "sector_heat"
       },
       {
+        "persona": "investor",
+        "section": "SECTOR_DD",
+        "page_target": "/deal-flow",
+        "doc_anchor": "portals/portfolio-health",
         "id": "investor.sector.consumer_payback_floor"
       }
     ],
     "operatingPartner": [
       {
+        "persona": "partner",
+        "section": "FIRM",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
         "id": "partner.firm.name"
       },
       {
+        "persona": "partner",
+        "section": "FIRM",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
         "id": "partner.role.kind"
       },
       {
+        "persona": "partner",
+        "section": "FIRM",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
         "id": "partner.services.offered"
       },
       {
-        "id": "partner.deals.interest"
+        "persona": "partner",
+        "section": "FIRM",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "id": "partner.deals.interest",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "partner",
+        "section": "FIRM",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
         "id": "partner.dealflow.channels"
       },
       {
+        "persona": "partner",
+        "section": "FIRM",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
         "id": "partner.conflicts.list"
       },
       {
+        "persona": "partner",
+        "section": "FIRM",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
         "id": "partner.profile.focus"
       },
       {
+        "persona": "partner",
+        "section": "FIRM",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
         "id": "partner.rate.hourly"
       },
       {
+        "persona": "partner",
+        "section": "FIRM",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
         "id": "partner.rate.project"
       },
       {
+        "persona": "partner",
+        "section": "FIRM",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
         "id": "partner.comp.model"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.firm_type"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.years_in_business"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.team_size"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.startup_team_size"
       },
       {
-        "id": "partner.sp.headquarter_geo"
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.headquarter_geo",
+        "mi_section": "sentiment_geo"
       },
       {
-        "id": "partner.sp.geos_served"
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.geos_served",
+        "mi_section": "sentiment_geo"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.services_detailed"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.signature_offering"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.scope_minimum_usd"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.pricing_model"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.startup_discount_pct"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.deferred_fees_open"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.sla_response_hours"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.case_study_link"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.references_count"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.tooling_used"
       },
       {
-        "id": "partner.sp.target_stages"
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.target_stages",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "partner.sp.target_sectors"
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.target_sectors",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "partner.sp.deal_volume_pref_qtr"
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.deal_volume_pref_qtr",
+        "mi_section": "demand_supply"
       },
       {
-        "id": "partner.sp.current_capacity_pct"
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.current_capacity_pct",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.intro_friendly"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.cold_inbound_open"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.intake_process"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.kickoff_time_days"
       },
       {
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.conflicts_companies"
       },
       {
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.conflicts_sectors"
       },
       {
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.exclusivity_clauses"
       },
       {
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.confidentiality_walls"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.priority_focus_qtr"
       },
       {
-        "id": "partner.sp.expansion_goal"
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.expansion_goal",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.success_metric"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.escalation_contact"
       },
       {
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.preferred_comms_channel"
       },
       {
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.weekly_digest_optin"
       },
       {
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.case_study_consent"
       },
       {
-        "id": "partner.sp.availability_office_hours"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.availability_office_hours",
+        "mi_section": "partner_pulse"
       },
       {
-        "id": "partner.sp.satisfaction_score"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.satisfaction_score",
+        "mi_section": "sentiment"
       },
       {
-        "id": "partner.sp.referral_nps"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.referral_nps",
+        "mi_section": "sentiment"
       },
       {
-        "id": "partner.sp.biggest_friction"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.biggest_friction",
+        "mi_section": "sentiment"
       },
       {
-        "id": "partner.sp.improvement_suggestion"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.improvement_suggestion",
+        "mi_section": "partner_pulse"
       },
       {
-        "id": "partner.sp.dd.fintech_specialty"
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.dd.fintech_specialty",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "partner.sp.dd.healthcare_specialty"
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.dd.healthcare_specialty",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "partner.sp.dd.ai_specialty"
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.dd.ai_specialty",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "partner.sp.dd.intl_expansion"
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
+        "id": "partner.sp.dd.intl_expansion",
+        "mi_section": "sentiment_geo"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.dd.licensing_held"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.dd.security_compliance"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.dd.data_handling"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.dd.team_seniority_mix"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.dd.tooling_integrations"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "service_provider",
         "id": "partner.sp.dd.engagement_kpi"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.role_type"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.years_operating"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.notable_outcomes"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.current_advisor_seats"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.current_eir_engagements"
       },
       {
-        "id": "partner.ma.geos_active"
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
+        "id": "partner.ma.geos_active",
+        "mi_section": "sentiment_geo"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.functional_expertise"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.signature_topic"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.session_length_min"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.async_or_sync"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.pricing_model"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.equity_floor_pct"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.cash_rate_usd_hr"
       },
       {
-        "id": "partner.ma.weekly_hours_open"
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
+        "id": "partner.ma.weekly_hours_open",
+        "mi_section": "demand_supply"
       },
       {
-        "id": "partner.ma.intros_offered_qtr"
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
+        "id": "partner.ma.intros_offered_qtr",
+        "mi_section": "partner_pulse"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.coaching_credentials"
       },
       {
-        "id": "partner.ma.target_stages"
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
+        "id": "partner.ma.target_stages",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "partner.ma.target_sectors"
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
+        "id": "partner.ma.target_sectors",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "partner.ma.adoption_curve"
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
+        "id": "partner.ma.adoption_curve",
+        "mi_section": "talc"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.founder_archetype"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.intake_process"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.minimum_engagement_months"
       },
       {
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.conflicts_companies"
       },
       {
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.conflicts_funds"
       },
       {
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.confidentiality_practice"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.quarter_focus"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.success_metric"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.case_studies_open"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.community_participation"
       },
       {
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.calendar_link"
       },
       {
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.preferred_comms"
       },
       {
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.weekly_digest_optin"
       },
       {
-        "id": "partner.ma.satisfaction_score"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
+        "id": "partner.ma.satisfaction_score",
+        "mi_section": "sentiment"
       },
       {
-        "id": "partner.ma.referral_nps"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
+        "id": "partner.ma.referral_nps",
+        "mi_section": "sentiment"
       },
       {
-        "id": "partner.ma.biggest_friction"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
+        "id": "partner.ma.biggest_friction",
+        "mi_section": "sentiment"
       },
       {
-        "id": "partner.ma.suggestion_for_studio"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
+        "id": "partner.ma.suggestion_for_studio",
+        "mi_section": "partner_pulse"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.dd.go_to_market"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.dd.product_strategy"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.dd.fundraising_help"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.dd.hiring_help"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.dd.crisis_support"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.dd.board_observer_open"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.dd.podcast_or_writing_consent"
       },
       {
-        "id": "partner.ma.dd.intl_geo_expertise"
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
+        "id": "partner.ma.dd.intl_geo_expertise",
+        "mi_section": "sentiment_geo"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.dd.regulatory_navigation"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.dd.exec_search_partners"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.dd.workshops_offered"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.dd.feedback_style"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.dd.preferred_meeting_format"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "mentor_advisor",
         "id": "partner.ma.dd.public_speaking_open"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.partnership_type"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.parent_company"
       },
       {
-        "id": "partner.st.industry"
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.industry",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "partner.st.regions_active"
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.regions_active",
+        "mi_section": "sentiment_geo"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.team_dedicated_to_partnerships"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.years_in_partnerships"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.assets_offered"
       },
       {
-        "id": "partner.st.audience_reach"
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.audience_reach",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.api_or_marketplace"
       },
       {
-        "id": "partner.st.referral_economics"
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.referral_economics",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.commercial_minimums"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.case_study_link"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.brand_assets_available"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.legal_template_speed_days"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.exclusivity_offered"
       },
       {
-        "id": "partner.st.success_examples_count"
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.success_examples_count",
+        "mi_section": "partner_pulse"
       },
       {
-        "id": "partner.st.target_stages"
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.target_stages",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "partner.st.target_sectors"
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.target_sectors",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "partner.st.partnership_volume_qtr"
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.partnership_volume_qtr",
+        "mi_section": "demand_supply"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.qualifying_traction"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.warm_intro_required"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.ideal_partner_archetype"
       },
       {
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.conflicts_competitors"
       },
       {
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.conflicts_existing_partners"
       },
       {
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.compliance_constraints"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.quarter_focus"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.executive_sponsor"
       },
       {
-        "id": "partner.st.budget_band_usd"
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.budget_band_usd",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.success_metric"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.kpi_north_star"
       },
       {
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.preferred_comms"
       },
       {
-        "id": "partner.st.review_cadence"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.review_cadence",
+        "mi_section": "partner_pulse"
       },
       {
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.weekly_digest_optin"
       },
       {
-        "id": "partner.st.satisfaction_score"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.satisfaction_score",
+        "mi_section": "sentiment"
       },
       {
-        "id": "partner.st.referral_nps"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.referral_nps",
+        "mi_section": "sentiment"
       },
       {
-        "id": "partner.st.biggest_friction"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.biggest_friction",
+        "mi_section": "sentiment"
       },
       {
-        "id": "partner.st.suggestion_for_studio"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.suggestion_for_studio",
+        "mi_section": "partner_pulse"
       },
       {
-        "id": "partner.st.dd.api_access_program"
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.dd.api_access_program",
+        "mi_section": "demand_supply"
       },
       {
-        "id": "partner.st.dd.intl_expansion_help"
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.dd.intl_expansion_help",
+        "mi_section": "sentiment_geo"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.dd.regulatory_help"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.dd.brand_co_marketing_examples"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.dd.event_co_hosting"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.dd.data_sharing_open"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.dd.executive_intros"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.dd.procurement_path"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.dd.poc_funding_available"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.dd.ip_licensing_open"
       },
       {
-        "id": "partner.st.dd.sustainability_priorities"
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.dd.sustainability_priorities",
+        "mi_section": "sector_heat"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
         "id": "partner.st.dd.competitive_intel_share"
       },
       {
-        "id": "partner.st.dd.warm_intro_quota"
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "strategic",
+        "id": "partner.st.dd.warm_intro_quota",
+        "mi_section": "partner_pulse"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.parent_company"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.cvc_unit_age_years"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.cvc_team_size"
       },
       {
-        "id": "partner.cv.fund_size_usd"
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.fund_size_usd",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "partner.cv.geos_active"
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.geos_active",
+        "mi_section": "sentiment_geo"
       },
       {
+        "persona": "partner",
+        "section": "PROFILE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.balance_sheet_or_separate"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.thesis_one_line"
       },
       {
-        "id": "partner.cv.target_sectors"
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.target_sectors",
+        "mi_section": "sector_heat"
       },
       {
-        "id": "partner.cv.target_stages"
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.target_stages",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "partner.cv.ticket_band_usd"
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.ticket_band_usd",
+        "mi_section": "investor_signals"
       },
       {
-        "id": "partner.cv.followon_reserve_pct"
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.followon_reserve_pct",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.lead_or_follow"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.commercial_bundle_offered"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.dilution_neutral_clauses"
       },
       {
-        "id": "partner.cv.investments_per_yr"
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.investments_per_yr",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "partner",
+        "section": "SUPPLY",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.support_offered"
       },
       {
-        "id": "partner.cv.deals_screened_qtr"
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.deals_screened_qtr",
+        "mi_section": "demand_supply"
       },
       {
-        "id": "partner.cv.deals_closed_qtr"
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.deals_closed_qtr",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.average_dd_days"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.warm_intro_required"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.coinvest_partners"
       },
       {
+        "persona": "partner",
+        "section": "DEMAND",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.lps_or_internal_committee"
       },
       {
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.conflicts_competitors"
       },
       {
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.conflicts_existing_portcos"
       },
       {
-        "id": "partner.cv.regulatory_constraints"
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.regulatory_constraints",
+        "mi_section": "sentiment_geo"
       },
       {
+        "persona": "partner",
+        "section": "CONFLICTS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.strategic_vs_financial"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.quarter_focus"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.executive_sponsor"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.success_metric"
       },
       {
+        "persona": "partner",
+        "section": "FOCUS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.next_year_priorities"
       },
       {
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.preferred_comms"
       },
       {
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.weekly_digest_optin"
       },
       {
-        "id": "partner.cv.review_cadence"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.review_cadence",
+        "mi_section": "partner_pulse"
       },
       {
-        "id": "partner.cv.satisfaction_score"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.satisfaction_score",
+        "mi_section": "sentiment"
       },
       {
-        "id": "partner.cv.referral_nps"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.referral_nps",
+        "mi_section": "sentiment"
       },
       {
-        "id": "partner.cv.biggest_friction"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.biggest_friction",
+        "mi_section": "sentiment"
       },
       {
-        "id": "partner.cv.suggestion_for_studio"
+        "persona": "partner",
+        "section": "COMMS",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.suggestion_for_studio",
+        "mi_section": "partner_pulse"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.dd.commercial_signoff_required"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.dd.preferred_exit_path"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.dd.right_of_first_refusal"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.dd.brand_use_restrictions"
       },
       {
-        "id": "partner.cv.dd.commercial_velocity_days"
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.dd.commercial_velocity_days",
+        "mi_section": "capital_velocity"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.dd.followon_signal_window"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.dd.board_seats_required"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.dd.commercial_team_intros"
       },
       {
-        "id": "partner.cv.dd.pro_rata_intent"
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
+        "id": "partner.cv.dd.pro_rata_intent",
+        "mi_section": "investor_signals"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.dd.bridge_support"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.dd.lp_communication_role"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.dd.public_pr_consent"
       },
       {
+        "persona": "partner",
+        "section": "DEEP_DIVE",
+        "page_target": "/partner-portal",
+        "doc_anchor": "network/partners",
+        "partner_subtype": "corporate_venture",
         "id": "partner.cv.dd.product_roadmap_input"
       }
     ],
     "mentor": [
       {
+        "persona": "mentor",
+        "section": "PROFILE",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.profile.display_name"
       },
       {
+        "persona": "mentor",
+        "section": "PROFILE",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.profile.bio"
       },
       {
+        "persona": "mentor",
+        "section": "PROFILE",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.profile.linkedin_url"
       },
       {
+        "persona": "mentor",
+        "section": "PROFILE",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.profile.years_operating"
       },
       {
+        "persona": "mentor",
+        "section": "PROFILE",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.profile.exits_or_outcomes"
       },
       {
+        "persona": "mentor",
+        "section": "PROFILE",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.profile.public_writing"
       },
       {
-        "id": "mentor.profile.sectors"
+        "persona": "mentor",
+        "section": "EXPERTISE",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
+        "id": "mentor.profile.sectors",
+        "mi_section": "sector_heat"
       },
       {
+        "persona": "mentor",
+        "section": "EXPERTISE",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.profile.expertise"
       },
       {
-        "id": "mentor.expertise.stages"
+        "persona": "mentor",
+        "section": "EXPERTISE",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
+        "id": "mentor.expertise.stages",
+        "mi_section": "capital_velocity"
       },
       {
-        "id": "mentor.expertise.geographies"
+        "persona": "mentor",
+        "section": "EXPERTISE",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
+        "id": "mentor.expertise.geographies",
+        "mi_section": "sentiment_geo"
       },
       {
-        "id": "mentor.expertise.adoption_curve"
+        "persona": "mentor",
+        "section": "EXPERTISE",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
+        "id": "mentor.expertise.adoption_curve",
+        "mi_section": "talc"
       },
       {
+        "persona": "mentor",
+        "section": "EXPERTISE",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.expertise.depth_or_breadth"
       },
       {
+        "persona": "mentor",
+        "section": "TOPICS",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.topics.willing"
       },
       {
+        "persona": "mentor",
+        "section": "TOPICS",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.topics.unwilling"
       },
       {
+        "persona": "mentor",
+        "section": "TOPICS",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.topics.signature_session"
       },
       {
-        "id": "mentor.topics.recent_wins"
+        "persona": "mentor",
+        "section": "TOPICS",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
+        "id": "mentor.topics.recent_wins",
+        "mi_section": "partner_pulse"
       },
       {
+        "persona": "mentor",
+        "section": "TOPICS",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.topics.preferred_session_length_min"
       },
       {
+        "persona": "mentor",
+        "section": "TOPICS",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.topics.async_vs_sync"
       },
       {
+        "persona": "mentor",
+        "section": "COMP",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.profile.hourly_rate_usd"
       },
       {
+        "persona": "mentor",
+        "section": "COMP",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.comp.equity_open"
       },
       {
+        "persona": "mentor",
+        "section": "COMP",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.comp.minimum_engagement_hours"
       },
       {
+        "persona": "mentor",
+        "section": "CALENDAR",
+        "page_target": "/calendar",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.calendar.weekly_hours"
       },
       {
-        "id": "mentor.calendar.timezones_covered"
+        "persona": "mentor",
+        "section": "CALENDAR",
+        "page_target": "/calendar",
+        "doc_anchor": "portals/mentor",
+        "id": "mentor.calendar.timezones_covered",
+        "mi_section": "sentiment_geo"
       },
       {
+        "persona": "mentor",
+        "section": "CALENDAR",
+        "page_target": "/calendar",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.calendar.notice_required_hours"
       },
       {
+        "persona": "mentor",
+        "section": "CALENDAR",
+        "page_target": "/calendar",
+        "doc_anchor": "portals/mentor",
         "id": "mentor.calendar.office_hours_window"
       },
       {
-        "id": "mentor.engagement.active_founders"
+        "persona": "mentor",
+        "section": "ENGAGEMENT",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
+        "id": "mentor.engagement.active_founders",
+        "mi_section": "partner_pulse"
       },
       {
-        "id": "mentor.engagement.satisfaction"
+        "persona": "mentor",
+        "section": "ENGAGEMENT",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
+        "id": "mentor.engagement.satisfaction",
+        "mi_section": "sentiment"
       },
       {
-        "id": "mentor.engagement.intros_made_qtr"
+        "persona": "mentor",
+        "section": "ENGAGEMENT",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
+        "id": "mentor.engagement.intros_made_qtr",
+        "mi_section": "partner_pulse"
       },
       {
-        "id": "mentor.engagement.biggest_friction"
+        "persona": "mentor",
+        "section": "ENGAGEMENT",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
+        "id": "mentor.engagement.biggest_friction",
+        "mi_section": "sentiment"
       },
       {
-        "id": "mentor.engagement.referral_likely"
+        "persona": "mentor",
+        "section": "ENGAGEMENT",
+        "page_target": "/mentors/me",
+        "doc_anchor": "portals/mentor",
+        "id": "mentor.engagement.referral_likely",
+        "mi_section": "sentiment"
       }
     ],
     "roleDetector": [
       {
-        "id": "role_detect.primary"
+        "id": "role_detect.primary",
+        "persona": "unknown",
+        "section": "ROLE",
+        "page_target": "/onboarding/persona",
+        "doc_anchor": "getting-started/personas"
       },
       {
-        "id": "role_detect.organization"
+        "id": "role_detect.organization",
+        "persona": "unknown",
+        "section": "ROLE",
+        "page_target": "/onboarding/persona",
+        "doc_anchor": "getting-started/personas"
       },
       {
-        "id": "role_detect.headline"
+        "id": "role_detect.headline",
+        "persona": "unknown",
+        "section": "ROLE",
+        "page_target": "/onboarding/persona",
+        "doc_anchor": "getting-started/personas"
       }
     ]
   }

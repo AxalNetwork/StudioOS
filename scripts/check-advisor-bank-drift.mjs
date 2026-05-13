@@ -142,7 +142,16 @@ if (followupBranches < 30) {
   console.log(`  ✓ followups: ${followupBranches} branches ≥ 30`);
 }
 
-// 5. Frontend legacy banks ⊆ worker ------------------------------------
+// 4b. Write-router coverage --------------------------------------------
+const { spawnSync } = await import('node:child_process');
+const cov = spawnSync(process.execPath, [resolve(ROOT, 'scripts/check-write-router-coverage.mjs')], { stdio: 'inherit' });
+if (cov.status !== 0) {
+  errors.push('write-router coverage failed (see output above)');
+} else {
+  console.log('  ✓ write-router coverage');
+}
+
+// 5. Frontend legacy banks ⊆ worker (with page_target equality) --------
 const workerIdSet = new Set();
 for (const ids of Object.values(idsByBank)) for (const id of ids) workerIdSet.add(id);
 // also pick up role_detect.* from questionBank.ts so the frontend's

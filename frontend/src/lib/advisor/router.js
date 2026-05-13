@@ -15,22 +15,51 @@
  * to a sensible default.
  */
 import { BANKS } from './persona';
+// Task #5 (CH) — manifest emitted by
+// `cloudflare-worker/scripts/gen-question-ids.mjs` is the AUTHORITATIVE
+// source for every advisor question id + its page_target / doc_anchor.
+// Local `BANKS` (legacy AC-2) only contributes optional UI hints
+// (label / wording) and is treated as a fallback for ids that pre-date
+// the manifest era. Worker bank changes ship to the client through
+// the manifest with no code edits required here.
+import WORKER_MANIFEST from '../../../../cloudflare-worker/src/services/advisor/banks.manifest.json';
 
-// Build a flat { question_id -> { page_target, doc_anchor, bank } } table
-// from the AC-2 banks so the client can predict landing targets without
-// a server round-trip.
 const QUESTION_INDEX = (() => {
   const idx = new Map();
+  // 1. Seed from the worker manifest — authoritative.
+  if (WORKER_MANIFEST && WORKER_MANIFEST.banks) {
+    for (const [bankName, rows] of Object.entries(WORKER_MANIFEST.banks)) {
+      if (!Array.isArray(rows)) continue;
+      for (const r of rows) {
+        if (!r?.id) continue;
+        idx.set(r.id, {
+          page_target: r.page_target || null,
+          doc_anchor: r.doc_anchor || null,
+          bank: bankName,
+          label: null,
+          mi_section: r.mi_section || null,
+        });
+      }
+    }
+  }
+  // 2. Layer in legacy local-bank labels for ids the manifest already
+  // covers; ADD any local-only id as a last-resort fallback.
   for (const [bankName, bank] of Object.entries(BANKS)) {
     if (!Array.isArray(bank)) continue;
     for (const q of bank) {
       if (!q?.id) continue;
-      idx.set(q.id, {
-        page_target: q.page_target || null,
-        doc_anchor: q.doc_anchor || null,
-        bank: bankName,
-        label: q.label || null,
-      });
+      const existing = idx.get(q.id);
+      if (existing) {
+        if (q.label && !existing.label) existing.label = q.label;
+      } else {
+        idx.set(q.id, {
+          page_target: q.page_target || null,
+          doc_anchor: q.doc_anchor || null,
+          bank: bankName,
+          label: q.label || null,
+          mi_section: null,
+        });
+      }
     }
   }
   return idx;

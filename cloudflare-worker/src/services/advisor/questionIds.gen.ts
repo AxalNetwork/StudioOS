@@ -3,8 +3,8 @@
 // (or `npm run test:drift`) after changing any bank file.
 //
 // Task #5 (CH) — string-literal union of every advisor question id
-// across all persona banks + the role detector. Consumed by tools
-// (Task #?) that need exhaustive switch coverage.
+// across all persona banks + the role detector. Used by writeRouter
+// coverage tests + any consumer that needs an exhaustive switch.
 
 export type AdvisorQuestionId =
   | 'founder.brand.tagline'
