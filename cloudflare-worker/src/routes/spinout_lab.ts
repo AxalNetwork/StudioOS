@@ -27,111 +27,21 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+// Catalog moved to a pure module so non-route consumers (advisor
+// state machine) can import it without dragging in Hono / db / auth.
+// The route's original public surface is preserved by re-export.
+import {
+  MILESTONES,
+  VALID_MILESTONE_KEYS,
+  weekForKey,
+  weekMet,
+  unlockedFeaturesThrough,
+} from '../services/spinoutLabCatalog';
+// Re-export so existing external imports of these names from this
+// module keep working unchanged.
+export { MILESTONES, VALID_MILESTONE_KEYS, weekMet, unlockedFeaturesThrough };
 
 const spinoutLab = new Hono<{ Bindings: Env }>();
-
-// ---------------------------------------------------------------------------
-// Catalog — week → required milestone keys + unlocked features.
-// `requiredAll` lists keys that MUST all be completed; `requiredAny` (when
-// present) is an additional set of which AT LEAST ONE must be completed.
-// Week 4's `incorporation_completed` milestone advances the week pointer
-// AND triggers the auto-exit branch in `recordMilestone` (flips
-// `is_incorporated=1` + lab off). The explicit /exit route remains as a
-// user-driven escape hatch with the same effect.
-// ---------------------------------------------------------------------------
-type WeekDef = {
-  week: 1 | 2 | 3 | 4;
-  requiredAll: string[];
-  requiredAny?: string[];
-  unlockedFeatures: string[];
-};
-
-export const MILESTONES: WeekDef[] = [
-  {
-    week: 1,
-    requiredAll: [
-      'project_created',
-      'customer_interview_logged_1',
-      'customer_interview_logged_2',
-      'customer_interview_logged_3',
-    ],
-    unlockedFeatures: [
-      'spinout-lab',
-      'projects',
-      'customer-discovery',
-      'market-intelligence',
-    ],
-  },
-  {
-    week: 2,
-    requiredAll: ['okrs_created', 'brand_basics_filled', 'pitch_deck_drafted'],
-    unlockedFeatures: ['roadmap', 'brand-builder', 'pitch-deck'],
-  },
-  {
-    week: 3,
-    requiredAll: ['scoring_run_completed'],
-    requiredAny: ['mentor_meeting_booked', 'cofounder_request_sent'],
-    unlockedFeatures: [
-      'cofounder-match',
-      'mentors',
-      'office-hours',
-      'scoring',
-    ],
-  },
-  {
-    week: 4,
-    requiredAll: ['incorporation_completed'],
-    unlockedFeatures: [
-      'incorporate',
-      'captable',
-      'section-83b',
-      'cofounder-agreement',
-      'capital',
-      'compliance',
-      'kyc',
-    ],
-  },
-];
-
-// Flat allow-list of every milestone key the API will accept, derived from
-// the catalog. Anything else is rejected as a client error so a typo can't
-// silently land in the DB.
-export const VALID_MILESTONE_KEYS = new Set<string>(
-  MILESTONES.flatMap((w) => [...w.requiredAll, ...(w.requiredAny ?? [])]),
-);
-
-function weekForKey(key: string): number | null {
-  for (const w of MILESTONES) {
-    if (w.requiredAll.includes(key) || (w.requiredAny ?? []).includes(key)) {
-      return w.week;
-    }
-  }
-  return null;
-}
-
-/**
- * Decide whether the user has met every requirement for `week`. Pure
- * function over the set of completed keys — used both by the in-handler
- * auto-advance loop and by the tests.
- */
-export function weekMet(week: number, completed: Set<string>): boolean {
-  const def = MILESTONES.find((w) => w.week === week);
-  if (!def) return false;
-  if (!def.requiredAll.every((k) => completed.has(k))) return false;
-  if (def.requiredAny && def.requiredAny.length > 0) {
-    if (!def.requiredAny.some((k) => completed.has(k))) return false;
-  }
-  return true;
-}
-
-/** Cumulative unlocked features through `currentWeek` (inclusive). */
-export function unlockedFeaturesThrough(currentWeek: number): string[] {
-  const out: string[] = [];
-  for (const w of MILESTONES) {
-    if (w.week <= currentWeek) out.push(...w.unlockedFeatures);
-  }
-  return out;
-}
 
 /** Days elapsed since `started_at` (UTC). Returns 0 when started_at is null. */
 function daysSince(startedAt: string | null | undefined, nowMs = Date.now()): number {

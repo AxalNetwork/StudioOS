@@ -40,14 +40,16 @@ function q(over: Partial<AnyQ> = {}): any {
 // ---------------------------------------------------------------------------
 interface AnswerRow { user_id: number; question_id: string; saved_status: string }
 interface StateRow  { user_id: number; question_id: string; last_asked_at: string; answer_count?: number }
-interface LogRow    { action: string; details: string; user_id: number }
+interface LogRow    { action: string; details: string; user_id: number; created_at?: string }
 interface UserRow   { id: number; spinout_lab_week?: number }
+interface SourceRow { user_id: number; page_target: string | null; filled_at: string }
 
 function makeDb() {
   const tables = {
     advisor_answers: [] as AnswerRow[],
     advisor_state: [] as StateRow[],
     activity_logs: [] as LogRow[],
+    field_sources: [] as SourceRow[],
     users: [] as UserRow[],
   };
   function prepare(sql: string) {
@@ -67,6 +69,20 @@ function makeDb() {
           const rows = tables.advisor_state
             .filter((r) => r.user_id === uid)
             .map((r) => ({ question_id: r.question_id, last_asked_at: r.last_asked_at }));
+          return { results: rows } as any;
+        }
+        if (/FROM activity_logs/.test(sql)) {
+          const [uid, sinceIso] = params;
+          const rows = tables.activity_logs
+            .filter((r) => r.user_id === uid && (r.created_at || '') >= sinceIso)
+            .map((r) => ({ details: r.details }));
+          return { results: rows } as any;
+        }
+        if (/FROM field_sources/.test(sql)) {
+          const [uid, sinceIso] = params;
+          const rows = tables.field_sources
+            .filter((r) => r.user_id === uid && r.filled_at >= sinceIso)
+            .map((r) => ({ page_target: r.page_target }));
           return { results: rows } as any;
         }
         return { results: [] } as any;
@@ -131,6 +147,7 @@ test('scoreCandidate composes importance × focus + proximity − anti-repeat', 
   assert.equal(base.score, 2);
   assert.equal(base.breakdown.focus_boost, false);
   assert.equal(base.breakdown.unlock_proximity, false);
+  assert.equal(base.breakdown.recent_activity, false);
   assert.equal(base.breakdown.anti_repeat, false);
 
   const crit = SM.scoreCandidate(q({ id: 'b', importance: 'critical' }), {
@@ -289,6 +306,135 @@ test('pickNext drops answered ids and returns top-of-queue + capped queue', () =
 });
 
 // ---------------------------------------------------------------------------
+// Recent platform activity — page-target match adds +RECENT_ACTIVITY_BOOST.
+// ---------------------------------------------------------------------------
+test('isRecentActivityMatch + score path', () => {
+  // Empty / undefined recentPages → false.
+  assert.equal(SM.isRecentActivityMatch(q({ id: 'a', page_target: '/build' }), undefined), false);
+  assert.equal(SM.isRecentActivityMatch(q({ id: 'a', page_target: '/build' }), new Set()), false);
+  // No page_target on the question → false.
+  assert.equal(SM.isRecentActivityMatch(q({ id: 'a', page_target: null }), new Set(['/build'])), false);
+  // Matching page → true.
+  assert.equal(SM.isRecentActivityMatch(q({ id: 'a', page_target: '/build' }), new Set(['/build'])), true);
+
+  const c = SM.scoreCandidate(q({ id: 'r', importance: 'normal', page_target: '/build' }), {
+    focusPage: null, week: 1, completedMilestones: new Set(),
+    recentlyAsked: new Map(),
+    recentActivityPages: new Set(['/build']),
+    now: 0,
+  });
+  assert.equal(c.score, 2 + SM.RECENT_ACTIVITY_BOOST);
+  assert.equal(c.breakdown.recent_activity, true);
+});
+
+// ---------------------------------------------------------------------------
+// Milestone-catalog week advancement (architect review item #2).
+// ---------------------------------------------------------------------------
+test('highestEarnedWeek walks the catalog and onAnswered advances on completion', async () => {
+  // Empty completed set → still at week 1.
+  assert.equal(SM.highestEarnedWeek(new Set()), 1);
+
+  // All week-1 milestones complete → user has earned week 2.
+  const week1 = new Set(['project_created', 'customer_interview_logged_1',
+    'customer_interview_logged_2', 'customer_interview_logged_3']);
+  assert.equal(SM.highestEarnedWeek(week1), 2);
+
+  // Plus week-2 → earned 3.
+  const week2 = new Set([...week1, 'okrs_created', 'brand_basics_filled', 'pitch_deck_drafted']);
+  assert.equal(SM.highestEarnedWeek(week2), 3);
+
+  // Week-3 needs requiredAll AND requiredAny.
+  const week3Partial = new Set([...week2, 'scoring_run_completed']);
+  assert.equal(SM.highestEarnedWeek(week3Partial), 3); // requiredAny not satisfied.
+  const week3Full = new Set([...week3Partial, 'mentor_meeting_booked']);
+  assert.equal(SM.highestEarnedWeek(week3Full), 4);
+
+  // Cap at 4 even when week-4 milestones are met.
+  const all = new Set([...week3Full, 'incorporation_completed']);
+  assert.equal(SM.highestEarnedWeek(all), 4);
+
+  // onAnswered: completing the last week-1 milestone bumps the user
+  // even though the answered question doesn't carry advances_week.
+  const env = makeDb();
+  const plain = q({ id: 'plain' }); // no advances_week flag
+  const completed = new Set(['project_created', 'customer_interview_logged_1',
+    'customer_interview_logged_2', 'customer_interview_logged_3']);
+  const se = await SM.onAnswered(env, 11, plain, 'v', 1, completed);
+  assert.equal(se.week_advanced, true);
+  assert.equal(se.new_week, 2);
+  assert.equal(env._tables.users.find((u: UserRow) => u.id === 11)!.spinout_lab_week, 2);
+
+  // Already-current-week → no advance.
+  const env2 = makeDb();
+  const seSame = await SM.onAnswered(env2, 12, plain, 'v', 2, completed);
+  assert.equal(seSame.week_advanced, false);
+  assert.equal(seSame.new_week, null);
+});
+
+// ---------------------------------------------------------------------------
+// loadRecentActivityPages — pulls from activity_logs.details.page +
+// field_sources.page_target.
+// ---------------------------------------------------------------------------
+test('loadRecentActivityPages merges activity_logs + field_sources', async () => {
+  const env = makeDb();
+  const sinceMs = Date.parse('2026-05-01T00:00:00Z');
+  // Inside window.
+  env._tables.activity_logs.push({ user_id: 5, action: 'page.view',
+    details: JSON.stringify({ page: '/build/discovery' }), created_at: '2026-05-10 12:00:00' });
+  // Malformed details → skipped without throwing.
+  env._tables.activity_logs.push({ user_id: 5, action: 'noop',
+    details: '{bad json', created_at: '2026-05-10 12:01:00' });
+  // Missing page → skipped.
+  env._tables.activity_logs.push({ user_id: 5, action: 'noop',
+    details: JSON.stringify({ other: 1 }), created_at: '2026-05-10 12:02:00' });
+  // Non-/-prefixed page → skipped.
+  env._tables.activity_logs.push({ user_id: 5, action: 'noop',
+    details: JSON.stringify({ page: 'not-a-path' }), created_at: '2026-05-10 12:02:00' });
+  // Other user → not returned.
+  env._tables.activity_logs.push({ user_id: 999, action: 'page.view',
+    details: JSON.stringify({ page: '/other' }), created_at: '2026-05-10 12:00:00' });
+  // field_sources for the same user.
+  env._tables.field_sources.push({ user_id: 5, page_target: '/build/okrs', filled_at: '2026-05-09 10:00:00' });
+  env._tables.field_sources.push({ user_id: 5, page_target: null, filled_at: '2026-05-09 10:00:00' });
+
+  const pages = await SM.loadRecentActivityPages(env, 5, sinceMs);
+  assert.ok(pages.has('/build/discovery'));
+  assert.ok(pages.has('/build/okrs'));
+  assert.equal(pages.has('/other'), false);
+  assert.equal(pages.size, 2);
+
+  // Broken DB → empty Set, no throw.
+  const broken = makeBrokenDb();
+  const empty = await SM.loadRecentActivityPages(broken, 5, sinceMs);
+  assert.equal(empty.size, 0);
+});
+
+// ---------------------------------------------------------------------------
+// paywallCtas serializer.
+// ---------------------------------------------------------------------------
+test('paywallCtas only emits tier-deferred entries with upgrade links', () => {
+  const out = SM.paywallCtas([
+    { question: q({ id: 'pro1', tier_required: 'studio' }), reason: 'tier' },
+    { question: q({ id: 'pro2', tier_required: 'investor_pro' }), reason: 'tier', detail: 'Investor Pro only.' },
+    { question: q({ id: 'wk1' }), reason: 'week', detail: 'Locks unlock at week 2.' },
+    { question: q({ id: 'no_tier' }), reason: 'tier' }, // missing tier_required
+  ]);
+  assert.equal(out.length, 3);
+  assert.equal(out[0].question_id, 'pro1');
+  assert.equal(out[0].tier_required, 'studio');
+  assert.match(String(out[0].upgrade_link), /tier=studio/);
+  assert.equal(out[1].detail, 'Investor Pro only.');
+  // Custom upgrade path.
+  const out2 = SM.paywallCtas(
+    [{ question: q({ id: 'p', tier_required: 'studio' }), reason: 'tier' }],
+    '/upgrade-here',
+  );
+  assert.match(String(out2[0].upgrade_link), /^\/upgrade-here\?/);
+  // Empty deferred → empty CTAs.
+  assert.deepEqual(SM.paywallCtas([]), []);
+});
+
+// ---------------------------------------------------------------------------
 // Test 5 — D1 helpers + nextTurn + onAnswered side effects + error paths.
 // ---------------------------------------------------------------------------
 test('nextTurn loads state, ranks, marks asked, and onAnswered fires hooks', async () => {
@@ -321,6 +467,29 @@ test('nextTurn loads state, ranks, marks asked, and onAnswered fires hooks', asy
   });
   assert.equal(result.next_question!.id, 'd');
   assert.ok(env._tables.advisor_state.find((r: StateRow) => r.question_id === 'd'));
+
+  // extraAnswered union — answered ids passed by the route layer
+  // (e.g. domain-table hydration) must also be excluded.
+  const bankWithExtra = [
+    q({ id: 'hydrated', importance: 'critical' }),
+    q({ id: 'fresh', importance: 'normal' }),
+  ];
+  const r2 = await SM.nextTurn(env, 7, bankWithExtra, {
+    focusPage: null, week: 1, completedMilestones: new Set(), now: nowMs,
+    extraAnswered: new Set(['hydrated']),
+  });
+  assert.equal(r2.next_question!.id, 'fresh');
+
+  // Pre-loaded recentActivityPages bypasses the loader.
+  const recentBank = [
+    q({ id: 'p_act', importance: 'normal', page_target: '/build/discovery' }),
+    q({ id: 'p_idle', importance: 'normal' }),
+  ];
+  const r3 = await SM.nextTurn(env, 7, recentBank, {
+    focusPage: null, week: 1, completedMilestones: new Set(), now: nowMs,
+    recentActivityPages: new Set(['/build/discovery']),
+  });
+  assert.equal(r3.next_question!.id, 'p_act');
 
   // onAnswered: counter bump + activity log + week advance.
   const advancingQ = q({

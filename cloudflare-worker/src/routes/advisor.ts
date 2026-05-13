@@ -92,6 +92,7 @@ import {
   onAnswered as smOnAnswered,
   publicCandidate as smPublicCandidate,
   loadAnsweredForUser as smLoadAnsweredForUser,
+  paywallCtas as smPaywallCtas,
 } from '../services/advisor/stateMachine';
 import { enqueueJob } from '../services/queue';
 
@@ -930,7 +931,10 @@ advisor.post('/answer', async (c) => {
   if (result.status === 'saved') {
     try {
       const gateForSE = await loadAdvisorGate(c.env, user);
-      await smOnAnswered(c.env, user.id, q, valueStr, gateForSE.week);
+      // Pass completedMilestones so the catalog-based week-advance
+      // path (architect review item #2) can fire when this answer
+      // satisfies the last milestone of the user's current week.
+      await smOnAnswered(c.env, user.id, q, valueStr, gateForSE.week, gateForSE.completedMilestones);
     } catch (e) {
       console.warn('[advisor] smOnAnswered failed', (e as Error).message);
     }
@@ -975,8 +979,18 @@ advisor.post('/answer', async (c) => {
   const gate = await loadAdvisorGate(c.env, liveUser);
   const answered = await effectiveAnsweredSet(c.env, liveUser, conv.id);
   const { visible: bank } = selectBank(liveUser, answered, gate);
-  // Re-rank via Workers AI (see rerank.ts) — answer-handler path.
-  const next = await pickNextQuestion(c.env, liveUser.id, conv.id, bank, answered);
+  // Task #6 (CB) — deterministic next-question selection via the
+  // state machine. Replaces the legacy AI re-rank (pickNextQuestion)
+  // so /answer obeys the same composite ranking + anti-repeat rules
+  // as /turn. We pass `extraAnswered: answered` so the just-saved
+  // (and any hydrated) ids are honoured even before the cross-conv
+  // read inside nextTurn sees them.
+  const turn = await smNextTurn(c.env, liveUser.id, bank, {
+    week: gate.week,
+    completedMilestones: gate.completedMilestones,
+    extraAnswered: answered,
+  });
+  const next = turn.next_question;
   await syncBankTotal(c.env, conv, bank.length, personaFor(liveUser));
   await refreshCounts(c.env, conv.id, next?.id || null);
 
@@ -1119,8 +1133,17 @@ advisor.post('/skip', async (c) => {
   // detector question 3 is served.
   const answered = await effectiveAnsweredSet(c.env, user, conv.id);
   const { visible: bank } = selectBank(user, answered, gate);
-  // Re-rank via Workers AI (see rerank.ts) — skip-handler path.
-  const next = await pickNextQuestion(c.env, user.id, conv.id, bank, answered);
+  // Task #6 (CB) — deterministic next-question selection via the
+  // state machine. /skip writes a `saved_status='skipped'` row, so
+  // by the time nextTurn loads cross-conversation answered ids the
+  // skipped question is already in `answered` — extraAnswered is a
+  // belt-and-braces guard against same-isolate read lag.
+  const turn = await smNextTurn(c.env, user.id, bank, {
+    week: gate.week,
+    completedMilestones: gate.completedMilestones,
+    extraAnswered: answered,
+  });
+  const next = turn.next_question;
   await syncBankTotal(c.env, conv, bank.length, personaFor(user));
   await refreshCounts(c.env, conv.id, next?.id || null);
   if (!next) {
@@ -2058,51 +2081,65 @@ async function buildVisibleBank(c: Context<{ Bindings: Env }>, focus: string | n
   const fromAnswers = conv
     ? await effectiveAnsweredSet(c.env, user, conv.id).catch(() => new Set<string>())
     : await smLoadAnsweredForUser(c.env, user.id);
-  const fromDomain = conv ? new Set<string>() : await hydrateAlreadyAnswered(c.env, user).catch(() => new Set<string>());
+  // Hydrate domain-table answers regardless of whether a conversation
+  // exists. effectiveAnsweredSet already does this for the
+  // active-conv path, but the hydrated row write requires a real
+  // conversation FK; we still want those ids in the answered set so
+  // ranking never re-asks them — architect review item #1.
+  const fromDomain = await hydrateAlreadyAnswered(c.env, user).catch(() => new Set<string>());
   const answered = new Set<string>([...fromAnswers, ...fromDomain]);
-  const { visible } = selectBank(user, answered, gate, focus || undefined);
+  const { visible, deferred } = selectBank(user, answered, gate, focus || undefined);
   // Treat focus as a page only when it looks page-shaped (starts with
   // `/`) — otherwise the state machine's focus_boost would never fire
   // (it compares against page_target). Section-pinned flows already
   // got their critical-first ordering inside selectBank().
   const focusPage = focus && (focus.startsWith('/') || focus.includes('/')) ? focus : null;
-  return { user, visible, gate, focusPage };
+  return { user, visible, deferred, answered, gate, focusPage };
 }
 
 advisor.post('/turn', async (c) => {
   const focus = (c.req.query('focus') || '').trim() || null;
-  const { user, visible, gate, focusPage } = await buildVisibleBank(c, focus);
+  const { user, visible, deferred, answered, gate, focusPage } = await buildVisibleBank(c, focus);
   const result = await smNextTurn(c.env, user.id, visible, {
     focusPage,
     week: gate.week,
     completedMilestones: gate.completedMilestones,
+    extraAnswered: answered,
   });
   return c.json({
     persona: personaFor(user),
     focus: focus || null,
     next_question: publicQuestion(result.next_question),
     queue: result.queue.map(smPublicCandidate),
+    // Tier-blocked questions surface as paywall CTAs, not as
+    // questions — spec "Done looks like" condition.
+    paywall_ctas: smPaywallCtas(deferred),
     complete: !result.next_question,
   });
 });
 
 advisor.get('/queue', async (c) => {
   const focus = (c.req.query('focus') || '').trim() || null;
-  const { user, visible, gate, focusPage } = await buildVisibleBank(c, focus);
+  const { user, visible, deferred, answered, gate, focusPage } = await buildVisibleBank(c, focus);
   // /queue is a read-only peek — we want the ranking but NOT to
   // register an asked-at timestamp (that would spuriously suppress
   // the same questions on the next /turn). So we replicate nextTurn's
   // pure path without calling markAsked.
-  const { pickNext, loadAnsweredForUser, loadRecentlyAsked, ANTI_REPEAT_WINDOW_MS } =
-    await import('../services/advisor/stateMachine');
+  const {
+    pickNext, loadAnsweredForUser, loadRecentlyAsked, loadRecentActivityPages,
+    ANTI_REPEAT_WINDOW_MS, RECENT_ACTIVITY_WINDOW_MS,
+  } = await import('../services/advisor/stateMachine');
   const now = Date.now();
-  const answered = await loadAnsweredForUser(c.env, user.id);
+  const fromAnswers = await loadAnsweredForUser(c.env, user.id);
+  const mergedAnswered = new Set<string>([...fromAnswers, ...answered]);
   const recentlyAsked = await loadRecentlyAsked(c.env, user.id, now - ANTI_REPEAT_WINDOW_MS);
-  const result = pickNext(visible, answered, {
+  const recentActivityPages = await loadRecentActivityPages(c.env, user.id, now - RECENT_ACTIVITY_WINDOW_MS);
+  const result = pickNext(visible, mergedAnswered, {
     focusPage,
     week: gate.week,
     completedMilestones: gate.completedMilestones,
     recentlyAsked,
+    recentActivityPages,
     now,
   });
   return c.json({
@@ -2110,6 +2147,7 @@ advisor.get('/queue', async (c) => {
     focus: focus || null,
     next_question: publicQuestion(result.next),
     queue: result.queue.map(smPublicCandidate),
+    paywall_ctas: smPaywallCtas(deferred),
     complete: !result.next,
   });
 });
