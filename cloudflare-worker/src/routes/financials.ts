@@ -31,13 +31,26 @@ const financials = new Hono<{ Bindings: Env }>();
 // CREATE / ADD COLUMN whatever's missing. Idempotent + single-flight.
 // ---------------------------------------------------------------------------
 let _financialsSchemaReady = false;
+// Legacy `schema.sql` shape includes `name TEXT NOT NULL` and
+// `inputs_json TEXT NOT NULL DEFAULT '{}'` (Task #36 marketplace
+// placeholder). Track which legacy NOT-NULL columns exist so the PUT
+// handler can supply deterministic values for them on INSERT.
+let _financialsLegacyCols: Set<string> = new Set();
+function getFinancialsLegacyCols(): Set<string> { return _financialsLegacyCols; }
 async function ensureFinancialsModelSchema(env: Env): Promise<void> {
   if (_financialsSchemaReady) return;
   try {
     const cols = await env.DB
       .prepare(`PRAGMA table_info(financial_models)`)
-      .all<{ name: string }>();
-    const have = new Set((cols.results || []).map((r) => r.name));
+      .all<{ name: string; notnull: number; dflt_value: unknown }>();
+    const rows = cols.results || [];
+    const have = new Set(rows.map((r) => r.name));
+    // Detect legacy NOT-NULL-without-default columns we need to satisfy.
+    _financialsLegacyCols = new Set(
+      rows
+        .filter((r) => r.notnull === 1 && r.dflt_value == null && (r.name === 'name' || r.name === 'inputs_json'))
+        .map((r) => r.name),
+    );
     if (have.size === 0) {
       await env.DB.exec(
         `CREATE TABLE IF NOT EXISTS financial_models (` +
@@ -467,20 +480,15 @@ financials.put('/:projectId', async (c) => {
   const now = new Date().toISOString();
 
   // INSERT … ON CONFLICT(project_id) DO UPDATE — atomic upsert keyed by
-  // the project_id unique index.
-  await c.env.DB.prepare(
-    `INSERT INTO financial_models
-       (project_id, assumptions_json, computed_json, sensitivity_json,
-        capital_recompute_json, updated_by, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(project_id) DO UPDATE SET
-       assumptions_json       = excluded.assumptions_json,
-       computed_json          = excluded.computed_json,
-       sensitivity_json       = excluded.sensitivity_json,
-       capital_recompute_json = excluded.capital_recompute_json,
-       updated_by             = excluded.updated_by,
-       updated_at             = excluded.updated_at`,
-  ).bind(
+  // the project_id unique index. The legacy `schema.sql` shape carries
+  // NOT-NULL `name` / `inputs_json` columns from a prior placeholder
+  // table; if present we must supply deterministic values on INSERT or
+  // SQLite raises a NOT NULL constraint error. The ensure() helper
+  // populates `_financialsLegacyCols` so we can build the column list
+  // dynamically here.
+  const legacy = getFinancialsLegacyCols();
+  const cols = ['project_id', 'assumptions_json', 'computed_json', 'sensitivity_json', 'capital_recompute_json', 'updated_by', 'updated_at'];
+  const vals: unknown[] = [
     projectId,
     JSON.stringify(a),
     JSON.stringify(computed),
@@ -488,7 +496,21 @@ financials.put('/:projectId', async (c) => {
     JSON.stringify(capital),
     user.id,
     now,
-  ).run();
+  ];
+  if (legacy.has('name')) { cols.push('name'); vals.push(project.name); }
+  if (legacy.has('inputs_json')) { cols.push('inputs_json'); vals.push(JSON.stringify(a)); }
+  const placeholders = cols.map(() => '?').join(', ');
+  await c.env.DB.prepare(
+    `INSERT INTO financial_models (${cols.join(', ')})
+     VALUES (${placeholders})
+     ON CONFLICT(project_id) DO UPDATE SET
+       assumptions_json       = excluded.assumptions_json,
+       computed_json          = excluded.computed_json,
+       sensitivity_json       = excluded.sensitivity_json,
+       capital_recompute_json = excluded.capital_recompute_json,
+       updated_by             = excluded.updated_by,
+       updated_at             = excluded.updated_at`,
+  ).bind(...vals).run();
 
   // Activity log — match the Python message shape (best-effort).
   try {
