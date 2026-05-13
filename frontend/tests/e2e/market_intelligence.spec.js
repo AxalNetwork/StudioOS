@@ -338,7 +338,8 @@ test.describe('Market Intelligence — AT-2 advisor-derived tabs', () => {
     await expect(gapCard).toBeVisible();
     // 'fintech' must be on the gap chart's Y-axis; 'health' must not.
     await expect(gapCard.getByText(/fintech/i).first()).toBeVisible();
-    await expect(gapCard.getByText(/^\s*health\s*$/i)).toHaveCount(0);
+    const gapRows = gapCard.locator('li');
+    await expect(gapRows.filter({ hasText: /\bhealth\b/i })).toHaveCount(0);
   });
 
   test('Founder Sentiment ranks excitements by mean energy and pins valence text', async ({ page }) => {
