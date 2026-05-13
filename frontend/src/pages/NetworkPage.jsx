@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { Network as NetworkIcon, Trophy, DollarSign, Users } from 'lucide-react';
 import { api } from '../lib/api';
+import UserTrustBadge from '../components/UserTrustBadge';
+import { useAuth } from '../hooks/useAuthSync';
 
 const VIS_CSS = 'https://unpkg.com/vis-network/styles/vis-network.min.css';
 const VIS_JS = 'https://unpkg.com/vis-network/standalone/umd/vis-network.min.js';
@@ -36,6 +38,7 @@ const ROLE_COLORS = {
 };
 
 export default function NetworkPage() {
+  const { user } = useAuth();
   const containerRef = useRef(null);
   const [graph, setGraph] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -139,7 +142,13 @@ export default function NetworkPage() {
                     i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-gray-300 text-gray-800' : i === 2 ? 'bg-orange-400 text-white' : 'bg-gray-100 text-gray-600'
                   }`}>{i + 1}</div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-gray-900 truncate">{r.name}</div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="text-xs font-medium text-gray-900 truncate">{r.name}</div>
+                      {/* Task #51 — trust badge on top-referrers list for
+                          admin/investor/partner viewers; UserTrustBadge
+                          silently no-ops for other roles. */}
+                      <UserTrustBadge userId={r.user_id} viewerRole={user?.role} />
+                    </div>
                     <div className="text-[11px] text-gray-500 flex items-center gap-2">
                       <span className="flex items-center gap-0.5"><Users size={10} /> {r.referral_count}</span>
                       <span className="flex items-center gap-0.5"><DollarSign size={10} /> {fmt(r.earned_cents)}</span>

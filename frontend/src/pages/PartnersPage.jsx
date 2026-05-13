@@ -4,6 +4,8 @@ import { api } from '../lib/api';
 import { Users, Plus, Search, Copy, ChevronRight } from 'lucide-react';
 import { UserDetailModal } from './AdminPage';
 import VirtualList from '../components/VirtualList';
+import UserTrustBadge from '../components/UserTrustBadge';
+import { useAuth } from '../hooks/useAuthSync';
 
 // T24 — measured from the existing <tr> with name + email-below + py-3.
 // The virtualized branch (>=300 rows) renders div rows whose grid columns
@@ -12,6 +14,7 @@ const PARTNER_ROW_HEIGHT = 64;
 const PARTNER_GRID = 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 90px';
 
 export default function PartnersPage() {
+  const { user } = useAuth();
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -124,6 +127,10 @@ export default function PartnersPage() {
                   <div className="px-5 py-3 text-gray-900 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="font-medium truncate">{p.name}</span>
+                      {/* Task #51 — trust badge inline on partner row for
+                          admin/investor/partner viewers; UserTrustBadge
+                          silently no-ops for other roles or unlinked rows. */}
+                      <UserTrustBadge userId={p.user_id} viewerRole={user?.role} />
                       <ChevronRight size={12} className="text-gray-300 group-hover:text-violet-600 transition-colors shrink-0" />
                     </div>
                     <div className="text-[11px] text-gray-500 mt-0.5 truncate">{p.email || p.user_email || '—'}</div>
@@ -158,6 +165,9 @@ export default function PartnersPage() {
                       <td className="px-5 py-3 text-gray-900">
                         <div className="flex items-center gap-1.5">
                           <span className="font-medium">{p.name}</span>
+                          {/* Task #51 — trust badge inline on partner row for
+                              admin/investor/partner viewers. */}
+                          <UserTrustBadge userId={p.user_id} viewerRole={user?.role} />
                           <ChevronRight size={12} className="text-gray-300 group-hover:text-violet-600 transition-colors" />
                         </div>
                         <div className="text-[11px] text-gray-500 mt-0.5">{p.email || p.user_email || '—'}</div>
