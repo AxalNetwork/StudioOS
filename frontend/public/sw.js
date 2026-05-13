@@ -14,7 +14,7 @@
 // offline.html, manifest, icons) so old caches drop on activate. Vite-built
 // /assets/* files are content-hashed in their filenames, so the cache-first
 // rule is safe across deploys without a version bump.
-const VERSION = 'v1-2026-05-03';
+const VERSION = 'v2-2026-05-13';
 const PRECACHE = `studioos-precache-${VERSION}`;
 const RUNTIME_STATIC = `studioos-static-${VERSION}`;
 const RUNTIME_API = `studioos-api-${VERSION}`;
@@ -130,6 +130,12 @@ self.addEventListener('fetch', (event) => {
         JSON.stringify({ offline: true }), { status: 503, headers: { 'Content-Type': 'application/json' } }
       )));
     }
+    return;
+  }
+
+  // Skip caching Vite dev server internals — these change between restarts
+  // and caching them causes stale React bundle versions (invalid hook call).
+  if (url.pathname.startsWith('/node_modules/.vite/') || url.pathname.startsWith('/@')) {
     return;
   }
 
