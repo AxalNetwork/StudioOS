@@ -757,8 +757,24 @@ export const api = {
   // admin user-detail drawer's Onboarding + Ongoing tabs.
   adminUserOnboardingConversation: (userId) =>
     request(`/admin/users/${userId}/conversations/onboarding`),
-  adminUserAdvisorConversations: (userId) =>
-    request(`/admin/users/${userId}/conversations/advisor`),
+  adminUserAdvisorConversations: (userId, opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.q) qs.set('q', opts.q);
+    if (opts.since) qs.set('since', opts.since);
+    if (opts.until) qs.set('until', opts.until);
+    if (opts.limit) qs.set('limit', String(opts.limit));
+    const q = qs.toString();
+    return request(`/admin/users/${userId}/conversations/advisor${q ? `?${q}` : ''}`);
+  },
+  // Returns the same payload as the JSON endpoint above but as a CSV
+  // download URL (caller hits it via window.open / an <a download>).
+  adminUserAdvisorConversationsCsvUrl: (userId, opts = {}) => {
+    const qs = new URLSearchParams({ format: 'csv' });
+    if (opts.q) qs.set('q', opts.q);
+    if (opts.since) qs.set('since', opts.since);
+    if (opts.until) qs.set('until', opts.until);
+    return `/api/admin/users/${userId}/conversations/advisor?${qs.toString()}`;
+  },
   adminUserAdvisorConversation: (userId, conversationId) =>
     request(`/admin/users/${userId}/conversations/advisor/${conversationId}`),
   adminUpdateNotes: (userId, admin_notes) => request(`/admin/users/${userId}/notes`, { method: 'POST', body: JSON.stringify({ admin_notes }) }),

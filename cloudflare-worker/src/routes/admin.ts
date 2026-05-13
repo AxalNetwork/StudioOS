@@ -318,18 +318,26 @@ admin.get('/users/:user_id/profile', async (c) => {
 // admin_audit_log + activity_logs so we have a per-conversation view trail.
 // ---------------------------------------------------------------------------
 
-let adminAuditLogTableReady = false;
-async function ensureAdminAuditLogTable(env: Env): Promise<void> {
-  if (adminAuditLogTableReady) return;
+// Task #1 (DB) — dedicated profile-view audit trail with first-class
+// columns (admin_user_id, viewed_user_id, conversation_id, viewed_at)
+// instead of stuffing target/conversation into a JSON blob on the
+// generic admin_audit_log (which is for export / publication actions).
+// Provisioned by migration 049; the lazy CREATE here self-heals dev.
+let adminProfileAuditReady = false;
+async function ensureAdminProfileAuditTable(env: Env): Promise<void> {
+  if (adminProfileAuditReady) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS admin_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL REFERENCES users(id), action TEXT NOT NULL, report_type TEXT, format TEXT, filters_json TEXT, storage_key TEXT, download_url TEXT, exported_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      "CREATE TABLE IF NOT EXISTS admin_profile_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL, viewed_user_id INTEGER NOT NULL, conversation_id INTEGER, action TEXT NOT NULL, viewed_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );
     await env.DB.exec(
-      'CREATE INDEX IF NOT EXISTS idx_admin_audit_user_ts ON admin_audit_log(admin_user_id, exported_at DESC)',
+      'CREATE INDEX IF NOT EXISTS idx_admin_profile_audit_viewed ON admin_profile_audit(viewed_user_id, viewed_at DESC)',
+    );
+    await env.DB.exec(
+      'CREATE INDEX IF NOT EXISTS idx_admin_profile_audit_admin ON admin_profile_audit(admin_user_id, viewed_at DESC)',
     );
   } catch {}
-  adminAuditLogTableReady = true;
+  adminProfileAuditReady = true;
 }
 
 async function auditConversationView(
@@ -340,18 +348,12 @@ async function auditConversationView(
   conversationId: number | null,
 ): Promise<void> {
   try {
-    await ensureAdminAuditLogTable(env);
+    await ensureAdminProfileAuditTable(env);
     await env.DB.prepare(
-      `INSERT INTO admin_audit_log (admin_user_id, action, filters_json) VALUES (?, ?, ?)`,
-    )
-      .bind(
-        adminUser.id,
-        action,
-        JSON.stringify({ target_user_id: targetUserId, conversation_id: conversationId }),
-      )
-      .run();
+      `INSERT INTO admin_profile_audit (admin_user_id, viewed_user_id, conversation_id, action) VALUES (?, ?, ?, ?)`,
+    ).bind(adminUser.id, targetUserId, conversationId, action).run();
   } catch (e) {
-    console.error('[admin/audit] admin_audit_log insert failed', (e as Error).message);
+    console.error('[admin/audit] admin_profile_audit insert failed', (e as Error).message);
   }
   try {
     const adminHash = await hashEmail(adminUser.email);
@@ -366,6 +368,17 @@ async function auditConversationView(
       )
       .run();
   } catch {}
+}
+
+// Best-effort summary extractor: pulls the last assistant message
+// (or first user prompt as a fallback) and trims to 200 chars.
+function summariseConversation(messages: Array<{ role: string; content: string }>): string | null {
+  if (!messages.length) return null;
+  const lastAsst = [...messages].reverse().find(m => m.role === 'assistant' && m.content);
+  const seed = lastAsst?.content || messages[0]?.content || '';
+  const oneLine = seed.replace(/\s+/g, ' ').trim();
+  if (!oneLine) return null;
+  return oneLine.length > 200 ? `${oneLine.slice(0, 197)}…` : oneLine;
 }
 
 // GET /api/admin/users/:user_id/conversations/onboarding
@@ -388,21 +401,40 @@ admin.get('/users/:user_id/conversations/onboarding', async (c) => {
   ).bind(userId).first();
   if (!conv) {
     await auditConversationView(c.env, adminUser, userId, 'admin_viewed_onboarding_transcript', null);
-    return c.json({ ok: true, conversation: null, messages: [] });
+    return c.json({ ok: true, conversation: null, messages: [], summary: null, completion_pct: 0 });
   }
   const r: any = await c.env.DB.prepare(
-    `SELECT role, question_id, content, created_at
+    `SELECT role, question_id, content, meta_json, created_at
        FROM advisor_messages
       WHERE conversation_id = ?
       ORDER BY id ASC
       LIMIT 1000`,
   ).bind(conv.id).all();
-  const messages = (r?.results || []).map((m: any) => ({
-    role: m.role, content: m.content, ts: m.created_at, question_id: m.question_id || null,
-  }));
+  const messages = (r?.results || []).map((m: any) => {
+    const meta = m.meta_json ? safeParse(m.meta_json) : null;
+    return {
+      role: m.role,
+      content: m.content,
+      ts: m.created_at,
+      question_id: m.question_id || null,
+      model: meta?.model || meta?.provider_model || null,
+      latency_ms: meta?.latency_ms ?? meta?.latency ?? null,
+      tokens: meta?.tokens ?? meta?.tokens_used ?? null,
+      written_to: meta?.written_to || null,
+    };
+  });
+  const total = Number(conv.total_questions) || 0;
+  const answered = Number(conv.answered_count) || 0;
+  const completion_pct = total > 0 ? Math.round((answered / total) * 100) : 0;
+  const summary = summariseConversation(messages);
   await auditConversationView(c.env, adminUser, userId, 'admin_viewed_onboarding_transcript', conv.id);
-  return c.json({ ok: true, conversation: conv, messages });
+  return c.json({ ok: true, conversation: conv, messages, summary, completion_pct });
 });
+
+// Local helper — mirrors safeReadJSON without the frontend dependency.
+function safeParse(s: string): any {
+  try { return JSON.parse(s); } catch { return null; }
+}
 
 // GET /api/admin/users/:user_id/conversations/advisor
 // Returns the LIST of every advisor conversation the user has owned, newest
@@ -415,18 +447,82 @@ admin.get('/users/:user_id/conversations/advisor', async (c) => {
 
   const limit = clampLimit(c.req.query('limit'), 50, 200);
   const offset = parseOffset(c.req.query('offset'));
+  const search = (c.req.query('q') || '').trim().toLowerCase();
+  const since = (c.req.query('since') || '').trim();
+  const until = (c.req.query('until') || '').trim();
+  const where: string[] = ['c.user_id = ?'];
+  const args: any[] = [userId];
+  if (since) { where.push('datetime(c.updated_at) >= datetime(?)'); args.push(since); }
+  if (until) { where.push('datetime(c.updated_at) <= datetime(?)'); args.push(until); }
+  args.push(limit, offset);
   const r: any = await c.env.DB.prepare(
     `SELECT c.id, c.uid, c.persona, c.state, c.current_question_id,
             c.total_questions, c.answered_count, c.skipped_count,
             c.created_at, c.updated_at,
-            (SELECT COUNT(*) FROM advisor_messages WHERE conversation_id = c.id) AS message_count
+            (SELECT COUNT(*) FROM advisor_messages WHERE conversation_id = c.id) AS message_count,
+            (SELECT COUNT(*) FROM advisor_answers
+              WHERE conversation_id = c.id AND saved_to_table IS NOT NULL) AS write_count
        FROM advisor_conversations c
-      WHERE c.user_id = ?
+      WHERE ${where.join(' AND ')}
       ORDER BY datetime(c.updated_at) DESC, c.id DESC
       LIMIT ? OFFSET ?`,
-  ).bind(userId, limit, offset).all();
+  ).bind(...args).all();
+  let conversations: any[] = r?.results || [];
+
+  // Annotate per-conversation latency / token / model rollups by
+  // scanning the most recent assistant meta_json. Cheap because we
+  // limit to 1 row per conversation.
+  for (const conv of conversations) {
+    try {
+      const last: any = await c.env.DB.prepare(
+        `SELECT meta_json FROM advisor_messages
+          WHERE conversation_id = ? AND role = 'assistant' AND meta_json IS NOT NULL
+          ORDER BY id DESC LIMIT 1`,
+      ).bind(conv.id).first();
+      const meta = last?.meta_json ? safeParse(last.meta_json) : null;
+      conv.last_model = meta?.model || meta?.provider_model || null;
+      conv.last_latency_ms = meta?.latency_ms ?? meta?.latency ?? null;
+      conv.last_tokens = meta?.tokens ?? meta?.tokens_used ?? null;
+      const total = Number(conv.total_questions) || 0;
+      const answered = Number(conv.answered_count) || 0;
+      conv.completion_pct = total > 0 ? Math.round((answered / total) * 100) : 0;
+    } catch {}
+  }
+
+  // In-memory text search across persona + state + uid (D1 LIKE on
+  // text columns is cheap; we keep it client-side here so the same
+  // payload powers the CSV export). Bounded by the LIMIT clause.
+  if (search) {
+    conversations = conversations.filter(c =>
+      [c.persona, c.state, c.uid, c.last_model].some(v =>
+        typeof v === 'string' && v.toLowerCase().includes(search),
+      ),
+    );
+  }
+
   await auditConversationView(c.env, adminUser, userId, 'admin_listed_advisor_conversations', null);
-  return c.json({ ok: true, conversations: r?.results || [] });
+
+  // CSV export branch — `?format=csv` returns a flat per-conversation
+  // table suitable for spreadsheet review. PII-light: no message
+  // content, only metadata.
+  if ((c.req.query('format') || '').toLowerCase() === 'csv') {
+    const header = ['id','uid','persona','state','created_at','updated_at','total_questions','answered_count','skipped_count','completion_pct','message_count','write_count','last_model','last_latency_ms','last_tokens'];
+    const esc = (v: any) => {
+      if (v == null) return '';
+      const s = String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = conversations.map(c => header.map(h => esc((c as any)[h])).join(','));
+    const csv = [header.join(','), ...rows].join('\n');
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="advisor-conversations-${userId}.csv"`,
+      },
+    });
+  }
+
+  return c.json({ ok: true, conversations });
 });
 
 // GET /api/admin/users/:user_id/conversations/advisor/:conversation_id
@@ -450,17 +546,68 @@ admin.get('/users/:user_id/conversations/advisor/:conversation_id', async (c) =>
     return c.json({ error: 'Conversation not found' }, 404);
   }
   const r: any = await c.env.DB.prepare(
-    `SELECT role, question_id, content, created_at
+    `SELECT role, question_id, content, meta_json, created_at
        FROM advisor_messages
       WHERE conversation_id = ?
       ORDER BY id ASC
       LIMIT 2000`,
   ).bind(convId).all();
-  const messages = (r?.results || []).map((m: any) => ({
-    role: m.role, content: m.content, ts: m.created_at, question_id: m.question_id || null,
-  }));
+  // Pull saved_to_* per question_id so the UI can render a "sparkle"
+  // write indicator on each assistant message that landed a value.
+  const ans: any = await c.env.DB.prepare(
+    `SELECT question_id, saved_to_table, saved_to_column, saved_to_id, saved_status
+       FROM advisor_answers WHERE conversation_id = ?`,
+  ).bind(convId).all();
+  const writeMap = new Map<string, any>();
+  for (const a of (ans?.results || []) as any[]) {
+    if (a.question_id) writeMap.set(a.question_id, {
+      table: a.saved_to_table, column: a.saved_to_column,
+      id: a.saved_to_id, status: a.saved_status,
+    });
+  }
+  const messages = (r?.results || []).map((m: any) => {
+    const meta = m.meta_json ? safeParse(m.meta_json) : null;
+    const wrote = m.question_id ? (writeMap.get(m.question_id) || null) : null;
+    return {
+      role: m.role,
+      content: m.content,
+      ts: m.created_at,
+      question_id: m.question_id || null,
+      model: meta?.model || meta?.provider_model || null,
+      latency_ms: meta?.latency_ms ?? meta?.latency ?? null,
+      tokens: meta?.tokens ?? meta?.tokens_used ?? null,
+      written_to: wrote,
+    };
+  });
+  const total = Number(conv.total_questions) || 0;
+  const answered = Number(conv.answered_count) || 0;
+  const completion_pct = total > 0 ? Math.round((answered / total) * 100) : 0;
+  const summary = summariseConversation(messages);
   await auditConversationView(c.env, adminUser, userId, 'admin_viewed_advisor_transcript', convId);
-  return c.json({ ok: true, conversation: conv, messages });
+  return c.json({ ok: true, conversation: conv, messages, summary, completion_pct });
+});
+
+// POST /api/admin/maintenance/public-ids/backfill
+// One-shot operator endpoint. Walks users in created_at order and
+// assigns AXF-/AXP- ids to every founder/partner that doesn't yet
+// have one. Idempotent — safe to re-run until counts return zero.
+admin.post('/maintenance/public-ids/backfill', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const limitParam = parseInt(String(c.req.query('limit') || '1000'));
+  const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(5000, limitParam)) : 1000;
+  const { backfillPublicIds } = await import('../services/publicIds');
+  const result = await backfillPublicIds(c.env, limit);
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind(
+      'admin_public_ids_backfill',
+      `Backfill: assigned ${result.founders_assigned} founder + ${result.partners_assigned} partner public ids in ${result.cursor_ms}ms`,
+      adminHash, adminUser.id,
+    ).run();
+  } catch {}
+  return c.json({ ok: true, ...result });
 });
 
 // PATCH /api/admin/users/:user_id/access-level — admin grants or revokes
@@ -669,6 +816,21 @@ admin.patch('/users/:userId/role', async (c) => {
 
   const oldRole = rows[0].role;
   await sql`UPDATE users SET role = ${role} WHERE id = ${userId}`;
+
+  // Task #1 (DB) — when an admin promotes someone to founder/partner,
+  // immediately allocate their public AXF-/AXP- id so it is visible
+  // in the profile pane and ready for any contract send. Idempotent.
+  try {
+    if (role === 'founder') {
+      const { assignFounderPublicId } = await import('../services/publicIds');
+      await assignFounderPublicId(c.env, userId);
+    } else if (role === 'partner') {
+      const { assignPartnerPublicId } = await import('../services/publicIds');
+      await assignPartnerPublicId(c.env, userId);
+    }
+  } catch (e) {
+    console.error('[admin/role-change] public-id assign failed', (e as Error).message);
+  }
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'partner', id: userId }); } catch {}
   // Task #3 (Y-1) — re-seed Trust Center obligations for the new role.
   // pruneStaleForRole=true marks obligations no longer required (e.g.

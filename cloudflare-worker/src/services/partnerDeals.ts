@@ -262,6 +262,14 @@ export async function activatePartnerDealOnSignature(
     userId = Number(ins.id);
   }
 
+  // Task #1 (DB) — assign AXP-id at deal-activation time so the
+  // contract record + admin profile pane both surface it. Idempotent
+  // (no-op if the user already has one).
+  try {
+    const { assignPartnerPublicId } = await import('./publicIds');
+    await assignPartnerPublicId(env, userId);
+  } catch {}
+
   // Generate referral code with retry on UNIQUE collision. We only
   // adopt the candidate once the UPDATE actually persists (changes>=1)
   // so a lost race or a UNIQUE-failed retry can't surface a code that

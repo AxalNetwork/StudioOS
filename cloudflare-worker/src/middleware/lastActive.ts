@@ -20,6 +20,17 @@ import type { Env } from '../types';
 const SKIP_PREFIXES = ['/api/health', '/api/monitoring/'];
 const TTL_SECONDS = 300; // 5 min — matches the cookie/session refresh cadence
 
+// Lazy bootstrap — guarantees `users.last_active_at` exists before the
+// middleware ever issues an UPDATE. Mirrors ensureProfileColumns() so a
+// stale dev D1 self-heals on the first authenticated request.
+let lastActiveColumnReady = false;
+async function ensureLastActiveColumn(env: Env): Promise<void> {
+  if (lastActiveColumnReady) return;
+  try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN last_active_at TIMESTAMP`).run(); } catch {}
+  try { await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_users_last_active ON users(last_active_at)`).run(); } catch {}
+  lastActiveColumnReady = true;
+}
+
 export const lastActiveMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
   return async (c, next) => {
     await next();
@@ -40,6 +51,7 @@ export const lastActiveMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => 
           if (seen) return; // throttled — already stamped within last 5 min
         } catch {}
         try {
+          await ensureLastActiveColumn(env);
           await env.DB.prepare(
             `UPDATE users SET last_active_at = datetime('now') WHERE id = ?`,
           ).bind(userId).run();

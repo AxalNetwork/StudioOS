@@ -66,6 +66,12 @@ async function ensureFounder(env: Env, user: User): Promise<number | null> {
     if (ins?.id) {
       await env.DB.prepare(`UPDATE users SET founder_id = ? WHERE id = ?`)
         .bind(ins.id, user.id).run();
+      // Task #1 (DB) — assign public AXF-id alongside the FK so legal
+      // contracts and the admin profile pane see it immediately.
+      try {
+        const { assignFounderPublicId } = await import('./publicIds');
+        await assignFounderPublicId(env, user.id);
+      } catch {}
       return Number(ins.id);
     }
   } catch (_e) {
@@ -80,6 +86,10 @@ async function ensureFounder(env: Env, user: User): Promise<number | null> {
     if (existing?.id) {
       await env.DB.prepare(`UPDATE users SET founder_id = ? WHERE id = ?`)
         .bind(existing.id, user.id).run();
+      try {
+        const { assignFounderPublicId } = await import('./publicIds');
+        await assignFounderPublicId(env, user.id);
+      } catch {}
       return Number(existing.id);
     }
   } catch (e) {
@@ -100,6 +110,10 @@ async function ensurePartner(env: Env, user: User): Promise<number | null> {
     if (ins?.id) {
       await env.DB.prepare(`UPDATE users SET partner_id = ? WHERE id = ?`)
         .bind(ins.id, user.id).run();
+      try {
+        const { assignPartnerPublicId } = await import('./publicIds');
+        await assignPartnerPublicId(env, user.id);
+      } catch {}
       return Number(ins.id);
     }
   } catch (_e) {
@@ -112,6 +126,10 @@ async function ensurePartner(env: Env, user: User): Promise<number | null> {
     if (existing?.id) {
       await env.DB.prepare(`UPDATE users SET partner_id = ? WHERE id = ?`)
         .bind(existing.id, user.id).run();
+      try {
+        const { assignPartnerPublicId } = await import('./publicIds');
+        await assignPartnerPublicId(env, user.id);
+      } catch {}
       return Number(existing.id);
     }
   } catch (e) {

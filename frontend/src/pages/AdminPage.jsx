@@ -732,6 +732,65 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
   const integrations = data?.integrations || [];
   const kyc = data?.kyc || {};
 
+  // Task #1 (DB) — Ongoing Conversation tab uses dedicated transcript
+  // endpoints with a left-rail conversation list + right-pane drilldown,
+  // search/date filters, CSV export, and per-message sparkle indicators
+  // for messages that triggered a domain write (advisor_answers row).
+  const [advisorList, setAdvisorList] = useState([]);
+  const [advisorListLoading, setAdvisorListLoading] = useState(false);
+  const [selectedConvId, setSelectedConvId] = useState(null);
+  const [convDetail, setConvDetail] = useState(null);
+  const [convDetailLoading, setConvDetailLoading] = useState(false);
+  const [advisorSearch, setAdvisorSearch] = useState('');
+  const [advisorSince, setAdvisorSince] = useState('');
+  const [advisorUntil, setAdvisorUntil] = useState('');
+
+  useEffect(() => {
+    if (tab !== 'advisor') return;
+    let alive = true;
+    setAdvisorListLoading(true);
+    (async () => {
+      try {
+        const res = await api.adminUserAdvisorConversations(userRow.id, {
+          q: advisorSearch || undefined,
+          since: advisorSince || undefined,
+          until: advisorUntil || undefined,
+          limit: 100,
+        });
+        if (!alive) return;
+        const list = res?.conversations || [];
+        setAdvisorList(list);
+        if (list.length && !list.find(c => c.id === selectedConvId)) {
+          setSelectedConvId(list[0].id);
+        }
+      } catch (e) {
+        if (alive) flash('err', e.message || 'Failed to load conversations');
+      } finally {
+        if (alive) setAdvisorListLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, userRow.id, advisorSearch, advisorSince, advisorUntil]);
+
+  useEffect(() => {
+    if (tab !== 'advisor' || !selectedConvId) { setConvDetail(null); return; }
+    let alive = true;
+    setConvDetailLoading(true);
+    (async () => {
+      try {
+        const res = await api.adminUserAdvisorConversation(userRow.id, selectedConvId);
+        if (alive) setConvDetail(res);
+      } catch (e) {
+        if (alive) flash('err', e.message || 'Failed to load transcript');
+      } finally {
+        if (alive) setConvDetailLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, userRow.id, selectedConvId]);
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -902,78 +961,160 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
             </div>
           )}
 
-          {data && (tab === 'onboarding' || tab === 'advisor') && (() => {
-            // Task #11 — both tabs share the exact same chat-bubble layout.
+          {data && tab === 'onboarding' && (() => {
             // Onboarding = user's FIRST advisor session (week-1 / sign-up).
-            // Ongoing    = user's MOST RECENT advisor session by updated_at.
-            // The worker returns BOTH, even if they point at the same row.
-            const isOnboarding = tab === 'onboarding';
-            const slice = isOnboarding
-              ? (data.onboarding_conversation || (data.onboarding ? { messages: data.onboarding } : null))
-              : data.ongoing_conversation;
+            // Sourced from the embedded /profile payload so this tab works
+            // even when the dedicated /conversations/onboarding endpoint
+            // hasn't been touched yet.
+            const slice = data.onboarding_conversation || (data.onboarding ? { messages: data.onboarding } : null);
             const msgs = slice?.messages || [];
             const conv = slice?.conversation || null;
-            const title = isOnboarding ? 'Onboarding Conversation' : 'Ongoing Conversation';
-            const emptyText = isOnboarding
-              ? 'No transcript stored for this user yet. Conversations sync here once the user answers their first Personal Advisor question.'
-              : 'No active Personal Advisor conversation for this user yet.';
+            const total = Number(conv?.total_questions) || 0;
+            const answered = Number(conv?.answered_count) || 0;
+            const completionPct = total > 0 ? Math.round((answered / total) * 100) : 0;
+            const summary = (() => {
+              if (!msgs.length) return null;
+              const last = [...msgs].reverse().find(m => m.role === 'assistant' && m.content);
+              const seed = (last?.content || msgs[0]?.content || '').replace(/\s+/g, ' ').trim();
+              return seed ? (seed.length > 200 ? `${seed.slice(0, 197)}…` : seed) : null;
+            })();
             return (
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <MessageSquare size={14} className="text-gray-600" />
-                  <h4 className="text-sm font-semibold text-gray-900">{title}</h4>
+                  <h4 className="text-sm font-semibold text-gray-900">Onboarding Conversation</h4>
                   {conv && (
                     <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-700">
                       {conv.persona} · {conv.state}
                     </span>
                   )}
                   <span className="ml-auto text-[11px] text-gray-500">
-                    {msgs.length} message{msgs.length === 1 ? '' : 's'}
+                    {msgs.length} message{msgs.length === 1 ? '' : 's'} · {completionPct}% complete
                   </span>
                 </div>
+                {summary && (
+                  <div className="mb-2 text-[11px] text-gray-600 bg-violet-50 border border-violet-100 rounded-lg p-2">
+                    <span className="font-semibold text-violet-800">Summary:</span> {summary}
+                  </div>
+                )}
                 {msgs.length === 0 ? (
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-xs text-gray-500">
-                    {emptyText}
+                    No transcript stored for this user yet. Conversations sync here once the user answers their first Personal Advisor question.
                   </div>
                 ) : (
-                  <>
-                    {conv && (
-                      <div className="text-[11px] text-gray-500 mb-2">
-                        Started {conv.created_at ? new Date(conv.created_at).toLocaleString() : '—'}
-                        {' · '}
-                        {conv.answered_count}/{conv.total_questions} answered
-                        {conv.skipped_count ? ` · ${conv.skipped_count} skipped` : ''}
-                      </div>
-                    )}
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-[60vh] overflow-y-auto space-y-2">
-                      {msgs.map((m, i) => (
-                        <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-[85%] text-xs px-3 py-2 rounded-lg whitespace-pre-wrap ${
-                            m.role === 'user'
-                              ? 'bg-violet-600 text-white'
-                              : m.role === 'system'
-                              ? 'bg-amber-50 border border-amber-200 text-amber-800'
-                              : m.role === 'tool'
-                              ? 'bg-blue-50 border border-blue-200 text-blue-800'
-                              : 'bg-white border border-gray-200 text-gray-800'
-                          }`}>
-                            <div>{m.content}</div>
-                            {m.ts && (
-                              <div className={`mt-1 text-[10px] ${m.role === 'user' ? 'text-violet-100' : 'text-gray-400'}`}>
-                                {new Date(m.ts).toLocaleString()}
-                                {m.question_id ? ` · ${m.question_id}` : ''}
-                                {m.extracted_persona ? ` · persona: ${m.extracted_persona}` : ''}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-[60vh] overflow-y-auto space-y-2">
+                    {msgs.map((m, i) => (
+                      <ChatBubble key={i} m={m} />
+                    ))}
+                  </div>
                 )}
               </div>
             );
           })()}
+
+          {data && tab === 'advisor' && (
+            <div className="flex gap-3 h-[65vh]">
+              {/* LEFT RAIL — conversation list with search + date filters + CSV */}
+              <div className="w-64 shrink-0 border border-gray-200 rounded-lg bg-white flex flex-col">
+                <div className="p-2 border-b border-gray-200 space-y-2">
+                  <input
+                    type="search"
+                    value={advisorSearch}
+                    onChange={(e) => setAdvisorSearch(e.target.value)}
+                    placeholder="Search persona / state / model"
+                    className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded"
+                  />
+                  <div className="flex gap-1">
+                    <input
+                      type="date"
+                      value={advisorSince}
+                      onChange={(e) => setAdvisorSince(e.target.value)}
+                      title="From"
+                      className="flex-1 text-[11px] px-1.5 py-1 border border-gray-300 rounded"
+                    />
+                    <input
+                      type="date"
+                      value={advisorUntil}
+                      onChange={(e) => setAdvisorUntil(e.target.value)}
+                      title="To"
+                      className="flex-1 text-[11px] px-1.5 py-1 border border-gray-300 rounded"
+                    />
+                  </div>
+                  <a
+                    href={api.adminUserAdvisorConversationsCsvUrl(userRow.id, {
+                      q: advisorSearch || undefined,
+                      since: advisorSince || undefined,
+                      until: advisorUntil || undefined,
+                    })}
+                    target="_blank" rel="noreferrer"
+                    className="block text-center text-[11px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded font-medium text-gray-700"
+                  >
+                    Download CSV
+                  </a>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {advisorListLoading && (
+                    <div className="p-3 text-[11px] text-gray-500">Loading…</div>
+                  )}
+                  {!advisorListLoading && advisorList.length === 0 && (
+                    <div className="p-3 text-[11px] text-gray-500">No conversations.</div>
+                  )}
+                  {advisorList.map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => setSelectedConvId(c.id)}
+                      className={`w-full text-left px-2.5 py-2 border-b border-gray-100 text-[11px] hover:bg-gray-50 ${selectedConvId === c.id ? 'bg-violet-50' : ''}`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-semibold text-gray-900 truncate">{c.persona || '—'}</span>
+                        {(c.write_count ?? 0) > 0 && (
+                          <span title={`${c.write_count} writes`} className="text-amber-500">✦</span>
+                        )}
+                      </div>
+                      <div className="text-gray-600 truncate">{c.state || '—'} · {c.completion_pct ?? 0}%</div>
+                      <div className="text-gray-400 mt-0.5">{c.updated_at ? new Date(c.updated_at).toLocaleString() : '—'}</div>
+                      {c.last_model && (
+                        <div className="text-gray-400 truncate">{c.last_model}{c.last_latency_ms ? ` · ${c.last_latency_ms}ms` : ''}</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* RIGHT PANE — selected conversation transcript */}
+              <div className="flex-1 min-w-0 border border-gray-200 rounded-lg bg-gray-50 flex flex-col">
+                {!selectedConvId && (
+                  <div className="p-4 text-xs text-gray-500">Select a conversation from the list.</div>
+                )}
+                {selectedConvId && convDetailLoading && (
+                  <div className="p-4 text-xs text-gray-500">Loading transcript…</div>
+                )}
+                {selectedConvId && convDetail && (() => {
+                  const c = convDetail.conversation;
+                  const msgs = convDetail.messages || [];
+                  return (
+                    <>
+                      <div className="p-3 border-b border-gray-200 bg-white text-xs">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-gray-900">{c?.persona || '—'}</span>
+                          <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-700">{c?.state || '—'}</span>
+                          <span className="text-gray-500">{convDetail.completion_pct ?? 0}% complete · {msgs.length} msg</span>
+                        </div>
+                        {convDetail.summary && (
+                          <div className="mt-1.5 text-[11px] text-gray-700 bg-violet-50 border border-violet-100 rounded px-2 py-1.5">
+                            <span className="font-semibold text-violet-800">Summary:</span> {convDetail.summary}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                        {msgs.map((m, i) => <ChatBubble key={i} m={m} />)}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
 
           {data && tab === 'kyc' && (
             <div className="space-y-3 text-sm">
@@ -1045,6 +1186,47 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
           </div>
           <button onClick={onClose} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900">Close</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Task #1 (DB) — shared chat-bubble renderer for the Onboarding +
+// Ongoing Conversation tabs. Surfaces the per-message metadata that
+// the worker now returns: model, latency_ms, tokens, and a sparkle
+// indicator when the assistant turn triggered a domain write
+// (advisor_answers row landed in a real table).
+function ChatBubble({ m }) {
+  const wrote = m.written_to;
+  const wroteOk = wrote && (wrote.status === 'ok' || wrote.status === 'success' || wrote.table);
+  return (
+    <div className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+      <div className={`max-w-[85%] text-xs px-3 py-2 rounded-lg whitespace-pre-wrap ${
+        m.role === 'user'
+          ? 'bg-violet-600 text-white'
+          : m.role === 'system'
+          ? 'bg-amber-50 border border-amber-200 text-amber-800'
+          : m.role === 'tool'
+          ? 'bg-blue-50 border border-blue-200 text-blue-800'
+          : 'bg-white border border-gray-200 text-gray-800'
+      }`}>
+        <div className="flex items-start gap-1.5">
+          {wroteOk && (
+            <span title={`Wrote to ${wrote.table || ''}${wrote.column ? `.${wrote.column}` : ''}`}
+                  className="text-amber-500 shrink-0">✦</span>
+          )}
+          <div className="flex-1 min-w-0">{m.content}</div>
+        </div>
+        {(m.ts || m.model || m.latency_ms != null || m.tokens != null) && (
+          <div className={`mt-1 text-[10px] ${m.role === 'user' ? 'text-violet-100' : 'text-gray-400'}`}>
+            {m.ts ? new Date(m.ts).toLocaleString() : ''}
+            {m.question_id ? ` · ${m.question_id}` : ''}
+            {m.model ? ` · ${m.model}` : ''}
+            {m.latency_ms != null ? ` · ${m.latency_ms}ms` : ''}
+            {m.tokens != null ? ` · ${m.tokens}t` : ''}
+            {wroteOk && wrote.table ? ` · → ${wrote.table}${wrote.column ? `.${wrote.column}` : ''}` : ''}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -258,12 +258,36 @@ export async function createAndSendEnvelope(
     if (opts.recipientUserId) {
       try {
         const row = await env.DB.prepare(
-          `SELECT founder_public_id, partner_public_id FROM users WHERE id = ?`,
-        ).bind(opts.recipientUserId).first<{ founder_public_id: string | null; partner_public_id: string | null }>();
+          `SELECT role, founder_id, partner_id, founder_public_id, partner_public_id
+             FROM users WHERE id = ?`,
+        ).bind(opts.recipientUserId).first<{
+          role: string | null;
+          founder_id: number | null; partner_id: number | null;
+          founder_public_id: string | null; partner_public_id: string | null;
+        }>();
         if (row) {
+          // Task #1 (DB) — auto-assign at send-time so the merge field
+          // never expands to an empty string. Triggered when:
+          //   * the user is already a founder/partner (role or FK set)
+          //     but has no public id yet (back-compat for accounts that
+          //     pre-date migration 049 and have not been backfilled).
+          let founderPid = row.founder_public_id;
+          let partnerPid = row.partner_public_id;
+          if (!founderPid && (row.role === 'founder' || row.founder_id)) {
+            try {
+              const { assignFounderPublicId } = await import('../services/publicIds');
+              founderPid = await assignFounderPublicId(env, opts.recipientUserId);
+            } catch {}
+          }
+          if (!partnerPid && (row.role === 'partner' || row.partner_id)) {
+            try {
+              const { assignPartnerPublicId } = await import('../services/publicIds');
+              partnerPid = await assignPartnerPublicId(env, opts.recipientUserId);
+            } catch {}
+          }
           counterparty = {
-            founder_id: row.founder_public_id || null,
-            partner_id: row.partner_public_id || null,
+            founder_id: founderPid || null,
+            partner_id: partnerPid || null,
             user_id: opts.recipientUserId,
           };
         }
