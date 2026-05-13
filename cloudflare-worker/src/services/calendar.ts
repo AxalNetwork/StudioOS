@@ -98,14 +98,59 @@ function msToken(env: Env): string {
 }
 
 // ---------------------------------------------------------------------------
+// Redirect-URI resolution. Task #5 (DC) — the explicit
+// GOOGLE_CALENDAR_REDIRECT_URI / MICROSOFT_CALENDAR_REDIRECT_URI env vars
+// remain authoritative when set (so an operator can override per-env without
+// a redeploy), but if absent we derive the canonical URI from APP_URL. That
+// makes the worker self-bootstrapping on production where APP_URL =
+// https://axal.vc and removes the failure mode where a missing redirect var
+// makes the provider unconfigured even though the rest of the OAuth client is
+// in place.
+// ---------------------------------------------------------------------------
+function appBase(env: Env): string {
+  return (env.APP_URL || '').replace(/\/+$/, '');
+}
+// Reject any override that still points at the workers.dev sandbox in
+// production — a stale env var set before Task #5 (DC) would otherwise
+// regenerate a workers.dev consent screen and the browser would round-
+// trip through the new 410-Gone callback guard, breaking the connect.
+function isProd(env: Env): boolean {
+  const e = String((env as { ENVIRONMENT?: string }).ENVIRONMENT || '').toLowerCase();
+  return e === 'production' || e === 'prod';
+}
+function overrideAcceptable(env: Env, override: string | undefined): string | null {
+  if (!override) return null;
+  if (isProd(env)) {
+    try {
+      const host = new URL(override).hostname.toLowerCase();
+      if (host.endsWith('.workers.dev')) return null;
+    } catch { return null; }
+  }
+  return override;
+}
+export function googleRedirectUri(env: Env): string {
+  const ov = overrideAcceptable(env, env.GOOGLE_CALENDAR_REDIRECT_URI);
+  if (ov) return ov;
+  const base = appBase(env);
+  return base ? `${base}/api/calendar/google/callback` : '';
+}
+export function microsoftRedirectUri(env: Env): string {
+  const ov = overrideAcceptable(env, env.MICROSOFT_CALENDAR_REDIRECT_URI);
+  if (ov) return ov;
+  const base = appBase(env);
+  return base ? `${base}/api/calendar/microsoft/callback` : '';
+}
+
+// ---------------------------------------------------------------------------
 // Availability checks. Provider is "available" only when every required
-// secret + a redirect URI are present.
+// secret is present and a redirect URI can be resolved (explicit env var OR
+// derived from APP_URL).
 // ---------------------------------------------------------------------------
 export function googleOAuthAvailable(env: Env): boolean {
-  return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_CALENDAR_REDIRECT_URI);
+  return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && googleRedirectUri(env));
 }
 export function microsoftOAuthAvailable(env: Env): boolean {
-  return !!(env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET && env.MICROSOFT_CALENDAR_REDIRECT_URI);
+  return !!(env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET && microsoftRedirectUri(env));
 }
 
 // ===========================================================================
@@ -114,7 +159,7 @@ export function microsoftOAuthAvailable(env: Env): boolean {
 export function buildGoogleAuthUrl(env: Env, state: string): string {
   const p = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID!,
-    redirect_uri: env.GOOGLE_CALENDAR_REDIRECT_URI!,
+    redirect_uri: googleRedirectUri(env),
     response_type: 'code',
     scope: GOOGLE_SCOPES.join(' '),
     access_type: 'offline',
@@ -128,7 +173,7 @@ export function buildGoogleAuthUrl(env: Env, state: string): string {
 export function buildMicrosoftAuthUrl(env: Env, state: string): string {
   const p = new URLSearchParams({
     client_id: env.MICROSOFT_CLIENT_ID!,
-    redirect_uri: env.MICROSOFT_CALENDAR_REDIRECT_URI!,
+    redirect_uri: microsoftRedirectUri(env),
     response_type: 'code',
     response_mode: 'query',
     scope: MICROSOFT_SCOPES.join(' '),
@@ -158,7 +203,7 @@ export async function exchangeGoogleCode(env: Env, code: string): Promise<any> {
     code,
     client_id: env.GOOGLE_CLIENT_ID!,
     client_secret: env.GOOGLE_CLIENT_SECRET!,
-    redirect_uri: env.GOOGLE_CALENDAR_REDIRECT_URI!,
+    redirect_uri: googleRedirectUri(env),
     grant_type: 'authorization_code',
   });
   const r = await fetchWithTimeout(GOOGLE_TOKEN_URL, {
@@ -207,7 +252,7 @@ export async function exchangeMicrosoftCode(env: Env, code: string): Promise<any
     code,
     client_id: env.MICROSOFT_CLIENT_ID!,
     client_secret: env.MICROSOFT_CLIENT_SECRET!,
-    redirect_uri: env.MICROSOFT_CALENDAR_REDIRECT_URI!,
+    redirect_uri: microsoftRedirectUri(env),
     grant_type: 'authorization_code',
     scope: MICROSOFT_SCOPES.join(' '),
   });

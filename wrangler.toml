@@ -24,6 +24,29 @@ compatibility_date = "2026-04-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
+# ---------- Worker routes (zone-scoped, path-restricted) ----------
+# Task #5 (DC) — Mount the worker at `axal.vc/api/*` so every API call
+# (including third-party OAuth callbacks) resolves through the canonical
+# brand domain instead of the `*.workers.dev` sandbox URL.
+#
+# IMPORTANT: This is a *zone route*, NOT a `custom_domain = true`
+# binding. Cloudflare custom-domain bindings are hostname-only — they
+# can't be path-scoped, and a `pattern = "axal.vc"` custom-domain would
+# steal *every* request on the apex away from the Cloudflare Pages
+# deployment that serves the React SPA. A zone route with the
+# `axal.vc/api/*` glob lets the worker own only the API surface while
+# Pages keeps serving the SPA. `zone_name = "axal.vc"` makes Wrangler
+# look up the zone by name (no zone_id literal needed).
+#
+# The workers.dev sandbox URL stays accessible (workers_dev = true above)
+# for preview/debug, but the OAuth callback paths reject workers.dev
+# requests in production via the middleware in
+# `cloudflare-worker/src/index.ts` (returns 410 Gone — see
+# `oauthCallbackWorkersDevGuard`).
+[[routes]]
+pattern   = "axal.vc/api/*"
+zone_name = "axal.vc"
+
 # Epic 11 — minified production bundle. Wrangler runs esbuild with
 # `minify: true`, which strips comments, mangles identifiers, and (most
 # importantly here) drops dead-code branches so leftover console.log
@@ -288,6 +311,14 @@ service = "studioos-tail"
 # ===========================================================================
 [env.production]
 name = "studioos"
+
+# Task #5 (DC) — Mirror of the top-level [[routes]] block. Wrangler env
+# tables don't inherit `routes` either, so the `--env production` deploy
+# path needs its own zone-route binding for `axal.vc/api/*`. See the
+# top-level block for the rationale (zone route vs custom_domain).
+[[env.production.routes]]
+pattern   = "axal.vc/api/*"
+zone_name = "axal.vc"
 
 [env.production.vars]
 APP_URL           = "https://axal.vc"

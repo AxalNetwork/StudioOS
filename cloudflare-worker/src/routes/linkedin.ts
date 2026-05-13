@@ -79,8 +79,30 @@ async function ensureColumns(env: Env): Promise<void> {
   if (allPresent) migrationDone = true;
 }
 
+// Task #5 (DC) — derive the LinkedIn redirect URI from APP_URL when the
+// LINKEDIN_REDIRECT_URI env var is unset. The explicit env var still wins
+// when present (e.g. preview env pointing at a workers.dev URL), but the
+// production deploy now self-bootstraps to https://axal.vc/api/linkedin/
+// oauth/callback so the LinkedIn consent screen never shows workers.dev.
+function linkedinRedirectUri(env: Env): string {
+  // In production, ignore stale workers.dev overrides (see services/calendar.ts
+  // for the same hardening — a workers.dev consent screen would 410-Gone on
+  // the callback path and break the connect).
+  const override = env.LINKEDIN_REDIRECT_URI;
+  if (override) {
+    const envName = String((env as { ENVIRONMENT?: string }).ENVIRONMENT || '').toLowerCase();
+    const isProd = envName === 'production' || envName === 'prod';
+    let host = '';
+    try { host = new URL(override).hostname.toLowerCase(); } catch { host = ''; }
+    const stale = isProd && host.endsWith('.workers.dev');
+    if (host && !stale) return override;
+  }
+  const base = stripTrailingSlashes(env.APP_URL || '');
+  return base ? `${base}/api/linkedin/oauth/callback` : '';
+}
+
 function configured(env: Env): boolean {
-  return !!(env.LINKEDIN_CLIENT_ID && env.LINKEDIN_CLIENT_SECRET && env.LINKEDIN_REDIRECT_URI);
+  return !!(env.LINKEDIN_CLIENT_ID && env.LINKEDIN_CLIENT_SECRET && linkedinRedirectUri(env));
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +184,7 @@ linkedin.post('/oauth/start', async (c) => {
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: c.env.LINKEDIN_CLIENT_ID!,
-      redirect_uri: c.env.LINKEDIN_REDIRECT_URI!,
+      redirect_uri: linkedinRedirectUri(c.env),
       scope: 'openid profile email',
       state,
     });
@@ -235,7 +257,7 @@ linkedin.get('/oauth/callback', async (c) => {
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: c.env.LINKEDIN_REDIRECT_URI!,
+        redirect_uri: linkedinRedirectUri(c.env),
         client_id: c.env.LINKEDIN_CLIENT_ID!,
         client_secret: c.env.LINKEDIN_CLIENT_SECRET!,
       }).toString(),

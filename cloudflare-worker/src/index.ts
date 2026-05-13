@@ -210,6 +210,36 @@ app.use('/api/*', lastActiveMiddleware());
 // — see middleware/csrf.ts for the full predicate.
 app.use('/api/*', csrfMiddleware());
 
+// Task #5 (DC) — Hard-block third-party OAuth callbacks that arrive on the
+// `*.workers.dev` sandbox host in production. The provider apps (Google,
+// Microsoft, LinkedIn) are now registered with axal.vc redirect URIs only;
+// any callback hitting workers.dev is either a stale redirect from before
+// the migration or an attacker probing the legacy URL. Returning 410 Gone
+// (vs 404) signals "this URL is permanently retired" so providers stop
+// retrying and any cached browser state self-heals on the next attempt.
+// The non-callback workers.dev surface stays open for preview/debugging.
+//
+// Mounted AFTER observability + rate-limit + CSRF so blocked traffic still
+// shows up in metrics and counts against the per-bucket rate limit (so a
+// stuck retry loop on a stale URL gets throttled instead of free-firing).
+async function oauthCallbackWorkersDevGuard(c: any, next: () => Promise<void>) {
+  const envName = String((c.env?.ENVIRONMENT || '')).toLowerCase();
+  if (envName === 'production' || envName === 'prod') {
+    const host = (c.req.header('host') || '').toLowerCase();
+    if (host.endsWith('.workers.dev')) {
+      console.warn('[OAUTH-GUARD] blocked workers.dev callback', c.req.path, host);
+      return c.text(
+        'This OAuth callback URL is no longer accepted. Please reconnect from https://axal.vc.',
+        410,
+      );
+    }
+  }
+  await next();
+}
+app.use('/api/calendar/google/callback', oauthCallbackWorkersDevGuard);
+app.use('/api/calendar/microsoft/callback', oauthCallbackWorkersDevGuard);
+app.use('/api/linkedin/oauth/callback', oauthCallbackWorkersDevGuard);
+
 // Quick health probe used by uptime monitors.
 app.get('/api/health', (c) =>
   c.json({
