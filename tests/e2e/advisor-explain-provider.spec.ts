@@ -136,7 +136,7 @@ test.describe('Personal Advisor /explain — SSE provider routing', () => {
     expect(r.error).toBeNull();
     expect(r.provider).not.toBeNull();
     expect(r.provider!.provider).toBe('workers-ai');
-    expect(r.provider!.model).toMatch(/^@cf\/meta\/llama-3\.3-70b/);
+    expect(r.provider!.model).toBe('@cf/meta/llama-3.3-70b-instruct-fp8-fast');
     expect(r.provider!.fallback_used).toBe(false);
     expect(r.provider!.cached).toBe(false);
     expect(r.deltas.join('')).toContain('Simple Agreement for Future Equity');
