@@ -7,9 +7,6 @@ import {
   Send, Loader2, ShieldCheck, Info, FileDown, Bell, UserCheck, Clock,
 } from 'lucide-react';
 
-// lucide-react v1 dropped brand icons; reuse the inline LinkedinSvg below.
-const LinkedinIcon = (props) => <LinkedinSvg {...props} />;
-
 import QRCode from 'qrcode';
 import { api } from '../lib/api';
 
@@ -23,6 +20,9 @@ const LinkedinSvg = ({ size = 18 }) => (
     <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
   </svg>
 );
+
+// lucide-react v1 dropped brand icons; reuse the inline LinkedinSvg below.
+const LinkedinIcon = (props) => <LinkedinSvg {...props} />;
 
 const TEMPLATE_STORAGE_KEY = 'axal:invite_templates_v1';
 
@@ -159,7 +159,8 @@ export default function ReferEarnPage() {
         const s = await api.linkedinStatus();
         setLinkedinStatus(s || { configured: false, connected: false });
       } catch (e) {
-        if (e?.status === 404 || (e?.message || '').toLowerCase() === 'not found') {
+        const message = String(e?.message || '').toLowerCase();
+        if (e?.status === 404 || message.includes('not found')) {
           setLinkedinStatus({ configured: false, connected: false });
         }
         // Other errors (e.g. 401) are silent — user just doesn't see status.
@@ -250,6 +251,12 @@ export default function ReferEarnPage() {
     localStorage.removeItem(TEMPLATE_STORAGE_KEY);
   };
 
+  const buildPersonalizedInviteLink = (baseLink, refCode, inviteeEmail) => {
+    const params = new URLSearchParams({ ref: refCode });
+    if (inviteeEmail) params.set('invitee', inviteeEmail);
+    return `${baseLink.split('?')[0]}?${params.toString()}`;
+  };
+
   const handleCsvUpload = async (e) => {
     setImportError('');
     const file = e.target.files?.[0];
@@ -271,9 +278,7 @@ export default function ReferEarnPage() {
       // Backend caps a single send-invites request at 100 contacts; keep the
       // import preview aligned so users don't queue invites we'd reject.
       const personalized = rows.slice(0, 100).map(r => {
-        const params = new URLSearchParams({ ref: code });
-        if (r.email) params.set('invitee', r.email);
-        const personalizedLink = `${link.split('?')[0]}?${params.toString()}`;
+        const personalizedLink = buildPersonalizedInviteLink(link, code, r.email);
         return {
           name: r.name || '',
           email: r.email || '',
@@ -1083,16 +1088,19 @@ function LinkedInImportModal({ status, tab, setTab, busy, flash, onClose, onConn
           {tabBtn('csv', '2. Upload Connections.csv')}
         </div>
 
-        {flash && (
-          <div className={`mx-6 mt-4 px-3 py-2 text-xs rounded-md flex items-start gap-2 ${
-            /fail|error|could not/i.test(flash)
-              ? 'bg-red-50 border border-red-200 text-red-700'
-              : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-          }`}>
-            {/fail|error|could not/i.test(flash) ? <AlertCircle size={12} className="mt-0.5 shrink-0" /> : <Check size={12} className="mt-0.5 shrink-0" />}
-            <span>{flash}</span>
-          </div>
-        )}
+        {flash && (() => {
+          const isErrorFlash = /fail|error|could not/i.test(flash || '');
+          return (
+            <div className={`mx-6 mt-4 px-3 py-2 text-xs rounded-md flex items-start gap-2 ${
+              isErrorFlash
+                ? 'bg-red-50 border border-red-200 text-red-700'
+                : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+            }`}>
+              {isErrorFlash ? <AlertCircle size={12} className="mt-0.5 shrink-0" /> : <Check size={12} className="mt-0.5 shrink-0" />}
+              <span>{flash}</span>
+            </div>
+          );
+        })()}
 
         {tab === 'signin' && (
           <div className="p-6 space-y-4">
