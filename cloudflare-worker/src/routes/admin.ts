@@ -5,6 +5,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAdmin, createJWT, hashToken, requireFactor } from '../auth';
 import { runTotpRemediation } from '../services/totpRemediation';
+import { assignFounderPublicId, assignPartnerPublicId, ensurePublicIdColumns } from '../services/publicIds';
 
 const admin = new Hono<{ Bindings: Env }>();
 
@@ -249,6 +250,20 @@ admin.get('/users/:user_id/profile', async (c) => {
     } catch {}
   }
 
+  // Task #1 (DB) — lazy-assign public AXF-/AXP- identifiers when the
+  // user has the corresponding role but no id yet. Idempotent: returns
+  // the existing value when one is already set. Mirrored back onto
+  // userRow so the response includes the freshly-minted id.
+  await ensurePublicIdColumns(c.env);
+  if ((userRow.role === 'founder' || userRow.founder_id) && !userRow.founder_public_id) {
+    const fid = await assignFounderPublicId(c.env, userRow.id);
+    if (fid) userRow.founder_public_id = fid;
+  }
+  if ((userRow.role === 'partner' || userRow.partner_id) && !userRow.partner_public_id) {
+    const pid = await assignPartnerPublicId(c.env, userRow.id);
+    if (pid) userRow.partner_public_id = pid;
+  }
+
   // Audit trail — admin viewed this profile. Epic 11 — actor stores
   // hashEmail(adminUser.email), never the plaintext, to keep PII out of
   // activity_logs. user_id is the join key for support workflows.
@@ -293,6 +308,159 @@ admin.get('/users/:user_id/profile', async (c) => {
       signed_agreement_count: agreements.filter((a: any) => a.recipient_status === 'signed').length,
     },
   });
+});
+
+// ---------------------------------------------------------------------------
+// Task #1 (DB) — Dedicated transcript endpoints. The /profile endpoint above
+// returns the first + most-recent advisor conversation inline; these endpoints
+// give the admin UI per-conversation pagination and a discoverable list of
+// every advisor session a user has owned. Each call also writes a row to
+// admin_audit_log + activity_logs so we have a per-conversation view trail.
+// ---------------------------------------------------------------------------
+
+let adminAuditLogTableReady = false;
+async function ensureAdminAuditLogTable(env: Env): Promise<void> {
+  if (adminAuditLogTableReady) return;
+  try {
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS admin_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL REFERENCES users(id), action TEXT NOT NULL, report_type TEXT, format TEXT, filters_json TEXT, storage_key TEXT, download_url TEXT, exported_at TEXT NOT NULL DEFAULT (datetime('now')))",
+    );
+    await env.DB.exec(
+      'CREATE INDEX IF NOT EXISTS idx_admin_audit_user_ts ON admin_audit_log(admin_user_id, exported_at DESC)',
+    );
+  } catch {}
+  adminAuditLogTableReady = true;
+}
+
+async function auditConversationView(
+  env: Env,
+  adminUser: { id: number; name?: string | null; email: string },
+  targetUserId: number,
+  action: string,
+  conversationId: number | null,
+): Promise<void> {
+  try {
+    await ensureAdminAuditLogTable(env);
+    await env.DB.prepare(
+      `INSERT INTO admin_audit_log (admin_user_id, action, filters_json) VALUES (?, ?, ?)`,
+    )
+      .bind(
+        adminUser.id,
+        action,
+        JSON.stringify({ target_user_id: targetUserId, conversation_id: conversationId }),
+      )
+      .run();
+  } catch (e) {
+    console.error('[admin/audit] admin_audit_log insert failed', (e as Error).message);
+  }
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    await env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    )
+      .bind(
+        action,
+        `Admin ${adminUser.name || adminUser.email} viewed ${action} (target_user=${targetUserId}${conversationId ? `, conv=${conversationId}` : ''})`,
+        adminHash,
+        adminUser.id,
+      )
+      .run();
+  } catch {}
+}
+
+// GET /api/admin/users/:user_id/conversations/onboarding
+// Returns the user's FIRST advisor session (week-1 / sign-up flow) with full
+// message transcript. Mirrors the embedded `onboarding_conversation` block on
+// /profile but is the discoverable, audited entry-point for the dedicated
+// admin "Onboarding" tab.
+admin.get('/users/:user_id/conversations/onboarding', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('user_id'));
+  if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
+
+  const conv: any = await c.env.DB.prepare(
+    `SELECT id, uid, persona, state, current_question_id, total_questions,
+            answered_count, skipped_count, created_at, updated_at
+       FROM advisor_conversations
+      WHERE user_id = ?
+      ORDER BY datetime(created_at) ASC, id ASC
+      LIMIT 1`,
+  ).bind(userId).first();
+  if (!conv) {
+    await auditConversationView(c.env, adminUser, userId, 'admin_viewed_onboarding_transcript', null);
+    return c.json({ ok: true, conversation: null, messages: [] });
+  }
+  const r: any = await c.env.DB.prepare(
+    `SELECT role, question_id, content, created_at
+       FROM advisor_messages
+      WHERE conversation_id = ?
+      ORDER BY id ASC
+      LIMIT 1000`,
+  ).bind(conv.id).all();
+  const messages = (r?.results || []).map((m: any) => ({
+    role: m.role, content: m.content, ts: m.created_at, question_id: m.question_id || null,
+  }));
+  await auditConversationView(c.env, adminUser, userId, 'admin_viewed_onboarding_transcript', conv.id);
+  return c.json({ ok: true, conversation: conv, messages });
+});
+
+// GET /api/admin/users/:user_id/conversations/advisor
+// Returns the LIST of every advisor conversation the user has owned, newest
+// first. No messages — just the per-row metadata so the admin UI can render
+// a dropdown / sidebar of sessions to drill into.
+admin.get('/users/:user_id/conversations/advisor', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('user_id'));
+  if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
+
+  const limit = clampLimit(c.req.query('limit'), 50, 200);
+  const offset = parseOffset(c.req.query('offset'));
+  const r: any = await c.env.DB.prepare(
+    `SELECT c.id, c.uid, c.persona, c.state, c.current_question_id,
+            c.total_questions, c.answered_count, c.skipped_count,
+            c.created_at, c.updated_at,
+            (SELECT COUNT(*) FROM advisor_messages WHERE conversation_id = c.id) AS message_count
+       FROM advisor_conversations c
+      WHERE c.user_id = ?
+      ORDER BY datetime(c.updated_at) DESC, c.id DESC
+      LIMIT ? OFFSET ?`,
+  ).bind(userId, limit, offset).all();
+  await auditConversationView(c.env, adminUser, userId, 'admin_listed_advisor_conversations', null);
+  return c.json({ ok: true, conversations: r?.results || [] });
+});
+
+// GET /api/admin/users/:user_id/conversations/advisor/:conversation_id
+// Returns the message transcript of one specific advisor conversation. The
+// conversation_id is verified to belong to user_id before any messages are
+// returned, preventing cross-user leakage via id guessing.
+admin.get('/users/:user_id/conversations/advisor/:conversation_id', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('user_id'));
+  const convId = parseInt(c.req.param('conversation_id'));
+  if (!Number.isFinite(userId) || !Number.isFinite(convId)) {
+    return c.json({ error: 'Invalid id' }, 400);
+  }
+  const conv: any = await c.env.DB.prepare(
+    `SELECT id, uid, persona, state, current_question_id, total_questions,
+            answered_count, skipped_count, created_at, updated_at, user_id
+       FROM advisor_conversations
+      WHERE id = ?`,
+  ).bind(convId).first();
+  if (!conv || conv.user_id !== userId) {
+    return c.json({ error: 'Conversation not found' }, 404);
+  }
+  const r: any = await c.env.DB.prepare(
+    `SELECT role, question_id, content, created_at
+       FROM advisor_messages
+      WHERE conversation_id = ?
+      ORDER BY id ASC
+      LIMIT 2000`,
+  ).bind(convId).all();
+  const messages = (r?.results || []).map((m: any) => ({
+    role: m.role, content: m.content, ts: m.created_at, question_id: m.question_id || null,
+  }));
+  await auditConversationView(c.env, adminUser, userId, 'admin_viewed_advisor_transcript', convId);
+  return c.json({ ok: true, conversation: conv, messages });
 });
 
 // PATCH /api/admin/users/:user_id/access-level — admin grants or revokes

@@ -246,11 +246,37 @@ export async function createAndSendEnvelope(
     // substitution. We always seed a sane set of default merge values
     // (recipient_name/email + effective_date) and let the caller
     // override any of them via `mergeFields`.
-    const merge: Record<string, string> = {
+    //
+    // Task #1 (DB) — also seed `counterparty.{founder_id,partner_id}`
+    // from the recipient user row when the recipient is a known
+    // platform user. The renderer accepts dotted-path tokens like
+    // `{{counterparty.founder_id}}` so legal templates can embed the
+    // public AXF-/AXP- identifier without per-template plumbing.
+    let counterparty: { founder_id: string | null; partner_id: string | null; user_id: number | null } = {
+      founder_id: null, partner_id: null, user_id: opts.recipientUserId ?? null,
+    };
+    if (opts.recipientUserId) {
+      try {
+        const row = await env.DB.prepare(
+          `SELECT founder_public_id, partner_public_id FROM users WHERE id = ?`,
+        ).bind(opts.recipientUserId).first<{ founder_public_id: string | null; partner_public_id: string | null }>();
+        if (row) {
+          counterparty = {
+            founder_id: row.founder_public_id || null,
+            partner_id: row.partner_public_id || null,
+            user_id: opts.recipientUserId,
+          };
+        }
+      } catch (e) {
+        console.error('[esign] counterparty lookup failed', (e as Error).message);
+      }
+    }
+    const merge: Record<string, unknown> = {
       recipient_name: opts.recipientName || '',
       recipient_email: opts.recipientEmail,
       counterparty_name: opts.recipientName || opts.recipientEmail,
       effective_date: new Date().toISOString().slice(0, 10),
+      counterparty,
       ...(opts.mergeFields || {}),
     };
     const body = await renderLegalTemplate(tplKey, merge);

@@ -58,13 +58,27 @@ export function getLegalTemplateBody(key: LegalTemplateKey): string {
  */
 export async function renderLegalTemplate(
   key: LegalTemplateKey,
-  merge: Record<string, string | number | null | undefined>,
+  merge: Record<string, unknown>,
 ): Promise<string> {
   const body = getLegalTemplateBody(key);
-  return body.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
-    const v = merge[k];
-    return v == null ? `{{${k}}}` : String(v);
+  // Task #1 (DB) — accept dotted-path tokens like
+  // `{{counterparty.founder_id}}`. The lookup walks nested objects;
+  // a flat key like `{{recipient_name}}` continues to work because
+  // the path of length 1 falls through to the top-level `merge[k]`.
+  return body.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (_, path: string) => {
+    const v = resolveDotted(merge, path);
+    return v == null ? `{{${path}}}` : String(v);
   });
+}
+
+function resolveDotted(scope: Record<string, unknown>, path: string): unknown {
+  const parts = path.split('.');
+  let cur: unknown = scope;
+  for (const p of parts) {
+    if (cur == null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string, unknown>)[p];
+  }
+  return cur;
 }
 
 export const ALL_TEMPLATE_KEYS: LegalTemplateKey[] = Object.keys(TEMPLATES) as LegalTemplateKey[];

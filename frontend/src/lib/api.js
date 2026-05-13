@@ -751,6 +751,16 @@ export const api = {
   adminProcessPayout: (id, data) => request(`/network/admin/payouts/${id}/process`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   adminUserProfile: (userId) => request(`/admin/users/${userId}/profile`),
+  // Task #1 (DB) — dedicated transcript endpoints. The /profile call above
+  // returns the first + most-recent advisor conversation inline; these are
+  // the discoverable, per-conversation, audited entry-points for the
+  // admin user-detail drawer's Onboarding + Ongoing tabs.
+  adminUserOnboardingConversation: (userId) =>
+    request(`/admin/users/${userId}/conversations/onboarding`),
+  adminUserAdvisorConversations: (userId) =>
+    request(`/admin/users/${userId}/conversations/advisor`),
+  adminUserAdvisorConversation: (userId, conversationId) =>
+    request(`/admin/users/${userId}/conversations/advisor/${conversationId}`),
   adminUpdateNotes: (userId, admin_notes) => request(`/admin/users/${userId}/notes`, { method: 'POST', body: JSON.stringify({ admin_notes }) }),
   adminResendVerification: (userId) => request(`/admin/users/${userId}/resend-verification`, { method: 'POST' }),
 

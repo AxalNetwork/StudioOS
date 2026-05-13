@@ -139,6 +139,7 @@ import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
 import { csrfMiddleware } from './middleware/csrf';
+import { lastActiveMiddleware } from './middleware/lastActive';
 import { requireCfAccess } from './middleware/cfAccess';
 import filesRoutes from './routes/files';
 import ddRoutes from './routes/dd';
@@ -199,6 +200,10 @@ app.use('*', securityHeadersMiddleware());
 // handlers don't re-query the DB. Both are no-ops outside `/api/*`.
 app.use('/api/*', rateLimitMiddleware());
 app.use('/api/*', observabilityMiddleware());
+// Task #1 (DB) — stamps users.last_active_at, throttled via RATE_LIMITS KV.
+// Mounted AFTER observability so the cached `currentUser` is available; the
+// middleware short-circuits when no user is on context.
+app.use('/api/*', lastActiveMiddleware());
 // T6 — CSRF double-submit on mutating verbs for cookie-auth requests. Bearer
 // auth (impersonation, websockets, signed-download URLs) is exempt by design
 // — see middleware/csrf.ts for the full predicate.

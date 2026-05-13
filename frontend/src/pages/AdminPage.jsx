@@ -789,8 +789,8 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
               <Field label="Email" value={u.email} />
               <Field label="Role" value={u.role} />
               <Field label="UID" value={u.uid} mono />
-              <Field label="Founder ID" value={u.founder_id ?? '—'} />
-              <Field label="Partner ID" value={u.partner_id ?? '—'} />
+              <Field label="Founder ID" value={u.founder_public_id || (u.founder_id ? `#${u.founder_id}` : '—')} mono={!!u.founder_public_id} />
+              <Field label="Partner ID" value={u.partner_public_id || (u.partner_id ? `#${u.partner_id}` : '—')} mono={!!u.partner_public_id} />
               <Field label="Joined" value={u.created_at ? new Date(u.created_at).toLocaleString() : '—'} />
               <Field label="Last active" value={u.last_active_at ? new Date(u.last_active_at).toLocaleString() : '—'} />
               <div className="col-span-2 grid grid-cols-4 gap-3 mt-2">
