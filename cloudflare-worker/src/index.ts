@@ -101,6 +101,7 @@ import linkedinRoutes from './routes/linkedin';
 import calendarRoutes from './routes/calendar';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
+import metricsRoutes from './routes/metrics';
 import wellbeingRoutes from './routes/wellbeing';
 import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
@@ -386,6 +387,8 @@ app.route('/api/financials', financialsRoutes);
 // Task #1 (AG) — kept alphabetically adjacent to /api/financials.
 app.route('/api/founder-risk', founderRiskRoutes);
 app.route('/api/progress', progressRoutes);
+// Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.
+app.route('/api/metrics', metricsRoutes);
 app.route('/api/wellbeing', wellbeingRoutes);
 // T12 — Compliance calendar + Cap-table simulator + Co-founder matching.
 app.route('/api/compliance', complianceRoutes);

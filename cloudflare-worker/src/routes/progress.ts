@@ -673,7 +673,12 @@ type MetricsSnapshot = {
   project_id: number;
   snapshot_date: string;
   mrr: number | null;
+  arr: number | null;
+  cac: number | null;
+  ltv: number | null;
+  monthly_churn_pct: number | null;
   active_users: number | null;
+  new_users: number | null;
   notes: string | null;
   source: string | null;
   created_by: number | null;
@@ -685,11 +690,59 @@ type SerializedSnap = {
   project_id: number;
   snapshot_date: string;
   mrr: number | null;
+  arr: number | null;
+  cac: number | null;
+  ltv: number | null;
+  monthly_churn_pct: number | null;
   active_users: number | null;
+  new_users: number | null;
   notes: string | null;
   source: string | null;
   created_at: string;
 };
+
+// Task #3 (DF) — lazy column ensure for metrics_snapshots. Frontend writes
+// cac/ltv/arr/monthly_churn_pct/new_users which the original 2-column
+// schema doesn't have. Idempotent PRAGMA + ALTER ADD COLUMN.
+let _metricsColsReady = false;
+export async function ensureMetricsSnapshotsSchema(env: Env): Promise<void> {
+  if (_metricsColsReady) return;
+  try {
+    const cols = await env.DB.prepare(`PRAGMA table_info(metrics_snapshots)`).all<{ name: string }>();
+    const have = new Set((cols.results || []).map((r) => r.name));
+    if (have.size === 0) {
+      await env.DB.exec(
+        `CREATE TABLE IF NOT EXISTS metrics_snapshots (` +
+          `id INTEGER PRIMARY KEY AUTOINCREMENT,` +
+          `project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,` +
+          `snapshot_date TEXT NOT NULL,` +
+          `mrr REAL, arr REAL, cac REAL, ltv REAL, monthly_churn_pct REAL,` +
+          `active_users INTEGER, new_users INTEGER,` +
+          `notes TEXT, source TEXT,` +
+          `created_by INTEGER REFERENCES users(id),` +
+          `created_at TEXT NOT NULL DEFAULT (datetime('now'))` +
+        `)`,
+      );
+      try { await env.DB.exec(
+        `CREATE INDEX IF NOT EXISTS idx_metrics_snapshots_project ON metrics_snapshots(project_id, snapshot_date DESC)`,
+      ); } catch (e) { void e; }
+    } else {
+      const required: Array<[string, string]> = [
+        ['arr', 'REAL'], ['cac', 'REAL'], ['ltv', 'REAL'],
+        ['monthly_churn_pct', 'REAL'], ['new_users', 'INTEGER'],
+      ];
+      for (const [col, decl] of required) {
+        if (!have.has(col)) {
+          try { await env.DB.exec(`ALTER TABLE metrics_snapshots ADD COLUMN ${col} ${decl}`); }
+          catch (e) { void e; }
+        }
+      }
+    }
+    _metricsColsReady = true;
+  } catch (e) {
+    console.error('[progress] ensureMetricsSnapshotsSchema:', (e as Error).message);
+  }
+}
 
 function serializeSnap(s: MetricsSnapshot): SerializedSnap {
   return {
@@ -697,11 +750,22 @@ function serializeSnap(s: MetricsSnapshot): SerializedSnap {
     project_id: s.project_id,
     snapshot_date: s.snapshot_date,
     mrr: s.mrr,
+    arr: s.arr ?? null,
+    cac: s.cac ?? null,
+    ltv: s.ltv ?? null,
+    monthly_churn_pct: s.monthly_churn_pct ?? null,
     active_users: s.active_users,
+    new_users: s.new_users ?? null,
     notes: s.notes,
     source: s.source,
     created_at: s.created_at,
   };
+}
+
+function numOrNull(v: unknown): number | null {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 progress.get('/metrics/:projectId', async (c) => {
@@ -711,10 +775,18 @@ progress.get('/metrics/:projectId', async (c) => {
   const project = await loadProject(c.env, projectId);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM metrics_snapshots WHERE project_id = ? ORDER BY snapshot_date DESC, id DESC LIMIT 200`,
-  ).bind(projectId).all<MetricsSnapshot>();
-  return c.json({ items: (rows.results || []).map(serializeSnap) });
+  await ensureMetricsSnapshotsSchema(c.env);
+  let items: SerializedSnap[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM metrics_snapshots WHERE project_id = ? ORDER BY snapshot_date DESC, id DESC LIMIT 200`,
+    ).bind(projectId).all<MetricsSnapshot>();
+    items = (rows.results || []).map(serializeSnap);
+  } catch (e) {
+    console.error('[progress] metrics GET:', (e as Error).message);
+  }
+  // Frontend reads `snapshots` (MetricsPage) AND `items` (other consumers).
+  return c.json({ items, snapshots: items });
 });
 
 progress.post('/metrics/:projectId', async (c) => {
@@ -724,20 +796,77 @@ progress.post('/metrics/:projectId', async (c) => {
   const project = await loadProject(c.env, projectId);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
+  await ensureMetricsSnapshotsSchema(c.env);
   const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
   const dateRaw = String(body?.snapshot_date || '').trim();
   const snapshotDate = dateRaw || new Date().toISOString().slice(0, 10);
-  const mrr = body?.mrr != null && body.mrr !== '' && Number.isFinite(Number(body.mrr)) ? Number(body.mrr) : null;
-  const activeUsers = body?.active_users != null && body.active_users !== '' && Number.isFinite(Number(body.active_users)) ? Number(body.active_users) : null;
+  const mrr = numOrNull(body?.mrr);
+  let arr = numOrNull(body?.arr);
+  if (arr == null && mrr != null) arr = mrr * 12;
+  const cac = numOrNull(body?.cac);
+  const ltv = numOrNull(body?.ltv);
+  const churn = numOrNull(body?.monthly_churn_pct);
+  const activeUsers = numOrNull(body?.active_users);
+  const newUsers = numOrNull(body?.new_users);
   const notes = body?.notes ? String(body.notes).slice(0, 4000) : null;
   const source = body?.source ? String(body.source).slice(0, 80) : 'manual';
-  const r = await c.env.DB.prepare(
-    `INSERT INTO metrics_snapshots
-       (project_id, snapshot_date, mrr, active_users, notes, source, created_by, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-  ).bind(projectId, snapshotDate, mrr, activeUsers, notes, source, user.id).run();
-  const fresh = await c.env.DB.prepare('SELECT * FROM metrics_snapshots WHERE id = ?')
-    .bind(r.meta.last_row_id).first<MetricsSnapshot>();
+  try {
+    const r = await c.env.DB.prepare(
+      `INSERT INTO metrics_snapshots
+         (project_id, snapshot_date, mrr, arr, cac, ltv, monthly_churn_pct,
+          active_users, new_users, notes, source, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    ).bind(projectId, snapshotDate, mrr, arr, cac, ltv, churn, activeUsers, newUsers, notes, source, user.id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM metrics_snapshots WHERE id = ?')
+      .bind(r.meta.last_row_id).first<MetricsSnapshot>();
+    return c.json(serializeSnap(fresh as MetricsSnapshot));
+  } catch (e) {
+    console.error('[progress] metrics POST:', (e as Error).message);
+    return c.json({ detail: 'Failed to save snapshot', error: (e as Error).message }, 500);
+  }
+});
+
+progress.put('/metrics/snapshot/:id', async (c) => {
+  const user = await requireAuth(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
+  await ensureMetricsSnapshotsSchema(c.env);
+  const existing = await c.env.DB.prepare('SELECT id, project_id FROM metrics_snapshots WHERE id = ?')
+    .bind(id).first<{ id: number; project_id: number }>();
+  if (!existing) return c.json({ detail: 'Snapshot not found' }, 404);
+  const project = await loadProject(c.env, existing.project_id);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+  const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
+  const fields: Array<[string, unknown]> = [
+    ['snapshot_date', body.snapshot_date != null ? String(body.snapshot_date) : undefined],
+    ['mrr', body.mrr !== undefined ? numOrNull(body.mrr) : undefined],
+    ['arr', body.arr !== undefined ? numOrNull(body.arr) : undefined],
+    ['cac', body.cac !== undefined ? numOrNull(body.cac) : undefined],
+    ['ltv', body.ltv !== undefined ? numOrNull(body.ltv) : undefined],
+    ['monthly_churn_pct', body.monthly_churn_pct !== undefined ? numOrNull(body.monthly_churn_pct) : undefined],
+    ['active_users', body.active_users !== undefined ? numOrNull(body.active_users) : undefined],
+    ['new_users', body.new_users !== undefined ? numOrNull(body.new_users) : undefined],
+    ['notes', body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : undefined],
+  ];
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  for (const [k, v] of fields) {
+    if (v === undefined) continue;
+    sets.push(`${k} = ?`);
+    binds.push(v);
+  }
+  if (sets.length === 0) {
+    const cur = await c.env.DB.prepare('SELECT * FROM metrics_snapshots WHERE id = ?').bind(id).first<MetricsSnapshot>();
+    return c.json(serializeSnap(cur as MetricsSnapshot));
+  }
+  binds.push(id);
+  try {
+    await c.env.DB.prepare(`UPDATE metrics_snapshots SET ${sets.join(', ')} WHERE id = ?`).bind(...binds).run();
+  } catch (e) {
+    return c.json({ detail: 'Failed to update snapshot', error: (e as Error).message }, 500);
+  }
+  const fresh = await c.env.DB.prepare('SELECT * FROM metrics_snapshots WHERE id = ?').bind(id).first<MetricsSnapshot>();
   return c.json(serializeSnap(fresh as MetricsSnapshot));
 });
 
@@ -745,6 +874,7 @@ progress.delete('/metrics/:id', async (c) => {
   const user = await requireAuth(c);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
+  await ensureMetricsSnapshotsSchema(c.env);
   const existing = await c.env.DB.prepare('SELECT id, project_id FROM metrics_snapshots WHERE id = ?')
     .bind(id).first<{ id: number; project_id: number }>();
   if (!existing) return c.json({ detail: 'Snapshot not found' }, 404);
@@ -753,6 +883,45 @@ progress.delete('/metrics/:id', async (c) => {
   ensureCanEdit(project, user);
   await c.env.DB.prepare('DELETE FROM metrics_snapshots WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
+});
+
+// Task #3 (DF) — time-series aggregator. Returns
+// `{ series: [{date, value}, ...] }` so charts can render even when no
+// snapshots exist (empty array, not 5xx).
+progress.get('/metrics/:projectId/series', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanView(project, user);
+  await ensureMetricsSnapshotsSchema(c.env);
+
+  const allowed = new Set(['mrr', 'arr', 'cac', 'ltv', 'monthly_churn_pct', 'active_users', 'new_users']);
+  const metric = String(c.req.query('metric') || 'mrr');
+  const safeMetric = allowed.has(metric) ? metric : 'mrr';
+  const granularity = String(c.req.query('granularity') || 'snapshot'); // snapshot|month
+  let series: Array<{ date: string; value: number | null }> = [];
+  try {
+    if (granularity === 'month') {
+      const rows = await c.env.DB.prepare(
+        `SELECT substr(snapshot_date, 1, 7) AS bucket, AVG(${safeMetric}) AS v
+           FROM metrics_snapshots WHERE project_id = ?
+           GROUP BY bucket ORDER BY bucket ASC`,
+      ).bind(projectId).all<{ bucket: string; v: number | null }>();
+      series = (rows.results || []).map((r) => ({ date: r.bucket, value: r.v }));
+    } else {
+      const rows = await c.env.DB.prepare(
+        `SELECT snapshot_date AS date, ${safeMetric} AS v
+           FROM metrics_snapshots WHERE project_id = ?
+           ORDER BY snapshot_date ASC, id ASC`,
+      ).bind(projectId).all<{ date: string; v: number | null }>();
+      series = (rows.results || []).map((r) => ({ date: r.date, value: r.v }));
+    }
+  } catch (e) {
+    console.error('[progress] metrics series:', (e as Error).message);
+  }
+  return c.json({ project_id: projectId, metric: safeMetric, granularity, series });
 });
 
 progress.post('/metrics/:projectId/import-stripe', async (c) => {

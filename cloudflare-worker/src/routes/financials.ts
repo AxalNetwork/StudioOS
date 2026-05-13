@@ -23,6 +23,67 @@ import { requireAuth, canAccessFounderResource } from '../auth';
 const financials = new Hono<{ Bindings: Env }>();
 
 // ---------------------------------------------------------------------------
+// Task #3 (DF) — runtime schema bootstrap. The schema.sql checked into the
+// repo carries an older `financial_models` shape (uid/name/inputs_json), and
+// migration 034 (which would rebuild it) failed to apply on prod per the
+// notes in replit.md. To stop the page 5xx-ing on either a fresh DB or a
+// stale-schema prod, lazily PRAGMA-check the table on first request and
+// CREATE / ADD COLUMN whatever's missing. Idempotent + single-flight.
+// ---------------------------------------------------------------------------
+let _financialsSchemaReady = false;
+async function ensureFinancialsModelSchema(env: Env): Promise<void> {
+  if (_financialsSchemaReady) return;
+  try {
+    const cols = await env.DB
+      .prepare(`PRAGMA table_info(financial_models)`)
+      .all<{ name: string }>();
+    const have = new Set((cols.results || []).map((r) => r.name));
+    if (have.size === 0) {
+      await env.DB.exec(
+        `CREATE TABLE IF NOT EXISTS financial_models (` +
+          `id INTEGER PRIMARY KEY AUTOINCREMENT,` +
+          `project_id INTEGER NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,` +
+          `assumptions_json TEXT NOT NULL DEFAULT '{}',` +
+          `computed_json TEXT,` +
+          `sensitivity_json TEXT,` +
+          `capital_recompute_json TEXT,` +
+          `updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,` +
+          `updated_at TEXT NOT NULL DEFAULT (datetime('now'))` +
+        `)`,
+      );
+      try { await env.DB.exec(
+        `CREATE INDEX IF NOT EXISTS idx_financial_models_project ON financial_models(project_id)`,
+      ); } catch (e) { void e; }
+    } else {
+      const required: Array<[string, string]> = [
+        ['assumptions_json', `TEXT NOT NULL DEFAULT '{}'`],
+        ['computed_json', `TEXT`],
+        ['sensitivity_json', `TEXT`],
+        ['capital_recompute_json', `TEXT`],
+        ['updated_by', `INTEGER`],
+        ['updated_at', `TEXT`],
+      ];
+      for (const [col, decl] of required) {
+        if (!have.has(col)) {
+          try { await env.DB.exec(`ALTER TABLE financial_models ADD COLUMN ${col} ${decl}`); }
+          catch (e) { void e; }
+        }
+      }
+    }
+    // PUT uses `INSERT ... ON CONFLICT(project_id) DO UPDATE` — that
+    // requires `project_id` to be UNIQUE. The legacy schema.sql shape
+    // does NOT mark it unique, so without this index a stale-schema prod
+    // would 500 on every save. Idempotent.
+    try { await env.DB.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_models_project_unique ON financial_models(project_id)`,
+    ); } catch (e) { void e; }
+    _financialsSchemaReady = true;
+  } catch (e) {
+    console.error('[financials] ensureFinancialsModelSchema:', (e as Error).message);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Assumption defaults + bounds (mirror Pydantic field validators).
 // ---------------------------------------------------------------------------
 type Assumptions = {
@@ -337,9 +398,17 @@ financials.get('/:projectId', async (c) => {
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
 
-  const fm = await c.env.DB.prepare(
-    'SELECT * FROM financial_models WHERE project_id = ?',
-  ).bind(projectId).first<any>();
+  await ensureFinancialsModelSchema(c.env);
+  let fm: any = null;
+  try {
+    fm = await c.env.DB.prepare(
+      'SELECT * FROM financial_models WHERE project_id = ?',
+    ).bind(projectId).first<any>();
+  } catch (e) {
+    // Table missing or column drift — fall through to hydrated default
+    // so the page still renders an editable scaffold.
+    console.error('[financials] GET select failed:', (e as Error).message);
+  }
 
   if (!fm) {
     const a = normalizeAssumptions(null);
@@ -377,6 +446,7 @@ financials.put('/:projectId', async (c) => {
   const project = await loadProject(c.env, projectId);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
+  await ensureFinancialsModelSchema(c.env);
 
   const body = await c.req.json().catch(() => null);
   if (body == null || typeof body !== 'object' || !('assumptions' in body)) {
@@ -454,10 +524,14 @@ financials.post('/:projectId/recompute', async (c) => {
   const project = await loadProject(c.env, projectId);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
+  await ensureFinancialsModelSchema(c.env);
 
-  const fm = await c.env.DB.prepare(
-    'SELECT assumptions_json FROM financial_models WHERE project_id = ?',
-  ).bind(projectId).first<{ assumptions_json: string }>();
+  let fm: { assumptions_json: string } | null = null;
+  try {
+    fm = await c.env.DB.prepare(
+      'SELECT assumptions_json FROM financial_models WHERE project_id = ?',
+    ).bind(projectId).first<{ assumptions_json: string }>();
+  } catch (e) { console.error('[financials] recompute select:', (e as Error).message); }
   if (!fm) return c.json({ detail: 'No financial model saved yet' }, 404);
 
   const a = normalizeAssumptions(safeJsonParse<Partial<Assumptions>>(fm.assumptions_json, {}));
@@ -493,10 +567,14 @@ financials.get('/:projectId/export.xlsx', async (c) => {
   const project = await loadProject(c.env, projectId);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
+  await ensureFinancialsModelSchema(c.env);
 
-  const fm = await c.env.DB.prepare(
-    'SELECT assumptions_json FROM financial_models WHERE project_id = ?',
-  ).bind(projectId).first<{ assumptions_json: string }>();
+  let fm: { assumptions_json: string } | null = null;
+  try {
+    fm = await c.env.DB.prepare(
+      'SELECT assumptions_json FROM financial_models WHERE project_id = ?',
+    ).bind(projectId).first<{ assumptions_json: string }>();
+  } catch (e) { console.error('[financials] export select:', (e as Error).message); }
   const a = normalizeAssumptions(
     fm ? safeJsonParse<Partial<Assumptions>>(fm.assumptions_json, {}) : null,
   );
