@@ -14,7 +14,7 @@ async function ensureSchema(env: Env) {
   const db = env.DB;
   const stmts = [
     `ALTER TABLE users ADD COLUMN referral_code TEXT`,
-    // Task #4 (DH) — back-compat column for historical AXAL-XXXXXXXX
+    // Task #4 (DH) — back-compat column for historical AXAL-XXXXXX(XX)
     // codes. Defensive ALTER + index here so dev/SQLite stays self-
     // healing even before migration 051 is applied to remote D1.
     `ALTER TABLE users ADD COLUMN legacy_referral_code TEXT`,
@@ -89,7 +89,7 @@ async function ensureSchema(env: Env) {
 
 // Task #4 (DH) — Brand-new codes use the 6-char Crockford-base32 short
 // form (no AXAL- prefix). Pre-existing users keep their (truncated) short
-// code in users.referral_code and the original `AXAL-XXXXXXXX` in
+// code in users.referral_code and the original `AXAL-XXXXXX(XX)` in
 // users.legacy_referral_code (via migration 051) so historical invite
 // URLs still resolve via resolveReferralCode().
 async function ensureReferralCode(env: Env, userId: number): Promise<string> {
@@ -98,7 +98,7 @@ async function ensureReferralCode(env: Env, userId: number): Promise<string> {
     .bind(userId)
     .first<{ referral_code: string | null }>();
   const existing = row?.referral_code || '';
-  // Detect codes still in the old `AXAL-XXXXXXXX` shape (e.g. dev DBs
+  // Detect codes still in the old `AXAL-XXXXXX(XX)` shape (e.g. dev DBs
   // that haven't run migration 051 yet) and rotate them to the short
   // form transparently — the legacy value is moved to
   // legacy_referral_code so back-compat resolution keeps working.
@@ -300,7 +300,7 @@ export async function attachReferral(env: Env, newUserId: number, refCode: strin
   if (!refCode) return false;
   await ensureSchema(env);
   // Task #4 (DH) — resolve through the back-compat helper so historical
-  // `AXAL-XXXXXXXX` invite URLs still attach correctly.
+  // `AXAL-XXXXXX(XX)` invite URLs still attach correctly.
   const referrerId = await resolveReferralCode(env, refCode);
   if (!referrerId) return false;
   if (referrerId === newUserId) return false; // self-referral guard

@@ -20,7 +20,7 @@ export function normaliseReferralCode(input: string | null | undefined): string 
 // Returns the user_id of the referrer who owns `rawCode`, checking:
 //   1. The new short form column (`users.referral_code`).
 //   2. The legacy form column (`users.legacy_referral_code`) — populated
-//      by migration 051 with the original `AXAL-XXXXXXXX` strings.
+//      by migration 051 with the original `AXAL-XXXXXX(XX)` strings.
 //   3. As a final defence, the original AXAL-prefixed string against
 //      `users.referral_code` (in case a stale environment hasn't been
 //      migrated yet — keeps existing in-flight invites working).

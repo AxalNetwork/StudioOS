@@ -19,7 +19,7 @@
  *     (or pick up an existing row matching email), then UPDATE
  *     users.founder_id.
  *   - role='partner' & partner_id IS NULL  →  same for partners,
- *     with a generated AXAL-XXXXXXXX referral_code (matches the
+ *     with a generated AXAL-XXXXXX(XX) referral_code (matches the
  *     pattern in routes/partners.ts).
  *   - Any other role: no-op.
  *
@@ -100,7 +100,7 @@ async function ensureFounder(env: Env, user: User): Promise<number | null> {
 
 async function ensurePartner(env: Env, user: User): Promise<number | null> {
   // Task #4 (DH) — Short-form Crockford base32 referral code. Legacy
-  // AXAL-XXXXXXXX rows in the partners table continue to resolve via
+  // AXAL-XXXXXX(XX) rows in the partners table continue to resolve via
   // services/referrals/resolveCode.ts.
   const { generateShortReferralCode } = await import('./referrals/codes');
   const refCode = generateShortReferralCode();
