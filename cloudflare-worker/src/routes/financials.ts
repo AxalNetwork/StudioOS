@@ -500,17 +500,27 @@ financials.put('/:projectId', async (c) => {
   if (legacy.has('name')) { cols.push('name'); vals.push(project.name); }
   if (legacy.has('inputs_json')) { cols.push('inputs_json'); vals.push(JSON.stringify(a)); }
   const placeholders = cols.map(() => '?').join(', ');
-  await c.env.DB.prepare(
-    `INSERT INTO financial_models (${cols.join(', ')})
-     VALUES (${placeholders})
-     ON CONFLICT(project_id) DO UPDATE SET
-       assumptions_json       = excluded.assumptions_json,
-       computed_json          = excluded.computed_json,
-       sensitivity_json       = excluded.sensitivity_json,
-       capital_recompute_json = excluded.capital_recompute_json,
-       updated_by             = excluded.updated_by,
-       updated_at             = excluded.updated_at`,
-  ).bind(...vals).run();
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO financial_models (${cols.join(', ')})
+       VALUES (${placeholders})
+       ON CONFLICT(project_id) DO UPDATE SET
+         assumptions_json       = excluded.assumptions_json,
+         computed_json          = excluded.computed_json,
+         sensitivity_json       = excluded.sensitivity_json,
+         capital_recompute_json = excluded.capital_recompute_json,
+         updated_by             = excluded.updated_by,
+         updated_at             = excluded.updated_at`,
+    ).bind(...vals).run();
+  } catch (e) {
+    const msg = (e as Error).message || '';
+    console.error('[financials] PUT upsert:', msg);
+    const drift = /no such (table|column)|constraint|unique/i.test(msg);
+    return c.json(
+      { detail: drift ? 'Financial model store not ready, please retry.' : 'Failed to save financial model', code: drift ? 'schema_drift' : 'write_failed' },
+      drift ? 503 : 500,
+    );
+  }
 
   // Activity log — match the Python message shape (best-effort).
   try {
