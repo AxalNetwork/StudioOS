@@ -62,10 +62,16 @@ admin.get('/users/:user_id/profile', async (c) => {
   const userId = parseInt(c.req.param('user_id'));
   if (!Number.isFinite(userId) || userId <= 0) return c.json({ error: 'Invalid user_id' }, 400);
 
+  // Task #1 (DB) — guarantee the new columns exist BEFORE the SELECT
+  // references them; otherwise a partially-migrated D1 raises
+  // "no such column" and the whole profile call 500s. Idempotent +
+  // sentinel-cached after the first call per isolate.
+  await ensurePublicIdColumns(c.env);
   const userRow: any = await c.env.DB.prepare(
     `SELECT id, uid, email, name, role, is_active, email_verified, founder_id, partner_id,
             kyc_status, kyc_provider, kyc_submitted_at, kyc_reviewed_at, kyc_rejection_reason,
-            COALESCE(admin_notes, '') AS admin_notes, last_active_at, created_at
+            COALESCE(admin_notes, '') AS admin_notes,
+            founder_public_id, partner_public_id, last_active_at, created_at
        FROM users WHERE id = ?`
   ).bind(userId).first();
   if (!userRow) return c.json({ error: 'User not found' }, 404);

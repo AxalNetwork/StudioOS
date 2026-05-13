@@ -156,6 +156,60 @@ CREATE INDEX IF NOT EXISTS idx_corp_profiles_high_risk
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_uid ON users(uid);
 
+-- Generic admin_audit_log (export / publication actions) PLUS, per
+-- Task #1 (DB), per-conversation profile-view rows with first-class
+-- viewed_user_id / conversation_id / viewed_at columns. Was originally
+-- introduced by migration 036_monitoring_analytics.sql; declared here
+-- so a fresh `wrangler d1 execute --file=schema.sql` bootstrap
+-- produces the full canonical shape including the Task #1 columns.
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_user_id INTEGER NOT NULL REFERENCES users(id),
+    action TEXT NOT NULL,
+    report_type TEXT,
+    format TEXT,
+    filters_json TEXT,
+    storage_key TEXT,
+    download_url TEXT,
+    exported_at TEXT NOT NULL DEFAULT (datetime('now')),
+    viewed_user_id INTEGER,
+    conversation_id INTEGER,
+    viewed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_user_ts
+    ON admin_audit_log(admin_user_id, exported_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_action_ts
+    ON admin_audit_log(action, exported_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_viewed_user
+    ON admin_audit_log(viewed_user_id, viewed_at DESC);
+
+-- Task #1 (DB) — atomic monotonic counter table backing
+-- AXF-/AXP- public id allocation in services/publicIds.ts.
+CREATE TABLE IF NOT EXISTS id_sequences (
+    name        TEXT PRIMARY KEY,
+    next_value  INTEGER NOT NULL DEFAULT 1
+);
+INSERT OR IGNORE INTO id_sequences (name, next_value) VALUES ('axf', 1);
+INSERT OR IGNORE INTO id_sequences (name, next_value) VALUES ('axp', 1);
+
+-- Task #1 (DB) — per-conversation profile-view audit trail with
+-- first-class columns (admin_user_id, viewed_user_id, conversation_id,
+-- viewed_at). Mirrored into admin_audit_log by
+-- routes/admin.ts::auditConversationView so existing Trust-Center
+-- oversight reports continue to work.
+CREATE TABLE IF NOT EXISTS admin_profile_audit (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_user_id   INTEGER NOT NULL REFERENCES users(id),
+    viewed_user_id  INTEGER NOT NULL REFERENCES users(id),
+    conversation_id INTEGER,
+    action          TEXT NOT NULL,
+    viewed_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_admin_profile_audit_viewed
+    ON admin_profile_audit(viewed_user_id, viewed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_profile_audit_admin
+    ON admin_profile_audit(admin_user_id, viewed_at DESC);
+
 -- Spin-Out Lab milestone log. One row per (user_id, milestone_key); the
 -- handler only ever issues INSERT OR IGNORE so re-calls are no-ops.
 CREATE TABLE IF NOT EXISTS spinout_lab_milestones (
