@@ -318,20 +318,46 @@ admin.get('/users/:user_id/profile', async (c) => {
 // admin_audit_log + activity_logs so we have a per-conversation view trail.
 // ---------------------------------------------------------------------------
 
-// Generic admin_audit_log (export / publication actions). Re-declared
-// here as a lazy bootstrap because the auditConversationView bridge
-// below writes into it as the canonical Trust-Center oversight surface
-// in addition to the dedicated admin_profile_audit table.
+// Generic admin_audit_log (export / publication actions PLUS, per
+// Task #1 (DB), per-conversation profile-view rows with first-class
+// columns viewed_user_id / conversation_id / viewed_at).
+//
+// The lazy bootstrap below is PRAGMA-guarded so it stays idempotent:
+// CREATE TABLE / INDEX use IF NOT EXISTS, and each ADD COLUMN is only
+// emitted when the column is genuinely missing from PRAGMA
+// table_info(). Safe to call on every request, on a fresh DB, and on
+// a DB that already has the canonical schema.
 let adminAuditLogTableReady = false;
 async function ensureAdminAuditLogTable(env: Env): Promise<void> {
   if (adminAuditLogTableReady) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS admin_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL REFERENCES users(id), action TEXT NOT NULL, report_type TEXT, format TEXT, filters_json TEXT, storage_key TEXT, download_url TEXT, exported_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      "CREATE TABLE IF NOT EXISTS admin_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL REFERENCES users(id), action TEXT NOT NULL, report_type TEXT, format TEXT, filters_json TEXT, storage_key TEXT, download_url TEXT, exported_at TEXT NOT NULL DEFAULT (datetime('now')), viewed_user_id INTEGER, conversation_id INTEGER, viewed_at TEXT)",
     );
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_admin_audit_user_ts ON admin_audit_log(admin_user_id, exported_at DESC)',
     );
+    // PRAGMA-guarded ADD COLUMN for the three Task #1 (DB) columns —
+    // needed when the table already existed from an earlier migration
+    // without these columns.
+    let cols = new Set<string>();
+    try {
+      const info: any = await env.DB.prepare(`PRAGMA table_info(admin_audit_log)`).all();
+      for (const r of (info?.results || []) as Array<{ name: string }>) cols.add(r.name);
+    } catch {}
+    const adds: Array<[string, string]> = [
+      ['viewed_user_id', `ALTER TABLE admin_audit_log ADD COLUMN viewed_user_id INTEGER`],
+      ['conversation_id', `ALTER TABLE admin_audit_log ADD COLUMN conversation_id INTEGER`],
+      ['viewed_at', `ALTER TABLE admin_audit_log ADD COLUMN viewed_at TEXT`],
+    ];
+    for (const [name, sql] of adds) {
+      if (!cols.has(name)) { try { await env.DB.exec(sql); } catch {} }
+    }
+    try {
+      await env.DB.exec(
+        'CREATE INDEX IF NOT EXISTS idx_admin_audit_viewed_user ON admin_audit_log(viewed_user_id, viewed_at DESC)',
+      );
+    } catch {}
   } catch {}
   adminAuditLogTableReady = true;
 }
@@ -372,23 +398,27 @@ async function auditConversationView(
   } catch (e) {
     console.error('[admin/audit] admin_profile_audit insert failed', (e as Error).message);
   }
-  // Task #1 (DB) — also bridge into the canonical admin_audit_log so
-  // existing Trust Center oversight + admin export reporting picks up
-  // these per-view events without a parallel ingestion path. The
-  // dedicated admin_profile_audit table above is the SQL-friendly
-  // surface for investigators (first-class viewed_user_id /
-  // conversation_id columns); this row is the report-friendly mirror.
+  // Task #1 (DB) — also write the canonical row into admin_audit_log
+  // with first-class viewed_user_id / conversation_id / viewed_at
+  // columns so existing Trust-Center oversight + admin export reports
+  // pick these up without a parallel ingestion path or JSON unwrapping.
+  // Mirrors the same pair of values into filters_json for legacy
+  // readers that haven't been updated to consume the dedicated cols.
   try {
     await ensureAdminAuditLogTable(env);
+    const nowIso = new Date().toISOString();
     await env.DB.prepare(
-      `INSERT INTO admin_audit_log (admin_user_id, action, filters_json) VALUES (?, ?, ?)`,
+      `INSERT INTO admin_audit_log (admin_user_id, action, viewed_user_id, conversation_id, viewed_at, filters_json) VALUES (?, ?, ?, ?, ?, ?)`,
     ).bind(
       adminUser.id,
       action,
-      JSON.stringify({ target_user_id: targetUserId, conversation_id: conversationId }),
+      targetUserId,
+      conversationId,
+      nowIso,
+      JSON.stringify({ target_user_id: targetUserId, conversation_id: conversationId, viewed_at: nowIso }),
     ).run();
   } catch (e) {
-    console.error('[admin/audit] admin_audit_log bridge insert failed', (e as Error).message);
+    console.error('[admin/audit] admin_audit_log insert failed', (e as Error).message);
   }
   try {
     const adminHash = await hashEmail(adminUser.email);
