@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "test:drift": "node scripts/check-api-drift.mjs && node --test cloudflare-worker/test/api_drift.test.mjs && node scripts/check-advisor-bank-drift.mjs && node scripts/check-statemachine-coverage.mjs && node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/advisor.scenarios.test.ts",
+    "test:drift": "node scripts/check-api-drift.mjs && node --test cloudflare-worker/test/api_drift.test.mjs && node scripts/check-advisor-bank-drift.mjs && node scripts/check-statemachine-coverage.mjs && node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/advisor.scenarios.test.ts && node --test cloudflare-worker/test/market_intel_personas.test.mjs && (cd cloudflare-worker && npx --no-install tsc --noEmit)",
     "test:e2e": "playwright test",
     "build": "cd frontend && npm run build",
     "deploy": "wrangler deploy --env production",

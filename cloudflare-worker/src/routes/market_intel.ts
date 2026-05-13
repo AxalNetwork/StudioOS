@@ -1153,12 +1153,25 @@ async function buildPersonasPayload(env: Env): Promise<PlatformPersonasPayload> 
   };
 }
 
+// ─── GET /api/market-intel/platform-personas ─────────────────────────
+// SLO contract (Task #8 — review follow-up to Task #4):
+//   • Warm cache hit (`personas:platform` present in KV):  ≤ 5 s p95
+//   • Cold cache miss (KV miss → buildPersonasPayload runs all 8
+//     D1 sub-queries):                                       ≤ 30 s p95
+// Cache TTL is 5 min, so warm-path traffic dominates outside the first
+// request after a key expiry. Latency telemetry is emitted to
+// `activity_logs` (action=`mi.personas.served`) on every request
+// regardless of tier; p50/p95 are computed downstream by SQL over
+// `json_extract(details,'$.latency_ms')`.
+// ---------------------------------------------------------------------
 marketIntel.get('/platform-personas', async (c) => {
   const user = (await requireAuth(c)) as MIUser;
   const tier = tierKind(user);
+  const startedAt = Date.now();
 
   // 5-minute KV cache so all callers share one D1 read pass.
   let payload = await readKv<PlatformPersonasPayload>(c.env, 'personas:platform');
+  const cacheHit = !!payload;
   if (!payload) {
     payload = await buildPersonasPayload(c.env);
     await writeKv(c.env, 'personas:platform', payload, 5 * 60);
@@ -1197,6 +1210,22 @@ marketIntel.get('/platform-personas', async (c) => {
       },
     };
   }
+  // Per-request latency telemetry — fire-and-forget so the response
+  // path stays on the SLO budget. Downstream aggregation (p50/p95) is
+  // SQL-side: `SELECT json_extract(details,'$.latency_ms') FROM
+  // activity_logs WHERE action='mi.personas.served'`.
+  const latency_ms = Date.now() - startedAt;
+  c.executionCtx.waitUntil(
+    c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, user_id) VALUES (?, ?, ?)`,
+    ).bind(
+      'mi.personas.served',
+      JSON.stringify({ latency_ms, cache_hit: cacheHit, tier }),
+      user.id,
+    ).run().catch((e: unknown) => {
+      console.warn('[mi.personas] telemetry insert failed:', (e as Error).message);
+    }),
+  );
   return c.json(payload);
 });
 
