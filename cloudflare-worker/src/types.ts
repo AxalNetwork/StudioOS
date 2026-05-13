@@ -62,10 +62,14 @@ export interface Env {
   CF_AI_GATEWAY_SLUG_ADVISOR?: string;
   // Task #4 (CG) — per-user daily advisor turn cap. Counts /api/advisor
   // turns (chat completions, not /explain) in KV bucket
-  // `ai_spend:advisor_turns:{user_id}:{yyyy-mm-dd}` and hard-blocks at
-  // this number, surfacing a friendly throttle message. Soft-warn fires
-  // at 80% so the UI can show a "approaching daily cap" hint. Default
-  // 100 turns/day per spec.
+  // `ai_spend:advisor:{user_id}:{yyyy-mm-dd}` and hard-blocks at this
+  // number, surfacing a friendly throttle message. Soft-warn fires at
+  // 80% so the UI can show a "approaching daily cap" hint. Default
+  // 100 turns/day per spec. The "USD_DAY" suffix is a misnomer in the
+  // spec — the value is a TURN count, not a dollar amount — but we
+  // keep the spec name verbatim and accept the legacy
+  // `WORKERS_AI_ADVISOR_BUDGET_PER_DAY` alias for back-compat.
+  WORKERS_AI_ADVISOR_BUDGET_USD_DAY?: string;
   WORKERS_AI_ADVISOR_BUDGET_PER_DAY?: string;
   // Task #4 (AW) — global advisor kill switch. When set to "1" or "true"
   // every /api/advisor/{start,answer,explain} short-circuits with the

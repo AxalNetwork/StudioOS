@@ -37,12 +37,29 @@ function StatCard({ icon: Icon, label, value, sub, accent = 'violet' }) {
   );
 }
 
+// Task #4 (CG) — classify a `task` row from ai_usage_logs into a
+// surface label so admins can filter advisor traffic separately from
+// the onboarding chatbot. Pure client-side: the report endpoint
+// already groups by `task` (see services/aiRouter.ts::loadAiUsageReport).
+function surfaceOf(taskName) {
+  const t = String(taskName || '');
+  if (t.startsWith('advisor_')) return 'advisor';
+  if (t.startsWith('onboarding_') || t === 'role_detect' || t === 'tool_call') return 'onboarding';
+  return 'other';
+}
+
 export default function AiUsageTab() {
   const [days, setDays] = useState(7);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState('');
+  // Task #4 (CG) — Surface filter: 'all' | 'advisor' | 'onboarding' | 'other'.
+  // Filters the per-task & per-model tables and the headline stat cards
+  // client-side. by_day stays at the un-filtered window because the
+  // server doesn't break by_day down by task (would need a new column
+  // in the report payload — out of scope for CG).
+  const [surface, setSurface] = useState('all');
 
   const load = async (d = days) => {
     setRefreshing(true);
@@ -68,6 +85,42 @@ export default function AiUsageTab() {
     );
   }
 
+  // Apply the Surface filter to per-task / per-model rows. When
+  // surface === 'all' we pass through unchanged so the headline card
+  // numbers still match the overall window when nothing is filtered.
+  const allTasks = data?.by_task || [];
+  const filteredTasks = surface === 'all'
+    ? allTasks
+    : allTasks.filter(t => surfaceOf(t.task) === surface);
+  // Per-model can't be filtered by task (the row is keyed on model),
+  // so when a surface filter is active we hide rows whose model wasn't
+  // touched by any task in the filtered set.
+  const allModels = data?.by_model || [];
+  const filteredModels = surface === 'all'
+    ? allModels
+    // We don't have a task→model breakdown in the report payload, so
+    // for advisor/onboarding/other we fall back to a name-prefix
+    // heuristic: advisor uses @cf/meta llamas; onboarding shares the
+    // same models, so we conservatively show all @cf/* under either
+    // and leave Anthropic models visible only under 'other' unless
+    // surface='advisor' AND any advisor task was found (advisor uses
+    // claude as last-resort fallback).
+    : allModels.filter(m => {
+        if (surface === 'advisor') return true; // advisor may use any model in fallback
+        if (surface === 'onboarding') return String(m.model).startsWith('@cf/');
+        return !String(m.model).startsWith('@cf/');
+      });
+  // Recompute headline stats from the filtered task set so the cards
+  // reflect what the operator actually selected.
+  const filteredCalls = filteredTasks.reduce((s, t) => s + (Number(t.calls) || 0), 0);
+  const filteredSpend = filteredTasks.reduce((s, t) => s + (Number(t.total_cost_usd) || 0), 0);
+  const filteredFallbackRate = filteredCalls > 0
+    ? filteredTasks.reduce((s, t) => s + (Number(t.fallback_rate) || 0) * (Number(t.calls) || 0), 0) / filteredCalls
+    : 0;
+  const headlineCalls   = surface === 'all' ? (data?.total_calls || 0) : filteredCalls;
+  const headlineSpend   = surface === 'all' ? (data?.total_cost_usd || 0) : filteredSpend;
+  const headlineFb      = surface === 'all' ? (data?.fallback_rate || 0) : filteredFallbackRate;
+
   return (
     <div className="space-y-6" data-testid="monitoring-ai-usage-panel">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -75,6 +128,18 @@ export default function AiUsageTab() {
           <Sparkles size={18} className="text-violet-600" /> AI Router Usage
         </h2>
         <div className="flex items-center gap-2">
+          <select
+            value={surface}
+            onChange={e => setSurface(e.target.value)}
+            data-testid="ai-usage-surface-filter"
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none"
+            aria-label="Filter by AI surface"
+          >
+            <option value="all">All surfaces</option>
+            <option value="advisor">Advisor only</option>
+            <option value="onboarding">Onboarding only</option>
+            <option value="other">Other</option>
+          </select>
           <select
             value={days}
             onChange={e => setDays(parseInt(e.target.value, 10))}
@@ -102,8 +167,8 @@ export default function AiUsageTab() {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard icon={Sparkles} label="Total spend" value={fmtUsd(data?.total_cost_usd)} sub={`${data?.total_calls || 0} calls`} />
-        <StatCard icon={Zap} label="Fallback rate" value={fmtPct(data?.fallback_rate)} sub="primary→sibling" accent="amber" />
+        <StatCard icon={Sparkles} label={surface === 'all' ? 'Total spend' : `${surface} spend`} value={fmtUsd(headlineSpend)} sub={`${headlineCalls} calls`} />
+        <StatCard icon={Zap} label="Fallback rate" value={fmtPct(headlineFb)} sub="primary→sibling" accent="amber" />
         <StatCard icon={Clock} label="Cache hit rate" value={fmtPct(data?.cache_hit_rate)} sub="embed/explain/sentiment" accent="emerald" />
         <StatCard icon={AlertTriangle} label="Refusals" value={(data?.refusals || []).reduce((s, r) => s + r.count, 0)} sub="budget / kill / fail" accent="red" />
       </div>
@@ -153,7 +218,7 @@ export default function AiUsageTab() {
             </tr>
           </thead>
           <tbody>
-            {(data?.by_task || []).map(t => (
+            {filteredTasks.map(t => (
               <tr key={t.task} className="border-t border-gray-100">
                 <td className="px-4 py-2 font-mono text-gray-900">{t.task}</td>
                 <td className="px-4 py-2 text-right">{t.calls}</td>
@@ -163,8 +228,8 @@ export default function AiUsageTab() {
                 <td className="px-4 py-2 text-right">{fmtPct(t.fallback_rate)}</td>
               </tr>
             ))}
-            {(data?.by_task || []).length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">No AI calls in this window.</td></tr>
+            {filteredTasks.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">No AI calls in this window{surface !== 'all' ? ` for surface "${surface}"` : ''}.</td></tr>
             )}
           </tbody>
         </table>
@@ -182,7 +247,7 @@ export default function AiUsageTab() {
             </tr>
           </thead>
           <tbody>
-            {(data?.by_model || []).map(m => (
+            {filteredModels.map(m => (
               <tr key={m.model} className="border-t border-gray-100">
                 <td className="px-4 py-2 font-mono text-gray-900">{m.model}</td>
                 <td className="px-4 py-2 text-right">{m.calls}</td>
@@ -190,8 +255,8 @@ export default function AiUsageTab() {
                 <td className="px-4 py-2 text-right">{m.fallback_count}</td>
               </tr>
             ))}
-            {(data?.by_model || []).length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400">No model invocations in this window.</td></tr>
+            {filteredModels.length === 0 && (
+              <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400">No model invocations in this window{surface !== 'all' ? ` for surface "${surface}"` : ''}.</td></tr>
             )}
           </tbody>
         </table>

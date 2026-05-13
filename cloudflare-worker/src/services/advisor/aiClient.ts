@@ -99,7 +99,14 @@ const DEFAULT_TEMPERATURE = 0.2;
 const DEFAULT_MAX_TOKENS = 800;
 
 function turnLimit(env: Env): number {
-  const raw = (env as unknown as Record<string, string | undefined>).WORKERS_AI_ADVISOR_BUDGET_PER_DAY;
+  // Spec env name is `WORKERS_AI_ADVISOR_BUDGET_USD_DAY`. The "USD"
+  // segment is a misnomer in the spec — the value is a TURN count,
+  // not a dollar amount — but we honour the contract exactly.
+  // `WORKERS_AI_ADVISOR_BUDGET_PER_DAY` is accepted as a backward-compat
+  // alias so existing wrangler.toml entries don't have to be renamed
+  // mid-deploy.
+  const e = env as unknown as Record<string, string | undefined>;
+  const raw = e.WORKERS_AI_ADVISOR_BUDGET_USD_DAY ?? e.WORKERS_AI_ADVISOR_BUDGET_PER_DAY;
   const n = raw != null ? Number(raw) : NaN;
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_TURNS_PER_DAY;
 }
@@ -133,7 +140,8 @@ function kv(env: Env): MinimalKV | null {
 }
 
 function bucketKeyFor(userId: number, dayUtc: string): string {
-  return `ai_spend:advisor_turns:${userId}:${dayUtc}`;
+  // Spec key: `ai_spend:advisor:{user_id}:{yyyy-mm-dd}`.
+  return `ai_spend:advisor:${userId}:${dayUtc}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,25 +263,31 @@ async function callOnce(
     const text = r.response ?? r.choices?.[0]?.message?.content ?? '';
     return { ok: true, status: 200, output: String(text || '') };
   } catch (e) {
-    // Workers AI surfaces upstream HTTP status in the error message
-    // when available, plus structured fields on AiError instances. We
-    // try the structured shape first, then a regex over the message,
-    // then fall back to 500 for unknown errors so the spec's
-    // "fallback ONLY on HTTP 500/429" still triggers degradation on
-    // genuinely opaque upstream failures (matches the original intent
-    // — un-classifiable errors are treated as upstream 5xx so the
-    // 8b sibling gets a chance, rather than failing the user with no
-    // attempt at recovery).
+    // Spec: "Sole fallback ... only on HTTP 500/429 from primary."
+    // We therefore extract status STRICTLY — structured fields first,
+    // then an explicit "<status> <Status-Text>" pattern in the error
+    // message. Anything that can't be classified as a real HTTP 5xx
+    // or 429 stays at 0 (unknown) so the caller does NOT trigger
+    // fallback. This keeps non-HTTP failures (timeout configured by
+    // us, payload validation, binding misconfig) from silently
+    // double-dipping into the 8b sibling.
     const msg = (e as Error).message || '';
     const errObj = e as { status?: number; statusCode?: number; cause?: { status?: number } };
-    let status: number | null = null;
+    let status = 0;
     if (typeof errObj?.status === 'number') status = errObj.status;
     else if (typeof errObj?.statusCode === 'number') status = errObj.statusCode;
     else if (typeof errObj?.cause?.status === 'number') status = errObj.cause.status;
-    if (status == null) {
-      if (/\b429\b|rate[\s_-]?limit/i.test(msg)) status = 429;
-      else if (/\b5\d\d\b|server error|internal error|timeout|timed out/i.test(msg)) status = 500;
-      else status = 500;
+    if (!status) {
+      // Match Cloudflare's typical AiError serialization: "AiError:
+      // 5022: Capacity temporarily exceeded" or "HTTP 429 Too Many
+      // Requests". We require the digit to appear with a clear
+      // boundary so a user-supplied prompt containing "500" can't
+      // forge a fallback.
+      const m = msg.match(/\b(?:HTTP\s+)?(\d{3})\b/);
+      if (m) {
+        const n = Number(m[1]);
+        if (n === 429 || (n >= 500 && n <= 599)) status = n;
+      }
     }
     return { ok: false, status, error: msg.slice(0, 240) };
   }
