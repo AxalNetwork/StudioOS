@@ -102,4 +102,19 @@ commits = [
   # push the new value to the production worker via
   # `wrangler secret put JWT_SECRET --env production`.
   "d9da1be1a41c216028cc8edb17ae6f02e1b0248d",  # historical: JWT_SECRET re-leaked in .replit (Task #2 AU)
+  # 2026-05-12 — JWT_SECRET re-introduced AGAIN in .replit by the
+  # "Add functionality for market intelligence analysis and reporting"
+  # task-agent merge (Task #2 AT-1/AT-2 + AU bundle). This is the THIRD
+  # re-leak in 24h via the same root cause: task agents writing the
+  # secret into `.replit`'s `[env]` block instead of using Replit Secrets.
+  # Value removed from current `.replit` (`grep JWT_SECRET .replit` is
+  # empty as of 2026-05-13). Allowlisted here so gitleaks CI doesn't
+  # fail forever on a finding nobody can change without rewriting
+  # public history. ACTION REQUIRED OUTSIDE THIS FILE: rotate the
+  # JWT_SECRET via Replit Secrets, then push the new value to the
+  # production worker via `wrangler secret put JWT_SECRET --env production`.
+  # FOLLOW-UP: add a pre-commit hook (or task-agent guardrail) that
+  # rejects any `JWT_SECRET = "..."` line in `.replit` so this stops
+  # recurring.
+  "11e262ebc153a3540e80fd5c39a56ae479fccbad",  # historical: JWT_SECRET re-leaked in .replit (MI analysis task)
 ]
