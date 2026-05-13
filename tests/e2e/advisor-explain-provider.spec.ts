@@ -51,7 +51,10 @@ async function stubExplain(page: import('@playwright/test').Page, body: string) 
   });
 }
 
-// In-browser SSE consumer mirroring PersonalAdvisor.jsx's parser.
+// In-browser SSE consumer mirroring frontend/src/components/advisor/PersonalAdvisor.jsx
+// parser loop (currently lines 339-377 in that file).
+// KEEP IN SYNC: if the SSE parsing logic or event/data field handling changes in
+// PersonalAdvisor.jsx, update this function in the same PR and re-check this test.
 // Returns { provider, deltas, done } for the test to assert.
 async function runExplainInBrowser(page: import('@playwright/test').Page) {
   return await page.evaluate(async () => {
