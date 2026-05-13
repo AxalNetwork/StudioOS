@@ -8,7 +8,7 @@
  *   GET    /:projectId/export.xlsx   — CSV fallback (worker has no XLSX lib)
  *
  * Authorization mirrors the Python helpers:
- *   admin / partner / investor   — read-only on any project
+ *   admin / partner              — read-only on any project
  *   admin / founder (own project) — may PUT
  *   anyone else                  — 403
  *
@@ -360,7 +360,8 @@ async function loadProject(env: Env, projectId: number): Promise<Project | null>
 }
 
 function isPrivileged(role: string): boolean {
-  return role === 'admin' || role === 'partner' || role === 'investor';
+  // Task #3 (DF) — investor removed from read-allowlist per IDOR contract.
+  return role === 'admin' || role === 'partner';
 }
 
 function ensureCanView(project: Project, user: { role: string; founder_id?: number | null }) {

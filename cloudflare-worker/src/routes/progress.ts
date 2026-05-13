@@ -14,7 +14,7 @@
  *   POST   /roadmap/okr/:id/move              — move OKR (kanban_status + order)
  *
  * Authorization mirrors the FastAPI helpers:
- *   admin / partner / investor   — read any project
+ *   admin / partner              — read any project
  *   admin / founder (own project) — may write
  *   anyone else                  — 403
  *
@@ -52,7 +52,8 @@ async function loadProject(env: Env, projectId: number): Promise<Project | null>
 }
 
 function isPrivileged(role: User['role']): boolean {
-  return role === 'admin' || role === 'partner' || role === 'investor';
+  // Task #3 (DF) — investor removed from read-allowlist per IDOR contract.
+  return role === 'admin' || role === 'partner';
 }
 
 function ensureCanView(project: Project, user: User): void {
