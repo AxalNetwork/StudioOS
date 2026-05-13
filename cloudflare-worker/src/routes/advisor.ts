@@ -500,6 +500,32 @@ async function refreshCounts(env: Env, conversationId: number, currentQid: strin
 }
 
 // ---------------------------------------------------------------------------
+// Shared advisor gate — runs the Task #5 staged-rollout decision FIRST
+// (before any D1 schema probe) and the Task #4 (AW) kill-switch /
+// per-user lock SECOND. Returns null when the request may proceed,
+// or a Response (503 / 423) the caller must return as-is.
+//
+// Used by every user-facing advisor endpoint (/start, /answer,
+// /explain handle audit-on-block themselves; /skip, /sources,
+// /next-question, /progress, /manifest, /conversations/:id, /tools,
+// /tool, /tool/auto, /turn, /queue use this helper). Keeps the
+// kill-switch contract uniform across the surface so an emergency
+// `ADVISOR_V2_DISABLED=1` actually shuts every door, not just three.
+// ---------------------------------------------------------------------------
+async function applyAdvisorGate(c: Context<{ Bindings: Env }>, user: User): Promise<Response | null> {
+  const rollout = rolloutDecision(c.env, user);
+  if (!rollout.allowed) {
+    return c.json({ error: rollout.message, status: 'unavailable', reason: rollout.reason }, 503);
+  }
+  await ensureGuardrailColumns(c.env);
+  const ks = await checkKillSwitch(c.env, user);
+  if (ks.blocked) {
+    return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // POST /start  —  open or resume the user's active conversation.
 // ---------------------------------------------------------------------------
 advisor.post('/start', async (c) => {
@@ -1130,6 +1156,8 @@ advisor.post('/answer', async (c) => {
 // ---------------------------------------------------------------------------
 advisor.post('/skip', async (c) => {
   const user = await requireAuth(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
   await ensureSchema(c.env);
   const body = await readJson<{ conversation_id?: string; conversation_uid?: string; question_id?: string }>(c);
   const convUidS = body?.conversation_id || body?.conversation_uid;
@@ -1216,6 +1244,8 @@ advisor.post('/skip', async (c) => {
 // ---------------------------------------------------------------------------
 advisor.get('/sources', async (c) => {
   const user = await requireAuth(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
   await ensureSchema(c.env);
   const page = (c.req.query('page') || '').trim() || null;
   try {
@@ -1263,6 +1293,8 @@ advisor.get('/sources', async (c) => {
 // ---------------------------------------------------------------------------
 advisor.get('/next-question', async (c) => {
   const user = await requireAuth(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
   await ensureSchema(c.env);
   await ensureAdvisorWeekColumn(c.env);
   const focus = (c.req.query('focus') || '').trim() || undefined;
@@ -1300,6 +1332,8 @@ advisor.get('/next-question', async (c) => {
 // ---------------------------------------------------------------------------
 advisor.get('/progress', async (c) => {
   const user = await requireAuth(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
   await ensureSchema(c.env);
   await ensureAdvisorWeekColumn(c.env);
   const gate = await loadAdvisorGate(c.env, user);
@@ -1393,6 +1427,8 @@ advisor.get('/progress', async (c) => {
 // ---------------------------------------------------------------------------
 advisor.get('/manifest', async (c) => {
   const user = await requireAuth(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
   await ensureSchema(c.env);
   await ensureAdvisorWeekColumn(c.env);
   const gate = await loadAdvisorGate(c.env, user);
@@ -1786,12 +1822,16 @@ advisor.post('/explain', async (c) => {
 // ---------------------------------------------------------------------------
 
 advisor.get('/tools', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
   return c.json({ tools: TOOL_SCHEMAS });
 });
 
 advisor.post('/tool', async (c) => {
   const user = await requireAuth(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
   await ensureSchema(c.env);
   await ensureGuardrailColumns(c.env);
 
@@ -1953,6 +1993,8 @@ const TOOL_CALL_SYSTEM_PROMPT = [
 
 advisor.post('/tool/auto', async (c) => {
   const user = await requireAuth(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
   await ensureSchema(c.env);
   await ensureGuardrailColumns(c.env);
 
@@ -2141,6 +2183,8 @@ async function buildVisibleBank(c: Context<{ Bindings: Env }>, focus: string | n
 advisor.post('/turn', async (c) => {
   const focus = (c.req.query('focus') || '').trim() || null;
   const { user, visible, deferred, answered, gate, focusPage } = await buildVisibleBank(c, focus);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
   const result = await smNextTurn(c.env, user.id, visible, {
     focusPage,
     week: gate.week,
@@ -2162,6 +2206,8 @@ advisor.post('/turn', async (c) => {
 advisor.get('/queue', async (c) => {
   const focus = (c.req.query('focus') || '').trim() || null;
   const { user, visible, deferred, answered, gate, focusPage } = await buildVisibleBank(c, focus);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
   // /queue is a read-only peek — we want the ranking but NOT to
   // register an asked-at timestamp (that would spuriously suppress
   // the same questions on the next /turn). So we replicate nextTurn's
