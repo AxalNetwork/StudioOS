@@ -872,22 +872,59 @@ async function disclosedIdentities(env: Env, viewerId: number, targetUserIds: nu
 // purge runs first, then the next read recomputes from D1 on cache miss).
 // ─────────────────────────────────────────────────────────────────────────
 
+interface RoleDonutBucket { group: string; label: string; n: number }
+interface RoleDonutChart { buckets: RoleDonutBucket[] }
+interface SectorHeatCell { sector: string; persona: string; n: number }
+interface SectorHeatChart { cells: SectorHeatCell[] }
+interface StageFocusRow { stage: string; role: string; n: number }
+interface StageFocusChart { rows: StageFocusRow[] }
+interface GeoRow { country: string; n: number }
+interface GeoChart { rows: GeoRow[] }
+interface ActivityRow { role: string; active_users: number; events_per_user: number }
+interface ActivityTopFeature { role: string; action: string; n: number }
+interface ActivityChart { rows: ActivityRow[]; top_features: ActivityTopFeature[] }
+interface FunnelRow { week: number; n: number }
+interface FunnelChart {
+  rows: FunnelRow[];
+  completion_rate: number | null;
+  started_band: string | null;
+}
+interface SignupsRow { week: string; role: string; n: number }
+interface SignupsChart { rows: SignupsRow[] }
+interface PipelineRow {
+  tier_bucket: string;
+  n: number;
+  deals_watched: number;
+  weighted_coverage: number;
+}
+interface PipelineChart { rows: PipelineRow[] }
+interface GatedChart {
+  tier_required: string;
+  upgrade_path: string;
+  blurred: boolean;
+}
+type Maybe<T> = T | GatedChart;
+
 interface PlatformPersonasPayload {
   generated_at: string;
   k_min: number;
   source: 'platform';
-  role_donut: any;
-  sector_heatmap: any;
-  stage_focus: any;
-  geo_distribution: any;
-  activity_composite: any;
-  spinout_lab_funnel: any;
-  signups_trend: any;
-  pipeline_coverage: any;
+  role_donut: Maybe<RoleDonutChart>;
+  sector_heatmap: Maybe<SectorHeatChart>;
+  stage_focus: Maybe<StageFocusChart>;
+  geo_distribution: Maybe<GeoChart>;
+  activity_composite: Maybe<ActivityChart>;
+  spinout_lab_funnel: Maybe<FunnelChart>;
+  signups_trend: Maybe<SignupsChart>;
+  pipeline_coverage: Maybe<PipelineChart>;
   exports?: { csv_url: string; pdf_url: string };
   tier: 'free' | 'full' | 'export';
   /** Free-tier hint so the frontend can render blurred chart teasers. */
   free_teaser?: { gated_charts: string[]; reason: string };
+}
+
+function isGated(c: unknown): c is GatedChart {
+  return !!c && typeof c === 'object' && 'tier_required' in (c as Record<string, unknown>);
 }
 
 const PERSONAS_KMIN = 5;
@@ -1226,12 +1263,22 @@ marketIntel.get('/platform-personas/export', async (c) => {
 // Hand-rolled PDF 1.4 writer — no external lib (CF Workers can't easily
 // pull pdf-lib). One Helvetica page, content auto-paginates at ~52 lines.
 // Output is a real `application/pdf` byte stream that Acrobat / Chrome /
-// Preview render natively.
+// Preview render natively. All offsets and `/Length` values are computed
+// from BYTES (TextEncoder) — never from JS string length — so non-ASCII
+// content (em-dashes, accented country names, etc.) cannot desync the
+// xref table from the actual file layout.
 function renderPersonasPdf(payload: PlatformPersonasPayload): Uint8Array {
   const enc = new TextEncoder();
-  const escTxt = (s: string) => s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  // Strip every code point outside printable ASCII so the stream stays
+  // PDFDocEncoding-safe. Anything outside 0x20-0x7E becomes '?'.
+  const ascii = (s: string) =>
+    String(s).replace(/[^\x20-\x7E]/g, '?');
+  const escTxt = (s: string) =>
+    ascii(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  const byteLen = (s: string) => enc.encode(s).length;
+
   const lines: string[] = [];
-  lines.push('Axal StudioOS — Platform Personas');
+  lines.push('Axal StudioOS - Platform Personas');
   lines.push(`Generated: ${payload.generated_at}`);
   lines.push(`k-anonymity threshold: ${payload.k_min}`);
   lines.push('');
@@ -1241,67 +1288,85 @@ function renderPersonasPdf(payload: PlatformPersonasPayload): Uint8Array {
     else for (const b of body) lines.push(`  ${b}`);
     lines.push('');
   };
-  section('Role distribution', (payload.role_donut?.buckets || []).map((b: any) =>
-    `[${b.group}] ${b.label}: n=${b.n}`));
-  section('Sector x role heatmap', (payload.sector_heatmap?.cells || []).map((c: any) =>
-    `${c.sector} / ${c.persona}: n=${c.n}`));
-  section('Stage focus', (payload.stage_focus?.rows || []).map((r: any) =>
-    `${r.stage} / ${r.role}: n=${r.n}`));
-  section('Geography', (payload.geo_distribution?.rows || []).map((r: any) =>
-    `${r.country}: n=${r.n}`));
-  section('Activity (last 30d)', (payload.activity_composite?.rows || []).map((r: any) =>
-    `${r.role}: active=${r.active_users} events/user=${r.events_per_user}`));
-  const fnl = payload.spinout_lab_funnel || {};
-  const funnelRows = (fnl.rows || []).map((r: any) => `Week ${r.week}: n=${r.n}`);
-  if (fnl.completion_rate != null) funnelRows.push(`Completion rate: ${fnl.completion_rate}%`);
-  if (fnl.started_band) funnelRows.push(`Cohort size band: ${fnl.started_band}`);
-  section('Spin-Out Lab funnel', funnelRows);
-  section('Weekly signups', (payload.signups_trend?.rows || []).map((r: any) =>
-    `${r.week} / ${r.role}: n=${r.n}`));
-  section('Investor pipeline coverage', (payload.pipeline_coverage?.rows || []).map((r: any) =>
-    `${r.tier_bucket}: n=${r.n} weighted=${r.weighted_coverage}`));
 
-  // Pageify — 52 lines per page, leave room for header.
+  const donut = isGated(payload.role_donut) ? null : payload.role_donut;
+  const heat = isGated(payload.sector_heatmap) ? null : payload.sector_heatmap;
+  const stage = isGated(payload.stage_focus) ? null : payload.stage_focus;
+  const geo = isGated(payload.geo_distribution) ? null : payload.geo_distribution;
+  const activity = isGated(payload.activity_composite) ? null : payload.activity_composite;
+  const funnel = isGated(payload.spinout_lab_funnel) ? null : payload.spinout_lab_funnel;
+  const signups = isGated(payload.signups_trend) ? null : payload.signups_trend;
+  const pipeline = isGated(payload.pipeline_coverage) ? null : payload.pipeline_coverage;
+
+  section('Role distribution', (donut?.buckets ?? []).map(
+    (b) => `[${b.group}] ${b.label}: n=${b.n}`,
+  ));
+  section('Sector x role heatmap', (heat?.cells ?? []).map(
+    (c) => `${c.sector} / ${c.persona}: n=${c.n}`,
+  ));
+  section('Stage focus', (stage?.rows ?? []).map(
+    (r) => `${r.stage} / ${r.role}: n=${r.n}`,
+  ));
+  section('Geography', (geo?.rows ?? []).map(
+    (r) => `${r.country}: n=${r.n}`,
+  ));
+  section('Activity (last 30d)', (activity?.rows ?? []).map(
+    (r) => `${r.role}: active=${r.active_users} events/user=${r.events_per_user}`,
+  ));
+  const funnelRows: string[] = (funnel?.rows ?? []).map(
+    (r) => `Week ${r.week}: n=${r.n}`,
+  );
+  if (funnel?.completion_rate != null) funnelRows.push(`Completion rate: ${funnel.completion_rate}%`);
+  if (funnel?.started_band) funnelRows.push(`Cohort size band: ${funnel.started_band}`);
+  section('Spin-Out Lab funnel', funnelRows);
+  section('Weekly signups', (signups?.rows ?? []).map(
+    (r) => `${r.week} / ${r.role}: n=${r.n}`,
+  ));
+  section('Investor pipeline coverage', (pipeline?.rows ?? []).map(
+    (r) => `${r.tier_bucket}: n=${r.n} weighted=${r.weighted_coverage}`,
+  ));
+
   const PER_PAGE = 52;
   const pages: string[][] = [];
   for (let i = 0; i < lines.length; i += PER_PAGE) pages.push(lines.slice(i, i + PER_PAGE));
   if (pages.length === 0) pages.push(['(empty)']);
 
-  // Build the PDF body manually so we can compute the xref byte offsets.
-  const objs: string[] = [];
-  const pageObjIds: number[] = [];
-  const contentObjIds: number[] = [];
-  // 1 catalog, 2 pages, 3 font, 4..(4+2N-1) page+content pairs.
   const fontId = 3;
   const pagesId = 2;
   const catalogId = 1;
+  const objs: string[] = [];
+  const pageObjIds: number[] = [];
   pages.forEach((pageLines, idx) => {
     const pageId = 4 + idx * 2;
     const contentId = 5 + idx * 2;
     pageObjIds.push(pageId);
-    contentObjIds.push(contentId);
     let stream = 'BT /F1 10 Tf 12 TL 50 760 Td\n';
-    for (const ln of pageLines) {
-      stream += `(${escTxt(ln)}) Tj T*\n`;
-    }
+    for (const ln of pageLines) stream += `(${escTxt(ln)}) Tj T*\n`;
     stream += 'ET';
-    const contentObj = `${contentId} 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`;
-    const pageObj = `${pageId} 0 obj\n<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>\nendobj\n`;
-    objs[pageId] = pageObj;
-    objs[contentId] = contentObj;
+    const streamLen = byteLen(stream);
+    objs[contentId] =
+      `${contentId} 0 obj\n<< /Length ${streamLen} >>\nstream\n${stream}\nendstream\nendobj\n`;
+    objs[pageId] =
+      `${pageId} 0 obj\n<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 792] ` +
+      `/Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>\nendobj\n`;
   });
   objs[catalogId] = `${catalogId} 0 obj\n<< /Type /Catalog /Pages ${pagesId} 0 R >>\nendobj\n`;
-  objs[pagesId] = `${pagesId} 0 obj\n<< /Type /Pages /Kids [${pageObjIds.map((i) => `${i} 0 R`).join(' ')}] /Count ${pageObjIds.length} >>\nendobj\n`;
+  objs[pagesId] =
+    `${pagesId} 0 obj\n<< /Type /Pages /Kids [${pageObjIds.map((i) => `${i} 0 R`).join(' ')}] ` +
+    `/Count ${pageObjIds.length} >>\nendobj\n`;
   objs[fontId] = `${fontId} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`;
 
   const totalObjs = 3 + pages.length * 2;
-  let body = '%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n';
+  // Header is pure ASCII so we drop the optional 4-byte binary marker —
+  // every CF Workers PDF reader (Acrobat / Chrome / Preview / pdf.js)
+  // accepts a header without it; what matters is the xref byte offsets.
+  let body = '%PDF-1.4\n';
   const offsets: number[] = [0];
   for (let i = 1; i <= totalObjs; i++) {
-    offsets.push(body.length);
+    offsets.push(byteLen(body));
     body += objs[i] || '';
   }
-  const xrefStart = body.length;
+  const xrefStart = byteLen(body);
   let xref = `xref\n0 ${totalObjs + 1}\n0000000000 65535 f \n`;
   for (let i = 1; i <= totalObjs; i++) {
     xref += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
