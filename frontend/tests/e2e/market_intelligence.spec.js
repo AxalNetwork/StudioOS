@@ -465,11 +465,18 @@ test.describe('Market Intelligence — AT-2 advisor-derived tabs', () => {
     await expect(fintechRow).toBeVisible();
     await expect(fintechRow).toContainText('2.80');
     await expect(fintechRow).not.toContainText('2.40');
-    // Last two columns: Periods=2, Sub-sectors=1. Use cell-level matches
-    // so the sparkline column doesn't confuse the assertion.
+    // Assert by semantic column names instead of hard-coded positions.
+    const table = heatCard.locator('table').first();
+    const headers = await table.locator('thead th').allTextContents();
+    const normalizedHeaders = headers.map((h) => h.trim().toLowerCase());
+    const periodsIdx = normalizedHeaders.findIndex((h) => h === 'periods');
+    const subSectorsIdx = normalizedHeaders.findIndex((h) => h === 'sub-sectors' || h === 'sub-sectors');
+    expect(periodsIdx).toBeGreaterThanOrEqual(0);
+    expect(subSectorsIdx).toBeGreaterThanOrEqual(0);
+
     const cells = fintechRow.locator('td');
-    await expect(cells.nth(3)).toHaveText('2');
-    await expect(cells.nth(4)).toHaveText('1');
+    await expect(cells.nth(periodsIdx)).toHaveText('2');
+    await expect(cells.nth(subSectorsIdx)).toHaveText('1');
   });
 
   test('Sentiment Geography renders one card per geo with valence and contributor counts', async ({ page }) => {
