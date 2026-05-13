@@ -1,0 +1,79 @@
+Objective
+  Add a "Platform Personas" tab to Market Intelligence showing the
+  composition of platform users (anonymised, aggregated). Useful for
+  founders ("what kind of investors are here?"), investors ("what
+  kind of founders show up?"), and admins (executive overview).
+
+Charts on the tab
+  1. Role distribution donut: % Founders (Spin-Out vs Existing), %
+     Investors (Free/Pro/Inst), % Mentors, % Operating Partners by
+     deal type.
+  2. Sector × Role heatmap: founder sectors vs investor sectors;
+     highlight matches and mismatches.
+  3. Stage focus stacked bar: which stage each persona group prefers.
+  4. Geo distribution: country / region pie.
+  5. Activity composite: median session minutes per role, top-feature
+     usage per role.
+  6. Spin-Out Lab funnel: count of founders at each week + completion
+     rate.
+  7. New signups trend: weekly chart, broken down by role.
+  8. Active investor pipeline coverage: weighted by ticket × deals
+     watched.
+
+Endpoint
+  GET /api/market-intel/platform-personas?from=&to=
+    → all of the above as JSON, k-anonymity ≥ 5 applied.
+
+Frontend
+  frontend/src/pages/MarketIntelPage.jsx adds tab "Platform Personas"
+  alongside the existing ones. Uses recharts for visualisations.
+
+Tier gating
+  Free tier: high-level composition only (role donut, sector heatmap).
+  Growth / Investor Pro: all charts.
+  Studio / Institutional: + CSV / PDF export, weekly digest.
+
+Acceptance
+  - Tab renders all 8 charts with real data once n ≥ 5 per cell.
+  - Refresh within 5s for cached results, 30s for fresh aggregation.
+  - Export buttons working on the right tiers.
+  - Free tier sees teaser with upgrade CTA for blurred charts.  Objective
+  Add a "Platform Personas" tab to Market Intelligence showing the
+  composition of platform users (anonymised, aggregated). Useful for
+  founders ("what kind of investors are here?"), investors ("what
+  kind of founders show up?"), and admins (executive overview).
+
+Charts on the tab
+  1. Role distribution donut: % Founders (Spin-Out vs Existing), %
+     Investors (Free/Pro/Inst), % Mentors, % Operating Partners by
+     deal type.
+  2. Sector × Role heatmap: founder sectors vs investor sectors;
+     highlight matches and mismatches.
+  3. Stage focus stacked bar: which stage each persona group prefers.
+  4. Geo distribution: country / region pie.
+  5. Activity composite: median session minutes per role, top-feature
+     usage per role.
+  6. Spin-Out Lab funnel: count of founders at each week + completion
+     rate.
+  7. New signups trend: weekly chart, broken down by role.
+  8. Active investor pipeline coverage: weighted by ticket × deals
+     watched.
+
+Endpoint
+  GET /api/market-intel/platform-personas?from=&to=
+    → all of the above as JSON, k-anonymity ≥ 5 applied.
+
+Frontend
+  frontend/src/pages/MarketIntelPage.jsx adds tab "Platform Personas"
+  alongside the existing ones. Uses recharts for visualisations.
+
+Tier gating
+  Free tier: high-level composition only (role donut, sector heatmap).
+  Growth / Investor Pro: all charts.
+  Studio / Institutional: + CSV / PDF export, weekly digest.
+
+Acceptance
+  - Tab renders all 8 charts with real data once n ≥ 5 per cell.
+  - Refresh within 5s for cached results, 30s for fresh aggregation.
+  - Export buttons working on the right tiers.
+  - Free tier sees teaser with upgrade CTA for blurred charts.

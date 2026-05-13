@@ -1,0 +1,50 @@
+Objective
+  Right rail of the advisor card shows three buckets with priority
+  ordering. Drives the user's sense of "what should I do next."
+
+Buckets (computed by the state machine in Prompt CB)
+  Proposed   — top 5 unanswered questions for this user, ordered by
+                priority. Empty progress bar (gray) per item.
+  Pending    — questions partially answered (e.g. a textarea draft
+                saved but not committed; or a multi-part question
+                like "Add 3 OKRs" where 1/3 are done). Progress bar
+                shows %. Sorted by completion % descending then priority.
+  Completed  — last 10 answered questions, newest first. Filled bar
+                (green).
+
+UI (frontend/src/components/advisor/ProgressRail.jsx)
+  Header: "YOUR PROGRESS"
+  Three collapsible sections with counts. Sticky on scroll.
+  Each item card: section icon, label, progress bar, importance pill,
+  click → focuses the chat on that question.
+  Hover shows: explainer text + doc-anchor "Learn more →".
+
+  When a section maps to a page (e.g. "Projects · Customer Discovery"),
+  show a small "Open page →" link beside the count.
+
+  Empty states:
+    Proposed empty: "You're caught up. New tasks show up here as you
+    progress." with a small confetti SVG.
+    Pending empty: "Nothing in progress."
+    Completed empty: "Answers you provide will appear here."
+
+Data source
+  GET /api/advisor/queue (returns the three buckets, already
+  priority-ordered).
+  Polls on advisor turn commit, plus subscribes to a Durable Object
+  channel `advisor-progress:{user_id}` for push updates when side-
+  effects (milestone unlock, tier change) re-order the queue.
+
+Spin-Out Lab variant
+  When users.spinout_lab_active = 1, the rail header shows the week
+  badge (e.g. "Week 2 of 4") and a per-week milestone strip above the
+  three buckets. Each milestone card has its own progress bar and a
+  "what's missing" tooltip.
+
+Acceptance
+  - Three buckets render with real counts; refresh-safe.
+  - Clicking a Proposed item focuses the chat on that question.
+  - Completing a question moves it to Completed and pushes the next
+    Proposed item up; animation < 500ms.
+  - Free-tier user with a Studio-only question pending sees it in
+    Proposed with a small lock pill and "Upgrade to unlock" CTA.

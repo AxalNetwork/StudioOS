@@ -19,7 +19,6 @@ export default function MarketIntelPage() {
   const [conviction, setConviction] = useState([]);
   const [enriched, setEnriched] = useState([]);
   const [tab, setTab] = useState('compass');
-  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -126,41 +125,21 @@ export default function MarketIntelPage() {
       </div>
 
       <div className="mb-6">
-        {/* Tab selector — dropdown on all screen sizes (no horizontal scroll) */}
+        {/* Tab selector — native select on all screen sizes (no horizontal scroll) */}
         <div className="relative w-full md:max-w-xs">
-          <button
+          <select
             data-testid="mi-tab-dropdown"
-            onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-white border border-violet-300 rounded-xl text-sm font-medium text-gray-900 hover:bg-violet-50 focus:outline-none focus:ring-2 focus:ring-violet-400 transition-colors shadow-sm"
+            value={tab}
+            onChange={e => setTab(e.target.value)}
+            className="w-full appearance-none bg-white border border-violet-300 rounded-xl px-4 py-3 pr-10 text-sm font-medium text-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-400 transition-colors shadow-sm cursor-pointer"
           >
-            <span className="flex items-center gap-2 text-violet-700">
-              {tabs.find(t => t.key === tab)?.icon && React.createElement(tabs.find(t => t.key === tab).icon, { size: 14 })}
-              {tabs.find(t => t.key === tab)?.label}
-            </span>
-            <ChevronDown size={16} className={`text-violet-400 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
-          </button>
-
-          {dropdownOpen && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-80 overflow-y-auto">
-              {tabs.map(t => (
-                <button
-                  key={t.key}
-                  data-testid={`mi-tab-${t.key}`}
-                  onClick={() => {
-                    setTab(t.key);
-                    setDropdownOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b border-gray-100 last:border-b-0 ${
-                    tab === t.key
-                      ? 'bg-violet-50 text-violet-600'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <t.icon size={14} /> {t.label}
-                </button>
-              ))}
-            </div>
-          )}
+            {tabs.map(t => (
+              <option key={t.key} value={t.key} data-testid={`mi-tab-${t.key}`}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-violet-400" />
         </div>
       </div>
 

@@ -1,0 +1,82 @@
+Objective
+  Logical separation between onboarding chatbot (existing) and Personal
+  Advisor (new). Same Workers AI provider, different operational
+  surface: independent rate limits, analytics, caching, budget alerts.
+
+wrangler.toml
+  Add a second AI binding:
+    [ai]
+    binding = "AI"                  # existing — keep for onboarding
+
+    [[ai]]
+    binding = "AI_ADVISOR"          # new — dedicated for advisor
+    [Cloudflare may not support multiple [ai] blocks; if not, use the
+     SAME binding but route through different AI Gateway slugs — see
+     below.]
+
+  Add an AI Gateway slug for the advisor:
+    Dashboard: Cloudflare > AI > AI Gateway > New Gateway
+      Name: studioos-advisor-ongoing
+      Slug: advisor-ongoing
+    Cache TTL: 5 minutes for explainer responses; 0 for advisor turns.
+    Rate limit: 60 req/min/user (server-side), 200 req/min/account.
+
+Wrangler secrets
+  CF_AI_GATEWAY_ACCOUNT_ID                      already set
+  CF_AI_GATEWAY_SLUG_ADVISOR=advisor-ongoing
+  CF_AI_GATEWAY_SLUG_ONBOARDING=onboarding      (existing)
+
+Code (cloudflare-worker/src/services/advisor/aiClient.ts)
+  Default model:
+    @cf/meta/llama-3.3-70b-instruct-fp8-fast
+  Sole fallback (for trivial turns):
+    @cf/meta/llama-3.1-8b-instruct
+  No other models. No Anthropic. No GitHub Models in production.
+
+  export async function runAdvisorLLM(env, payload, opts) {
+    const url = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_AI_GATEWAY_SLUG_ADVISOR}/workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.CF_AI_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messages: payload.messages,
+        max_tokens: payload.max_tokens ?? 800,
+        temperature: 0.2,
+        stream: true,
+      }),
+    });
+    if (!res.ok) {
+      // single-tier fallback only for 500/429
+      if (res.status === 500 || res.status === 429) {
+        return runFallback(env, payload);
+      }
+      throw new AdvisorAIError(await res.text());
+    }
+    return res;
+  }
+
+Budget controls
+  KV bucket `ai_spend:advisor:{user_id}:{yyyy-mm-dd}`.
+  Soft cap: 100 turns/user/day. Warn at 80%. Block at 100% with a
+  polite "you've used today's advisor budget — back tomorrow" message.
+  Org-wide hard cap configurable via env var
+  WORKERS_AI_ADVISOR_BUDGET_USD_DAY.
+
+Observability
+  Monitoring page > AI Usage tab gets a new "Advisor" filter showing
+  requests, tokens, latency, cost per gateway slug.
+
+Migration
+  Onboarding code continues to use the existing AI binding + onboarding
+  gateway slug — do not touch it.
+
+Acceptance
+  - Advisor traffic visible separately in AI Gateway analytics.
+  - Per-user daily budget enforced.
+  - Latency p95 < 1.5s for advisor turns.
+  - Streaming first token under 500ms in production.
+  - Fallback to llama-3.1-8b kicks in only on 500/429, not on every
+    request.
