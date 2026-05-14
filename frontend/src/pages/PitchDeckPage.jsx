@@ -250,7 +250,8 @@ export default function PitchDeckPage() {
     if (!deck?.id) return;
     try {
       const r = await api.deckShare(deck.id, { ttl_hours: 24 });
-      const url = r?.url || (r?.token && `${window.location.origin}/share/deck/${r.token}`);
+      const path = r?.share_path || (r?.token && `/deck/share/${r.token}`);
+      const url = r?.url || (path && `${window.location.origin}${path}`);
       setShareUrl(url || '');
       if (url && navigator.clipboard) {
         await navigator.clipboard.writeText(url).catch(() => {});
