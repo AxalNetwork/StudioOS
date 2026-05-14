@@ -258,6 +258,38 @@ export const api = {
     request('/wellbeing/resources', { method: 'POST', body: JSON.stringify(data) }),
   wellbeingResourceDelete: (id) =>
     request(`/wellbeing/resources/${id}`, { method: 'DELETE' }),
+  // Task #8 (DI) — daily pulse + expert directory
+  wellbeingDaily: (days = 30) => request(`/wellbeing/daily?days=${days}`),
+  wellbeingDailySubmit: (data) =>
+    request('/wellbeing/daily', { method: 'POST', body: JSON.stringify(data) }),
+  wellbeingExpertCategories: () => request('/wellbeing/experts/categories'),
+  wellbeingExperts: (params = {}) => {
+    const q = new URLSearchParams();
+    const set = (k, v) => { if (v != null && v !== '') q.set(k, String(v)); };
+    set('category', params.category);
+    set('language', params.language);
+    set('modality', params.modality);
+    set('price_max', params.price_max);
+    set('q', params.q);
+    set('limit', params.limit);
+    set('tz', params.tz);
+    set('budget_max', params.budget_max);
+    (params.want_categories || []).forEach((v) => q.append('want_category', v));
+    (params.want_languages || []).forEach((v) => q.append('want_language', v));
+    (params.want_sectors || []).forEach((v) => q.append('want_sector', v));
+    (params.want_modalities || []).forEach((v) => q.append('want_modality', v));
+    const qs = q.toString();
+    return request(`/wellbeing/experts${qs ? `?${qs}` : ''}`);
+  },
+  wellbeingExpertGet: (uid) => request(`/wellbeing/experts/${encodeURIComponent(uid)}`),
+  wellbeingExpertBook: (uid, data = {}) =>
+    request(`/wellbeing/experts/${encodeURIComponent(uid)}/book`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  wellbeingExpertRate: (uid, data) =>
+    request(`/wellbeing/experts/${encodeURIComponent(uid)}/rate`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
 
   legal83bUploadReceipt: (id, file) => {
     const fd = new FormData();
