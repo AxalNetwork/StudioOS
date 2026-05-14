@@ -207,7 +207,11 @@ export const REGISTRY: ProviderDescriptor[] = [
     display_name: 'Salesforce',
     integration_type: 'crm',
     description: 'Push opportunities and accounts to your Salesforce org.',
-    status: 'live',
+    // 2026-05-14 — parked as coming_soon by product. Provider impl
+    // remains registered (side-effect import) so existing connections
+    // keep working, but new connect attempts get the standard 503 +
+    // "join the waitlist" path from /api/integrations/connect.
+    status: 'coming_soon',
     tier: 'studio',
     auth_type: 'oauth2',
     capabilities: ['Push opportunities', 'Sync accounts', 'Custom objects'],
@@ -220,7 +224,8 @@ export const REGISTRY: ProviderDescriptor[] = [
     display_name: 'Carta',
     integration_type: 'cap_table',
     description: 'Mirror your Carta cap table (issuer, stakeholders, securities) into the Capital module on a 6-hour sync.',
-    status: 'live',
+    // 2026-05-14 — parked as coming_soon by product (see Salesforce).
+    status: 'coming_soon',
     tier: 'studio',
     auth_type: 'oauth2',
     capabilities: ['Cap-table sync', 'Stakeholder import', 'Securities import'],
@@ -249,7 +254,8 @@ export const REGISTRY: ProviderDescriptor[] = [
     display_name: 'DocuSign',
     integration_type: 'e_sign',
     description: 'Send incorporation, NDA, and co-founder agreements through DocuSign with audit trail.',
-    status: 'live',
+    // 2026-05-14 — parked as coming_soon by product (see Salesforce).
+    status: 'coming_soon',
     tier: 'studio',
     auth_type: 'oauth2',
     capabilities: ['Send envelopes', 'Webhook on signed', 'Template library'],
@@ -262,7 +268,8 @@ export const REGISTRY: ProviderDescriptor[] = [
     display_name: 'Crunchbase',
     integration_type: 'data_feed',
     description: 'Auto-enrich projects with Crunchbase company data — funding, headcount, sector tags. BETA: Crunchbase Basic API only (read-only org search + lookup); deeper investor / round / people endpoints require Crunchbase Enterprise and ship later.',
-    status: 'beta',
+    // 2026-05-14 — parked as coming_soon by product (see Salesforce).
+    status: 'coming_soon',
     tier: 'growth',
     auth_type: 'api_key',
     capabilities: ['Company enrichment', 'Funding history', 'Competitor lookup'],
