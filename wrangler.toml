@@ -24,6 +24,17 @@ compatibility_date = "2026-04-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
+# Epic 11 — minified production bundle. Wrangler runs esbuild with
+# `minify: true`, which strips comments, mangles identifiers, and (most
+# importantly here) drops dead-code branches so leftover console.log
+# statements that we want kept for dev observability don't bloat the
+# production bundle. It also reduces the worker startup latency on cold
+# isolates by ~10-15% on a deploy this size.
+# (Must live ABOVE any [[routes]]/[table] section — TOML doesn't end a
+# table on blank lines, so a top-level key placed below `[[routes]]` is
+# parsed as a member of that route entry and rejected by Wrangler 4.x.)
+minify = true
+
 # ---------- Worker routes (zone-scoped, path-restricted) ----------
 # Task #5 (DC) — Mount the worker at `axal.vc/api/*` so every API call
 # (including third-party OAuth callbacks) resolves through the canonical
@@ -46,14 +57,6 @@ workers_dev = true
 [[routes]]
 pattern   = "axal.vc/api/*"
 zone_name = "axal.vc"
-
-# Epic 11 — minified production bundle. Wrangler runs esbuild with
-# `minify: true`, which strips comments, mangles identifiers, and (most
-# importantly here) drops dead-code branches so leftover console.log
-# statements that we want kept for dev observability don't bloat the
-# production bundle. It also reduces the worker startup latency on cold
-# isolates by ~10-15% on a deploy this size.
-minify = true
 
 # ---------- Module Rules ----------
 # Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
