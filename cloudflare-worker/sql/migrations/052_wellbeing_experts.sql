@@ -42,19 +42,21 @@ CREATE TABLE IF NOT EXISTS wellbeing_resources (
 
 -- New: lightweight daily pulse (mood/stress/sleep/energy/focus/social) so
 -- the page can render a 30-day chart. Free-text + tags are encrypted.
+-- All metric columns are AES-GCM ciphertext (cryptoBox.encryptString) per
+-- the privacy contract; tags_enc holds the encrypted JSON tag array.
 CREATE TABLE IF NOT EXISTS wellbeing_daily_pulses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     day TEXT NOT NULL,
-    mood INTEGER,
-    stress INTEGER,
-    sleep INTEGER,
-    energy INTEGER,
-    focus INTEGER,
-    social INTEGER,
+    mood_enc TEXT,
+    stress_enc TEXT,
+    sleep_enc TEXT,
+    energy_enc TEXT,
+    focus_enc TEXT,
+    social_enc TEXT,
     free_text_enc TEXT,
-    tags_json TEXT NOT NULL DEFAULT '[]',
+    tags_enc TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(user_id, day)
 );

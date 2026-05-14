@@ -282,6 +282,7 @@ export const api = {
     return request(`/wellbeing/experts${qs ? `?${qs}` : ''}`);
   },
   wellbeingExpertGet: (uid) => request(`/wellbeing/experts/${encodeURIComponent(uid)}`),
+  wellbeingExpertSlots: (uid) => request(`/wellbeing/experts/${encodeURIComponent(uid)}/slots`),
   wellbeingExpertBook: (uid, data = {}) =>
     request(`/wellbeing/experts/${encodeURIComponent(uid)}/book`, {
       method: 'POST', body: JSON.stringify(data),

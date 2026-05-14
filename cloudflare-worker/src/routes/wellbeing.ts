@@ -33,6 +33,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { encryptString, decryptInt, decryptString } from '../services/cryptoBox';
+import { notify } from '../services/notify';
 import {
   EXPERT_CATEGORIES, EXPERT_CATEGORY_FAMILIES,
   isValidCategoryKey, VALID_MODALITIES, VALID_PRICING_MODELS,
@@ -119,10 +120,10 @@ async function ensureWellbeingSchema(env: Env): Promise<void> {
        uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
        user_id INTEGER NOT NULL,
        day TEXT NOT NULL,
-       mood INTEGER, stress INTEGER, sleep INTEGER,
-       energy INTEGER, focus INTEGER, social INTEGER,
+       mood_enc TEXT, stress_enc TEXT, sleep_enc TEXT,
+       energy_enc TEXT, focus_enc TEXT, social_enc TEXT,
        free_text_enc TEXT,
-       tags_json TEXT NOT NULL DEFAULT '[]',
+       tags_enc TEXT,
        created_at TEXT NOT NULL DEFAULT (datetime('now')),
        UNIQUE(user_id, day)
      )`,
@@ -318,23 +319,40 @@ wellbeing.get('/checkins', async (c) => {
 // ---------------------------------------------------------------------------
 type DailyRow = {
   id: number; uid: string; user_id: number; day: string;
-  mood: number | null; stress: number | null; sleep: number | null;
-  energy: number | null; focus: number | null; social: number | null;
-  free_text_enc: string | null; tags_json: string; created_at: string;
+  mood_enc: string | null; stress_enc: string | null; sleep_enc: string | null;
+  energy_enc: string | null; focus_enc: string | null; social_enc: string | null;
+  free_text_enc: string | null; tags_enc: string | null; created_at: string;
 };
 
+// Per the privacy contract every wellbeing field is AES-GCM at rest. The
+// only consumer of free_text is the authoring founder (no admin/aggregate
+// path reads it), so paraphrasing-on-display would be a no-op — we keep the
+// invariant by never exposing free_text via /aggregate or any other endpoint.
 async function serializeDaily(env: Env, row: DailyRow) {
+  const dec = async (s: string | null) => {
+    if (!s) return null;
+    try { return await decryptInt(env, s); } catch { return null; }
+  };
+  const [mood, stress, sleep, energy, focus, social] = await Promise.all([
+    dec(row.mood_enc), dec(row.stress_enc), dec(row.sleep_enc),
+    dec(row.energy_enc), dec(row.focus_enc), dec(row.social_enc),
+  ]);
   let free_text: string | null = null;
   if (row.free_text_enc) {
     try { free_text = await decryptString(env, row.free_text_enc); }
     catch { free_text = null; }
   }
   let tags: string[] = [];
-  try { tags = JSON.parse(row.tags_json || '[]'); } catch { tags = []; }
+  if (row.tags_enc) {
+    try {
+      const decoded = await decryptString(env, row.tags_enc);
+      const parsed = JSON.parse(decoded || '[]');
+      tags = Array.isArray(parsed) ? parsed.map((x: any) => String(x)) : [];
+    } catch { tags = []; }
+  }
   return {
     id: row.id, uid: row.uid, day: row.day,
-    mood: row.mood, stress: row.stress, sleep: row.sleep,
-    energy: row.energy, focus: row.focus, social: row.social,
+    mood, stress, sleep, energy, focus, social,
     free_text, tags, created_at: row.created_at,
   };
 }
@@ -370,24 +388,37 @@ wellbeing.post('/daily', async (c) => {
     ? ((body as any).tags as any[]).filter((x) => typeof x === 'string').slice(0, 16)
     : [];
 
+  // Encrypt every metric + free_text + tags so the at-rest privacy contract
+  // applies to all daily wellbeing data, not just the free-text fields.
+  const encMaybe = (n: number | null) =>
+    n == null ? Promise.resolve<string | null>(null) : encryptString(c.env, String(n));
+  const [
+    mood_enc, stress_enc, sleep_enc, energy_enc, focus_enc, social_enc,
+  ] = await Promise.all([
+    encMaybe(vals.mood), encMaybe(vals.stress), encMaybe(vals.sleep),
+    encMaybe(vals.energy), encMaybe(vals.focus), encMaybe(vals.social),
+  ]);
   const free_text_enc = rawText ? await encryptString(c.env, rawText) : null;
+  const tags_enc = tagsArr.length ? await encryptString(c.env, JSON.stringify(tagsArr)) : null;
   const newUid = uuidHex();
 
   await c.env.DB.prepare(
     `INSERT INTO wellbeing_daily_pulses
-       (uid, user_id, day, mood, stress, sleep, energy, focus, social,
-        free_text_enc, tags_json, created_at)
+       (uid, user_id, day, mood_enc, stress_enc, sleep_enc,
+        energy_enc, focus_enc, social_enc,
+        free_text_enc, tags_enc, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(user_id, day) DO UPDATE SET
-       mood = excluded.mood, stress = excluded.stress, sleep = excluded.sleep,
-       energy = excluded.energy, focus = excluded.focus, social = excluded.social,
-       free_text_enc = excluded.free_text_enc, tags_json = excluded.tags_json,
+       mood_enc = excluded.mood_enc, stress_enc = excluded.stress_enc,
+       sleep_enc = excluded.sleep_enc, energy_enc = excluded.energy_enc,
+       focus_enc = excluded.focus_enc, social_enc = excluded.social_enc,
+       free_text_enc = excluded.free_text_enc, tags_enc = excluded.tags_enc,
        created_at = excluded.created_at`,
   ).bind(
     newUid, user.id, day,
-    vals.mood, vals.stress, vals.sleep,
-    vals.energy, vals.focus, vals.social,
-    free_text_enc, JSON.stringify(tagsArr),
+    mood_enc, stress_enc, sleep_enc,
+    energy_enc, focus_enc, social_enc,
+    free_text_enc, tags_enc,
   ).run();
 
   const row = await c.env.DB.prepare(
@@ -801,6 +832,62 @@ wellbeing.get('/experts/:uid', async (c) => {
   }));
 });
 
+// Internal scheduling fallback. Generates 30-min slots over the next 14
+// business days (09:00–17:00 in the expert's first declared timezone, or
+// UTC otherwise). Used by the FE when the expert has no external calendar.
+function generateInternalSlots(expert: ExpertRow, days = 14, slotMinutes = 30): string[] {
+  const tzs = (() => {
+    try { return JSON.parse(expert.timezones_json || '[]') as string[]; }
+    catch { return [] as string[]; }
+  })();
+  const tz = tzs[0] || 'UTC';
+  const now = new Date();
+  const slots: string[] = [];
+  for (let d = 1; d <= days && slots.length < 48; d++) {
+    const day = new Date(now.getTime() + d * 86_400_000);
+    const dow = day.getUTCDay();
+    if (dow === 0 || dow === 6) continue; // weekdays only
+    for (let h = 9; h < 17 && slots.length < 48; h++) {
+      for (let m = 0; m < 60 && slots.length < 48; m += slotMinutes) {
+        const slot = new Date(Date.UTC(
+          day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), h, m, 0,
+        ));
+        slots.push(slot.toISOString());
+      }
+    }
+    void tz; // tz is informational; UTC anchor is conservative — FE renders local
+  }
+  return slots;
+}
+
+wellbeing.get('/experts/:uid/slots', async (c) => {
+  const user = await requireAuth(c);
+  if (role(user) === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
+  await ensureWellbeingSchema(c.env);
+
+  const uid = c.req.param('uid');
+  const expert = await c.env.DB.prepare(
+    'SELECT * FROM experts WHERE uid = ? AND is_active = 1',
+  ).bind(uid).first<ExpertRow>();
+  if (!expert) return c.json({ detail: 'Expert not found' }, 404);
+
+  const launchUrl = expert.calendly_url || expert.booking_url || null;
+  if (launchUrl) {
+    // External scheduler exists — internal slots are not used.
+    return c.json({ external: true, launch_url: launchUrl, slots: [] });
+  }
+
+  // Filter out slots already booked.
+  const taken = await c.env.DB.prepare(
+    `SELECT scheduled_at FROM expert_bookings
+     WHERE expert_id = ? AND scheduled_at IS NOT NULL AND status != 'cancelled'`,
+  ).bind(expert.id).all<{ scheduled_at: string }>();
+  const takenSet = new Set((taken.results || []).map((r) => r.scheduled_at));
+
+  const slots = generateInternalSlots(expert).filter((s) => !takenSet.has(s));
+  return c.json({ external: false, launch_url: null, slots });
+});
+
 wellbeing.post('/experts/:uid/book', async (c) => {
   const user = await requireAuth(c);
   if (role(user) === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
@@ -814,6 +901,39 @@ wellbeing.post('/experts/:uid/book', async (c) => {
 
   const body = await c.req.json().catch(() => ({}));
   const launchUrl = expert.calendly_url || expert.booking_url || expert.website_url || null;
+  const notes = typeof (body as any)?.notes === 'string' ? (body as any).notes.slice(0, 1000) : null;
+  const duration = Number((body as any)?.duration_minutes) || 30;
+
+  // Internal-scheduling path: founder picked an explicit slot from /slots.
+  let scheduledAt: string | null = null;
+  const rawSlot = (body as any)?.scheduled_at;
+  if (typeof rawSlot === 'string' && rawSlot.length > 0) {
+    const dt = new Date(rawSlot);
+    if (!Number.isNaN(dt.getTime()) && dt.getTime() > Date.now() - 60_000) {
+      scheduledAt = dt.toISOString();
+    } else {
+      return c.json({ detail: 'scheduled_at must be a valid future ISO timestamp' }, 400);
+    }
+  }
+
+  const usingInternal = !launchUrl;
+  if (usingInternal && !scheduledAt) {
+    // Force internal callers to pick a slot — the old "we'll reach out" stub
+    // is no longer a fallback when there's no external scheduler.
+    return c.json({
+      detail: 'scheduled_at is required when the expert has no external scheduler',
+      slots_endpoint: `/api/wellbeing/experts/${uid}/slots`,
+    }, 400);
+  }
+
+  // Concurrency guard: refuse if the slot was just taken.
+  if (usingInternal && scheduledAt) {
+    const clash = await c.env.DB.prepare(
+      `SELECT id FROM expert_bookings
+       WHERE expert_id = ? AND scheduled_at = ? AND status != 'cancelled' LIMIT 1`,
+    ).bind(expert.id, scheduledAt).first();
+    if (clash) return c.json({ detail: 'That slot was just taken — please pick another.' }, 409);
+  }
 
   const bookingUid = uuidHex();
   try {
@@ -824,23 +944,53 @@ wellbeing.post('/experts/:uid/book', async (c) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       bookingUid, expert.id, user.id,
-      (body as any)?.scheduled_at || null,
-      Number((body as any)?.duration_minutes || 30),
-      launchUrl ? 'requested' : 'awaiting_internal_scheduling',
-      launchUrl,
-      typeof (body as any)?.notes === 'string' ? (body as any).notes.slice(0, 1000) : null,
+      scheduledAt, duration,
+      usingInternal ? 'scheduled' : 'requested',
+      launchUrl, notes,
     ).run();
   } catch (e: any) {
     console.warn('[wellbeing] booking insert failed:', String(e?.message || e));
   }
 
+  // Fan out notifications. Founder always gets one; expert too if linked to a user_id.
+  try {
+    const when = scheduledAt ? new Date(scheduledAt).toUTCString() : 'time TBD via external scheduler';
+    await notify(c.env, {
+      userId: user.id,
+      type: 'expert_booking_confirmed',
+      title: `Booking with ${expert.name}`,
+      body: usingInternal
+        ? `Confirmed for ${when} (${duration} min). The expert has been notified.`
+        : `Open the scheduler to confirm your slot with ${expert.name}.`,
+      link: usingInternal ? '/wellbeing' : (launchUrl || '/wellbeing'),
+      category: 'calendar',
+      channels: ['in_app', 'email'],
+    });
+    if (expert.user_id) {
+      await notify(c.env, {
+        userId: expert.user_id,
+        type: 'expert_booking_received',
+        title: `New booking request`,
+        body: usingInternal
+          ? `A founder booked you for ${when} (${duration} min).${notes ? ` Notes: ${notes}` : ''}`
+          : `A founder is opening your external scheduler.`,
+        link: '/wellbeing',
+        category: 'calendar',
+        channels: ['in_app', 'email'],
+      });
+    }
+  } catch (e) {
+    console.warn('[wellbeing] booking notify failed:', String((e as any)?.message || e));
+  }
+
   return c.json({
     booking_uid: bookingUid,
     launch_url: launchUrl,
-    fallback: launchUrl ? null : 'internal_scheduling_pending',
-    message: launchUrl
-      ? 'Open the booking URL to confirm your slot with the expert.'
-      : "We've recorded your request. The expert will reach out via your registered email.",
+    scheduled_at: scheduledAt,
+    fallback: usingInternal ? 'internal_scheduled' : null,
+    message: usingInternal
+      ? `Confirmed for ${new Date(scheduledAt!).toUTCString()}. Both of you have been emailed.`
+      : 'Open the booking URL to confirm your slot with the expert.',
   });
 });
 

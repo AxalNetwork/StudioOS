@@ -16,6 +16,7 @@ import type { Env } from '../../types';
 export interface ExpertRow {
   id: number;
   uid: string;
+  user_id: number | null;
   name: string;
   headline: string | null;
   bio: string | null;
@@ -152,13 +153,6 @@ function availabilityScore(expert: ExpertRow): number {
   return Math.min(1, s);
 }
 
-function modalityBoost(expert: ExpertRow, prefs: MatchPrefs): number {
-  if (!prefs.modalities.length) return 1;
-  const own = safeJsonArray(expert.modalities_json);
-  if (!own.length) return 0.6;
-  return jaccard(own, prefs.modalities) > 0 ? 1 : 0.4;
-}
-
 export function scoreExpert(
   expert: ExpertRow,
   prefs: MatchPrefs,
@@ -170,17 +164,25 @@ export function scoreExpert(
   const tzs = safeJsonArray(expert.timezones_json);
 
   // base_match weights category overlap (0.7) and sector overlap (0.3).
+  // Modality preference (when supplied) is folded into base_match with a
+  // light penalty for non-overlap rather than a separate multiplier — the
+  // spec defines the composite formula exactly and we honour it verbatim.
   const catScore = jaccard(cats, prefs.categories);
   const sectorScore = sectors.length && prefs.sectors.length ? jaccard(sectors, prefs.sectors) : 0.5;
-  const base = 0.7 * catScore + 0.3 * sectorScore;
+  let base = 0.7 * catScore + 0.3 * sectorScore;
+  if (prefs.modalities.length) {
+    const own = safeJsonArray(expert.modalities_json);
+    const modOk = own.length === 0 || jaccard(own, prefs.modalities) > 0;
+    if (!modOk) base = base * 0.6;
+  }
 
   const langScore = jaccard(langs, prefs.languages.length ? prefs.languages : ['en']);
   const tzScore = tzMatchScore(prefs.timezone, tzs);
   const availability = availabilityScore(expert);
   const price = priceMatchScore(expert, prefs.budget_max_usd);
   const rscore = ratingScore(rating);
-  const modBoost = modalityBoost(expert, prefs);
 
+  // Composite per spec — no extra multipliers.
   const composite =
     0.35 * base +
     0.25 * rscore +
@@ -191,7 +193,7 @@ export function scoreExpert(
 
   return {
     expert,
-    score: composite * modBoost,
+    score: composite,
     breakdown: {
       base_match: base,
       rating_score: rscore,

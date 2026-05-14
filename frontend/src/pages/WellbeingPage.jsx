@@ -298,10 +298,23 @@ function ExpertCard({ expert, onBook, onView, categoryLabels }) {
   );
 }
 
+function formatSlot(iso) {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    });
+  } catch { return iso; }
+}
+
 function BookingModal({ expert, onClose }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [err, setErr] = useState(null);
+  const [slots, setSlots] = useState(null); // null = loading, [] = none, [...] = available
+  const [external, setExternal] = useState(null); // launch_url string when available
+  const [chosen, setChosen] = useState(null);
+  const [notes, setNotes] = useState('');
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -309,12 +322,27 @@ function BookingModal({ expert, onClose }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  useEffect(() => {
+    let cancelled = false;
+    api.wellbeingExpertSlots(expert.uid)
+      .then((r) => {
+        if (cancelled) return;
+        if (r.external) { setExternal(r.launch_url); setSlots([]); }
+        else { setExternal(null); setSlots(r.slots || []); }
+      })
+      .catch((e) => { if (!cancelled) setErr(e.message || 'Failed to load slots'); });
+    return () => { cancelled = true; };
+  }, [expert.uid]);
+
   const book = async () => {
     setBusy(true); setErr(null);
     try {
-      const r = await api.wellbeingExpertBook(expert.uid, {});
+      const payload = external
+        ? {}
+        : { scheduled_at: chosen, duration_minutes: 30, notes: notes || undefined };
+      const r = await api.wellbeingExpertBook(expert.uid, payload);
       setResult(r);
-      if (r.launch_url) window.open(r.launch_url, '_blank', 'noopener,noreferrer');
+      if (r.launch_url && external) window.open(r.launch_url, '_blank', 'noopener,noreferrer');
     } catch (e) {
       setErr(e.message || 'Failed to book');
     } finally {
@@ -326,7 +354,7 @@ function BookingModal({ expert, onClose }) {
     <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+        className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl max-h-[85vh] overflow-y-auto"
       >
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -337,34 +365,82 @@ function BookingModal({ expert, onClose }) {
             <X className="w-5 h-5" />
           </button>
         </div>
+
         {!result && (
           <>
-            <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-              Booking opens the expert's scheduling page in a new tab.
-              {expert.first_session_free && <div className="mt-1 text-emerald-700 font-medium">First session free.</div>}
-            </div>
+            {expert.first_session_free && (
+              <div className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                First session free with this expert.
+              </div>
+            )}
+
+            {slots === null && <div className="mt-4 text-sm text-slate-500">Loading availability…</div>}
+
+            {slots !== null && external && (
+              <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                This expert uses an external scheduler. Clicking "Open scheduler" will open it in a new tab and record your interest in your booking history.
+              </div>
+            )}
+
+            {slots !== null && !external && (
+              <div className="mt-4 space-y-3">
+                <div className="text-sm font-medium text-slate-700">Pick a time (your local timezone)</div>
+                {slots.length === 0 ? (
+                  <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+                    No internal slots available right now. Please check back later.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                    {slots.map((s) => (
+                      <button
+                        key={s} type="button" onClick={() => setChosen(s)}
+                        className={`text-left rounded-lg border px-3 py-2 text-xs ${
+                          chosen === s
+                            ? 'border-rose-500 bg-rose-50 text-rose-700 font-medium'
+                            : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                        }`}
+                      >{formatSlot(s)}</button>
+                    ))}
+                  </div>
+                )}
+                {chosen && (
+                  <div>
+                    <label className="text-xs font-medium text-slate-600">Anything the expert should know? (optional)</label>
+                    <textarea
+                      value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={1000}
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             {err && <div className="mt-3 text-sm text-red-600">{err}</div>}
+
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm">Cancel</button>
-              <button onClick={book} disabled={busy} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
-                {busy ? 'Opening…' : 'Open scheduler'}
+              <button
+                onClick={book}
+                disabled={busy || slots === null || (!external && !chosen)}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {busy ? 'Booking…' : external ? 'Open scheduler' : 'Confirm booking'}
               </button>
             </div>
           </>
         )}
+
         {result && (
           <div className="mt-4 space-y-3">
-            <div className="text-sm text-slate-700">{result.message}</div>
-            {result.launch_url ? (
+            <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 flex items-start gap-2">
+              <Check className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{result.message}</span>
+            </div>
+            {result.launch_url && external && (
               <a href={result.launch_url} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-sm font-medium text-rose-600 hover:underline">
                 <Calendar className="w-4 h-4" /> Open scheduler
               </a>
-            ) : (
-              <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>This expert hasn't connected a scheduler yet — we've recorded your interest and they'll reach out by email.</span>
-              </div>
             )}
             <div className="flex justify-end">
               <button onClick={onClose} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white">Done</button>
