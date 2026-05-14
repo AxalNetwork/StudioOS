@@ -70,19 +70,38 @@ function Slider({ value, onChange, lowLabel, highLabel, invert }) {
   );
 }
 
-function DailyPulseCard({ alreadyToday, initialValues, onSubmitted }) {
+const QUICK_TAGS = [
+  { tag: 'wb.therapy_counseling',  label: 'Therapy' },
+  { tag: 'wb.coaching_executive',  label: 'Executive coaching' },
+  { tag: 'wb.peer_support',        label: 'Peer support' },
+  { tag: 'wb.sleep',               label: 'Sleep' },
+  { tag: 'wb.burnout',             label: 'Burnout' },
+  { tag: 'wb.anxiety',             label: 'Anxiety' },
+  { tag: 'wb.relationships',       label: 'Relationships' },
+  { tag: 'wb.cofounder_conflict',  label: 'Co-founder conflict' },
+  { tag: 'lifestyle.fitness',      label: 'Fitness' },
+  { tag: 'lifestyle.nutrition',    label: 'Nutrition' },
+  { tag: 'lifestyle.mindfulness',  label: 'Mindfulness' },
+  { tag: 'advisory.fundraising',   label: 'Fundraising' },
+];
+
+function DailyPulseCard({ alreadyToday, initialValues, initialTags, onSubmitted }) {
   const [values, setValues] = useState(() => initialValues || {
     mood: 3, stress: 3, sleep: 3, energy: 3, focus: 3, social: 3,
   });
   const [text, setText] = useState('');
+  const [tags, setTags] = useState(() => initialTags || []);
   const [saving, setSaving] = useState(false);
   const [ok, setOk] = useState(false);
   const [err, setErr] = useState(null);
 
+  const toggleTag = (t) =>
+    setTags((cur) => cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t].slice(0, 8));
+
   const submit = async () => {
     setSaving(true); setErr(null); setOk(false);
     try {
-      await api.wellbeingDailySubmit({ ...values, free_text: text || null });
+      await api.wellbeingDailySubmit({ ...values, free_text: text || null, tags });
       setOk(true);
       onSubmitted?.();
     } catch (e) {
@@ -123,6 +142,24 @@ function DailyPulseCard({ alreadyToday, initialValues, onSubmitted }) {
             />
           </div>
         ))}
+      </div>
+
+      <div className="mt-4">
+        <label className="text-sm font-medium text-slate-700">What's on your mind today? (optional)</label>
+        <p className="text-xs text-slate-500">Pick a few — these tune your matched experts. Up to 8.</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {QUICK_TAGS.map((t) => {
+            const on = tags.includes(t.tag);
+            return (
+              <button
+                key={t.tag} type="button" onClick={() => toggleTag(t.tag)}
+                className={`rounded-full px-2.5 py-1 text-xs font-medium border transition ${
+                  on ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                }`}
+              >{t.label}</button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="mt-4">
@@ -462,6 +499,11 @@ function ExpertDirectory({ wellnessGoals }) {
   const [filters, setFilters] = useState({
     category: '', language: '', modality: '', price_max: '', q: '',
   });
+  const LANGUAGE_OPTIONS = [
+    { v: 'en', l: 'English' }, { v: 'es', l: 'Spanish' }, { v: 'fr', l: 'French' },
+    { v: 'de', l: 'German' }, { v: 'pt', l: 'Portuguese' }, { v: 'zh', l: 'Mandarin' },
+    { v: 'ja', l: 'Japanese' }, { v: 'hi', l: 'Hindi' }, { v: 'ar', l: 'Arabic' },
+  ];
   const [bookingExpert, setBookingExpert] = useState(null);
   const [tierError, setTierError] = useState(null);
 
@@ -541,7 +583,7 @@ function ExpertDirectory({ wellnessGoals }) {
         )}
       </div>
 
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-5 gap-2">
+      <div className="mb-4 grid grid-cols-1 md:grid-cols-6 gap-2">
         <div className="md:col-span-2 relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -559,6 +601,16 @@ function ExpertDirectory({ wellnessGoals }) {
           <option value="">All categories</option>
           {categories.map((c) => (
             <option key={c.key} value={c.key}>{c.label}</option>
+          ))}
+        </select>
+        <select
+          value={filters.language}
+          onChange={(e) => setFilters((f) => ({ ...f, language: e.target.value }))}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        >
+          <option value="">Any language</option>
+          {LANGUAGE_OPTIONS.map((o) => (
+            <option key={o.v} value={o.v}>{o.l}</option>
           ))}
         </select>
         <select
@@ -850,6 +902,7 @@ export default function WellbeingPage() {
                 <DailyPulseCard
                   alreadyToday={!!daily.submitted_today}
                   initialValues={initial}
+                  initialTags={todays?.tags || []}
                   onSubmitted={load}
                 />
               )}
