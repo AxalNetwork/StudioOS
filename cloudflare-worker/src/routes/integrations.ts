@@ -957,7 +957,7 @@ integrations.get('/oauth/:provider/start', async (c) => {
     const msg = (e as Error)?.message || String(e);
     const stack = (e as Error)?.stack || '';
     console.error('[oauth/start] DIAG:', msg, '\n', stack);
-    return c.json({ error: 'oauth_start_failed', diag_message: msg, diag_stack: stack.split('\n').slice(0, 5).join(' | ') }, 500);
+    return c.json({ error: `oauth_start_failed: ${msg}`, diag_stack: stack.split('\n').slice(0, 5).join(' | ') }, 500);
   }
 });
 
