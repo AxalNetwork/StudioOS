@@ -508,7 +508,8 @@ decks.get('/recommend', async (c) => {
 /** POST /api/decks/apply-method — autofill the picked template into a new version. */
 decks.post('/apply-method', async (c) => {
   const user = await requireAuth(c);
-  ensureTier(user, 'growth');
+  // Free-tier founders may apply any non-premium template. Premium
+  // templates are gated below via ensureMethodAllowed → 402.
   const body = await c.req.json().catch(() => ({} as any));
   const pid = parseInt(body?.project_id);
   const methodId = String(body?.method_id || '').trim();
