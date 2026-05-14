@@ -895,7 +895,6 @@ integrations.delete('/waitlist/:provider', async (c) => {
  * during the callback. Providers without OAuth return 404.
  */
 integrations.get('/oauth/:provider/start', async (c) => {
-  try {
   await ensureIntegrationsSchema(c.env);
   const user = await requireAuth(c);
   ensureRole(c, user);
@@ -952,13 +951,6 @@ integrations.get('/oauth/:provider/start', async (c) => {
     throw e;
   }
   return c.json({ ok: true, authorize_url: url, state, pkce_method: pkce.method });
-  } catch (e) {
-    if (e instanceof Response) throw e;
-    const msg = (e as Error)?.message || String(e);
-    const stack = (e as Error)?.stack || '';
-    console.error('[oauth/start] DIAG:', msg, '\n', stack);
-    return c.json({ error: `oauth_start_failed: ${msg}` }, 500);
-  }
 });
 
 /**
