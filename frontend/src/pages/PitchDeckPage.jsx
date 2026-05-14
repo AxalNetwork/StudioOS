@@ -5,6 +5,7 @@ import {
   Sparkles, Loader2, Plus, Trash2, Share2, Download,
   History, RotateCcw, ChevronLeft, ChevronRight, Lock, Wand2,
   LayoutGrid, FileImage, FileText, FileCode2, Settings, X, Check,
+  GripVertical,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
@@ -49,6 +50,8 @@ export default function PitchDeckPage() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState('');
   const [shareUrl, setShareUrl] = useState('');
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
   const [error, setError] = useState('');
 
   const saveTimer = useRef(null);
@@ -174,6 +177,18 @@ export default function PitchDeckPage() {
     const next = slides.filter((_, i) => i !== idx);
     setDeck({ ...deck, slides: next });
     setActiveIdx(Math.max(0, idx - 1));
+    scheduleSave(next);
+  };
+
+  // Task #16 — drag-to-reorder slide thumbnails. Persisted via the same
+  // debounced autosave path so versions/restore see the new order.
+  const moveSlide = (from, to) => {
+    if (from === to || from < 0 || to < 0 || from >= slides.length || to >= slides.length) return;
+    const next = slides.slice();
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setDeck({ ...deck, slides: next });
+    setActiveIdx(to);
     scheduleSave(next);
   };
 
@@ -340,15 +355,32 @@ export default function PitchDeckPage() {
                 </div>
                 <div className="space-y-1 max-h-[60vh] overflow-y-auto">
                   {slides.map((s, i) => (
-                    <button
+                    <div
                       key={i}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', String(i));
+                        setDragIdx(i);
+                      }}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverIdx(i); }}
+                      onDragLeave={() => setDragOverIdx((v) => (v === i ? null : v))}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const from = Number(e.dataTransfer.getData('text/plain'));
+                        moveSlide(from, i);
+                        setDragIdx(null); setDragOverIdx(null);
+                      }}
+                      onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
                       onClick={() => setActiveIdx(i)}
-                      className={`w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-2 ${
+                      className={`group cursor-grab active:cursor-grabbing w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-2 select-none ${
                         i === activeIdx
                           ? 'bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300'
                           : 'hover:bg-gray-100 dark:hover:bg-slate-800'
-                      }`}
+                      } ${dragIdx === i ? 'opacity-40' : ''} ${dragOverIdx === i && dragIdx !== i ? 'ring-2 ring-violet-400' : ''}`}
+                      title="Drag to reorder"
                     >
+                      <GripVertical className="w-3 h-3 text-gray-300 group-hover:text-gray-500 shrink-0" />
                       <span className="w-5 text-gray-400">{i + 1}</span>
                       <span className="flex-1 truncate">{s.title || 'Untitled'}</span>
                       {s.appendix && <span className="text-[10px] text-gray-400">apx</span>}
@@ -356,7 +388,7 @@ export default function PitchDeckPage() {
                         className="w-3 h-3 text-gray-300 hover:text-red-500"
                         onClick={(e) => { e.stopPropagation(); removeSlide(i); }}
                       />
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>

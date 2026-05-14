@@ -205,8 +205,12 @@ function enforceTen(slides: any[], fallback: any[]): any[] {
   return out;
 }
 
+// Task #16 — must accept *both* the legacy {title,body,bullets,image_url}
+// shape AND the new fielded shape { title, subtitle, spec_id, appendix,
+// method_id, fields:[{key,label,kind,value,source,edited?}] }. Anything
+// else is dropped. Caps prevent runaway sizes.
 function sanitizeSlides(input: any[]): any[] {
-  return (input || []).slice(0, 20).map((s: any) => {
+  return (input || []).slice(0, 60).map((s: any) => {
     const title = String((s?.title || '') as string).trim().slice(0, 120) || 'Slide';
     const sub = s?.subtitle ? String(s.subtitle).trim().slice(0, 200) : null;
     const body = s?.body ? String(s.body).trim().slice(0, 4000) : '';
@@ -215,11 +219,73 @@ function sanitizeSlides(input: any[]): any[] {
       : [];
     let image_url: string | null = null;
     if (s?.image_url && typeof s.image_url === 'string') {
-      const u = s.image_url.trim();
-      if (/^https?:\/\//i.test(u)) image_url = u.slice(0, 1000);
+      const u = sanitizeImageUrl(s.image_url);
+      if (u) image_url = u;
     }
-    return { title, subtitle: sub, body, bullets, image_url };
+    const out: any = { title, subtitle: sub, body, bullets, image_url };
+    if (s?.spec_id) out.spec_id = String(s.spec_id).slice(0, 80);
+    if (s?.method_id) out.method_id = String(s.method_id).slice(0, 80);
+    if (s?.appendix) out.appendix = !!s.appendix;
+    if (Array.isArray(s?.fields)) out.fields = sanitizeFields(s.fields);
+    return out;
   });
+}
+
+const ALLOWED_FIELD_KINDS = new Set(['title', 'subtitle', 'paragraph', 'bullets', 'image', 'metric_grid', 'quote']);
+function sanitizeFields(input: any[]): any[] {
+  return input.slice(0, 16).map((f: any) => {
+    const kind = ALLOWED_FIELD_KINDS.has(f?.kind) ? f.kind : 'paragraph';
+    const key = String(f?.key || '').slice(0, 64) || 'field';
+    const label = String(f?.label || '').slice(0, 80);
+    const source = ['data', 'ai', 'placeholder'].includes(f?.source) ? f.source : 'data';
+    let value: any;
+    if (kind === 'bullets') {
+      value = Array.isArray(f?.value)
+        ? f.value.map((b: any) => String(b).slice(0, 400)).filter(Boolean).slice(0, 8)
+        : [];
+    } else if (kind === 'metric_grid') {
+      value = Array.isArray(f?.value)
+        ? f.value.slice(0, 8).map((c: any) => ({
+            label: String(c?.label || '').slice(0, 60),
+            value: String(c?.value || '').slice(0, 80),
+          }))
+        : [];
+    } else if (kind === 'image') {
+      value = f?.value ? sanitizeImageUrl(String(f.value)) : null;
+    } else {
+      value = String(f?.value || '').slice(0, 4000);
+    }
+    const out: any = { key, label, kind, value, source };
+    if (f?.edited) out.edited = true;
+    return out;
+  });
+}
+
+// Task #16 — SSRF guard. Slide images & watermarks are eventually fed
+// into Cloudflare Browser Rendering as <img src=…>. Reject anything but
+// https:// and refuse RFC1918 / loopback hostnames so a malicious user
+// can't make the headless browser request internal services.
+export function sanitizeImageUrl(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const raw = String(input).trim();
+  if (raw.length > 1000) return null;
+  let u: URL;
+  try { u = new URL(raw); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  const host = u.hostname.toLowerCase();
+  if (
+    host === 'localhost' ||
+    host === '0.0.0.0' ||
+    host === '::1' ||
+    host.endsWith('.local') ||
+    host.endsWith('.internal') ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^169\.254\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+  ) return null;
+  return u.toString();
 }
 
 async function projectOwned(env: Env, user: any, projectId: number): Promise<any> {
@@ -342,7 +408,8 @@ decks.get('/:id', async (c) => {
 });
 
 decks.put('/:id', async (c) => {
-  ensureTier(await requireAuth(c), 'growth');
+  // Task #16 — free-tier founders may edit non-premium decks. Premium
+  // template decks are still gated by re-checking slides[0].method_id.
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   await ensureSchema(c.env);
@@ -351,6 +418,11 @@ decks.put('/:id', async (c) => {
   try { await projectOwned(c.env, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
+  const firstMethod = String(body?.slides?.[0]?.method_id || '').trim();
+  if (firstMethod && PREMIUM_METHOD_IDS.includes(firstMethod as any)) {
+    try { ensureMethodAllowed(user, firstMethod, PREMIUM_METHOD_IDS); }
+    catch { return c.json({ error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD', method_id: firstMethod, required_tier: 'growth' }, 402); }
+  }
   const slides = sanitizeSlides(body?.slides || []);
   if (!slides.length) return c.json({ error: 'slides required' }, 400);
   const title = String(body?.title || row.title || 'Pitch deck').slice(0, 200);

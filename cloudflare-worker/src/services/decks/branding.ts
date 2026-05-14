@@ -72,14 +72,33 @@ export async function setStudioWatermark(
     await env.DB.prepare(`DELETE FROM deck_brand_watermarks WHERE user_id = ?`).bind(user.id).run();
     return;
   }
-  if (!/^https?:\/\//i.test(url) || url.length > 1000) {
-    throw new Error('INVALID_WATERMARK_URL');
-  }
+  // Task #16 SSRF guard: must be a public https:// URL. Watermarks are
+  // fetched by Cloudflare Browser Rendering during /export, so loopback /
+  // RFC1918 hostnames are refused.
+  const safe = sanitizeWatermarkUrl(url);
+  if (!safe) throw new Error('INVALID_WATERMARK_URL');
   await env.DB.prepare(
     `INSERT INTO deck_brand_watermarks (user_id, watermark_url, updated_at)
      VALUES (?, ?, datetime('now'))
      ON CONFLICT(user_id) DO UPDATE SET watermark_url = excluded.watermark_url, updated_at = datetime('now')`,
-  ).bind(user.id, url).run();
+  ).bind(user.id, safe).run();
+}
+
+function sanitizeWatermarkUrl(input: string): string | null {
+  const raw = String(input).trim();
+  if (!raw || raw.length > 1000) return null;
+  let u: URL;
+  try { u = new URL(raw); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  const host = u.hostname.toLowerCase();
+  if (
+    host === 'localhost' || host === '0.0.0.0' || host === '::1' ||
+    host.endsWith('.local') || host.endsWith('.internal') ||
+    /^127\./.test(host) || /^10\./.test(host) ||
+    /^192\.168\./.test(host) || /^169\.254\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+  ) return null;
+  return u.toString();
 }
 
 /** Throws PAYWALL_PREMIUM_METHOD if a free-tier user picks a premium template. */
