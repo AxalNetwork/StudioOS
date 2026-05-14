@@ -313,6 +313,7 @@ export async function autofillDeck(
 
   // Second pass: build slides.
   const slides: FilledSlide[] = [];
+  // (sanitizePublicHttpsUrl is hoisted below.)
   let totalRequired = 0; let totalFilled = 0;
   for (const spec of method.slides) {
     const subtitle = spec.subtitle
@@ -324,7 +325,11 @@ export async function autofillDeck(
       let val: FilledFieldValue;
       if (field.kind === 'metric_grid') val = resolveMetricGrid(field, project, fin);
       else if (field.kind === 'image') {
-        const url = field.sources.map((s) => resolveProjectSource(s, project)).find((v) => !!v) || null;
+        const raw = field.sources.map((s) => resolveProjectSource(s, project)).find((v) => !!v) || null;
+        // Task #16 — SSRF guard at the source of truth. Project image
+        // columns are user-controlled, so reject loopback / RFC1918 /
+        // non-https hosts here, before the URL ever reaches a renderer.
+        const url = raw ? sanitizePublicHttpsUrl(raw) : null;
         val = { kind: 'image', value: url, source: url ? 'data' : 'placeholder' };
       } else {
         val = resolveScalarField(field, project, fin, aiOut);
@@ -394,4 +399,23 @@ export function toEditorSlides(method: DeckMethodSpec, filled: FilledDeck): Edit
       }),
     };
   });
+}
+
+// Task #16 — SSRF guard for project-supplied image URLs. Mirror of the
+// route-level helper; kept here to avoid a cross-module import cycle.
+function sanitizePublicHttpsUrl(input: string): string | null {
+  const raw = String(input).trim();
+  if (!raw || raw.length > 1000) return null;
+  let u: URL;
+  try { u = new URL(raw); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  const host = u.hostname.toLowerCase();
+  if (
+    host === 'localhost' || host === '0.0.0.0' || host === '::1' ||
+    host.endsWith('.local') || host.endsWith('.internal') ||
+    /^127\./.test(host) || /^10\./.test(host) ||
+    /^192\.168\./.test(host) || /^169\.254\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+  ) return null;
+  return u.toString();
 }

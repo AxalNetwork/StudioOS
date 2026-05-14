@@ -265,6 +265,16 @@ function sanitizeFields(input: any[]): any[] {
 // into Cloudflare Browser Rendering as <img src=…>. Reject anything but
 // https:// and refuse RFC1918 / loopback hostnames so a malicious user
 // can't make the headless browser request internal services.
+function extractDeckMethodId(row: any): string | null {
+  try {
+    const arr = JSON.parse(row?.slides || '[]');
+    for (const s of arr) {
+      if (s && typeof s.method_id === 'string' && s.method_id) return s.method_id;
+    }
+  } catch {}
+  return null;
+}
+
 export function sanitizeImageUrl(input: string | null | undefined): string | null {
   if (!input) return null;
   const raw = String(input).trim();
@@ -409,7 +419,9 @@ decks.get('/:id', async (c) => {
 
 decks.put('/:id', async (c) => {
   // Task #16 — free-tier founders may edit non-premium decks. Premium
-  // template decks are still gated by re-checking slides[0].method_id.
+  // gating is enforced from TRUSTED state: we look up method_id from the
+  // currently-stored deck, not the request body, so a malicious client
+  // can't omit/replace the method_id to bypass the paywall.
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   await ensureSchema(c.env);
@@ -417,13 +429,20 @@ decks.put('/:id', async (c) => {
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
   try { await projectOwned(c.env, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
-  const body = await c.req.json().catch(() => ({} as any));
-  const firstMethod = String(body?.slides?.[0]?.method_id || '').trim();
-  if (firstMethod && PREMIUM_METHOD_IDS.includes(firstMethod as any)) {
-    try { ensureMethodAllowed(user, firstMethod, PREMIUM_METHOD_IDS); }
-    catch { return c.json({ error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD', method_id: firstMethod, required_tier: 'growth' }, 402); }
+  const persistedMethod = extractDeckMethodId(row);
+  if (persistedMethod && PREMIUM_METHOD_IDS.includes(persistedMethod as any)) {
+    try { ensureMethodAllowed(user, persistedMethod, PREMIUM_METHOD_IDS); }
+    catch { return c.json({ error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD', method_id: persistedMethod, required_tier: 'growth' }, 402); }
   }
+  const body = await c.req.json().catch(() => ({} as any));
   const slides = sanitizeSlides(body?.slides || []);
+  // Refuse client-side attempts to escalate a non-premium deck into a
+  // premium one via PUT — apply-method is the only way to switch templates.
+  for (const s of slides) {
+    if (s?.method_id && persistedMethod && s.method_id !== persistedMethod) {
+      return c.json({ error: 'method_id may not be changed via PUT — use /apply-method', code: 'METHOD_LOCKED' }, 400);
+    }
+  }
   if (!slides.length) return c.json({ error: 'slides required' }, 400);
   const title = String(body?.title || row.title || 'Pitch deck').slice(0, 200);
   const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null);
@@ -624,8 +643,13 @@ decks.post('/apply-method', async (c) => {
     bullets: (s.fields.find((f) => f.kind === 'bullets')?.value as any) || [],
     image_url: (s.fields.find((f) => f.kind === 'image')?.value as any) || null,
   }));
+  // Task #16 — run sanitizeSlides on the autofilled output too so
+  // project-supplied image URLs (logo_url, cover_url, …) get the SSRF
+  // guard before they're persisted and later rendered into the
+  // headless browser during /export.
+  const safeWrapped = sanitizeSlides(wrapped);
   const title = `${proj.name} — ${method.label}`;
-  const id = await insertVersion(c.env, pid, wrapped, title, Number(user.id) || null);
+  const id = await insertVersion(c.env, pid, safeWrapped, title, Number(user.id) || null);
   const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
   return c.json({
     deck: rowToDeck(row),
@@ -652,6 +676,11 @@ decks.post('/:id/export', async (c) => {
   try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
   // Adapt either the new fielded shape or the legacy {title, body, bullets,
   // image_url} shape to RenderableSlide.
+  // Task #16 — re-sanitize every persisted slide before handing it to
+  // the headless browser. Defense-in-depth: even if a legacy row pre-
+  // dates sanitizeImageUrl, the export path will not let a private-IP
+  // <img src=…> reach Browser Rendering.
+  slides = sanitizeSlides(slides);
   const renderable: RenderableDeck = {
     title: row.title || 'Pitch deck',
     project_name: row.title || '',
