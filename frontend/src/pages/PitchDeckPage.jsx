@@ -227,9 +227,13 @@ export default function PitchDeckPage() {
       const r = await api.deckExport(deck.id, format);
       if (!r.ok) {
         // Server may signal client-fallback for missing browser binding (dev).
-        if (r.status === 503 && format !== 'pptx') {
+        if (r.status === 503 && format === 'pdf') {
           addToast('Server PDF unavailable — using client renderer.', 'info');
           await downloadDeckPdf({ title: deck.title, slides });
+          return;
+        }
+        if (r.status === 503) {
+          addToast(`Server ${format.toUpperCase()} export unavailable in this environment.`, 'error');
           return;
         }
         const err = await r.json().catch(() => ({}));

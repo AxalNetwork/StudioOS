@@ -573,7 +573,9 @@ decks.get('/methods', async (c) => {
     premium_method_ids: PREMIUM_METHOD_IDS,
     user_tier: tier,
     can_remove_footer: brand.can_remove_footer,
-    can_upload_watermark: tierCovers(tier, 'studio') || isBypass,
+    // Capability mirrors server-side enforcement in setStudioWatermark
+    // (studio tier required; bypass roles do NOT bypass tier here).
+    can_upload_watermark: tierCovers(tier, 'studio'),
     watermark_url: brand.watermark_url,
   });
 });
