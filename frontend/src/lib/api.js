@@ -881,6 +881,24 @@ export const api = {
   deckRestore: (id) => request(`/decks/${id}/restore`, { method: 'POST', body: JSON.stringify({}) }),
   deckShare: (id, payload) => request(`/decks/${id}/share`, { method: 'POST', body: JSON.stringify(payload || {}) }),
   deckShareRead: (token) => request(`/decks/share/${encodeURIComponent(token)}`),
+  // Task #16 (DE) — Pitch Deck Builder rewrite.
+  deckMethods: () => request('/decks/methods'),
+  deckRecommend: (projectId) => request(`/decks/recommend?project_id=${projectId}`),
+  deckApplyMethod: (projectId, methodId) =>
+    request('/decks/apply-method', { method: 'POST', body: JSON.stringify({ project_id: projectId, method_id: methodId }) }),
+  deckExport: (id, format) =>
+    fetch(`${BASE}/decks/${id}/export`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      body: JSON.stringify({ format }),
+    }),
+  deckGetBrand: () => request('/decks/brand'),
+  deckSetWatermark: (url) => request('/decks/brand/watermark', { method: 'PUT', body: JSON.stringify({ watermark_url: url }) }),
 
   matchPreferences: () => request('/matches/preferences'),
   matchPreferencesSave: (data) => request('/matches/preferences', { method: 'PUT', body: JSON.stringify(data) }),

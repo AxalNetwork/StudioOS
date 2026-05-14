@@ -8,7 +8,15 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { ensureTier } from '../middleware/requireTier';
+import { ensureTier, tierCovers } from '../middleware/requireTier';
+import {
+  DECK_METHODS, DECK_METHODS_BY_ID, PREMIUM_METHOD_IDS, getMethod,
+} from '../services/decks/methods';
+import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
+import { recommendMethod, listOverrides, setOverride, deleteOverride } from '../services/decks/recommend';
+import { getDeckBrand, setStudioWatermark, ensureMethodAllowed } from '../services/decks/branding';
+import { renderDeckHTML, type RenderableDeck } from '../services/decks/render';
+import { renderDeckPPTX } from '../services/decks/pptx';
 
 const decks = new Hono<{ Bindings: Env }>();
 
@@ -445,5 +453,287 @@ async function sha256Hex(s: string): Promise<string> {
   for (let i = 0; i < bytes.length; i++) out += bytes[i].toString(16).padStart(2, '0');
   return out;
 }
+
+// =====================================================================
+// Task #16 (DE) — Pitch Deck Builder rewrite endpoints.
+// =====================================================================
+
+/** GET /api/decks/methods — list all 12 templates with lock status. */
+decks.get('/methods', async (c) => {
+  const user = await requireAuth(c);
+  const tier = String((user as any).subscription_tier || 'free').toLowerCase();
+  const isBypass = ['admin', 'partner', 'investor', 'mentor'].includes(String(user.role));
+  const items = DECK_METHODS.map((m) => ({
+    id: m.id, key: m.key, label: m.label, prompt_hint: m.prompt_hint,
+    best_for: m.best_for, slide_count: m.slide_count, premium: !!m.premium,
+    category: m.category, ai_fill_hint: m.ai_fill_hint,
+    locked: !!m.premium && !isBypass && !tierCovers(tier, 'growth'),
+    fields_from_project: m.fields_from_project,
+    fields_from_financials: m.fields_from_financials,
+    fields_from_captable: m.fields_from_captable,
+    slides: m.slides.map((s) => ({
+      id: s.id, title: s.title, appendix: !!s.appendix,
+      fields: s.fields.map((f) => ({ key: f.key, label: f.label, kind: f.kind, optional: !!f.optional })),
+    })),
+  }));
+  const brand = await getDeckBrand(c.env, user as any);
+  return c.json({
+    methods: items,
+    premium_method_ids: PREMIUM_METHOD_IDS,
+    user_tier: tier,
+    can_remove_footer: brand.can_remove_footer,
+    can_upload_watermark: tierCovers(tier, 'studio') || isBypass,
+    watermark_url: brand.watermark_url,
+  });
+});
+
+/** GET /api/decks/recommend?project_id=... — suggested method for project. */
+decks.get('/recommend', async (c) => {
+  const user = await requireAuth(c);
+  const pid = parseInt(c.req.query('project_id') || '');
+  if (!pid) return c.json({ error: 'project_id required' }, 400);
+  let proj: any;
+  try {
+    await projectOwned(c.env, user, pid);
+    proj = await c.env.DB.prepare('SELECT id, name, sector, stage FROM projects WHERE id = ?')
+      .bind(pid).first<any>();
+  } catch (e: any) {
+    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
+    return c.json({ error: 'forbidden' }, 403);
+  }
+  const rec = await recommendMethod(c.env, proj || {});
+  return c.json(rec);
+});
+
+/** POST /api/decks/apply-method — autofill the picked template into a new version. */
+decks.post('/apply-method', async (c) => {
+  const user = await requireAuth(c);
+  ensureTier(user, 'growth');
+  const body = await c.req.json().catch(() => ({} as any));
+  const pid = parseInt(body?.project_id);
+  const methodId = String(body?.method_id || '').trim();
+  if (!pid || !methodId) return c.json({ error: 'project_id and method_id required' }, 400);
+  const method = getMethod(methodId);
+  if (!method) return c.json({ error: 'unknown method_id' }, 400);
+  try {
+    ensureMethodAllowed(user, methodId, PREMIUM_METHOD_IDS);
+  } catch (e: any) {
+    return c.json({
+      error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD',
+      method_id: methodId, required_tier: 'growth',
+      message: 'This template is part of the Growth plan. Upgrade to unlock.',
+    }, 402);
+  }
+  let proj: any;
+  try {
+    await projectOwned(c.env, user, pid);
+    proj = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
+  } catch (e: any) {
+    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
+    return c.json({ error: 'forbidden' }, 403);
+  }
+  await ensureSchema(c.env);
+  // Run autofill, then convert to the editor slide JSON shape stored in
+  // pitch_decks.slides. We also stash the method_id + spec_id on each
+  // slide so the editor can re-render the right field controls.
+  const filled = await autofillDeck(c.env, method, pid);
+  const editorSlides = toEditorSlides(method, filled);
+  const wrapped = editorSlides.map((s) => ({
+    title: s.title,
+    subtitle: s.subtitle || null,
+    spec_id: s.spec_id,
+    appendix: s.appendix,
+    method_id: methodId,
+    fields: s.fields,
+    // Legacy keys kept for backward-compat with the old renderer (share/link
+    // pages still using the v1 editor will see something sensible).
+    body: s.fields.find((f) => f.kind === 'paragraph')?.value || '',
+    bullets: (s.fields.find((f) => f.kind === 'bullets')?.value as any) || [],
+    image_url: (s.fields.find((f) => f.kind === 'image')?.value as any) || null,
+  }));
+  const title = `${proj.name} — ${method.label}`;
+  const id = await insertVersion(c.env, pid, wrapped, title, Number(user.id) || null);
+  const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
+  return c.json({
+    deck: rowToDeck(row),
+    method_id: methodId,
+    coverage_pct: filled.total_coverage_pct,
+  });
+});
+
+/** POST /api/decks/:id/export — { format: 'pdf' | 'pptx' | 'png' } → file bytes. */
+decks.post('/:id/export', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  await ensureSchema(c.env);
+  let row: any;
+  try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
+  try { await projectOwned(c.env, user, Number(row.project_id)); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  const body = await c.req.json().catch(() => ({} as any));
+  const format = String(body?.format || 'pdf').toLowerCase();
+  if (!['pdf', 'pptx', 'png'].includes(format)) {
+    return c.json({ error: 'format must be pdf | pptx | png' }, 400);
+  }
+  let slides: any[] = [];
+  try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
+  // Adapt either the new fielded shape or the legacy {title, body, bullets,
+  // image_url} shape to RenderableSlide.
+  const renderable: RenderableDeck = {
+    title: row.title || 'Pitch deck',
+    project_name: row.title || '',
+    slides: slides.map((s: any) => {
+      if (Array.isArray(s.fields)) {
+        return { title: s.title, subtitle: s.subtitle, appendix: !!s.appendix, fields: s.fields };
+      }
+      // Legacy shape → synthesise fields.
+      const fields: any[] = [];
+      if (s.title) fields.push({ key: 'title', label: 'Title', kind: 'title', value: s.title });
+      if (s.subtitle) fields.push({ key: 'sub', label: 'Subtitle', kind: 'subtitle', value: s.subtitle });
+      if (s.body) fields.push({ key: 'body', label: 'Body', kind: 'paragraph', value: s.body });
+      if (Array.isArray(s.bullets) && s.bullets.length) {
+        fields.push({ key: 'bullets', label: 'Bullets', kind: 'bullets', value: s.bullets });
+      }
+      if (s.image_url) fields.push({ key: 'img', label: 'Image', kind: 'image', value: s.image_url });
+      return { title: s.title || 'Slide', subtitle: s.subtitle, appendix: false, fields };
+    }),
+  };
+  const brand = await getDeckBrand(c.env, user as any);
+  const fname = (row.title || 'pitch-deck').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 80);
+
+  if (format === 'pptx') {
+    const bytes = renderDeckPPTX(renderable, brand);
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'Content-Disposition': `attachment; filename="${fname}.pptx"`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+
+  // pdf + png both go via Cloudflare Browser Rendering.
+  const html = renderDeckHTML(renderable, brand);
+  const browser = (c.env as any).BROWSER;
+  if (!browser?.fetch) {
+    // Browser binding missing (dev) — return HTML so the client can do
+    // its existing client-side PDF flow as a fallback.
+    return c.json({
+      error: 'browser_binding_unavailable',
+      fallback: 'client_render',
+      html,
+    }, 503);
+  }
+  if (format === 'pdf') {
+    const r = await browser.fetch('https://browser.rendering/pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        html, viewport: { width: 1280, height: 720 },
+        pdfOptions: { printBackground: true, format: 'Letter', landscape: true },
+      }),
+    });
+    if (!r.ok) {
+      const text = await r.text().catch(() => '');
+      console.error('[decks/export] pdf render failed:', r.status, text.slice(0, 200));
+      return c.json({ error: 'pdf_render_failed', status: r.status }, 502);
+    }
+    const bytes = await r.arrayBuffer();
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${fname}.pdf"`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+  // png — first slide thumbnail.
+  const firstHtml = renderDeckHTML({ ...renderable, slides: renderable.slides.slice(0, 1) }, brand);
+  const r = await browser.fetch('https://browser.rendering/screenshot', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      html: firstHtml,
+      viewport: { width: 1280, height: 720 },
+      screenshotOptions: { type: 'png', omitBackground: false },
+    }),
+  });
+  if (!r.ok) {
+    const text = await r.text().catch(() => '');
+    console.error('[decks/export] png render failed:', r.status, text.slice(0, 200));
+    return c.json({ error: 'png_render_failed', status: r.status }, 502);
+  }
+  const bytes = await r.arrayBuffer();
+  return new Response(bytes, {
+    status: 200,
+    headers: {
+      'Content-Type': 'image/png',
+      'Content-Disposition': `attachment; filename="${fname}-thumb.png"`,
+      'Cache-Control': 'no-store',
+    },
+  });
+});
+
+// --- Branding endpoints (Studio tier custom watermark) ---------------
+
+decks.get('/brand', async (c) => {
+  const user = await requireAuth(c);
+  const brand = await getDeckBrand(c.env, user as any);
+  return c.json({ brand });
+});
+
+decks.put('/brand/watermark', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  try {
+    await setStudioWatermark(c.env, user as any, body?.watermark_url ?? null);
+  } catch (e: any) {
+    if (e?.message === 'STUDIO_TIER_REQUIRED') {
+      return c.json({ error: 'studio_tier_required', required_tier: 'studio' }, 402);
+    }
+    if (e?.message === 'INVALID_WATERMARK_URL') {
+      return c.json({ error: 'watermark_url must be https URL ≤1000 chars' }, 400);
+    }
+    return c.json({ error: 'failed' }, 500);
+  }
+  const brand = await getDeckBrand(c.env, user as any);
+  return c.json({ brand });
+});
+
+// --- Admin overrides for the recommendation engine -------------------
+
+decks.get('/admin/recommend-overrides', async (c) => {
+  const user = await requireAuth(c);
+  if (String(user.role) !== 'admin') return c.json({ error: 'forbidden' }, 403);
+  const overrides = await listOverrides(c.env);
+  return c.json({ overrides });
+});
+
+decks.put('/admin/recommend-overrides', async (c) => {
+  const user = await requireAuth(c);
+  if (String(user.role) !== 'admin') return c.json({ error: 'forbidden' }, 403);
+  const body = await c.req.json().catch(() => ({} as any));
+  const sector = String(body?.sector || '').trim();
+  const stage = String(body?.stage || '').trim();
+  const methodId = String(body?.method_id || '').trim();
+  if (!sector || !stage || !methodId) return c.json({ error: 'sector, stage, method_id required' }, 400);
+  if (!getMethod(methodId)) return c.json({ error: 'unknown method_id' }, 400);
+  await setOverride(c.env, sector, stage, methodId, Number(user.id) || null);
+  const overrides = await listOverrides(c.env);
+  return c.json({ overrides });
+});
+
+decks.delete('/admin/recommend-overrides', async (c) => {
+  const user = await requireAuth(c);
+  if (String(user.role) !== 'admin') return c.json({ error: 'forbidden' }, 403);
+  const sector = c.req.query('sector') || '';
+  const stage = c.req.query('stage') || '';
+  if (!sector || !stage) return c.json({ error: 'sector + stage query required' }, 400);
+  await deleteOverride(c.env, sector, stage);
+  const overrides = await listOverrides(c.env);
+  return c.json({ overrides });
+});
 
 export default decks;
