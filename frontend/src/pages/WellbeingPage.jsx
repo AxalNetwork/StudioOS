@@ -70,19 +70,21 @@ function Slider({ value, onChange, lowLabel, highLabel, invert }) {
   );
 }
 
+// Tag values are real expertCategories.ts catalogue keys so the
+// `want_category` weighting in the matcher actually fires.
 const QUICK_TAGS = [
-  { tag: 'wb.therapy_counseling',  label: 'Therapy' },
-  { tag: 'wb.coaching_executive',  label: 'Executive coaching' },
-  { tag: 'wb.peer_support',        label: 'Peer support' },
-  { tag: 'wb.sleep',               label: 'Sleep' },
-  { tag: 'wb.burnout',             label: 'Burnout' },
-  { tag: 'wb.anxiety',             label: 'Anxiety' },
-  { tag: 'wb.relationships',       label: 'Relationships' },
-  { tag: 'wb.cofounder_conflict',  label: 'Co-founder conflict' },
-  { tag: 'lifestyle.fitness',      label: 'Fitness' },
-  { tag: 'lifestyle.nutrition',    label: 'Nutrition' },
-  { tag: 'lifestyle.mindfulness',  label: 'Mindfulness' },
-  { tag: 'advisory.fundraising',   label: 'Fundraising' },
+  { tag: 'therapist_clinical',     label: 'Therapy' },
+  { tag: 'executive_coach',        label: 'Executive coaching' },
+  { tag: 'peer_founder_mentor',    label: 'Peer support' },
+  { tag: 'sleep_specialist_physician', label: 'Sleep' },
+  { tag: 'burnout_specialist',     label: 'Burnout' },
+  { tag: 'psychiatrist',           label: 'Anxiety' },
+  { tag: 'relationship_counsellor', label: 'Relationships' },
+  { tag: 'leadership_coach',       label: 'Co-founder conflict' },
+  { tag: 'personal_trainer',       label: 'Fitness' },
+  { tag: 'nutritionist',           label: 'Nutrition' },
+  { tag: 'mindfulness_coach',      label: 'Mindfulness' },
+  { tag: 'fundraising_advisor',    label: 'Fundraising' },
 ];
 
 function DailyPulseCard({ alreadyToday, initialValues, initialTags, onSubmitted }) {
