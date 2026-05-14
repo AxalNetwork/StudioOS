@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, LogOut, Shield,
-  ChevronDown, ChevronRight, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock, Calendar,
+  ChevronDown, ChevronLeft, ChevronRight, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock, Calendar,
   Settings as SettingsIcon, PieChart as PieIcon, Heart, Bookmark, Megaphone, BookOpen, Search
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier, hasTier, hasInvestorTier } from './sidebarConfig';
@@ -192,7 +192,20 @@ function highlightMatch(label, query) {
   );
 }
 
-function SidebarNav({ groups, role, onNavigate, user }) {
+// Sidebar abbreviations for the collapsed rail. First letter of each word
+// (split on whitespace and hyphens), filtering out filler words, capped at
+// 3 chars. Examples: Dashboard→D, Admin Console→AC, Pipeline Board→PB,
+// Spin-Outs→SO, Refer & Earn→RE.
+function abbreviateLabel(label) {
+  if (!label) return '';
+  const parts = String(label).split(/[\s\-/&]+/).filter((w) => {
+    if (!w) return false;
+    return !/^(and|the|of|a|to|for|on|in|my)$/i.test(w);
+  });
+  return parts.map((w) => w[0].toUpperCase()).join('').slice(0, 3) || label[0].toUpperCase();
+}
+
+function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
   const [query, setQuery] = useState('');
   // Persisted open-state per group key. We seed once from
   // localStorage merged with `defaultOpenGroups()` so first-time users
@@ -246,38 +259,50 @@ function SidebarNav({ groups, role, onNavigate, user }) {
 
   return (
     <nav className="flex-1 py-3 overflow-y-auto" aria-label="Primary navigation">
-      <div className="px-3 pb-2">
-        <div className="relative">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search…"
-            aria-label="Search sidebar"
-            className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400 dark:placeholder:text-gray-500"
-          />
+      {!collapsed && (
+        <div className="px-3 pb-2">
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search…"
+              aria-label="Search sidebar"
+              className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+            />
+          </div>
         </div>
-      </div>
+      )}
       {groups.map((group) => {
         const visibleItems = q
           ? group.items.filter((it) => it.label.toLowerCase().includes(q))
           : group.items;
         if (q && visibleItems.length === 0) return null;
-        const isOpen = effectiveOpen.has(group.key);
+        const isOpen = collapsed ? true : effectiveOpen.has(group.key);
         return (
           <div key={group.key} className="mb-0.5">
-            <button
-              type="button"
-              onClick={() => toggleGroup(group.key)}
-              aria-expanded={isOpen}
-              className="w-full flex items-center gap-1 px-5 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            >
-              {isOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-              <span>{group.label}</span>
-            </button>
+            {collapsed ? (
+              <div
+                className="px-2 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-wider text-gray-400 text-center"
+                title={group.label}
+              >
+                {group.label}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.key)}
+                aria-expanded={isOpen}
+                className="w-full flex items-center gap-1 px-5 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                {isOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                <span>{group.label}</span>
+              </button>
+            )}
             {isOpen && visibleItems.map((item) => {
               const { to, icon: Icon, label, highlight, requiredTier, requiredInvestorTier } = item;
+              const abbr = abbreviateLabel(label);
               // Task #6 / #7 — items the user can't afford render as a
               // "locked" button that opens PaywallModal. Bypass roles + users
               // on the right tier render as normal NavLinks. Investor tier
@@ -296,12 +321,20 @@ function SidebarNav({ groups, role, onNavigate, user }) {
                     key={to}
                     type="button"
                     onClick={() => openPaywall(lockTier)}
-                    className="w-full flex items-center gap-3 px-5 py-2 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                    className={collapsed
+                      ? 'w-full flex flex-col items-center gap-0.5 px-1 py-2 text-[10px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors'
+                      : 'w-full flex items-center gap-3 px-5 py-2 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors'}
                     title={`${label} — requires ${lockLabel} plan`}
                   >
-                    {Icon && <Icon size={16} />}
-                    <span className="truncate flex-1 text-left">{highlightMatch(label, q)}</span>
-                    <LockIcon size={11} className="flex-shrink-0" />
+                    {Icon && <Icon size={collapsed ? 18 : 16} />}
+                    {collapsed ? (
+                      <span className="truncate w-full text-center">{abbr}</span>
+                    ) : (
+                      <>
+                        <span className="truncate flex-1 text-left">{highlightMatch(label, q)}</span>
+                        <LockIcon size={11} className="flex-shrink-0" />
+                      </>
+                    )}
                   </button>
                 );
               }
@@ -311,18 +344,31 @@ function SidebarNav({ groups, role, onNavigate, user }) {
                   to={to}
                   end
                   onClick={onNavigate}
+                  title={collapsed ? label : undefined}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
-                      isActive
-                        ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
-                        : highlight
-                          ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50/60 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40'
-                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
-                    }`
+                    collapsed
+                      ? `flex flex-col items-center gap-0.5 px-1 py-2 text-[10px] transition-colors ${
+                          isActive
+                            ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
+                            : highlight
+                              ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50/60 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40'
+                              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`
+                      : `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
+                          isActive
+                            ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
+                            : highlight
+                              ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50/60 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40'
+                              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`
                   }
                 >
-                  {Icon && <Icon size={16} />}
-                  <span className="truncate">{highlightMatch(label, q)}</span>
+                  {Icon && <Icon size={collapsed ? 18 : 16} />}
+                  {collapsed ? (
+                    <span className="truncate w-full text-center">{abbr}</span>
+                  ) : (
+                    <span className="truncate">{highlightMatch(label, q)}</span>
+                  )}
                 </NavLink>
               );
             })}
@@ -409,6 +455,38 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) return false;
     return appearance?.sidebar_default !== 'collapsed';
   });
+  // Desktop-only collapsed rail state. When true, the sidebar stays
+  // visible at a narrow width showing only icons + 1-3 letter
+  // abbreviations. Persisted across sessions in localStorage. Mobile
+  // ignores this and uses the full drawer via `sidebarOpen`.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return safeReadJSON('sidebar_collapsed', false) === true;
+  });
+  // Track desktop breakpoint so the collapsed rail never leaks onto the
+  // mobile drawer (which always renders full-width). Persistence stays
+  // intact so the user's preference returns on a desktop viewport.
+  const [isDesktop, setIsDesktop] = useState(() => {
+    return typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : true;
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const handler = (e) => setIsDesktop(e.matches);
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else mq.addListener(handler);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', handler);
+      else mq.removeListener(handler);
+    };
+  }, []);
+  const effectiveCollapsed = isDesktop && sidebarCollapsed;
+  const toggleSidebarCollapsed = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem('sidebar_collapsed', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
   const initialSyncRef = React.useRef(false);
   useEffect(() => {
     // One-shot sync the moment the SettingsProvider's first /appearance
@@ -464,45 +542,75 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <div className="flex flex-1 overflow-hidden">
           <aside className={`
             fixed ${sidebarOpen ? 'lg:relative' : ''}
-            inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800
+            inset-y-0 left-0 z-50 ${effectiveCollapsed ? 'w-20' : 'w-64'} bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800
             flex flex-col
             transform transition-transform duration-200
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:hidden'}
           `}>
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+            <div className={`flex items-center gap-2 ${effectiveCollapsed ? 'px-2 justify-center' : 'px-5'} py-4 border-b border-gray-200 dark:border-gray-800`}>
               <img src="/axal-mark.png" alt="Axal VC" className="h-8 w-8 rounded-lg object-cover flex-shrink-0" />
-              <div>
-                <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">Axal VC</div>
-                <div className="text-[10px] text-gray-500 dark:text-gray-400">StudioOS v1.0</div>
-              </div>
-              {isAdmin && activeRole !== 'admin' && (
+              {!effectiveCollapsed && (
+                <div>
+                  <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">Axal VC</div>
+                  <div className="text-[10px] text-gray-500 dark:text-gray-400">StudioOS v1.0</div>
+                </div>
+              )}
+              {!effectiveCollapsed && isAdmin && activeRole !== 'admin' && (
                 <span className={`ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS[activeRole]}`}>
                   {ROLE_LABELS[activeRole]} View
                 </span>
               )}
-              <button className="ml-auto text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setSidebarOpen(false)} aria-label="Collapse sidebar" title="Collapse sidebar">
+              <button
+                className={`${effectiveCollapsed ? '' : 'ml-auto'} hidden lg:inline-flex text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800`}
+                onClick={toggleSidebarCollapsed}
+                aria-label={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                aria-expanded={!effectiveCollapsed}
+                title={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                {effectiveCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+              </button>
+              <button
+                className="lg:hidden ml-auto text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+                onClick={() => setSidebarOpen(false)}
+                aria-label="Close menu"
+                title="Close menu"
+              >
                 <X size={18} />
               </button>
             </div>
             {inSpinoutLab ? (
               <SpinoutLabSidebar onNavigate={closeOnMobileNav} />
             ) : (
-              <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} user={user} />
+              <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} />
             )}
-            <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-800">
+            <div className={`${effectiveCollapsed ? 'px-2' : 'px-5'} py-3 border-t border-gray-200 dark:border-gray-800`}>
               {user && (
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-gray-900 dark:text-gray-100 font-medium truncate">{user.name}</div>
-                    <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{user.email}</div>
-                    <span className={`inline-block mt-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${ROLE_COLORS[user.role] || 'bg-gray-100 text-gray-600'}`}>
-                      {ROLE_LABELS[user.role] || user.role}
+                effectiveCollapsed ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ROLE_COLORS[user.role] || 'bg-gray-100 text-gray-600'}`}
+                      title={`${user.name} — ${user.email}`}
+                    >
+                      {(user.name || user.email || '?').slice(0, 1).toUpperCase()}
                     </span>
+                    <button onClick={onLogout} className="text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors" title="Sign out" aria-label="Sign out">
+                      <LogOut size={16} />
+                    </button>
                   </div>
-                  <button onClick={onLogout} className="text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors" title="Sign out">
-                    <LogOut size={14} />
-                  </button>
-                </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs text-gray-900 dark:text-gray-100 font-medium truncate">{user.name}</div>
+                      <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{user.email}</div>
+                      <span className={`inline-block mt-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${ROLE_COLORS[user.role] || 'bg-gray-100 text-gray-600'}`}>
+                        {ROLE_LABELS[user.role] || user.role}
+                      </span>
+                    </div>
+                    <button onClick={onLogout} className="text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors" title="Sign out">
+                      <LogOut size={14} />
+                    </button>
+                  </div>
+                )
               )}
             </div>
           </aside>
