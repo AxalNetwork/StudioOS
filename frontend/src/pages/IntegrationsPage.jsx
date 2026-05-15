@@ -611,7 +611,9 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
                 </button>
                 {provider.supports_pat && (
                   <p className="mt-2 text-[11px] text-gray-500">
-                    Or paste a Personal Access Token below — useful if your workspace blocks third-party OAuth apps.
+                    {provider.key === 'hubspot'
+                      ? 'Or paste a Private App access token below — recommended while our public app is pending HubSpot Marketplace review.'
+                      : 'Or paste a Personal Access Token below — useful if your workspace blocks third-party OAuth apps.'}
                   </p>
                 )}
               </div>
@@ -622,9 +624,22 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
               </Field>
             )}
             {provider.auth_type === 'oauth2' && provider.supports_pat && !existing && (
-              <Field label="Personal Access Token (optional)">
-                <input type="password" className={inputCls} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="cal_pat_..." autoComplete="off" />
-                <p className="text-[11px] text-gray-500 mt-1">Generate one in {provider.display_name} → Integrations → API & Webhooks.</p>
+              <Field label={provider.key === 'hubspot' ? 'Private App access token' : 'Personal Access Token (optional)'}>
+                <input
+                  type="password"
+                  className={inputCls}
+                  value={apiKey}
+                  onChange={e => setApiKey(e.target.value)}
+                  placeholder={provider.key === 'hubspot' ? 'pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' : 'cal_pat_...'}
+                  autoComplete="off"
+                />
+                <p className="text-[11px] text-gray-500 mt-1">
+                  {provider.key === 'hubspot' ? (
+                    <>Create one in HubSpot → <strong>Settings → Integrations → Private Apps → Create private app</strong>. Required scopes: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">crm.objects.deals.read/write</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">crm.objects.contacts.read</code>.</>
+                  ) : (
+                    <>Generate one in {provider.display_name} → Integrations → API & Webhooks.</>
+                  )}
+                </p>
               </Field>
             )}
             <Field label="Webhook secret (optional)">
@@ -636,8 +651,12 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
             </Field>
             <div className="flex items-center justify-end gap-2 pt-2">
               <button type="button" onClick={onClose} className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 px-4 py-2">Cancel</button>
-              {provider.auth_type !== 'oauth2' || existing || (provider.supports_pat && apiKey) ? (
-                <button type="submit" disabled={busy} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
+              {provider.auth_type !== 'oauth2' || existing || provider.supports_pat ? (
+                <button
+                  type="submit"
+                  disabled={busy || (provider.auth_type === 'oauth2' && provider.supports_pat && !existing && !apiKey)}
+                  className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg"
+                >
                   {busy ? 'Saving…' : (existing ? 'Update' : 'Connect')}
                 </button>
               ) : null}

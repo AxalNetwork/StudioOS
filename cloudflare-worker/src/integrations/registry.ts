@@ -184,6 +184,11 @@ export const REGISTRY: ProviderDescriptor[] = [
     docs_url: 'https://developers.hubspot.com/docs/api/overview',
     icon: 'Building2',
     oauth_scopes: ['crm.objects.deals.read', 'crm.objects.deals.write', 'crm.objects.contacts.read'],
+    // Task #17 — HubSpot Public-App OAuth requires app marketplace
+    // publication on non-test portals; until that lands, customers can
+    // connect via a HubSpot Private App access token (long-lived bearer,
+    // no refresh). Provider `connect()` branches on `input.api_key` first.
+    supports_pat: true,
   },
   {
     key: 'calendly',
