@@ -102,9 +102,11 @@ export default function IntegrationsPage() {
       await refresh();
       showToast('Integration connected.');
     } catch (e) {
-      // 402 path is auto-handled by api.js (PaywallModal opens). Surface
-      // the message inside the modal for everything else.
-      if (e.status !== 402) setError(e.message);
+      // 402 path is auto-handled by api.js (PaywallModal opens). For
+      // everything else, RE-THROW so ConnectModal can surface the
+      // message inline in its own red banner (Task #17 — page-level
+      // error is hidden behind the modal overlay).
+      if (e.status !== 402) throw e;
     } finally {
       setBusy(false);
     }
@@ -529,7 +531,7 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
   const [err, setErr] = useState('');
   const tierLocked = !bypassesTier && provider.tier_locked;
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     setErr('');
     let config = {};
@@ -537,13 +539,21 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
       try { config = JSON.parse(configText); }
       catch { setErr('Config must be valid JSON.'); return; }
     }
-    onSubmit({
-      provider_key: provider.key,
-      display_name: displayName,
-      api_key: apiKey || undefined,
-      webhook_secret: webhookSecret || undefined,
-      config,
-    });
+    try {
+      await onSubmit({
+        provider_key: provider.key,
+        display_name: displayName,
+        api_key: apiKey || undefined,
+        webhook_secret: webhookSecret || undefined,
+        config,
+      });
+    } catch (ex) {
+      // Surface backend validation errors (e.g.
+      // hubspot_invalid_private_app_token, hubspot_requires_oauth_code_or_pat)
+      // inline in the modal's red banner so the user can correct and retry
+      // without losing the open form.
+      setErr(ex?.message || 'Connect failed.');
+    }
   };
 
   const startOauth = async () => {
@@ -654,7 +664,7 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
               {provider.auth_type !== 'oauth2' || existing || provider.supports_pat ? (
                 <button
                   type="submit"
-                  disabled={busy || (provider.auth_type === 'oauth2' && provider.supports_pat && !existing && !apiKey)}
+                  disabled={busy}
                   className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg"
                 >
                   {busy ? 'Saving…' : (existing ? 'Update' : 'Connect')}
