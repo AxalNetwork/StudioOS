@@ -165,6 +165,12 @@ async function getActiveAccessToken(env: Env, row: IntegrationRow): Promise<stri
 
   let creds = await decryptCredentials(env, row.uid, row.credentials_enc);
   if (!creds) throw new Error('hubspot_credentials_missing');
+  // Private App tokens are long-lived and have no refresh_token; return
+  // the access_token directly without touching the refresh code path.
+  if (creds.is_private_app === true || (!creds.refresh_token && !creds.expires_at)) {
+    const pat = typeof creds.access_token === 'string' ? creds.access_token as string : '';
+    if (pat) return pat;
+  }
   const live = isLive(creds);
   if (live) return live;
 
@@ -238,8 +244,38 @@ async function hsFetch(env: Env, row: IntegrationRow, path: string, init: Reques
 // ───────────────────────────────────────────────────────────── connect
 
 async function connect(c: Context<{ Bindings: Env }>, _user: User, input: ConnectInput): Promise<ConnectResult> {
+  // Private App path: long-lived bearer token pasted by the user.
+  // No refresh, no client_id/secret needed — HubSpot Private Apps issue
+  // a single non-expiring access token scoped to one portal.
+  const pat = String(input.api_key || '').trim();
+  if (pat) {
+    const info = await fetchTokenInfo(pat);
+    if (!info || !info.hub_id) {
+      throw new Error('hubspot_invalid_private_app_token: token rejected by HubSpot. Ensure it was copied from Settings → Integrations → Private Apps.');
+    }
+    const credentials: CredentialBlob = {
+      access_token: pat,
+      token_type: 'bearer',
+      is_private_app: true,
+    };
+    return {
+      credentials,
+      scopes: info.scopes || SCOPES,
+      external_account_id: info.hub_id ? String(info.hub_id) : null,
+      external_account_name: info.hub_domain || info.user || null,
+      capabilities: ['Push deals', 'Pull contacts', 'Two-way sync'],
+      config: {
+        portal_id: info.hub_id || null,
+        hub_domain: info.hub_domain || null,
+        authorising_user: info.user || null,
+        pipeline_id: 'default',
+        auth_mode: 'private_app',
+      },
+    };
+  }
+  // OAuth2 path (public app + marketplace install).
   if (!input.oauth_code) {
-    throw new Error('hubspot_requires_oauth_code: complete the OAuth handshake first.');
+    throw new Error('hubspot_requires_oauth_code_or_pat: complete the OAuth handshake first, or paste a Private App access token.');
   }
   const tokens = await exchangeCode(c.env, input.oauth_code);
   const info = await fetchTokenInfo(tokens.access_token);
@@ -260,6 +296,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
       hub_domain: info.hub_domain || null,
       authorising_user: info.user || null,
       pipeline_id: 'default',
+      auth_mode: 'oauth2',
     },
   };
 }
