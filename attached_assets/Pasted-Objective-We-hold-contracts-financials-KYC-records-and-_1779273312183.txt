@@ -1,0 +1,55 @@
+Objective
+  We hold contracts, financials, KYC records, and audit logs. A loss
+  event must be recoverable and a disclosure-ready playbook must
+  exist.
+
+Tasks
+
+  1. D1 backup
+     Daily cron:
+       wrangler d1 export studioos-db --output=backup-$(date +%F).sql
+     Worker uploads to R2 bucket studioos-backups with object-lock
+     (compliance mode), retention 365 days, lifecycle to Standard-IA
+     after 30 days.
+     One-shot restore script scripts/restore-d1.sh that takes a
+     backup file + target DB name and walks the operator through
+     the import.
+
+  2. R2 contracts versioning
+     Enable R2 versioning on the contracts + KYC buckets. Configure
+     lifecycle to retain previous versions for 7 years.
+
+  3. KV snapshots
+     Daily list-keys + value dump for non-ephemeral KV (rate-limit
+     state is ephemeral; tokens are short-lived; settings/state isn't
+     all that critical). Snapshot stored as JSONL in studioos-backups.
+
+  4. Restore drill
+     scripts/dr-drill.sh: provisions a fresh preview environment,
+     imports the latest backup, runs the smoke-test suite. Run
+     monthly via GitHub Actions; failure pages on-call.
+
+  5. Incident response playbook
+     /INCIDENT_RESPONSE.md committed. Sections:
+       - Severity definitions (SEV-1 to SEV-4)
+       - On-call rotation
+       - First 10-minute checklist (triage, comms, freeze)
+       - Internal comms channel
+       - Customer communication templates (status update, post-
+         mortem summary)
+       - Regulator notification timelines (GDPR 72h, SEC, etc.)
+       - Tabletop exercise schedule
+
+  6. Post-mortem template
+     /docs/POSTMORTEM_TEMPLATE.md. Required to be filled within 5
+     business days of any SEV-1 or SEV-2.
+
+  7. RTO / RPO commitments
+     Document target Recovery Time Objective (4h) and Recovery Point
+     Objective (24h backups + WAL where feasible).
+
+Acceptance
+  - First backup file visible in R2 within 24h of merging.
+  - Restore drill script runs end-to-end on the preview env.
+  - INCIDENT_RESPONSE.md + POSTMORTEM_TEMPLATE.md committed.
+  - On-call schedule documented.
