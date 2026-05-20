@@ -455,6 +455,17 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       console.info(`[mi.reducer] cells=${r.cells_written} suppressed=${r.cells_suppressed} fit_pairs=${r.fit_pairs_written} purged=${r.optout_purged}`);
       return;
     }
+    case 'email_send': {
+      // Task #2 (IB) — transactional email delivery. Payload is the
+      // rendered envelope produced by services/email/send.ts (subject,
+      // text, html, from, reply_to, list_unsubscribe, log_id, …).
+      // Failure throws so Cloudflare Queues retries up to max_retries
+      // and then DLQs onto studioos-job-queue-dlq.
+      const { deliverNow } = await import('./email/send');
+      const ok = await deliverNow(env, payload);
+      if (!ok) throw new Error(`email_send failed template=${payload?.template_key} log=${payload?.log_id}`);
+      return;
+    }
     default:
       throw new Error(`unknown job type ${job.job_type}`);
   }

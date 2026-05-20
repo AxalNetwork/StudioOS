@@ -32,7 +32,10 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { encryptString, decryptInt, decryptString } from '../services/cryptoBox';
+import { decryptInt, decryptString } from '../services/cryptoBox';
+import {
+  validateCheckinBody, validateDailyBody, encryptOrFallback,
+} from './wellbeing.helpers';
 import { notify } from '../services/notify';
 import {
   EXPERT_CATEGORIES, EXPERT_CATEGORY_FAMILIES,
@@ -187,6 +190,34 @@ async function ensureWellbeingSchema(env: Env): Promise<void> {
     try { await env.DB.prepare(sql).run(); }
     catch (e: any) { console.warn('[wellbeing] schema bootstrap stmt failed:', String(e?.message || e)); }
   }
+  // Task #33 — additive plaintext-fallback columns. ALTER TABLE ADD COLUMN
+  // is NOT idempotent in SQLite/D1; we swallow the duplicate-column error
+  // so this is safe on every cold start.
+  const ALTERS = [
+    `ALTER TABLE wellbeing_daily_pulses ADD COLUMN mood_plain INTEGER`,
+    `ALTER TABLE wellbeing_daily_pulses ADD COLUMN stress_plain INTEGER`,
+    `ALTER TABLE wellbeing_daily_pulses ADD COLUMN sleep_plain INTEGER`,
+    `ALTER TABLE wellbeing_daily_pulses ADD COLUMN energy_plain INTEGER`,
+    `ALTER TABLE wellbeing_daily_pulses ADD COLUMN focus_plain INTEGER`,
+    `ALTER TABLE wellbeing_daily_pulses ADD COLUMN social_plain INTEGER`,
+    `ALTER TABLE wellbeing_daily_pulses ADD COLUMN free_text_plain TEXT`,
+    `ALTER TABLE wellbeing_daily_pulses ADD COLUMN tags_plain TEXT`,
+    `ALTER TABLE wellbeing_checkins ADD COLUMN stress_plain INTEGER`,
+    `ALTER TABLE wellbeing_checkins ADD COLUMN sleep_plain INTEGER`,
+    `ALTER TABLE wellbeing_checkins ADD COLUMN support_plain INTEGER`,
+    `ALTER TABLE wellbeing_checkins ADD COLUMN decisions_plain INTEGER`,
+    `ALTER TABLE wellbeing_checkins ADD COLUMN energy_plain INTEGER`,
+    `ALTER TABLE wellbeing_checkins ADD COLUMN notes_plain TEXT`,
+  ];
+  for (const sql of ALTERS) {
+    try { await env.DB.prepare(sql).run(); }
+    catch (e: any) {
+      const msg = String(e?.message || e);
+      if (!/duplicate column|already exists/i.test(msg)) {
+        console.warn('[wellbeing] ALTER failed:', msg);
+      }
+    }
+  }
   _schemaReady = true;
 }
 
@@ -200,15 +231,29 @@ type CheckinRow = {
   created_at: string;
 };
 
-async function serializeOwn(env: Env, row: CheckinRow) {
-  const [stress, sleep, support, decisions, energy, notes] = await Promise.all([
-    decryptInt(env, row.stress_enc),
-    decryptInt(env, row.sleep_enc),
-    decryptInt(env, row.support_enc),
-    decryptInt(env, row.decisions_enc),
-    decryptInt(env, row.energy_enc),
-    row.notes_enc ? decryptString(env, row.notes_enc) : Promise.resolve(null),
+async function serializeOwn(env: Env, row: CheckinRow & {
+  stress_plain?: number | null; sleep_plain?: number | null;
+  support_plain?: number | null; decisions_plain?: number | null;
+  energy_plain?: number | null; notes_plain?: string | null;
+}) {
+  // Task #33 — plaintext fallback columns win when ciphertext is missing.
+  const pick = async (enc: string | null, plain: number | null | undefined) => {
+    if (enc) {
+      const v = await decryptInt(env, enc);
+      if (v != null) return v;
+    }
+    return plain ?? null;
+  };
+  const [stress, sleep, support, decisions, energy] = await Promise.all([
+    pick(row.stress_enc, row.stress_plain),
+    pick(row.sleep_enc, row.sleep_plain),
+    pick(row.support_enc, row.support_plain),
+    pick(row.decisions_enc, row.decisions_plain),
+    pick(row.energy_enc, row.energy_plain),
   ]);
+  let notes: string | null = null;
+  if (row.notes_enc) notes = await decryptString(env, row.notes_enc);
+  if (notes == null) notes = row.notes_plain ?? null;
   return {
     id: row.id, uid: row.uid, week_anchor: row.week_anchor,
     created_at: row.created_at,
@@ -216,68 +261,95 @@ async function serializeOwn(env: Env, row: CheckinRow) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Task #33 — POST /checkins now uses the CANONICAL daily-pulse schema
+// (mood / stress / sleep / energy / focus / social[connection], tags,
+// free_text) and writes to `wellbeing_daily_pulses`. The legacy weekly
+// columns (`support`, `decisions`, `notes`) are no longer accepted on
+// write — they remain in the DB for historical reads via the read path
+// below, but no new code path writes to `wellbeing_checkins`.
+//
+// The handler logic is extracted into `submitCanonicalCheckin()` so it
+// can be unit-tested against a stubbed env.DB without booting Hono.
+// `POST /daily` is now a thin alias for the same handler.
+// ---------------------------------------------------------------------------
+export type CanonicalCheckinResult =
+  | { status: 201; body: any }
+  | { status: 400; body: { error: string; fields: Record<string, string> } }
+  | { status: 500; body: { error: string } };
+
+export async function submitCanonicalCheckin(
+  env: Env, userId: number, body: any,
+): Promise<CanonicalCheckinResult> {
+  const v = validateDailyBody(body);
+  if (!v.ok) return { status: 400, body: { error: 'Invalid input', fields: v.fields } };
+
+  const [m, s, sl, en, fo, so] = await Promise.all([
+    encryptOrFallback(env, v.values.mood),
+    encryptOrFallback(env, v.values.stress),
+    encryptOrFallback(env, v.values.sleep),
+    encryptOrFallback(env, v.values.energy),
+    encryptOrFallback(env, v.values.focus),
+    encryptOrFallback(env, v.values.social),
+  ]);
+  const ft = await encryptOrFallback<string>(env, v.free_text);
+  const tagsStr = v.tags.length ? JSON.stringify(v.tags) : null;
+  const tg = await encryptOrFallback<string>(env, tagsStr);
+  const newUid = uuidHex();
+
+  try {
+    await env.DB.prepare(
+      `INSERT INTO wellbeing_daily_pulses
+         (uid, user_id, day,
+          mood_enc, stress_enc, sleep_enc, energy_enc, focus_enc, social_enc,
+          free_text_enc, tags_enc,
+          mood_plain, stress_plain, sleep_plain, energy_plain, focus_plain, social_plain,
+          free_text_plain, tags_plain,
+          created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(user_id, day) DO UPDATE SET
+         mood_enc = excluded.mood_enc, stress_enc = excluded.stress_enc,
+         sleep_enc = excluded.sleep_enc, energy_enc = excluded.energy_enc,
+         focus_enc = excluded.focus_enc, social_enc = excluded.social_enc,
+         free_text_enc = excluded.free_text_enc, tags_enc = excluded.tags_enc,
+         mood_plain = excluded.mood_plain, stress_plain = excluded.stress_plain,
+         sleep_plain = excluded.sleep_plain, energy_plain = excluded.energy_plain,
+         focus_plain = excluded.focus_plain, social_plain = excluded.social_plain,
+         free_text_plain = excluded.free_text_plain, tags_plain = excluded.tags_plain,
+         created_at = excluded.created_at`,
+    ).bind(
+      newUid, userId, v.day,
+      m.enc, s.enc, sl.enc, en.enc, fo.enc, so.enc,
+      ft.enc, tg.enc,
+      m.plain, s.plain, sl.plain, en.plain, fo.plain, so.plain,
+      ft.plain, tg.plain,
+    ).run();
+  } catch (e: any) {
+    console.warn('[wellbeing] /checkins insert failed:', String(e?.message || e));
+    return { status: 500, body: { error: "Couldn't save — try again. If this persists, contact support." } };
+  }
+
+  const row = await env.DB.prepare(
+    'SELECT * FROM wellbeing_daily_pulses WHERE user_id = ? AND day = ?',
+  ).bind(userId, v.day).first<DailyRow>();
+  if (!row) {
+    return { status: 500, body: { error: "Couldn't save — try again. If this persists, contact support." } };
+  }
+  const serialized = await serializeDaily(env, row as any);
+  return {
+    status: 201,
+    body: { ok: true, captured_at: row.created_at, ...serialized, id: row.id },
+  };
+}
+
 wellbeing.post('/checkins', async (c) => {
   const user = await requireAuth(c);
   const r = role(user);
-  if (r !== 'founder' && r !== 'admin') {
-    return c.json({ detail: 'Founders only' }, 403);
-  }
+  if (r === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
   await ensureWellbeingSchema(c.env);
-
   const body = await c.req.json().catch(() => ({}));
-  const intAnswer = (k: QKey) => {
-    const v = Number((body as any)?.[k]);
-    if (!Number.isInteger(v) || v < 1 || v > 5) {
-      throw new Error(`Field ${k} must be an integer 1..5`);
-    }
-    return v;
-  };
-  let answers: Record<QKey, number>;
-  try {
-    answers = {
-      stress: intAnswer('stress'), sleep: intAnswer('sleep'),
-      support: intAnswer('support'), decisions: intAnswer('decisions'),
-      energy: intAnswer('energy'),
-    };
-  } catch (e: any) {
-    return c.json({ detail: e?.message || 'Invalid payload' }, 400);
-  }
-  const rawNotes = (body as any)?.notes ?? null;
-  if (rawNotes != null && (typeof rawNotes !== 'string' || rawNotes.length > 4000)) {
-    return c.json({ detail: 'notes must be a string ≤ 4000 chars' }, 400);
-  }
-
-  const anchor = weekAnchor();
-  const newUid = uuidHex();
-  const [s_e, sl_e, su_e, d_e, en_e] = await Promise.all([
-    encryptString(c.env, String(answers.stress)),
-    encryptString(c.env, String(answers.sleep)),
-    encryptString(c.env, String(answers.support)),
-    encryptString(c.env, String(answers.decisions)),
-    encryptString(c.env, String(answers.energy)),
-  ]);
-  const notesEnc = rawNotes ? await encryptString(c.env, rawNotes) : null;
-
-  await c.env.DB.prepare(
-    `INSERT INTO wellbeing_checkins
-       (uid, user_id, week_anchor, stress_enc, sleep_enc, support_enc,
-        decisions_enc, energy_enc, notes_enc, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-     ON CONFLICT(user_id, week_anchor) DO UPDATE SET
-       stress_enc    = excluded.stress_enc,
-       sleep_enc     = excluded.sleep_enc,
-       support_enc   = excluded.support_enc,
-       decisions_enc = excluded.decisions_enc,
-       energy_enc    = excluded.energy_enc,
-       notes_enc     = excluded.notes_enc,
-       created_at    = excluded.created_at`,
-  ).bind(newUid, user.id, anchor, s_e, sl_e, su_e, d_e, en_e, notesEnc).run();
-
-  const row = await c.env.DB.prepare(
-    'SELECT * FROM wellbeing_checkins WHERE user_id = ? AND week_anchor = ?',
-  ).bind(user.id, anchor).first<CheckinRow>();
-  if (!row) return c.json({ detail: 'Insert failed' }, 500);
-  return c.json(await serializeOwn(c.env, row));
+  const result = await submitCanonicalCheckin(c.env, user.id, body);
+  return c.json(result.body, result.status);
 });
 
 wellbeing.get('/checkins', async (c) => {
@@ -285,32 +357,27 @@ wellbeing.get('/checkins', async (c) => {
   if (role(user) === 'investor') {
     return c.json({ detail: 'Not available for investors' }, 403);
   }
-  const limitRaw = Number(c.req.query('limit') ?? 26);
-  const limit = Math.max(1, Math.min(Number.isFinite(limitRaw) ? limitRaw : 26, 200));
+  const limitRaw = Number(c.req.query('limit') ?? 30);
+  const limit = Math.max(1, Math.min(Number.isFinite(limitRaw) ? limitRaw : 30, 200));
   try {
     await ensureWellbeingSchema(c.env);
+    // Canonical read path is the daily-pulse table (Task #33).
     const res = await c.env.DB.prepare(
-      `SELECT * FROM wellbeing_checkins
+      `SELECT * FROM wellbeing_daily_pulses
          WHERE user_id = ?
-         ORDER BY created_at DESC
+         ORDER BY day DESC
          LIMIT ?`,
-    ).bind(user.id, limit).all<CheckinRow>();
-    const rows = (res.results || []) as CheckinRow[];
-    const serialized = await Promise.all(rows.map((r) => serializeOwn(c.env, r)));
-    const thisWeek = weekAnchor();
+    ).bind(user.id, limit).all<DailyRow>();
+    const rows = (res.results || []) as DailyRow[];
+    const serialized = await Promise.all(rows.map((r) => serializeDaily(c.env, r)));
     return c.json({
       checkins: serialized,
-      this_week_anchor: thisWeek,
-      submitted_this_week: rows.some((r) => r.week_anchor === thisWeek),
+      today: todayUTC(),
+      submitted_today: rows.some((r) => r.day === todayUTC()),
     });
   } catch (e: any) {
-    // Defensive: never 500 the page on a fresh / migrating DB.
-    console.warn('[wellbeing] /checkins failed, returning empty:', String(e?.message || e));
-    return c.json({
-      checkins: [],
-      this_week_anchor: weekAnchor(),
-      submitted_this_week: false,
-    });
+    console.warn('[wellbeing] /checkins read failed, returning empty:', String(e?.message || e));
+    return c.json({ checkins: [], today: todayUTC(), submitted_today: false });
   }
 });
 
@@ -328,28 +395,47 @@ type DailyRow = {
 // only consumer of free_text is the authoring founder (no admin/aggregate
 // path reads it), so paraphrasing-on-display would be a no-op — we keep the
 // invariant by never exposing free_text via /aggregate or any other endpoint.
-async function serializeDaily(env: Env, row: DailyRow) {
-  const dec = async (s: string | null) => {
-    if (!s) return null;
-    try { return await decryptInt(env, s); } catch { return null; }
+async function serializeDaily(env: Env, row: DailyRow & {
+  mood_plain?: number | null; stress_plain?: number | null;
+  sleep_plain?: number | null; energy_plain?: number | null;
+  focus_plain?: number | null; social_plain?: number | null;
+  free_text_plain?: string | null; tags_plain?: string | null;
+}) {
+  // Task #33 — plaintext fallback columns win when ciphertext is missing
+  // or fails to decrypt (e.g. JWT_SECRET was rotated mid-flight).
+  const pick = async (enc: string | null, plain: number | null | undefined) => {
+    if (enc) {
+      try { const v = await decryptInt(env, enc); if (v != null) return v; } catch { /* fall through */ }
+    }
+    return plain ?? null;
   };
   const [mood, stress, sleep, energy, focus, social] = await Promise.all([
-    dec(row.mood_enc), dec(row.stress_enc), dec(row.sleep_enc),
-    dec(row.energy_enc), dec(row.focus_enc), dec(row.social_enc),
+    pick(row.mood_enc, row.mood_plain),
+    pick(row.stress_enc, row.stress_plain),
+    pick(row.sleep_enc, row.sleep_plain),
+    pick(row.energy_enc, row.energy_plain),
+    pick(row.focus_enc, row.focus_plain),
+    pick(row.social_enc, row.social_plain),
   ]);
   let free_text: string | null = null;
   if (row.free_text_enc) {
-    try { free_text = await decryptString(env, row.free_text_enc); }
-    catch { free_text = null; }
+    try { free_text = await decryptString(env, row.free_text_enc); } catch { /* fall */ }
   }
+  if (free_text == null) free_text = row.free_text_plain ?? null;
+
   let tags: string[] = [];
-  if (row.tags_enc) {
+  const parseTags = (s: string | null | undefined) => {
+    if (!s) return [];
     try {
-      const decoded = await decryptString(env, row.tags_enc);
-      const parsed = JSON.parse(decoded || '[]');
-      tags = Array.isArray(parsed) ? parsed.map((x: any) => String(x)) : [];
-    } catch { tags = []; }
+      const parsed = JSON.parse(s);
+      return Array.isArray(parsed) ? parsed.map((x: any) => String(x)) : [];
+    } catch { return []; }
+  };
+  if (row.tags_enc) {
+    try { tags = parseTags(await decryptString(env, row.tags_enc)); } catch { tags = []; }
   }
+  if (!tags.length && row.tags_plain) tags = parseTags(row.tags_plain);
+
   return {
     id: row.id, uid: row.uid, day: row.day,
     mood, stress, sleep, energy, focus, social,
@@ -357,75 +443,15 @@ async function serializeDaily(env: Env, row: DailyRow) {
   };
 }
 
-const DAILY_KEYS = ['mood', 'stress', 'sleep', 'energy', 'focus', 'social'] as const;
-type DKey = typeof DAILY_KEYS[number];
-
+// Task #33 — POST /daily is now a backward-compat alias for the
+// canonical /checkins handler (same body schema, same response shape).
 wellbeing.post('/daily', async (c) => {
   const user = await requireAuth(c);
-  const r = role(user);
-  if (r === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
+  if (role(user) === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
   await ensureWellbeingSchema(c.env);
-
   const body = await c.req.json().catch(() => ({}));
-  const day = String((body as any)?.day || todayUTC()).slice(0, 10);
-  const vals: Record<DKey, number | null> = {
-    mood: null, stress: null, sleep: null, energy: null, focus: null, social: null,
-  };
-  for (const k of DAILY_KEYS) {
-    const raw = (body as any)?.[k];
-    if (raw == null || raw === '') continue;
-    const n = Number(raw);
-    if (!Number.isInteger(n) || n < 1 || n > 5) {
-      return c.json({ detail: `${k} must be integer 1..5` }, 400);
-    }
-    vals[k] = n;
-  }
-  const rawText = (body as any)?.free_text ?? null;
-  if (rawText != null && (typeof rawText !== 'string' || rawText.length > 4000)) {
-    return c.json({ detail: 'free_text must be a string ≤ 4000 chars' }, 400);
-  }
-  const tagsArr = Array.isArray((body as any)?.tags)
-    ? ((body as any).tags as any[]).filter((x) => typeof x === 'string').slice(0, 16)
-    : [];
-
-  // Encrypt every metric + free_text + tags so the at-rest privacy contract
-  // applies to all daily wellbeing data, not just the free-text fields.
-  const encMaybe = (n: number | null) =>
-    n == null ? Promise.resolve<string | null>(null) : encryptString(c.env, String(n));
-  const [
-    mood_enc, stress_enc, sleep_enc, energy_enc, focus_enc, social_enc,
-  ] = await Promise.all([
-    encMaybe(vals.mood), encMaybe(vals.stress), encMaybe(vals.sleep),
-    encMaybe(vals.energy), encMaybe(vals.focus), encMaybe(vals.social),
-  ]);
-  const free_text_enc = rawText ? await encryptString(c.env, rawText) : null;
-  const tags_enc = tagsArr.length ? await encryptString(c.env, JSON.stringify(tagsArr)) : null;
-  const newUid = uuidHex();
-
-  await c.env.DB.prepare(
-    `INSERT INTO wellbeing_daily_pulses
-       (uid, user_id, day, mood_enc, stress_enc, sleep_enc,
-        energy_enc, focus_enc, social_enc,
-        free_text_enc, tags_enc, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-     ON CONFLICT(user_id, day) DO UPDATE SET
-       mood_enc = excluded.mood_enc, stress_enc = excluded.stress_enc,
-       sleep_enc = excluded.sleep_enc, energy_enc = excluded.energy_enc,
-       focus_enc = excluded.focus_enc, social_enc = excluded.social_enc,
-       free_text_enc = excluded.free_text_enc, tags_enc = excluded.tags_enc,
-       created_at = excluded.created_at`,
-  ).bind(
-    newUid, user.id, day,
-    mood_enc, stress_enc, sleep_enc,
-    energy_enc, focus_enc, social_enc,
-    free_text_enc, tags_enc,
-  ).run();
-
-  const row = await c.env.DB.prepare(
-    'SELECT * FROM wellbeing_daily_pulses WHERE user_id = ? AND day = ?',
-  ).bind(user.id, day).first<DailyRow>();
-  if (!row) return c.json({ detail: 'Insert failed' }, 500);
-  return c.json(await serializeDaily(c.env, row));
+  const result = await submitCanonicalCheckin(c.env, user.id, body);
+  return c.json(result.body, result.status);
 });
 
 wellbeing.get('/daily', async (c) => {
@@ -470,11 +496,27 @@ wellbeing.get('/aggregate', async (c) => {
   try {
     await ensureWellbeingSchema(c.env);
     const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
-    const res = await c.env.DB.prepare(
-      `SELECT user_id, stress_enc, sleep_enc, support_enc, decisions_enc, energy_enc
-         FROM wellbeing_checkins
-        WHERE created_at >= ?`,
-    ).bind(cutoff).all<Pick<CheckinRow, 'user_id' | 'stress_enc' | 'sleep_enc' | 'support_enc' | 'decisions_enc' | 'energy_enc'>>();
+    // Task #33 — canonical read path is now `wellbeing_daily_pulses` since
+    // /checkins POST writes there. We tolerate the `*_plain` fallback
+    // columns being absent on stale dev DBs by retrying without them.
+    const cols = 'user_id, mood_enc, stress_enc, sleep_enc, energy_enc, focus_enc, social_enc';
+    let res: any;
+    try {
+      res = await c.env.DB.prepare(
+        `SELECT ${cols},
+                mood_plain, stress_plain, sleep_plain, energy_plain, focus_plain, social_plain
+           FROM wellbeing_daily_pulses
+          WHERE created_at >= ?`,
+      ).bind(cutoff).all<any>();
+    } catch (e: any) {
+      if (/no such column/i.test(String(e?.message || ''))) {
+        res = await c.env.DB.prepare(
+          `SELECT ${cols}
+             FROM wellbeing_daily_pulses
+            WHERE created_at >= ?`,
+        ).bind(cutoff).all<any>();
+      } else { throw e; }
+    }
     const rows = res.results || [];
     const distinct = new Set(rows.map((r: any) => r.user_id));
     const cohort = distinct.size;
@@ -493,17 +535,22 @@ wellbeing.get('/aggregate', async (c) => {
         averages: null,
       });
     }
-    const buckets: Record<QKey, number[]> = {
-      stress: [], sleep: [], support: [], decisions: [], energy: [],
+    const AGG_KEYS = ['mood', 'stress', 'sleep', 'energy', 'focus', 'social'] as const;
+    const buckets: Record<typeof AGG_KEYS[number], number[]> = {
+      mood: [], stress: [], sleep: [], energy: [], focus: [], social: [],
     };
     for (const r of rows as any[]) {
-      for (const k of QUESTION_KEYS) {
-        const v = await decryptInt(c.env, r[`${k}_enc`]);
+      for (const k of AGG_KEYS) {
+        let v = await decryptInt(c.env, r[`${k}_enc`]);
+        if (v == null && r[`${k}_plain`] != null) {
+          const n = Number(r[`${k}_plain`]);
+          if (Number.isInteger(n) && n >= 1 && n <= 5) v = n;
+        }
         if (v != null) buckets[k].push(v);
       }
     }
-    const averages: Record<QKey, number | null> = {} as any;
-    for (const k of QUESTION_KEYS) {
+    const averages: Record<string, number | null> = {};
+    for (const k of AGG_KEYS) {
       averages[k] = buckets[k].length
         ? Math.round((buckets[k].reduce((s, v) => s + v, 0) / buckets[k].length) * 10) / 10
         : null;

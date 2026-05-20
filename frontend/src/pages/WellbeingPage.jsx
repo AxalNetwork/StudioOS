@@ -96,18 +96,30 @@ function DailyPulseCard({ alreadyToday, initialValues, initialTags, onSubmitted 
   const [saving, setSaving] = useState(false);
   const [ok, setOk] = useState(false);
   const [err, setErr] = useState(null);
+  // Task #33 — per-field validation errors returned by POST /api/wellbeing/daily
+  // (shape: { error, fields: { mood?: '...', stress?: '...', ... } }). Rendered
+  // inline under each slider / textarea so the user knows exactly what to fix.
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const toggleTag = (t) =>
     setTags((cur) => cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t].slice(0, 8));
 
   const submit = async () => {
-    setSaving(true); setErr(null); setOk(false);
+    setSaving(true); setErr(null); setOk(false); setFieldErrors({});
     try {
       await api.wellbeingDailySubmit({ ...values, free_text: text || null, tags });
       setOk(true);
       onSubmitted?.();
     } catch (e) {
-      setErr(e.message || 'Failed to save');
+      // 400 carries { error, fields } — show inline. 5xx → friendly retry banner.
+      if (e?.status === 400 && e?.data?.fields) {
+        setFieldErrors(e.data.fields);
+        setErr(null);
+      } else if (e?.status >= 500) {
+        setErr("Couldn't save — try again. If this persists, contact support.");
+      } else {
+        setErr(e.message || 'Failed to save');
+      }
     } finally {
       setSaving(false);
     }
@@ -132,18 +144,24 @@ function DailyPulseCard({ alreadyToday, initialValues, initialTags, onSubmitted 
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
-        {DAILY_QUESTIONS.map((q) => (
-          <div key={q.key}>
-            <div className="text-sm font-medium text-slate-700 mb-1.5">{q.label}</div>
-            <Slider
-              value={values[q.key]}
-              onChange={(n) => setValues((v) => ({ ...v, [q.key]: n }))}
-              lowLabel={q.lowLabel}
-              highLabel={q.highLabel}
-              invert={q.invert}
-            />
-          </div>
-        ))}
+        {DAILY_QUESTIONS.map((q) => {
+          // Worker may return either `social` (canonical) or `connection`
+          // (task-spec alias) as the field key. Show whichever is present.
+          const fe = fieldErrors[q.key] || (q.key === 'social' ? fieldErrors.connection : null);
+          return (
+            <div key={q.key}>
+              <div className="text-sm font-medium text-slate-700 mb-1.5">{q.label}</div>
+              <Slider
+                value={values[q.key]}
+                onChange={(n) => setValues((v) => ({ ...v, [q.key]: n }))}
+                lowLabel={q.lowLabel}
+                highLabel={q.highLabel}
+                invert={q.invert}
+              />
+              {fe && <div role="alert" className="mt-1 text-xs text-red-600">{fe}</div>}
+            </div>
+          );
+        })}
       </div>
 
       <div className="mt-4">
@@ -164,6 +182,10 @@ function DailyPulseCard({ alreadyToday, initialValues, initialTags, onSubmitted 
         </div>
       </div>
 
+      {fieldErrors.tags && (
+        <div role="alert" className="mt-2 text-xs text-red-600">{fieldErrors.tags}</div>
+      )}
+
       <div className="mt-4">
         <label className="text-sm font-medium text-slate-700">Anything else? (optional)</label>
         <textarea
@@ -174,6 +196,9 @@ function DailyPulseCard({ alreadyToday, initialValues, initialTags, onSubmitted 
           placeholder="Encrypted at rest. Only you can read this."
           className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/30"
         />
+        {fieldErrors.free_text && (
+          <div role="alert" className="mt-1 text-xs text-red-600">{fieldErrors.free_text}</div>
+        )}
       </div>
 
       {err && <div className="mt-3 text-sm text-red-600">{err}</div>}

@@ -24,7 +24,10 @@ import {
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
   fetchUserEvents, eventsToIcs,
   syncUserToGoogle, syncUserToMicrosoft,
+  googleRedirectUri, microsoftRedirectUri,
+  preflightOAuthSecrets,
 } from '../services/calendar';
+export { preflightOAuthSecrets };
 import { encryptString } from '../services/cryptoBox';
 
 const calendar = new Hono<{ Bindings: Env }>();
@@ -405,16 +408,69 @@ calendar.get('/google/status', safe('g_status', 'Could not load Google status', 
   });
 }));
 
-calendar.post('/google/connect', safe('g_connect', 'Could not start Google OAuth', async (c) => {
-  const user = await requireAuth(c);
-  if (!googleOAuthAvailable(c.env)) {
-    return c.json({ detail: 'Google OAuth not configured on server' }, 503);
+/**
+ * Task #35 — pure helper exposed for testing. Returns the JSON body +
+ * HTTP status that `/google/start` should send. Side effect: persists the
+ * OAuth state row when secrets are healthy. Split out of the Hono handler
+ * so the regression test can drive it without booting the Hono app or
+ * synthesising a JWT cookie.
+ */
+export async function buildGoogleOAuthStartResponse(
+  env: Env,
+  userId: number,
+): Promise<{ status: 200 | 500; body: any }> {
+  const missing = preflightOAuthSecrets(env, 'google');
+  if (missing.length > 0) {
+    return {
+      status: 500,
+      body: {
+        error: {
+          code: 'oauth_config_missing',
+          message: `Google Calendar OAuth is not fully configured on the server. Missing: ${missing.join(', ')}.`,
+          missing,
+        },
+      },
+    };
   }
   const nonce = crypto.randomUUID().replace(/-/g, '');
-  await persistState(c.env, nonce, user.id, 'google');
-  const state = await makeState(c.env, nonce);
-  return c.json({ auth_url: buildGoogleAuthUrl(c.env, state) });
-}));
+  await persistState(env, nonce, userId, 'google');
+  const state = await makeState(env, nonce);
+  const url = buildGoogleAuthUrl(env, state);
+  return { status: 200, body: { redirect_url: url, auth_url: url } };
+}
+
+export async function buildMicrosoftOAuthStartResponse(
+  env: Env,
+  userId: number,
+): Promise<{ status: 200 | 500; body: any }> {
+  const missing = preflightOAuthSecrets(env, 'microsoft');
+  if (missing.length > 0) {
+    return {
+      status: 500,
+      body: {
+        error: {
+          code: 'oauth_config_missing',
+          message: `Outlook Calendar OAuth is not fully configured on the server. Missing: ${missing.join(', ')}.`,
+          missing,
+        },
+      },
+    };
+  }
+  const nonce = crypto.randomUUID().replace(/-/g, '');
+  await persistState(env, nonce, userId, 'microsoft');
+  const state = await makeState(env, nonce);
+  const url = buildMicrosoftAuthUrl(env, state);
+  return { status: 200, body: { redirect_url: url, auth_url: url } };
+}
+
+async function startGoogleOAuth(c: any) {
+  const user = await requireAuth(c);
+  const { status, body } = await buildGoogleOAuthStartResponse(c.env, user.id);
+  return c.json(body, status);
+}
+calendar.post('/google/connect', safe('g_connect', 'Could not start Google OAuth', startGoogleOAuth));
+calendar.get('/google/start',    safe('g_start',   'Could not start Google OAuth', startGoogleOAuth));
+calendar.post('/google/start',   safe('g_start',   'Could not start Google OAuth', startGoogleOAuth));
 
 calendar.get('/google/callback', async (c) => {
   // Intentionally no requireAuth — the user_id comes from the state row.
@@ -508,16 +564,16 @@ calendar.get('/microsoft/status', safe('m_status', 'Could not load Microsoft sta
   });
 }));
 
-calendar.post('/microsoft/connect', safe('m_connect', 'Could not start Microsoft OAuth', async (c) => {
+async function startMicrosoftOAuth(c: any) {
   const user = await requireAuth(c);
-  if (!microsoftOAuthAvailable(c.env)) {
-    return c.json({ detail: 'Microsoft OAuth not configured on server' }, 503);
-  }
-  const nonce = crypto.randomUUID().replace(/-/g, '');
-  await persistState(c.env, nonce, user.id, 'microsoft');
-  const state = await makeState(c.env, nonce);
-  return c.json({ auth_url: buildMicrosoftAuthUrl(c.env, state) });
-}));
+  const { status, body } = await buildMicrosoftOAuthStartResponse(c.env, user.id);
+  return c.json(body, status);
+}
+calendar.post('/microsoft/connect', safe('m_connect', 'Could not start Microsoft OAuth', startMicrosoftOAuth));
+calendar.get('/microsoft/start',    safe('m_start',   'Could not start Microsoft OAuth', startMicrosoftOAuth));
+calendar.post('/microsoft/start',   safe('m_start',   'Could not start Microsoft OAuth', startMicrosoftOAuth));
+calendar.get('/outlook/start',      safe('o_start',   'Could not start Outlook OAuth',   startMicrosoftOAuth));
+calendar.post('/outlook/start',     safe('o_start',   'Could not start Outlook OAuth',   startMicrosoftOAuth));
 
 calendar.get('/microsoft/callback', async (c) => {
   try {

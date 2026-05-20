@@ -466,6 +466,31 @@ billing.post('/stripe/webhook', async (c) => {
     return c.json({ error: 'invalid_payload' }, 400);
   }
   await handleStripeEvent(c.env, event);
+  // Task #9 — Refer & Earn Connect events. Same webhook endpoint, dispatched
+  // by event type. `account.updated` mirrors the Connect account flags onto
+  // users.*; `transfer.paid` / `transfer.failed` close the referral_payouts
+  // lifecycle.
+  try {
+    const ev = event as { type: string; account?: string; data: { object: Record<string, unknown> } };
+    if (ev.type === 'account.updated') {
+      const { applyConnectAccountUpdated } = await import('../services/referralPayouts');
+      await applyConnectAccountUpdated(c.env, ev.data.object as Parameters<typeof applyConnectAccountUpdated>[1]);
+    } else if (ev.type === 'transfer.paid') {
+      const transferId = (ev.data.object as { id?: string }).id;
+      if (transferId) {
+        const { applyTransferPaid } = await import('../services/referralPayouts');
+        await applyTransferPaid(c.env, transferId);
+      }
+    } else if (ev.type === 'transfer.failed' || ev.type === 'transfer.reversed') {
+      const obj = ev.data.object as { id?: string; failure_message?: string; failure_code?: string };
+      if (obj.id) {
+        const { applyTransferFailed } = await import('../services/referralPayouts');
+        await applyTransferFailed(c.env, obj.id, obj.failure_message || obj.failure_code || ev.type);
+      }
+    }
+  } catch (e) {
+    console.warn('[billing] refer-earn webhook dispatch failed:', (e as Error).message);
+  }
   return c.json({ received: true });
 });
 

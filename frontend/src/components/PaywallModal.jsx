@@ -13,7 +13,10 @@ import { Lock, Check, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 
-const TIER_PLANS = {
+// Task #4 (ID) — Exported so the public /pricing page can derive its
+// feature lists from the same source-of-truth instead of duplicating
+// them and drifting over time. See `frontend/src/data/pricing.js`.
+export const TIER_PLANS = {
   growth: {
     label: 'Growth',
     price: '$79',

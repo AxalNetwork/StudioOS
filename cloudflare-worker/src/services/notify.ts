@@ -81,6 +81,16 @@ async function ensureInbox(env: Env): Promise<boolean> {
       `CREATE INDEX IF NOT EXISTS idx_inbox_user_unread
          ON notifications_inbox(user_id, read_at, created_at)`,
     ).run();
+    // Task #2 (IB) — spec columns. Idempotent ALTERs so dev/preview D1
+    // that never ran migration 053 still serves new writes & reads.
+    for (const ddl of [
+      `ALTER TABLE notifications_inbox ADD COLUMN category TEXT`,
+      `ALTER TABLE notifications_inbox ADD COLUMN severity TEXT DEFAULT 'info'`,
+      `ALTER TABLE notifications_inbox ADD COLUMN cta_url TEXT`,
+      `ALTER TABLE notifications_inbox ADD COLUMN template_key TEXT`,
+    ]) {
+      try { await env.DB.prepare(ddl).run(); } catch { /* already-exists is fine */ }
+    }
     // Task #14 — outbox for digest + quiet-hours buffering (mirrors
     // sql/migrations/013_notifications_digest.sql so dev/preview that
     // never run wrangler d1 execute still work).
@@ -279,9 +289,18 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
 
     let rowId: number | null = null;
     if (resolved.includes('in_app')) {
+      // Task #2 (IB) — also stamp category/severity/cta_url/template_key
+      // so the Notification Center UI can filter + render CTA buttons
+      // without re-parsing payload. Severity derives from isCritical
+      // when caller didn't pass one explicitly (CRITICAL_CATEGORIES set).
+      const severity = isCritical ? 'critical' : 'info';
+      const ctaUrl = args.link ?? null;
+      const templateKey = (args.payload as any)?.template_key ?? null;
       const insert: any = await env.DB.prepare(
-        `INSERT INTO notifications_inbox (user_id, type, title, body, link, payload, channel)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO notifications_inbox
+           (user_id, type, title, body, link, payload, channel,
+            category, severity, cta_url, template_key)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         args.userId,
         args.type,
@@ -290,6 +309,10 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
         args.link ?? null,
         args.payload ? JSON.stringify(args.payload) : null,
         resolved.join(','),
+        args.category ?? null,
+        severity,
+        ctaUrl,
+        templateKey,
       ).run();
       rowId = Number(insert?.meta?.last_row_id || 0) || null;
 

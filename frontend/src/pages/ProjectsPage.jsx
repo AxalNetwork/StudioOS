@@ -9,6 +9,10 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 import { StatusBadge, WeekBadge } from './Dashboard';
 import VirtualList from '../components/VirtualList';
 import { useToast } from '../components/useToast';
+import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
+import Skeleton from '../components/Skeleton';
+import { Rocket } from 'lucide-react';
 
 // T24 — Single line per row with py-3.
 const PROJECT_ROW_HEIGHT = 52;
@@ -158,18 +162,22 @@ export default function ProjectsPage() {
       </div>
 
       {loading ? (
-        <div className="text-gray-600 text-center py-10 text-sm">Loading...</div>
+        <Skeleton.Table rows={6} cols={5} />
       ) : loadError ? (
-        <div className="bg-white border border-red-200 rounded-xl px-5 py-8 text-center text-sm">
-          <div className="text-red-600 mb-2">Couldn't load projects</div>
-          <div className="text-gray-600 mb-4">{loadError}</div>
-          <button onClick={load} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-white text-sm">Retry</button>
-        </div>
+        <ErrorState message={`Couldn't load projects — ${loadError}`} onRetry={load} supportTopic="projects" />
+      ) : filtered.length === 0 && projects.length === 0 ? (
+        <EmptyState
+          icon={Rocket}
+          title="No projects yet"
+          body='Create your first venture project to start scoring, due-diligence, and pipeline tracking.'
+          cta={{ label: 'New project', onClick: () => setShowForm(true) }}
+          secondary={{ label: 'Learn more', to: '/docs#core/projects' }}
+        />
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           {filtered.length === 0 ? (
             <div className="px-5 py-8 text-center text-gray-500 text-sm">
-              {projects.length === 0 ? 'No projects yet — click "New Project" to get started.' : 'No projects match your filter'}
+              No projects match your filter
             </div>
           ) : (
             <VirtualList

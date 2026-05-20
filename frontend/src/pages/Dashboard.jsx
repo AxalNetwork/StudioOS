@@ -10,6 +10,9 @@ import { api } from '../lib/api';
 import SemanticSearch from '../components/SemanticSearch';
 import InvestorTrialBanner from '../components/InvestorTrialBanner';
 import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
+// Task #6 (IF) — onboarding checklist + first-login product tour.
+import OnboardingChecklistPanel from '../components/OnboardingChecklistPanel';
+import ProductTour from '../components/ProductTour';
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
@@ -17,6 +20,10 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [error, setError] = useState('');
+  // Task #6 (IF) — tour fires once when /api/onboarding/checklist returns
+  // meta.tour_seen_at === null. Checked on every dashboard mount; the
+  // first POST /api/onboarding/meta {tour_seen:true} closes the loop.
+  const [tourEnabled, setTourEnabled] = useState(false);
 
   const load = async (fresh = false) => {
     try {
@@ -28,6 +35,20 @@ export default function Dashboard() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Task #6 (IF) — decide whether to fire the 5-step product tour. We
+  // wait until after the dashboard's main content has mounted so the
+  // `data-tour` anchors exist when the tooltip queries them.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await api.getOnboardingChecklist();
+        if (!cancelled && d && !d?.meta?.tour_seen_at) setTourEnabled(true);
+      } catch { /* tour silently skipped if endpoint unreachable */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -62,21 +83,26 @@ export default function Dashboard() {
             <RoleBadge role={user.role} />
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400">Here's your venture studio at a glance.</p>
-          <div className="mt-3"><SemanticSearch /></div>
+          <div className="mt-3" data-tour="search"><SemanticSearch /></div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <button onClick={() => setShowNotifs(s => !s)} className="relative p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
-              <Bell size={16} className="text-gray-700 dark:text-gray-300" />
-              {unreadNotifs > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{unreadNotifs}</span>}
+        <div className="flex items-start gap-3">
+          {/* Task #6 (IF) — persistent onboarding checklist panel. */}
+          <OnboardingChecklistPanel />
+          <div className="flex items-center gap-2">
+            <div className="relative" data-tour="notifications">
+              <button onClick={() => setShowNotifs(s => !s)} className="relative p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
+                <Bell size={16} className="text-gray-700 dark:text-gray-300" />
+                {unreadNotifs > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{unreadNotifs}</span>}
+              </button>
+              {showNotifs && <NotifDropdown items={notifications} onClose={() => setShowNotifs(false)} />}
+            </div>
+            <button onClick={refresh} disabled={refreshing} className="flex items-center gap-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg">
+              {refreshing ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />} Refresh Scores
             </button>
-            {showNotifs && <NotifDropdown items={notifications} onClose={() => setShowNotifs(false)} />}
           </div>
-          <button onClick={refresh} disabled={refreshing} className="flex items-center gap-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg">
-            {refreshing ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />} Refresh Scores
-          </button>
         </div>
       </div>
+      <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
 
       {/* Task #7 (W-2) — investor trial countdown banner (auto-hides) */}
       <InvestorTrialBanner user={user} />

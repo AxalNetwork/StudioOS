@@ -75,7 +75,6 @@ function useIsDesktop() {
 
 export default function PersonalAdvisor() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const persisted = useMemo(() => safeReadJSON(STORAGE_KEY, { minimised: false }) || { minimised: false }, []);
   const [minimised, setMinimised] = useState(!!persisted.minimised);
   const [conversationId, setConversationId] = useState(persisted.conversation_id || null);
@@ -83,7 +82,9 @@ export default function PersonalAdvisor() {
   const [question, setQuestion] = useState(null);     // public_question shape from server
   const [progress, setProgress] = useState({ total: 0, answered: 0, skipped: 0, percent: 0, complete: false });
   const [messages, setMessages] = useState([]);       // [{role, content, question_id?}]
-  const [answeredIds, setAnsweredIds] = useState([]); // for ring computation
+  // Value is write-only — `setAnsweredIds` feeds an internal cache used by
+  // the server for ring computation; the local array is never read back.
+  const [, setAnsweredIds] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState(null);
@@ -969,16 +970,6 @@ function TutorPanel({ tutor, onClose }) {
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function ProgressBar({ percent, done }) {
-  const pct = Math.max(0, Math.min(100, Number(percent) || 0));
-  const color = done ? 'bg-emerald-500' : pct > 0 ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-700';
-  return (
-    <div className="h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
-      <div className={`h-full ${color} transition-all`} style={{ width: `${pct}%` }} />
     </div>
   );
 }

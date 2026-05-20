@@ -557,7 +557,7 @@ esign.post('/send', async (c) => {
       recipientName,
       documentType,
       dealId,
-      appUrl: c.env.APP_URL || 'https://axal.vc',
+      appUrl: c.env.APP_URL || 'https://app.axal.vc',
       viaProvider,
       mergeFields,
     });

@@ -1065,7 +1065,16 @@ integrations.get('/oauth/:provider/callback', async (c) => {
         'INSERT INTO activity_logs (user_id, actor, action, details) VALUES (?, ?, ?, ?)',
       ).bind(user.id, actorHash, 'integration_oauth_failed', JSON.stringify({ provider_key: provider, message: (e as Error).message?.slice(0, 200) })).run();
     } catch { /* non-fatal */ }
-    return c.redirect(`/integrations?oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent((e as Error).message || 'callback_failed')}`);
+    // Sanitize the error code: only emit the first token (canonical
+    // snake_case reason like `hubspot_token_exchange_failed`) and drop
+    // any HTTP body / inner detail that callers shouldn't see and that
+    // could otherwise reflect attacker-controlled content back into the
+    // UI's query string.
+    const rawMsg = (e as Error).message || 'callback_failed';
+    const code = /^[a-z0-9_]+$/i.test(rawMsg.split(/[:\s]/)[0])
+      ? rawMsg.split(/[:\s]/)[0].slice(0, 64)
+      : 'callback_failed';
+    return c.redirect(`/integrations?oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(code)}`);
   }
 });
 

@@ -426,7 +426,13 @@
 </main>
 
 <script>
-  const API = 'https://studioos.guillaumelauzier.workers.dev/api/auth';
+  // Resolve the API base from the page's own origin so this works on
+  // every deploy (axal.vc, preview workers.dev, local) without a code
+  // change. Production link emails land on https://axal.vc/verify-email
+  // so this resolves to https://axal.vc/api/auth — the live Worker.
+  // The previous hard-coded preview worker URL went stale and produced
+  // the "Connection error / Could not reach the server" screen.
+  const API = `${window.location.origin}/api/auth`;
 
   function show(id) {
     ['view-verifying','view-setup-totp','view-error','view-already-verified']

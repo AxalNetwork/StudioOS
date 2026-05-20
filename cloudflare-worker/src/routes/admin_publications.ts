@@ -23,7 +23,7 @@ import { hashEmail } from '../util/hashEmail';
 import {
   ALLOWED_AUDIENCES, ALLOWED_SECTIONS,
   loadSectionAggregates, draftSummary, publicationHtml, sectionToCsv,
-  signPublicationToken, verifyPublicationToken,
+  signPublicationToken,
   uniqueSlug, periodLabel, K_MIN,
 } from '../services/publications';
 
@@ -317,7 +317,11 @@ r.post('/:id{[0-9]+}/render', async (c: AppCtx) => {
   const generatedAt = new Date().toISOString();
 
   let bytes: ArrayBuffer | Uint8Array | null = null;
-  let contentType = 'application/octet-stream';
+  // `contentType` is set in every code path that proceeds to read it (csv
+  // branch + the pdf/png branch after a successful Browser Rendering
+  // call); the !-assertion sidesteps a CodeQL "useless assignment"
+  // warning on a placeholder default that was always overwritten.
+  let contentType!: string;
 
   if (format === 'csv') {
     const csv = sectionToCsv(pub.section, aggregates);

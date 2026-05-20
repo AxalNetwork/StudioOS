@@ -3,6 +3,9 @@ import { safeReadJSON } from '../lib/storage';
 import { Activity, GitBranch, CheckCircle, AlertCircle, Loader2, Lock, Hash } from 'lucide-react';
 import { api } from '../lib/api';
 import VirtualList from '../components/VirtualList';
+import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
+import Skeleton from '../components/Skeleton';
 
 // T24 — measured from the existing px-4 py-3 row with action label + 1 line
 // of details. Slight overflow on rows with very long details is acceptable
@@ -139,9 +142,12 @@ export default function ActivityPage() {
       </div>
 
       {loadError && (
-        <div className="mb-4 p-3 rounded-lg border bg-red-50 border-red-200 text-red-800 text-sm flex items-center gap-2">
-          <AlertCircle size={14} /> {loadError}
-          <button onClick={load} className="ml-auto underline text-xs">Retry</button>
+        <div className="mb-4">
+          <ErrorState
+            message={`Couldn't load activity — ${loadError}`}
+            onRetry={load}
+            supportTopic="activity"
+          />
         </div>
       )}
 
@@ -171,7 +177,7 @@ export default function ActivityPage() {
       )}
 
       {loading ? (
-        <div className="text-gray-600 text-center py-20">Loading...</div>
+        <Skeleton.Table rows={6} cols={4} />
       ) : (
         <>
           {summary && (
@@ -199,12 +205,11 @@ export default function ActivityPage() {
             </div>
 
             {logs.length === 0 ? (
-              <div className="p-8 text-center text-sm text-gray-600">
-                <p className="text-gray-700 font-medium mb-1">No activity recorded yet.</p>
-                <p className="text-xs text-gray-500 max-w-md mx-auto">
-                  Account creation, email verification, profile capture, sign-in, and admin reviews are all logged here automatically. If you just registered, your events will appear after your next sign-in.
-                </p>
-              </div>
+              <EmptyState
+                icon={Activity}
+                title="No activity recorded yet"
+                body="Account creation, email verification, profile capture, sign-in, and admin reviews are all logged here automatically. If you just registered, your events will appear after your next sign-in."
+              />
             ) : (
               <VirtualList
                 items={logs}

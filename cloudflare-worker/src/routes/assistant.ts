@@ -1,6 +1,13 @@
 /**
  * Task #5 — Dashboard personal assistant chatbot.
  *
+ * ANTHROPIC-DEV-ONLY: every endpoint in this file calls the Anthropic
+ * Messages API directly. Task #31 removed Anthropic from production;
+ * this route is allow-listed by `scripts/ci/no-anthropic-in-prod.mjs`
+ * and is mounted only when `ENABLE_ANTHROPIC_DEV=1` AND
+ * `STAGE !== 'production'`. The mount guard lives in `src/index.ts`;
+ * defense-in-depth refusal lives in `requireAnthropicDevEnv()` below.
+ *
  * Endpoints (mounted at /api/assistant):
  *   POST   /message                     — SSE stream; runs an agentic
  *                                         tool-loop against Anthropic
@@ -36,6 +43,16 @@ import { requireAuth, requireAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 
 const assistant = new Hono<{ Bindings: Env }>();
+
+// Task #31 — defense-in-depth gate. The mount in src/index.ts already
+// refuses to wire this route on production stages, but every handler
+// re-checks the same invariant so a stray import (eval scripts, tests)
+// can never reach Anthropic against a production env.
+function anthropicDevAllowed(env: Env): boolean {
+  const e = env as unknown as { ENABLE_ANTHROPIC_DEV?: string; STAGE?: string; ENVIRONMENT?: string };
+  if (e.STAGE === 'production' || e.ENVIRONMENT === 'production') return false;
+  return e.ENABLE_ANTHROPIC_DEV === '1';
+}
 
 // ---------------------------------------------------------------------------
 // Model + pricing (USD per 1M tokens). Pricing kept in one place so the
@@ -460,6 +477,9 @@ assistant.post('/message', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
 
+  if (!anthropicDevAllowed(c.env)) {
+    return c.json({ error: 'assistant not configured' }, 503);
+  }
   if (!c.env.ANTHROPIC_API_KEY) {
     return c.json({ error: 'assistant not configured' }, 503);
   }

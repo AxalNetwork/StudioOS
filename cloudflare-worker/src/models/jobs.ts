@@ -27,7 +27,10 @@ export type JobType =
   | 'flagged_score_digest'
   // Task #6 (AT-1) — MI extractor fan-out per advisor answer + nightly reducer.
   | 'mi_extract'
-  | 'mi_reduce';
+  | 'mi_reduce'
+  // Task #2 (IB) — unified transactional email pipeline. Payload is the
+  // rendered MIME-ready envelope produced by services/email/send.ts.
+  | 'email_send';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

@@ -4,6 +4,12 @@ import { hashEmail } from '../util/hashEmail';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAdmin, createJWT, hashToken, requireFactor } from '../auth';
+import {
+  serializeTranscriptCsv,
+  classifyOnboardingEmpty,
+  type TranscriptRow,
+  type WriteMap,
+} from './admin.conversations.helpers';
 import { runTotpRemediation } from '../services/totpRemediation';
 import { assignFounderPublicId, assignPartnerPublicId, ensurePublicIdColumns } from '../services/publicIds';
 
@@ -441,6 +447,57 @@ async function auditConversationView(
   } catch {}
 }
 
+// Task #34 — viewed-user notification on admin transcript view. Suppressed
+// when an active investigation flag is set on the user row
+// (`users.admin_view_suppressed = 1`). Best-effort: any failure here is
+// logged and the request continues — the audit row is the authoritative
+// trail; the inbox row is courtesy.
+let _adminSuppressColReady = false;
+async function ensureAdminViewSuppressColumn(env: Env): Promise<void> {
+  if (_adminSuppressColReady) return;
+  try {
+    const info: any = await env.DB.prepare(`PRAGMA table_info(users)`).all();
+    const have = new Set((info?.results || []).map((r: any) => r.name));
+    if (!have.has('admin_view_suppressed')) {
+      try { await env.DB.exec(`ALTER TABLE users ADD COLUMN admin_view_suppressed INTEGER DEFAULT 0`); }
+      catch { /* duplicate-column race */ }
+    }
+    _adminSuppressColReady = true;
+  } catch (e) {
+    console.warn('[admin/notify] ensureAdminViewSuppressColumn failed', (e as Error).message);
+  }
+}
+
+async function notifyTranscriptViewed(
+  env: Env,
+  viewedUserId: number,
+  kind: 'onboarding' | 'advisor_list' | 'advisor_transcript',
+): Promise<void> {
+  try {
+    await ensureAdminViewSuppressColumn(env);
+    const row: any = await env.DB.prepare(
+      `SELECT admin_view_suppressed FROM users WHERE id = ?`,
+    ).bind(viewedUserId).first();
+    if (Number(row?.admin_view_suppressed || 0) === 1) return;
+    const { notify } = await import('../services/notify');
+    const titles: Record<typeof kind, string> = {
+      onboarding: 'An admin viewed your onboarding transcript',
+      advisor_list: 'An admin viewed your advisor conversations',
+      advisor_transcript: 'An admin viewed your advisor transcript',
+    };
+    await notify(env, {
+      userId: viewedUserId,
+      type: 'admin_transcript_view',
+      title: titles[kind],
+      body: 'A platform admin reviewed your Personal Advisor conversation history as part of standard support / compliance activity.',
+      category: 'security',
+      channels: ['in_app'],
+    });
+  } catch (e) {
+    console.warn('[admin/notify] notifyTranscriptViewed failed', (e as Error).message);
+  }
+}
+
 // Best-effort summary extractor: pulls the last assistant message
 // (or first user prompt as a fallback) and trims to 200 chars.
 function summariseConversation(messages: Array<{ role: string; content: string }>): string | null {
@@ -472,7 +529,16 @@ admin.get('/users/:user_id/conversations/onboarding', async (c) => {
   ).bind(userId).first();
   if (!conv) {
     await auditConversationView(c.env, adminUser, userId, 'admin_viewed_onboarding_transcript', null);
-    return c.json({ ok: true, conversation: null, messages: [], summary: null, completion_pct: 0 });
+    await notifyTranscriptViewed(c.env, userId, 'onboarding');
+    return c.json({
+      ok: true,
+      conversation: null,
+      messages: [],
+      summary: null,
+      completion_pct: 0,
+      empty: true,
+      empty_reason: 'never_completed',
+    });
   }
   const r: any = await c.env.DB.prepare(
     `SELECT role, question_id, content, meta_json, created_at
@@ -498,8 +564,24 @@ admin.get('/users/:user_id/conversations/onboarding', async (c) => {
   const answered = Number(conv.answered_count) || 0;
   const completion_pct = total > 0 ? Math.round((answered / total) * 100) : 0;
   const summary = summariseConversation(messages);
+  // Task #34 — empty_reason distinguishes "user never started the
+  // onboarding chatbot" (never_completed) from "user has an active
+  // session with no assistant turns yet" (in_progress). The conv-
+  // not-found branch above already returns empty_reason='never_completed';
+  // here we only fall into in_progress when the conversation is active
+  // with no logged messages.
+  const { empty, empty_reason } = classifyOnboardingEmpty(conv as any, messages.length);
   await auditConversationView(c.env, adminUser, userId, 'admin_viewed_onboarding_transcript', conv.id);
-  return c.json({ ok: true, conversation: conv, messages, summary, completion_pct });
+  await notifyTranscriptViewed(c.env, userId, 'onboarding');
+  return c.json({
+    ok: true,
+    conversation: conv,
+    messages,
+    summary,
+    completion_pct,
+    empty,
+    empty_reason,
+  });
 });
 
 // Local helper — mirrors safeReadJSON without the frontend dependency.
@@ -572,6 +654,7 @@ admin.get('/users/:user_id/conversations/advisor', async (c) => {
   }
 
   await auditConversationView(c.env, adminUser, userId, 'admin_listed_advisor_conversations', null);
+  await notifyTranscriptViewed(c.env, userId, 'advisor_list');
 
   // CSV export branch — `?format=csv` returns a flat per-conversation
   // table suitable for spreadsheet review. PII-light: no message
@@ -593,7 +676,23 @@ admin.get('/users/:user_id/conversations/advisor', async (c) => {
     });
   }
 
-  return c.json({ ok: true, conversations });
+  // Task #34 — surface a `total` count alongside the (already capped)
+  // conversations array. Required by the admin user-detail modal so the
+  // left-rail badge can show "12 conversations" without re-fetching.
+  // Total counts ALL conversations matching the WHERE clause (modulo the
+  // in-memory `search` filter, which is reflected in conversations.length
+  // since the search is page-local by design).
+  let total = conversations.length;
+  try {
+    const countArgs = args.slice(0, -2); // drop LIMIT + OFFSET
+    const countRow: any = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM advisor_conversations c WHERE ${where.join(' AND ')}`,
+    ).bind(...countArgs).first();
+    if (countRow && Number.isFinite(Number(countRow.n))) total = Number(countRow.n);
+  } catch (e) {
+    console.warn('[admin/advisor-list] count query failed', (e as Error).message);
+  }
+  return c.json({ ok: true, conversations, total });
 });
 
 // GET /api/admin/users/:user_id/conversations/advisor/:conversation_id
@@ -655,7 +754,88 @@ admin.get('/users/:user_id/conversations/advisor/:conversation_id', async (c) =>
   const completion_pct = total > 0 ? Math.round((answered / total) * 100) : 0;
   const summary = summariseConversation(messages);
   await auditConversationView(c.env, adminUser, userId, 'admin_viewed_advisor_transcript', convId);
+  await notifyTranscriptViewed(c.env, userId, 'advisor_transcript');
   return c.json({ ok: true, conversation: conv, messages, summary, completion_pct });
+});
+
+// Task #34 — POST /api/admin/users/:user_id/conversations/advisor/export
+// Message-level CSV export across one or all advisor conversations for a
+// user, optionally filtered by date window / persona / model. Body shape:
+//   { from?: ISO, to?: ISO, persona?, model?, conversation_id?: number }
+// CSV columns (per spec): ts, role, content, question_id, written_to,
+// model, latency_ms. Bounded to 5000 messages to keep the worker memory
+// envelope sane.
+admin.post('/users/:user_id/conversations/advisor/export', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('user_id'));
+  if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
+  const body: any = await c.req.json().catch(() => ({}));
+  const from = typeof body?.from === 'string' ? body.from : '';
+  const to = typeof body?.to === 'string' ? body.to : '';
+  const persona = typeof body?.persona === 'string' ? body.persona.toLowerCase() : '';
+  const model = typeof body?.model === 'string' ? body.model.toLowerCase() : '';
+  const convFilter = Number.isFinite(Number(body?.conversation_id))
+    ? Number(body.conversation_id)
+    : null;
+
+  const where: string[] = ['c.user_id = ?'];
+  const args: any[] = [userId];
+  if (convFilter != null) { where.push('c.id = ?'); args.push(convFilter); }
+  if (persona) { where.push('LOWER(c.persona) = ?'); args.push(persona); }
+  if (from) { where.push('datetime(m.created_at) >= datetime(?)'); args.push(from); }
+  if (to) { where.push('datetime(m.created_at) <= datetime(?)'); args.push(to); }
+
+  const r: any = await c.env.DB.prepare(
+    `SELECT m.conversation_id, m.role, m.question_id, m.content, m.meta_json, m.created_at AS ts,
+            c.persona
+       FROM advisor_messages m
+       JOIN advisor_conversations c ON c.id = m.conversation_id
+      WHERE ${where.join(' AND ')}
+      ORDER BY m.conversation_id ASC, m.id ASC
+      LIMIT 5000`,
+  ).bind(...args).all();
+  const rows = (r?.results || []) as any[];
+
+  // Build a writeMap so we can fill the `written_to` column. Single query
+  // scoped to the conversations the message rows came from.
+  const convIds = Array.from(new Set(rows.map((m) => m.conversation_id))).filter(Boolean);
+  const writeMap = new Map<string, string>();
+  if (convIds.length) {
+    const placeholders = convIds.map(() => '?').join(',');
+    const ans: any = await c.env.DB.prepare(
+      `SELECT conversation_id, question_id, saved_to_table, saved_to_column
+         FROM advisor_answers
+        WHERE conversation_id IN (${placeholders}) AND saved_to_table IS NOT NULL`,
+    ).bind(...convIds).all();
+    for (const a of (ans?.results || []) as any[]) {
+      if (!a.question_id) continue;
+      const key = `${a.conversation_id}:${a.question_id}`;
+      writeMap.set(key, `${a.saved_to_table}${a.saved_to_column ? '.' + a.saved_to_column : ''}`);
+    }
+  }
+
+  const { csv, skippedByModel, rowCount } = serializeTranscriptCsv(
+    rows as TranscriptRow[],
+    writeMap as WriteMap,
+    model,
+  );
+
+  await auditConversationView(
+    c.env, adminUser, userId,
+    'admin_exported_advisor_transcript',
+    convFilter,
+  );
+  await notifyTranscriptViewed(c.env, userId, 'advisor_transcript');
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  return new Response(csv, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="advisor-transcript-${userId}-${stamp}.csv"`,
+      'X-Export-Rows': String(rowCount),
+      'X-Export-Skipped-Model': String(skippedByModel),
+    },
+  });
 });
 
 // POST /api/admin/maintenance/public-ids/backfill
@@ -792,7 +972,7 @@ admin.post('/users/:user_id/resend-verification', async (c) => {
   let emailed = false;
   try {
     const { sendVerificationEmail } = await import('../services/email');
-    const verifyUrl = `${c.env.APP_URL || 'https://axal.vc'}/verify-email?token=${rawToken}`;
+    const verifyUrl = `${c.env.APP_URL || 'https://app.axal.vc'}/verify-email?token=${rawToken}`;
     emailed = await sendVerificationEmail(c.env, target.email, target.name || '', verifyUrl);
   } catch (e: any) {
     console.error('[admin/resend-verification] email send failed', e);

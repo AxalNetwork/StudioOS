@@ -479,7 +479,7 @@ test.describe('Market Intelligence — AT-2 advisor-derived tabs', () => {
     const headers = await table.locator('thead th').allTextContents();
     const normalizedHeaders = headers.map((h) => h.trim().toLowerCase());
     const periodsIdx = normalizedHeaders.findIndex((h) => h === 'periods');
-    const subSectorsIdx = normalizedHeaders.findIndex((h) => h === 'sub-sectors' || h === 'sub-sectors');
+    const subSectorsIdx = normalizedHeaders.findIndex((h) => h === 'sub-sectors' || h === 'subsectors');
     expect(periodsIdx).toBeGreaterThanOrEqual(0);
     expect(subSectorsIdx).toBeGreaterThanOrEqual(0);
 

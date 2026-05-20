@@ -301,7 +301,7 @@ export async function gateToolCall(
 // ---------------------------------------------------------------------------
 const URL_ALLOWLIST_HOSTS = [
   'axal.vc', 'docs.axal.vc',
-  'developers.cloudflare.com', 'docs.anthropic.com', 'docs.stripe.com',
+  'developers.cloudflare.com', 'docs.stripe.com',
   'developers.google.com', 'learn.microsoft.com',
 ];
 

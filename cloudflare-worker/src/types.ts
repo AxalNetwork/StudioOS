@@ -19,6 +19,10 @@ export interface Env {
   FASTAPI_ORIGIN?: string;
   TURNSTILE_SECRET_KEY?: string;
   APP_URL: string;
+  // Task #30 — explicit aliases for the SPA+API host and marketing apex.
+  // New code should prefer these; APP_URL stays as the legacy name.
+  PUBLIC_BASE_URL?: string;
+  PUBLIC_MARKETING_URL?: string;
   GMAIL_CLIENT_ID?: string;
   GMAIL_CLIENT_SECRET?: string;
   GMAIL_REFRESH_TOKEN?: string;
@@ -36,17 +40,18 @@ export interface Env {
   // Task #5 — Anthropic API key powers the Dashboard personal assistant
   // (cloudflare-worker/src/routes/assistant.ts). When unset the route
   // returns 503 instead of streaming, so the UI can degrade gracefully.
+  // Task #31 — Anthropic removed from production. ANTHROPIC_API_KEY is
+  // honoured ONLY when ENABLE_ANTHROPIC_DEV=1 AND STAGE !== 'production',
+  // and only by the dev/eval harness under scripts/eval/. The
+  // `scripts/ci/no-anthropic-in-prod.mjs` guard enforces this contract.
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_EXPLAIN_MODEL?: string;
-  // Task #16 — chooses the provider for the Personal Advisor /explain
-  // SSE endpoint. Values:
-  //   'workers-ai' (default) — Cloudflare Workers AI primary; Anthropic
-  //                            narrow fallback only when WAI hops fail.
-  //   'anthropic'            — Anthropic primary; WAI llamas as fallback.
-  //   'auto'                 — alias of 'workers-ai'.
-  // Removes the legacy hard 503 when ANTHROPIC_API_KEY is unset since
-  // Workers AI is always reachable via the `AI` binding.
-  ADVISOR_EXPLAIN_PROVIDER?: 'workers-ai' | 'anthropic' | 'auto' | string;
+  ENABLE_ANTHROPIC_DEV?: string;
+  STAGE?: string;
+  // Task #31 — ADVISOR_EXPLAIN_PROVIDER is no longer read by the
+  // production worker. Kept in the type for backward compatibility with
+  // any operator scripts that still set it; the value is ignored.
+  ADVISOR_EXPLAIN_PROVIDER?: string;
   // Task #4 (CG) — Personal Advisor AI Gateway slug. Routes every
   // advisor LLM call (advisor_explain today, advisor_turn from CB
   // onwards) through a dedicated Cloudflare AI Gateway so spend,

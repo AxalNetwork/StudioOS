@@ -284,7 +284,23 @@ interface CartaSecurity {
   shares?: number;
   shares_authorized?: number;
   shares_issued?: number;
+  shares_available?: number;
   name?: string;
+  vesting_schedule_id?: string;
+  vesting?: CartaVesting;
+}
+
+interface CartaVesting {
+  id?: string;
+  start_date?: string;
+  cliff_months?: number;
+  total_months?: number;
+  duration_months?: number;
+  vesting_period_months?: number;
+  total_shares?: number;
+  vested_shares?: number;
+  stakeholder_id?: string;
+  security_id?: string;
 }
 
 async function fetchAllPages<T>(env: Env, row: IntegrationRow, firstPath: string, key: string): Promise<T[]> {
@@ -324,7 +340,7 @@ async function ensureIssuer(env: Env, row: IntegrationRow): Promise<{ id: string
 }
 
 async function sync(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<SyncResult> {
-  const counts = { pulled: 0, holders: 0, securities: 0, errors: 0 };
+  const counts = { pulled: 0, holders: 0, securities: 0, vesting: 0, option_pools: 0, errors: 0 };
   const issuer = await ensureIssuer(c.env, row);
 
   // Fetch stakeholders + securities in parallel.
@@ -452,8 +468,89 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
     }
   } catch { /* non-fatal reconcile */ }
 
+  // ── Option pools — derived from securities whose share_class /
+  // security_type identifies them as option-pool buckets. Carta exposes
+  // these as regular securities; we mirror them into a dedicated table
+  // so the cap-table UI / waterfall sim can show pool availability
+  // independent of issued holdings.
+  const seenPoolIds = new Set<string>();
+  for (const s of securities) {
+    const klass = `${s.share_class || ''} ${s.security_type || ''} ${s.name || ''}`.toLowerCase();
+    const isPool = klass.includes('option pool') || klass.includes('option_pool')
+      || s.security_type === 'option_pool' || klass.includes('esop');
+    if (!isPool) continue;
+    seenPoolIds.add(s.id);
+    try {
+      const authorized = s.shares_authorized ?? 0;
+      const issued = s.shares_issued ?? s.quantity ?? s.shares ?? 0;
+      const available = s.shares_available ?? Math.max(0, Number(authorized) - Number(issued));
+      await c.env.DB.prepare(
+        'INSERT INTO cap_table_option_pools (user_id, name, shares_authorized, shares_issued, shares_available, source, carta_id) ' +
+        "VALUES (?, ?, ?, ?, ?, 'carta', ?) " +
+        'ON CONFLICT(user_id, carta_id) WHERE carta_id IS NOT NULL DO UPDATE SET ' +
+        'name = excluded.name, shares_authorized = excluded.shares_authorized, ' +
+        'shares_issued = excluded.shares_issued, shares_available = excluded.shares_available, ' +
+        "source = 'carta', updated_at = CURRENT_TIMESTAMP",
+      ).bind(
+        row.user_id,
+        s.name || s.share_class || 'Option Pool',
+        authorized,
+        issued,
+        available,
+        s.id,
+      ).run();
+      counts.option_pools++;
+    } catch { counts.errors++; }
+  }
+
+  // ── Vesting schedules — best-effort. Carta exposes vesting either
+  // inline on a security (`security.vesting`) or via a sibling
+  // `/vesting-schedules` collection. We try both paths so older / newer
+  // API tenants both produce rows. A failure on either path is non-fatal
+  // (the cap-table import still completes for holders + securities).
+  const vestingRows: CartaVesting[] = [];
+  for (const s of securities) {
+    if (s.vesting && (s.vesting.id || s.vesting.start_date)) {
+      vestingRows.push({ ...s.vesting, security_id: s.vesting.security_id || s.id, stakeholder_id: s.vesting.stakeholder_id || s.stakeholder_id });
+    }
+  }
+  try {
+    const remote = await fetchAllPages<CartaVesting>(
+      c.env, row,
+      `/issuers/${encodeURIComponent(issuer.id)}/vesting-schedules`,
+      'vesting_schedules',
+    ).catch(() => [] as CartaVesting[]);
+    for (const v of remote) vestingRows.push(v);
+  } catch { /* endpoint not available on this tenant — skip */ }
+
+  for (const v of vestingRows) {
+    const cartaId = v.id || (v.security_id ? `sec:${v.security_id}` : null);
+    if (!cartaId) continue;
+    try {
+      const totalMonths = v.total_months ?? v.duration_months ?? v.vesting_period_months ?? null;
+      await c.env.DB.prepare(
+        'INSERT INTO cap_table_vesting (user_id, carta_vesting_id, start_date, cliff_months, total_months, total_shares, vested_shares, source) ' +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 'carta') " +
+        'ON CONFLICT(user_id, carta_vesting_id) WHERE carta_vesting_id IS NOT NULL DO UPDATE SET ' +
+        'start_date = excluded.start_date, cliff_months = excluded.cliff_months, ' +
+        'total_months = excluded.total_months, total_shares = excluded.total_shares, ' +
+        "vested_shares = excluded.vested_shares, source = 'carta', updated_at = CURRENT_TIMESTAMP",
+      ).bind(
+        row.user_id,
+        cartaId,
+        v.start_date || null,
+        v.cliff_months ?? null,
+        totalMonths,
+        v.total_shares ?? null,
+        v.vested_shares ?? null,
+      ).run();
+      counts.vesting++;
+    } catch { counts.errors++; }
+  }
+  counts.pulled = counts.holders + counts.securities + counts.vesting + counts.option_pools;
+
   return {
-    summary: `pulled holders=${counts.holders} securities=${counts.securities} errors=${counts.errors}`,
+    summary: `pulled holders=${counts.holders} securities=${counts.securities} vesting=${counts.vesting} option_pools=${counts.option_pools} errors=${counts.errors}`,
     counts,
   };
 }
@@ -469,6 +566,18 @@ async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: Integ
     await c.env.DB.prepare(
       "UPDATE cap_table_securities SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
     ).bind(row.user_id).run();
+    // Vesting + option-pool rows imported from Carta get the same flip-to-
+    // manual treatment so they're preserved through a disconnect.
+    try {
+      await c.env.DB.prepare(
+        "UPDATE cap_table_vesting SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
+      ).bind(row.user_id).run();
+    } catch { /* table may be absent on legacy deployments */ }
+    try {
+      await c.env.DB.prepare(
+        "UPDATE cap_table_option_pools SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
+      ).bind(row.user_id).run();
+    } catch { /* table may be absent on legacy deployments */ }
   } catch (e) {
     console.warn('[carta] disconnect flip-to-manual failed:', (e as Error).message);
   }
@@ -565,6 +674,29 @@ void REGISTRY;
  * Per-integration error isolation. Called from index.ts scheduled() on a
  * 6-hour cadence.
  */
+/**
+ * Task #8 (IH) — one-shot import for a single Carta integration. Reuses
+ * the cron `sync()` for a single row so the imports route can trigger an
+ * on-demand pull without scanning every active integration.
+ */
+export async function syncCartaForIntegration(
+  c: Context<{ Bindings: Env }>,
+  user: User,
+  integrationId: number,
+): Promise<{ summary: string; counts: { holders: number; securities: number; errors: number } }> {
+  const row = await c.env.DB.prepare(
+    'SELECT * FROM integrations WHERE id = ? LIMIT 1',
+  ).bind(integrationId).first<IntegrationRow>();
+  if (!row) throw new Error('integration_not_found');
+  const out = await sync(c, user, row);
+  try {
+    await c.env.DB.prepare(
+      'UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ?',
+    ).bind(row.id).run();
+  } catch { /* non-fatal */ }
+  return out as { summary: string; counts: { holders: number; securities: number; errors: number } };
+}
+
 export async function syncAllCartaIntegrations(env: Env): Promise<{ scanned: number; ok: number; failed: number }> {
   let scanned = 0, ok = 0, failed = 0;
   let rows: { results: IntegrationRow[] };

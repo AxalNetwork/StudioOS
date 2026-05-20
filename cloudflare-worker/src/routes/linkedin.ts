@@ -203,7 +203,7 @@ linkedin.post('/oauth/start', async (c) => {
 // the user row, discards the token, and redirects back to /refer.
 // ---------------------------------------------------------------------------
 function redirectBack(env: Env, status: 'connected' | 'error', message?: string) {
-  const base = stripTrailingSlashes(env.APP_URL || 'https://axal.vc');
+  const base = stripTrailingSlashes(env.APP_URL || 'https://app.axal.vc');
   const params = new URLSearchParams({ linkedin: status });
   if (message) params.set('linkedin_error', message);
   return Response.redirect(`${base}/refer?${params.toString()}`, 302);

@@ -7,10 +7,14 @@ import {
   User, Globe, Mail, ShieldCheck, Bell, Lock, Briefcase, Users,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
   Plus, X, KeyRound, Palette, Plug, CreditCard, Code, UserCog,
-  Sun, Moon, ChevronDown, Check,
+  Sun, Moon, ChevronDown, Check, Database,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
+// Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
+import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
+// Task #8 (IH) — Data Imports tab (Settings → Data Imports).
+import DataImportsTab from '../components/DataImportsTab';
 
 // Task #4 (Y-2) — small reusable trust score on the profile surface so
 // the user can see their compliance posture without bouncing to the
@@ -121,11 +125,14 @@ const PARTNER_NOTIFICATION_EVENTS = [
 // `roles` controls visibility per signed-in role; absence = visible to all.
 const SECTIONS = [
   { id: 'profile', label: 'Profile', icon: User },
+  { id: 'onboarding', label: 'Onboarding', icon: CheckCircle2 },
   { id: 'account', label: 'Account', icon: UserCog },
   { id: 'security', label: 'Security', icon: ShieldCheck },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'privacy', label: 'Privacy', icon: Lock },
   { id: 'integrations', label: 'Integrations', icon: Plug },
+  // Task #8 (IH) — Data Imports list + per-type wizards.
+  { id: 'imports', label: 'Data Imports', icon: Database },
   { id: 'billing', label: 'Billing', icon: CreditCard, roles: ['founder', 'investor'] },
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'developer', label: 'Developer', icon: Code, roles: ['admin'] },
@@ -138,6 +145,7 @@ const SECTIONS = [
 // land users directly on the notification matrix.
 const PATH_TO_SECTION = {
   notifications: 'notifications',
+  onboarding: 'onboarding',
   profile: 'profile',
   account: 'account',
   security: 'security',
@@ -146,6 +154,7 @@ const PATH_TO_SECTION = {
   billing: 'billing',
   appearance: 'appearance',
   developer: 'developer',
+  imports: 'imports',
   // Back-compat: old deep links still resolve to a sensible new tab.
   jurisdictions: 'profile',
   email: 'account',
@@ -290,7 +299,9 @@ export default function SettingsPage() {
               <PrivacySection data={data} patch={patch} flash={flash} reload={() => api.getSettings().then(setData)} hideAccountDelete />
             </>
           )}
+          {safeActive === 'onboarding' && <OnboardingSettingsTab />}
           {safeActive === 'integrations' && allowedIds.has('integrations') && <IntegrationsTab flash={flash} />}
+          {safeActive === 'imports' && <DataImportsTab flash={flash} />}
           {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
           {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
           {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperTab flash={flash} />}

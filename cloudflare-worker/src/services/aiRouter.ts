@@ -3,8 +3,9 @@
  *
  * Single entry point every Personal Advisor feature (banks, write-router
  * LLM tool-calls, guardrails, find/deep-link, MI extractors, publication
- * synthesis) calls into. Workers AI is primary; Anthropic is a narrow
- * fallback for high-stakes synthesis only (`publication`, `dd_synthesis`).
+ * synthesis) calls into. Production: Workers AI only.
+ * The dev/eval-only provider (Task #31) is documented separately under
+ * `docs/dev/`; this file no longer references it by name.
  *
  * Public API:
  *   run(env, opts) → Promise<RunResult>
@@ -12,7 +13,7 @@
  * Behaviour:
  *   - ROUTE map picks the model per task class.
  *   - Non-2xx or >8 s latency on a Workers AI primary → smaller WAI sibling.
- *   - Anthropic failure with no further fallback → refusal.
+ *   - Chain exhausted → refusal (`all_models_failed`).
  *   - Per-user $/day + $/month KV caps; org-wide kill switch on monthly cap.
  *   - embed/explain/sentiment results cached by content-hash (30d / 7d / 30d).
  *   - Every call writes one row to D1 `ai_usage_logs` for the admin dashboard.
@@ -71,16 +72,6 @@ export interface RunOptions {
   // are surfaced to the caller. Cache + safety_score parsing are bypassed
   // for streams since neither is meaningful without buffering the body.
   stream?: boolean;
-  // Task #16 — force a specific provider for this call, ignoring the
-  // task's ROUTE entry. Used by the /advisor/explain unsafe-completion
-  // retry path: when the Workers AI primary returns a leak-flagged
-  // response, the route handler retries with `forceProvider: 'anthropic'`
-  // to get a clean answer from claude-sonnet-4-6 instead of returning a
-  // templated refusal. When 'anthropic' is requested but
-  // ANTHROPIC_API_KEY is not configured, the override is silently
-  // ignored (the task's default route runs instead) so misconfigured
-  // environments never hard-fail.
-  forceProvider?: 'workers-ai' | 'anthropic';
 }
 
 export interface UsageMeta {
@@ -109,17 +100,12 @@ export interface RunResult {
 // ROUTE table — one record per task class
 // ---------------------------------------------------------------------------
 interface RouteEntry {
-  provider: 'workers-ai' | 'anthropic';
+  provider: 'workers-ai';
   model: string;
   // Ordered chain of smaller Workers AI siblings to retry on 5xx / >8s
   // latency. The router tries the primary, then each entry in
   // `fallbackChain` until one succeeds or the chain is exhausted.
   fallbackChain?: string[];
-  // Anthropic last-resort hop. Spec: "Workers AI is primary; Anthropic
-  // is a narrow fallback for high-stakes synthesis only" — so this is
-  // populated only on `publication` and `dd_synthesis`. Invoked only
-  // after every Workers AI hop fails.
-  anthropicFallback?: string;
   // KV cache TTL in seconds. Undefined → no cache.
   cacheTtlSec?: number;
   // True for embedding models (response shape differs).
@@ -129,7 +115,7 @@ interface RouteEntry {
 // Per-1M-token rough USD prices used for budget accounting. The exact
 // numbers don't have to be perfect — we just need them to be stable so
 // caps trip in roughly the right place. Workers AI pricing is per-token
-// (May 2026 published rates); Anthropic is per-1M-token list price.
+// (May 2026 published rates).
 //
 // Stored separately so test harnesses can swap them.
 export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }> = {
@@ -138,8 +124,6 @@ export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast': { in: 0.50, out: 0.50 },
   '@cf/qwen/qwen2.5-coder-32b-instruct':      { in: 0.40, out: 0.40 },
   '@cf/baai/bge-base-en-v1.5':                { in: 0.05, out: 0.00 },
-  'claude-haiku-4-5':                         { in: 1.00, out: 5.00 },
-  'claude-sonnet-4-6':                        { in: 3.00, out: 15.00 },
 };
 
 // Spec step 3: "fall back to a smaller Workers AI sibling
@@ -163,30 +147,21 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // total chain failure still yields a valid next question.
   rerank:       { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
   explain:      { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 7 * 86400 },
-  // Task #16 — Personal Advisor free-form "explain" SSE endpoint.
-  // Workers AI is the always-on primary (env.AI binding is universally
-  // available, so the legacy 503-when-no-Anthropic-key failure mode is
-  // gone). Anthropic claude-sonnet-4-6 is kept as a narrow last-resort
-  // fallback to preserve the original AC-1 quality bar when both
-  // llama hops fail. Per-call provider preference can flip primary <->
-  // fallback via the ADVISOR_EXPLAIN_PROVIDER env var (handled inside
-  // run() so we don't have to mutate this const). No cache: each
-  // explanation is persona/topic-specific and short-lived.
-  advisor_explain: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], anthropicFallback: 'claude-sonnet-4-6' },
+  // Personal Advisor free-form "explain" SSE endpoint. Workers AI is the
+  // only provider in production (Task #31 removed the Anthropic narrow
+  // last-resort fallback). No cache: each explanation is persona/topic-
+  // specific and short-lived.
+  advisor_explain: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
-  // High-stakes synthesis: Workers AI primary, Anthropic narrow fallback
-  // only after all WAI hops fail. Matches the spec's "Workers AI is
-  // primary; Anthropic is a narrow fallback for high-stakes synthesis only"
-  // and "Anthropic only invoked for publication and dd_synthesis".
-  // Task #2 (AU): admin publication summaries are deterministic
-  // headline synthesis. Spec mandates Anthropic claude-haiku-4-5 with
-  // prompt caching as the PRIMARY model (not a fallback) so admins get
-  // consistent voice/quality on every render. Workers AI llamas remain
-  // as the cost-bounded fallback chain.
-  publication:  { provider: 'anthropic', model: 'claude-haiku-4-5', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
-  dd_synthesis: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], anthropicFallback: 'claude-sonnet-4-6' },
+  // High-stakes synthesis (Task #2 AU admin publication summaries,
+  // dd synthesis). Task #31: Anthropic removed from production. Both
+  // task classes now route through Workers AI MID_LLAMA primary →
+  // SMALL_LLAMA fallback. Voice/quality regression is monitored via
+  // the existing admin AI usage dashboard.
+  publication:  { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  dd_synthesis: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
 };
 
 // Latency budget per primary attempt before we fall back.
@@ -457,54 +432,9 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
   }
 }
 
-async function callAnthropic(env: Env, model: string, opts: RunOptions): Promise<ProviderResult> {
-  const apiKey = (env as unknown as { ANTHROPIC_API_KEY?: string }).ANTHROPIC_API_KEY;
-  if (!apiKey) return { ok: false, status: 0, error: 'ANTHROPIC_API_KEY not configured' };
-  const messages = opts.messages?.length
-    ? opts.messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content }))
-    : [{ role: 'user' as const, content: opts.text || '' }];
-  // Anthropic prompt-cache: emit a system block with cache_control when
-  // the prompt is large enough. We declare the cache breakpoint at any
-  // non-empty system prompt; Anthropic discards cache_control for blocks
-  // <1024 tokens automatically, so this is a safe no-op for short prompts.
-  const systemPrompt = opts.systemPrompt
-    || opts.messages?.find(m => m.role === 'system')?.content
-    || '';
-  const body: Record<string, unknown> = {
-    model,
-    max_tokens: opts.maxTokens || 1024,
-    messages,
-  };
-  if (systemPrompt) {
-    body.system = [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }];
-  }
-  if (opts.temperature != null) body.temperature = opts.temperature;
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      return { ok: false, status: res.status, error: txt.slice(0, 240) };
-    }
-    const j = await res.json() as {
-      content?: Array<{ type: string; text?: string }>;
-      usage?: { input_tokens?: number; output_tokens?: number };
-    };
-    const text = (j.content || []).filter(b => b.type === 'text').map(b => b.text || '').join('');
-    const promptTok = j.usage?.input_tokens ?? estTokens(systemPrompt + messages.map(m => m.content).join('\n'));
-    const completionTok = j.usage?.output_tokens ?? estTokens(text);
-    return { ok: true, output: text, prompt_tokens: promptTok, completion_tokens: completionTok };
-  } catch (e) {
-    return { ok: false, status: 0, error: (e as Error).message };
-  }
-}
+// Task #31 — non-WAI providers removed from the production worker.
+// The dev/eval harness lives in `scripts/eval/` with its own fetch
+// wrapper; the router itself is Workers-AI-only on the prod surface.
 
 // Wrap a provider call in a hard latency budget. Resolves to {ok:false,status:504}
 // on timeout so the caller can fall back to the smaller sibling.
@@ -522,37 +452,7 @@ function withTimeout(p: Promise<ProviderResult>, ms: number): Promise<ProviderRe
 // Public: run()
 // ---------------------------------------------------------------------------
 export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
-  let route = ROUTE[opts.task];
-  // Task #16 — ADVISOR_EXPLAIN_PROVIDER lets ops flip the advisor /explain
-  // primary between Workers AI (default) and Anthropic without a code
-  // deploy. 'anthropic' requires ANTHROPIC_API_KEY; if absent we silently
-  // ignore the override and stay on the WAI primary so the surface never
-  // hard-fails on misconfiguration.
-  if (route && opts.task === 'advisor_explain') {
-    const pref = String(((env as unknown as Record<string, string | undefined>).ADVISOR_EXPLAIN_PROVIDER || 'workers-ai')).toLowerCase();
-    const hasAnthropic = !!(env as unknown as { ANTHROPIC_API_KEY?: string }).ANTHROPIC_API_KEY;
-    if (pref === 'anthropic' && hasAnthropic) {
-      route = {
-        provider: 'anthropic',
-        model: (env as unknown as { ANTHROPIC_EXPLAIN_MODEL?: string }).ANTHROPIC_EXPLAIN_MODEL || 'claude-sonnet-4-6',
-        fallbackChain: [MID_LLAMA, SMALL_LLAMA],
-      };
-    }
-  }
-  // Task #16 — explicit per-call forceProvider override. Used by the
-  // /advisor/explain unsafe-completion retry path. Ignored silently
-  // when 'anthropic' is requested without an API key.
-  if (route && opts.forceProvider) {
-    const hasAnthropic = !!(env as unknown as { ANTHROPIC_API_KEY?: string }).ANTHROPIC_API_KEY;
-    if (opts.forceProvider === 'anthropic' && hasAnthropic) {
-      route = {
-        provider: 'anthropic',
-        model: (env as unknown as { ANTHROPIC_EXPLAIN_MODEL?: string }).ANTHROPIC_EXPLAIN_MODEL || 'claude-sonnet-4-6',
-      };
-    } else if (opts.forceProvider === 'workers-ai') {
-      route = { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] };
-    }
-  }
+  const route = ROUTE[opts.task];
   const startedAt = Date.now();
 
   if (!route) {
@@ -652,23 +552,14 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     if (opts.stream) return callWorkersAI(env, model, opts, !!route.isEmbed);
     return withTimeout(callWorkersAI(env, model, opts, !!route.isEmbed), PRIMARY_TIMEOUT_MS);
   };
-  const callClaude = (model: string): Promise<ProviderResult> =>
-    withTimeout(callAnthropic(env, model, opts), PRIMARY_TIMEOUT_MS);
 
-  // Pick the primary call based on route.provider. Anthropic-primary
-  // tasks (Task #2 AU publication) call Claude first; Workers AI
-  // siblings in `fallbackChain` are the cost-bounded retries.
-  let attempt = route.provider === 'anthropic'
-    ? await callClaude(route.model)
-    : await callWai(route.model);
+  let attempt = await callWai(route.model);
   let modelUsed = route.model;
   let fallbackUsed = false;
   let lastError = attempt.error;
 
   // Workers AI multi-hop fallback chain (spec: tool_call → advisor_turn →
-  // role_detect, i.e. qwen32b → llama-70b → llama-8b). Also used as the
-  // anthropic-primary fallback chain (publication: haiku-4-5 → llama-70b
-  // → llama-8b) so the SPA never blocks on Anthropic outages.
+  // role_detect, i.e. qwen32b → llama-70b → llama-8b).
   if (!attempt.ok && route.fallbackChain?.length) {
     for (const sibling of route.fallbackChain) {
       const next = await callWai(sibling);
@@ -680,20 +571,6 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         break;
       }
       lastError = next.error || lastError;
-    }
-  }
-
-  // Anthropic narrow fallback for publication / dd_synthesis only.
-  // Reached only after every Workers AI hop has failed.
-  if (!attempt.ok && route.anthropicFallback) {
-    const claude = await callClaude(route.anthropicFallback);
-    if (claude.ok) {
-      attempt = claude;
-      modelUsed = route.anthropicFallback;
-      fallbackUsed = true;
-      lastError = undefined;
-    } else {
-      lastError = claude.error || lastError;
     }
   }
 

@@ -106,14 +106,11 @@ export async function draftSummary(
     filters: Record<string, unknown>; aggregates: AggregateRow[];
   },
 ): Promise<{ summary_text: string; ok: boolean; error?: string }> {
-  // Spec: headline synthesis MUST use Anthropic claude-haiku-4-5 with
-  // prompt caching. We route through the canonical aiRouter contract
-  // (`task: 'publication'`) — ROUTE['publication'] is configured as
-  // `provider: 'anthropic', model: 'claude-haiku-4-5'` so the primary
-  // call hits Claude with the >1024-token system prompt carrying
-  // `cache_control: ephemeral` (24h prompt cache). Workers AI llamas
-  // are the cost-bounded fallback chain so the SPA never blocks on
-  // an Anthropic outage.
+  // Task #31 — headline synthesis runs entirely on Workers AI in
+  // production. ROUTE['publication'] is `provider: 'workers-ai'` with
+  // a llama-3.3-70b primary and llama-3.1-8b fallback. The >1024-token
+  // system prompt below is kept stable across renders so the in-isolate
+  // KV explainer cache can de-duplicate identical-payload requests.
   const systemPrompt = buildSystemPrompt();
   const userMessage = buildUserMessage(opts);
   const r = await ai.run(env, {
@@ -135,8 +132,8 @@ export async function draftSummary(
 }
 
 // >1024 tokens of stable scaffolding. Matches the MI publication voice
-// guide so the cached prefix doesn't drift across runs (any drift
-// invalidates the 24h prompt cache and burns Anthropic spend).
+// guide so the prompt stays stable across renders (drift invalidates
+// the in-isolate explainer cache for identical-payload requests).
 function buildSystemPrompt(): string {
   return [
     'You are the Axal Venture Studio analyst editor producing concise, board-ready',
@@ -380,9 +377,9 @@ export function publicationHtml(d: RenderInput): string {
     here is grouped by <code>(dimension_key, period_key)</code> and is
     suppressed when the distinct contributor count <code>n</code> falls
     below the k-anonymity floor of <strong>${K_MIN}</strong>. The headline
-    summary is drafted by Anthropic Claude haiku-4-5 from the same numeric
-    payload (no free-text excerpts) and reviewed by an Axal admin before
-    publication. Filters applied to this report:
+    summary is drafted by Cloudflare Workers AI (Llama 3.3 70B) from the
+    same numeric payload (no free-text excerpts) and reviewed by an Axal
+    admin before publication. Filters applied to this report:
   </p>
   ${filterList ? `<ul style="font-size:12px;color:#333">${filterList}</ul>` :
     `<p style="font-size:12px;color:#777">(no filters)</p>`}

@@ -22,14 +22,13 @@ compatibility_date = "2026-04-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = false
 
-# Declares the producer relationship per Task #9 (AO) spec text. In
-# Cloudflare's actual semantics, `[[tail_consumers]]` is read on the
-# PRODUCER side (the main `studioos` worker, see root wrangler.toml
-# under [env.production.tail_consumers]). Listing the producer here is
-# accepted by wrangler as a no-op declarative reference and keeps this
-# worker's config self-documenting about which service it tails.
-[[tail_consumers]]
-service = "studioos"
+# NOTE: do NOT add `[[tail_consumers]]` here. Cloudflare reads that
+# block on the PRODUCER side only — declaring it on this consumer
+# worker caused Cloudflare to invoke `studioos.tail()` (which doesn't
+# exist; the main worker only exports `fetch()`), generating an
+# "Handler does not export a tail() function." error for every tail
+# batch. The correct producer→consumer wiring lives in the root
+# `wrangler.toml` under `[[env.production.tail_consumers]]`.
 
 [[r2_buckets]]
 binding     = "LOGS"

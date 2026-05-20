@@ -111,7 +111,7 @@ async function loadHelper(notifyImpl) {
     .replace(/: number/g, '')
     .replace(/:\s*any\[\]\s*=/g, ' =')
     .replace(/:\s*any/g, '')
-    .replace(/ as any/g, '').replace(/new Set<[^>]+>/g, 'new Set').replace(/let pending = rows;/, 'let pending = rows;').replace(/:s*Set<[^>]+>/g, '');
+    .replace(/ as any/g, '').replace(/new Set<[^>]+>/g, 'new Set').replace(/:\s*Set<[^>]+>/g, '');
   // Replace the dynamic notify import with our injected stub.
   body = body.replace(
     /const \{ notify \} = await import\('\.\.\/services\/notify'\);/,

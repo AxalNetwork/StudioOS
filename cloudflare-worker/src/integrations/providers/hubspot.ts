@@ -104,7 +104,11 @@ async function exchangeCode(env: Env, code: string): Promise<HubSpotTokenRespons
     const txt = await res.text();
     throw new Error(`hubspot_token_exchange_failed: ${res.status} ${txt.slice(0, 300)}`);
   }
-  return await res.json() as HubSpotTokenResponse;
+  try {
+    return await res.json() as HubSpotTokenResponse;
+  } catch {
+    throw new Error('hubspot_token_exchange_invalid_json');
+  }
 }
 
 async function refreshAccessToken(env: Env, refreshToken: string): Promise<HubSpotTokenResponse> {
@@ -124,7 +128,11 @@ async function refreshAccessToken(env: Env, refreshToken: string): Promise<HubSp
     const txt = await res.text();
     throw new Error(`hubspot_refresh_failed: ${res.status} ${txt.slice(0, 300)}`);
   }
-  return await res.json() as HubSpotTokenResponse;
+  try {
+    return await res.json() as HubSpotTokenResponse;
+  } catch {
+    throw new Error('hubspot_refresh_invalid_json');
+  }
 }
 
 async function fetchTokenInfo(accessToken: string): Promise<HubSpotTokenInfo> {
@@ -132,7 +140,11 @@ async function fetchTokenInfo(accessToken: string): Promise<HubSpotTokenInfo> {
   if (!res.ok) {
     return {};
   }
-  return await res.json() as HubSpotTokenInfo;
+  try {
+    return await res.json() as HubSpotTokenInfo;
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -421,7 +433,7 @@ async function pushProjectCompany(env: Env, row: IntegrationRow, projectId: numb
 
   // Create primary contact if we have a founder email and none yet.
   if (proj.founder_email && !proj.hubspot_primary_contact_id) {
-    const [first, ...rest] = (proj.founder_name || '').split(' ');
+    const [first, ...rest] = String(proj.founder_name || '').trim().split(/\s+/);
     const contactRes = await hsFetch(env, row, '/crm/v3/objects/contacts', {
       method: 'POST',
       body: JSON.stringify({
@@ -722,6 +734,80 @@ const impl: ProviderImpl = {
 };
 registerProvider(impl);
 void REGISTRY; // Static descriptor in registry.ts is the source of truth (status='live').
+
+/**
+ * Task #8 (IH) — list pipelines for the imports picker. Reuses `hsFetch`
+ * so token refresh + rate-limit handling stay consistent with `sync()`.
+ */
+export async function listHubspotPipelines(env: Env, integrationId: number): Promise<Array<{ id: string; label: string; stages: Array<{ id: string; label: string; order: number }> }>> {
+  const row = await env.DB.prepare('SELECT * FROM integrations WHERE id = ? LIMIT 1').bind(integrationId).first<IntegrationRow>();
+  if (!row) throw new Error('integration_not_found');
+  const res = await hsFetch(env, row, '/crm/v3/pipelines/deals');
+  if (!res.ok) throw new Error(`hubspot_pipelines_failed: ${res.status}`);
+  const out = await res.json() as { results: Array<{ id: string; label: string; stages?: Array<{ id: string; label: string; displayOrder?: number }> }> };
+  return out.results.map(p => ({
+    id: p.id,
+    label: p.label,
+    stages: (p.stages || []).map(s => ({ id: s.id, label: s.label, order: s.displayOrder ?? 0 })),
+  }));
+}
+
+/**
+ * Task #8 (IH) — one-shot pipeline import into local `deals`. Pulls every
+ * deal in the selected HubSpot pipeline and upserts a local row keyed by
+ * hubspot_deal_id. Stage mapping is HubSpot stageId → StudioOS status
+ * (caller passes through the mapping built by the picker UI).
+ */
+export async function importHubspotPipeline(
+  env: Env,
+  user: User,
+  integrationId: number,
+  pipelineId: string,
+  stageMap: Record<string, string>,
+): Promise<{ counts: { imported: number; errors: number } }> {
+  const row = await env.DB.prepare('SELECT * FROM integrations WHERE id = ? LIMIT 1').bind(integrationId).first<IntegrationRow>();
+  if (!row) throw new Error('integration_not_found');
+  let imported = 0;
+  let errors = 0;
+  let after: string | undefined;
+  for (let page = 0; page < 20; page++) {
+    const url = `/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,pipeline,amount${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+    const res = await hsFetch(env, row, url);
+    if (!res.ok) { errors++; break; }
+    const out = await res.json() as { results: Array<{ id: string; properties: Record<string, string> }>; paging?: { next?: { after?: string } } };
+    for (const d of (out.results || [])) {
+      if (d.properties.pipeline !== pipelineId) continue;
+      const status = stageMap[d.properties.dealstage] || 'applied';
+      try {
+        const existing = await env.DB.prepare(
+          'SELECT id FROM deals WHERE hubspot_deal_id = ? LIMIT 1',
+        ).bind(d.id).first<{ id: number }>();
+        if (existing) {
+          await env.DB.prepare(
+            'UPDATE deals SET status = ?, amount = COALESCE(?, amount), updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          ).bind(status, Number(d.properties.amount) || null, existing.id).run();
+        } else {
+          // deals.project_id is NOT NULL — find-or-create a placeholder
+          // project per imported deal (keyed by dealname) so the import
+          // succeeds for new rows.
+          const { ensureProjectForImport } = await import('../../routes/imports');
+          const projectId = await ensureProjectForImport(env, user, d.properties.dealname || `HubSpot deal ${d.id}`, 'hubspot');
+          if (!projectId) { errors++; continue; }
+          await env.DB.prepare(
+            `INSERT INTO deals (project_id, hubspot_deal_id, status, amount, created_at, updated_at)
+             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          ).bind(projectId, d.id, status, Number(d.properties.amount) || null).run();
+        }
+        imported++;
+      } catch {
+        errors++;
+      }
+    }
+    after = out.paging?.next?.after;
+    if (!after) break;
+  }
+  return { counts: { imported, errors } };
+}
 
 /**
  * Cron entry-point. Iterates every active hubspot integration and runs

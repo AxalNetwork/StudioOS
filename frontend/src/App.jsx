@@ -46,6 +46,7 @@ import AdvisoryPage from './pages/AdvisoryPage';
 import ActivityPage from './pages/ActivityPage';
 import AdminPage from './pages/AdminPage';
 import AdminTrashPage from './pages/AdminTrashPage';
+import AdminReferEarnPayouts from './pages/admin/ReferEarnPayouts';
 import AdminDueDiligencePage from './pages/AdminDueDiligencePage';
 import AdminDueDiligenceCasePage from './pages/AdminDueDiligenceCasePage';
 import ApiBridgePage from './pages/ApiBridgePage';
@@ -79,6 +80,12 @@ import SpinOutsPage from './pages/SpinOutsPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import RiskDisclosuresPage from './pages/RiskDisclosuresPage';
+// Task #4 (ID) — Public marketing surfaces.
+import PricingPage from './pages/PricingPage';
+import DemoPage from './pages/DemoPage';
+import StatusPage from './pages/StatusPage';
+import ChangelogPage from './pages/ChangelogPage';
+import PublicRoadmapPage from './pages/PublicRoadmapPage';
 import MonitoringPage from './pages/MonitoringPage';
 import LiquidityPage from './pages/LiquidityPage';
 import FundsPage from './pages/FundsPage';
@@ -114,7 +121,10 @@ import EmailChangeRevokePage from './pages/EmailChangeRevokePage';
 import InactivityWarningModal from './components/InactivityWarningModal';
 import NotificationBell from './components/NotificationBell';
 import CommandPalette from './components/CommandPalette';
+// Task #7 (IG) — Contextual help (+ paid-tier customer chat) on every signed-in page.
+import HelpWidget from './components/HelpWidget';
 import InstallPrompt from './components/InstallPrompt';
+import KeyboardShortcutsOverlay from './components/KeyboardShortcutsOverlay';
 import useInactivityTimeout from './hooks/useInactivityTimeout';
 
 // Phase B · Prompt 5 — sidebar groups now live in `frontend/src/sidebarConfig.js`.
@@ -258,7 +268,7 @@ function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
     : openKeys;
 
   return (
-    <nav className="flex-1 py-3 overflow-y-auto" aria-label="Primary navigation">
+    <nav className="flex-1 py-3 overflow-y-auto" aria-label="Primary navigation" data-tour="sidebar-nav">
       {!collapsed && (
         <div className="px-3 pb-2">
           <div className="relative">
@@ -404,7 +414,12 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
           </button>
           {open && (
             <>
-              <div className="fixed inset-0 z-50" onClick={() => setOpen(false)} />
+              <button
+                type="button"
+                aria-label="Close menu"
+                className="fixed inset-0 z-50 cursor-default bg-transparent"
+                onClick={() => setOpen(false)}
+              />
               <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[160px] z-50">
                 {Object.entries(ROLE_LABELS).map(([role, label]) => (
                   <button
@@ -660,6 +675,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         onLogout={logoutNow}
       />
       <CommandPalette />
+      <HelpWidget />
+      <KeyboardShortcutsOverlay />
       <InstallPrompt />
     </ViewModeContext.Provider>
   );
@@ -951,6 +968,7 @@ function AppInner() {
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/trash" element={guard(['admin'], <AdminTrashPage />)} />
+      <Route path="/admin/refer-earn" element={guard(['admin'], <AdminReferEarnPayouts />)} />
       <Route path="/admin/partners" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/publications" element={guard(['admin'], <AdminPublications />)} />
       <Route path="/admin/publications/new" element={guard(['admin'], <AdminPublicationNew />)} />
@@ -1031,6 +1049,12 @@ function AppInner() {
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/risk-disclosures" element={<RiskDisclosuresPage />} />
+      {/* Task #4 (ID) — Public marketing surfaces. No auth. */}
+      <Route path="/pricing" element={<PricingPage />} />
+      <Route path="/demo" element={<DemoPage />} />
+      <Route path="/status" element={<StatusPage />} />
+      <Route path="/changelog" element={<ChangelogPage />} />
+      <Route path="/roadmap" element={<PublicRoadmapPage />} />
       <Route path="/academy/:slug" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
       <Route path="/academy" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
     </Routes>

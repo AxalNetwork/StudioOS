@@ -53,16 +53,16 @@ async function ensureFinancialsModelSchema(env: Env): Promise<void> {
     );
     if (have.size === 0) {
       await env.DB.exec(
-        `CREATE TABLE IF NOT EXISTS financial_models (` +
-          `id INTEGER PRIMARY KEY AUTOINCREMENT,` +
-          `project_id INTEGER NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,` +
-          `assumptions_json TEXT NOT NULL DEFAULT '{}',` +
-          `computed_json TEXT,` +
-          `sensitivity_json TEXT,` +
-          `capital_recompute_json TEXT,` +
-          `updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,` +
-          `updated_at TEXT NOT NULL DEFAULT (datetime('now'))` +
-        `)`,
+        `CREATE TABLE IF NOT EXISTS financial_models (`
+          + ` id INTEGER PRIMARY KEY AUTOINCREMENT,`
+          + ` project_id INTEGER NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,`
+          + ` assumptions_json TEXT NOT NULL DEFAULT '{}',`
+          + ` computed_json TEXT,`
+          + ` sensitivity_json TEXT,`
+          + ` capital_recompute_json TEXT,`
+          + ` updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,`
+          + ` updated_at TEXT NOT NULL DEFAULT (datetime('now'))`
+          + `)`,
       );
       try { await env.DB.exec(
         `CREATE INDEX IF NOT EXISTS idx_financial_models_project ON financial_models(project_id)`,

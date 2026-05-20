@@ -9,6 +9,9 @@ import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
+import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
+import Skeleton from '../components/Skeleton';
 
 const ICON_MAP = {
   Building2, Calendar, Cloud, PieChart, MessageSquare, PenTool, Database,
@@ -179,7 +182,16 @@ export default function IntegrationsPage() {
     return { live, coming };
   }, [providers]);
 
-  if (loading) return <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Loading…</div>;
+  if (loading) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto" data-density-target>
+        <Skeleton h={28} w="33%" className="mb-6" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton.Card key={i} />)}
+        </div>
+      </div>
+    );
+  }
 
   if (loadError) {
     return (
@@ -190,17 +202,11 @@ export default function IntegrationsPage() {
             Integrations <span className="text-gray-500 dark:text-gray-400 font-normal">— Connect your CRM, legal providers, and data feeds. Push deals out, receive webhooks back.</span>
           </h1>
         </header>
-        <div className="bg-white dark:bg-gray-900 border border-red-200 dark:border-red-900 rounded-xl p-6 text-center">
-          <AlertCircle className="mx-auto text-red-500 mb-2" size={28} />
-          <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">Couldn't load integrations</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-4">{loadError}</div>
-          <button
-            onClick={() => { setLoading(true); refresh(); }}
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700"
-          >
-            <RefreshCw size={12} /> Retry
-          </button>
-        </div>
+        <ErrorState
+          message={`Couldn't load integrations — ${loadError}`}
+          onRetry={() => { setLoading(true); refresh(); }}
+          supportTopic="integrations"
+        />
       </div>
     );
   }
@@ -232,9 +238,11 @@ export default function IntegrationsPage() {
           Connected <span className="text-xs font-normal text-gray-500">({items.length})</span>
         </h2>
         {items.length === 0 ? (
-          <div className="bg-white dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 text-center text-sm text-gray-500 dark:text-gray-400">
-            No integrations connected yet. Pick one from the marketplace below to get started.
-          </div>
+          <EmptyState
+            icon={Plug}
+            title="No integrations connected yet"
+            body="Pick one from the marketplace below to start syncing deals, contacts, and calendar."
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {items.map(it => {

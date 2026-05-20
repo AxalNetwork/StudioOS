@@ -28,7 +28,7 @@ function getCsrfHeader(method) {
   return {};
 }
 
-async function request(path, options = {}) {
+export async function request(path, options = {}) {
   try {
     // FormData uploads must NOT carry an explicit Content-Type — the browser
     // sets it (with the multipart boundary). Setting application/json here
@@ -140,6 +140,12 @@ export const api = {
   checkVerifyEmail: (token) => request(`/auth/verify-email?token=${encodeURIComponent(token)}`),
   confirmVerifyEmail: (data) => request('/auth/confirm-verify-email', { method: 'POST', body: JSON.stringify(data) }),
   resendVerification: (data) => request('/auth/resend-verification', { method: 'POST', body: JSON.stringify(data) }),
+  // Task #6 (IF) — onboarding checklist + product-tour state.
+  getOnboardingChecklist: () => request('/onboarding/checklist'),
+  completeOnboardingItem: (key) => request(`/onboarding/checklist/${encodeURIComponent(key)}/complete`, { method: 'POST' }),
+  skipOnboardingItem: (key) => request(`/onboarding/checklist/${encodeURIComponent(key)}/skip`, { method: 'POST' }),
+  resetOnboardingChecklist: () => request('/onboarding/checklist/reset', { method: 'POST' }),
+  patchOnboardingMeta: (patch) => request('/onboarding/meta', { method: 'POST', body: JSON.stringify(patch || {}) }),
   setupTotp: (data) => request('/auth/setup-totp', { method: 'POST', body: JSON.stringify(data) }),
   // Task #6 — SMS 2FA (Google Cloud Identity Platform / Firebase Phone Auth).
   // Discovery is unauth (rate-limited per IP). All other endpoints follow the
@@ -157,6 +163,13 @@ export const api = {
   smsVerifyChallenge: (email, session_info, code) =>
     request('/auth/sms/verify-challenge', { method: 'POST', body: JSON.stringify({ email, session_info, code }) }),
   getMe: () => request('/auth/me'),
+  // Task #7 (IG) — Cmd+K + Help widget + Customer chat.
+  getRecentActivity: (limit = 20) => request(`/activity/recent?limit=${encodeURIComponent(limit)}`),
+  getCustomerChatThread: () => request('/customer-chat/thread'),
+  sendCustomerChat: (text) => request('/customer-chat/send', {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  }),
   health: () => request('/health'),
 
   // Task #15 — Page header explainers (server-synced dismiss list).
@@ -260,8 +273,10 @@ export const api = {
     request(`/wellbeing/resources/${id}`, { method: 'DELETE' }),
   // Task #8 (DI) — daily pulse + expert directory
   wellbeingDaily: (days = 30) => request(`/wellbeing/daily?days=${days}`),
+  // Task #33 — canonical submit endpoint is /wellbeing/checkins; /daily is
+  // kept as a backward-compat alias on the worker.
   wellbeingDailySubmit: (data) =>
-    request('/wellbeing/daily', { method: 'POST', body: JSON.stringify(data) }),
+    request('/wellbeing/checkins', { method: 'POST', body: JSON.stringify(data) }),
   wellbeingExpertCategories: () => request('/wellbeing/experts/categories'),
   wellbeingExperts: (params = {}) => {
     const q = new URLSearchParams();
@@ -783,6 +798,22 @@ export const api = {
   adminPayouts: () => request('/network/admin/payouts'),
   adminProcessPayout: (id, data) => request(`/network/admin/payouts/${id}/process`, { method: 'PATCH', body: JSON.stringify(data) }),
 
+  // Task #9 — Refer & Earn payouts via Stripe Connect Express.
+  referEarnConnectOnboard: () => request('/refer-earn/connect/onboard', { method: 'POST' }),
+  referEarnConnectStatus: () => request('/refer-earn/connect/status'),
+  referEarnConnectLoginLink: () => request('/refer-earn/connect/login-link', { method: 'POST' }),
+  referEarnDashboard: () => request('/refer-earn/dashboard'),
+  referEarnPayoutsMe: () => request('/refer-earn/payouts/me'),
+  adminReferEarnPayouts: (status) =>
+    request(`/refer-earn/admin/payouts${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  adminReferEarnApprove: (id) => request(`/refer-earn/admin/payouts/${id}/approve`, { method: 'POST' }),
+  adminReferEarnPay: (id) => request(`/refer-earn/admin/payouts/${id}/pay`, { method: 'POST' }),
+  adminReferEarnRunApprovalEngine: () =>
+    request('/refer-earn/admin/run-approval-engine', { method: 'POST' }),
+  adminReferEarnTaxSummary: (year) =>
+    request(`/refer-earn/admin/tax-summary${year ? `?year=${year}` : ''}`),
+  adminReferEarnEvaluate: (id) => request(`/refer-earn/admin/payouts/${id}/evaluate`),
+
   adminUserProfile: (userId) => request(`/admin/users/${userId}/profile`),
   // Task #1 (DB) — dedicated transcript endpoints. The /profile call above
   // returns the first + most-recent advisor conversation inline; these are
@@ -810,6 +841,39 @@ export const api = {
   },
   adminUserAdvisorConversation: (userId, conversationId) =>
     request(`/admin/users/${userId}/conversations/advisor/${conversationId}`),
+  // Task #34 — message-level transcript CSV export. POST per spec (the body
+  // can include from/to/persona/model/conversation_id filters that would
+  // be awkward to express as a GET URL). Returns the CSV blob; caller is
+  // responsible for triggering the download.
+  adminUserAdvisorTranscriptExport: async (userId, opts = {}) => {
+    const res = await fetch(`/api/admin/users/${userId}/conversations/advisor/export`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      credentials: 'include',
+      body: JSON.stringify(opts || {}),
+    });
+    if (!res.ok) {
+      let msg = `Export failed (${res.status})`;
+      try { const j = await res.json(); if (j?.error) msg = j.error; } catch {}
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const filename =
+      (res.headers.get('Content-Disposition') || '')
+        .match(/filename="?([^"]+)"?/)?.[1] || `advisor-transcript-${userId}.csv`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   adminUpdateNotes: (userId, admin_notes) => request(`/admin/users/${userId}/notes`, { method: 'POST', body: JSON.stringify({ admin_notes }) }),
   adminResendVerification: (userId) => request(`/admin/users/${userId}/resend-verification`, { method: 'POST' }),
 
@@ -1619,6 +1683,44 @@ export const api = {
   // Reuse the existing /api/capital/funds endpoint for the fund picker —
   // it returns the canonical VCFund list with id/uid/name/total_commitment.
   capitalFundsList: () => request('/capital/funds'),
+
+  // Task #8 (IH) — Data import + migration tools.
+  importsList: () => request('/imports/'),
+  importsQuota: () => request('/imports/quota'),
+  importsGet: (id) => request(`/imports/${encodeURIComponent(id)}`),
+  universalPreview: (csv, target) =>
+    request('/imports/universal/preview', { method: 'POST', body: JSON.stringify({ csv, target }) }),
+  universalCommit: (csv, target, mapping) =>
+    request('/imports/universal/commit', { method: 'POST', body: JSON.stringify({ csv, target, mapping }) }),
+  angellistPreview: (csv) =>
+    request('/imports/angellist/preview', { method: 'POST', body: JSON.stringify({ csv }) }),
+  angellistCommit: (csv) =>
+    request('/imports/angellist/commit', { method: 'POST', body: JSON.stringify({ csv }) }),
+  portfolioPreview: (csv) =>
+    request('/imports/portfolio/preview', { method: 'POST', body: JSON.stringify({ csv }) }),
+  portfolioCommit: (csv) =>
+    request('/imports/portfolio/commit', { method: 'POST', body: JSON.stringify({ csv }) }),
+  portfolioHoldings: () => request('/imports/portfolio/holdings'),
+  cartaImport: (integrationId) =>
+    request('/imports/carta', { method: 'POST', body: JSON.stringify({ integration_id: integrationId }) }),
+  hubspotPipelines: () => request('/imports/hubspot/preview', { method: 'POST', body: JSON.stringify({}) }),
+  hubspotImport: (pipelineId, stageMap) =>
+    request('/imports/hubspot/commit', {
+      method: 'POST',
+      body: JSON.stringify({ pipeline_id: pipelineId, stage_map: stageMap }),
+    }),
+  affinityLists: () => request('/imports/affinity/preview', { method: 'POST', body: JSON.stringify({}) }),
+  affinityImport: (listId, stageMap) =>
+    request('/imports/affinity/commit', {
+      method: 'POST',
+      body: JSON.stringify({ list_id: listId, stage_map: stageMap }),
+    }),
+  deckImport: (file, projectId) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (projectId) fd.append('project_id', String(projectId));
+    return request('/imports/deck', { method: 'POST', body: fd });
+  },
 };
 
 // Task #3 — Due Diligence module. Admin/partner/investor/mentor only;

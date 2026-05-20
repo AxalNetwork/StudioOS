@@ -107,8 +107,13 @@ function msToken(env: Env): string {
 // makes the provider unconfigured even though the rest of the OAuth client is
 // in place.
 // ---------------------------------------------------------------------------
+// Task #35 — PUBLIC_BASE_URL is the canonical source of truth for the
+// public app origin; APP_URL is kept as a back-compat alias. Either
+// resolves the OAuth redirect URI; PUBLIC_BASE_URL wins when both are
+// set.
 function appBase(env: Env): string {
-  return (env.APP_URL || '').replace(/\/+$/, '');
+  const e = env as Env & { PUBLIC_BASE_URL?: string };
+  return ((e.PUBLIC_BASE_URL || e.APP_URL || '')).replace(/\/+$/, '');
 }
 // Reject any override that still points at the workers.dev sandbox in
 // production — a stale env var set before Task #5 (DC) would otherwise
@@ -151,6 +156,30 @@ export function googleOAuthAvailable(env: Env): boolean {
 }
 export function microsoftOAuthAvailable(env: Env): boolean {
   return !!(env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET && microsoftRedirectUri(env));
+}
+
+/**
+ * Task #35 — pre-flight check that the server has every secret needed to
+ * start an OAuth round-trip. Returning the `missing` list lets an admin
+ * fix the config without reading worker logs. Lives here (not in
+ * routes/calendar.ts) so tests can import it without dragging Hono in.
+ */
+export function preflightOAuthSecrets(
+  env: Env,
+  provider: 'google' | 'microsoft',
+): string[] {
+  const missing: string[] = [];
+  if (!env.JWT_SECRET) missing.push('JWT_SECRET');
+  if (provider === 'google') {
+    if (!env.GOOGLE_CLIENT_ID) missing.push('GOOGLE_CLIENT_ID');
+    if (!env.GOOGLE_CLIENT_SECRET) missing.push('GOOGLE_CLIENT_SECRET');
+    if (!googleRedirectUri(env)) missing.push('PUBLIC_BASE_URL');
+  } else {
+    if (!env.MICROSOFT_CLIENT_ID) missing.push('MICROSOFT_CLIENT_ID');
+    if (!env.MICROSOFT_CLIENT_SECRET) missing.push('MICROSOFT_CLIENT_SECRET');
+    if (!microsoftRedirectUri(env)) missing.push('PUBLIC_BASE_URL');
+  }
+  return missing;
 }
 
 // ===========================================================================

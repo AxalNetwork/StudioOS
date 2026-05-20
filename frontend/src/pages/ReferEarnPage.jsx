@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
+import StripeConnectPayoutsPanel from '../components/StripeConnectPayoutsPanel';
 import { Link } from 'react-router-dom';
 import {
   Copy, Check, Users, DollarSign, Share2, ExternalLink, Network as NetworkIcon,
@@ -635,25 +636,11 @@ export default function ReferEarnPage() {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-900">Wallet</h2>
-          <Link to="/payouts" className="text-xs text-violet-600 hover:underline flex items-center gap-1">
-            Manage payouts <ExternalLink size={11} />
-          </Link>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
-          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-            <div className="text-xs text-emerald-700 mb-1">Available Balance</div>
-            <div className="text-2xl font-bold text-emerald-900">{fmt(commissions.balance_cents)}</div>
-            <div className="text-[11px] text-emerald-600 mt-1">Accrued commissions ready for payout</div>
-          </div>
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <div className="text-xs text-gray-600 mb-1">Lifetime Earned</div>
-            <div className="text-2xl font-bold text-gray-900">{fmt(commissions.lifetime_cents)}</div>
-            <div className="text-[11px] text-gray-500 mt-1">Including paid-out amounts</div>
-          </div>
-        </div>
+      {/* Task #9 — Stripe Connect Express payouts: Connect onboarding,
+          pending/approved/paid totals, anonymised referral history, and
+          "Manage payout method" CTA to the Stripe hosted dashboard. */}
+      <div className="mb-6">
+        <StripeConnectPayoutsPanel />
       </div>
 
       {/* Task #4 — Sent Invitations panel. Lives between Wallet and Import

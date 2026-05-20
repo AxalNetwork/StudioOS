@@ -1,0 +1,58 @@
+name: Beta Readiness Re-audit Reminder
+
+# Fires every 14 days starting 2026-06-03 (2 weeks after the 2026-05-20 audit).
+# Opens a tracking issue referencing the most recent audit doc so the next
+# pass has a clear hand-off.
+on:
+  schedule:
+    # 09:00 UTC every other Wednesday. Cron's day-of-week is 0-6 (Sun=0).
+    # First match after 2026-05-20 is Wed 2026-06-03.
+    - cron: "0 9 3,17 * *"
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  open-tracking-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find latest audit doc
+        id: latest
+        run: |
+          latest=$(ls -1 BETA_READINESS_AUDIT_*.md 2>/dev/null | sort | tail -1 || true)
+          if [ -z "$latest" ]; then
+            echo "No BETA_READINESS_AUDIT_*.md found at repo root." >&2
+            echo "latest=" >> "$GITHUB_OUTPUT"
+          else
+            echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open re-audit tracking issue
+        if: steps.latest.outputs.latest != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const today = new Date().toISOString().slice(0, 10);
+            const latest = "${{ steps.latest.outputs.latest }}";
+            const title = `Beta Readiness re-audit — ${today}`;
+            const body = [
+              `Scheduled 14-day re-audit triggered by \`.github/workflows/beta-readiness-reaudit.yml\`.`,
+              ``,
+              `Previous audit: [\`${latest}\`](../blob/main/${latest}).`,
+              `Companion issue staging file: [\`BETA_READINESS_ISSUES_2026-05-20.md\`](../blob/main/BETA_READINESS_ISSUES_2026-05-20.md).`,
+              ``,
+              `**Action:** Open Task #1's playbook, walk every row in the previous audit, and produce \`BETA_READINESS_AUDIT_${today}.md\`. Re-grade each row (green / partial / red); update the punch list (IB–II); close any beta-blocker/beta-nice issues that have shipped.`,
+              ``,
+              `When done, attach the new doc to this issue and close.`,
+            ].join("\n");
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ["beta-readiness", "audit", "tracking"],
+            });

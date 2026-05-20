@@ -33,7 +33,6 @@ import {
 } from '../registry';
 import {
   decryptCredentials,
-  encryptCredentials,
   type CredentialBlob,
 } from '../secrets';
 

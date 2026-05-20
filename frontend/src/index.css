@@ -196,3 +196,69 @@ select::-ms-expand { display: none; }
 [data-density="compact"] [data-card]:not(:has(> [data-card-body])) {
   padding: 0.875rem;
 }
+
+/* ---------------------------------------------------------------------------
+   Task #3 (IC) — Accessibility primitives.
+
+   1) Reduced-motion guard. When the OS advertises
+      `prefers-reduced-motion: reduce`, suppress every CSS transition,
+      animation, and smooth scroll across the app. Components that need
+      a *functional* animation (e.g. a progress indicator) must opt back
+      in with `motion-safe:` Tailwind variants.
+   2) Visible focus ring on keyboard-only focus. `:focus-visible` skips
+      the ring for click/touch focus and shows a 2px violet ring for
+      keyboard navigation — passes WCAG 2.4.7 without the visual noise
+      of a permanent outline on every clickable element.
+   3) Screen-reader-only utility — apply `.sr-only` on the live-region
+      announcement nodes the bell + toast system surface (Tailwind 4
+      ships its own .sr-only but we re-declare here so it's available
+      regardless of plugin order).
+   ------------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:where(a, button, [role="button"], input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid #8b5cf6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Mobile responsive helpers — Task #3 (IC).
+   `data-table-cards` opt-in collapses a <table>-like grid into a card
+   stack below 768px. Pages that adopt it wrap rows with
+   `data-table-card-row` so the rule scopes precisely. */
+@media (max-width: 767px) {
+  [data-table-cards] [data-table-card-row] {
+    display: block !important;
+    grid-template-columns: none !important;
+    border: 1px solid var(--app-border);
+    border-radius: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding: 0.75rem;
+  }
+  [data-table-cards] [data-table-card-row] > * {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.25rem 0 !important;
+    border-bottom: 1px dashed var(--app-border);
+  }
+  [data-table-cards] [data-table-card-row] > *:last-child { border-bottom: 0; }
+}

@@ -168,6 +168,27 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
     return { sent: false, verificationUrl, tokenStored: false };
   }
 
+  // Task #2 (IB) — route through the unified send() pipeline first. It
+  // renders the `auth_verify_email` template, mirrors into
+  // notifications_inbox, and enqueues an `email_send` job (with
+  // automatic DLQ on permanent failure). The legacy
+  // sendVerificationEmail() stays as a fallback ONLY if the unified
+  // pipeline throws before enqueueing — the queue itself handles its
+  // own retries so we don't double-send on transient SMTP errors.
+  try {
+    const { send } = await import('../services/email/send');
+    const r = await send(
+      env,
+      'auth_verify_email',
+      email,
+      { name, verify_url: verificationUrl, app_url: env.APP_URL },
+      { userId },
+    );
+    if (r.ok) return { sent: true, verificationUrl, tokenStored };
+    console.warn(`[AUTH] unified send() returned not-ok for ${email}; falling back to legacy sender`);
+  } catch (e: any) {
+    console.error(`[AUTH] unified send() threw for ${email}: ${e?.message || 'Unknown error'} — falling back`);
+  }
   try {
     const sent = await sendVerificationEmail(env, email, name, verificationUrl);
     if (!sent) {

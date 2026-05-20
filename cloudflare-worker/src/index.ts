@@ -46,6 +46,8 @@ import { investorProfile, investorSignals, aggregateInvestorSignals } from './ro
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import { runTotpRemediation } from './services/totpRemediation';
 import { writeDailySnapshot } from './services/analyticsReports';
+// Task #5 (IE) — Backup + DR. Daily KV snapshot to R2.
+import { runDailyKvSnapshot, writeBackupHeartbeat } from './services/backup';
 import advisory from './routes/advisory';
 import activity from './routes/activity';
 import admin from './routes/admin';
@@ -82,11 +84,16 @@ import { syncAllDocusignIntegrations } from './integrations/providers/docusign';
 // Side-effect import so registerProvider() runs at boot. No cron/sync —
 // Slack is send-only, driven by services/notify.ts.
 import './integrations/providers/slack';
-import './integrations/providers/crunchbase';
+// Crunchbase provider — named import (not bare side-effect) so CodeQL's
+// unused-import check sees a real reference. The module's top-level
+// `registerProvider(impl)` still runs as soon as it's loaded.
+import { crunchbaseFetch as _registerCrunchbase } from './integrations/providers/crunchbase';
+void _registerCrunchbase;
 // Task #6 (DG) — Stripe provider. Side-effect import so registerProvider() runs at boot.
 import { syncAllStripeIntegrations, handleStripeConnectEvent } from './integrations/providers/stripe';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
+import referEarn from './routes/refer_earn';
 import networkfx from './routes/networkfx';
 import profiling from './routes/profiling';
 import studioops from './routes/studioops';
@@ -95,6 +102,13 @@ import matches from './routes/matches';
 import settings from './routes/settings';
 import personas from './routes/personas';
 import onboarding from './routes/onboarding';
+// Task #6 (IF) — per-role onboarding checklist + product-tour tracking.
+import onboardingChecklist from './routes/onboarding_checklist';
+// Task #7 (IG) — Customer chat for paid tiers (Studio/Institutional/Partner).
+import customerChat from './routes/customer_chat';
+// Task #8 (IH) — Data import + migration tools (Carta/AngelList CSV/Deck
+// PDF+PPTX/Investor portfolio/HubSpot pipeline/Universal CSV).
+import importsRoutes from './routes/imports';
 import brand, { renderLandingHtml } from './routes/brand';
 import decks from './routes/decks';
 import notificationsRoutes from './routes/notifications';
@@ -158,7 +172,18 @@ const app = new Hono<{ Bindings: Env }>();
 // www); the dev allowlist now comes from `env.EXTRA_DEV_ORIGINS` (comma
 // separated) so the workers.dev sandbox URL is NEVER hardcoded into a
 // production deploy. Production env should leave EXTRA_DEV_ORIGINS unset.
-const PROD_ORIGINS = ['https://axal.vc', 'https://www.axal.vc'];
+// Task #30 — Production allowlist. `app.axal.vc` is the same-origin SPA
+// (no CORS preflight needed for that traffic, but listing it keeps
+// preflight code paths well-behaved). `axal.vc` + `www.axal.vc` are the
+// GitHub-Pages marketing site, which posts to `/api/forms/*` and reads
+// `/api/public/status` cross-origin. `status.axal.vc` is the public
+// status page (Worker-served HTML), allowed for any future widget JS.
+const PROD_ORIGINS = [
+  'https://app.axal.vc',
+  'https://axal.vc',
+  'https://www.axal.vc',
+  'https://status.axal.vc',
+];
 const DEV_LOCALHOSTS = ['http://localhost:5000', 'http://localhost:5173'];
 
 function parseExtraDevOrigins(env: unknown): string[] {
@@ -231,7 +256,7 @@ async function oauthCallbackWorkersDevGuard(c: any, next: () => Promise<void>) {
     if (host.endsWith('.workers.dev')) {
       console.warn('[OAUTH-GUARD] blocked workers.dev callback', c.req.path, host);
       return c.text(
-        'This OAuth callback URL is no longer accepted. Please reconnect from https://axal.vc.',
+        'This OAuth callback URL is no longer accepted. Please reconnect from https://app.axal.vc.',
         410,
       );
     }
@@ -347,6 +372,20 @@ app.route('/api/market-intel', marketIntel);
 app.route('/api/market-intel-public', marketIntelPublic);
 app.route('/api/investor-profile', investorProfile);
 app.route('/api/investor-signals', investorSignals);
+// Task #31 — Dashboard personal assistant is Anthropic-only and is
+// gated behind ENABLE_ANTHROPIC_DEV=1 on non-production stages. We
+// can't read env at module init time, so the gate runs as a
+// per-request middleware in front of the mount; in production STAGE
+// callers get a canonical 404 instead of reaching the route. The
+// assistant route itself also self-checks in `anthropicDevAllowed()`.
+app.use('/api/assistant/*', async (c, next) => {
+  const env = c.env as unknown as { STAGE?: string; ENVIRONMENT?: string; ENABLE_ANTHROPIC_DEV?: string };
+  const prod = env.STAGE === 'production' || env.ENVIRONMENT === 'production';
+  if (prod || env.ENABLE_ANTHROPIC_DEV !== '1') {
+    return c.json({ error: 'not_found' }, 404);
+  }
+  await next();
+});
 app.route('/api/assistant', assistantRoutes);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
@@ -386,6 +425,20 @@ app.route('/api/email', email);
 app.route('/api/pipeline', pipeline);
 app.route('/api/search', search);
 app.route('/api/onboarding', onboarding);
+// Task #6 (IF) — mounts /api/onboarding/checklist + /api/onboarding/meta.
+// Sits on the same prefix as the legacy wizard router; Hono dispatches the
+// most specific path first so /progress + /complete keep going to the
+// original handler.
+app.route('/api/onboarding', onboardingChecklist);
+// Task #7 (IG) — Customer chat (paid tiers). Tier gating is enforced
+// inline (isEligible) so admin/mentor bypass + Partner-tier access work
+// without listing the prefix in STUDIO_PREFIXES (which would block
+// partners).
+app.route('/api/customer-chat', customerChat);
+// Task #8 (IH) — Data imports. Outside STUDIO_PREFIXES — tier limits are
+// enforced inline (Free=1/mo, Growth=10/mo, Studio=unlimited; admin/
+// partner/investor/mentor bypass).
+app.route('/api/imports', importsRoutes);
 app.route('/api/brand', brand);
 app.route('/api/decks', decks);
 
@@ -402,6 +455,8 @@ app.route('/api/trust', trust);
 // register esign at the path the UI already uses.
 app.route('/api/legal/esign', esign);
 app.route('/api/network', network);
+// Task #9 — Refer & Earn payouts via Stripe Connect Express (import at top).
+app.route('/api/refer-earn', referEarn);
 app.route('/api/networkfx', networkfx);
 app.route('/api/profiling', profiling);
 app.route('/api/studioops', studioops);
@@ -672,6 +727,26 @@ export default {
             }
           } catch (e) { console.error('[cron] trust expiry failed', e); }
         }
+        // Task #9 — daily Refer & Earn auto-approval sweep at 04:50 UTC.
+        // Walks every pending referral_payouts row, re-runs the
+        // (email-verified + investor-KYC + 30-day refund window + OFAC)
+        // checks, and flips eligible rows to 'approved' so the admin
+        // queue stays current without manual intervention. Idempotent;
+        // failures during one row don't affect the rest.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 50) {
+          try {
+            const { runApprovalEngine } = await import('./services/referralPayouts');
+            const r = await runApprovalEngine(env);
+            if (r.scanned) {
+              console.info(
+                `[cron] refer-earn approval-engine scanned=${r.scanned} ` +
+                `approved=${r.approved} still_pending=${r.still_pending} blocked=${r.blocked}`,
+              );
+            }
+          } catch (e) {
+            console.error('[cron] refer-earn approval-engine failed', e);
+          }
+        }
         // Task #8 (X-1) — daily partner deal expiry sweep at 04:40 UTC.
         // Flips deals past their term to 'expired' and revokes tier
         // grants on the partner + every redeemer (paid upgrades that
@@ -724,12 +799,19 @@ export default {
         // Task #5 — daily assistant retention sweep at 04:10 UTC. Drops
         // conversations past their tier's TTL (90d free / 1y paid /
         // 5y admin opt-in). CASCADE deletes messages + feedback.
+        // Task #31 — only runs on dev/preview stages where the assistant
+        // route is mounted; in production the assistant tables are
+        // expected to be empty so the sweep is a no-op anyway.
         if (now.getUTCHours() === 4 && now.getUTCMinutes() === 10) {
-          try {
-            const r = await sweepExpiredConversations(env);
-            console.info(`[cron] assistant retention sweep deleted_free=${r.deleted_free} deleted_paid=${r.deleted_paid}`);
-          } catch (e) {
-            console.error('[cron] assistant retention sweep failed', e);
+          const e2 = env as unknown as { STAGE?: string; ENVIRONMENT?: string; ENABLE_ANTHROPIC_DEV?: string };
+          const prod = e2.STAGE === 'production' || e2.ENVIRONMENT === 'production';
+          if (!prod && e2.ENABLE_ANTHROPIC_DEV === '1') {
+            try {
+              const r = await sweepExpiredConversations(env);
+              console.info(`[cron] assistant retention sweep deleted_free=${r.deleted_free} deleted_paid=${r.deleted_paid}`);
+            } catch (e) {
+              console.error('[cron] assistant retention sweep failed', e);
+            }
           }
         }
         // Task #6 — daily TOTP remediation backstop at 04:20 UTC. The
@@ -775,6 +857,29 @@ export default {
               console.info(`[cron] personas digest scanned=${r.scanned} sent=${r.sent}`);
             }
           } catch (e) { console.error('[cron] personas digest failed', e); }
+        }
+        // Task #5 (IE) — Daily KV snapshot to R2 at 02:00 UTC. D1
+        // backup is taken separately by .github/workflows/backup-d1.yml
+        // (wrangler d1 export → R2) since the worker runtime has no
+        // native D1 export. Best-effort: failures log + page but never
+        // raise; the next 24h tick retries.
+        if (now.getUTCHours() === 2 && now.getUTCMinutes() === 0) {
+          try {
+            const r = await runDailyKvSnapshot(env);
+            console.info(`[cron] kv snapshot configured=${r.configured} ok=${r.ok} failed=${r.failed}`);
+            // Only advance the KV heartbeat when at least one snapshot
+            // actually landed and none failed. This prevents a "fresh"
+            // heartbeat from masking a regression where every target
+            // 404s or refuses (ephemeral guard).
+            if (r.ok > 0 && r.failed === 0) {
+              await writeBackupHeartbeat(env, 'worker_cron', 'kv', {
+                snapshots: r.objects,
+                configured: r.configured,
+              });
+            }
+          } catch (e) {
+            console.error('[cron] kv snapshot failed', e);
+          }
         }
         if (now.getUTCHours() === 4 && now.getUTCMinutes() === 30) {
           try {

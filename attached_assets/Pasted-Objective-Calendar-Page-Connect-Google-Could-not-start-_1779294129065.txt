@@ -1,0 +1,119 @@
+Objective
+  Calendar Page → "Connect Google" → "Could not start Google OAuth".
+  This is the /start endpoint failing, not the callback. Diagnose,
+  fix, and add a regression test.
+
+Diagnostic
+  1. wrangler tail while reproducing. Capture exact error.
+  2. Most likely causes:
+       a. Route /api/calendar/google/start not mounted in
+          cloudflare-worker/src/index.ts (calendar.ts not registered).
+       b. GOOGLE_CLIENT_ID secret not set (Worker env reads as
+          undefined, the URL-build throws).
+       c. PUBLIC_BASE_URL not set; redirect_uri assembled as
+          "undefined/api/calendar/google/callback".
+       d. state HMAC requires JWT_SECRET; if unset, throws.
+       e. Auth scopes string has a typo causing Google to 400
+          earlier (less likely at /start time).
+
+Fix
+  1. cloudflare-worker/src/routes/calendar.ts
+     calendar.get('/google/start', async (c) => {
+       const user = await requireAuth(c);
+
+       // Pre-flight checks: produce a clear typed error instead of
+       // a generic 500 / "Could not start".
+       const errors = [];
+       if (!c.env.GOOGLE_CLIENT_ID) errors.push('GOOGLE_CLIENT_ID');
+       if (!c.env.JWT_SECRET)       errors.push('JWT_SECRET');
+       if (!c.env.PUBLIC_BASE_URL)   errors.push('PUBLIC_BASE_URL');
+       if (errors.length > 0) {
+         log('error', 'calendar.google.start missing config',
+              { missing: errors });
+         return c.json(
+           { error: { code: 'oauth_config_missing',
+                       message: 'Google OAuth is not configured.',
+                       missing: errors } },
+           500
+         );
+       }
+
+       const nonce = crypto.randomUUID();
+       const state = await signHmac(c.env.JWT_SECRET,
+         JSON.stringify({ user_id: user.id, nonce, ts: Date.now() }));
+       await c.env.TOKENS.put(`oauth_state:google:${nonce}`,
+                               String(user.id), { expirationTtl: 600 });
+
+       const params = new URLSearchParams({
+         response_type: 'code',
+         client_id:     c.env.GOOGLE_CLIENT_ID,
+         redirect_uri:  `${c.env.PUBLIC_BASE_URL}/api/calendar/google/callback`,
+         scope: [
+           'https://www.googleapis.com/auth/calendar.events',
+           'https://www.googleapis.com/auth/calendar.readonly',
+           'openid', 'email', 'profile',
+         ].join(' '),
+         access_type:    'offline',
+         prompt:         'consent',
+         include_granted_scopes: 'true',
+         state:          `${nonce}.${state}`,
+       });
+
+       const redirect_url =
+         `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+       return c.json({ redirect_url });
+     });
+
+  2. Mount in cloudflare-worker/src/index.ts:
+       import calendar from './routes/calendar';
+       app.route('/api/calendar', calendar);
+
+  3. Frontend (CalendarPage.jsx):
+     The "Connect Google" button calls /api/calendar/google/start.
+     On 200 with redirect_url → window.location.assign(redirect_url).
+     On 500 with code='oauth_config_missing' → show a friendly admin-
+     contact message, not "Could not start Google OAuth".
+     On any other error → show the error response.error.message.
+
+  4. Wrangler config check
+     Ask the user to run:
+       wrangler secret list
+     Expected: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, JWT_SECRET.
+     Add PUBLIC_BASE_URL = "https://axal.vc" to wrangler.toml under
+     [vars] (NOT a secret; it's a public constant).
+
+  5. Google Cloud Console
+     OAuth consent screen verified.
+     Test users added if app is in testing mode.
+     Authorized redirect URIs include:
+       https://axal.vc/api/calendar/google/callback
+     Optionally for preview env: preview domain too.
+
+  6. Callback handler /google/callback
+     Verify state by hash lookup in KV; consume + delete the KV key.
+     Exchange code at oauth2.googleapis.com/token via x-www-form-
+     urlencoded body.
+     Persist refresh_token (encrypted), access_token, expires_at.
+     302 to /calendar?connected=google.
+
+  7. Reuse the same pattern for Outlook (/outlook/start, /outlook/
+     callback) — same pre-flight checks for MS_CLIENT_ID, etc.
+
+Tests
+  test/calendar.google-oauth.test.ts:
+    - missing GOOGLE_CLIENT_ID → 500 with code='oauth_config_missing'
+                                  and missing field in body
+    - all secrets present → 200 with redirect_url that matches the
+                              expected origin
+    - frontend smoke: clicking "Connect Google" navigates to
+      accounts.google.com
+
+Acceptance
+  - Connecting Google from /calendar successfully redirects to Google,
+    user grants, callback completes, events appear within 30s.
+  - If any required secret is missing, the API returns a typed error
+    with the missing key list so an admin can fix it without checking
+    server logs.
+  - Outlook flow mirrors Google.
+  - LinkedIn callback in Refer & Earn re-verified at axal.vc URL
+    (Prompt JB cross-reference).

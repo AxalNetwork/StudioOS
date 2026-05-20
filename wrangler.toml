@@ -22,7 +22,11 @@ name = "studioos"
 main = "cloudflare-worker/src/index.ts"
 compatibility_date = "2026-04-01"
 compatibility_flags = ["nodejs_compat"]
-workers_dev = true
+# Task #36 — workers.dev subdomain disabled. The worker is reachable
+# only through its Workers Custom Domain `app.axal.vc` (see [[routes]]
+# below). Re-enabling this also requires removing `app.axal.vc` from
+# the OAuth-callback workers.dev guard in cloudflare-worker/src/index.ts.
+workers_dev = false
 
 # Epic 11 — minified production bundle. Wrangler runs esbuild with
 # `minify: true`, which strips comments, mangles identifiers, and (most
@@ -35,28 +39,55 @@ workers_dev = true
 # parsed as a member of that route entry and rejected by Wrangler 4.x.)
 minify = true
 
-# ---------- Worker routes (zone-scoped, path-restricted) ----------
-# Task #5 (DC) — Mount the worker at `axal.vc/api/*` so every API call
-# (including third-party OAuth callbacks) resolves through the canonical
-# brand domain instead of the `*.workers.dev` sandbox URL.
+# ---------- Worker Custom Domain ----------
+# Task #36 — `app.axal.vc` is bound to this worker as a Workers Custom
+# Domain (the entire hostname, not a path-scoped zone route). The
+# worker serves BOTH the SPA (via [assets] below) and the `/api/*`
+# routes. The apex `axal.vc` continues to serve the GitHub Pages
+# marketing site — never attach Cloudflare to the apex.
 #
-# IMPORTANT: This is a *zone route*, NOT a `custom_domain = true`
-# binding. Cloudflare custom-domain bindings are hostname-only — they
-# can't be path-scoped, and a `pattern = "axal.vc"` custom-domain would
-# steal *every* request on the apex away from the Cloudflare Pages
-# deployment that serves the React SPA. A zone route with the
-# `axal.vc/api/*` glob lets the worker own only the API surface while
-# Pages keeps serving the SPA. `zone_name = "axal.vc"` makes Wrangler
-# look up the zone by name (no zone_id literal needed).
-#
-# The workers.dev sandbox URL stays accessible (workers_dev = true above)
-# for preview/debug, but the OAuth callback paths reject workers.dev
-# requests in production via the middleware in
-# `cloudflare-worker/src/index.ts` (returns 410 Gone — see
-# `oauthCallbackWorkersDevGuard`).
+# `custom_domain = true` makes Wrangler manage the binding through the
+# Workers domains API on deploy, including automatic DNS record
+# creation on the proxied zone. Do NOT use a path-scoped zone route
+# here — that would conflict with the assets binding and break the
+# SPA fallback for unmatched paths.
 [[routes]]
-pattern   = "axal.vc/api/*"
-zone_name = "axal.vc"
+pattern        = "app.axal.vc"
+custom_domain  = true
+
+# ---------- Static Assets (SPA) ----------
+# Task #36 — Worker Static Assets binding. The worker serves the
+# Vite-built SPA from `frontend/dist`. With `not_found_handling =
+# "single-page-application"`, any request the worker's fetch handler
+# doesn't match (i.e. anything NOT under `/api/*`, `/landing/:slug`,
+# or the few other handlers in `cloudflare-worker/src/index.ts`)
+# falls through to assets, which serves `index.html` for unknown
+# paths so the SPA's client-side router can take over.
+#
+# `run_worker_first = false` (the default) means assets are checked
+# BEFORE the worker fetch handler — so static files (.js/.css/.png)
+# are served directly from the edge without invoking the worker.
+# Only requests for paths not present in `dist/` reach the worker.
+#
+# `run_worker_first` lists path patterns where the worker MUST run
+# before any asset lookup. Without this, the SPA fallback in
+# `not_found_handling = "single-page-application"` would intercept
+# `/api/*` and `/landing/*` and serve `index.html` instead of
+# invoking the Hono router. Patterns use the same syntax as Workers
+# routes (`*` wildcards, not regex).
+#
+# Vite is configured (frontend/vite.config.js) to build into the
+# repo-root `./docs/` directory (legacy GitHub-Pages output path,
+# preserved so the in-repo deploy artifact stays in one place).
+#
+# Build before deploy:
+#   cd frontend && npm run build      # writes to ./docs/
+#   npx wrangler deploy --env production
+[assets]
+directory = "./docs"
+binding   = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/landing/*"]
 
 # ---------- Module Rules ----------
 # Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
@@ -86,7 +117,19 @@ fallthrough = true
 
 # ---------- Public (non-secret) variables ----------
 [vars]
-APP_URL = "https://axal.vc"
+# Task #30 — APP_URL now points at the dedicated SPA+API subdomain.
+# `axal.vc` apex stays on GitHub Pages (marketing). Email links, OAuth
+# redirect URIs, sitemap URLs, and signed-download URL bases all derive
+# from APP_URL via `c.env.APP_URL`.
+APP_URL = "https://app.axal.vc"
+# Task #30 — explicit aliases. PUBLIC_BASE_URL is the canonical
+# product hostname (SPA+API); PUBLIC_MARKETING_URL is the brand apex
+# (GitHub Pages) that the marketing site lives on. New code should
+# prefer these over APP_URL for clarity; APP_URL is kept as the
+# legacy name to avoid breaking the wide blast radius of code that
+# already reads it.
+PUBLIC_BASE_URL = "https://app.axal.vc"
+PUBLIC_MARKETING_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
 ENVIRONMENT       = "production"
@@ -229,6 +272,19 @@ bucket_name = "studioos-files"
 binding     = "PUBLICATIONS"
 bucket_name = "studioos-publications"
 
+# Task #5 (IE) — Backup + DR. Holds daily D1 SQL exports under
+# `d1/backup-YYYY-MM-DD.sql` (written by .github/workflows/backup-d1.yml)
+# and daily KV JSONL snapshots under `kv/<namespace>/YYYY-MM-DD.jsonl`
+# (written by services/backup.ts at 02:00 UTC). The bucket is private;
+# object-lock (compliance mode, 365-day retention) and lifecycle to
+# Standard-IA after 30 days are configured one-time in the dashboard —
+# see INCIDENT_RESPONSE.md § Backups for the checklist. The binding is
+# OPTIONAL at runtime: services/backup.ts logs and no-ops when missing
+# so dev/preview deploys without the bucket created still boot cleanly.
+[[r2_buckets]]
+binding     = "BACKUPS"
+bucket_name = "studioos-backups"
+
 # ---------- Workers Analytics Engine ----------
 # Task #13 — write a data point per HTTP request from the observability
 # middleware (cloudflare-worker/src/middleware/observability.ts) so the
@@ -315,16 +371,18 @@ service = "studioos-tail"
 [env.production]
 name = "studioos"
 
-# Task #5 (DC) — Mirror of the top-level [[routes]] block. Wrangler env
-# tables don't inherit `routes` either, so the `--env production` deploy
-# path needs its own zone-route binding for `axal.vc/api/*`. See the
-# top-level block for the rationale (zone route vs custom_domain).
+# Task #36 — Mirror of the top-level [[routes]] block. Wrangler env
+# tables don't inherit `routes` either, so the `--env production`
+# deploy path needs its own custom-domain binding. See the top-level
+# block for the rationale (custom_domain vs path-scoped route).
 [[env.production.routes]]
-pattern   = "axal.vc/api/*"
-zone_name = "axal.vc"
+pattern        = "app.axal.vc"
+custom_domain  = true
 
 [env.production.vars]
-APP_URL           = "https://axal.vc"
+APP_URL              = "https://app.axal.vc"
+PUBLIC_BASE_URL      = "https://app.axal.vc"
+PUBLIC_MARKETING_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
 ENVIRONMENT       = "production"
@@ -391,12 +449,26 @@ bucket_name = "studioos-files"
 binding     = "PUBLICATIONS"
 bucket_name = "studioos-publications"
 
+# Task #5 (IE) — mirror of the top-level BACKUPS R2 binding. See the
+# top-level [[r2_buckets]] block for rationale + operator setup.
+[[env.production.r2_buckets]]
+binding     = "BACKUPS"
+bucket_name = "studioos-backups"
+
 [[env.production.analytics_engine_datasets]]
 binding = "ANALYTICS"
 dataset = "studioos_metrics"
 
 [env.production.browser]
 binding = "BROWSER"
+
+# Task #36 — Mirror of the top-level [assets] binding. Env tables
+# don't inherit, so the `--env production` deploy path needs its own.
+[env.production.assets]
+directory = "./docs"
+binding   = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/landing/*"]
 
 # Task #9 (AO) — wire the studioos-tail consumer worker
 # (cloudflare-worker-tail/) so all production worker tail events get

@@ -155,6 +155,24 @@ export async function fireCommissionEvent(
     if (!insertResult.meta?.changes) return; // already credited; do not log a second time
     await sql`UPDATE referrals SET status = 'converted', converted_at = CURRENT_TIMESTAMP WHERE id = ${referral.id} AND status != 'converted'`;
 
+    // Task #9 — also create a referral_payouts ledger row for the new
+    // commission so the Stripe Connect payout pipeline can pick it up.
+    // Idempotent via UNIQUE(redemption_id) inside the helper.
+    try {
+      const commissionRow = await sql`SELECT id FROM commissions WHERE user_id = ${referral.referrer_id} AND source_type = ${rule.source_type} AND source_id = ${sourceId} LIMIT 1`;
+      const commissionId = (commissionRow[0] as { id?: number } | undefined)?.id;
+      if (commissionId) {
+        const { createReferralPayoutForCommission } = await import('../services/referralPayouts');
+        await createReferralPayoutForCommission(env, {
+          commissionId,
+          referrerUserId: referral.referrer_id,
+          amountCents,
+        });
+      }
+    } catch (e) {
+      console.warn('[refer-earn] createReferralPayoutForCommission failed:', (e as Error).message);
+    }
+
     const referrerRow = await sql`SELECT email, id FROM users WHERE id = ${referral.referrer_id}`;
     if (referrerRow.length) {
       const dollars = (amountCents / 100).toFixed(2);
@@ -357,7 +375,7 @@ network.get('/referral/code', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const code = await ensureReferralCode(c.env, user.id);
-  const baseUrl = c.env.APP_URL || 'https://axal.vc';
+  const baseUrl = c.env.APP_URL || 'https://app.axal.vc';
   // Task #4 (DH) — surface the legacy AXAL- code (if present) so the
   // Refer & Earn UI can show the "Previous code also works" tooltip.
   let legacyCode: string | null = null;

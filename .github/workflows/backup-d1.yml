@@ -1,0 +1,99 @@
+name: Daily D1 Backup → R2
+
+# Task #5 (IE) — Daily backup cron.
+# Exports the production D1 database via `wrangler d1 export`, uploads
+# the resulting .sql file to R2 bucket `studioos-backups` under key
+# `d1/backup-YYYY-MM-DD.sql`, and writes a heartbeat marker so
+# /api/admin/backup-status can show "last successful backup at …".
+#
+# Schedule: 02:10 UTC daily. RPO commitment: 24 hours.
+#
+# Object lifecycle (configured one-time in the Cloudflare dashboard,
+# NOT here):
+#   - Object lock: compliance mode, 365-day retention.
+#   - Lifecycle: transition to Standard-IA after 30 days.
+#   - Delete after 365 days.
+# See INCIDENT_RESPONSE.md § Backups for the dashboard checklist.
+
+on:
+  schedule:
+    - cron: '10 2 * * *'
+  workflow_dispatch:
+    inputs:
+      target_db:
+        description: 'D1 database name (default: studioos-db)'
+        required: false
+        default: 'studioos-db'
+
+permissions:
+  contents: read
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  TARGET_DB: ${{ github.event.inputs.target_db || 'studioos-db' }}
+  BACKUP_BUCKET: studioos-backups
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install wrangler
+        run: npm i -g wrangler@latest
+
+      - name: Compute backup filename
+        id: name
+        run: |
+          DATE=$(date -u +%F)
+          echo "filename=backup-${DATE}.sql" >> "$GITHUB_OUTPUT"
+          echo "key=d1/backup-${DATE}.sql"   >> "$GITHUB_OUTPUT"
+
+      - name: Export D1 → SQL
+        run: |
+          wrangler d1 export "${TARGET_DB}" \
+            --remote \
+            --output "${{ steps.name.outputs.filename }}"
+          ls -lh "${{ steps.name.outputs.filename }}"
+
+      - name: Upload to R2 (studioos-backups)
+        run: |
+          wrangler r2 object put \
+            "${BACKUP_BUCKET}/${{ steps.name.outputs.key }}" \
+            --file "${{ steps.name.outputs.filename }}" \
+            --content-type 'application/sql' \
+            --remote
+
+      - name: Write D1 heartbeat marker
+        # Distinct key (`heartbeat-d1.json`) so the worker's KV
+        # heartbeat at `heartbeat-kv.json` can't mask a stale D1 backup
+        # and vice-versa. Only written AFTER the R2 put succeeds.
+        run: |
+          cat > heartbeat-d1.json <<EOF
+          {
+            "at": "$(date -u +%FT%TZ)",
+            "source": "gha",
+            "kind": "d1",
+            "key": "${{ steps.name.outputs.key }}",
+            "size_bytes": $(stat -c%s "${{ steps.name.outputs.filename }}")
+          }
+          EOF
+          wrangler r2 object put \
+            "${BACKUP_BUCKET}/heartbeat-d1.json" \
+            --file heartbeat-d1.json \
+            --content-type 'application/json' \
+            --remote
+
+      - name: Notify on failure
+        if: failure() && env.PAGER_WEBHOOK_URL != ''
+        env:
+          PAGER_WEBHOOK_URL: ${{ secrets.PAGER_WEBHOOK_URL }}
+        run: |
+          curl -fsS -X POST -H 'Content-Type: application/json' \
+            -d "{\"text\":\"⚠️ D1 backup FAILED on ${TARGET_DB} ($(date -u +%FT%TZ))\"}" \
+            "${PAGER_WEBHOOK_URL}" || true

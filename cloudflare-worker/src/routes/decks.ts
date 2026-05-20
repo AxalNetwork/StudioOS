@@ -10,7 +10,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { ensureTier, tierCovers } from '../middleware/requireTier';
 import {
-  DECK_METHODS, DECK_METHODS_BY_ID, PREMIUM_METHOD_IDS, getMethod,
+  DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
 } from '../services/decks/methods';
 import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
 import { recommendMethod, listOverrides, setOverride, deleteOverride } from '../services/decks/recommend';

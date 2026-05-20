@@ -4,7 +4,7 @@
 
 Internal codename: Axal StudioOS. Operated by Axal Management, LLC.
 
-> **Architecture in one sentence:** Production API runs on a Cloudflare Worker (`cloudflare-worker/`), the React SPA ships to Cloudflare Pages (`frontend/`), D1 is the canonical user store, and the FastAPI in `backend/` exists only as a Replit dev convenience and is **never deployed**. Read [`CLAUDE.md`](./CLAUDE.md) before contributing.
+> **Architecture in one sentence:** Production API runs on a Cloudflare Worker at `app.axal.vc/api/*` (`cloudflare-worker/`), the React SPA ships to Cloudflare Pages at `app.axal.vc` (`frontend/`), the `axal.vc` apex is GitHub Pages marketing (do NOT attach Cloudflare to the apex), D1 is the canonical user store, and the FastAPI in `backend/` exists only as a Replit dev convenience and is **never deployed**. Read [`CLAUDE.md`](./CLAUDE.md) before contributing. Cutover runbook for the `app.axal.vc` migration lives at [`MIGRATE_TO_CUSTOM_DOMAIN.md`](./MIGRATE_TO_CUSTOM_DOMAIN.md).
 
 ## Repo layout
 

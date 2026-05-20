@@ -120,9 +120,19 @@ export default function CalendarPage() {
   async function connectGoogle() {
     try {
       const r = await api.googleCalConnect();
-      window.location.href = r.auth_url;
+      window.location.assign(r.redirect_url || r.auth_url);
     } catch (e) {
-      setSyncResult({ kind: 'error', text: e.message });
+      // Task #35 — typed 'oauth_config_missing' surfaces with a `missing`
+      // list so an admin can fix the config without reading worker logs.
+      const data = e?.data;
+      if (data?.code === 'oauth_config_missing') {
+        const miss = Array.isArray(data.missing) && data.missing.length
+          ? ` (missing: ${data.missing.join(', ')})`
+          : '';
+        setSyncResult({ kind: 'error', text: `Google Calendar isn't configured yet — contact an admin${miss}.` });
+      } else {
+        setSyncResult({ kind: 'error', text: e.message });
+      }
     }
   }
 
@@ -148,9 +158,17 @@ export default function CalendarPage() {
   async function connectMicrosoft() {
     try {
       const r = await api.microsoftCalConnect();
-      window.location.href = r.auth_url;
+      window.location.assign(r.redirect_url || r.auth_url);
     } catch (e) {
-      setSyncResult({ kind: 'error', text: e.message });
+      const data = e?.data;
+      if (data?.code === 'oauth_config_missing') {
+        const miss = Array.isArray(data.missing) && data.missing.length
+          ? ` (missing: ${data.missing.join(', ')})`
+          : '';
+        setSyncResult({ kind: 'error', text: `Outlook isn't configured yet — contact an admin${miss}.` });
+      } else {
+        setSyncResult({ kind: 'error', text: e.message });
+      }
     }
   }
 

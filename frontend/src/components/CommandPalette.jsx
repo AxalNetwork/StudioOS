@@ -1,71 +1,169 @@
+/**
+ * Task #7 (IG) — Cmd+K command palette.
+ *
+ * Four sources, fuzzy-matched client-side via Fuse.js:
+ *   1. Pages — sidebar entries filtered by role + tier (and not locked).
+ *   2. Recent activity — last 20 of the user's own activity_logs.
+ *   3. Documentation anchors — flattened from the docs manifest.
+ *   4. Quick actions — Create project / Send NDA / Run scoring / Open advisor.
+ *
+ * Index built on mount, refreshed every 5 minutes. Hotkey: Cmd+K / Ctrl+K
+ * to toggle, Esc to close, ↑↓ to navigate, Enter to activate.
+ */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Fuse from 'fuse.js';
 import {
-  Search, Loader2, Briefcase, Handshake, Rocket, Users,
-  FileText, GraduationCap, ArrowRight, X,
+  Search, ArrowRight, Compass, Activity, BookOpen, Sparkles, Loader2,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import { SIDEBAR_GROUPS, hasTier, hasInvestorTier } from '../sidebarConfig';
+import { SECTIONS, filterSectionsForRole } from '../pages/docs/sections';
 
-// Phase 0.2 — Global cmd-K command palette.
-// Listens for ⌘K / Ctrl+K anywhere in the authed shell, calls
-// /api/search?grouped=1, and renders one section per entity type with
-// keyboard navigation (↑↓ + Enter, Esc to close). Hits deep-link via
-// react-router so we never bounce through a full page load.
+const REFRESH_MS = 5 * 60 * 1000;
 
-const TYPE_META = {
-  project:        { label: 'Projects',        icon: Briefcase },
-  deal:           { label: 'Deals',           icon: Handshake },
-  founder:        { label: 'Founders',        icon: Rocket },
-  partner:        { label: 'Partners',        icon: Users },
-  document:       { label: 'Documents',       icon: FileText },
-  academy_lesson: { label: 'Academy Lessons', icon: GraduationCap },
+const KIND_META = {
+  page:     { label: 'Pages',           icon: Compass },
+  action:   { label: 'Quick actions',   icon: Sparkles },
+  activity: { label: 'Recent activity', icon: Activity },
+  doc:      { label: 'Documentation',   icon: BookOpen },
 };
+const KIND_ORDER = ['page', 'action', 'activity', 'doc'];
 
-// Render order — projects/deals first because they dominate intent.
-const TYPE_ORDER = ['project', 'deal', 'founder', 'partner', 'document', 'academy_lesson'];
+// Quick actions — role/tier-gated. Handler receives (navigate) and is
+// responsible for closing-side-effects (palette closes itself on any
+// activation, so no need to call close() inside).
+const QUICK_ACTIONS = [
+  {
+    id: 'qa.create-project',
+    label: 'Create project',
+    hint: 'New venture-studio project',
+    roles: ['admin', 'founder', 'partner'],
+    run: (nav) => nav('/projects?new=1'),
+  },
+  {
+    id: 'qa.send-nda',
+    label: 'Send NDA',
+    hint: 'Open the legal docs surface',
+    roles: ['admin', 'founder', 'partner', 'investor'],
+    run: (nav) => nav('/legal'),
+  },
+  {
+    id: 'qa.run-scoring',
+    label: 'Run scoring',
+    hint: 'Score an opportunity',
+    roles: ['admin', 'founder', 'partner', 'investor'],
+    run: (nav) => nav('/scoring'),
+  },
+  {
+    id: 'qa.open-advisor',
+    label: 'Open Personal Advisor',
+    hint: 'Ask the AI advisor',
+    roles: ['admin', 'founder', 'partner', 'investor', 'mentor'],
+    run: (nav) => nav('/dashboard?advisor=1'),
+  },
+  {
+    id: 'qa.open-help',
+    label: 'Open Help',
+    hint: 'Docs, ticket, contact options',
+    roles: ['admin', 'founder', 'partner', 'investor', 'mentor'],
+    run: () => {
+      try { window.dispatchEvent(new CustomEvent('open-help-widget')); } catch { /* ignore */ }
+    },
+  },
+];
+
+function buildPageItems(role, user) {
+  const groups = SIDEBAR_GROUPS[role] || SIDEBAR_GROUPS.founder || [];
+  const out = [];
+  for (const g of groups) {
+    for (const it of g.items || []) {
+      // Drop items the user can't afford — Cmd+K should not jump into a
+      // paywall flow, and the locked rail tile already provides that path.
+      if (it.requiredTier && !hasTier(user, it.requiredTier)) continue;
+      if (it.requiredInvestorTier && !hasInvestorTier(user, it.requiredInvestorTier)) continue;
+      out.push({
+        id: `page:${it.to}`,
+        kind: 'page',
+        label: it.label,
+        hint: g.label,
+        to: it.to,
+      });
+    }
+  }
+  return out;
+}
+
+function buildDocItems(role) {
+  const sections = filterSectionsForRole(SECTIONS, role || 'founder');
+  const out = [];
+  for (const sec of sections) {
+    for (const sub of sec.subsections || []) {
+      out.push({
+        id: `doc:${sec.id}/${sub.id}`,
+        kind: 'doc',
+        label: sub.title,
+        hint: sec.title,
+        to: `/docs#${sec.id}/${sub.id}`,
+      });
+    }
+  }
+  return out;
+}
+
+function buildQuickActions(role) {
+  const r = String(role || '').toLowerCase();
+  return QUICK_ACTIONS.filter((a) => !a.roles || a.roles.includes(r)).map((a) => ({
+    id: a.id,
+    kind: 'action',
+    label: a.label,
+    hint: a.hint,
+    run: a.run,
+  }));
+}
+
+function summarizeActivity(row) {
+  const action = String(row?.action || 'event');
+  let details = '';
+  if (row?.details) {
+    try {
+      const d = typeof row.details === 'string' ? JSON.parse(row.details) : row.details;
+      if (d && typeof d === 'object') {
+        details = d.summary || d.title || d.project_name || d.name || '';
+      }
+    } catch { details = String(row.details).slice(0, 80); }
+  }
+  const label = details ? `${action} — ${details}` : action;
+  return label.length > 80 ? label.slice(0, 77) + '…' : label;
+}
 
 export default function CommandPalette() {
   const navigate = useNavigate();
+  const { user, role } = useAuth();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
-  const [groups, setGroups] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [warning, setWarning] = useState('');
+  const [activity, setActivity] = useState([]);
+  const [loadingActivity, setLoadingActivity] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef(null);
-  const debounceRef = useRef(null);
-  const reqIdRef = useRef(0);
-
-  // Flatten groups in render order so ↑↓ traversal matches what's on screen.
-  const flatHits = useMemo(() => {
-    const out = [];
-    for (const t of TYPE_ORDER) {
-      const list = groups[t] || [];
-      for (const h of list) out.push(h);
-    }
-    return out;
-  }, [groups]);
+  const listRef = useRef(null);
+  const lastFetchRef = useRef(0);
 
   const close = useCallback(() => {
     setOpen(false);
     setQ('');
-    setGroups({});
     setActiveIdx(0);
-    setWarning('');
   }, []);
 
-  // Global cmd-K / ctrl-K listener. Mounted once on the shell; toggles
-  // open and selects the input on next paint so the user can type
-  // immediately.
+  // Global hotkey listener — mounted once.
   useEffect(() => {
     function onKey(e) {
       const isToggle = (e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey);
       if (isToggle) {
         e.preventDefault();
-        setOpen(o => !o);
-        return;
-      }
-      if (e.key === 'Escape' && open) {
+        setOpen((o) => !o);
+      } else if (e.key === 'Escape' && open) {
         e.preventDefault();
         close();
       }
@@ -74,158 +172,192 @@ export default function CommandPalette() {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, close]);
 
-  // Focus input when opening.
-  useEffect(() => {
-    if (open) {
-      // requestAnimationFrame so the input is mounted before focus().
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [open]);
+  // Recent activity fetch — on open and every REFRESH_MS while mounted.
+  const refreshActivity = useCallback(async () => {
+    if (!user) return;
+    const now = Date.now();
+    if (now - lastFetchRef.current < REFRESH_MS && activity.length > 0) return;
+    lastFetchRef.current = now;
+    setLoadingActivity(true);
+    try {
+      const res = await api.getRecentActivity(20);
+      setActivity(Array.isArray(res?.items) ? res.items : []);
+    } catch { /* silent — palette stays usable without activity */ }
+    finally { setLoadingActivity(false); }
+  }, [user, activity.length]);
 
-  // Debounced search. reqIdRef guards against out-of-order responses
-  // when the user types fast enough to overlap requests.
   useEffect(() => {
     if (!open) return;
-    const term = q.trim();
-    if (!term) { setGroups({}); setLoading(false); setWarning(''); setActiveIdx(0); return; }
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    setLoading(true);
-    const myId = ++reqIdRef.current;
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const res = await api.searchSemantic(term, undefined, 8, true);
-        if (myId !== reqIdRef.current) return;
-        setGroups(res.groups || {});
-        setWarning(res.warning || '');
-        setActiveIdx(0);
-      } catch (e) {
-        if (myId !== reqIdRef.current) return;
-        setGroups({});
-        setWarning(e.message || 'Search failed');
-      } finally {
-        if (myId === reqIdRef.current) setLoading(false);
-      }
-    }, 200);
-    return () => debounceRef.current && clearTimeout(debounceRef.current);
-  }, [q, open]);
+    refreshActivity();
+  }, [open, refreshActivity]);
 
-  const go = useCallback((hit) => {
-    if (!hit) return;
+  // Focus + scroll input into view when opening.
+  useEffect(() => {
+    if (!open) return;
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [open]);
+
+  // Static-ish indexes — rebuilt only when role/user/activity changes.
+  const allItems = useMemo(() => {
+    if (!user) return [];
+    const r = role || user.role || 'founder';
+    const pages = buildPageItems(r, user);
+    const actions = buildQuickActions(r);
+    const docs = buildDocItems(r);
+    const activityItems = activity.map((row, i) => ({
+      id: `activity:${row.id || i}`,
+      kind: 'activity',
+      label: summarizeActivity(row),
+      hint: row.created_at ? new Date(row.created_at).toLocaleString() : '',
+      row,
+    }));
+    return [...pages, ...actions, ...activityItems, ...docs];
+  }, [user, role, activity]);
+
+  const fuse = useMemo(() => {
+    return new Fuse(allItems, {
+      keys: [
+        { name: 'label', weight: 0.7 },
+        { name: 'hint', weight: 0.3 },
+      ],
+      threshold: 0.4,
+      ignoreLocation: true,
+      minMatchCharLength: 1,
+    });
+  }, [allItems]);
+
+  const grouped = useMemo(() => {
+    const matched = q.trim()
+      ? fuse.search(q.trim()).slice(0, 60).map((r) => r.item)
+      : allItems.slice(0, 60);
+    const out = { page: [], action: [], activity: [], doc: [] };
+    for (const it of matched) {
+      if (out[it.kind]) out[it.kind].push(it);
+    }
+    return out;
+  }, [q, fuse, allItems]);
+
+  const flat = useMemo(() => {
+    const out = [];
+    for (const k of KIND_ORDER) for (const it of grouped[k] || []) out.push(it);
+    return out;
+  }, [grouped]);
+
+  useEffect(() => { setActiveIdx(0); }, [q, open]);
+
+  const activate = useCallback((item) => {
+    if (!item) return;
+    if (item.kind === 'action' && typeof item.run === 'function') {
+      try { item.run(navigate); } catch { /* ignore */ }
+    } else if (item.to) {
+      navigate(item.to);
+    } else if (item.kind === 'activity') {
+      // No deep-link for an activity row by default; just close.
+    }
     close();
-    if (hit.url) navigate(hit.url);
-  }, [close, navigate]);
+  }, [navigate, close]);
 
-  const onInputKey = (e) => {
+  // Arrow / Enter handling — only when palette is open.
+  const onKeyDown = (e) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActiveIdx(i => Math.min(flatHits.length - 1, i + 1));
+      setActiveIdx((i) => Math.min(flat.length - 1, i + 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setActiveIdx(i => Math.max(0, i - 1));
+      setActiveIdx((i) => Math.max(0, i - 1));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      go(flatHits[activeIdx]);
+      activate(flat[activeIdx]);
     }
   };
 
+  // Scroll the active row into view.
+  useEffect(() => {
+    if (!open || !listRef.current) return;
+    const el = listRef.current.querySelector(`[data-idx="${activeIdx}"]`);
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+  }, [activeIdx, open]);
+
   if (!open) return null;
 
+  let cursor = -1;
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-24 px-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={close} />
-      <div className="relative w-full max-w-2xl bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden">
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200">
-          <Search size={18} className="text-gray-400 shrink-0" />
+    <div
+      className="fixed inset-0 z-[200] bg-black/40 backdrop-blur-sm flex items-start justify-center pt-[10vh] px-4"
+      onClick={close}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command palette"
+    >
+      <div
+        className="w-full max-w-xl bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-800">
+          <Search size={16} className="text-gray-400 flex-shrink-0" />
           <input
             ref={inputRef}
+            type="text"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onKeyDown={onInputKey}
-            placeholder="Search projects, deals, founders, partners, documents, lessons…"
-            className="flex-1 outline-none text-sm bg-transparent placeholder-gray-400"
+            onKeyDown={onKeyDown}
+            placeholder="Jump to a page, action, doc, or recent event…"
+            className="flex-1 bg-transparent text-sm outline-none text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+            aria-label="Search command palette"
           />
-          {loading && <Loader2 size={16} className="animate-spin text-gray-400" />}
-          <kbd className="hidden sm:inline-flex items-center gap-1 text-[10px] text-gray-500 border border-gray-200 rounded px-1.5 py-0.5 bg-gray-50">esc</kbd>
-          <button onClick={close} className="text-gray-400 hover:text-gray-600 sm:hidden" aria-label="Close">
-            <X size={16} />
-          </button>
+          {loadingActivity && <Loader2 size={14} className="animate-spin text-gray-400" />}
+          <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 text-gray-500">Esc</kbd>
         </div>
-
-        <div className="max-h-[60vh] overflow-y-auto">
-          {warning && (
-            <div className="px-4 py-2 text-xs text-amber-700 bg-amber-50 border-b border-amber-100">{warning}</div>
+        <div ref={listRef} className="max-h-[60vh] overflow-y-auto py-1">
+          {flat.length === 0 && (
+            <div className="px-4 py-6 text-sm text-gray-500 text-center">No matches.</div>
           )}
-          {!q.trim() && (
-            <div className="px-4 py-10 text-center text-sm text-gray-500">
-              Start typing to search across the studio.
-              <div className="mt-2 text-xs text-gray-400">
-                Press <kbd className="border border-gray-200 rounded px-1 bg-gray-50">↑</kbd>
-                {' '}<kbd className="border border-gray-200 rounded px-1 bg-gray-50">↓</kbd>{' '}to navigate,
-                {' '}<kbd className="border border-gray-200 rounded px-1 bg-gray-50">enter</kbd>{' '}to open.
-              </div>
-            </div>
-          )}
-          {q.trim() && !loading && flatHits.length === 0 && (
-            <div className="px-4 py-10 text-center text-sm text-gray-500">No matches for “{q}”.</div>
-          )}
-
-          {TYPE_ORDER.map(t => {
-            const list = groups[t] || [];
-            if (!list.length) return null;
-            const meta = TYPE_META[t];
-            const Icon = meta?.icon || Search;
+          {KIND_ORDER.map((kind) => {
+            const items = grouped[kind] || [];
+            if (items.length === 0) return null;
+            const Meta = KIND_META[kind];
+            const Icon = Meta.icon;
             return (
-              <div key={t} className="py-2">
-                <div className="px-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                  {meta?.label || t}
+              <div key={kind} className="py-1">
+                <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-gray-400 font-semibold flex items-center gap-1.5">
+                  <Icon size={11} />{Meta.label}
                 </div>
-                <ul>
-                  {list.map((h) => {
-                    const idx = flatHits.indexOf(h);
-                    const isActive = idx === activeIdx;
-                    return (
-                      <li key={h.id}>
-                        <button
-                          type="button"
-                          onMouseEnter={() => setActiveIdx(idx)}
-                          onClick={() => go(h)}
-                          className={`w-full text-left px-4 py-2 flex items-start gap-3 ${
-                            isActive ? 'bg-violet-50' : 'hover:bg-gray-50'
-                          }`}
-                        >
-                          <Icon size={16} className={`mt-0.5 shrink-0 ${isActive ? 'text-violet-600' : 'text-gray-400'}`} />
-                          <div className="min-w-0 flex-1">
-                            <div className={`text-sm font-medium truncate ${isActive ? 'text-violet-900' : 'text-gray-900'}`}>
-                              {h.title}
-                            </div>
-                            {h.snippet && (
-                              <div className="text-xs text-gray-500 truncate">{h.snippet}</div>
-                            )}
-                          </div>
-                          <ArrowRight size={14} className={`mt-1 shrink-0 ${isActive ? 'text-violet-500' : 'text-gray-300'}`} />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                {items.map((it) => {
+                  cursor += 1;
+                  const isActive = cursor === activeIdx;
+                  const idx = cursor;
+                  return (
+                    <button
+                      key={it.id}
+                      data-idx={idx}
+                      type="button"
+                      onMouseEnter={() => setActiveIdx(idx)}
+                      onClick={() => activate(it)}
+                      className={`w-full text-left flex items-center gap-3 px-3 py-2 text-sm ${
+                        isActive
+                          ? 'bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-200'
+                          : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      <span className="flex-1 truncate">{it.label}</span>
+                      {it.hint && (
+                        <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate max-w-[40%]">{it.hint}</span>
+                      )}
+                      <ArrowRight size={12} className="text-gray-300 dark:text-gray-600 flex-shrink-0" />
+                    </button>
+                  );
+                })}
               </div>
             );
           })}
         </div>
-
-        <div className="hidden sm:flex items-center justify-between gap-3 px-4 py-2 border-t border-gray-100 text-[10px] text-gray-500 bg-gray-50">
-          <div className="flex items-center gap-2">
-            <kbd className="border border-gray-200 rounded px-1 bg-white">↑</kbd>
-            <kbd className="border border-gray-200 rounded px-1 bg-white">↓</kbd>
-            <span>navigate</span>
-            <kbd className="border border-gray-200 rounded px-1 bg-white ml-2">enter</kbd>
-            <span>open</span>
+        <div className="flex items-center justify-between gap-3 px-3 py-1.5 border-t border-gray-200 dark:border-gray-800 text-[10px] text-gray-400">
+          <div className="flex gap-3">
+            <span><kbd className="px-1 border border-gray-200 dark:border-gray-700 rounded">↑↓</kbd> navigate</span>
+            <span><kbd className="px-1 border border-gray-200 dark:border-gray-700 rounded">Enter</kbd> open</span>
+            <span><kbd className="px-1 border border-gray-200 dark:border-gray-700 rounded">Esc</kbd> close</span>
           </div>
-          <div className="flex items-center gap-1">
-            <kbd className="border border-gray-200 rounded px-1 bg-white">⌘</kbd>
-            <kbd className="border border-gray-200 rounded px-1 bg-white">K</kbd>
-            <span>toggle</span>
-          </div>
+          <span>{flat.length} result{flat.length === 1 ? '' : 's'}</span>
         </div>
       </div>
     </div>

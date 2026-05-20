@@ -33,6 +33,15 @@ const AUTH_COOKIE = 'studioos_auth';
 const CSRF_COOKIE = 'studioos_csrf';
 const CSRF_HEADER = 'X-CSRF-Token';
 
+// Task #2 (IB) — RFC 8058 one-click List-Unsubscribe MUST work without a
+// CSRF token. Mailbox-provider unsubscribe POSTs originate from the
+// mailbox UI (Gmail, Outlook), not the user's browser session — they
+// will never carry the studioos_csrf cookie+header pair. The HMAC token
+// in the URL IS the authorisation, so this path is safe to exempt.
+const CSRF_PATH_EXEMPT = new Set([
+  '/api/notifications/unsubscribe',
+]);
+
 function readCookie(cookieHeader: string, name: string): string | null {
   if (!cookieHeader) return null;
   for (const part of cookieHeader.split(';')) {
@@ -49,6 +58,9 @@ function readCookie(cookieHeader: string, name: string): string | null {
 export function csrfMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
   return async (c, next) => {
     if (SAFE_METHODS.has(c.req.method)) return next();
+
+    // Task #2 (IB) — RFC 8058 one-click unsubscribe exemption.
+    if (CSRF_PATH_EXEMPT.has(c.req.path)) return next();
 
     // Bearer flow: no ambient credentials → no CSRF concern.
     const authHeader = c.req.header('Authorization');

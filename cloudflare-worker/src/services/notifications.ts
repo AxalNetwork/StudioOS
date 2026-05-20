@@ -140,7 +140,7 @@ export async function notifyAdminsOfFlaggedScore(env: Env, alert: FlaggedAlert):
   // still pages — but identical retries within the same surface don't.
   const dedupeKey = `snap:${alert.snapshotId}:${alert.source}`;
 
-  const appUrl = env.APP_URL || 'https://axal.vc';
+  const appUrl = env.APP_URL || 'https://app.axal.vc';
   const reviewUrl = `${appUrl.replace(/\/$/, '')}${link}`;
 
   for (const admin of admins) {
@@ -208,7 +208,7 @@ export async function digestUnreviewedFlaggedScores(env: Env): Promise<{ admins:
     };
   });
 
-  const appUrl = env.APP_URL || 'https://axal.vc';
+  const appUrl = env.APP_URL || 'https://app.axal.vc';
   const queueUrl = `${appUrl.replace(/\/$/, '')}/monitoring?tab=integrity`;
   const dedupeKey = `digest:${new Date().toISOString().slice(0, 10)}`; // YYYY-MM-DD UTC
 

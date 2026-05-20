@@ -57,10 +57,6 @@ const warnings = [];
 
 function read(p) { return readFileSync(p, 'utf8'); }
 
-function countIds(src) {
-  return (src.match(/\bid:\s*['"][^'"]+['"]/g) || []).length;
-}
-
 function extractIds(src) {
   const re = /\bid:\s*['"]([^'"]+)['"]/g;
   const out = [];
@@ -90,7 +86,8 @@ for (const [name, rel] of Object.entries(BANK_FILES)) {
 }
 
 // 2. operatingPartner sub-type coverage --------------------------------
-const opSrc = read(resolve(WORKER_SRC, 'banks/operatingPartner.ts'));
+// Counts ids by `partner.<sub_short>.` prefix using the already-extracted
+// `idsByBank.operatingPartner` list rather than re-reading the source.
 for (const sub of PARTNER_SUBTYPES) {
   // Each sub-type's helper (SP/MA/ST/CV) emits rows by passing the sub
   // string to block(). We count `partner.<sub_short>.` ids as a proxy:

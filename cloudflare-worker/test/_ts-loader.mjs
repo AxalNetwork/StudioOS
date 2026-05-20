@@ -6,8 +6,6 @@
 //
 // Used by cloudflare-worker/test/advisor.scenarios.test.ts via:
 //   node --experimental-strip-types --import ./cloudflare-worker/test/_ts-loader.mjs --test …
-import { existsSync, statSync } from 'node:fs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
 import { register } from 'node:module';
 
 register(new URL('./_ts-loader-hook.mjs', import.meta.url));

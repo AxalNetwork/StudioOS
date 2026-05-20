@@ -1,6 +1,35 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
+  <script>
+    // Dev-only: unregister any stale service worker + clear caches BEFORE any
+    // module loads. The SW precaches '/' and serves stale HTML referencing old
+    // Vite optimizer dep hashes, causing "Outdated Optimize Dep" 504s after
+    // restarts. Runs only in dev (vite serves index.html with /@vite/client).
+    (function () {
+      try {
+        var isDev = !!document.querySelector('script[src="/@vite/client"]') ||
+                    /[?&](localhost|replit\.dev|replit\.app|repl\.co)/.test(window.location.host) ||
+                    window.location.port === '5000';
+        if (!isDev || !('serviceWorker' in navigator)) return;
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          var hadSW = regs && regs.length > 0;
+          regs.forEach(function (r) { try { r.unregister(); } catch (e) {} });
+          if (window.caches && caches.keys) {
+            caches.keys().then(function (keys) {
+              var pending = keys.map(function (k) { return caches.delete(k); });
+              Promise.all(pending).then(function () {
+                if (hadSW && !window.__swKilled) {
+                  window.__swKilled = true;
+                  window.location.reload();
+                }
+              });
+            });
+          }
+        });
+      } catch (e) { /* no-op */ }
+    })();
+  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Global Venture Partner Network — One network. Three lanes.</title>
@@ -50,8 +79,8 @@
       }
     })();
   </script>
-  <script type="module" crossorigin src="/assets/index-DkHfX0J_.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-BQ3ovauM.css">
+  <script type="module" crossorigin src="/assets/index-OFvbInw6.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BDHPztq0.css">
 </head>
 <body class="bg-white text-gray-900">
   <div id="root"></div>

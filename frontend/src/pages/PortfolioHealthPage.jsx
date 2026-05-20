@@ -162,6 +162,53 @@ function SignalCard({ label, value, component }) {
   );
 }
 
+// Task #8 (IH) — surfaces investor_portfolio_holdings rows imported via
+// Settings → Data Imports → Investor Portfolio. Investor-only; silently
+// hides for other roles (founders see this page for their own projects).
+function InvestorHoldingsCard() {
+  const [holdings, setHoldings] = useState(null);
+  useEffect(() => {
+    api.portfolioHoldings()
+      .then(out => setHoldings(out?.holdings || []))
+      .catch(() => setHoldings([]));
+  }, []);
+  if (!holdings || holdings.length === 0) return null;
+  return (
+    <div className="mb-6 bg-white border border-slate-200 rounded-lg p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-base font-semibold text-slate-900">Portfolio holdings</h2>
+        <span className="text-xs text-slate-500">{holdings.length} positions</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-xs uppercase text-slate-500 border-b border-slate-200">
+            <tr>
+              <th className="py-2 pr-3 text-left">Company</th>
+              <th className="py-2 pr-3 text-left">Ticker</th>
+              <th className="py-2 pr-3 text-left">Date</th>
+              <th className="py-2 pr-3 text-left">Instrument</th>
+              <th className="py-2 pr-3 text-right">Amount</th>
+              <th className="py-2 pr-3 text-right">Current</th>
+            </tr>
+          </thead>
+          <tbody>
+            {holdings.map(h => (
+              <tr key={h.id} className="border-b border-slate-100">
+                <td className="py-2 pr-3 text-slate-800">{h.company_name || h.company}</td>
+                <td className="py-2 pr-3 text-slate-600">{h.ticker || '—'}</td>
+                <td className="py-2 pr-3 text-slate-600">{h.investment_date || '—'}</td>
+                <td className="py-2 pr-3 text-slate-600">{h.instrument || '—'}</td>
+                <td className="py-2 pr-3 text-right text-slate-800">{h.amount != null ? `$${Number(h.amount).toLocaleString()}` : '—'}</td>
+                <td className="py-2 pr-3 text-right text-slate-800">{h.current_valuation != null ? `$${Number(h.current_valuation).toLocaleString()}` : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function PortfolioHealthPage() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
@@ -218,6 +265,8 @@ export default function PortfolioHealthPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {/* Task #8 (IH) — Investor portfolio holdings (CSV-imported) */}
+      <InvestorHoldingsCard />
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">

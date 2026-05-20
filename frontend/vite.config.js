@@ -32,9 +32,7 @@ export default defineConfig({
     outDir: path.resolve(__dirname, '../docs'),
     emptyOutDir: true,
     rollupOptions: {
-      output: {
-        manualChunks: undefined,
-      },
+      output: {},
     },
   },
   server: {

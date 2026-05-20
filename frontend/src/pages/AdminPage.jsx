@@ -995,6 +995,10 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
             const conv = onboardingDetail?.conversation || null;
             const completionPct = onboardingDetail?.completion_pct ?? 0;
             const summary = onboardingDetail?.summary || null;
+            // Task #34 — distinguish "user never started onboarding"
+            // from "user opened the chatbot but never answered". Backend
+            // returns one of: 'never_completed' | 'in_progress' | null.
+            const emptyReason = onboardingDetail?.empty_reason || null;
             return (
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -1016,7 +1020,17 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                 )}
                 {msgs.length === 0 ? (
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-xs text-gray-500">
-                    No transcript stored for this user yet. Conversations sync here once the user answers their first Personal Advisor question.
+                    {emptyReason === 'in_progress' ? (
+                      <>
+                        <div className="font-semibold text-gray-700 mb-1">Onboarding in progress</div>
+                        This user has opened the Personal Advisor onboarding session but hasn’t answered any questions yet. The transcript will populate as soon as they respond to the first prompt.
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-semibold text-gray-700 mb-1">Never completed onboarding</div>
+                        This user has not started the Personal Advisor onboarding chatbot. Conversations sync here once they answer their first question.
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-[60vh] overflow-y-auto space-y-2">
@@ -1057,17 +1071,22 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                       className="flex-1 text-[11px] px-1.5 py-1 border border-gray-300 rounded"
                     />
                   </div>
-                  <a
-                    href={api.adminUserAdvisorConversationsCsvUrl(userRow.id, {
-                      q: advisorSearch || undefined,
-                      since: advisorSince || undefined,
-                      until: advisorUntil || undefined,
-                    })}
-                    target="_blank" rel="noreferrer"
-                    className="block text-center text-[11px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded font-medium text-gray-700"
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await api.adminUserAdvisorTranscriptExport(userRow.id, {
+                          from: advisorSince || undefined,
+                          to: advisorUntil || undefined,
+                        });
+                      } catch (e) {
+                        flash('error', e.message || 'CSV export failed');
+                      }
+                    }}
+                    className="block w-full text-center text-[11px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded font-medium text-gray-700"
                   >
                     Download CSV
-                  </a>
+                  </button>
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {advisorListLoading && (

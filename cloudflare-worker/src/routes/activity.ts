@@ -42,6 +42,23 @@ activity.get('/', async (c) => {
   });
 });
 
+// Task #7 (IG) — Lightweight recent feed consumed by the Cmd+K palette.
+// Trimmed projection (id/action/details/created_at) so the palette index
+// stays small; capped at 20 rows regardless of caller input.
+activity.get('/recent', async (c) => {
+  const user = await requireAuth(c);
+  const requested = parseInt(c.req.query('limit') || '20', 10);
+  const limit = Math.max(1, Math.min(20, Number.isFinite(requested) ? requested : 20));
+  const sql = getSQL(c.env);
+  const rows = await sql`
+    SELECT id, action, details, created_at FROM activity_logs
+    WHERE user_id = ${user.id} OR LOWER(actor) = LOWER(${user.email})
+    ORDER BY created_at DESC LIMIT ${limit}
+  `;
+  await sql.end();
+  return c.json({ items: rows, limit });
+});
+
 activity.get('/summary', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);

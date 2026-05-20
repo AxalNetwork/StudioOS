@@ -713,16 +713,16 @@ export async function ensureMetricsSnapshotsSchema(env: Env): Promise<void> {
     const have = new Set((cols.results || []).map((r) => r.name));
     if (have.size === 0) {
       await env.DB.exec(
-        `CREATE TABLE IF NOT EXISTS metrics_snapshots (` +
-          `id INTEGER PRIMARY KEY AUTOINCREMENT,` +
-          `project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,` +
-          `snapshot_date TEXT NOT NULL,` +
-          `mrr REAL, arr REAL, cac REAL, ltv REAL, monthly_churn_pct REAL,` +
-          `active_users INTEGER, new_users INTEGER,` +
-          `notes TEXT, source TEXT,` +
-          `created_by INTEGER REFERENCES users(id),` +
-          `created_at TEXT NOT NULL DEFAULT (datetime('now'))` +
-        `)`,
+        `CREATE TABLE IF NOT EXISTS metrics_snapshots (`
+          + ` id INTEGER PRIMARY KEY AUTOINCREMENT,`
+          + ` project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,`
+          + ` snapshot_date TEXT NOT NULL,`
+          + ` mrr REAL, arr REAL, cac REAL, ltv REAL, monthly_churn_pct REAL,`
+          + ` active_users INTEGER, new_users INTEGER,`
+          + ` notes TEXT, source TEXT,`
+          + ` created_by INTEGER REFERENCES users(id),`
+          + ` created_at TEXT NOT NULL DEFAULT (datetime('now'))`
+          + `)`,
       );
       try { await env.DB.exec(
         `CREATE INDEX IF NOT EXISTS idx_metrics_snapshots_project ON metrics_snapshots(project_id, snapshot_date DESC)`,

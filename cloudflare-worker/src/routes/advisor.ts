@@ -20,10 +20,7 @@
  *                                         explanation of the current /
  *                                         requested topic. Routed via
  *                                         aiRouter task='advisor_explain'
- *                                         (Workers AI primary; Anthropic
- *                                         narrow fallback). Provider can
- *                                         be flipped via the
- *                                         ADVISOR_EXPLAIN_PROVIDER env.
+ *                                         (Workers AI only, Task #31).
  *   GET    /progress                    — { persona, total, answered, skipped, percent }
  *   GET    /conversations/:uid          — full Q&A history (most recent first).
  *
@@ -104,8 +101,8 @@ const advisor = new Hono<{ Bindings: Env }>();
 
 // Per-call output cap for /explain. AC-1 caps replies to ≤120 words so
 // the buffered stripVerbatimLeak post-processing stays cheap; 512 tokens
-// is a generous ceiling that fits that bound for both Workers AI llama
-// models and Anthropic claude-sonnet-4-6 (Task #16 fallback).
+// is a generous ceiling that fits that bound for the Workers AI llama
+// models (Task #31: WAI is the only production provider).
 const EXPLAIN_MAX_TOKENS = 512;
 
 // ---------------------------------------------------------------------------
@@ -356,11 +353,6 @@ async function effectiveAnsweredSet(
   env: Env, _user: User, conversationId: number,
 ): Promise<Set<string>> {
   return answeredQuestionIds(env, conversationId);
-}
-
-function nextUnansweredQuestion(bank: Question[], answered: Set<string>): Question | null {
-  for (const q of bank) if (!answered.has(q.id)) return q;
-  return null;
 }
 
 function publicQuestion(q: Question | null): Record<string, unknown> | null {
@@ -1510,11 +1502,9 @@ advisor.get('/conversations/:id', conversationDetailHandler);
 //   delta    { text }
 //   done     { leaked }
 //   error    { message }
-// Routed via aiRouter task='advisor_explain'. Workers AI is the always-on
-// primary; Anthropic claude-sonnet-4-6 is the narrow last-resort fallback
-// (also retried when stripVerbatimLeak detects an unsafe Workers AI
-// completion and ANTHROPIC_API_KEY is configured). Provider can be
-// flipped via the ADVISOR_EXPLAIN_PROVIDER env (workers-ai|auto|anthropic).
+// Routed via aiRouter task='advisor_explain'. Task #31: Workers AI is
+// the only provider in production. The unsafe-completion Anthropic
+// retry was removed; leaks now fall back to the templated refusal.
 // /explain is still the ONLY free-form LLM surface in AC-1; /answer is
 // deterministic so we don't burn tokens routing structured data.
 // ---------------------------------------------------------------------------
@@ -1541,10 +1531,8 @@ advisor.post('/explain', async (c) => {
     });
     return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
   }
-  // Task #16 — Workers AI primary; the legacy 503-when-no-Anthropic-key
-  // guard is gone because env.AI is universally bound on the worker.
-  // The aiRouter still gracefully refuses (with budget/refusal usage
-  // rows) if every model in the chain fails.
+  // Workers AI only (Task #31). The aiRouter gracefully refuses (with
+  // budget/refusal usage rows) if every model in the chain fails.
   const body = await readJson<{ topic?: string; question_id?: string; conversation_id?: string; conversation_uid?: string }>(c);
   const topic = String(body?.topic || '').trim().slice(0, 500);
   if (!topic) return c.json({ error: 'topic is required' }, 400);
@@ -1595,7 +1583,7 @@ advisor.post('/explain', async (c) => {
   // Per AC-1 the LLM is shown only the topic + persona context — never
   // free-form user-typed answer text. Strip prompt-injection markers
   // (system tags, role overrides) defensively before they reach the
-  // model (Workers AI primary, Anthropic fallback).
+  // model.
   const safeTopic = topic
     .replace(/<\/?(system|assistant|user|tool[^>]*)>/gi, '')
     .replace(/```[\s\S]*?```/g, '')
@@ -1654,15 +1642,13 @@ advisor.post('/explain', async (c) => {
     });
   }
 
-  // Task #16 — Route through aiRouter. Workers AI is the always-on
-  // primary; Anthropic claude-sonnet-4-6 is the narrow last-resort
-  // fallback (or primary if ADVISOR_EXPLAIN_PROVIDER='anthropic'). We
-  // intentionally do NOT request a streaming response: Task #4 (AW) L1
-  // requires the full text be buffered before stripVerbatimLeak runs,
-  // and explanations are capped at ~120 words so the wall-clock cost
-  // of buffering is negligible (sub-second on llama-3.3-70b-fp8-fast).
-  // The output below is then re-emitted as a single SSE delta event so
-  // the React consumer's wire format is unchanged.
+  // Route through aiRouter. Workers AI only (Task #31). We intentionally
+  // do NOT request a streaming response: Task #4 (AW) L1 requires the
+  // full text be buffered before stripVerbatimLeak runs, and
+  // explanations are capped at ~120 words so the wall-clock cost of
+  // buffering is negligible (sub-second on llama-3.3-70b-fp8-fast). The
+  // output below is then re-emitted as a single SSE delta event so the
+  // React consumer's wire format is unchanged.
   const ai = await aiRouterRun(c.env, {
     task: 'advisor_explain',
     userId: user.id,
@@ -1696,42 +1682,13 @@ advisor.post('/explain', async (c) => {
     }, status);
   }
 
-  let collected = String(ai.output || '');
-  let { text: safeOut, leaked } = stripVerbatimLeak(collected);
-  let usage = ai.usage;
-  let unsafeRetryUsed = false;
-  // Task #16 — unsafe-completion fallback. When stripVerbatimLeak
-  // flags the primary response AND we used a Workers AI model AND an
-  // Anthropic key is configured, retry once via Anthropic. Anthropic
-  // claude-sonnet-4-6 has stronger instruction-following on the
-  // "stay-on-StudioOS-scope" guardrail, so it's likely to produce a
-  // clean answer where the smaller llama leaked. If Anthropic is
-  // unavailable or also leaks we keep the original templated refusal.
-  if (
-    leaked
-    && (usage?.model || '').startsWith('@cf/')
-    && !!(c.env as unknown as { ANTHROPIC_API_KEY?: string }).ANTHROPIC_API_KEY
-  ) {
-    const retry = await aiRouterRun(c.env, {
-      task: 'advisor_explain',
-      userId: user.id,
-      systemPrompt: systemPromptText,
-      messages: [{ role: 'user', content: safeTopic }],
-      maxTokens: EXPLAIN_MAX_TOKENS,
-      forceProvider: 'anthropic',
-    });
-    if (retry.ok) {
-      const retryCollected = String(retry.output || '');
-      const retryScan = stripVerbatimLeak(retryCollected);
-      if (!retryScan.leaked) {
-        collected = retryCollected;
-        safeOut = retryScan.text;
-        leaked = false;
-        usage = retry.usage;
-        unsafeRetryUsed = true;
-      }
-    }
-  }
+  const collected = String(ai.output || '');
+  const { text: safeOut, leaked } = stripVerbatimLeak(collected);
+  const usage = ai.usage;
+  // Task #31 — Anthropic unsafe-completion retry removed. If the
+  // Workers AI primary + sibling fallback both leak, we surface the
+  // templated refusal rather than reaching for an external provider.
+
   // Single delta + done — the client sees a "typing finished"
   // beat instead of incremental tokens, in exchange for a hard
   // guarantee that no leaked text ever crossed the wire.
@@ -1739,15 +1696,14 @@ advisor.post('/explain', async (c) => {
     ? 'I can only discuss your StudioOS data and your current advisor questions. Want me to help with one of those?'
     : safeOut;
   const modelUsed = usage?.model || 'unknown';
-  // Task #16 — surface which model actually answered so the React UI
-  // can render a small "(fallback)" badge when the Workers AI primary
-  // hop missed and Anthropic (or a smaller llama sibling) was used.
-  // Cached responses (cached:true) come back without fallback_used so
-  // the badge stays accurate.
+  // Surface which model actually answered so the React UI can render
+  // a "(fallback)" badge when the Workers AI primary hop missed and a
+  // smaller llama sibling was used. Provider is always 'workers-ai'
+  // in production (Task #31).
   const providerEvent = {
     model: modelUsed,
-    provider: modelUsed.startsWith('@cf/') ? 'workers-ai' as const : 'anthropic' as const,
-    fallback_used: !!usage?.fallback_used || unsafeRetryUsed,
+    provider: 'workers-ai' as const,
+    fallback_used: !!usage?.fallback_used,
     cached: !!usage?.cached,
   };
 
@@ -1774,7 +1730,6 @@ advisor.post('/explain', async (c) => {
           safetyScore: safety.score,
           sanitisationActions: [
             ...(leaked ? ['verbatim_leak_stripped'] : []),
-            ...(unsafeRetryUsed ? ['unsafe_completion_anthropic_retry'] : []),
           ],
           refusalReason: leaked ? 'verbatim_leak' : null,
           shadowFlagged: false,

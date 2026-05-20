@@ -1,4 +1,4 @@
-import { Context } from 'hono';
+import type { Context } from 'hono';
 import { SignJWT, jwtVerify } from 'jose';
 import type { Env, User, JWTPayload } from './types';
 import { getSQL } from './db';

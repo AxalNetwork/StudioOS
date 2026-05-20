@@ -26,7 +26,7 @@ import { useEscapeClose } from '../components/useEscapeClose';
  * Axal footer; Growth+ removes it; Studio may add a custom watermark.
  */
 export default function PitchDeckPage() {
-  const { user } = useAuth();
+  useAuth();
   const { toast, showToast } = useToast(3500);
   const addToast = (msg, kind = 'ok') => showToast({ msg, kind: kind === 'success' ? 'ok' : kind === 'error' ? 'err' : kind === 'info' ? 'info' : 'ok' });
 
@@ -102,9 +102,17 @@ export default function PitchDeckPage() {
     try {
       const raw = deck?.slides;
       if (!raw) return [];
-      if (typeof raw === 'string') return JSON.parse(raw);
-      return raw;
-    } catch { return []; }
+      if (typeof raw === 'string') {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+      return Array.isArray(raw) ? raw : [];
+    } catch (err) {
+      // Don't silently swallow — log so a corrupted slides blob is visible
+      // in the console rather than appearing as an empty deck.
+      console.error('PitchDeckPage: failed to parse deck.slides', err);
+      return [];
+    }
   }, [deck]);
 
   const activeSlide = slides[activeIdx] || null;
