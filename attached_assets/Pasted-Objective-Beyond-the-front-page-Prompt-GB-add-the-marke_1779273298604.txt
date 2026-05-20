@@ -1,0 +1,57 @@
+Objective
+  Beyond the front page (Prompt GB), add the marketing surfaces a
+  paying user expects to see: pricing, demo booking, status, public
+  changelog, public roadmap.
+
+Pages
+
+  1. /pricing
+     Three columns per audience (Founders, Investors). Tier names
+     reuse the in-app names (Free / Growth / Studio for founders,
+     Free / Pro / Institutional for investors). Each tier card lists
+     concrete features, monthly + annual price, "Start free trial"
+     CTA. FAQ at the bottom. Schema.org Offer markup.
+     Pricing data lives in frontend/src/data/pricing.ts so it's
+     editable in one place.
+
+  2. /demo
+     Calendly embed (your link) OR a form that creates a GitHub
+     Issue (reuse Prompt GE) and emails the lead a confirmation.
+     Three buttons: "30-min product demo" / "Investor brief" /
+     "Partnership intro". Each pre-fills topic.
+
+  3. /status
+     Public status page at status.axal.vc or /status. Backed by:
+       GET /api/public/status
+         → { incidents: [{id, title, status, severity, created_at,
+                           updates: [...]}],
+              services: [{name, status: 'operational'|'degraded'|'down'}] }
+     Sources: /api/health (Prompt FG) for service status; admin-
+     written incidents for human updates.
+     History: last 90 days of uptime per service.
+
+  4. /changelog
+     Public list of shipped changes. Source: GitHub Releases on the
+     repo, filtered to releases tagged "public-changelog". Each entry:
+     date, title, audience tag (founder/investor/partner/mentor/all),
+     summary, optional screenshot link.
+
+  5. /roadmap
+     Public roadmap with three columns: Soon (this quarter), Next
+     (next quarter), Later. Drawn from a small CMS file
+     frontend/src/data/roadmap.ts. Each card: title, audience tag,
+     short description, status. Allow upvoting via reactions
+     persisted in roadmap_votes table.
+
+SEO + analytics
+  - Each page has Open Graph + Twitter Card metadata.
+  - sitemap.xml regenerated to include all marketing pages.
+  - Privacy-friendly first-party analytics (already in privacy
+    policy) tracks visits per page.
+
+Acceptance
+  - All five pages live.
+  - /pricing tiers match in-app paywalls.
+  - /status shows real-time service status.
+  - /changelog auto-syncs from GitHub Releases with the right tag.
+  - /roadmap accepts upvotes from logged-in users.

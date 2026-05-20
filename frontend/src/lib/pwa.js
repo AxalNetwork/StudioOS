@@ -35,6 +35,19 @@ export function isPushSupported() {
 export function registerServiceWorker() {
   if (typeof window === 'undefined') return;
   if (!('serviceWorker' in navigator)) return;
+  // Skip SW registration in Vite dev — the SW precaches '/' and serves
+  // stale HTML referencing old optimizer dep hashes, which causes
+  // "Outdated Optimize Dep" 504s on reload. Also unregister any leftover
+  // SW from a prior session so it stops intercepting requests.
+  if (import.meta.env && import.meta.env.DEV) {
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      regs.forEach((r) => r.unregister().catch(() => {}));
+    }).catch(() => {});
+    if (window.caches && caches.keys) {
+      caches.keys().then((keys) => keys.forEach((k) => caches.delete(k).catch(() => {}))).catch(() => {});
+    }
+    return;
+  }
   // Register after first paint to avoid blocking LCP.
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' })

@@ -1,0 +1,107 @@
+Objective
+  Today email is patchy. Beta needs a unified transactional pipeline
+  covering every system-generated email, an in-app Notification Center
+  to mirror them, and a digest preference users actually control.
+
+Transactional templates (commit in cloudflare-worker/src/templates/email/)
+  auth_verify_email
+  auth_password_reset
+  auth_magic_link
+  auth_passkey_added
+  auth_recovery_started
+  auth_recovery_resolved
+  auth_signin_new_device
+  account_welcome_founder
+  account_welcome_investor
+  account_welcome_mentor
+  account_welcome_partner
+  account_deleted_confirmation
+  account_email_change_confirm
+  account_email_change_revoke
+  billing_subscribed_growth
+  billing_subscribed_studio
+  billing_subscribed_investor_pro
+  billing_subscribed_investor_inst
+  billing_payment_failed
+  billing_canceled
+  billing_invoice_receipt
+  billing_refund_issued
+  contract_envelope_sent
+  contract_envelope_signed
+  contract_envelope_declined
+  contract_envelope_voided
+  nda_pairwise_requested
+  nda_pairwise_signed
+  dd_section_assigned
+  dd_section_completed
+  dd_report_ready
+  partner_invitation
+  partner_deal_signed
+  referral_invitation
+  referral_payout_paid
+  mentor_session_booked
+  mentor_session_canceled
+  spinout_milestone_unlocked
+  spinout_graduated
+  weekly_digest                  (composed; takes a JSON of summary)
+  daily_digest
+  contact_form_acknowledgement
+  support_form_acknowledgement
+  github_issue_replied
+
+Layout standard
+  Plain text fallback + HTML version. Header with Axal wordmark.
+  Body. Footer with: unsubscribe link, account link, legal links,
+  registered address. From: noreply@axal.vc; Reply-To varies per
+  template (support@, security@, billing@).
+
+Sender service
+  cloudflare-worker/src/services/email/send.ts
+    Single send(template_key, to, vars, opts) entry. Picks template,
+    renders via lightweight engine (Handlebars or mustache), enqueues
+    to JOB_QUEUE for delivery (retries + DLQ on permanent failure).
+    Provider: existing Gmail OAuth as primary; document fallback to
+    a transactional provider (Postmark or SES) if needed at scale.
+
+Notification Center
+  Schema:
+    CREATE TABLE notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      category TEXT NOT NULL,          -- 'security','billing','contract',
+                                        -- 'deal','mentor','calendar',
+                                        -- 'system','marketing'
+      severity TEXT NOT NULL,           -- 'info','warning','critical'
+      title TEXT NOT NULL,
+      body TEXT,
+      cta_url TEXT,
+      template_key TEXT,                 -- source template
+      read_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  Endpoints:
+    GET /api/notifications?unread=true&category=
+    POST /api/notifications/:id/read
+    POST /api/notifications/read-all
+    DELETE /api/notifications/:id
+  Frontend: bell icon in header with unread count; slide-over panel
+  shows the list. Click row → routes to cta_url.
+
+Digest engine
+  Cron `0 9 * * *` (per timezone) composes a daily digest if user
+  picked digest_frequency='daily'; same for weekly.
+  Suppress per user_settings.quiet_hours and digest preferences.
+
+Compliance
+  Every category gets per-channel toggles (email / in-app / SMS /
+  Slack) in Settings > Notifications.
+  Critical security alerts override "off" — always sent.
+  Marketing emails always include a one-click List-Unsubscribe header
+  + visible unsubscribe link (CAN-SPAM, CASL, GDPR).
+
+Acceptance
+  - Every event in the platform routes through send().
+  - Notification Center populated for every email sent.
+  - Quiet hours + digest preferences respected.
+  - Marketing emails unsubscribable in one click.
+  - Critical alerts never silenced.

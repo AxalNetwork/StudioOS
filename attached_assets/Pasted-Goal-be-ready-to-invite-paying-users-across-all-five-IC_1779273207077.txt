@@ -1,0 +1,59 @@
+Goal: be ready to invite paying users across all five ICPs (Founders,
+Investors, Operating Partners, Mentors, Admins) without losing them to
+broken flows.
+
+Three categories of work remaining:
+
+  Category A — MUST HAVE before beta opens (blockers):
+    1. Auth that doesn't lose leads at signup (Prompt GI status check).
+    2. Email transactional pipeline (verify, welcome, reset, NDA-pending,
+       contract-signed, billing receipt, weekly digest).
+    3. Every 500 from the error dashboard fixed (Prompt FC status check).
+    4. Stripe paywall end-to-end: sign up → trial → pay → tier flips →
+       paywalled features unlock; cancel/refund tested.
+    5. KYC working for investors end-to-end (Persona or Sumsub callback
+       round-trip).
+    6. Contract send + sign working (esign envelope creation, email
+       to signer, signature capture, signed PDF stored, status returns
+       to Admin > Contracts).
+    7. Notification Center in the app + matching email.
+    8. Mobile-responsive on every dashboard page (no broken layouts).
+    9. Empty states + error states on every page (no white-screen-of-
+       death, no generic toast).
+    10. Backup + disaster-recovery plan tested (D1 export, R2 cold copy,
+        admin-runnable restore script).
+
+  Category B — SHOULD HAVE early in beta:
+    11. Public marketing surfaces beyond the front page (pricing page,
+        demo-booking page, status page, changelog, public roadmap).
+    12. Onboarding completion experience: clear "you're set up"
+        moment + persistent in-app checklist.
+    13. Cmd+K search across the app.
+    14. Help / contact widget on every signed-in page.
+    15. Accessibility audit (WCAG 2.1 AA on every public page +
+        signed-in core).
+    16. Data-import tools so Carta / AngelList / spreadsheet users
+        can land on Axal without re-typing.
+    17. Refer & Earn payouts (Stripe Connect Express on referrers).
+
+  Category C — NICE TO HAVE for the first months:
+    18. i18n (French at minimum since founder is FR-CA).
+    19. PWA / installable mobile experience.
+    20. Affiliate program separate from refer-earn.
+    21. Press kit / brand-assets page.
+    22. SOC 2 / ISO 27001 attestation (long-running engagement).
+
+Nine PRs to deliver Categories A + B in order:
+
+  IB  Email transactional pipeline + Notification Center
+  IC  Empty + error states + mobile + a11y sweep
+  ID  Public surfaces (pricing, demo, status, changelog, roadmap)
+  IE  Backup + DR + incident playbook
+  IF  Onboarding completion + persistent checklist + product tour
+  IG  Cmd+K search + help widget + customer chat
+  IH  Data import + migration tools
+  II  Refer & Earn payouts via Stripe Connect Express
+  IJ  Bug bash: confirm every spec'd fix actually shipped
+
+Run IJ first (audit what's already done) so you know what's left to
+build.

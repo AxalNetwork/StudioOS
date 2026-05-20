@@ -27,7 +27,6 @@ export default defineConfig({
       'react-window',
       'lucide-react',
     ],
-    force: true,
   },
   build: {
     outDir: path.resolve(__dirname, '../docs'),

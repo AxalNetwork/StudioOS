@@ -1,0 +1,64 @@
+Objective
+  Every page must look intentional on a brand-new account, on
+  every viewport, and behave correctly for assistive tech. Today
+  most pages render white space + a console error on empty state.
+
+Tasks
+
+  1. Empty-state library
+     frontend/src/components/EmptyState.jsx — single component:
+       <EmptyState
+         icon={Sparkles}
+         title="No projects yet"
+         body="Create your first venture project to get started."
+         cta={{ label: 'New project', to: '/projects' }}
+         secondary={{ label: 'Learn more', to: '/docs#core/projects' }}
+       />
+     Mount on every list page. Replace any "Loading..." / blank
+     div / generic toast empty fallback.
+
+  2. Error-state library
+     frontend/src/components/ErrorState.jsx — single component
+     for inline render when an API call fails:
+       <ErrorState
+         message="Couldn't load projects (404)"
+         onRetry={load}
+         supportTopic="projects"
+       />
+     Replaces every console.error → generic toast pattern.
+
+  3. Mobile responsive sweep
+     Audit every page at viewports: 360, 414, 768, 1024, 1440.
+     Targets:
+       - sidebar collapses to slide-in drawer below 768px
+       - tables become card-stack below 768px
+       - long forms use full-width fields below 640px
+       - sticky-bottom CTA on key conversion pages
+       - hit targets ≥ 44×44 px
+     Fix any horizontal scroll on the main viewport.
+
+  4. WCAG 2.1 AA pass
+     - All images have meaningful alt text or alt=""
+     - Headings nest (h1 → h2 → h3, no skips)
+     - Color contrast ≥ 4.5:1 for normal text, 3:1 for large
+     - Every interactive control has a focus ring
+     - Every form field has a label (visible or aria-label)
+     - Every modal traps focus on open, returns focus on close
+     - Cmd/Ctrl + / opens a keyboard-shortcut overlay
+     - prefers-reduced-motion respected on animations
+     - All routes navigable by keyboard alone
+
+  5. CI gate
+     Add axe-core via Playwright on top-30 pages. Fail the build
+     on serious/critical violations.
+
+  6. Skeleton loaders
+     Replace "Loading..." with skeleton placeholders that mirror
+     the final layout (use a small skeleton.tsx component).
+
+Acceptance
+  - Every page renders an intentional empty state on a fresh account.
+  - Every fetch failure renders an ErrorState, not a toast.
+  - Lighthouse Accessibility ≥ 95 on the audited pages.
+  - axe-core CI step green.
+  - Manual viewport check at 360px shows no horizontal scroll.
