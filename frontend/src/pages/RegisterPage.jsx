@@ -275,7 +275,13 @@ export default function RegisterPage() {
         const loginRes = await api.login({ email: form.email, totp_code: verifyCode });
         localStorage.setItem('token', loginRes.token);
         localStorage.setItem('user', JSON.stringify(loginRes.user));
-        window.location.href = '/dashboard';
+        // All new users land on the AI onboarding chatbot, which classifies
+        // their persona (Founder / Investor / Mentor / Operator / Counsel /
+        // Technical / Liquidity) and promotes role from the 'partner'
+        // default to 'founder'/'investor' when appropriate. Existing inline
+        // chat step in RegisterPage is best-effort capture; this guarantees
+        // every signup path (email + Google) hits the chatbot.
+        window.location.href = '/onboarding/chat';
       } else {
         setError('Invalid code. Make sure your authenticator app is synced correctly.');
       }
