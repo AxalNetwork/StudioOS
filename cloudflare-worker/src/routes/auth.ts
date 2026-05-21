@@ -204,7 +204,7 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
 auth.post('/register', safe('register', 'Registration failed. Please try again in a moment, or contact support if the problem persists.', async (c) => {
   const parsed = await readJson(c);
   if (!parsed.ok) return parsed.res;
-  const { email, name, role, turnstileToken, ref_code } = parsed.body;
+  const { email, name, role, turnstileToken, ref_code, defer_email } = parsed.body;
   if (!email || !name) return c.json({ error: 'Email and name required' }, 400);
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   if (!emailRe.test(String(email).trim())) return c.json({ error: 'Please enter a valid email address' }, 400);
@@ -251,6 +251,18 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
     await sql.end();
     // Phase 0.1: investors embed under their own entity bucket; partners stay legacy.
     try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: role === 'investor' ? 'investor' : 'partner', id: user.id }); } catch {}
+    // Task #50 — frontend signup is a multi-step flow (register → chatbot →
+    // "Check Your Email"). When `defer_email` is true the frontend will
+    // explicitly request the verification email at the final step via
+    // /resend-verification, so it arrives the moment the user lands on the
+    // "Check Your Email" screen instead of minutes earlier (which made users
+    // think no email was ever sent).
+    if (defer_email) {
+      return c.json({
+        message: 'Account updated, verification email deferred',
+        email, name, requires_verification: true, email_sent: null, email_deferred: true,
+      });
+    }
     const { sent: emailSent, verificationUrl, tokenStored } = await sendVerification(c.env, email, name, user.id);
     return c.json({
       message: emailSent ? 'Verification email sent' : 'Account created but email delivery failed',
@@ -325,6 +337,14 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
     } catch (e) { console.error('attachReferral failed:', e); }
   }
 
+  // Task #50 — see note above; defer when the multi-step signup will request
+  // verification email at the final step.
+  if (defer_email) {
+    return c.json({
+      message: 'Account created, verification email deferred',
+      email: user.email, name: user.name, requires_verification: true, email_sent: null, email_deferred: true,
+    });
+  }
   const { sent: emailSent, verificationUrl, tokenStored } = await sendVerification(c.env, email, name, user.id);
   return c.json({
     message: emailSent ? 'Verification email sent' : 'Account created but email delivery failed',

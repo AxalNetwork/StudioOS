@@ -162,7 +162,10 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined });
+      // Task #50 — defer the verification email until the user finishes the
+      // chatbot. Otherwise the email arrives minutes before the "Check Your
+      // Email" screen and users think no email was ever sent.
+      const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, defer_email: true });
       setEmailWarning(res?.email_sent === false);
       if (res?.verification_url) setVerificationUrl(res.verification_url);
       setStep(2);
@@ -204,6 +207,17 @@ export default function RegisterPage() {
     try {
       await api.profilingSave({ email: form.email, messages: chatMessages });
       setProfileSaved(true);
+      // Task #50 — register deferred the email; trigger it now so it arrives
+      // the moment the user lands on the "Check Your Email" screen.
+      try {
+        const sendRes = await api.resendVerification({ email: form.email });
+        setEmailWarning(sendRes?.email_sent === false);
+        if (sendRes?.verification_url) setVerificationUrl(sendRes.verification_url);
+      } catch (sendErr) {
+        // Don't block the step transition on email send failure — the user
+        // can still click "Resend Verification Email" on the next screen.
+        setEmailWarning(true);
+      }
       setStep(3);
     } catch (e) {
       setError(e.message);
