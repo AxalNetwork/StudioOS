@@ -280,9 +280,24 @@ ${transcript}`;
 
   const personaLabel = founderTrack ? `${persona} / ${founderTrack}` : (persona || 'unknown');
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_captured', ${`Profile captured — ${personaLabel} — pending admin verification`}, ${await hashEmail(email)}, ${user.id})`;
+
+  // Task #51-followup — Google signups land with role='pending' and stay
+  // pinned to /onboarding/chat until classified. Flip to the inferred role
+  // here so the SPA's pending-gate releases them on the next /me poll.
+  // Mapping mirrors the SYSTEM_PROMPT persona list above.
+  let inferredRole: string | null = null;
+  if (persona === 'Founder') inferredRole = 'founder';
+  else if (typeof persona === 'string' && persona.startsWith('Investor')) inferredRole = 'investor';
+  else if (persona) inferredRole = 'partner'; // Operator/Counsel/Technical/Liquidity
+  if (inferredRole && String(user.role || '').toLowerCase() === 'pending') {
+    try {
+      await sql`UPDATE users SET role = ${inferredRole} WHERE id = ${user.id}`;
+    } catch (e) { console.error('[PROFILING] role promotion failed', e); }
+  }
+
   await sql.end();
 
-  return c.json({ saved: true, persona, founder_track: founderTrack, summary: extracted?.summary || null });
+  return c.json({ saved: true, persona, founder_track: founderTrack, role: inferredRole, summary: extracted?.summary || null });
 });
 
 // ---------- Admin endpoints ----------

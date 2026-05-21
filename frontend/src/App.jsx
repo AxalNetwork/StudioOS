@@ -100,6 +100,7 @@ import AcademyLessonPage from './pages/AcademyLessonPage';
 import OnboardingFounderPage from './pages/OnboardingFounderPage';
 import OnboardingInvestorPage from './pages/OnboardingInvestorPage';
 import OnboardingPartnerPage from './pages/OnboardingPartnerPage';
+import OnboardingChatPage from './pages/OnboardingChatPage';
 import BrandBuilderPage from './pages/BrandBuilderPage';
 import PitchDeckPage from './pages/PitchDeckPage';
 import FinancialsPage from './pages/FinancialsPage';
@@ -152,6 +153,11 @@ const ROLE_DEFAULT_PATH = {
   partner: '/partner-portal',
   investor: '/dashboard',
   mentor: '/office-hours',
+  // Task #51 follow-up — fresh Google signups land with role='pending' until
+  // the onboarding chatbot classifies them. The pending-gate in RequireAuth
+  // pins them to /onboarding/chat, but this default keeps any stray
+  // role-lookup (e.g. landing-page fallback) from 404-ing them out.
+  pending: '/onboarding/chat',
 };
 
 const ViewModeContext = createContext(null);
@@ -740,6 +746,15 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Task #51 follow-up — pending-role gate. Fresh Google signups are
+  // created with role='pending' and must complete the onboarding chatbot
+  // (Workers AI Llama) so an admin can review their profile. Pin them to
+  // /onboarding/chat regardless of where they navigate; the chatbot's
+  // /api/profiling/save promotes them out of 'pending' on completion.
+  if (user.role === 'pending' && !location.pathname.startsWith('/onboarding/chat')) {
+    return <Navigate to="/onboarding/chat" replace />;
+  }
+
   // Phase 0.2 / Task #23 — wizard resume gate.
   // Roles that have a dedicated wizard land back on it until completion.
   // Admins are exempt; persona-only flows (/onboarding/persona) and the
@@ -951,6 +966,7 @@ function AppInner() {
           so we get a tighter capital-allocator surface; per-route guards
           stay permissive so deep links keep working during the split. */}
       <Route path="/dashboard" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <Dashboard />)} />
+      <Route path="/onboarding/chat" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor', 'pending'], <OnboardingChatPage />)} />
       <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
       <Route path="/onboarding/founder" element={guard(['admin', 'founder'], <OnboardingFounderPage />)} />
       <Route path="/onboarding/investor" element={guard(['admin', 'investor'], <OnboardingInvestorPage />)} />

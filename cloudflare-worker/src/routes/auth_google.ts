@@ -521,9 +521,15 @@ authGoogle.get('/callback', async (c) => {
       } else {
         // Rule 4 — fresh signup. Google already verified the email.
         const name = (idt.name || googleEmail.split('@')[0] || 'New user').slice(0, 200);
+        // Fresh Google signups land with role='pending' so the onboarding
+        // chatbot can classify them (Founder vs Investor-LP/Syndicate/Co-Investor
+        // vs Operator/Partner/Counsel/Technical/Liquidity). The chatbot's
+        // /api/profiling/save flips role to the inferred value when extraction
+        // succeeds; until then the SPA's pending-role gate keeps the user
+        // pinned to /onboarding/chat.
         const inserted = await sql`
           INSERT INTO users (email, name, role, email_verified)
-          VALUES (${googleEmail}, ${name}, 'partner', true)
+          VALUES (${googleEmail}, ${name}, 'pending', true)
           RETURNING *` as any[];
         user = inserted[0];
         // INSERT OR IGNORE defends against the rare case where a second
@@ -575,13 +581,11 @@ authGoogle.get('/callback', async (c) => {
     const csrf = generateCsrfToken();
     setAuthCookies(c, token, csrf);
 
-    // Per Task #51 spec: fresh Google signups land directly on /dashboard
-    // (no onboarding-chatbot detour — that flow is still available from
-    // the in-app Help widget but is no longer mandatory for Google
-    // signups, since Google has already verified the email and we have
-    // a full name from the id_token). Existing users honour the
-    // sanitized redirect target the caller passed to /start.
-    const landing = newSignup ? '/dashboard' : sanitizeRedirect(state.redirect);
+    // Fresh Google signups land on the onboarding chatbot (Workers AI
+    // Llama 3.1 8B via /api/profiling/chat) which classifies persona and
+    // saves a partner_profiles row for admin review. Existing users honour
+    // the sanitized redirect target the caller passed to /start.
+    const landing = newSignup ? '/onboarding/chat' : sanitizeRedirect(state.redirect);
     const url = `${appUrl(c.env)}${landing}${landing.includes('?') ? '&' : '?'}google=ok${newSignup ? '&google_signup=1' : ''}`;
     return c.redirect(url, 302);
   } catch (e: any) {
