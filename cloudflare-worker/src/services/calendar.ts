@@ -70,9 +70,16 @@ const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo';
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
+// Task #52 — request both read+write (`calendar.events`) AND read-only
+// (`calendar.readonly`) scopes so the future external→Axal mirror
+// (follow-up #58) can list external events via sync_token without a
+// second consent screen. `userinfo.profile` is included so the consent
+// screen names the connecting user.
 const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
   'openid',
 ];
 
@@ -192,13 +199,18 @@ export function preflightOAuthSecrets(
   const missing: string[] = [];
   if (!env.JWT_SECRET) missing.push('JWT_SECRET');
   if (provider === 'google') {
-    if (!googleCalClientId(env)) missing.push('GOOGLE_CAL_CLIENT_ID (or GOOGLE_CLIENT_ID)');
-    if (!googleCalClientSecret(env)) missing.push('GOOGLE_CAL_CLIENT_SECRET (or GOOGLE_CLIENT_SECRET)');
-    if (!googleRedirectUri(env)) missing.push('PUBLIC_BASE_URL');
+    // Surface the calendar-specific env names FIRST (`GOOGLE_CAL_*`).
+    // The legacy `GOOGLE_CLIENT_*` vars are still accepted as a
+    // back-compat fallback (see `googleCalClientId/Secret`), but the
+    // preflight payload reports the canonical CAL-prefixed names so
+    // admins know which secret to set on a fresh deploy.
+    if (!googleCalClientId(env)) missing.push('GOOGLE_CAL_CLIENT_ID');
+    if (!googleCalClientSecret(env)) missing.push('GOOGLE_CAL_CLIENT_SECRET');
+    if (!googleRedirectUri(env)) missing.push('GOOGLE_CALENDAR_REDIRECT_URI');
   } else {
-    if (!microsoftCalClientId(env)) missing.push('MICROSOFT_CAL_CLIENT_ID (or MICROSOFT_CLIENT_ID)');
-    if (!microsoftCalClientSecret(env)) missing.push('MICROSOFT_CAL_CLIENT_SECRET (or MICROSOFT_CLIENT_SECRET)');
-    if (!microsoftRedirectUri(env)) missing.push('PUBLIC_BASE_URL');
+    if (!microsoftCalClientId(env)) missing.push('MICROSOFT_CAL_CLIENT_ID');
+    if (!microsoftCalClientSecret(env)) missing.push('MICROSOFT_CAL_CLIENT_SECRET');
+    if (!microsoftRedirectUri(env)) missing.push('MICROSOFT_CALENDAR_REDIRECT_URI');
   }
   return missing;
 }

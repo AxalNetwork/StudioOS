@@ -2,7 +2,7 @@
 
 ## 2026-05-21 — Task #52 (follow-up patch) — partner OH hooks + CAL-OAuth aliases + external-mirror migration
 
-Addressing the architect's second-round findings on Task #52:
+Addressing the architect's follow-up findings on Task #52:
 
 - **Partner office hours** booking + cancel hooks now wired the same
   way (`routes/partner_office_hours.ts`): book lines 176-217, cancel
@@ -19,11 +19,21 @@ Addressing the architect's second-round findings on Task #52:
   surfaces the new env names in the `missing` array.
 - **Migration 062** — `062_calendar_external_sync.sql` adds the
   additive `calendar_external_sync` table (sync_token, delta_link,
-  watch_channel_id / resource_id / expires_at) and stamps
-  `external_provider` + `external_event_id` onto `calendar_events`,
-  scaffolding for follow-up Task #58 (Google sync_token + Microsoft
-  Graph delta read-only mirror). Idempotent — `IF NOT EXISTS` on
-  every CREATE / INDEX; ALTERs are additive-only.
+  watch_channel_id / resource_id / expires_at) — scaffolding for
+  follow-up Task #58 (Google sync_token + Microsoft Graph delta
+  read-only mirror). Strictly idempotent — only `CREATE TABLE IF NOT
+  EXISTS` + `CREATE INDEX IF NOT EXISTS`, no ALTERs (D1 doesn't
+  support `ADD COLUMN IF NOT EXISTS`; the `external_provider` /
+  `external_event_id` columns on `calendar_events` move to a lazy
+  PRAGMA-table_info() helper in #58).
+- **Google scopes** widened to include `calendar.readonly` and
+  `userinfo.profile` so the future external→Axal mirror can list
+  events via `sync_token` without a second consent screen, and the
+  consent screen names the connecting user.
+- **Preflight** now reports the canonical `GOOGLE_CAL_*` /
+  `MICROSOFT_CAL_*` env names plus `GOOGLE_CALENDAR_REDIRECT_URI` /
+  `MICROSOFT_CALENDAR_REDIRECT_URI` in the `missing` payload (legacy
+  vars still accepted as fallback at the resolver layer).
 - **Frontend** — `CalendarPage.jsx` `KIND_LABEL`/`KIND_COLOR` now
   cover `partner_office_hour` (emerald) and the future
   `google_external` / `microsoft_external` mirrored rows (gray /
