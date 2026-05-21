@@ -1,5 +1,170 @@
 # Changelog
 
+## 2026-05-21 — Service Provider Directory admin approval/feature toggle
+
+Admin console can now approve who appears on the public `/directory`
+page and which partners get the "featured" promotion above standard
+rows.
+
+- **Migration `063_partner_directory_approval.sql`** — adds
+  `directory_listed`, `directory_featured`, `directory_decided_at`,
+  `directory_decided_by` columns to `partners` plus an index on
+  (listed, featured). Pair with the lazy bootstrap helper
+  `services/partnerDirectorySchema.ts::ensurePartnerDirectoryColumns()`
+  (PRAGMA-checked, per-isolate cached, same pattern as
+  `ensureAdvisorWeekColumn`) so fresh envs self-heal.
+- **Public `/api/public/partners`** now filters
+  `status='active' AND directory_listed=1` and surfaces
+  `featured: !!directory_featured`. Featured rows sort first
+  (`ORDER BY directory_featured DESC, referrals_count DESC, name ASC`)
+  and their `ranking_score` is offset by 1e6 so featured always wins.
+- **Admin worker routes** in `routes/admin_partners.ts`:
+  `GET /api/admin/partners/directory` (search by name/company/email,
+  returns flags + audit columns) and
+  `POST /api/admin/partners/:id/directory` (body `{ listed?, featured? }`).
+  Featuring auto-clears if `listed=false` (invariant: featured ⇒ listed).
+  Decisions logged via `logAdminAction` → `activity_logs` +
+  `admin_audit_log` as `partner_directory_toggled`.
+- **Frontend**: new `Directory` tab in `AdminPage.jsx` rendering
+  `DirectoryPanel` (rows with Approve/Remove + Feature/Unfeature
+  buttons, search box, approved/featured counts). API helpers
+  `adminListDirectoryPartners()` + `adminSetPartnerDirectory()` added
+  to `frontend/src/lib/api.js`. `useCallback` added to AdminPage's
+  React import.
+
+**Apply migration** (post-merge ops step — additive ALTER TABLE,
+NOT yet applied to remote D1):
+```
+wrangler d1 execute studioos-db --remote \
+  --file=cloudflare-worker/sql/migrations/063_partner_directory_approval.sql
+```
+The worker is self-healing via the lazy PRAGMA helper, so missing the
+migration only costs an extra ALTER round-trip on the first request to
+either `/api/public/partners` or the new admin endpoints.
+
+## 2026-05-21 — Task #52 (follow-up patch) — partner OH hooks + CAL-OAuth aliases + external-mirror migration
+
+Addressing the architect's follow-up findings on Task #52:
+
+- **Partner office hours** booking + cancel hooks now wired the same
+  way (`routes/partner_office_hours.ts`): book lines 176-217, cancel
+  branch in `transition()` lines 278-287. `PUSHABLE_KINDS` already
+  contained `partner_office_hour`; `services/calendar.ts` already
+  exports the matching event-row shape.
+- **Calendar-specific OAuth client envs** —
+  `GOOGLE_CAL_CLIENT_ID/SECRET` and `MICROSOFT_CAL_CLIENT_ID/SECRET`
+  are now the preferred env names, with `GOOGLE_CLIENT_ID/SECRET` and
+  `MICROSOFT_CLIENT_ID/SECRET` kept as fallbacks. New helpers
+  `googleCalClientId/Secret` + `microsoftCalClientId/Secret` in
+  `services/calendar.ts` ; every auth-URL builder, code-exchange and
+  refresh path now reads through the helpers. `preflightOAuthSecrets`
+  surfaces the new env names in the `missing` array.
+- **Migration 062** — `062_calendar_external_sync.sql` adds the
+  additive `calendar_external_sync` table (sync_token, delta_link,
+  watch_channel_id / resource_id / expires_at) — scaffolding for
+  follow-up Task #58 (Google sync_token + Microsoft Graph delta
+  read-only mirror). Strictly idempotent — only `CREATE TABLE IF NOT
+  EXISTS` + `CREATE INDEX IF NOT EXISTS`, no ALTERs (D1 doesn't
+  support `ADD COLUMN IF NOT EXISTS`; the `external_provider` /
+  `external_event_id` columns on `calendar_events` move to a lazy
+  PRAGMA-table_info() helper in #58).
+- **Google scopes** widened to include `calendar.readonly` and
+  `userinfo.profile` so the future external→Axal mirror can list
+  events via `sync_token` without a second consent screen, and the
+  consent screen names the connecting user.
+- **Preflight** now reports the canonical `GOOGLE_CAL_CLIENT_ID/SECRET`
+  / `MICROSOFT_CAL_CLIENT_ID/SECRET` env names plus `PUBLIC_BASE_URL`
+  in the `missing` payload (legacy `GOOGLE_CLIENT_*` /
+  `MICROSOFT_CLIENT_*` vars still accepted as fallback at the resolver
+  layer for back-compat).
+- **Cancel-sync durability** — `onAxalSessionCancelled()` now only
+  DELETEs the `calendar_sync_records` row AFTER the upstream provider
+  DELETE confirmed success. Failed deletes leave the mapping in place
+  (and stamp `last_error` if the column exists) so a retry can finish
+  the job — preventing transient 5xx errors from permanently orphaning
+  external events with no mapping back to Axal. Test stub updated to
+  understand both the legacy 2-param and new 4-param DELETE shapes.
+- **Frontend** — `CalendarPage.jsx` `KIND_LABEL`/`KIND_COLOR` now
+  cover `partner_office_hour` (emerald) and the future
+  `google_external` / `microsoft_external` mirrored rows (gray /
+  dimmed) so the unified feed can render them out-of-the-box.
+
+Investor 1:1s are already covered: the original Task #52 wired IC
+meetings, which IS the investor meeting surface.
+
+## 2026-05-21 — Task #52 — Calendar two-way sync for booked sessions
+
+Sessions booked on-platform (mentor sessions, IC meetings, founder
+check-ins) now appear on `/calendar` AND propagate to every connected
+attendee's Google / Outlook calendar within seconds — and disappear
+again on cancel. Booking endpoints stay snappy because the push runs
+inside `c.executionCtx.waitUntil(...)` after the HTTP response returns.
+
+**New service** — `cloudflare-worker/src/services/calendar/sync.ts`
+exposes three hooks:
+- `onAxalSessionCreated(env, ev)` — pushes the event to every
+  connected attendee (organizer + invitees). Idempotent: re-runs
+  PATCH the existing external event via the `(user_id, provider,
+  source_kind, source_id) → external_event_id` map in
+  `calendar_sync_records`.
+- `onAxalSessionUpdated` — alias for `onAxalSessionCreated`.
+- `onAxalSessionCancelled(env, kind, source_id)` — DELETEs upstream +
+  clears the sync row.
+- `pushOneEventForUser(env, userId, ev)` — powers the new "Add to
+  my Google / Outlook" button for sessions that pre-date the user's
+  OAuth connection.
+
+**Wired booking hooks** (all best-effort, exceptions never break the
+underlying booking):
+- `POST /api/mentors/slots/:id/book` →
+  `routes/mentors.ts` lines 314-341.
+- Mentor booking cancel / no-show transitions →
+  `routes/mentors.ts` lines 404-411.
+- `POST /api/calendar/ic-meetings` →
+  `routes/calendar.ts` lines 263-285.
+- `DELETE /api/calendar/ic-meetings/:id` →
+  `routes/calendar.ts` lines 338-343.
+- `POST /api/calendar/founder-checkins` →
+  `routes/calendar.ts` lines 406-424.
+- `DELETE /api/calendar/founder-checkins/:id` →
+  `routes/calendar.ts` lines 459-464.
+
+**New endpoint** — `POST /api/calendar/push/:kind/:source_id` lets the
+SPA push an already-booked Axal session to whichever providers the
+caller has connected. Returns `{ ok: true, pushed: { google, microsoft } }`.
+
+**Frontend** — `CalendarPage.jsx` renders an "Add to Google / Outlook
+Calendar" button on each agenda row whenever at least one external
+provider is connected. Re-clicking is safe (PATCH not insert). New
+`api.pushOneToExternal(kind, sourceId)` helper in `frontend/src/lib/api.js`.
+
+**Disconnect symmetry** — existing `DELETE /calendar/google` and
+`DELETE /calendar/microsoft` already cascade `DELETE FROM
+calendar_sync_records WHERE provider = ?`, so reconnect → fresh push
+cycle leaves no orphan rows.
+
+**Tests** — `cloudflare-worker/test/calendar.sync_hooks.test.ts`
+covers (a) push to Google for connected user, (b) DELETE + sync-row
+cleanup on cancel, (c) silent no-op when the user has no OAuth row.
+Uses a hand-rolled stub `fetch` + in-memory tables.
+
+**Calendar OAuth client separation** — already in place from Task #51:
+sign-in uses `GOOGLE_AUTH_CLIENT_ID/SECRET`, calendar uses
+`GOOGLE_CLIENT_ID/SECRET`. Redirect URI continues to resolve to
+`https://app.axal.vc/api/calendar/google/callback` via
+`PUBLIC_BASE_URL` (preferred) or `APP_URL`. Microsoft mirrors the
+same pattern.
+
+**Out of scope (deferred to follow-ups)** — Google `sync_token` +
+push-notification watch channels for the external-mirror read-only
+side; Outlook delta-token parity; partner office hours + investor
+meetings hooks (no D1 tables today — partner OH already goes through
+Calendly). Existing `/api/calendar/{google,microsoft}/sync` endpoints
+remain the broad-window catch-up path for any push that failed the
+per-event hook.
+
+
+
 > This file is the single source of truth. `frontend/public/CHANGELOG.md`
 > is a symlink to it, so `vite build` copies it into `docs/CHANGELOG.md`
 > where it is served by GitHub Pages and rendered inside the in-app

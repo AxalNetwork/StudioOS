@@ -58,8 +58,11 @@ export function AuthProvider({ children }) {
     // public (no /me needed) or the route guard will redirect to /login
     // before this fires; if /me 401s anyway, api.request bounces to
     // /login on its own.
+    // EXCEPTION: `force: true` bypasses the cached-user gate — used by the
+    // post-OAuth bootstrap below where the cookie was set entirely
+    // server-side and localStorage is still empty.
     const hasCachedUser = !!safeReadJSON('user');
-    if (!hasCachedUser) return;
+    if (!hasCachedUser && !force) return;
 
     const now = Date.now();
     if (!force && now - lastFetchRef.current < THROTTLE_MS) return;
@@ -99,6 +102,25 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     refresh();
   }, [location.pathname, refresh]);
+
+  // Post-OAuth bootstrap. The Google sign-in callback sets the auth cookie
+  // entirely server-side and 302-redirects to `/dashboard?google=ok` (or
+  // `?google_signup=1` for fresh signups). At that point the SPA has a
+  // valid httpOnly cookie but localStorage is still empty, so the
+  // cached-user gate in refresh() would skip /me and the route guard in
+  // App.jsx would bounce the user back to /login. Force one /me probe
+  // when we see the post-OAuth marker so the user lands on their
+  // dashboard instead of /login. One-shot per mount; Dashboard.jsx
+  // strips the query params on its own mount effect.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('google') || params.has('google_signup')) {
+        refresh({ force: true });
+      }
+    } catch { /* noop */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Cross-tab sync: another tab logging in/out updates localStorage; mirror
   // it here so tabs stay consistent without a reload.
