@@ -13,7 +13,10 @@
     "tail": "wrangler tail",
     "tail:preview": "wrangler tail --env preview",
     "d1:migrate": "wrangler d1 execute studioos-db --remote --file=cloudflare-worker/sql/schema.sql",
-    "claude:check": "bash scripts/check-anthropic-key.sh"
+    "claude:check": "bash scripts/check-anthropic-key.sh",
+    "lfs:check": "node scripts/lfs-size-gate.mjs",
+    "lfs:check-all": "node scripts/lfs-size-gate.mjs --all",
+    "lfs:install-hook": "node scripts/lfs-size-gate.mjs --install"
   },
   "keywords": [],
   "author": "",
