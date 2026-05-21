@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-05-21 — Service Provider Directory admin approval/feature toggle
+
+Admin console can now approve who appears on the public `/directory`
+page and which partners get the "featured" promotion above standard
+rows.
+
+- **Migration `063_partner_directory_approval.sql`** — adds
+  `directory_listed`, `directory_featured`, `directory_decided_at`,
+  `directory_decided_by` columns to `partners` plus an index on
+  (listed, featured). Pair with the lazy bootstrap helper
+  `services/partnerDirectorySchema.ts::ensurePartnerDirectoryColumns()`
+  (PRAGMA-checked, per-isolate cached, same pattern as
+  `ensureAdvisorWeekColumn`) so fresh envs self-heal.
+- **Public `/api/public/partners`** now filters
+  `status='active' AND directory_listed=1` and surfaces
+  `featured: !!directory_featured`. Featured rows sort first
+  (`ORDER BY directory_featured DESC, referrals_count DESC, name ASC`)
+  and their `ranking_score` is offset by 1e6 so featured always wins.
+- **Admin worker routes** in `routes/admin_partners.ts`:
+  `GET /api/admin/partners/directory` (search by name/company/email,
+  returns flags + audit columns) and
+  `POST /api/admin/partners/:id/directory` (body `{ listed?, featured? }`).
+  Featuring auto-clears if `listed=false` (invariant: featured ⇒ listed).
+  Decisions logged via `logAdminAction` → `activity_logs` +
+  `admin_audit_log` as `partner_directory_toggled`.
+- **Frontend**: new `Directory` tab in `AdminPage.jsx` rendering
+  `DirectoryPanel` (rows with Approve/Remove + Feature/Unfeature
+  buttons, search box, approved/featured counts). API helpers
+  `adminListDirectoryPartners()` + `adminSetPartnerDirectory()` added
+  to `frontend/src/lib/api.js`. `useCallback` added to AdminPage's
+  React import.
+
+**Apply migration** (post-merge ops step — additive ALTER TABLE,
+NOT yet applied to remote D1):
+```
+wrangler d1 execute studioos-db --remote \
+  --file=cloudflare-worker/sql/migrations/063_partner_directory_approval.sql
+```
+The worker is self-healing via the lazy PRAGMA helper, so missing the
+migration only costs an extra ALTER round-trip on the first request to
+either `/api/public/partners` or the new admin endpoints.
+
 ## 2026-05-21 — Task #52 (follow-up patch) — partner OH hooks + CAL-OAuth aliases + external-mirror migration
 
 Addressing the architect's follow-up findings on Task #52:

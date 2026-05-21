@@ -18,6 +18,7 @@ import { requireAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { sendPartnerInvitationEmail } from '../services/email';
 import { ALL_PARTNER_DEAL_TYPES, type PartnerDealType } from '../services/partnerDeals';
+import { ensurePartnerDirectoryColumns } from '../services/partnerDirectorySchema';
 // Task #43 — revocation paths must drop investor_dealroom_max to the
 // free-tier cap, not the hardcoded `5` (which is the *professional* cap).
 // Sourcing the value from INVESTOR_QUOTAS keeps the column in sync with
@@ -429,6 +430,89 @@ admin_partners.post('/deals/:id/terminate', async (c) => {
     ok: true,
     tiers_revoked: !!(deal.granted_tier_founder || deal.granted_tier_investor),
     redemptions_revoked: redemptionsRevoked,
+  });
+});
+
+// ---------- Service Provider Directory approval (Task #53 admin tools) ----------
+//
+// Admin lists every partner with their current directory_listed /
+// directory_featured flags and toggles them via POST. Public
+// `/api/public/partners` (see routes/public.ts) only returns rows
+// where `directory_listed = 1`, so flipping `listed` to 0 removes a
+// partner from /directory immediately. Featuring without listing is
+// allowed by the schema but the public route hides the row anyway
+// (featured-but-unlisted is treated as a soft draft).
+
+admin_partners.get('/directory', async (c) => {
+  const admin = await requireAdmin(c);
+  await ensurePartnerDirectoryColumns(c.env);
+  const q = String(c.req.query('q') || '').trim().toLowerCase();
+  const params: unknown[] = [];
+  let where = `1=1`;
+  if (q) {
+    const like = `%${q.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+    where += ` AND (lower(name) LIKE ? ESCAPE '\\' OR lower(coalesce(company,'')) LIKE ? ESCAPE '\\' OR lower(email) LIKE ? ESCAPE '\\')`;
+    params.push(like, like, like);
+  }
+  const rs = await c.env.DB.prepare(
+    `SELECT id, uid, name, company, email, specialization, status, referrals_count,
+            COALESCE(directory_listed, 0)   AS directory_listed,
+            COALESCE(directory_featured, 0) AS directory_featured,
+            directory_decided_at, directory_decided_by, created_at
+       FROM partners
+      WHERE ${where}
+      ORDER BY directory_featured DESC, directory_listed DESC,
+               referrals_count DESC, name ASC
+      LIMIT 500`,
+  ).bind(...params).all();
+  void admin;
+  return c.json({ partners: rs.results || [], total: (rs.results || []).length });
+});
+
+admin_partners.post('/:id/directory', async (c) => {
+  const admin = await requireAdmin(c);
+  await ensurePartnerDirectoryColumns(c.env);
+  const id = Number(c.req.param('id'));
+  if (!Number.isFinite(id) || id <= 0) return c.json({ error: 'invalid partner id' }, 400);
+  const body = await c.req.json().catch(() => ({}));
+
+  const row = await c.env.DB.prepare(
+    `SELECT id, name, email,
+            COALESCE(directory_listed, 0)   AS directory_listed,
+            COALESCE(directory_featured, 0) AS directory_featured
+       FROM partners WHERE id = ?`,
+  ).bind(id).first<{
+    id: number; name: string; email: string;
+    directory_listed: number; directory_featured: number;
+  }>();
+  if (!row) return c.json({ error: 'partner not found' }, 404);
+
+  const nextListed   = typeof body.listed   === 'boolean' ? (body.listed   ? 1 : 0) : row.directory_listed;
+  // Featuring implies listed — you can't promote a partner who isn't
+  // visible. The reverse is fine (listed but not featured).
+  let   nextFeatured = typeof body.featured === 'boolean' ? (body.featured ? 1 : 0) : row.directory_featured;
+  if (nextFeatured && !nextListed) nextFeatured = 0;
+
+  await c.env.DB.prepare(
+    `UPDATE partners
+        SET directory_listed     = ?,
+            directory_featured   = ?,
+            directory_decided_at = datetime('now'),
+            directory_decided_by = ?
+      WHERE id = ?`,
+  ).bind(nextListed, nextFeatured, admin.id, id).run();
+
+  await logAdminAction(c.env, admin.id, admin.email, 'partner_directory_toggled', {
+    partner_id: id, partner_name: row.name,
+    listed:   { from: !!row.directory_listed,   to: !!nextListed   },
+    featured: { from: !!row.directory_featured, to: !!nextFeatured },
+  });
+
+  return c.json({
+    ok: true,
+    partner: {
+      id, listed: !!nextListed, featured: !!nextFeatured,
+    },
   });
 });
 

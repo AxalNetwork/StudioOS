@@ -636,6 +636,20 @@ export const api = {
   setPartnerFeatured: (partnerId, body) => request(`/marketplace/providers/${partnerId}/featured`, {
     method: 'POST', body: JSON.stringify(body),
   }),
+  // Admin-managed Service Provider Directory approval (Task #53).
+  // List = every partner with their current listed/featured flags;
+  // toggle = flip either flag (featured without listed is auto-corrected
+  // server-side to listed=false because the public route hides it anyway).
+  adminListDirectoryPartners: (q = '') =>
+    request(`/admin/partners/directory${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  adminSetPartnerDirectory: (partnerId, { listed, featured } = {}) =>
+    request(`/admin/partners/${partnerId}/directory`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(typeof listed === 'boolean' ? { listed } : {}),
+        ...(typeof featured === 'boolean' ? { featured } : {}),
+      }),
+    }),
   getMyProvider: () => request('/marketplace/providers/me'),
   updateMyProvider: (data) => request('/marketplace/providers/me', { method: 'PUT', body: JSON.stringify(data) }),
   setProviderKyb: (id, status) => request(`/marketplace/providers/${id}/kyb`, { method: 'POST', body: JSON.stringify({ status }) }),

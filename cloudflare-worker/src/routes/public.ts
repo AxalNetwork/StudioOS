@@ -126,24 +126,33 @@ publicRoutes.get('/u/:handle', async (c) => {
 // than a 400 keeps the UI working when a user toggles a filter on
 // the existing page.
 publicRoutes.get('/partners', async (c) => {
+  // Admin-gated directory: only rows where the admin has flipped
+  // `directory_listed = 1` are visible to anonymous visitors. The
+  // `directory_featured` flag promotes a partner above standard rows
+  // in the PartnerCard grid via the `featured: true` field on the
+  // response payload. See `routes/admin_partners.ts` for the admin
+  // toggle endpoints.
+  const { ensurePartnerDirectoryColumns } = await import('../services/partnerDirectorySchema');
+  await ensurePartnerDirectoryColumns(c.env);
   const q = String(c.req.query('q') || '').trim().toLowerCase();
   const params: any[] = [];
-  let where = `status = 'active'`;
+  let where = `status = 'active' AND directory_listed = 1`;
   if (q) {
     const like = `%${q.replace(/[%_]/g, (m) => `\\${m}`)}%`;
     where += ` AND (lower(name) LIKE ? ESCAPE '\\' OR lower(coalesce(company, '')) LIKE ? ESCAPE '\\' OR lower(coalesce(specialization, '')) LIKE ? ESCAPE '\\')`;
     params.push(like, like, like);
   }
-  const sqlText = `SELECT uid, name, company, specialization, referral_code, referrals_count
+  const sqlText = `SELECT uid, name, company, specialization, referral_code, referrals_count,
+                          directory_featured
                      FROM partners
                     WHERE ${where}
-                    ORDER BY referrals_count DESC, name ASC
+                    ORDER BY directory_featured DESC, referrals_count DESC, name ASC
                     LIMIT 200`;
   try {
     const rs = await c.env.DB.prepare(sqlText).bind(...params).all<{
       uid: string; name: string; company: string | null;
       specialization: string | null; referral_code: string | null;
-      referrals_count: number;
+      referrals_count: number; directory_featured: number;
     }>();
     const partners = (rs.results || []).map((r) => ({
       slug: r.uid,
@@ -152,15 +161,15 @@ publicRoutes.get('/partners', async (c) => {
       headline: r.specialization,
       categories: [] as string[],
       kyb_verified: false,
-      featured: false,
-      featured_tier: null,
+      featured: !!r.directory_featured,
+      featured_tier: r.directory_featured ? 'editor' : null,
       reviews: { avg_rating: null as number | null },
       response_time_hours: null as number | null,
       pricing_tier: null as string | null,
       completed_engagements: r.referrals_count || 0,
-      // Crude ranking until a richer signal lands — referrals_count is
-      // the only "engagement" proxy currently on the partners row.
-      ranking_score: r.referrals_count || 0,
+      // Featured rows always outrank standard ones; within each band we
+      // still use referrals_count as the only "engagement" proxy.
+      ranking_score: (r.directory_featured ? 1_000_000 : 0) + (r.referrals_count || 0),
     }));
     return c.json({ partners, total: partners.length });
   } catch (e: any) {
