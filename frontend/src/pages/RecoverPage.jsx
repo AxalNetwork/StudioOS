@@ -151,8 +151,11 @@ export default function RecoverPage() {
   const startTrusted = async () => {
     setBusy(true); setError(''); setInfo('');
     try {
-      const r = await post('/trusted-contact/start', { email: email.trim() });
-      setInfo(`We've asked your ${r.contacts_notified} trusted contacts to attest. You'll receive an email with a claim link once both have signed in and approved (ticket #${r.ticket_id}).`);
+      await post('/trusted-contact/start', { email: email.trim() });
+      // Endpoint is constant-shape (Task #50, no enumeration). We don't
+      // surface ticket_id / contact count to the unauthenticated caller
+      // — the trusted contacts get an email out-of-band.
+      setInfo("If your account has at least two trusted contacts on file, they've each been emailed an attest link. Once both approve, you'll receive a claim link to finish recovery.");
     } catch (e) {
       setError(e?.message === 'not_enough_trusted_contacts'
         ? 'You need at least two active trusted contacts to use this layer.'

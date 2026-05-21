@@ -193,9 +193,22 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
       if (expired) {
         const path = c.req.path || '';
         // Allow the user to log out + look at /me + complete TOTP re-enrol.
+        // Allowlist mirrors actually-mounted routes:
+        //   /api/auth/me            — read profile + recovery_pending
+        //   /api/auth/logout        — sign out
+        //   /api/settings/totp/re-enrol/* — fresh post-recovery TOTP pair
+        //                                  (Task #50, doesn't require existing code)
+        //   /api/settings/totp/repair      — swap secrets when current code still works
+        //   /api/settings/totp/recovery-codes/regenerate — fresh backup codes
+        //   /api/settings/sessions  — view + revoke sessions
+        //   /api/settings           — read settings root (the SPA mounts the page)
         const ALLOWED = [
           '/api/auth/me', '/api/auth/logout',
-          '/api/settings/totp', '/api/settings/totp/verify',
+          '/api/settings',
+          '/api/settings/totp/re-enrol', '/api/settings/totp/re-enrol/start',
+          '/api/settings/totp/re-enrol/confirm',
+          '/api/settings/totp/repair',
+          '/api/settings/totp/recovery-codes/regenerate',
           '/api/settings/sessions',
         ];
         const allowed = ALLOWED.some((p) => path === p || path.startsWith(p + '/'));

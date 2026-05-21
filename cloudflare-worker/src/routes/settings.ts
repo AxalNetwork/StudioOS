@@ -497,6 +497,88 @@ settings.post('/email-change/revoke', async (c) => {
 
 // --- TOTP repair ------------------------------------------------------------
 
+/**
+ * Task #50 — Fresh TOTP re-enrolment path that does NOT require an
+ * existing TOTP code. Eligibility: the caller must be on a session
+ * minted via recovery (i.e. users.recovery_step_up_due_at IS NOT NULL).
+ * This unblocks the "I lost my authenticator → recover via email magic
+ * → re-pair within 7 days" loop. /totp/repair still exists for users
+ * who have a working code and want to swap secrets.
+ *
+ * Flow:
+ *   POST /totp/re-enrol/start         → { totp_secret, provisioning_uri, qr_code }
+ *   POST /totp/re-enrol/confirm       { totp_secret, code } → { ok, recovery_codes }
+ */
+settings.post('/totp/re-enrol/start', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  const row = await sql`SELECT recovery_step_up_due_at FROM users WHERE id = ${user.id}`;
+  await sql.end();
+  if (!row.length || !row[0].recovery_step_up_due_at) {
+    return c.json({ error: 'not_eligible', message: 'Fresh re-enrol is only available after account recovery. Use /totp/repair if you still have a working authenticator.' }, 403);
+  }
+  const secret = new Secret();
+  const t = new TOTP({ issuer: 'Axal VC StudioOS', label: user.email, secret });
+  const uri = t.toString();
+  let qrBase64: string | null = null;
+  try {
+    const dataUrl = await QRCode.toDataURL(uri);
+    qrBase64 = dataUrl.replace('data:image/png;base64,', '');
+  } catch {}
+  return c.json({ totp_secret: secret.base32, provisioning_uri: uri, qr_code: qrBase64 });
+});
+
+settings.post('/totp/re-enrol/confirm', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const proposedSecret = clampStr(body?.totp_secret, 64);
+  const code = clampStr(body?.totp_code, 12);
+  if (!proposedSecret || !code) return c.json({ error: 'totp_secret and totp_code required' }, 400);
+  const sql = getSQL(c.env);
+  const row = await sql`SELECT recovery_step_up_due_at FROM users WHERE id = ${user.id}`;
+  if (!row.length || !row[0].recovery_step_up_due_at) {
+    await sql.end();
+    return c.json({ error: 'not_eligible' }, 403);
+  }
+  let totp: TOTP;
+  try { totp = new TOTP({ secret: Secret.fromBase32(proposedSecret) }); }
+  catch { await sql.end(); return c.json({ error: 'invalid_secret' }, 400); }
+  if (totp.validate({ token: code, window: 1 }) === null) {
+    await sql.end();
+    return c.json({ error: 'invalid_code' }, 401);
+  }
+  // Mint fresh recovery codes alongside the new secret.
+  const recoveryPlain: string[] = [];
+  const recoveryHashes: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const raw = generateToken().slice(0, 10);
+    recoveryPlain.push(raw);
+    recoveryHashes.push(await hashToken(raw));
+  }
+  await persistNewTotpEnrolment(c.env, user.id, proposedSecret, recoveryHashes);
+  try { await setUserFactor(c.env, user.id, 'totp'); } catch {}
+  // Clear the step-up nag AND bump jwt_min_iat so the lower-assurance
+  // session minted at recovery time is invalidated (forces a fresh
+  // login with the new TOTP, which lands at factor='totp').
+  const nowSec = Math.floor(Date.now() / 1000);
+  await sql`UPDATE users
+            SET recovery_step_up_due_at = NULL,
+                jwt_min_iat = ${nowSec}
+            WHERE id = ${user.id}`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+            VALUES ('totp_reenrolled_post_recovery',
+                    'Fresh authenticator paired after recovery; old session signed out',
+                    ${user.email}, ${user.id})`;
+  await sql.end();
+  return c.json({
+    ok: true,
+    recovery_codes: recoveryPlain,
+    note: 'Save these one-time recovery codes somewhere safe. Sign in again with your new authenticator.',
+  });
+});
+
 settings.post('/totp/repair', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);

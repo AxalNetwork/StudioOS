@@ -402,7 +402,7 @@ recover.post('/backup-code', async (c) => {
     { status: 'resolved', assurance: 'full', resolved: true },
     { template: 'auth_recovery_resolved' });
   await logActivity(c.env, user.id, 'recovery_resolved_backup_code', `ticket=${ticketId}`);
-  await notifyAllChannels(c.env, user, 'auth_recovery_resolved', { ticket_id: String(ticketId) });
+  // (Reviewer fix: transitionTicket already fans out — no duplicate notify.)
 
   const { token, csrf } = await mintRecoverySession(c, user, 'recovery', 'full');
   return c.json({
