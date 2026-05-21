@@ -104,12 +104,31 @@ async function tryConsumeRecoveryCode(env: Env, userId: number, raw: string): Pr
  * Logs the actual cause to Cloudflare logs with the route label so we can
  * triage post-hoc without leaking internals to the client.
  */
+// Known underlying errors that are safe to surface as a short, stable
+// `code` on the 500 response. Lets the operator diagnose misconfiguration
+// from the screenshot alone instead of having to dig through Cloudflare
+// logs. Patterns must match throw messages used inside the auth routes
+// and their direct services (columnCipher, authTotp).
+const SAFE_ERROR_CODES: Array<{ re: RegExp; code: string; hint: string }> = [
+  { re: /KEK_PII is required in production/i, code: 'kek_pii_missing',
+    hint: 'Server is missing the column-encryption key (KEK_PII). Ask the operator to provision it.' },
+  { re: /KEK_PII must be at least 32 bytes/i, code: 'kek_pii_too_short',
+    hint: 'Server column-encryption key is too short (<32 bytes). Ask the operator to rotate it.' },
+  { re: /Neither KEK_PII nor JWT_SECRET is set/i, code: 'encryption_keys_missing',
+    hint: 'Server encryption keys are not configured. Ask the operator to provision KEK_PII.' },
+];
+
 function safe(label: string, friendlyError: string, handler: (c: any) => Promise<any>) {
   return async (c: any) => {
     try {
       return await handler(c);
     } catch (e: any) {
-      console.error(`[AUTH:${label}] unhandled error:`, e?.message || e, e?.stack || '');
+      const msg = e?.message || String(e);
+      console.error(`[AUTH:${label}] unhandled error:`, msg, e?.stack || '');
+      const hit = SAFE_ERROR_CODES.find(s => s.re.test(msg));
+      if (hit) {
+        return c.json({ error: hit.hint, code: hit.code }, 500);
+      }
       return c.json({ error: friendlyError }, 500);
     }
   };
