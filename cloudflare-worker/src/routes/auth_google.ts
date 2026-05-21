@@ -285,6 +285,15 @@ authGoogle.get('/start', async (c) => {
     uid,
     redirect,
   });
+  // Bind the nonce to this OAuth handshake via KV (keyed by the state's
+  // own HMAC signature) AND via cookie for defence-in-depth. The KV
+  // record is the source of truth — mobile in-app browsers (Instagram,
+  // LinkedIn, etc.) commonly drop the third-party-cookie context across
+  // the Google round-trip, which used to surface as 'bad_state'.
+  const stateSig = state.slice(state.indexOf('.') + 1);
+  try {
+    await c.env.TOKENS.put(`gstate:${stateSig}`, nonce, { expirationTtl: 600 });
+  } catch (e) { console.error('[auth_google] state KV put failed', e); }
   c.header(
     'Set-Cookie',
     `studioos_google_state=${nonce}; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/google; Max-Age=600`,
@@ -417,19 +426,33 @@ authGoogle.get('/callback', async (c) => {
   if (!state) return callbackError(c.env, 'bad_state', 'signin');
 
   // Session-bind check: the nonce inside the HMAC'd state MUST equal the
-  // value of the studioos_google_state cookie set by /start. This binds
-  // the OAuth handshake to a single browser/session and defeats
-  // login-CSRF (attacker injecting their own {code,state} into the
-  // victim's browser) and state-replay across sessions.
-  const cookieHeader = c.req.header('cookie') || '';
-  const m = cookieHeader.match(/(?:^|;\s*)studioos_google_state=([^;]+)/);
-  const cookieNonce = m ? m[1] : '';
-  if (!cookieNonce || cookieNonce !== state.n) {
+  // value stored in KV (or the cookie, for desktop browsers) at /start
+  // time. This binds the OAuth handshake to a single browser/session and
+  // defeats login-CSRF (attacker injecting their own {code,state} into
+  // the victim's browser) and state-replay across sessions.
+  //
+  // KV is the primary source of truth because mobile in-app browsers
+  // (Instagram, LinkedIn, etc.) frequently drop the third-party-cookie
+  // context across the Google round-trip — using only the cookie would
+  // surface as 'bad_state' for every such user.
+  const stateSig = stateRaw.slice(stateRaw.indexOf('.') + 1);
+  let bindNonce = '';
+  try {
+    bindNonce = (await c.env.TOKENS.get(`gstate:${stateSig}`)) || '';
+  } catch (e) { console.error('[auth_google] state KV get failed', e); }
+  if (!bindNonce) {
+    // Cookie fallback for desktop browsers (KV write may have failed at /start).
+    const cookieHeader = c.req.header('cookie') || '';
+    const m = cookieHeader.match(/(?:^|;\s*)studioos_google_state=([^;]+)/);
+    bindNonce = m ? m[1] : '';
+  }
+  if (!bindNonce || bindNonce !== state.n) {
     return callbackError(c.env, 'bad_state', state.action);
   }
-  // One-shot: clear the binding cookie so the same {code,state} pair
-  // cannot be replayed even if it leaks (Google's code is already
-  // single-use, but defence-in-depth).
+  // One-shot: delete the KV record and clear the binding cookie so the
+  // same {code,state} pair cannot be replayed even if it leaks (Google's
+  // code is already single-use, but defence-in-depth).
+  try { await c.env.TOKENS.delete(`gstate:${stateSig}`); } catch {}
   c.header(
     'Set-Cookie',
     'studioos_google_state=; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/google; Max-Age=0',
