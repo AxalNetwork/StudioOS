@@ -43,15 +43,61 @@ async function ensureSchema(env: Env): Promise<void> {
        token_hash TEXT NOT NULL UNIQUE,
        expires_at TEXT NOT NULL,
        used_at TEXT,
+       view_limit INTEGER NOT NULL DEFAULT 1,
+       view_count INTEGER NOT NULL DEFAULT 0,
+       last_viewed_at TEXT,
        created_by INTEGER,
        created_at TEXT DEFAULT (datetime('now'))
      )`,
     `CREATE INDEX IF NOT EXISTS idx_deck_share_hash ON pitch_deck_share_tokens(token_hash)`,
+    // Task #53 — per-impression telemetry surfaced in the Engagement panel.
+    `CREATE TABLE IF NOT EXISTS deck_share_views (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       share_token_id INTEGER NOT NULL,
+       deck_id INTEGER NOT NULL,
+       ip_hash TEXT,
+       ua_fingerprint TEXT,
+       read_seconds INTEGER NOT NULL DEFAULT 0,
+       created_at TEXT DEFAULT (datetime('now')),
+       updated_at TEXT
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_deck_share_views_deck ON deck_share_views(deck_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_deck_share_views_tok ON deck_share_views(share_token_id)`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('decks schema:', e?.message); }
   }
+  // Lazy column bootstrap for older deployments where the share token
+  // table predates Task #53. D1 has no ADD COLUMN IF NOT EXISTS; we
+  // probe with PRAGMA and ALTER on demand.
+  try {
+    const cols = await env.DB.prepare(`PRAGMA table_info(pitch_deck_share_tokens)`).all<any>();
+    const have = new Set(((cols.results || []) as any[]).map((r) => String(r.name)));
+    if (!have.has('view_limit')) {
+      try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN view_limit INTEGER NOT NULL DEFAULT 1`).run(); } catch {}
+    }
+    if (!have.has('view_count')) {
+      try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0`).run(); } catch {}
+    }
+    if (!have.has('last_viewed_at')) {
+      try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN last_viewed_at TEXT`).run(); } catch {}
+    }
+  } catch {}
   _migrated = true;
+}
+
+// Task #53 — best-effort hashing of viewer identifiers. Stored
+// per-impression so the founder can see "5 views, 12 min read" without
+// learning the visitor's IP or UA verbatim. SHA-256(secret || value)
+// keyed by JWT_SECRET so the hashes aren't a precomputed-rainbow target.
+async function hashViewerField(env: Env, value: string | null): Promise<string | null> {
+  if (!value) return null;
+  const secret = (env as any).JWT_SECRET || 'fallback-dev-only';
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${secret}|${value}`));
+  const bytes = new Uint8Array(buf);
+  let out = '';
+  for (let i = 0; i < 8; i++) out += bytes[i].toString(16).padStart(2, '0');
+  return out;
 }
 
 const SLIDE_TITLES = [
@@ -387,23 +433,147 @@ decks.get('/share/:token', async (c) => {
   const token = c.req.param('token');
   let payload: any;
   try { payload = await verifySignedToken(c.env, token); }
-  catch (e: any) { return c.json({ error: e?.message || 'forbidden' }, 403); }
+  catch (e: any) {
+    // Expired signed tokens are functionally "gone" — return 410 so
+    // viewer pages can show a "share link expired" state distinct from
+    // an outright invalid signature (which stays 403).
+    if (/expired/i.test(String(e?.message || ''))) {
+      return c.json({ error: 'share link has expired' }, 410);
+    }
+    return c.json({ error: e?.message || 'forbidden' }, 403);
+  }
   const m = /^deck:(\d+):v(\d+)$/.exec(String(payload?.k || ''));
   if (!m) return c.json({ error: 'bad token scope' }, 400);
   await ensureSchema(c.env);
-  // Atomic single-use claim. D1 returns meta.changes for the affected
-  // row count, so we know whether THIS request consumed the token.
+  // Task #53 — atomic claim against view_limit. Increment view_count
+  // only when there is capacity left and the token hasn't expired.
+  // D1's meta.changes tells us if THIS request consumed a view slot.
   const h = await sha256Hex(token);
   const claim = await c.env.DB.prepare(
-    `UPDATE pitch_deck_share_tokens SET used_at = datetime('now')
-     WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')`
+    `UPDATE pitch_deck_share_tokens
+        SET view_count = view_count + 1,
+            last_viewed_at = datetime('now'),
+            used_at = CASE WHEN view_count + 1 >= view_limit THEN datetime('now') ELSE used_at END
+      WHERE token_hash = ?
+        AND view_count < view_limit
+        AND expires_at > datetime('now')`
   ).bind(h).run();
   const changes = Number((claim as any)?.meta?.changes || 0);
-  if (changes !== 1) return c.json({ error: 'share link is no longer valid' }, 403);
+  if (changes !== 1) {
+    // Distinguish expired/exhausted (410 Gone) from never-existed (403).
+    const tokRow = await c.env.DB.prepare(
+      `SELECT id, view_count, view_limit, expires_at FROM pitch_deck_share_tokens WHERE token_hash = ?`
+    ).bind(h).first<any>();
+    if (!tokRow) return c.json({ error: 'share link is invalid' }, 403);
+    return c.json({ error: 'share link is no longer valid' }, 410);
+  }
   const id = parseInt(m[1]);
   const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
   if (!row) return c.json({ error: 'deck not found' }, 404);
-  return c.json(rowToDeck(row));
+
+  // Log the impression. ip_hash & ua_fingerprint are SHA-256(secret||v)
+  // truncated to 16 hex chars — enough to distinguish unique viewers in
+  // the Engagement panel without storing raw PII.
+  const tokRow = await c.env.DB.prepare(
+    `SELECT id FROM pitch_deck_share_tokens WHERE token_hash = ?`
+  ).bind(h).first<any>();
+  const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '';
+  const ua = c.req.header('user-agent') || '';
+  const ipHash = await hashViewerField(c.env, ip || null);
+  const uaHash = await hashViewerField(c.env, ua || null);
+  let viewId: number | null = null;
+  try {
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO deck_share_views (share_token_id, deck_id, ip_hash, ua_fingerprint, read_seconds)
+       VALUES (?, ?, ?, ?, 0)`
+    ).bind(Number(tokRow?.id) || 0, id, ipHash, uaHash).run();
+    viewId = Number((ins as any)?.meta?.last_row_id || 0) || null;
+  } catch {}
+
+  // view_id is returned so the viewer can heartbeat read-time updates.
+  return c.json({ ...rowToDeck(row), view_id: viewId });
+});
+
+/**
+ * POST /api/decks/share/:token/heartbeat — viewer pings read-time so
+ * the Engagement panel can show "12 min read". Capped at 2h per view
+ * row to prevent runaway counters from a tab left open overnight.
+ */
+decks.post('/share/:token/heartbeat', async (c) => {
+  const token = c.req.param('token');
+  let payload: any;
+  try { payload = await verifySignedToken(c.env, token); } catch { return c.json({ ok: false }, 200); }
+  const m = /^deck:(\d+):v(\d+)$/.exec(String(payload?.k || ''));
+  if (!m) return c.json({ ok: false }, 200);
+  const body = await c.req.json().catch(() => ({} as any));
+  const viewId = parseInt(body?.view_id);
+  const seconds = Math.min(7200, Math.max(0, Number(body?.seconds) || 0));
+  if (!viewId || !seconds) return c.json({ ok: true });
+  await ensureSchema(c.env);
+  try {
+    await c.env.DB.prepare(
+      `UPDATE deck_share_views
+          SET read_seconds = MIN(7200, ?),
+              updated_at = datetime('now')
+        WHERE id = ? AND deck_id = ? AND read_seconds < ?`
+    ).bind(seconds, viewId, parseInt(m[1]), seconds).run();
+  } catch {}
+  return c.json({ ok: true });
+});
+
+/**
+ * GET /api/decks/:id/engagement — founder-facing roll-up of share-link
+ * activity for the Engagement panel. Returns active tokens + per-view
+ * impressions (hashed identifiers only) so the founder can answer
+ * "did anyone read it?" without leaking IPs.
+ */
+decks.get('/:id/engagement', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ error: 'bad id' }, 400);
+  await ensureSchema(c.env);
+  let row: any;
+  try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
+  try { await projectOwned(c.env, user, Number(row.project_id)); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  const tokens = await c.env.DB.prepare(
+    `SELECT id, expires_at, used_at, view_limit, view_count, last_viewed_at, created_at
+       FROM pitch_deck_share_tokens
+      WHERE deck_id = ?
+      ORDER BY created_at DESC
+      LIMIT 50`
+  ).bind(id).all<any>();
+  const views = await c.env.DB.prepare(
+    `SELECT id, share_token_id, ip_hash, ua_fingerprint, read_seconds, created_at, updated_at
+       FROM deck_share_views
+      WHERE deck_id = ?
+      ORDER BY created_at DESC
+      LIMIT 200`
+  ).bind(id).all<any>();
+  const tokRows = (tokens.results || []) as any[];
+  const viewRows = (views.results || []) as any[];
+  const totalRead = viewRows.reduce((acc, v) => acc + (Number(v.read_seconds) || 0), 0);
+  return c.json({
+    deck_id: id,
+    total_views: viewRows.length,
+    total_read_seconds: totalRead,
+    last_viewed_at: viewRows[0]?.created_at || null,
+    shares: tokRows.map((t) => ({
+      id: t.id,
+      created_at: t.created_at,
+      expires_at: t.expires_at,
+      view_limit: Number(t.view_limit) || 1,
+      view_count: Number(t.view_count) || 0,
+      last_viewed_at: t.last_viewed_at,
+      exhausted: !!t.used_at || (Number(t.view_count) || 0) >= (Number(t.view_limit) || 1),
+    })),
+    views: viewRows.map((v) => ({
+      id: v.id, share_token_id: v.share_token_id,
+      ip_hash: v.ip_hash, ua_fingerprint: v.ua_fingerprint,
+      read_seconds: Number(v.read_seconds) || 0,
+      created_at: v.created_at, updated_at: v.updated_at,
+    })),
+  });
 });
 
 decks.get('/:id', async (c) => {
@@ -473,17 +643,30 @@ decks.post('/:id/share', async (c) => {
   try { await projectOwned(c.env, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
-  const ttlHours = Math.min(24 * 30, Math.max(1, Number(body?.ttl_hours) || 72));
+  const ttlHours = Math.min(
+    24 * 30,
+    Math.max(1, Number(body?.expires_in_hours ?? body?.ttl_hours) || 72),
+  );
   const ttlSeconds = ttlHours * 3600;
+  // Task #53 — accept an optional view_limit (1..100). The spec says
+  // links work "exactly once OR up to view_limit"; default stays 1 so
+  // pre-Task-53 callers keep their one-time semantics.
+  const viewLimit = Math.min(100, Math.max(1, Number(body?.view_limit) || 1));
   const token = await mintSignedToken(c.env, `deck:${id}:v${row.version}`, ttlSeconds, user.email || null);
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString().replace('T', ' ').slice(0, 19);
   await c.env.DB.prepare(
-    `INSERT INTO pitch_deck_share_tokens (deck_id, token_hash, expires_at, created_by)
-     VALUES (?, ?, ?, ?)`
-  ).bind(id, await sha256Hex(token), expiresAt, Number(user.id) || null).run();
+    `INSERT INTO pitch_deck_share_tokens (deck_id, token_hash, expires_at, view_limit, view_count, created_by)
+     VALUES (?, ?, ?, ?, 0, ?)`
+  ).bind(id, await sha256Hex(token), expiresAt, viewLimit, Number(user.id) || null).run();
   return c.json({
     token, expires_in_seconds: ttlSeconds, expires_at: expiresAt,
-    share_path: `/deck/share/${token}`, one_time: true,
+    view_limit: viewLimit,
+    // Canonical share URL per Task #53 spec is /share/deck/<token>; the
+    // legacy /deck/share/<token> path is kept as an alias so existing
+    // links continue to resolve.
+    share_path: `/share/deck/${token}`,
+    legacy_share_path: `/deck/share/${token}`,
+    one_time: viewLimit === 1,
   });
 });
 

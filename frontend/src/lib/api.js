@@ -77,6 +77,7 @@ export async function request(path, options = {}) {
           || currentPath.startsWith('/partners/onboard')
           || currentPath.startsWith('/esign/')
           || currentPath.startsWith('/deck/share/')
+          || currentPath.startsWith('/share/deck/')
           || currentPath.startsWith('/insights/public/')
           || currentPath.startsWith('/settings/email/');
         if (!isPublicPath) {
@@ -991,6 +992,12 @@ export const api = {
   deckRestore: (id) => request(`/decks/${id}/restore`, { method: 'POST', body: JSON.stringify({}) }),
   deckShare: (id, payload) => request(`/decks/${id}/share`, { method: 'POST', body: JSON.stringify(payload || {}) }),
   deckShareRead: (token) => request(`/decks/share/${encodeURIComponent(token)}`),
+  // Task #53 — viewer heartbeat for read-time tracking + founder engagement panel.
+  deckShareHeartbeat: (token, viewId, seconds) => request(
+    `/decks/share/${encodeURIComponent(token)}/heartbeat`,
+    { method: 'POST', body: JSON.stringify({ view_id: viewId, seconds }) },
+  ),
+  deckEngagement: (id) => request(`/decks/${id}/engagement`),
   // Task #16 (DE) — Pitch Deck Builder rewrite.
   deckMethods: () => request('/decks/methods'),
   deckRecommend: (projectId) => request(`/decks/recommend?project_id=${projectId}`),

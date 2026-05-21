@@ -5,7 +5,7 @@ import {
   Sparkles, Loader2, Plus, Trash2, Share2, Download,
   History, RotateCcw, ChevronLeft, ChevronRight, Lock, Wand2,
   LayoutGrid, FileImage, FileText, FileCode2, Settings, X, Check,
-  GripVertical,
+  GripVertical, Eye, Clock,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
@@ -50,6 +50,7 @@ export default function PitchDeckPage() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState('');
   const [shareUrl, setShareUrl] = useState('');
+  const [engagement, setEngagement] = useState(null);
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const [error, setError] = useState('');
@@ -261,16 +262,31 @@ export default function PitchDeckPage() {
   const onShare = async () => {
     if (!deck?.id) return;
     try {
-      const r = await api.deckShare(deck.id, { ttl_hours: 24 });
-      const path = r?.share_path || (r?.token && `/deck/share/${r.token}`);
+      // Task #53 — canonical share URL shape is /share/deck/<token>.
+      // Server returns share_path in the new shape; older clients fall
+      // back to legacy /deck/share/<token>.
+      const r = await api.deckShare(deck.id, { expires_in_hours: 24, view_limit: 1 });
+      const path = r?.share_path || (r?.token && `/share/deck/${r.token}`);
       const url = r?.url || (path && `${window.location.origin}${path}`);
       setShareUrl(url || '');
       if (url && navigator.clipboard) {
         await navigator.clipboard.writeText(url).catch(() => {});
-        addToast('One-time share link copied to clipboard.', 'success');
+        addToast('Share link copied to clipboard.', 'success');
       }
+      // Refresh engagement so the new share row shows up in the panel.
+      api.deckEngagement(deck.id).then(setEngagement).catch(() => {});
     } catch (e) { setError(e.message || 'Share failed'); }
   };
+
+  // Task #53 — load engagement stats whenever the active deck changes.
+  useEffect(() => {
+    if (!deck?.id) { setEngagement(null); return; }
+    let alive = true;
+    api.deckEngagement(deck.id)
+      .then((r) => { if (alive) setEngagement(r); })
+      .catch(() => { if (alive) setEngagement(null); });
+    return () => { alive = false; };
+  }, [deck?.id]);
 
   const onRestore = async (id) => {
     try {
@@ -510,6 +526,10 @@ export default function PitchDeckPage() {
                   </div>
                 )}
               </div>
+
+              {/* Task #53 — Engagement panel: shows aggregate views,
+                  read-time, and a recent-impressions list (hashed). */}
+              <EngagementPanel data={engagement} />
 
               <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2 flex items-center gap-1">
@@ -792,6 +812,80 @@ function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, bu
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// Task #53 — Engagement panel. Shows founder-facing stats for share
+// links: aggregate views, total read-time, recent impressions (hashed
+// identifiers only — never raw IP/UA).
+// =====================================================================
+function fmtReadTime(seconds) {
+  const s = Math.max(0, Number(seconds) || 0);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+
+function EngagementPanel({ data }) {
+  if (!data) {
+    return (
+      <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
+        <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2 flex items-center gap-1">
+          <Eye className="w-3 h-3" /> Engagement
+        </div>
+        <p className="text-[11px] text-gray-400">No share activity yet.</p>
+      </div>
+    );
+  }
+  const shares = Array.isArray(data.shares) ? data.shares : [];
+  const views = Array.isArray(data.views) ? data.views : [];
+  return (
+    <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
+      <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2 flex items-center gap-1">
+        <Eye className="w-3 h-3" /> Engagement
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <div className="border dark:border-slate-700 rounded p-2">
+          <div className="text-[10px] uppercase text-gray-400">Views</div>
+          <div className="text-base font-semibold">{data.total_views || 0}</div>
+        </div>
+        <div className="border dark:border-slate-700 rounded p-2">
+          <div className="text-[10px] uppercase text-gray-400 flex items-center gap-1"><Clock className="w-3 h-3" /> Read time</div>
+          <div className="text-base font-semibold">{fmtReadTime(data.total_read_seconds)}</div>
+        </div>
+      </div>
+      {shares.length > 0 && (
+        <div className="mb-3">
+          <div className="text-[10px] uppercase text-gray-400 mb-1">Share links</div>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {shares.slice(0, 5).map((s) => (
+              <div key={s.id} className="flex items-center justify-between text-[11px] text-gray-500 dark:text-slate-400">
+                <span>{s.view_count}/{s.view_limit} used</span>
+                <span className={s.exhausted ? 'text-amber-600' : 'text-emerald-600'}>
+                  {s.exhausted ? 'gone' : 'active'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {views.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase text-gray-400 mb-1">Recent views</div>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {views.slice(0, 6).map((v) => (
+              <div key={v.id} className="flex items-center justify-between text-[11px] text-gray-500 dark:text-slate-400">
+                <span className="font-mono">{(v.ip_hash || '······').slice(0, 8)}</span>
+                <span>{fmtReadTime(v.read_seconds)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

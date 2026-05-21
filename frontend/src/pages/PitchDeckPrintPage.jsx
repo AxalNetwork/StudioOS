@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { Download, Loader2 } from 'lucide-react';
@@ -8,20 +8,45 @@ import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 // Task #25 — public viewer for an investor share link, plus an authenticated
 // preview at /deck/:id/print. Shows all slides on one scrollable page;
 // "Save as PDF" downloads via @react-pdf/renderer.
+// Task #53 — in share mode, heartbeat read-seconds to the worker every
+// 30s so the founder's Engagement panel can show "12 min read".
 export default function PitchDeckPrintPage({ shareMode = false }) {
   const { id, token } = useParams();
   const [deck, setDeck] = useState(null);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
+  const viewIdRef = useRef(null);
+  const startedAtRef = useRef(null);
 
   useEffect(() => {
     (async () => {
       try {
         const d = shareMode ? await api.deckShareRead(token) : await api.deckGet(parseInt(id));
         setDeck(d);
+        if (shareMode && d?.view_id) {
+          viewIdRef.current = d.view_id;
+          startedAtRef.current = Date.now();
+        }
       } catch (e) { setError(e?.message || 'Failed to load'); }
     })();
   }, [id, token, shareMode]);
+
+  // Task #53 — read-time heartbeat. Fires every 30s while the tab is
+  // open and once more on unmount. Capped server-side at 2h per view.
+  useEffect(() => {
+    if (!shareMode || !token) return undefined;
+    const tick = () => {
+      const vid = viewIdRef.current; const startedAt = startedAtRef.current;
+      if (!vid || !startedAt) return;
+      const seconds = Math.floor((Date.now() - startedAt) / 1000);
+      if (seconds <= 0) return;
+      api.deckShareHeartbeat(token, vid, seconds).catch(() => {});
+    };
+    const iv = setInterval(tick, 30_000);
+    const onHide = () => { if (document.visibilityState === 'hidden') tick(); };
+    document.addEventListener('visibilitychange', onHide);
+    return () => { tick(); clearInterval(iv); document.removeEventListener('visibilitychange', onHide); };
+  }, [shareMode, token]);
 
   const exportPdf = async () => {
     if (!deck) return;
