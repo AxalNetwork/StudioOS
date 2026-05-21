@@ -363,11 +363,14 @@ function capitalRecompute(_a: Assumptions, computed: Computed): CapitalRecompute
 // ---------------------------------------------------------------------------
 // Authorization helpers — port of _ensure_can_view / _ensure_can_edit.
 // ---------------------------------------------------------------------------
-type Project = { id: number; name: string; founder_id: number | null; submitted_by?: number | null };
+type Project = { id: number; name: string; founder_id: number | null };
 
 async function loadProject(env: Env, projectId: number): Promise<Project | null> {
+  // Note: `projects` table does NOT have a `submitted_by` column on prod
+  // (that column lives on the `issues` table — schema.sql:418). Selecting
+  // it threw "no such column: submitted_by" and 500'd the GET handler.
   const row = await env.DB.prepare(
-    'SELECT id, name, founder_id, submitted_by FROM projects WHERE id = ?',
+    'SELECT id, name, founder_id FROM projects WHERE id = ?',
   ).bind(projectId).first<Project>();
   return row || null;
 }

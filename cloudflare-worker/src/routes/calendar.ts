@@ -90,7 +90,39 @@ async function verifyState(env: Env, raw: string): Promise<string | null> {
   return diff === 0 ? nonce : null;
 }
 
+// Lazy schema bootstrap — calendar.sql creates oauth_state_tokens with
+// (state UNIQUE, user_id, provider CHECK, expires_at, created_at). On a
+// prod DB where the table is missing entirely (or was created by the
+// integrations/oauth.ts shape lacking `expires_at`), the INSERT below
+// throws and `safe()` returns the generic "Could not start Google OAuth"
+// string. Bootstrap the calendar shape once per isolate so the OAuth
+// start handler is self-healing.
+let _calendarOauthStateReady = false;
+async function ensureCalendarOauthStateTable(env: Env): Promise<void> {
+  if (_calendarOauthStateReady) return;
+  try {
+    await env.DB.exec(
+      'CREATE TABLE IF NOT EXISTS oauth_state_tokens (' +
+      'id INTEGER PRIMARY KEY AUTOINCREMENT, ' +
+      'state TEXT NOT NULL UNIQUE, ' +
+      'user_id INTEGER NOT NULL, ' +
+      'provider TEXT NOT NULL, ' +
+      'expires_at TEXT NOT NULL, ' +
+      "created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')))",
+    );
+    // Add expires_at if the table existed in the integrations/oauth.ts
+    // shape (no expires_at column). Ignore "duplicate column" errors.
+    try {
+      await env.DB.exec("ALTER TABLE oauth_state_tokens ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''");
+    } catch { /* column already exists */ }
+    _calendarOauthStateReady = true;
+  } catch (e) {
+    console.warn('[CAL:ensureOauthStateTable]', (e as Error).message);
+  }
+}
+
 async function persistState(env: Env, nonce: string, userId: number, provider: 'google' | 'microsoft'): Promise<void> {
+  await ensureCalendarOauthStateTable(env);
   const sql = getSQL(env);
   const expires = new Date(Date.now() + STATE_TTL_SECONDS * 1000).toISOString();
   // Opportunistic sweep — keeps the table from growing unbounded.
@@ -433,10 +465,23 @@ export async function buildGoogleOAuthStartResponse(
     };
   }
   const nonce = crypto.randomUUID().replace(/-/g, '');
-  await persistState(env, nonce, userId, 'google');
-  const state = await makeState(env, nonce);
-  const url = buildGoogleAuthUrl(env, state);
-  return { status: 200, body: { redirect_url: url, auth_url: url } };
+  try {
+    await persistState(env, nonce, userId, 'google');
+    const state = await makeState(env, nonce);
+    const url = buildGoogleAuthUrl(env, state);
+    return { status: 200, body: { redirect_url: url, auth_url: url } };
+  } catch (e: any) {
+    console.error('[CAL:g_start] persistState/makeState failed:', e?.message, e?.stack || '');
+    return {
+      status: 500,
+      body: {
+        error: {
+          code: 'oauth_state_error',
+          message: `Could not start Google OAuth: ${e?.message || 'unknown error'}`,
+        },
+      },
+    };
+  }
 }
 
 export async function buildMicrosoftOAuthStartResponse(
@@ -457,10 +502,23 @@ export async function buildMicrosoftOAuthStartResponse(
     };
   }
   const nonce = crypto.randomUUID().replace(/-/g, '');
-  await persistState(env, nonce, userId, 'microsoft');
-  const state = await makeState(env, nonce);
-  const url = buildMicrosoftAuthUrl(env, state);
-  return { status: 200, body: { redirect_url: url, auth_url: url } };
+  try {
+    await persistState(env, nonce, userId, 'microsoft');
+    const state = await makeState(env, nonce);
+    const url = buildMicrosoftAuthUrl(env, state);
+    return { status: 200, body: { redirect_url: url, auth_url: url } };
+  } catch (e: any) {
+    console.error('[CAL:ms_start] persistState/makeState failed:', e?.message, e?.stack || '');
+    return {
+      status: 500,
+      body: {
+        error: {
+          code: 'oauth_state_error',
+          message: `Could not start Outlook OAuth: ${e?.message || 'unknown error'}`,
+        },
+      },
+    };
+  }
 }
 
 async function startGoogleOAuth(c: any) {

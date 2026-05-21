@@ -19,6 +19,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import UserTrustBadge from '../components/UserTrustBadge';
+import PageExplainer from '../components/PageExplainer';
 
 const COMMITMENT_LABEL = {
   full_time: 'Full-time',
