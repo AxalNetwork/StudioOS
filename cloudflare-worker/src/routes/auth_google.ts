@@ -453,10 +453,11 @@ authGoogle.get('/callback', async (c) => {
     if (state.action === 'link') {
       const uid = state.uid;
       if (!uid) return callbackError(c.env, 'missing_uid', 'link');
-      const me = await sql`SELECT id, email, email_verified, google_sub FROM users WHERE id = ${uid}` as any[];
+      const me = await sql`SELECT id, email, email_verified FROM users WHERE id = ${uid}` as any[];
       if (!me.length) return callbackError(c.env, 'user_gone', 'link');
       const meRow = me[0];
-      if (meRow.google_sub) {
+      const meLink = await sql`SELECT google_sub FROM user_google_links WHERE user_id = ${uid}` as any[];
+      if (meLink.length) {
         // L1
         return callbackError(c.env, 'already_linked', 'link');
       }
@@ -464,12 +465,12 @@ authGoogle.get('/callback', async (c) => {
         // L4 — never link to an unverified email row.
         return callbackError(c.env, 'caller_email_unverified', 'link');
       }
-      const conflict = await sql`SELECT id FROM users WHERE google_sub = ${sub} AND id <> ${uid}` as any[];
+      const conflict = await sql`SELECT user_id FROM user_google_links WHERE google_sub = ${sub} AND user_id <> ${uid}` as any[];
       if (conflict.length) {
         // L2
         return callbackError(c.env, 'sub_owned_by_other', 'link');
       }
-      await sql`UPDATE users SET google_sub = ${sub} WHERE id = ${uid}`;
+      await sql`INSERT INTO user_google_links (user_id, google_sub) VALUES (${uid}, ${sub})`;
       const eh = await hashEmail(meRow.email);
       const mismatch = googleEmail !== (meRow.email || '').toLowerCase();
       await sql`INSERT INTO activity_logs (action, details, actor, user_id)
@@ -483,8 +484,11 @@ authGoogle.get('/callback', async (c) => {
     }
 
     // --- action === 'signin' ---------------------------------------------
-    // 1) lookup by google_sub
-    let users = await sql`SELECT * FROM users WHERE google_sub = ${sub} LIMIT 1` as any[];
+    // 1) lookup by google_sub via side-table join
+    let users = await sql`
+      SELECT u.* FROM users u
+      INNER JOIN user_google_links l ON l.user_id = u.id
+      WHERE l.google_sub = ${sub} LIMIT 1` as any[];
     let user = users[0] as any | undefined;
     let newSignup = false;
 
@@ -499,21 +503,22 @@ authGoogle.get('/callback', async (c) => {
           return callbackError(c.env, 'link_blocked_unverified', 'signin');
         }
         // Rule 2 — link verified row.
-        await sql`UPDATE users SET google_sub = ${sub} WHERE id = ${existing.id}`;
+        await sql`INSERT INTO user_google_links (user_id, google_sub) VALUES (${existing.id}, ${sub})`;
         const eh = await hashEmail(existing.email);
         await sql`INSERT INTO activity_logs (action, details, actor, user_id)
                   VALUES ('google_account_auto_linked',
                           'first-time Google sign-in matched verified email',
                           ${eh}, ${existing.id})`;
-        user = { ...existing, google_sub: sub };
+        user = { ...existing };
       } else {
         // Rule 4 — fresh signup. Google already verified the email.
         const name = (idt.name || googleEmail.split('@')[0] || 'New user').slice(0, 200);
         const inserted = await sql`
-          INSERT INTO users (email, name, role, email_verified, google_sub)
-          VALUES (${googleEmail}, ${name}, 'partner', true, ${sub})
+          INSERT INTO users (email, name, role, email_verified)
+          VALUES (${googleEmail}, ${name}, 'partner', true)
           RETURNING *` as any[];
         user = inserted[0];
+        await sql`INSERT INTO user_google_links (user_id, google_sub) VALUES (${user.id}, ${sub})`;
         newSignup = true;
         const eh = await hashEmail(user.email);
         await sql`INSERT INTO activity_logs (action, details, actor, user_id)

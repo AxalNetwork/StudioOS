@@ -1450,7 +1450,7 @@ settings.get('/connected-accounts', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT google_sub FROM users WHERE id = ${user.id}` as any[];
+  const rows = await sql`SELECT google_sub FROM user_google_links WHERE user_id = ${user.id}` as any[];
   await sql.end();
   const row = rows[0] || {};
   const factors = await getUserFactors(c.env, user.id);
@@ -1487,7 +1487,7 @@ settings.post('/connected-accounts/google/unlink', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   try {
-    const rows = await sql`SELECT google_sub FROM users WHERE id = ${user.id}` as any[];
+    const rows = await sql`SELECT google_sub FROM user_google_links WHERE user_id = ${user.id}` as any[];
     const row = rows[0];
     if (!row?.google_sub) {
       return c.json({ error: 'No Google account linked.' }, 400);
@@ -1504,7 +1504,7 @@ settings.post('/connected-accounts/google/unlink', async (c) => {
         code: 'last_sign_in_path',
       }, 409);
     }
-    await sql`UPDATE users SET google_sub = NULL WHERE id = ${user.id}`;
+    await sql`DELETE FROM user_google_links WHERE user_id = ${user.id}`;
     const eh = await hashEmail(user.email);
     await sql`INSERT INTO activity_logs (action, details, actor, user_id)
               VALUES ('google_account_unlinked', 'user unlinked Google sign-in', ${eh}, ${user.id})`;
