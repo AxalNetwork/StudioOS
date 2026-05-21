@@ -206,11 +206,11 @@ export function preflightOAuthSecrets(
     // admins know which secret to set on a fresh deploy.
     if (!googleCalClientId(env)) missing.push('GOOGLE_CAL_CLIENT_ID');
     if (!googleCalClientSecret(env)) missing.push('GOOGLE_CAL_CLIENT_SECRET');
-    if (!googleRedirectUri(env)) missing.push('GOOGLE_CALENDAR_REDIRECT_URI');
+    if (!googleRedirectUri(env)) missing.push('PUBLIC_BASE_URL');
   } else {
     if (!microsoftCalClientId(env)) missing.push('MICROSOFT_CAL_CLIENT_ID');
     if (!microsoftCalClientSecret(env)) missing.push('MICROSOFT_CAL_CLIENT_SECRET');
-    if (!microsoftRedirectUri(env)) missing.push('MICROSOFT_CALENDAR_REDIRECT_URI');
+    if (!microsoftRedirectUri(env)) missing.push('PUBLIC_BASE_URL');
   }
   return missing;
 }

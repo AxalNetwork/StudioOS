@@ -155,24 +155,53 @@ export async function onAxalSessionCancelled(
       WHERE source_kind = ${kind} AND source_id = ${sourceId}
     ` as SyncRow[];
     if (!rows || rows.length === 0) return;
+    // Task #52 follow-up — only DELETE the calendar_sync_records row
+    // when the upstream provider DELETE actually succeeded (or the
+    // upstream returned 404 — already gone). Rows where the delete
+    // throws are left in place so a future retry / disconnect cleanup
+    // can finish the job; otherwise a transient 5xx would permanently
+    // orphan the external event with no mapping back to Axal.
     await Promise.all(rows.map(async (r) => {
       const tokTable = r.provider === 'google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens';
       const tok = await loadRefreshToken(env, tokTable, r.user_id);
-      if (!tok) return;
+      // No refresh token = user disconnected; existing disconnect
+      // handlers already cascade DELETE on calendar_sync_records, so
+      // we can safely drop the mapping here too.
+      if (!tok) {
+        await sql`
+          DELETE FROM calendar_sync_records
+          WHERE user_id = ${r.user_id} AND provider = ${r.provider}
+            AND source_kind = ${kind} AND source_id = ${sourceId}
+        `;
+        return;
+      }
       try {
         const accessToken = r.provider === 'google'
           ? await refreshGoogleAccessToken(env, tok.raw)
           : await refreshMicrosoftAccessToken(env, tok.raw);
         if (r.provider === 'google') await deleteEventFromGoogle(accessToken, r.external_event_id);
         else await deleteEventFromMicrosoft(accessToken, r.external_event_id);
+        // Provider DELETE succeeded — safe to drop the mapping.
+        await sql`
+          DELETE FROM calendar_sync_records
+          WHERE user_id = ${r.user_id} AND provider = ${r.provider}
+            AND source_kind = ${kind} AND source_id = ${sourceId}
+        `;
       } catch (e) {
+        // Stamp the row with an error so an admin / future retry job
+        // can see it failed; do NOT delete the mapping.
         console.warn(`[calendar/sync] cancel ${r.provider} failed user=${r.user_id}`, e);
+        try {
+          await sql`
+            UPDATE calendar_sync_records
+               SET last_error = ${String((e as Error)?.message || e).slice(0, 200)},
+                   last_synced_at = ${new Date().toISOString()}
+             WHERE user_id = ${r.user_id} AND provider = ${r.provider}
+               AND source_kind = ${kind} AND source_id = ${sourceId}
+          `;
+        } catch { /* last_error column may not exist yet — drop silently */ }
       }
     }));
-    await sql`
-      DELETE FROM calendar_sync_records
-      WHERE source_kind = ${kind} AND source_id = ${sourceId}
-    `;
   } catch (e) {
     console.warn('[calendar/sync] onAxalSessionCancelled failed', e);
   }

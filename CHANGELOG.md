@@ -30,10 +30,18 @@ Addressing the architect's follow-up findings on Task #52:
   `userinfo.profile` so the future external→Axal mirror can list
   events via `sync_token` without a second consent screen, and the
   consent screen names the connecting user.
-- **Preflight** now reports the canonical `GOOGLE_CAL_*` /
-  `MICROSOFT_CAL_*` env names plus `GOOGLE_CALENDAR_REDIRECT_URI` /
-  `MICROSOFT_CALENDAR_REDIRECT_URI` in the `missing` payload (legacy
-  vars still accepted as fallback at the resolver layer).
+- **Preflight** now reports the canonical `GOOGLE_CAL_CLIENT_ID/SECRET`
+  / `MICROSOFT_CAL_CLIENT_ID/SECRET` env names plus `PUBLIC_BASE_URL`
+  in the `missing` payload (legacy `GOOGLE_CLIENT_*` /
+  `MICROSOFT_CLIENT_*` vars still accepted as fallback at the resolver
+  layer for back-compat).
+- **Cancel-sync durability** — `onAxalSessionCancelled()` now only
+  DELETEs the `calendar_sync_records` row AFTER the upstream provider
+  DELETE confirmed success. Failed deletes leave the mapping in place
+  (and stamp `last_error` if the column exists) so a retry can finish
+  the job — preventing transient 5xx errors from permanently orphaning
+  external events with no mapping back to Axal. Test stub updated to
+  understand both the legacy 2-param and new 4-param DELETE shapes.
 - **Frontend** — `CalendarPage.jsx` `KIND_LABEL`/`KIND_COLOR` now
   cover `partner_office_hour` (emerald) and the future
   `google_external` / `microsoft_external` mirrored rows (gray /

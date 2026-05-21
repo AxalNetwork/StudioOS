@@ -78,9 +78,22 @@ function makeStubEnv() {
         r.source_kind === params[0] && r.source_id === params[1]);
     }
     if (/delete from calendar_sync_records/.test(lower)) {
-      const [kind, srcId] = params;
-      tables.calendar_sync_records = tables.calendar_sync_records.filter(r =>
-        !(r.source_kind === kind && r.source_id === srcId));
+      // Two delete shapes are issued by the production code:
+      //   (a) DELETE … WHERE source_kind = ? AND source_id = ? (legacy
+      //       bulk wipe — kept for the no-OAuth fast path)
+      //   (b) DELETE … WHERE user_id = ? AND provider = ? AND
+      //       source_kind = ? AND source_id = ? (per-row wipe, only
+      //       after the provider DELETE confirmed success)
+      if (params.length >= 4) {
+        const [uid, prov, kind, srcId] = params;
+        tables.calendar_sync_records = tables.calendar_sync_records.filter(r =>
+          !(r.user_id === uid && r.provider === prov &&
+            r.source_kind === kind && r.source_id === srcId));
+      } else {
+        const [kind, srcId] = params;
+        tables.calendar_sync_records = tables.calendar_sync_records.filter(r =>
+          !(r.source_kind === kind && r.source_id === srcId));
+      }
       return [];
     }
     if (/update .*_oauth_tokens set refresh_token/.test(lower)) return [];
