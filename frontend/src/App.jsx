@@ -55,6 +55,7 @@ import SpinoutLabPage from './pages/SpinoutLabPage';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
+import RecoverPage from './pages/RecoverPage';
 import ESignPage from './pages/ESignPage';
 import KYCPage from './pages/KYCPage';
 import TrustCenterPage from './pages/TrustCenterPage';
@@ -931,6 +932,10 @@ function AppInner() {
       <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
+      {/* Task #50 — Lost-TOTP recovery. Catch-all subroute so /auth/recover,
+          /auth/recover/email and /auth/recover/attest all land here. */}
+      <Route path="/auth/recover" element={<RecoverPage />} />
+      <Route path="/auth/recover/*" element={<RecoverPage />} />
       <Route path="/esign/:token" element={<ESignPage />} />
       {/* Task #9 (X-2) — Public token-gated partner onboarding wizard.
           Mounted at the path embedded in admin-emailed magic links AND a

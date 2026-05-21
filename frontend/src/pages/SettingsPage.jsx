@@ -1197,6 +1197,152 @@ function SmsPanel({ data, flash }) {
   );
 }
 
+// Task #50 — Trusted contacts management (Layer 3f, 2-of-2 social recovery).
+function TrustedContactsPanel({ flash }) {
+  const [contacts, setContacts] = useState(null);
+  const [err, setErr] = useState('');
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    setErr('');
+    try {
+      const r = await fetch('/api/auth/recover/trusted-contacts', { credentials: 'include' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error || 'Failed to load');
+      setContacts(j.contacts || []);
+    } catch (e) { setErr(e?.message || 'Failed to load'); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const add = async () => {
+    setBusy(true); setErr('');
+    try {
+      const r = await fetch('/api/auth/recover/trusted-contacts', {
+        method: 'POST', credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ contact_email: email.trim(), display_name: name.trim() || null }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error || 'Failed');
+      setEmail(''); setName('');
+      flash && flash('Trusted contact added.');
+      await load();
+    } catch (e) { setErr(e?.message || 'Failed to add'); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async (id) => {
+    setBusy(true); setErr('');
+    try {
+      const r = await fetch(`/api/auth/recover/trusted-contacts/${id}`, {
+        method: 'DELETE', credentials: 'include',
+      });
+      if (!r.ok) throw new Error('Failed to remove');
+      flash && flash('Removed.');
+      await load();
+    } catch (e) { setErr(e?.message || 'Failed to remove'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Card title="Trusted contacts (recovery)"
+      description="Two trusted contacts together can vouch for you if you lose your authenticator. Both must sign in to Axal with their own two-factor to approve.">
+      {err && <div className="text-sm text-red-600 mb-3">{err}</div>}
+      {contacts === null ? (
+        <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
+      ) : (
+        <>
+          {contacts.length === 0 ? (
+            <div className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+              No trusted contacts yet. Add at least two to enable the social-recovery layer.
+            </div>
+          ) : (
+            <ul className="space-y-2 mb-4">
+              {contacts.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                      {c.display_name || c.contact_email}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.contact_email}</div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">
+                      {c.status === 'active' ? 'Active Axal user' : 'Pending invite — they\'ll be linked once they sign up'}
+                    </div>
+                  </div>
+                  <button onClick={() => remove(c.id)} disabled={busy}
+                    className="text-xs text-red-600 hover:text-red-700 disabled:opacity-50">Remove</button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+            <input value={email} onChange={(e) => setEmail(e.target.value)}
+              type="email" placeholder="contact@company.com" className={inputCls} />
+            <input value={name} onChange={(e) => setName(e.target.value)}
+              placeholder="Display name (optional)" className={inputCls} />
+          </div>
+          <button onClick={add} disabled={busy || !email.trim()}
+            className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
+            {busy ? 'Adding…' : 'Add trusted contact'}
+          </button>
+        </>
+      )}
+    </Card>
+  );
+}
+
+// Task #50 — Per-user recovery activity feed.
+function RecoveryActivityPanel() {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/auth/recover/activity', { credentials: 'include' });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j?.error || 'Failed');
+        setRows(j.activity || []);
+      } catch (e) { setErr(e?.message || 'Failed to load'); }
+    })();
+  }, []);
+  return (
+    <Card title="Recovery activity"
+      description="Every recovery attempt on your account, including ones in progress. Contact security@axal.vc if you don't recognise one.">
+      {err && <div className="text-sm text-red-600 mb-3">{err}</div>}
+      {rows === null ? (
+        <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
+      ) : rows.length === 0 ? (
+        <div className="text-sm text-gray-500 dark:text-gray-400">No recovery attempts on file.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="text-left px-2 py-2 font-medium">Layer</th>
+                <th className="text-left px-2 py-2 font-medium">Status</th>
+                <th className="text-left px-2 py-2 font-medium">Started</th>
+                <th className="text-left px-2 py-2 font-medium">Resolved</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-b border-gray-100 dark:border-gray-800">
+                  <td className="px-2 py-2 font-mono text-xs">{r.layer}</td>
+                  <td className="px-2 py-2">{r.status}</td>
+                  <td className="px-2 py-2 text-xs">{r.created_at}</td>
+                  <td className="px-2 py-2 text-xs">{r.resolved_at || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function AuthSection({ data, flash }) {
   const [code, setCode] = useState('');
   const [qrPayload, setQrPayload] = useState(null);
@@ -1394,6 +1540,10 @@ function AuthSection({ data, flash }) {
       </Card>
 
       <SmsPanel data={data} flash={flash} />
+
+      <TrustedContactsPanel flash={flash} />
+
+      <RecoveryActivityPanel />
 
       <Card title="Active sessions" description="See every device with an active session and revoke individual ones — or sign everything out at once.">
         {sessionsErr && <div className="text-sm text-red-600 mb-3">{sessionsErr}</div>}

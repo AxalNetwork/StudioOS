@@ -198,8 +198,9 @@ export default function LoginPage() {
           <div className="flex items-start gap-2 bg-violet-50 rounded-lg p-3 mt-5 border border-violet-300">
             <Shield size={14} className="text-violet-600 shrink-0 mt-0.5" />
             <p className="text-[10px] text-violet-700">
-              Lost your authenticator? Use one of your recovery codes here, or contact support.
-              You can enrol an SMS backup factor later from Settings → Security.
+              Lost your authenticator? Use one of your recovery codes here, or visit{' '}
+              <Link to="/auth/recover" className="font-medium underline">account recovery</Link>{' '}
+              for SMS / email / trusted-contact / admin-review options.
             </p>
           </div>
 

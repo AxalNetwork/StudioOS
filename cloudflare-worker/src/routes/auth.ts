@@ -816,6 +816,12 @@ auth.get('/me', async (c) => {
     subscription_renews_at: (user as any).subscription_renews_at || null,
     stripe_customer_id: (user as any).stripe_customer_id || null,
     stripe_subscription_id: (user as any).stripe_subscription_id || null,
+    // Task #50 — recovery state. cool_off_until > now disables sensitive
+    // surfaces (billing/contracts/capital/DD/KYC/impersonation). step_up_due_at
+    // is set on lower-assurance ('email_only') sessions; the SPA nags the
+    // user to re-enrol TOTP / passkey before the deadline.
+    recovery_cool_off_until: (user as any).recovery_cooling_off_until || null,
+    recovery_step_up_due_at: (user as any).recovery_step_up_due_at || null,
   });
 });
 

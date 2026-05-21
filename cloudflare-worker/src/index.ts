@@ -24,6 +24,8 @@ import type { Env, JobMessage } from './types';
 import realtime from './routes/realtime';
 import auth from './routes/auth';
 import authSms from './routes/auth_sms';
+import authRecover from './routes/auth_recover';
+import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
 import projects from './routes/projects';
 import legal from './routes/legal';
@@ -295,6 +297,27 @@ app.route('/api/auth', auth);
 // match the docstrings in routes/auth_sms.ts. Hono dispatches the most-
 // specific route first, so this never shadows /api/auth/login etc.
 app.route('/api/auth', authSms);
+// Task #50 — Lost-TOTP recovery flow (layered). Mounted at /api/auth/recover
+// so the existing /api/auth surface remains untouched.
+app.route('/api/auth/recover', authRecover);
+
+// Task #50 — 24h cool-off middleware. Blocks the listed sensitive
+// surfaces while users.recovery_cooling_off_until is in the future
+// (set by Layer 2c / 2d / 3f / 4 resolutions). Applied as a wildcard
+// BEFORE the route table so the gate runs ahead of every handler.
+const COOL_OFF_PREFIXES = [
+  '/api/billing',
+  '/api/contracts',
+  '/api/esign',
+  '/api/kyc',
+  '/api/capital',
+  '/api/dd',
+  '/api/admin/impersonate',
+];
+for (const p of COOL_OFF_PREFIXES) {
+  app.use(p, recoveryCoolOff);
+  app.use(`${p}/*`, recoveryCoolOff);
+}
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
 app.route('/api/billing', billing);
 
