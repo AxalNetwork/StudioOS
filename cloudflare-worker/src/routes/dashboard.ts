@@ -203,7 +203,13 @@ dashboard.get('/', async (c) => {
   }
 
   const payload = {
-    user: { id: user.id, email: user.email, name: user.name, role: user.role, kyc_status: user.kyc_status, assistant_enabled: ((user as any).assistant_enabled ?? 0) ? 1 : 0 },
+    user: { id: user.id, email: user.email, name: user.name, role: user.role, kyc_status: user.kyc_status, assistant_enabled: (() => {
+      // Mirror /api/assistant/* mount gate — see routes/auth.ts.
+      const e = c.env as any;
+      const prod = e?.STAGE === 'production' || e?.ENVIRONMENT === 'production';
+      if (prod || e?.ENABLE_ANTHROPIC_DEV !== '1') return 0;
+      return ((user as any).assistant_enabled ?? 0) ? 1 : 0;
+    })() },
     quick_stats: {
       month_earnings_cents: parseInt((monthEarnings as any)[0]?.c) || 0,
       lifetime_earnings_cents: parseInt((lifetimeEarnings as any)[0]?.c) || 0,

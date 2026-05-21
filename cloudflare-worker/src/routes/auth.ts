@@ -797,7 +797,17 @@ auth.get('/me', async (c) => {
     // /complete flips this to 1 once role detection is done. NULL on rows
     // that pre-date the migration; coerce to 0 so the UI hides the launcher
     // until the user has actually completed onboarding.
-    assistant_enabled: ((user as any).assistant_enabled ?? 0) ? 1 : 0,
+    // Mirror the /api/assistant/* mount gate in src/index.ts: if the
+    // assistant route is closed (production, or ENABLE_ANTHROPIC_DEV !== '1'
+    // on dev/preview), force the flag to 0 so the dashboard launcher hides
+    // instead of rendering and then erroring with "not_found" when the user
+    // sends a message.
+    assistant_enabled: (() => {
+      const e = c.env as any;
+      const prod = e?.STAGE === 'production' || e?.ENVIRONMENT === 'production';
+      if (prod || e?.ENABLE_ANTHROPIC_DEV !== '1') return 0;
+      return ((user as any).assistant_enabled ?? 0) ? 1 : 0;
+    })(),
     // Task #6 — founder subscription tier (FREE / GROWTH / STUDIO).
     // Bypass roles (admin/partner/investor/mentor) still receive these
     // fields so the frontend can display them, but tier gates are no-ops.
