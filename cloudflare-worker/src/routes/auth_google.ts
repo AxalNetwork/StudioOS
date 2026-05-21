@@ -521,15 +521,16 @@ authGoogle.get('/callback', async (c) => {
       } else {
         // Rule 4 — fresh signup. Google already verified the email.
         const name = (idt.name || googleEmail.split('@')[0] || 'New user').slice(0, 200);
-        // Fresh Google signups land with role='pending' so the onboarding
-        // chatbot can classify them (Founder vs Investor-LP/Syndicate/Co-Investor
-        // vs Operator/Partner/Counsel/Technical/Liquidity). The chatbot's
-        // /api/profiling/save flips role to the inferred value when extraction
-        // succeeds; until then the SPA's pending-role gate keeps the user
-        // pinned to /onboarding/chat.
+        // Fresh Google signups land with role='partner' — the lowest-trust
+        // CHECK-compliant default (users.role has a CHECK constraint that
+        // only permits admin/founder/partner/investor, see sql/schema.sql).
+        // The post-callback redirect still routes newSignup users to
+        // /onboarding/chat so the Workers AI Llama chatbot can capture a
+        // persona into partner_profiles for admin review. Admin assigns
+        // the final role manually from the profiling review queue.
         const inserted = await sql`
           INSERT INTO users (email, name, role, email_verified)
-          VALUES (${googleEmail}, ${name}, 'pending', true)
+          VALUES (${googleEmail}, ${name}, 'partner', true)
           RETURNING *` as any[];
         user = inserted[0];
         // INSERT OR IGNORE defends against the rare case where a second

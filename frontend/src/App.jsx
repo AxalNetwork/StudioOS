@@ -746,14 +746,11 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Task #51 follow-up — pending-role gate. Fresh Google signups are
-  // created with role='pending' and must complete the onboarding chatbot
-  // (Workers AI Llama) so an admin can review their profile. Pin them to
-  // /onboarding/chat regardless of where they navigate; the chatbot's
-  // /api/profiling/save promotes them out of 'pending' on completion.
-  if (user.role === 'pending' && !location.pathname.startsWith('/onboarding/chat')) {
-    return <Navigate to="/onboarding/chat" replace />;
-  }
+  // Task #51 follow-up — fresh Google signups land on /onboarding/chat
+  // via the auth_google callback redirect (newSignup branch). The users
+  // row is created with role='partner' (CHECK-compliant default); admin
+  // assigns the final role from partner_profiles review. No SPA-side
+  // gate here — the chatbot is best-effort capture, not a hard wall.
 
   // Phase 0.2 / Task #23 — wizard resume gate.
   // Roles that have a dedicated wizard land back on it until completion.

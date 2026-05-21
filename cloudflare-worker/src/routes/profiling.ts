@@ -282,20 +282,14 @@ ${transcript}`;
   const personaLabel = founderTrack ? `${persona} / ${founderTrack}` : (persona || 'unknown');
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_captured', ${`Profile captured — ${personaLabel} — pending admin verification`}, ${await hashEmail(email)}, ${user.id})`;
 
-  // Task #51-followup — Google signups land with role='pending' and stay
-  // pinned to /onboarding/chat until classified. Flip to the inferred role
-  // here so the SPA's pending-gate releases them on the next /me poll.
-  // Mapping mirrors the SYSTEM_PROMPT persona list above.
-  let inferredRole: string | null = null;
-  if (persona === 'Founder') inferredRole = 'founder';
-  else if (persona === 'Mentor') inferredRole = 'mentor';
-  else if (typeof persona === 'string' && persona.startsWith('Investor')) inferredRole = 'investor';
-  else if (persona) inferredRole = 'partner'; // Operator/Counsel/Technical/Liquidity
-  if (inferredRole && String(user.role || '').toLowerCase() === 'pending') {
-    try {
-      await sql`UPDATE users SET role = ${inferredRole} WHERE id = ${user.id}`;
-    } catch (e) { console.error('[PROFILING] role promotion failed', e); }
-  }
+  // Task #51-followup — persona is captured into partner_profiles for
+  // admin review ("pending admin verification" — see activity log above).
+  // We deliberately do NOT auto-promote users.role here: the column has a
+  // CHECK constraint (admin/founder/partner/investor only) and conflating
+  // chatbot output with role assignment risked locking the user out on
+  // failed classification. Admin assigns the final role from the
+  // /api/profiling/admin/list review queue.
+  const inferredRole: string | null = null;
 
   await sql.end();
 
