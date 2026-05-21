@@ -1,7 +1,7 @@
 # Axal StudioOS
 An API-first Venture Studio Operating System designed to manage the entire startup project lifecycle from intake to portfolio monitoring.
 
-> **Historical changelog moved to `docs/CHANGELOG.md`** (per-task entries since project start). This file holds only architecture, persistent gotchas, and active contracts. Do not append dated `Task #N` entries here — append to CHANGELOG instead.
+> **Historical changelog lives in `CHANGELOG.md` at repo root** (single source of truth — `frontend/public/CHANGELOG.md` is a symlink to it so `vite build` copies it into `docs/CHANGELOG.md` for GitHub Pages, and the in-app Documentation page renders it under `Docs → Changelog → Release notes` via a new `markdownUrl` field on doc subsections). Do not append dated `Task #N` entries to this file — append to CHANGELOG instead, newest-first.
 
 ## Run & Operate
 - **Run (dev)**: `npm run dev` (frontend) and `python backend/main.py` (dev backend).

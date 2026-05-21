@@ -17,6 +17,7 @@ import integrations from './integrations';
 import account from './account';
 import admin from './admin';
 import troubleshooting from './troubleshooting';
+import changelog from './changelog';
 
 export const SECTIONS = [
   gettingStarted,
@@ -32,6 +33,7 @@ export const SECTIONS = [
   account,
   admin,
   troubleshooting,
+  changelog,
 ];
 
 // Legacy in-manifest search index. Kept for backwards compatibility

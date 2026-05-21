@@ -3,8 +3,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   BookOpen, Search, ChevronRight, X, AlertTriangle,
   Compass, Rocket, Hammer, TrendingUp, DollarSign, Scale,
-  Network, LayoutDashboard, UserCircle, LifeBuoy, FileText,
+  Network, LayoutDashboard, UserCircle, LifeBuoy, FileText, History,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { SECTIONS, filterSectionsForRole, adminOnlyAnchors } from './sections';
 import { createDocsFuse, splitForHighlight, snippet } from '../../lib/docs/search';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -24,8 +25,40 @@ function highlight(text, q) {
 // Resolve the lucide icon name strings used in section manifests.
 const ICONS = {
   Compass, Rocket, Hammer, TrendingUp, DollarSign, Scale,
-  Network, LayoutDashboard, UserCircle, LifeBuoy, FileText,
+  Network, LayoutDashboard, UserCircle, LifeBuoy, FileText, History,
 };
+
+function MarkdownBody({ url }) {
+  const [state, setState] = useState({ status: 'loading', text: '' });
+  useEffect(() => {
+    let cancelled = false;
+    setState({ status: 'loading', text: '' });
+    fetch(url, { cache: 'no-cache' })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.text();
+      })
+      .then((text) => { if (!cancelled) setState({ status: 'ok', text }); })
+      .catch((err) => { if (!cancelled) setState({ status: 'error', text: String(err?.message || err) }); });
+    return () => { cancelled = true; };
+  }, [url]);
+
+  if (state.status === 'loading') {
+    return <p className="text-sm text-gray-500 italic">Loading…</p>;
+  }
+  if (state.status === 'error') {
+    return (
+      <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        Could not load <code className="font-mono text-xs">{url}</code>: {state.text}
+      </p>
+    );
+  }
+  return (
+    <div className="prose prose-sm max-w-none text-sm text-gray-700 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:text-gray-900 [&_h1]:mt-6 [&_h1]:mb-3 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-gray-900 [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-gray-900 [&_h3]:mt-4 [&_h3]:mb-2 [&_p]:leading-relaxed [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-3 [&_li]:leading-relaxed [&_li]:mb-1 [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono [&_blockquote]:border-l-2 [&_blockquote]:border-gray-200 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-600 [&_a]:text-violet-700 [&_a]:underline">
+      <ReactMarkdown>{state.text}</ReactMarkdown>
+    </div>
+  );
+}
 function SectionIcon({ name, ...rest }) {
   const Icon = ICONS[name] || FileText;
   return <Icon {...rest} />;
@@ -42,6 +75,12 @@ function SubsectionView({ section, sub }) {
       <h3 className="text-lg font-semibold text-gray-900 mb-3">{sub.title}</h3>
       {sub.overview && (
         <p className="text-sm text-gray-700 leading-relaxed mb-4">{sub.overview}</p>
+      )}
+
+      {sub.markdownUrl && (
+        <div className="mb-4">
+          <MarkdownBody url={sub.markdownUrl} />
+        </div>
       )}
 
       {Array.isArray(sub.howto) && sub.howto.length > 0 && (
