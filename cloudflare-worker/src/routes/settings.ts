@@ -1450,16 +1450,20 @@ settings.get('/connected-accounts', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT google_sub, email_verified FROM users WHERE id = ${user.id}` as any[];
+  const rows = await sql`SELECT google_sub FROM users WHERE id = ${user.id}` as any[];
   await sql.end();
   const row = rows[0] || {};
   const factors = await getUserFactors(c.env, user.id);
   const totpConfigured = await hasTotpConfigured(c.env, user.id);
   const smsRow = await loadSms(c.env, user.id);
-  const emailVerified = !!row.email_verified;
-  // A user can safely unlink Google iff at least one OTHER sign-in path
-  // remains. Magic link counts only when the email is verified.
-  const otherSignInPathRemaining = totpConfigured || !!smsRow || emailVerified;
+  // A user can safely unlink Google iff at least one OTHER real sign-in
+  // path remains. In this codebase the only routes that can mint a
+  // session WITHOUT going through Google are TOTP (/api/auth/login) and
+  // SMS (/api/auth/sms/*). Verified email alone is NOT a standalone
+  // sign-in path here — the email-verification token only unlocks the
+  // TOTP setup step, it cannot complete a login. Treating it as a fall-
+  // back would leave Google-only accounts with no way back in.
+  const otherSignInPathRemaining = totpConfigured || !!smsRow;
   return c.json({
     accounts: [
       {
@@ -1483,19 +1487,20 @@ settings.post('/connected-accounts/google/unlink', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   try {
-    const rows = await sql`SELECT google_sub, email_verified FROM users WHERE id = ${user.id}` as any[];
+    const rows = await sql`SELECT google_sub FROM users WHERE id = ${user.id}` as any[];
     const row = rows[0];
     if (!row?.google_sub) {
       return c.json({ error: 'No Google account linked.' }, 400);
     }
     const totpConfigured = await hasTotpConfigured(c.env, user.id);
     const smsRow = await loadSms(c.env, user.id);
-    const otherSignInPathRemaining = totpConfigured || !!smsRow || !!row.email_verified;
+    // No-orphan guard. Only TOTP or SMS count as alternate sign-in paths;
+    // verified email alone cannot complete a login in this codebase
+    // (it only unlocks TOTP setup), so it MUST NOT bypass the guard.
+    const otherSignInPathRemaining = totpConfigured || !!smsRow;
     if (!otherSignInPathRemaining) {
-      // No-orphan guard. Fail-closed: refuse to leave the account with
-      // zero sign-in paths.
       return c.json({
-        error: 'Set up TOTP, SMS, or verify your email before unlinking Google — it is currently your only sign-in path.',
+        error: 'Set up your authenticator app (TOTP) or add SMS recovery before unlinking Google — it is currently your only sign-in path.',
         code: 'last_sign_in_path',
       }, 409);
     }

@@ -218,6 +218,24 @@ export function decideLinkAction(opts: {
 
 // State sign/verify is exported for unit tests; consumers in the route
 // continue to use the un-exported wrappers below.
+/**
+ * Pure no-orphan unlink decision (extracted for unit-testing).
+ *
+ * A Google unlink is only safe when the user has at least one OTHER
+ * working sign-in path. In this codebase that means TOTP (the canonical
+ * /api/auth/login route) or SMS (/api/auth/sms/*). Verified email alone
+ * is NOT a standalone sign-in path — the email-verification token only
+ * unlocks the TOTP setup step. Returning `true` here when only
+ * email_verified is set would silently lock Google-only users out.
+ */
+export function decideUnlinkAllowed(opts: {
+  totpConfigured: boolean;
+  smsConfigured: boolean;
+}): { allowed: boolean; reason: 'last_sign_in_path' | null } {
+  const allowed = !!(opts.totpConfigured || opts.smsConfigured);
+  return { allowed, reason: allowed ? null : 'last_sign_in_path' };
+}
+
 export const __testing = { signState, verifyState };
 
 function sanitizeRedirect(raw: unknown): string {

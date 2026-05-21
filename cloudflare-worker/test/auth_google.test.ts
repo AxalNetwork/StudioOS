@@ -22,6 +22,7 @@ import assert from 'node:assert/strict';
 import {
   decideSigninAction,
   decideLinkAction,
+  decideUnlinkAllowed,
   __testing,
 } from '../src/routes/auth_google.ts';
 
@@ -138,6 +139,34 @@ test('state token: future timestamp (clock skew abuse) is rejected', async () =>
   });
   const parsed = await __testing.verifyState(ENV, t);
   assert.equal(parsed, null);
+});
+
+// ---------------------------------------------------------------------------
+// No-orphan unlink guard (Google-only account must NOT be able to unlink)
+// ---------------------------------------------------------------------------
+
+test('unlink — Google-only user (no TOTP, no SMS) is BLOCKED', () => {
+  const out = decideUnlinkAllowed({ totpConfigured: false, smsConfigured: false });
+  assert.deepEqual(out, { allowed: false, reason: 'last_sign_in_path' });
+});
+
+test('unlink — Google + TOTP is allowed', () => {
+  const out = decideUnlinkAllowed({ totpConfigured: true, smsConfigured: false });
+  assert.deepEqual(out, { allowed: true, reason: null });
+});
+
+test('unlink — Google + SMS is allowed', () => {
+  const out = decideUnlinkAllowed({ totpConfigured: false, smsConfigured: true });
+  assert.deepEqual(out, { allowed: true, reason: null });
+});
+
+test('unlink — email_verified alone does NOT unlock unlink (regression guard)', () => {
+  // A prior version of the route treated email_verified as an alternate
+  // sign-in path. It is NOT — the helper signature has no such field,
+  // and a Google-only user with a verified email but no TOTP and no SMS
+  // must still be blocked.
+  const out = decideUnlinkAllowed({ totpConfigured: false, smsConfigured: false });
+  assert.equal(out.allowed, false);
 });
 
 test('state token: bogus action is rejected', async () => {
