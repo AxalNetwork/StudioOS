@@ -59,8 +59,27 @@ export async function request(path, options = {}) {
       if (res.status === 401 && !path.startsWith('/auth/') && !isPublicEndpoint) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        // Only force a /login redirect when we're on a protected page.
+        // Public marketing/onboarding pages must stay reachable for
+        // anonymous visitors AND for previously-signed-in users with a
+        // now-expired session (otherwise axal.vc/ bounces them to
+        // /login the moment useAuthSync probes /auth/me).
         const currentPath = window.location.pathname;
-        if (currentPath !== '/login' && currentPath !== '/register' && currentPath !== '/verify-email') {
+        const isPublicPath = currentPath === '/'
+          || currentPath === '/login'
+          || currentPath === '/register'
+          || currentPath === '/verify-email'
+          || currentPath === '/spinout-lab'
+          || currentPath === '/directory'
+          || currentPath === '/roadmap'
+          || currentPath.startsWith('/pricing/')
+          || currentPath.startsWith('/partner-onboarding/')
+          || currentPath.startsWith('/partners/onboard')
+          || currentPath.startsWith('/esign/')
+          || currentPath.startsWith('/deck/share/')
+          || currentPath.startsWith('/insights/public/')
+          || currentPath.startsWith('/settings/email/');
+        if (!isPublicPath) {
           window.location.href = '/login';
         }
         throw new Error('Session expired');

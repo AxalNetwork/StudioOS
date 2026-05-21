@@ -7,6 +7,25 @@
 > entries at the top (newest-first) and reference the originating task
 > or commit.
 
+## 2026-05-21 — Public landing page reachable with stale session
+
+- `frontend/src/lib/api.js` — the 401 handler in `request()` no longer
+  force-redirects to `/login` when the current path is one of the
+  public marketing / onboarding routes (`/`, `/spinout-lab`,
+  `/directory`, `/roadmap`, `/pricing/*`, `/partner-onboarding/*`,
+  `/partners/onboard`, `/esign/*`, `/deck/share/*`,
+  `/insights/public/*`, `/settings/email/*`, plus the existing
+  `/login`, `/register`, `/verify-email`). Stale `localStorage` is
+  still cleared so the UI reflects "signed out", but the visitor
+  stays on the page they asked for.
+- Root cause of the user-reported "axal.vc bounces me to /login" bug:
+  `useAuthSync.refresh()` fires `/auth/me` whenever localStorage has
+  a cached `user` blob. If the `studioos_auth` cookie has since
+  expired, `/me` returns 401, and the old api.js handler force-
+  redirected to /login regardless of which page the visitor was on
+  — making the public LandingPage unreachable for anyone who had
+  previously signed in.
+
 ## 2026-05-21 — In-app changelog surface
 
 - `frontend/public/CHANGELOG.md` is now a symlink to this file, so
