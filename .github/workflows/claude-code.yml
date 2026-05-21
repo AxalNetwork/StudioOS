@@ -1,0 +1,81 @@
+name: Claude Code
+
+# Runs Anthropic's official Claude Code action against the repo using an
+# API key (NOT subscription auth — the Anthropic org has subscription
+# access to Claude Code disabled, so the only working path is the
+# `ANTHROPIC_API_KEY` environment variable documented at
+# https://docs.anthropic.com/en/docs/claude-code/github-actions).
+#
+# Trigger paths:
+#   - Issue comment mentioning `@claude`
+#   - PR review / review-comment mentioning `@claude`
+#   - Manual `workflow_dispatch`
+#
+# Required repository secret (Settings → Secrets and variables → Actions):
+#   ANTHROPIC_API_KEY   — billed via Anthropic API, not the Claude.ai sub.
+#
+# The workflow short-circuits with a human-readable error if the secret
+# is missing, so a misconfigured fork or freshly-cloned repo gets a
+# clear failure instead of an opaque auth crash inside the action.
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened, assigned]
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Optional one-shot prompt for Claude Code'
+        required: false
+        type: string
+
+concurrency:
+  group: claude-code-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  claude:
+    # Only run on `@claude` mentions or manual dispatch — keeps cost down
+    # and avoids accidental fires on unrelated comments.
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment'              && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review'        && contains(github.event.review.body,  '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # Hard-fail with a readable message if the secret isn't set.
+      # Without this, the action below crashes with a generic 401.
+      - name: Verify ANTHROPIC_API_KEY is configured
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: bash scripts/check-anthropic-key.sh
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          # API-key auth path. The action reads the env var below.
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Optional one-shot prompt for manual dispatch runs.
+          prompt: ${{ inputs.prompt }}
+        env:
+          # Some action versions read the key from the env directly
+          # rather than the `with:` input — set both for compatibility.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

@@ -31,6 +31,25 @@ Optional secrets: `GITHUB_ACCESS_TOKEN`, `GMAIL_*`, `STRIPE_*`, `SUMSUB_*` — s
 
 See `PRODUCTION.md` for the production Cloudflare deploy checklist, secrets, and post-deploy steps. See [`CLAUDE.md`](./CLAUDE.md) for the architecture rules every PR must respect.
 
+## Claude Code setup
+
+Claude Code in this repo authenticates with an Anthropic API key
+(`ANTHROPIC_API_KEY`) — **not** the Claude.ai subscription, which is
+disabled at the org level for this account.
+
+- **Replit**: add `ANTHROPIC_API_KEY` to Replit Secrets (lock icon →
+  New secret).
+- **GitHub Actions**: add `ANTHROPIC_API_KEY` under
+  **Settings → Secrets and variables → Actions → New repository secret**.
+- **Workflow**: `.github/workflows/claude-code.yml` runs on `@claude`
+  mentions in issues / PRs and on manual dispatch. It hard-fails with a
+  readable message if the secret is missing.
+- **Verify locally**: `bash scripts/check-anthropic-key.sh` (or
+  `npm run claude:check`).
+
+Full walkthrough + auth-error troubleshooting:
+[`docs/claude-code-setup.md`](./docs/claude-code-setup.md).
+
 ## License
 
 Proprietary — Axal Management, LLC.
