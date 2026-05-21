@@ -282,14 +282,35 @@ ${transcript}`;
   const personaLabel = founderTrack ? `${persona} / ${founderTrack}` : (persona || 'unknown');
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_captured', ${`Profile captured — ${personaLabel} — pending admin verification`}, ${await hashEmail(email)}, ${user.id})`;
 
-  // Task #51-followup — persona is captured into partner_profiles for
-  // admin review ("pending admin verification" — see activity log above).
-  // We deliberately do NOT auto-promote users.role here: the column has a
-  // CHECK constraint (admin/founder/partner/investor only) and conflating
-  // chatbot output with role assignment risked locking the user out on
-  // failed classification. Admin assigns the final role from the
-  // /api/profiling/admin/list review queue.
-  const inferredRole: string | null = null;
+  // Task #51-followup — auto-assign role from chatbot classification so
+  // the user can access basic features immediately (paywall gates the
+  // premium surface). Admin handles agreement + final role tweaks
+  // (e.g. promoting a partner to mentor-specific permissions) from
+  // /api/profiling/admin/list.
+  //
+  // users.role has a CHECK constraint (admin/founder/partner/investor
+  // only — see sql/schema.sql) so personas outside that set fold into
+  // 'partner' here; the precise persona stays in partner_profiles for
+  // admin review.
+  let inferredRole: string | null = null;
+  if (persona === 'Founder') inferredRole = 'founder';
+  else if (typeof persona === 'string' && persona.startsWith('Investor')) inferredRole = 'investor';
+  else if (persona) inferredRole = 'partner'; // Mentor / Operator / Counsel / Technical / Liquidity
+  if (inferredRole) {
+    const currentRole = String(user.role || '').toLowerCase();
+    // Never demote: admin/founder/investor stay put. Only promote from
+    // the fresh-signup default ('partner') into founder/investor when
+    // the chatbot has a higher-trust classification. partner→partner is
+    // a no-op.
+    const canPromote =
+      currentRole === 'partner' &&
+      (inferredRole === 'founder' || inferredRole === 'investor');
+    if (canPromote) {
+      try {
+        await sql`UPDATE users SET role = ${inferredRole} WHERE id = ${user.id}`;
+      } catch (e) { console.error('[PROFILING] role promotion failed', e); }
+    }
+  }
 
   await sql.end();
 
