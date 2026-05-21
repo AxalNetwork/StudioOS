@@ -305,10 +305,17 @@ app.route('/api/auth/recover', authRecover);
 // surfaces while users.recovery_cooling_off_until is in the future
 // (set by Layer 2c / 2d / 3f / 4 resolutions). Applied as a wildcard
 // BEFORE the route table so the gate runs ahead of every handler.
+// Round-5 review fix — the frontend calls `/api/legal/esign/*` (mounted
+// at line ~479) and admin contract operations live under
+// `/api/admin/contracts`. Without these prefixes the cool-off gate
+// missed actual contract surfaces; the threat-model post-recovery
+// containment requires ALL contract-sensitive routes to be paused.
 const COOL_OFF_PREFIXES = [
   '/api/billing',
   '/api/contracts',
   '/api/esign',
+  '/api/legal/esign',
+  '/api/admin/contracts',
   '/api/kyc',
   '/api/capital',
   '/api/dd',
