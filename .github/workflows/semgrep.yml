@@ -1,49 +1,46 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-# This workflow file requires a free account on Semgrep.dev to
-# manage rules, file ignores, notifications, and more.
-#
-# See https://semgrep.dev/docs
-
 name: Semgrep
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    # The branches below must be a subset of the branches above
-    branches: [ "main" ]
+    branches: ["main"]
   schedule:
     - cron: '31 0 * * 4'
 
 permissions:
   contents: read
+  security-events: write
 
+# Static-analysis scan using the official Semgrep CLI with public OSS rule
+# packs. We deliberately do NOT use `semgrep ci` (which requires a paid
+# Semgrep AppSec Platform token via SEMGREP_APP_TOKEN). The previous
+# workflow used the long-deprecated `returntocorp/semgrep-action` and
+# required SEMGREP_APP_TOKEN + SEMGREP_DEPLOYMENT_ID secrets which were
+# never set on this repo — that's why every run was red.
+#
+# Findings show up in the Security tab via SARIF upload. To stop running
+# Semgrep entirely, delete this file — no other workflow depends on it.
 jobs:
-  semgrep:
-    permissions:
-      contents: read # for actions/checkout to fetch code
-      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
-      actions: read # only required for a private repository by github/codeql-action/upload-sarif to get the Action run status
+  scan:
     name: Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: semgrep/semgrep:latest
     steps:
-      # Checkout project source
       - uses: actions/checkout@v4
-
-      # Scan code using project's configuration on https://semgrep.dev/manage
-      - uses: returntocorp/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d
-        with:
-          publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}
-          publishDeployment: ${{ secrets.SEMGREP_DEPLOYMENT_ID }}
-          generateSarif: "1"
-
-      # Upload SARIF file generated in previous step
-      - name: Upload SARIF file
+      - name: Run semgrep (public OSS rules)
+        run: |
+          semgrep scan \
+            --config p/default \
+            --config p/security-audit \
+            --config p/secrets \
+            --sarif --output semgrep.sarif \
+            --error
+        continue-on-error: true
+      - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v3
+        if: always()
         with:
           sarif_file: semgrep.sarif
-        if: always()

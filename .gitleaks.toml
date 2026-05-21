@@ -33,6 +33,12 @@ paths = [
   # for the trust/scoring contract; values are non-secret enum strings
   # (e.g. 'kyc_v1', 'doc_signed_v2'). Whole file allowlisted.
   '''(?i)frontend/test/trust_score\.test\.mjs$''',
+  # OAuth calendar test fixtures use literal `'g-client-id'`,
+  # `'g-client-secret'`, `'m-client-id'`, `'m-client-secret'` strings as
+  # placeholders. They are not real credentials (real Google/Microsoft
+  # client secrets are 24+ char base64). Allowlisted at the path level
+  # so gitleaks' generic-api-key heuristic doesn't keep tripping.
+  '''(?i)cloudflare-worker/test/calendar\.google-oauth\.test\.ts$''',
 ]
 regexes = [
   # Tailwind / Vite generated content hashes that look like secrets but aren't.
