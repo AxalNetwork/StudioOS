@@ -70,6 +70,7 @@ PROFILE CATEGORIES (one of):
 - "Legal Counsel" (Preferred legal partner, fixed-fee spin-out packages)
 - "Technical Partner" (White-label MVP / product integration)
 - "Liquidity Provider" (Secondary purchases, M&A advisory)
+- "Mentor" (Office-hours coach for founders — no equity, capped sessions per month)
 
 WORKFLOW:
 1. Greet briefly (1 sentence) and ask which best describes their interest in Axal.
@@ -185,7 +186,7 @@ profiling.post('/save', async (c) => {
 
       const extractionPrompt = `From the following onboarding conversation with a prospective Axal VC partner, extract a strict JSON object with these keys (use null when unknown):
 {
-  "persona": one of "Investor — LP" | "Investor — Syndicate" | "Investor — Co-Investor" | "Founder" | "Operator / Advisor" | "Operating Partner" | "Legal Counsel" | "Technical Partner" | "Liquidity Provider" | null,
+  "persona": one of "Investor — LP" | "Investor — Syndicate" | "Investor — Co-Investor" | "Founder" | "Mentor" | "Operator / Advisor" | "Operating Partner" | "Legal Counsel" | "Technical Partner" | "Liquidity Provider" | null,
   "founder_track": for Founders only — "Spin-Out (New)" if starting a brand new venture for the 30-day engine, "Strategic Scale (Existing)" if they have an existing company seeking partnership/capital/scale, null otherwise,
   "legal_entity_name": string|null,
   "entity_type": string|null,
@@ -287,6 +288,7 @@ ${transcript}`;
   // Mapping mirrors the SYSTEM_PROMPT persona list above.
   let inferredRole: string | null = null;
   if (persona === 'Founder') inferredRole = 'founder';
+  else if (persona === 'Mentor') inferredRole = 'mentor';
   else if (typeof persona === 'string' && persona.startsWith('Investor')) inferredRole = 'investor';
   else if (persona) inferredRole = 'partner'; // Operator/Counsel/Technical/Liquidity
   if (inferredRole && String(user.role || '').toLowerCase() === 'pending') {
