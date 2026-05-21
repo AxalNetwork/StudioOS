@@ -10,7 +10,7 @@ export default {
       id: 'overview',
       title: 'Admin overview',
       overview:
-        "Admins are studio operators with full visibility and the ability to act on behalf of users for support. The Admin Console organizes everything into Users, Projects, Deals, Trust, Contracts, Audit, and Settings.",
+        "Admins are studio operators with full visibility and the ability to act on behalf of users for support. The Admin Console organizes everything into Users, Projects, Deals, Trust, Audit, and Settings.",
       howto: [
         'Open Admin Console from the sidebar (admins only).',
         'Use the left rail to switch between sections.',
@@ -28,7 +28,6 @@ export default {
         { label: 'Admin Console (overview)', href: '#portals/admin' },
         { label: 'Users & roles', href: '#admin/users' },
         { label: 'Trust management', href: '#admin/trust' },
-        { label: 'Contracts', href: '#admin/contracts' },
         { label: 'Audit', href: '#admin/audit' },
       ],
     },
@@ -77,30 +76,6 @@ export default {
       ],
       related: [
         { label: 'Trust Center', href: '#validate-grow/trust-center' },
-      ],
-    },
-    {
-      id: 'contracts',
-      title: 'Contracts',
-      overview:
-        "The Contracts section shows every contract issued through the platform — NDAs, SAFEs, templates, partner engagements, founder agreements — with status, parties, and signed copies. Admins can also void a contract with a recorded reason.",
-      howto: [
-        'Open Admin Console → Contracts.',
-        'Filter by template, status (sent / signed / declined / void), or party.',
-        'Click any row for the full lifecycle and the signed PDF.',
-        'Use "Void" only when the contract was issued in error or superseded; record the reason.',
-      ],
-      tips: [
-        'Voiding a contract does not delete it; it stays in the audit trail with the reason.',
-        'Use the template-level search to find every NDA from a given month.',
-      ],
-      pitfalls: [
-        'Voiding a counter-signed contract does not nullify legal effect — talk to legal counsel before relying on the void.',
-        'Re-issuing the same template with the same parties creates a duplicate; check first.',
-      ],
-      related: [
-        { label: 'Legal Templates', href: '#legal/templates' },
-        { label: 'NDA flows', href: '#legal/nda' },
       ],
     },
     {
