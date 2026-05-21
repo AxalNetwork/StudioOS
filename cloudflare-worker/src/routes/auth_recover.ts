@@ -260,8 +260,15 @@ async function setCoolOffAndAssurance(
   assurance: 'full' | 'email_only',
 ) {
   const coolOff = inHours(RECOVERY_COOL_OFF_HOURS);
-  // Step-up only required for lower-assurance sessions.
-  const stepUp = assurance === 'full' ? null : inDays(STEP_UP_DEADLINE_DAYS);
+  // Task #50 (round-4 review fix) — EVERY recovery layer sets a step-up
+  // deadline, not just 'email_only'. The deadline gates the auto-relock
+  // in getCurrentUser() (only fires when expired) AND is the eligibility
+  // signal for the fresh /totp/re-enrol/* path. Without this, users who
+  // recovered via SMS / trusted-contact / admin claim — i.e. truly lost
+  // their authenticator — had no working remediation path. Full-assurance
+  // sessions still ride out the full 7 days before the relock fires;
+  // email_only sessions get the same 7-day window before relock.
+  const stepUp = inDays(STEP_UP_DEADLINE_DAYS);
   await env.DB.prepare(
     `UPDATE users SET recovery_cooling_off_until = ?, recovery_step_up_due_at = ? WHERE id = ?`,
   ).bind(coolOff, stepUp, userId).run();
@@ -805,7 +812,11 @@ recover.post('/admin/escalate', async (c) => {
   await transitionTicket(c.env, ticketId, user,
     { status: 'awaiting_admin' },
     { template: 'auth_recovery_started' });
-  return c.json({ ok: true, ticket_id: ticketId });
+  // Constant-shape response — never leak ticket_id to the unauthenticated
+  // caller (otherwise existing vs non-existent accounts are distinguishable
+  // by the presence of the field). The user receives the ticket details
+  // through the email + in-app + push fan-out triggered above.
+  return c.json({ ok: true });
 });
 
 recover.get('/admin/tickets', async (c) => {
