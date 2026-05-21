@@ -470,7 +470,12 @@ authGoogle.get('/callback', async (c) => {
         // L2
         return callbackError(c.env, 'sub_owned_by_other', 'link');
       }
-      await sql`INSERT INTO user_google_links (user_id, google_sub) VALUES (${uid}, ${sub})`;
+      // INSERT OR IGNORE: defends against double-click on the Link button —
+      // a second concurrent request would otherwise 500 on the UNIQUE
+      // constraint on (user_id) or (google_sub) and surface as
+      // `internal_error` to the user. The L1/L2 guards above already
+      // ensure the no-op is the correct outcome here.
+      await sql`INSERT OR IGNORE INTO user_google_links (user_id, google_sub) VALUES (${uid}, ${sub})`;
       const eh = await hashEmail(meRow.email);
       const mismatch = googleEmail !== (meRow.email || '').toLowerCase();
       await sql`INSERT INTO activity_logs (action, details, actor, user_id)
@@ -502,8 +507,11 @@ authGoogle.get('/callback', async (c) => {
           // first to prove email ownership.
           return callbackError(c.env, 'link_blocked_unverified', 'signin');
         }
-        // Rule 2 — link verified row.
-        await sql`INSERT INTO user_google_links (user_id, google_sub) VALUES (${existing.id}, ${sub})`;
+        // Rule 2 — link verified row. INSERT OR IGNORE so a double-click
+        // race (two concurrent sign-in callbacks for the same verified
+        // email) cannot 500 on the UNIQUE constraint; the second insert
+        // becomes a no-op and the existing link is reused.
+        await sql`INSERT OR IGNORE INTO user_google_links (user_id, google_sub) VALUES (${existing.id}, ${sub})`;
         const eh = await hashEmail(existing.email);
         await sql`INSERT INTO activity_logs (action, details, actor, user_id)
                   VALUES ('google_account_auto_linked',
@@ -518,7 +526,14 @@ authGoogle.get('/callback', async (c) => {
           VALUES (${googleEmail}, ${name}, 'partner', true)
           RETURNING *` as any[];
         user = inserted[0];
-        await sql`INSERT INTO user_google_links (user_id, google_sub) VALUES (${user.id}, ${sub})`;
+        // INSERT OR IGNORE defends against the rare case where a second
+        // concurrent fresh-signup request for the same google_sub raced
+        // us between the email-lookup miss and here. The new users row
+        // is already orphaned in that race; we accept the leak rather
+        // than 500 the surviving caller. (Belt-and-braces — the email
+        // UNIQUE constraint on users would also have rejected one of
+        // the two INSERTs further upstream in most cases.)
+        await sql`INSERT OR IGNORE INTO user_google_links (user_id, google_sub) VALUES (${user.id}, ${sub})`;
         newSignup = true;
         const eh = await hashEmail(user.email);
         await sql`INSERT INTO activity_logs (action, details, actor, user_id)
