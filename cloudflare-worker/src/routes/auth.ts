@@ -822,6 +822,20 @@ auth.get('/me', async (c) => {
     // user to re-enrol TOTP / passkey before the deadline.
     recovery_cool_off_until: (user as any).recovery_cooling_off_until || null,
     recovery_step_up_due_at: (user as any).recovery_step_up_due_at || null,
+    // Explicit boolean — true if ANY recovery ticket on this account
+    // is still in flight. The SPA shows a persistent "Recovery in
+    // progress" banner while this is true.
+    recovery_pending: await (async () => {
+      try {
+        const row: any = await c.env.DB.prepare(
+          `SELECT 1 FROM auth_recovery_tickets
+           WHERE user_id = ?
+             AND status IN ('open','awaiting_contacts','awaiting_admin','awaiting_admin_cosign')
+           LIMIT 1`,
+        ).bind(user.id).first();
+        return !!row;
+      } catch { return false; }
+    })(),
   });
 });
 

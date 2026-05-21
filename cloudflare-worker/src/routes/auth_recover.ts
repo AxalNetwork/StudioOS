@@ -193,7 +193,13 @@ async function createTicket(
   layer: string,
   state: Record<string, unknown>,
   c: any,
-): Promise<number> {
+): Promise<{ id: number; lookup_token: string }> {
+  // Task #50 — every ticket gets an opaque `lookup_token` that the
+  // unauthenticated `/ticket/:id` poll must present. This neutralises
+  // the enumeration oracle on auto-increment IDs without forcing a
+  // schema change to UUID PKs.
+  const lookup_token = generateToken();
+  const stateWithLookup = { ...state, lookup_token };
   await env.DB.prepare(
     `INSERT INTO auth_recovery_tickets
        (user_id, layer, status, initiator_ip, initiator_ua, state_json, expires_at)
@@ -202,11 +208,50 @@ async function createTicket(
     userId, layer,
     clientIp(c),
     (c.req.header('user-agent') || '').slice(0, 500),
-    JSON.stringify(state),
+    JSON.stringify(stateWithLookup),
     inHours(TICKET_TTL_HOURS),
   ).run();
   const r: any = await env.DB.prepare('SELECT last_insert_rowid() AS id').first();
-  return Number(r?.id || 0);
+  return { id: Number(r?.id || 0), lookup_token };
+}
+
+/**
+ * Atomic ticket-status transition that ALWAYS fans out an
+ * all-channels notification. Centralised so admin/deny, cosign,
+ * attestation progress, and verify paths can't silently update
+ * a row without alerting the account holder.
+ */
+async function transitionTicket(
+  env: Env,
+  ticketId: number,
+  user: { id: number; email: string; name?: string | null },
+  patch: { status?: string; assurance?: 'full' | 'email_only'; resolved?: boolean; statePatch?: Record<string, unknown> },
+  notify: { template: 'auth_recovery_started' | 'auth_recovery_resolved'; vars?: Record<string, unknown> } | null,
+) {
+  const row: any = await env.DB.prepare(
+    `SELECT state_json FROM auth_recovery_tickets WHERE id = ?`,
+  ).bind(ticketId).first();
+  let state: any = {};
+  try { state = JSON.parse(row?.state_json || '{}'); } catch {}
+  if (patch.statePatch) state = { ...state, ...patch.statePatch };
+  const sets: string[] = ['state_json = ?'];
+  const binds: any[] = [JSON.stringify(state)];
+  if (patch.status) { sets.push('status = ?'); binds.push(patch.status); }
+  if (patch.assurance) { sets.push('assurance_level = ?'); binds.push(patch.assurance); }
+  if (patch.resolved) { sets.push("resolved_at = CURRENT_TIMESTAMP"); }
+  sets.push('updated_at = CURRENT_TIMESTAMP');
+  binds.push(ticketId);
+  await env.DB.prepare(
+    `UPDATE auth_recovery_tickets SET ${sets.join(', ')} WHERE id = ?`,
+  ).bind(...binds).run();
+  if (notify) {
+    try {
+      await notifyAllChannels(env, user, notify.template, {
+        ticket_id: String(ticketId),
+        ...(notify.vars || {}),
+      });
+    } catch (e) { console.error('[recover] transition notify failed', e); }
+  }
 }
 
 async function setCoolOffAndAssurance(
@@ -351,11 +396,11 @@ recover.post('/backup-code', async (c) => {
   // the user still holds TOTP. We emit the all-channel alert + ticket
   // so unexpected backup-code use is loud.
   await setCoolOffAndAssurance(c.env, user.id, 'full');
-  const ticketId = await createTicket(c.env, user.id, 'backup_code',
+  const { id: ticketId } = await createTicket(c.env, user.id, 'backup_code',
     { ip: clientIp(c), ua: (c.req.header('user-agent') || '').slice(0, 200) }, c);
-  await c.env.DB.prepare(
-    `UPDATE auth_recovery_tickets SET status='resolved', assurance_level='full', resolved_at=CURRENT_TIMESTAMP WHERE id = ?`,
-  ).bind(ticketId).run();
+  await transitionTicket(c.env, ticketId, user,
+    { status: 'resolved', assurance: 'full', resolved: true },
+    { template: 'auth_recovery_resolved' });
   await logActivity(c.env, user.id, 'recovery_resolved_backup_code', `ticket=${ticketId}`);
   await notifyAllChannels(c.env, user, 'auth_recovery_resolved', { ticket_id: String(ticketId) });
 
@@ -407,14 +452,16 @@ recover.post('/sms/start', async (c) => {
   if (!r.ok) {
     return c.json({ error: r.code, message: r.message }, r.code === 'recaptcha_required' ? 412 : 502);
   }
+  const { id: ticketId, lookup_token } = await createTicket(c.env, user.id, 'sms', { sms_last4: sms_.last4 }, c);
+  // Bind the GCIP session to the ticket so /sms/verify can atomically
+  // resolve THIS ticket (no orphaned `open` rows in activity).
   await c.env.RATE_LIMITS.put(
     `recover-sms-session:${r.sessionInfo}`,
-    JSON.stringify({ user_id: user.id, email, ts: Date.now() }),
+    JSON.stringify({ user_id: user.id, email, ts: Date.now(), ticket_id: ticketId }),
     { expirationTtl: 600 },
   );
-  const ticketId = await createTicket(c.env, user.id, 'sms', { sms_last4: sms_.last4 }, c);
   await notifyAllChannels(c.env, user, 'auth_recovery_started', { ticket_id: String(ticketId) });
-  return c.json({ session_info: r.sessionInfo, last4: sms_.last4, ticket_id: ticketId });
+  return c.json({ session_info: r.sessionInfo, last4: sms_.last4, ticket_id: ticketId, lookup_token });
 });
 
 recover.post('/sms/verify', async (c) => {
@@ -429,7 +476,7 @@ recover.post('/sms/verify', async (c) => {
   }
   const stashed = await c.env.RATE_LIMITS.get(`recover-sms-session:${sessionInfo}`);
   if (!stashed) return c.json({ error: 'session_expired' }, 410);
-  let bound: { user_id: number; email: string };
+  let bound: { user_id: number; email: string; ticket_id?: number };
   try { bound = JSON.parse(stashed); } catch { return c.json({ error: 'session_corrupted' }, 500); }
   if (bound.email !== email) return c.json({ error: 'session_email_mismatch' }, 401);
 
@@ -451,8 +498,15 @@ recover.post('/sms/verify', async (c) => {
   // doesn't hold the canonical TOTP secret anymore.
   await setCoolOffAndAssurance(c.env, user.id, 'full');
   await markSmsUsed(c.env, user.id);
-  await logActivity(c.env, user.id, 'recovery_resolved_sms', 'sms-only recovery → 24h cool-off');
-  await notifyAllChannels(c.env, user, 'auth_recovery_resolved', { ticket_id: '-' });
+  // Resolve the exact ticket bound at /sms/start (Task #50 review fix:
+  // no more stale open rows in the activity feed).
+  if (bound.ticket_id) {
+    await transitionTicket(c.env, bound.ticket_id, user,
+      { status: 'resolved', assurance: 'full', resolved: true },
+      { template: 'auth_recovery_resolved' });
+  }
+  await logActivity(c.env, user.id, 'recovery_resolved_sms',
+    `ticket=${bound.ticket_id || '-'} sms-only recovery → 24h cool-off`);
 
   const { token, csrf } = await mintRecoverySession(c, user, 'recovery_sms', 'full');
   return c.json({
@@ -460,6 +514,7 @@ recover.post('/sms/verify', async (c) => {
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
     expires_in: 24 * 3600,
     assurance_level: 'full',
+    ticket_id: bound.ticket_id || null,
     cool_off_until: inHours(RECOVERY_COOL_OFF_HOURS),
     note: 'Recovered via SMS. Billing, contracts, capital movement, KYC re-submission, DD downloads and impersonation are paused for 24 hours.',
   });
@@ -485,7 +540,7 @@ recover.post('/email/start', async (c) => {
   const raw = generateToken();
   const tokenHash = await hashToken(raw);
   const expires = inMin(EMAIL_MAGIC_TTL_MIN);
-  const ticketId = await createTicket(c.env, user.id, 'email_magic',
+  const { id: ticketId } = await createTicket(c.env, user.id, 'email_magic',
     { token_hash: tokenHash, expires_at: expires }, c);
 
   const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://app.axal.vc'));
@@ -525,13 +580,12 @@ recover.get('/email/verify', async (c) => {
   if (!users.length) return c.json({ error: 'Account not found' }, 401);
   const user = users[0];
 
-  await c.env.DB.prepare(
-    `UPDATE auth_recovery_tickets SET status='resolved', assurance_level='email_only', resolved_at=CURRENT_TIMESTAMP WHERE id = ?`,
-  ).bind(ticketId).run();
   await setCoolOffAndAssurance(c.env, user.id, 'email_only');
+  await transitionTicket(c.env, ticketId, user,
+    { status: 'resolved', assurance: 'email_only', resolved: true },
+    { template: 'auth_recovery_resolved' });
   await logActivity(c.env, user.id, 'recovery_resolved_email_magic',
     `ticket=${ticketId} assurance=email_only`);
-  await notifyAllChannels(c.env, user, 'auth_recovery_resolved', { ticket_id: String(ticketId) });
 
   const { token: jwt, csrf } = await mintRecoverySession(c, user, 'recovery_email', 'email_only');
   return c.json({
@@ -554,34 +608,35 @@ recover.post('/trusted-contact/start', async (c) => {
   const body = await readJson(c);
   const email = String(body?.email || '').toLowerCase().trim();
   if (!email) return c.json({ error: 'Email required' }, 400);
+  // Task #50 review fix — constant-shape response across all branches
+  // (no enumeration on existence OR on "has enough trusted contacts").
+  // The caller always gets `{ ok: true }`; trusted contacts receive
+  // the actual attest invite out-of-band.
   const user = await findUserByEmail(c.env, email);
-  if (!user || !user.email_verified || !user.is_active) {
-    return c.json({ error: 'unavailable' }, 400);
+  if (user && user.email_verified && user.is_active) {
+    const contacts: any[] = (await c.env.DB.prepare(
+      `SELECT id, contact_user_id, contact_email FROM auth_trusted_contacts
+       WHERE user_id = ? AND status = 'active'`,
+    ).bind(user.id).all()).results || [];
+    if (contacts.length >= 2) {
+      const { id: ticketId } = await createTicket(c.env, user.id, 'trusted_contact', {
+        contacts: contacts.map((r) => ({ id: r.id, email: r.contact_email, user_id: r.contact_user_id })),
+        attestations: [],
+      }, c);
+      const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://app.axal.vc'));
+      const attestUrl = `${appUrl}/auth/recover/attest?ticket=${ticketId}`;
+      for (const ctc of contacts) {
+        try {
+          await sendEmail(c.env, 'auth_recovery_started', ctc.contact_email, {
+            name: ctc.contact_email,
+            ticket_id: String(ticketId),
+          }, { userId: ctc.contact_user_id ?? undefined, ctaUrl: attestUrl });
+        } catch (e) { console.error('[recover] tc invite email failed', e); }
+      }
+      await notifyAllChannels(c.env, user, 'auth_recovery_started', { ticket_id: String(ticketId) });
+    }
   }
-  const contacts: any[] = (await c.env.DB.prepare(
-    `SELECT id, contact_user_id, contact_email FROM auth_trusted_contacts
-     WHERE user_id = ? AND status = 'active'`,
-  ).bind(user.id).all()).results || [];
-  if (contacts.length < 2) return c.json({ error: 'not_enough_trusted_contacts' }, 400);
-
-  const ticketId = await createTicket(c.env, user.id, 'trusted_contact', {
-    contacts: contacts.map((r) => ({ id: r.id, email: r.contact_email, user_id: r.contact_user_id })),
-    attestations: [],
-  }, c);
-
-  // Notify each contact to log in and attest.
-  const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://app.axal.vc'));
-  const attestUrl = `${appUrl}/auth/recover/attest?ticket=${ticketId}`;
-  for (const ctc of contacts) {
-    try {
-      await sendEmail(c.env, 'auth_recovery_started', ctc.contact_email, {
-        name: ctc.contact_email,
-        ticket_id: String(ticketId),
-      }, { userId: ctc.contact_user_id ?? undefined, ctaUrl: attestUrl });
-    } catch (e) { console.error('[recover] tc invite email failed', e); }
-  }
-  await notifyAllChannels(c.env, user, 'auth_recovery_started', { ticket_id: String(ticketId) });
-  return c.json({ ticket_id: ticketId, contacts_notified: contacts.length });
+  return c.json({ ok: true });
 });
 
 recover.post('/trusted-contact/attest', async (c) => {
@@ -628,40 +683,41 @@ recover.post('/trusted-contact/attest', async (c) => {
     return c.json({ ok: true, attestations: atts.length, required: 2, note: 'already_attested' });
   }
   atts.push(contact.id);
-  state.attestations = atts;
-  await c.env.DB.prepare(
-    `UPDATE auth_recovery_tickets SET state_json = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-  ).bind(JSON.stringify(state), atts.length >= 2 ? 'awaiting_admin' : 'awaiting_contacts', ticketId).run();
+
+  // Load target user up-front for the centralised transition+notify.
+  const targetSql = getSQL(c.env);
+  const targetRows = await targetSql`SELECT * FROM users WHERE id = ${ticket.user_id}`;
+  await targetSql.end();
+  const target = targetRows[0] || { id: ticket.user_id, email: 'unknown', name: null };
+
+  // Centralised transition + all-channel fan-out for EVERY attest
+  // (1-of-2 progress AND 2-of-2 satisfaction).
+  await transitionTicket(c.env, ticketId, target as any, {
+    status: atts.length >= 2 ? 'awaiting_admin' : 'awaiting_contacts',
+    statePatch: { attestations: atts },
+  }, { template: 'auth_recovery_started', vars: { attestations: atts.length } });
 
   await logActivity(c.env, contact.id, 'recovery_attested',
     `attested ticket=${ticketId} for user=${ticket.user_id}`);
 
   if (atts.length >= 2) {
-    // 2-of-2 satisfied. Mint a session for the target user, mark
-    // ticket resolved (full assurance, 24h cool-off). The target user
-    // is NOT authenticated to this request — they get a one-shot magic
-    // URL emailed to them so they can claim the session in their own
-    // browser.
-    const sql = getSQL(c.env);
-    const ur = await sql`SELECT * FROM users WHERE id = ${ticket.user_id}`;
-    await sql.end();
-    if (!ur.length) return c.json({ error: 'target_user_missing' }, 410);
-    const target = ur[0];
-    // Issue a claim-token; the user POSTs it back from /auth/recover.
+    // 2-of-2 satisfied. Issue a claim-token; the user POSTs it back
+    // from /auth/recover. The target user is NOT authenticated to this
+    // request — they get a one-shot magic URL emailed to them.
+    if (!targetRows.length) return c.json({ error: 'target_user_missing' }, 410);
     const claim = generateToken();
     const claimHash = await hashToken(claim);
-    state.claim_token_hash = claimHash;
-    state.claim_expires_at = inMin(EMAIL_MAGIC_TTL_MIN);
-    await c.env.DB.prepare(
-      `UPDATE auth_recovery_tickets SET state_json = ?, assurance_level = 'full' WHERE id = ?`,
-    ).bind(JSON.stringify(state), ticketId).run();
+    await transitionTicket(c.env, ticketId, target as any, {
+      assurance: 'full',
+      statePatch: { claim_token_hash: claimHash, claim_expires_at: inMin(EMAIL_MAGIC_TTL_MIN) },
+    }, null);
 
     const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://app.axal.vc'));
     const claimUrl = `${appUrl}/auth/recover/email?token=${claim}&ticket=${ticketId}&trusted=1`;
-    await sendEmail(c.env, 'auth_recovery_resolved', target.email, {
-      name: target.name || target.email,
+    await sendEmail(c.env, 'auth_recovery_resolved', (target as any).email, {
+      name: (target as any).name || (target as any).email,
       ticket_id: String(ticketId),
-    }, { userId: target.id, ctaUrl: claimUrl });
+    }, { userId: (target as any).id, ctaUrl: claimUrl });
   }
 
   return c.json({ ok: true, attestations: atts.length, required: 2 });
@@ -697,13 +753,12 @@ recover.post('/claim', async (c) => {
   if (!users.length) return c.json({ error: 'Account not found' }, 401);
   const user = users[0];
 
-  await c.env.DB.prepare(
-    `UPDATE auth_recovery_tickets SET status='resolved', resolved_at=CURRENT_TIMESTAMP WHERE id = ?`,
-  ).bind(ticketId).run();
   await setCoolOffAndAssurance(c.env, user.id, 'full');
+  await transitionTicket(c.env, ticketId, user,
+    { status: 'resolved', assurance: 'full', resolved: true },
+    { template: 'auth_recovery_resolved' });
   await logActivity(c.env, user.id, 'recovery_resolved_claim',
     `ticket=${ticketId} layer=${row.layer}`);
-  await notifyAllChannels(c.env, user, 'auth_recovery_resolved', { ticket_id: String(ticketId) });
 
   const { token: jwt, csrf } = await mintRecoverySession(c, user,
     row.layer === 'trusted_contact' ? 'recovery_trusted' : 'recovery_admin', 'full');
@@ -744,13 +799,12 @@ recover.post('/admin/escalate', async (c) => {
   const user = await findUserByEmail(c.env, email);
   if (!user) return c.json({ ok: true });  // never leak existence
 
-  const ticketId = await createTicket(c.env, user.id, 'admin_manual', {
+  const { id: ticketId } = await createTicket(c.env, user.id, 'admin_manual', {
     reason, co_signers: [], denials: [],
   }, c);
-  await c.env.DB.prepare(
-    `UPDATE auth_recovery_tickets SET status = 'awaiting_admin' WHERE id = ?`,
-  ).bind(ticketId).run();
-  await notifyAllChannels(c.env, user, 'auth_recovery_started', { ticket_id: String(ticketId) });
+  await transitionTicket(c.env, ticketId, user,
+    { status: 'awaiting_admin' },
+    { template: 'auth_recovery_started' });
   return c.json({ ok: true, ticket_id: ticketId });
 });
 
@@ -794,34 +848,40 @@ recover.post('/admin/cosign', async (c) => {
     ).bind(admin.id, t.user_id).run();
   } catch {}
 
-  if (cosigners.length >= 2) {
-    // Mint a claim token + email to target.
-    const claim = generateToken();
-    state.claim_token_hash = await hashToken(claim);
-    state.claim_expires_at = inMin(EMAIL_MAGIC_TTL_MIN);
-    await c.env.DB.prepare(
-      `UPDATE auth_recovery_tickets SET state_json = ?, status='awaiting_admin_cosign', assurance_level='full' WHERE id = ?`,
-    ).bind(JSON.stringify(state), ticketId).run();
+  // Load target for the centralised transition+notify.
+  const sql = getSQL(c.env);
+  const ur = await sql`SELECT * FROM users WHERE id = ${t.user_id}`;
+  await sql.end();
+  const target = ur[0] || { id: t.user_id, email: 'unknown', name: null };
 
-    const sql = getSQL(c.env);
-    const ur = await sql`SELECT * FROM users WHERE id = ${t.user_id}`;
-    await sql.end();
+  if (cosigners.length >= 2) {
+    const claim = generateToken();
+    const claimHash = await hashToken(claim);
+    await transitionTicket(c.env, ticketId, target as any, {
+      status: 'awaiting_admin_cosign', assurance: 'full',
+      statePatch: {
+        co_signers: cosigners,
+        claim_token_hash: claimHash,
+        claim_expires_at: inMin(EMAIL_MAGIC_TTL_MIN),
+      },
+    }, { template: 'auth_recovery_started', vars: { co_signers: cosigners.length, status: 'claim_emailed' } });
+
     if (ur.length) {
-      const target = ur[0];
       const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://app.axal.vc'));
       const claimUrl = `${appUrl}/auth/recover/email?token=${claim}&ticket=${ticketId}&admin=1`;
       try {
-        await sendEmail(c.env, 'auth_recovery_resolved', target.email, {
-          name: target.name || target.email,
+        await sendEmail(c.env, 'auth_recovery_resolved', (target as any).email, {
+          name: (target as any).name || (target as any).email,
           ticket_id: String(ticketId),
-        }, { userId: target.id, ctaUrl: claimUrl });
+        }, { userId: (target as any).id, ctaUrl: claimUrl });
       } catch (e) { console.error('[recover] admin cosign email failed', e); }
     }
     return c.json({ ok: true, co_signers: cosigners.length, required: 2, status: 'claim_emailed' });
   }
-  await c.env.DB.prepare(
-    `UPDATE auth_recovery_tickets SET state_json = ?, status='awaiting_admin_cosign', updated_at=CURRENT_TIMESTAMP WHERE id = ?`,
-  ).bind(JSON.stringify(state), ticketId).run();
+  await transitionTicket(c.env, ticketId, target as any, {
+    status: 'awaiting_admin_cosign',
+    statePatch: { co_signers: cosigners },
+  }, { template: 'auth_recovery_started', vars: { co_signers: cosigners.length } });
   return c.json({ ok: true, co_signers: cosigners.length, required: 2 });
 });
 
@@ -837,27 +897,22 @@ recover.post('/admin/deny', async (c) => {
   if (!t || t.status === 'resolved' || t.status === 'denied') {
     return c.json({ error: 'ticket_closed' }, 400);
   }
-  await c.env.DB.prepare(
-    `UPDATE auth_recovery_tickets SET status='denied', resolved_at=CURRENT_TIMESTAMP, state_json = json_set(coalesce(state_json,'{}'), '$.denial_reason', ?) WHERE id = ?`,
-  ).bind(reason, ticketId).run();
   try {
     await c.env.DB.prepare(
       `INSERT INTO admin_audit_log (admin_user_id, action, viewed_user_id, exported_at)
        VALUES (?, 'recovery_denied', ?, datetime('now'))`,
     ).bind(admin.id, t.user_id).run();
   } catch {}
-  // Notify the target.
   const sql = getSQL(c.env);
   const ur = await sql`SELECT * FROM users WHERE id = ${t.user_id}`;
   await sql.end();
-  if (ur.length) {
-    try {
-      await sendEmail(c.env, 'auth_recovery_resolved', ur[0].email, {
-        name: ur[0].name || ur[0].email,
-        ticket_id: `${ticketId} — denied`,
-      }, { userId: ur[0].id });
-    } catch {}
-  }
+  const target = ur[0] || { id: t.user_id, email: 'unknown', name: null };
+  // Centralised transition: status=denied + ALL-CHANNEL fan-out
+  // (reviewer fix: deny no longer email-only).
+  await transitionTicket(c.env, ticketId, target as any, {
+    status: 'denied', resolved: true,
+    statePatch: { denial_reason: reason },
+  }, { template: 'auth_recovery_resolved', vars: { status: 'denied', reason } });
   return c.json({ ok: true });
 });
 
@@ -866,12 +921,25 @@ recover.get('/ticket/:id', async (c) => {
     return c.json({ error: 'Too many requests' }, 429);
   }
   const id = Number(c.req.param('id') || 0);
-  if (!id) return c.json({ error: 'invalid' }, 400);
+  const lookup = String(c.req.query('lookup') || '');
+  if (!id || !lookup) return c.json({ error: 'invalid' }, 400);
   const row: any = await c.env.DB.prepare(
-    `SELECT id, layer, status, created_at, resolved_at, expires_at FROM auth_recovery_tickets WHERE id = ?`,
+    `SELECT id, layer, status, created_at, resolved_at, expires_at, state_json FROM auth_recovery_tickets WHERE id = ?`,
   ).bind(id).first();
+  // Constant-time-ish 404: any mismatch (no row, or wrong lookup_token)
+  // returns the same error. Auto-increment IDs no longer leak via this
+  // endpoint — the unauthenticated caller MUST present the token that
+  // was issued at /start.
   if (!row) return c.json({ error: 'not_found' }, 404);
-  return c.json(row);
+  let state: any = {};
+  try { state = JSON.parse(row.state_json || '{}'); } catch {}
+  if (!state.lookup_token || state.lookup_token !== lookup) {
+    return c.json({ error: 'not_found' }, 404);
+  }
+  return c.json({
+    id: row.id, layer: row.layer, status: row.status,
+    created_at: row.created_at, resolved_at: row.resolved_at, expires_at: row.expires_at,
+  });
 });
 
 // ─────────────────────────── Trusted-contact management (authenticated)
