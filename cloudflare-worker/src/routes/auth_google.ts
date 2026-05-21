@@ -250,15 +250,28 @@ authGoogle.get('/start', async (c) => {
     uid = user.id;
   }
 
+  // Session-bind the OAuth state to defeat login-CSRF / state-replay.
+  // We mint a random nonce, embed it in the signed state JWT, AND set
+  // the same nonce in an httpOnly Secure same-site=Lax cookie. The
+  // /callback handler refuses any state whose `n` doesn't match the
+  // cookie, so an attacker who phishes a {code,state} pair cannot
+  // bounce the victim's browser through /callback to mint a session
+  // bound to the attacker's Google account (or vice-versa).
   const nonceBytes = new Uint8Array(16);
   crypto.getRandomValues(nonceBytes);
+  const nonce = b64urlEncode(nonceBytes);
   const state = await signState(c.env, {
-    n: b64urlEncode(nonceBytes),
+    n: nonce,
     ts: Math.floor(Date.now() / 1000),
     action,
     uid,
     redirect,
   });
+  c.header(
+    'Set-Cookie',
+    `studioos_google_state=${nonce}; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/google; Max-Age=600`,
+    { append: true },
+  );
 
   const params = new URLSearchParams({
     client_id: c.env.GOOGLE_AUTH_CLIENT_ID!,
@@ -385,6 +398,26 @@ authGoogle.get('/callback', async (c) => {
   const state = await verifyState(c.env, stateRaw);
   if (!state) return callbackError(c.env, 'bad_state', 'signin');
 
+  // Session-bind check: the nonce inside the HMAC'd state MUST equal the
+  // value of the studioos_google_state cookie set by /start. This binds
+  // the OAuth handshake to a single browser/session and defeats
+  // login-CSRF (attacker injecting their own {code,state} into the
+  // victim's browser) and state-replay across sessions.
+  const cookieHeader = c.req.header('cookie') || '';
+  const m = cookieHeader.match(/(?:^|;\s*)studioos_google_state=([^;]+)/);
+  const cookieNonce = m ? m[1] : '';
+  if (!cookieNonce || cookieNonce !== state.n) {
+    return callbackError(c.env, 'bad_state', state.action);
+  }
+  // One-shot: clear the binding cookie so the same {code,state} pair
+  // cannot be replayed even if it leaks (Google's code is already
+  // single-use, but defence-in-depth).
+  c.header(
+    'Set-Cookie',
+    'studioos_google_state=; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/google; Max-Age=0',
+    { append: true },
+  );
+
   const idt = await exchangeCode(c.env, code);
   if (!idt) return callbackError(c.env, 'exchange_failed', state.action);
 
@@ -504,12 +537,14 @@ authGoogle.get('/callback', async (c) => {
     const csrf = generateCsrfToken();
     setAuthCookies(c, token, csrf);
 
-    // Land freshly-signed-up users on the onboarding chatbot so the existing
-    // post-register flow (profiling chat → admin review) still runs.
-    const landing = newSignup
-      ? '/onboarding'
-      : sanitizeRedirect(state.redirect);
-    const url = `${appUrl(c.env)}${landing}${landing.includes('?') ? '&' : '?'}google=ok`;
+    // Per Task #51 spec: fresh Google signups land directly on /dashboard
+    // (no onboarding-chatbot detour — that flow is still available from
+    // the in-app Help widget but is no longer mandatory for Google
+    // signups, since Google has already verified the email and we have
+    // a full name from the id_token). Existing users honour the
+    // sanitized redirect target the caller passed to /start.
+    const landing = newSignup ? '/dashboard' : sanitizeRedirect(state.redirect);
+    const url = `${appUrl(c.env)}${landing}${landing.includes('?') ? '&' : '?'}google=ok${newSignup ? '&google_signup=1' : ''}`;
     return c.redirect(url, 302);
   } catch (e: any) {
     console.error('[auth_google] callback error', e?.message || e, e?.stack);

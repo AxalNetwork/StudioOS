@@ -1452,6 +1452,13 @@ function ConnectedAccountsPanel({ flash }) {
           </button>
         )}
       </div>
+      {google.connected && (
+        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800 pt-3">
+          Heads up: signing out of Axal does <strong>not</strong> sign you out of Google
+          globally. If you're on a shared device, also sign out of your Google account
+          in the browser.
+        </p>
+      )}
     </Card>
   );
 }

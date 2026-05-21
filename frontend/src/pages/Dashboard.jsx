@@ -20,6 +20,24 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [error, setError] = useState('');
+  // Task #51 — one-time "Google sign-out scope" notice after a fresh
+  // Google signup (?google_signup=1 stamped by /api/auth/google/callback).
+  // sessionStorage gate keeps the banner from re-firing on refresh.
+  const [googleNotice, setGoogleNotice] = useState(false);
+  useEffect(() => {
+    try {
+      const u = new URL(window.location.href);
+      if (u.searchParams.get('google_signup') === '1' && !sessionStorage.getItem('google_signup_notice_shown')) {
+        setGoogleNotice(true);
+        sessionStorage.setItem('google_signup_notice_shown', '1');
+      }
+      if (u.searchParams.has('google_signup') || u.searchParams.has('google')) {
+        u.searchParams.delete('google_signup');
+        u.searchParams.delete('google');
+        window.history.replaceState({}, '', u.pathname + (u.search ? `?${u.searchParams}` : ''));
+      }
+    } catch { /* noop */ }
+  }, []);
   // Task #6 (IF) — tour fires once when /api/onboarding/checklist returns
   // meta.tour_seen_at === null. Checked on every dashboard mount; the
   // first POST /api/onboarding/meta {tour_seen:true} closes the loop.
@@ -74,6 +92,17 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {googleNotice && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/40 dark:border-blue-900 text-sm text-blue-900 dark:text-blue-200 px-4 py-3 flex items-start justify-between gap-3">
+          <div>
+            <strong>You're signed in with Google.</strong> Signing out of Axal will not
+            sign you out of Google globally — if you're on a shared device, also sign
+            out of your Google account in this browser. You can manage this anytime
+            under <Link to="/settings/security" className="underline">Settings → Security → Connected accounts</Link>.
+          </div>
+          <button onClick={() => setGoogleNotice(false)} className="text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 text-xs shrink-0">Dismiss</button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
