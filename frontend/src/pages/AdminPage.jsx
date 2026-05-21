@@ -34,6 +34,8 @@ const ROLE_BADGES = {
   admin: 'bg-violet-100 text-violet-700',
   founder: 'bg-blue-100 text-blue-700',
   partner: 'bg-emerald-100 text-emerald-700',
+  investor: 'bg-amber-100 text-amber-700',
+  mentor: 'bg-sky-100 text-sky-700',
 };
 
 const STATUS_BADGES = {
@@ -211,7 +213,7 @@ export default function AdminPage({ onImpersonate }) {
   };
   const handleRoleChange = async (user, newRole) => {
     if (newRole === user.role) return;
-    const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner / Investor' };
+    const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor' };
     const ok = window.confirm(
       `Change ${user.name || user.email}'s role from ${labels[user.role] || user.role} ` +
       `to ${labels[newRole] || newRole}?\n\nThis takes effect immediately and is logged in their activity history.`
@@ -226,6 +228,7 @@ export default function AdminPage({ onImpersonate }) {
     admin: users.filter(u => u.role === 'admin').length,
     founder: users.filter(u => u.role === 'founder').length,
     partner: users.filter(u => u.role === 'partner').length,
+    investor: users.filter(u => u.role === 'investor').length,
   };
   const pendingProfiles = profiles.filter(p => p.admin_status === 'pending').length;
 
@@ -285,7 +288,7 @@ export default function AdminPage({ onImpersonate }) {
                   filter === role ? 'bg-violet-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:border-violet-300'
                 }`}>
                 <div className="text-lg font-bold">{count}</div>
-                <div className="capitalize">{role === 'all' ? 'All Users' : role === 'partner' ? 'Partners / Investors' : `${role}s`}</div>
+                <div className="capitalize">{role === 'all' ? 'All Users' : `${role}s`}</div>
               </button>
             ))}
           </div>
@@ -334,7 +337,8 @@ export default function AdminPage({ onImpersonate }) {
                                 className={`appearance-none text-xs font-semibold px-3 py-1 pr-7 rounded-full cursor-pointer border border-transparent hover:border-current hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-1 transition-all ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>
                                 {/* Admin promotion intentionally not offered — see span branch above. */}
                                 <option value="founder">Founder</option>
-                                <option value="partner">Partner / Investor</option>
+                                <option value="partner">Partner</option>
+                                <option value="investor">Investor</option>
                               </select>
                               <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-70 group-hover:opacity-100" />
                             </div>
