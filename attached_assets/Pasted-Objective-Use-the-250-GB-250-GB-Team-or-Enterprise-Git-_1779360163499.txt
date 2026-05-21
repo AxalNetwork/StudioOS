@@ -1,0 +1,110 @@
+Objective
+  Use the 250 GB / 250 GB Team-or-Enterprise Git LFS allotment for
+  versioned source artifacts that belong with the codebase. Leave
+  runtime-served traffic on R2 (zero-egress, that's R2's strength).
+
+Decision rule (commit at MIGRATION_LFS_AUDIT.md):
+  - Versioned with code, infrequent reads, dev-team consumes → LFS
+  - User-generated, runtime-served at scale, app reads → R2
+  - Small (< 50 KB) + critical + deploy-atomically → Worker bundle
+  - Public published artifact (e.g. quarterly report PDF) →
+    GitHub Releases CDN (not LFS) — release-asset bandwidth is
+    uncapped and immutable per tag
+
+What to move to LFS (typical good fits in this repo)
+  - Brand kits: vector logo masters, full design system source files
+    (.fig, .sketch, .ai, .psd, .xd)
+  - Marketing video raws / b-rolls > 5 MB
+  - Methodology / playbook archival PDFs that ship as reference
+    material (e.g. the original VC playbook attachments)
+  - Slide-deck template PSDs / Keynote sources used to author the
+    React-rendered decks from Prompt KB
+  - ML model weights pinned to a release (.onnx, .safetensors) —
+    rare but possible for offline analytics jobs
+  - Static reference data sets (.parquet, large .csv > 1 MB) used
+    by ETL jobs / market-intelligence connectors
+  - Sample data fixtures for tests > 500 KB
+  - Audit-snapshot PDFs (frozen quarterly reports kept with code
+    for SOC 2 / GLBA evidence)
+  - Generated screenshots used in marketing docs (only if shipped
+    in repo; user-uploaded screenshots stay in R2)
+  - Documentation companion files: high-res versions of architecture
+    diagrams, decision-record PDFs
+
+What stays on R2
+  - Signed contracts and KYC documents (per-envelope encrypted,
+    gated downloads)
+  - User-uploaded headshots and brand uploads
+  - Generated PDF / PNG deck exports from Prompt KB
+  - Backup snapshots (D1 dumps, KV snapshots)
+  - Audit log overflow (tail-worker forwarding)
+  - Generated publication artifacts that aren't yet public
+
+What stays bundled in the Worker (under 50 KB, critical, atomic)
+  - Email subject lines + transactional copy stubs
+  - Validation schemas / regex tables (country, postal, IBAN)
+  - Sanctions list cache misses (small reference snapshots)
+  - Default brand palette + typography tokens
+  - Legal merge-field defaults
+  - Small standardised assets (favicons, OG image fallback)
+
+What goes to GitHub Releases (not LFS)
+  - Quarterly Axal Investor Signals PDF (public)
+  - Public DD summaries
+  - Anonymised public data dumps
+  - 1-page public sector reports
+  - These are point-in-time public artifacts and benefit from the
+    Release CDN's uncapped bandwidth.
+
+Migration steps
+  1. Audit
+     find . -type f -size +100k -not -path "./node_modules/*"
+            -not -path "./.git/*" > LFS_CANDIDATES.txt
+     For each, classify per the decision rule above. Commit
+     MIGRATION_LFS_AUDIT.md with the table.
+
+  2. .gitattributes
+       *.psd            filter=lfs diff=lfs merge=lfs -text
+       *.fig            filter=lfs diff=lfs merge=lfs -text
+       *.sketch         filter=lfs diff=lfs merge=lfs -text
+       *.ai             filter=lfs diff=lfs merge=lfs -text
+       *.xd             filter=lfs diff=lfs merge=lfs -text
+       *.onnx           filter=lfs diff=lfs merge=lfs -text
+       *.safetensors    filter=lfs diff=lfs merge=lfs -text
+       *.parquet        filter=lfs diff=lfs merge=lfs -text
+       *.zip            filter=lfs diff=lfs merge=lfs -text
+       *.tar.gz         filter=lfs diff=lfs merge=lfs -text
+       *.mp4            filter=lfs diff=lfs merge=lfs -text
+       *.webm           filter=lfs diff=lfs merge=lfs -text
+       *.mov            filter=lfs diff=lfs merge=lfs -text
+     Pre-commit hook scripts/lfs-size-gate.mjs additionally LFS-tracks
+     PDFs and images above 500 KB.
+
+  3. Do NOT rewrite history. New / re-added files only. Old in-tree
+     blobs stay until the file is rotated.
+
+  4. Pull-cost discipline
+     Devs who don't need the design files locally can configure
+     LFS to skip with:
+       git config --global lfs.fetchexclude "design/**,docs/raw/**"
+     Document in CONTRIBUTING.md.
+
+  5. Bandwidth budget watch
+     .github/workflows/lfs-budget.yml — daily cron checks the
+     repo's LFS bandwidth usage via the GitHub API. Alerts Slack
+     #ops when projected monthly usage > 80% of 250 GB.
+
+Files Replit creates this PR
+  - .gitattributes (size-gated patterns)
+  - scripts/lfs-size-gate.mjs (pre-commit hook)
+  - MIGRATION_LFS_AUDIT.md (per-file decision table)
+  - CONTRIBUTING.md updates (LFS dev workflow)
+  - .github/workflows/lfs-budget.yml
+
+Acceptance
+  - At least one design source file (e.g. logo master) committed
+    via LFS and confirmed in GitHub's LFS storage panel.
+  - Pre-commit hook rejects an over-size PDF/PNG committed without
+    LFS tracking.
+  - LFS-budget workflow runs daily.
+  - R2 usage chart shows no spike (runtime traffic untouched).
