@@ -312,6 +312,21 @@ ${transcript}`;
     }
   }
 
+  // Task #51-followup — founder track drives feature unlocking.
+  //  • "Spin-Out (New)"        → activate the 30-Day Spin-Out Lab so the
+  //                              founder must hit weekly milestones to
+  //                              unlock features (sidebar collapses to the
+  //                              lab; `users.spinout_lab_active=1`).
+  //  • "Strategic Scale (Existing)" → leave the lab off; existing founders
+  //                              get the full founder portal immediately.
+  // Admin can still flip a founder into the lab manually later.
+  if (inferredRole === 'founder' && founderTrack === 'Spin-Out (New)') {
+    try {
+      const { startLab } = await import('./spinout_lab');
+      await startLab(sql as any, user.id);
+    } catch (e) { console.error('[PROFILING] spinout lab start failed', e); }
+  }
+
   await sql.end();
 
   return c.json({ saved: true, persona, founder_track: founderTrack, role: inferredRole, summary: extracted?.summary || null });
