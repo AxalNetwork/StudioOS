@@ -11,6 +11,17 @@ An API-first Venture Studio Operating System designed to manage the entire start
 - **Drift check**: `npm run test:drift` (must pass before merge)
 - **Required Env Vars**: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_CLAIM_EMAIL` (web push), `SCORING_HMAC_SECRET` (≥32 bytes, hard-required in prod), `JWT_SECRET`, `AXAL_ENCRYPTION_SECRET` (falls back to JWT_SECRET).
 
+### Sync Cheatsheet
+When Replit's Sync UI shows PUSH_REJECTED, run **one** of these from the Replit Shell tab (not the agent — `git push` is sandbox-blocked):
+
+| Situation | Command |
+|---|---|
+| Normal push, clean tree, fast-forward | `bash scripts/git-sync.sh` |
+| Diverged from `origin/main` (task-merge replay or Dependabot landed upstream) | `bash scripts/git-sync.sh --auto` (delegates to `sync-reconcile.sh`) |
+| Just want the push half | `bash scripts/git-push.sh` |
+
+`git-push.sh` auto-detects whether any pending commit touches `.github/workflows/*`. If yes, it pushes via `GITHUB_TOKEN` (which carries the `workflow` scope Replit's OAuth lacks); if no, it uses the default `origin` remote so Replit's Sync UI stays warm. See "Recovering from a Sync divergence" gotcha below for the full reconcile flow.
+
 ## Stack
 - **Frontend**: React 19, Vite 7, Tailwind CSS 4, react-router 7, lucide-react 1
 - **Production API**: Cloudflare Worker (Hono on Workers, TypeScript)
@@ -107,6 +118,7 @@ operation that creates a `.git/*.lock` file — including `git tag`,
 ### Ops items still owned by user (not in code)
 - (a) Disable R2 public access + add 90-day lifecycle rule to Standard-IA.
 - (b) Verify search/backfill cron in prod.
+- (d) **Grant Replit GitHub App the `workflow` scope** so the Sync UI works for commits that touch `.github/workflows/*` without needing `scripts/git-push.sh`'s `GITHUB_TOKEN` fallback. Steps: open https://github.com/settings/installations → click **Configure** on the Replit app → under **Repository permissions** for `AxalNetwork/StudioOS`, grant **Workflows: Read & write** → save. Until this is done, every workflow-touching commit must use `bash scripts/git-sync.sh` (the wrapper handles it transparently), and Replit's blue Sync button alone will keep rejecting those commits. This is a one-time click-through; the wrapper is the bridge.
 - (c) **JWT_SECRET rotation (2026-05-11 + 2026-05-12 ×2).** A
   production-grade `JWT_SECRET` was committed to `.replit` THREE times
   in 24h: first at commit
