@@ -160,14 +160,14 @@ export default function PaywallModal({ user }) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="paywall-title"
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:hidden"
+      className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 print:hidden overflow-y-auto"
       onClick={() => setOpen(false)}
     >
       <div
-        className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+        className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 my-3 sm:my-0 max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2rem)] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between px-6 py-5 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-start justify-between px-5 sm:px-6 py-4 sm:py-5 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-900 rounded-t-2xl z-10">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center text-violet-700 dark:text-violet-300">
               <Lock size={18} />
@@ -185,13 +185,14 @@ export default function PaywallModal({ user }) {
             type="button"
             onClick={() => setOpen(false)}
             aria-label="Close"
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+            className="-mr-2 -mt-2 p-2 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 dark:hover:text-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
           >
-            <X size={20} />
+            <X size={22} />
           </button>
         </div>
 
-        <div className={`grid gap-4 p-6 ${tiersToShow.length > 1 ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
+        <div className="overflow-y-auto flex-1">
+        <div className={`grid gap-4 p-5 sm:p-6 ${tiersToShow.length > 1 ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
           {tiersToShow.map((tier) => {
             const plan = TIER_PLANS[tier];
             const featured = tier === required;
@@ -242,21 +243,31 @@ export default function PaywallModal({ user }) {
           })}
         </div>
 
-        <div className="px-6 pb-5 text-xs text-gray-500 dark:text-gray-400 text-center">
-          {isInvestorMode && (
-            <Link
-              to="/pricing/investor"
-              onClick={() => setOpen(false)}
-              className="text-violet-700 dark:text-violet-300 hover:underline mr-2"
-            >
-              Compare investor plans →
-            </Link>
-          )}
-          Questions? Email{' '}
-          <a href="mailto:billing@axal.vc" className="text-violet-700 dark:text-violet-300 hover:underline">
-            billing@axal.vc
-          </a>
-          . You can cancel any time from Settings &rsaquo; Billing.
+        <div className="px-5 sm:px-6 pb-5 space-y-3">
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="w-full sm:w-auto sm:mx-auto sm:block py-2.5 px-4 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors min-h-[44px]"
+          >
+            Maybe later — stay on free plan
+          </button>
+          <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
+            {isInvestorMode && (
+              <Link
+                to="/pricing/investor"
+                onClick={() => setOpen(false)}
+                className="text-violet-700 dark:text-violet-300 hover:underline mr-2"
+              >
+                Compare investor plans →
+              </Link>
+            )}
+            Questions? Email{' '}
+            <a href="mailto:billing@axal.vc" className="text-violet-700 dark:text-violet-300 hover:underline">
+              billing@axal.vc
+            </a>
+            . You can cancel any time from Settings &rsaquo; Billing.
+          </div>
+        </div>
         </div>
       </div>
     </div>
