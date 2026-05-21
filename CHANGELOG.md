@@ -7,6 +7,25 @@
 > entries at the top (newest-first) and reference the originating task
 > or commit.
 
+## 2026-05-21 — Verification email actually delivered (not just enqueued)
+
+- `cloudflare-worker/src/routes/auth.ts::sendVerification()` now passes
+  `immediate: true` to the unified email send pipeline. Previously
+  `send()` returned `ok: true` the instant the job was placed on
+  `JOB_QUEUE`, so the API replied `email_sent: true` and the UI
+  showed "Email sent" even when Gmail later failed inside the queue
+  consumer (expired refresh token, mailbox bounce, queue not
+  draining) — and the user never knew their link wasn't on the way.
+- Synchronous delivery costs ~500 ms-2 s but the user is already
+  watching a loading spinner. In exchange, the response's `email_sent`
+  flag is now truthful; on failure RegisterPage's `emailWarning`
+  state kicks in and exposes the dev fallback `verification_url`.
+- Same call site is reused by `/auth/register`, `/auth/profiling/save`
+  (the deferred-email flush), and `/auth/resend-verification`, so all
+  three interactive flows now surface real delivery results.
+- Deployed to production via the CF API `/content` endpoint
+  (`PUT /accounts/{acct}/workers/scripts/studioos/content`).
+
 ## 2026-05-21 — Public landing page reachable with stale session
 
 - `frontend/src/lib/api.js` — the 401 handler in `request()` no longer

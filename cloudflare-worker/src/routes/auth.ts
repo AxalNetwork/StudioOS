@@ -196,15 +196,26 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
   // own retries so we don't double-send on transient SMTP errors.
   try {
     const { send } = await import('../services/email/send');
+    // `immediate: true` — verification emails are user-interactive
+    // (the visitor is sitting on a loading button waiting for the
+    // link), so we deliver synchronously instead of enqueueing.
+    // Without this, send() returned ok:true the moment the job hit
+    // JOB_QUEUE, and the API replied `email_sent: true` even when
+    // Gmail later failed inside the queue consumer (expired refresh
+    // token, mailbox bounce, queue not draining), so the user saw
+    // "Email sent" and never received anything. Synchronous delivery
+    // also gives us a truthful `delivered` flag we can surface to the
+    // user as `email_sent: false` so RegisterPage's emailWarning kicks
+    // in and shows the dev fallback verification_url.
     const r = await send(
       env,
       'auth_verify_email',
       email,
       { name, verify_url: verificationUrl, app_url: env.APP_URL },
-      { userId },
+      { userId, immediate: true },
     );
-    if (r.ok) return { sent: true, verificationUrl, tokenStored };
-    console.warn(`[AUTH] unified send() returned not-ok for ${email}; falling back to legacy sender`);
+    if (r.ok && r.delivered !== false) return { sent: true, verificationUrl, tokenStored };
+    console.warn(`[AUTH] unified send() returned not-ok/undelivered for ${email} (reason=${r.reason || 'unknown'}); falling back to legacy sender`);
   } catch (e: any) {
     console.error(`[AUTH] unified send() threw for ${email}: ${e?.message || 'Unknown error'} — falling back`);
   }
