@@ -761,7 +761,15 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   //   • returning user with a saved-but-incomplete row for their role
   // Cross-role rows (e.g. role-changed mid-flow) are ignored — those
   // users keep their default landing path until they re-enter onboarding.
-  const wizardForRole = { founder: '/onboarding/founder', investor: '/onboarding/investor', partner: '/onboarding/partner' };
+  // Partners (including Mentor / Operator / Counsel / Technical / Liquidity
+  // sub-personas that fold into role='partner' for the CHECK constraint)
+  // onboard via the AI chatbot at /onboarding/chat — not the legacy
+  // /onboarding/partner "Your firm" form. The chatbot saves the persona
+  // into partner_profiles for admin review, which is everything the form
+  // used to collect plus more. Founders and investors keep their existing
+  // wizards (founders' 30-day Spin-Out Lab is gated separately via
+  // users.spinout_lab_active and is unaffected by this map).
+  const wizardForRole = { founder: '/onboarding/founder', investor: '/onboarding/investor' };
   const myWizard = wizardForRole[user.role];
   const onWizardPath = location.pathname.startsWith('/onboarding/');
   const needsWizard = !onboardingComplete && (onboardingFlow === null || onboardingFlow === user.role);
