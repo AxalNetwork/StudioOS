@@ -608,9 +608,9 @@ export const api = {
   // Task #53 — Public partner directory (no auth required).
   publicListPartners: (params = {}) => {
     const q = Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== '');
-    return request(`/marketplace/public/partners${q.length ? `?${new URLSearchParams(q)}` : ''}`);
+    return request(`/public/partners${q.length ? `?${new URLSearchParams(q)}` : ''}`);
   },
-  publicGetPartner: (slug) => request(`/marketplace/public/partners/${encodeURIComponent(slug)}`),
+  publicGetPartner: (slug) => request(`/public/p/${encodeURIComponent(slug)}`),
   // Task #3 — public Calendly booking URL lookup. Returns null on 404
   // (provider not connected or no booking_url configured).
   publicCalendlyBooking: (userId) =>

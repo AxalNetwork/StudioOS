@@ -109,6 +109,66 @@ publicRoutes.get('/u/:handle', async (c) => {
   });
 });
 
+// PublicDirectoryPage (`/directory`) — list endpoint for anonymous
+// visitors. The `partners` table only carries the minimal shape
+// {uid, name, company, specialization, referral_code, status,
+// referrals_count}, so the richer fields the frontend renders
+// (categories, kyb_verified, featured, ratings, response time,
+// pricing tier, ranking_score) are filled with safe defaults until
+// a follow-up populates them from a richer source. The page's
+// PartnerCard already handles null/empty values gracefully.
+//
+// Filters supported:
+//   q      — case-insensitive LIKE against name/company/specialization
+// All other filter params (category, capacity, pricing,
+// verified_only, rate_max) are accepted but ignored at this layer
+// — they have no backing columns yet. Returning the full set rather
+// than a 400 keeps the UI working when a user toggles a filter on
+// the existing page.
+publicRoutes.get('/partners', async (c) => {
+  const q = String(c.req.query('q') || '').trim().toLowerCase();
+  const params: any[] = [];
+  let where = `status = 'active'`;
+  if (q) {
+    const like = `%${q.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+    where += ` AND (lower(name) LIKE ? ESCAPE '\\' OR lower(coalesce(company, '')) LIKE ? ESCAPE '\\' OR lower(coalesce(specialization, '')) LIKE ? ESCAPE '\\')`;
+    params.push(like, like, like);
+  }
+  const sqlText = `SELECT uid, name, company, specialization, referral_code, referrals_count
+                     FROM partners
+                    WHERE ${where}
+                    ORDER BY referrals_count DESC, name ASC
+                    LIMIT 200`;
+  try {
+    const rs = await c.env.DB.prepare(sqlText).bind(...params).all<{
+      uid: string; name: string; company: string | null;
+      specialization: string | null; referral_code: string | null;
+      referrals_count: number;
+    }>();
+    const partners = (rs.results || []).map((r) => ({
+      slug: r.uid,
+      name: r.name,
+      company: r.company,
+      headline: r.specialization,
+      categories: [] as string[],
+      kyb_verified: false,
+      featured: false,
+      featured_tier: null,
+      reviews: { avg_rating: null as number | null },
+      response_time_hours: null as number | null,
+      pricing_tier: null as string | null,
+      completed_engagements: r.referrals_count || 0,
+      // Crude ranking until a richer signal lands — referrals_count is
+      // the only "engagement" proxy currently on the partners row.
+      ranking_score: r.referrals_count || 0,
+    }));
+    return c.json({ partners, total: partners.length });
+  } catch (e: any) {
+    console.error('[public/partners] list failed:', e?.message || e);
+    return c.json({ partners: [], total: 0 });
+  }
+});
+
 publicRoutes.get('/p/:partner_slug', async (c) => {
   const slug = String(c.req.param('partner_slug') || '').trim().toLowerCase();
   if (!slug) return c.json({ detail: 'slug required' }, 400);

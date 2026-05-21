@@ -7,6 +7,38 @@
 > entries at the top (newest-first) and reference the originating task
 > or commit.
 
+## 2026-05-21 — /directory page reachable (public partner list endpoint)
+
+- `cloudflare-worker/src/routes/public.ts` — added
+  `GET /api/public/partners`, a no-auth list endpoint backing the
+  `PublicDirectoryPage` (`axal.vc/directory`). The page was calling
+  `/api/marketplace/public/partners`, which was never mounted in the
+  worker; Hono's default 404 (`{"error":"Not found"}`) rendered as
+  the red "Not found" banner under the search bar.
+- The `partners` table only carries
+  `{uid, name, company, specialization, referral_code, status,
+  referrals_count}`, so richer fields the page expects (categories,
+  kyb_verified, featured/featured_tier, reviews.avg_rating,
+  response_time_hours, pricing_tier) are returned with safe
+  null/false/empty defaults. `completed_engagements` and
+  `ranking_score` both proxy off `referrals_count` for now;
+  `PartnerCard` already null-checks every field it renders, so the
+  cards degrade cleanly.
+- Filter params: `q` is honoured via case-insensitive
+  `LIKE … ESCAPE '\'` against `name`, `company`, `specialization`.
+  `category` / `capacity` / `pricing` / `verified_only` / `rate_max`
+  are accepted but ignored at the worker layer — no backing columns
+  exist yet. Future work: populate richer columns on `partners` (or
+  pivot to `marketplace_profiles`) and start respecting the filters.
+- Frontend — `frontend/src/lib/api.js::publicListPartners` /
+  `publicGetPartner` now point at `/public/partners` and
+  `/public/p/:slug` respectively. `/public/` is already in the
+  `isPublicEndpoint` allowlist on the 401 handler, so anonymous
+  visitors never get bounced to /login.
+- Worker deployed to production via the CF API `/content` endpoint
+  at 2026-05-21T09:18:29Z. Verified live:
+  `curl https://axal.vc/api/public/partners` returns real rows.
+
 ## 2026-05-21 — Trimmed `replit.md`; migration & JWT-rotation history moved here
 
 Moved two oversized blocks out of `replit.md` (Persistent gotchas) into
