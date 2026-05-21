@@ -38,6 +38,21 @@ export function AuthProvider({ children }) {
   const inFlightRef = useRef(null);
   const location = useLocation();
 
+  // Capture the post-OAuth marker DURING the initial render (lazy initializer
+  // runs once, synchronously, before any effect). We can't read it from a
+  // useEffect because the protected-route guard's <Navigate to="/login"/>
+  // fires inside useLayoutEffect — which runs before useEffect — and rewrites
+  // window.location.search to '' before our effect ever sees the marker.
+  // Stashing it here means the post-OAuth bootstrap below still fires even
+  // after the guard has bounced us through /login.
+  const [postOAuthMarker] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.has('google') || params.has('google_signup');
+    } catch { return false; }
+  });
+
   // Wrap setUser so localStorage stays consistent. Callers like
   // handleImpersonate / login still write to localStorage themselves
   // (legacy behaviour) — this also accepts a plain object so context
@@ -110,17 +125,14 @@ export function AuthProvider({ children }) {
   // cached-user gate in refresh() would skip /me and the route guard in
   // App.jsx would bounce the user back to /login. Force one /me probe
   // when we see the post-OAuth marker so the user lands on their
-  // dashboard instead of /login. One-shot per mount; Dashboard.jsx
-  // strips the query params on its own mount effect.
+  // dashboard instead of /login. Marker captured at initial render
+  // above — by the time this effect runs the URL may already be /login.
   useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      if (params.has('google') || params.has('google_signup')) {
-        refresh({ force: true });
-      }
-    } catch { /* noop */ }
+    if (postOAuthMarker) {
+      refresh({ force: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [postOAuthMarker]);
 
   // Cross-tab sync: another tab logging in/out updates localStorage; mirror
   // it here so tabs stay consistent without a reload.
