@@ -180,6 +180,28 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
         // user_sessions not migrated yet; rely on iat alone.
       }
     }
+    // Task #50 — lower-assurance step-up deadline. When a session was
+    // minted via the email-magic recovery layer ('email_only'), the user
+    // has 7 days to re-enrol TOTP (or a passkey, once shipped). Once
+    // that deadline elapses without re-enrolment, every subsequent
+    // request returns 401 EXCEPT the narrow re-enrol surface and the
+    // logout endpoint. This is the "auto-relock" enforcement.
+    const stepUpDue = (u as any).recovery_step_up_due_at as string | null;
+    if (stepUpDue) {
+      let expired = false;
+      try { expired = new Date(stepUpDue).getTime() < Date.now(); } catch {}
+      if (expired) {
+        const path = c.req.path || '';
+        // Allow the user to log out + look at /me + complete TOTP re-enrol.
+        const ALLOWED = [
+          '/api/auth/me', '/api/auth/logout',
+          '/api/settings/totp', '/api/settings/totp/verify',
+          '/api/settings/sessions',
+        ];
+        const allowed = ALLOWED.some((p) => path === p || path.startsWith(p + '/'));
+        if (!allowed) return null;
+      }
+    }
     return u;
   } catch {
     return null;

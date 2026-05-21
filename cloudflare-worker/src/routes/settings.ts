@@ -531,6 +531,13 @@ settings.post('/totp/repair', async (c) => {
   // Invalidate existing sessions — the user is about to scan a new QR.
   const nowSec = Math.floor(Date.now() / 1000);
   await sql`UPDATE users SET jwt_min_iat = ${nowSec} WHERE id = ${user.id}`;
+  // Task #50 — clear the step-up deadline once the user has re-paired
+  // their authenticator. The cool-off is intentionally NOT cleared
+  // (the spec ties it to time, not factor enrolment) but the auto-
+  // relock guard in getCurrentUser() now stops firing.
+  try {
+    await sql`UPDATE users SET recovery_step_up_due_at = NULL WHERE id = ${user.id}`;
+  } catch {}
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
             VALUES ('totp_repaired', 'User re-paired TOTP from /settings; all sessions invalidated',
                     ${user.email}, ${user.id})`;

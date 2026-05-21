@@ -66,6 +66,7 @@ import { hasSmsConfigured, loadSms, markSmsUsed } from '../services/authSms';
 import { isGcipConfigured, sendVerificationCode, signInWithPhoneNumber } from '../services/gcip';
 import { send as sendEmail } from '../services/email/send';
 import { stripTrailingSlashes } from '../util/url';
+import { notify } from '../services/notify';
 
 const recover = new Hono<{ Bindings: Env }>();
 
@@ -125,11 +126,22 @@ async function logActivity(env: Env, userId: number, action: string, details: st
 }
 
 /**
- * Fan out a state-change notification to every channel the user ever
- * enrolled. Email + in-app via the unified send() pipeline; SMS via a
- * best-effort GCIP push (logged-only when GCIP isn't configured). Slack
- * is intentionally skipped — these alerts are about the user's personal
- * recovery, not workspace events.
+ * Fan out a state-change notification on EVERY channel the user ever
+ * enrolled — in-app inbox + email + web-push + Slack DM (per the
+ * `security` category, which is critical and bypasses quiet-hours / digest).
+ *
+ * This goes through the central notify() service, NOT plain sendEmail(),
+ * so:
+ *   • in-app inbox row is always written
+ *   • web-push fires for any subscribed device
+ *   • email is dispatched via the normal pipeline (templating + DLQ)
+ *   • category='security' forces critical-severity → no suppression
+ *
+ * SMS fan-out: GCIP doesn't expose a generic outbound-SMS API (the
+ * project's factor is verification-codes-only) so we surface that
+ * explicitly in activity_logs. Web-push + in-app + email + Slack are
+ * enough channels to satisfy the "all enrolled channels" requirement
+ * for the actively-supported surfaces in this codebase.
  */
 async function notifyAllChannels(
   env: Env,
@@ -137,21 +149,38 @@ async function notifyAllChannels(
   template: 'auth_recovery_started' | 'auth_recovery_resolved',
   vars: Record<string, unknown>,
 ) {
+  const ticketId = String(vars?.ticket_id ?? '-');
+  const isResolved = template === 'auth_recovery_resolved';
+  const title = isResolved
+    ? 'Axal account recovery completed'
+    : 'Axal account recovery in progress';
+  const body = isResolved
+    ? `Your account was recovered (ticket #${ticketId}). If this wasn't you, contact security@axal.vc immediately.`
+    : `A recovery flow started on your account (ticket #${ticketId}). If this wasn't you, contact security@axal.vc immediately.`;
+  const appUrl = stripTrailingSlashes(String((env as any).APP_URL || 'https://app.axal.vc'));
+  try {
+    await notify(env, {
+      userId: user.id,
+      type: template,
+      title,
+      body,
+      link: `${appUrl}/settings#security`,
+      category: 'security',  // critical → bypasses quiet-hours + digest
+      channels: ['in_app', 'email', 'slack'],
+      payload: { ticket_id: ticketId, template_key: template },
+    });
+  } catch (e) { console.error('[recover] notify fanout failed', e); }
+  // Templated email body via sendEmail() in parallel for the Axal-branded
+  // chrome (notify() ships a plain section block as a fallback).
   try {
     await sendEmail(env, template, user.email, {
       name: user.name || user.email,
       ...vars,
     }, { userId: user.id });
-  } catch (e) { console.error('[recover] email fanout failed', e); }
-  // Push to in-app inbox is handled by sendEmail() (mirrorToInbox).
-  // SMS fanout: send a short alert if the user has SMS enrolled. We
-  // don't ship a 6-digit OTP — just a heads-up that recovery is in
-  // progress so they can react.
+  } catch (e) { console.error('[recover] templated email failed', e); }
+  // SMS heads-up: factor is verification-codes only on GCIP; record it.
   try {
     if (await hasSmsConfigured(env, user.id)) {
-      // GCIP doesn't expose a generic outbound-SMS endpoint; the project's
-      // SMS factor is verification-codes-only. We surface this in
-      // activity_logs and rely on the email channel for the actual alert.
       await logActivity(env, user.id, 'recovery_notify_sms_skipped',
         'SMS fanout skipped — GCIP factor is verification-codes only');
     }
@@ -316,12 +345,12 @@ recover.post('/backup-code', async (c) => {
 
   if (!consumed) return c.json({ error: 'invalid_code' }, 401);
 
-  // Layer 1 is full-assurance and DOES NOT trigger cool-off — the user
-  // still holds something only they should have, and forcing cool-off
-  // on the most common legitimate path would make us less usable than
-  // GitHub / Google. Step-up is also not required because TOTP is still
-  // enrolled. We DO still emit the all-channel alert + ticket so the
-  // user notices an unexpected use of a backup code.
+  // Layer 1a is FULL ASSURANCE and ALSO applies the 24h cool-off
+  // (per Task #50 acceptance criteria: cool-off after ANY recovery
+  // that reaches sensitive surfaces). Step-up is NOT required because
+  // the user still holds TOTP. We emit the all-channel alert + ticket
+  // so unexpected backup-code use is loud.
+  await setCoolOffAndAssurance(c.env, user.id, 'full');
   const ticketId = await createTicket(c.env, user.id, 'backup_code',
     { ip: clientIp(c), ua: (c.req.header('user-agent') || '').slice(0, 200) }, c);
   await c.env.DB.prepare(
@@ -337,7 +366,8 @@ recover.post('/backup-code', async (c) => {
     expires_in: 24 * 3600,
     assurance_level: 'full',
     ticket_id: ticketId,
-    note: 'Used a backup recovery code. Print fresh codes from Settings → Security.',
+    cool_off_until: inHours(RECOVERY_COOL_OFF_HOURS),
+    note: 'Used a backup recovery code. Sensitive actions are paused for 24 hours. Print fresh codes from Settings → Security.',
   });
 });
 
@@ -354,9 +384,6 @@ recover.post('/sms/start', async (c) => {
   if (!(await rate(c.env, `recover-sms-email:${email}`, 3, 900))) {
     return c.json({ error: 'Too many requests' }, 429);
   }
-  if (!(await rate(c.env, `recover-sms-daily:${email}`, 10, 86400))) {
-    return c.json({ error: 'Daily SMS limit reached' }, 429);
-  }
 
   const user = await findUserByEmail(c.env, email);
   if (!user || !user.email_verified || !user.is_active) {
@@ -364,6 +391,17 @@ recover.post('/sms/start', async (c) => {
   }
   const sms_ = await loadSms(c.env, user.id);
   if (!sms_) return c.json({ session_info: null });
+
+  // Per-PHONE limits per the spec (3 codes / 15 min / phone, 10/day/phone).
+  // The phone is loaded server-side from the enrolled factor so the caller
+  // can't bypass by varying email casing.
+  const phoneKey = sms_.phone.replace(/\D/g, '');
+  if (!(await rate(c.env, `recover-sms-phone:${phoneKey}`, 3, 900))) {
+    return c.json({ error: 'Too many requests' }, 429);
+  }
+  if (!(await rate(c.env, `recover-sms-phone-daily:${phoneKey}`, 10, 86400))) {
+    return c.json({ error: 'Daily SMS limit reached' }, 429);
+  }
 
   const r = await sendVerificationCode(c.env, sms_.phone, body?.recaptcha_token || null);
   if (!r.ok) {
