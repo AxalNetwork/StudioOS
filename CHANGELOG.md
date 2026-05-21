@@ -1,5 +1,78 @@
 # Changelog
 
+## 2026-05-21 — Task #52 — Calendar two-way sync for booked sessions
+
+Sessions booked on-platform (mentor sessions, IC meetings, founder
+check-ins) now appear on `/calendar` AND propagate to every connected
+attendee's Google / Outlook calendar within seconds — and disappear
+again on cancel. Booking endpoints stay snappy because the push runs
+inside `c.executionCtx.waitUntil(...)` after the HTTP response returns.
+
+**New service** — `cloudflare-worker/src/services/calendar/sync.ts`
+exposes three hooks:
+- `onAxalSessionCreated(env, ev)` — pushes the event to every
+  connected attendee (organizer + invitees). Idempotent: re-runs
+  PATCH the existing external event via the `(user_id, provider,
+  source_kind, source_id) → external_event_id` map in
+  `calendar_sync_records`.
+- `onAxalSessionUpdated` — alias for `onAxalSessionCreated`.
+- `onAxalSessionCancelled(env, kind, source_id)` — DELETEs upstream +
+  clears the sync row.
+- `pushOneEventForUser(env, userId, ev)` — powers the new "Add to
+  my Google / Outlook" button for sessions that pre-date the user's
+  OAuth connection.
+
+**Wired booking hooks** (all best-effort, exceptions never break the
+underlying booking):
+- `POST /api/mentors/slots/:id/book` →
+  `routes/mentors.ts` lines 314-341.
+- Mentor booking cancel / no-show transitions →
+  `routes/mentors.ts` lines 404-411.
+- `POST /api/calendar/ic-meetings` →
+  `routes/calendar.ts` lines 263-285.
+- `DELETE /api/calendar/ic-meetings/:id` →
+  `routes/calendar.ts` lines 338-343.
+- `POST /api/calendar/founder-checkins` →
+  `routes/calendar.ts` lines 406-424.
+- `DELETE /api/calendar/founder-checkins/:id` →
+  `routes/calendar.ts` lines 459-464.
+
+**New endpoint** — `POST /api/calendar/push/:kind/:source_id` lets the
+SPA push an already-booked Axal session to whichever providers the
+caller has connected. Returns `{ ok: true, pushed: { google, microsoft } }`.
+
+**Frontend** — `CalendarPage.jsx` renders an "Add to Google / Outlook
+Calendar" button on each agenda row whenever at least one external
+provider is connected. Re-clicking is safe (PATCH not insert). New
+`api.pushOneToExternal(kind, sourceId)` helper in `frontend/src/lib/api.js`.
+
+**Disconnect symmetry** — existing `DELETE /calendar/google` and
+`DELETE /calendar/microsoft` already cascade `DELETE FROM
+calendar_sync_records WHERE provider = ?`, so reconnect → fresh push
+cycle leaves no orphan rows.
+
+**Tests** — `cloudflare-worker/test/calendar.sync_hooks.test.ts`
+covers (a) push to Google for connected user, (b) DELETE + sync-row
+cleanup on cancel, (c) silent no-op when the user has no OAuth row.
+Uses a hand-rolled stub `fetch` + in-memory tables.
+
+**Calendar OAuth client separation** — already in place from Task #51:
+sign-in uses `GOOGLE_AUTH_CLIENT_ID/SECRET`, calendar uses
+`GOOGLE_CLIENT_ID/SECRET`. Redirect URI continues to resolve to
+`https://app.axal.vc/api/calendar/google/callback` via
+`PUBLIC_BASE_URL` (preferred) or `APP_URL`. Microsoft mirrors the
+same pattern.
+
+**Out of scope (deferred to follow-ups)** — Google `sync_token` +
+push-notification watch channels for the external-mirror read-only
+side; Outlook delta-token parity; partner office hours + investor
+meetings hooks (no D1 tables today — partner OH already goes through
+Calendly). Existing `/api/calendar/{google,microsoft}/sync` endpoints
+remain the broad-window catch-up path for any push that failed the
+per-event hook.
+
+
+
 > This file is the single source of truth. `frontend/public/CHANGELOG.md`
 > is a symlink to it, so `vite build` copies it into `docs/CHANGELOG.md`
 > where it is served by GitHub Pages and rendered inside the in-app

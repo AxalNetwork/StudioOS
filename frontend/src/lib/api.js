@@ -1580,6 +1580,11 @@ export const api = {
   microsoftCalDisconnect: () => request('/calendar/microsoft', { method: 'DELETE' }),
   microsoftCalSync: () => request('/calendar/microsoft/sync', { method: 'POST' }),
 
+  // Task #52 — "Add to my external calendar" — pushes one already-booked
+  // Axal session to whichever calendar(s) the caller has connected.
+  pushOneToExternal: (kind, sourceId) =>
+    request(`/calendar/push/${kind}/${sourceId}`, { method: 'POST' }),
+
   // Per-user Cal.com key (mentor-only)
   attachMyCalcomKey: (data) =>
     request('/calendar/me/calcom', { method: 'POST', body: JSON.stringify(data) }),

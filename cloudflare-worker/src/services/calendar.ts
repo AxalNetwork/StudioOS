@@ -22,6 +22,10 @@ import { encryptString, decryptString } from './cryptoBox';
  * verbatim. After a successful sync the caller re-encrypts the row so
  * each user transparently rolls forward.
  */
+// Task #52 — exported so services/calendar/sync.ts can reuse the same
+// decryption + legacy-plaintext fallback path on its push hooks.
+export { loadRefreshToken as loadRefreshTokenExport };
+export { reencryptRefreshToken as reencryptRefreshTokenExport };
 async function loadRefreshToken(
   env: Env, table: 'google_oauth_tokens' | 'microsoft_oauth_tokens', userId: number,
 ): Promise<{ raw: string; wasPlaintext: boolean } | null> {

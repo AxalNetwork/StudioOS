@@ -368,6 +368,14 @@ export default function CalendarPage() {
                         )}
                       </div>
                       {e.notes && <p className="text-sm text-slate-500 mt-1 line-clamp-2">{e.notes}</p>}
+                      {/* Task #52 — Add to external calendar */}
+                      {(google?.connected || microsoft?.connected) && e.kind !== 'calendly_event' && (
+                        <AddToExternalButton
+                          ev={e}
+                          google={google?.connected}
+                          microsoft={microsoft?.connected}
+                        />
+                      )}
                     </div>
                   </div>
                 </li>
@@ -379,6 +387,44 @@ export default function CalendarPage() {
 
       {showIc && <IcMeetingModal me={me} onClose={() => setShowIc(false)} onSaved={() => { setShowIc(false); load(); }} />}
       {showCk && <CheckinModal me={me} onClose={() => setShowCk(false)} onSaved={() => { setShowCk(false); load(); }} />}
+    </div>
+  );
+}
+
+/**
+ * Task #52 — "Add to my Google/Outlook calendar" button.
+ * Shown on each agenda row when the user has at least one connected
+ * external provider. Best-effort: the worker will no-op if the event
+ * was already pushed (PATCH not insert), so re-clicking is safe.
+ */
+function AddToExternalButton({ ev, google, microsoft }) {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(null);
+  async function push() {
+    setBusy(true); setDone(null);
+    try {
+      const r = await api.pushOneToExternal(ev.kind, ev.source_id);
+      const targets = [
+        r?.pushed?.google && 'Google',
+        r?.pushed?.microsoft && 'Outlook',
+      ].filter(Boolean);
+      setDone(targets.length ? `Added to ${targets.join(' + ')}` : 'Already synced');
+    } catch (e) {
+      setDone(`Failed: ${e.message}`);
+    }
+    setBusy(false);
+  }
+  const label = google && microsoft ? 'Add to Google + Outlook'
+    : google ? 'Add to Google Calendar'
+    : microsoft ? 'Add to Outlook Calendar' : null;
+  if (!label) return null;
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <button onClick={push} disabled={busy}
+        className="text-xs px-2 py-1 border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50">
+        {busy ? 'Adding…' : label}
+      </button>
+      {done && <span className="text-xs text-slate-600">{done}</span>}
     </div>
   );
 }

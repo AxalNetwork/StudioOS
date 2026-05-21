@@ -257,6 +257,39 @@ calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', a
       `;
     } catch { /* UNIQUE collision — ignore */ }
   }
+  // Task #52 — push to attendees' external calendars. All prep
+  // (attendee lookup + event assembly + dynamic import) happens inside
+  // the waitUntil closure so the IC-create response returns immediately.
+  const meetingId = meeting.id;
+  const meetingStart = meeting.start_at;
+  const meetingTitle = meeting.title;
+  const meetingLocKind = meeting.location_kind;
+  const meetingLocUri = meeting.location_uri;
+  const meetingAgenda = meeting.agenda;
+  const endIso = new Date(startAt.getTime() + duration * 60_000).toISOString();
+  const icSyncP = (async () => {
+    try {
+      const { onAxalSessionCreated } = await import('../services/calendar/sync');
+      const att = await sql`
+        SELECT u.email, u.name FROM ic_meeting_attendees a
+        LEFT JOIN users u ON u.id = a.user_id WHERE a.meeting_id = ${meetingId}
+      ` as any[];
+      const me = (await sql`SELECT email, name FROM users WHERE id = ${user.id}` as any[])[0];
+      const ev = {
+        id: `ic_meeting:${meetingId}`, kind: 'ic_meeting' as const, source_id: meetingId,
+        source_uid: uid, title: meetingTitle, start_at: meetingStart, end_at: endIso,
+        status: 'confirmed', location_kind: meetingLocKind, location_uri: meetingLocUri,
+        organizer_email: me?.email || null, notes: meetingAgenda || null,
+        attendees: [
+          { email: me?.email || null, name: me?.name || null, role: 'organizer' as const },
+          ...att.filter((a: any) => a.email && a.email !== me?.email)
+                .map((a: any) => ({ email: a.email, name: a.name, role: 'invitee' as const })),
+        ],
+      };
+      await onAxalSessionCreated(c.env, ev);
+    } catch (e) { console.warn('[calendar] IC sync hook failed', e); }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(icSyncP);
   return c.json(await serializeIc(c.env, meeting));
 }));
 
@@ -309,6 +342,14 @@ calendar.delete('/ic-meetings/:id', safe('ic_cancel', 'Could not cancel IC meeti
            cancel_reason = ${reason}, updated_at = ${nowIso}
      WHERE id = ${id}
   `;
+  // Task #52 — remove from attendees' external calendars (deferred).
+  const icCancelP = (async () => {
+    try {
+      const { onAxalSessionCancelled } = await import('../services/calendar/sync');
+      await onAxalSessionCancelled(c.env, 'ic_meeting', id);
+    } catch (e) { console.warn('[calendar] IC cancel sync hook failed', e); }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(icCancelP);
   return c.json({ ok: true });
 }));
 
@@ -370,7 +411,35 @@ calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in'
        ${body.location_kind || 'video'}, ${body.location_uri || null})
     RETURNING *
   ` as any[];
-  return c.json(await serializeCheckin(c.env, r[0]));
+  const checkin = r[0];
+  // Task #52 — push founder check-in to attendees' external calendars
+  // (deferred via waitUntil so the response returns immediately).
+  const ckId = checkin.id;
+  const ckStart = checkin.start_at;
+  const ckLocKind = checkin.location_kind;
+  const ckLocUri = checkin.location_uri;
+  const ckNotes = body.notes || null;
+  const ckEndIso = new Date(startAt.getTime() + duration * 60_000).toISOString();
+  const ckSyncP = (async () => {
+    try {
+      const f = (await sql`SELECT email, name FROM users WHERE id = ${founderId}` as any[])[0];
+      const co = counterId ? (await sql`SELECT email, name FROM users WHERE id = ${counterId}` as any[])[0] : null;
+      const ev = {
+        id: `founder_checkin:${ckId}`, kind: 'founder_checkin' as const, source_id: ckId,
+        source_uid: uid, title, start_at: ckStart, end_at: ckEndIso,
+        status: 'confirmed', location_kind: ckLocKind, location_uri: ckLocUri,
+        organizer_email: co?.email || f?.email || null, notes: ckNotes,
+        attendees: [
+          { email: f?.email || null, name: f?.name || null, role: 'founder' as const },
+          ...(co ? [{ email: co.email, name: co.name, role: 'counterpart' as const }] : []),
+        ],
+      };
+      const { onAxalSessionCreated } = await import('../services/calendar/sync');
+      await onAxalSessionCreated(c.env, ev);
+    } catch (e) { console.warn('[calendar] checkin sync hook failed', e); }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(ckSyncP);
+  return c.json(await serializeCheckin(c.env, checkin));
 }));
 
 calendar.get('/founder-checkins', safe('ck_list', 'Could not list check-ins', async (c) => {
@@ -404,7 +473,41 @@ calendar.delete('/founder-checkins/:id', safe('ck_cancel', 'Could not cancel che
     UPDATE founder_checkins SET status = 'cancelled', cancelled_at = ${nowIso}, updated_at = ${nowIso}
     WHERE id = ${id}
   `;
+  // Task #52 — remove from attendees' external calendars (deferred).
+  const ckCancelP = (async () => {
+    try {
+      const { onAxalSessionCancelled } = await import('../services/calendar/sync');
+      await onAxalSessionCancelled(c.env, 'founder_checkin', id);
+    } catch (e) { console.warn('[calendar] checkin cancel sync hook failed', e); }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(ckCancelP);
   return c.json({ ok: true });
+}));
+
+// ===========================================================================
+// Task #52 — "Add to my external calendar" for events that pre-date the
+// user's OAuth connection. POST /api/calendar/push/:kind/:source_id pushes
+// one specific Axal session to whichever providers the caller has connected.
+// ===========================================================================
+const PUSHABLE_KINDS = new Set([
+  'mentor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour',
+]);
+calendar.post('/push/:kind/:source_id', safe('push_one', 'Could not push event', async (c) => {
+  const user = await requireAuth(c);
+  const kind = String(c.req.param('kind') || '');
+  const sourceId = parseInt(c.req.param('source_id'), 10);
+  if (!PUSHABLE_KINDS.has(kind)) return c.json({ detail: 'Unsupported kind' }, 400);
+  if (!Number.isFinite(sourceId)) return c.json({ detail: 'invalid source_id' }, 400);
+  const { fetchUserEvents } = await import('../services/calendar');
+  // Window broad enough to find historic + future bookings.
+  const from = new Date(Date.now() - 365 * 86400_000).toISOString();
+  const to = new Date(Date.now() + 365 * 86400_000).toISOString();
+  const events = await fetchUserEvents(c.env, user.id, user.role, from, to, [kind]);
+  const ev = events.find(e => e.source_id === sourceId);
+  if (!ev) return c.json({ detail: 'Event not found or not accessible' }, 404);
+  const { pushOneEventForUser } = await import('../services/calendar/sync');
+  const result = await pushOneEventForUser(c.env, user.id, ev);
+  return c.json({ ok: true, pushed: result });
 }));
 
 // ===========================================================================

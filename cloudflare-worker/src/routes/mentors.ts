@@ -304,6 +304,42 @@ mentors.post('/slots/:id/book', async (c) => {
           });
         }
       } catch (e) { console.warn('[mentors] notify mentor_session_booked failed', e); }
+      // Task #52 — fire-and-forget two-way calendar sync. The booking
+      // appears on Axal /calendar via mentor_bookings join AND on both
+      // attendees' connected Google/Outlook calendars within ~seconds.
+      // ALL prep (dynamic import + user/mentor lookups + event assembly)
+      // happens inside the waitUntil closure so the HTTP response
+      // returns immediately — no DB hop on the booking critical path.
+      const rowId = Number((r as any).meta?.last_row_id);
+      const syncPromise = (async () => {
+        try {
+          const founderRow = await c.env.DB.prepare('SELECT email, name FROM users WHERE id = ?')
+            .bind(user.id).first<{ email: string; name: string | null }>();
+          const mentorMeta = await c.env.DB.prepare('SELECT email, display_name, user_id FROM mentors WHERE id = ?')
+            .bind(slot.mentor_id).first<{ email: string | null; display_name: string; user_id: number | null }>();
+          const ev = {
+            id: `mentor_booking:${rowId}`,
+            kind: 'mentor_booking' as const,
+            source_id: rowId,
+            source_uid: uid,
+            title: `Mentor session — ${mentorMeta?.display_name || ''}`.trim(),
+            start_at: slot.starts_at,
+            end_at: slot.ends_at,
+            status: 'confirmed',
+            location_kind: 'video',
+            location_uri: slot.meeting_url || null,
+            organizer_email: mentorMeta?.email || null,
+            attendees: [
+              { email: mentorMeta?.email || null, name: mentorMeta?.display_name || null, role: 'mentor' },
+              { email: founderRow?.email || null, name: founderRow?.name || null, role: 'mentee' },
+            ],
+            notes: (body.topic || '') + (body.notes ? `\n\n${body.notes}` : ''),
+          };
+          const { onAxalSessionCreated } = await import('../services/calendar/sync');
+          await onAxalSessionCreated(c.env, ev);
+        } catch (e) { console.warn('[mentors] calendar sync hook failed', e); }
+      })();
+      if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(syncPromise);
       return c.json(bookingDto(b!));
     } catch (e: any) {
       if (String(e?.message || e).includes('UNIQUE')) {
@@ -366,6 +402,18 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   await c.env.DB.prepare(
     'UPDATE mentor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason), updated_at = ? WHERE id = ?'
   ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id).run();
+  // Task #52 — remove from external calendars on cancel/no-show.
+  // Defer the dynamic import + provider DELETE work via waitUntil so
+  // the cancel response returns immediately.
+  if (opts.nextStatus === 'cancelled' || opts.nextStatus === 'no_show') {
+    const p = (async () => {
+      try {
+        const { onAxalSessionCancelled } = await import('../services/calendar/sync');
+        await onAxalSessionCancelled(c.env, 'mentor_booking', id);
+      } catch (e) { console.warn('[mentors] calendar cancel hook failed', e); }
+    })();
+    if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
+  }
   const fresh = await c.env.DB.prepare('SELECT * FROM mentor_bookings WHERE id = ?')
     .bind(id).first<BookingRow>();
   return c.json(bookingDto(fresh!));
