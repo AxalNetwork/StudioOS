@@ -28,8 +28,17 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     key: 'auth_verify_email', category: 'security', severity: 'info',
     replyTo: 'security@axal.vc', alwaysSend: true,
     subject: 'Verify your email — Axal',
-    text: `Hi {{name}},\n\nConfirm this email address to finish creating your Axal account:\n{{verify_url}}\n\nThe link expires in 24 hours. If you didn't sign up, ignore this email.`,
-    html: `<p>Hi {{name}},</p><p>Confirm this email address to finish creating your Axal account.</p><p><a href="{{{verify_url}}}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Verify email</a></p><p style="color:#6b7280;font-size:13px;">Or copy this link: <span style="word-break:break-all;">{{verify_url}}</span></p><p style="color:#6b7280;font-size:13px;">The link expires in 24 hours. If you didn't sign up, ignore this email.</p>`,
+    text: `Hi {{name}},\n\nThanks for signing up for Axal VC. Please verify your email address to continue setting up your account:\n{{verify_url}}\n\nThis link expires in 24 hours. If you didn't create an account, you can safely ignore this email.`,
+    html: `<h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">Verify Your Email</h1>
+<p style="font-size:14px;color:#6b7280;margin:0 0 24px;line-height:1.6;">Hi {{name}}, thanks for signing up for Axal VC. Please verify your email address to continue setting up your account.</p>
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:8px 0 24px;">
+  <a href="{{{verify_url}}}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:16px 28px;border-radius:14px;">Verify Email Address</a>
+</td></tr></table>
+<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:18px 20px;">
+  <p style="margin:0 0 8px;color:#6b7280;font-size:14px;">Or copy and paste this link into your browser:</p>
+  <a href="{{{verify_url}}}" style="color:#2563eb;word-break:break-all;font-size:14px;">{{verify_url}}</a>
+</div>
+<p style="font-size:12px;color:#9ca3af;margin:24px 0 0;line-height:1.6;">This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.</p>`,
   }),
   // vars: name, reset_url
   auth_password_reset: t({
@@ -317,17 +326,39 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
   mentor_session_booked: t({
     key: 'mentor_session_booked', category: 'mentor', severity: 'info',
     replyTo: 'support@axal.vc',
-    subject: 'Mentor session booked with {{mentor_name}}',
-    text: `Hi {{name}},\n\nYour session with {{mentor_name}} is booked for {{start_time}}. Join: {{join_url}}`,
-    html: `<p>Hi {{name}},</p><p>Your session with <strong>{{mentor_name}}</strong> is booked for <strong>{{start_time}}</strong>.</p><p><a href="{{{join_url}}}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Join session</a></p>`,
+    subject: 'Booking with {{mentor_name}}',
+    text: `Hi {{name}},\n\nYour session with {{mentor_name}} is booked.\n\nWhen: {{start_time}}\n\nJoin / manage: {{join_url}}\n\nAdd to your calendar from the scheduler page — we'll send a reminder before the session.`,
+    html: `<h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">Session confirmed</h1>
+<p style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.6;">Hi {{name}}, your session with <strong style="color:#111827;">{{mentor_name}}</strong> is booked.</p>
+<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:14px;padding:18px 20px;margin:0 0 24px;">
+  <table cellpadding="0" cellspacing="0" style="width:100%;">
+    <tr><td style="padding:0 0 10px;vertical-align:top;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#7c3aed;font-weight:600;margin:0 0 4px;">With</div>
+      <div style="font-size:15px;color:#111827;font-weight:600;">{{mentor_name}}</div>
+    </td></tr>
+    <tr><td style="padding:6px 0 0;vertical-align:top;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#7c3aed;font-weight:600;margin:0 0 4px;">When</div>
+      <div style="font-size:15px;color:#111827;font-weight:600;">{{start_time}}</div>
+    </td></tr>
+  </table>
+</div>
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:0 0 24px;">
+  <a href="{{{join_url}}}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:16px 28px;border-radius:14px;">Open scheduler</a>
+</td></tr></table>
+<p style="font-size:13px;color:#6b7280;margin:0;line-height:1.6;">You can add this session to your calendar from the scheduler page. We'll send a reminder before it starts.</p>`,
   }),
   // vars: name, mentor_name, start_time, reason
   mentor_session_canceled: t({
     key: 'mentor_session_canceled', category: 'mentor', severity: 'warning',
     replyTo: 'support@axal.vc',
     subject: 'Mentor session with {{mentor_name}} canceled',
-    text: `Hi {{name}},\n\nThe session with {{mentor_name}} scheduled for {{start_time}} was canceled. Reason: {{reason}}`,
-    html: `<p>Hi {{name}},</p><p>The session with <strong>{{mentor_name}}</strong> scheduled for {{start_time}} was canceled.</p><p style="background:#fef2f2;padding:10px 12px;border-radius:8px;font-size:13px;color:#991b1b;">Reason: {{reason}}</p>`,
+    text: `Hi {{name}},\n\nThe session with {{mentor_name}} scheduled for {{start_time}} was canceled.\n\nReason: {{reason}}`,
+    html: `<h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">Session canceled</h1>
+<p style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.6;">Hi {{name}}, the session with <strong style="color:#111827;">{{mentor_name}}</strong> scheduled for <strong style="color:#111827;">{{start_time}}</strong> was canceled.</p>
+<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:14px;padding:14px 18px;color:#991b1b;font-size:14px;line-height:1.55;">
+  <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin:0 0 4px;">Reason</div>
+  {{reason}}
+</div>`,
   }),
 
   // ────────────────────────────────────────────────────────── SPINOUT
