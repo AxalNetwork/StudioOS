@@ -63,8 +63,15 @@ export default function OnboardingChatPage() {
     setError('');
     try {
       await api.profilingSave({ email, messages });
-      try { await refresh({ force: true }); } catch {}
-      navigate('/dashboard?profile_pending=1', { replace: true });
+      // Task #66 — full-page redirect (not SPA navigate). RequireAuth in
+      // App.jsx fetches `onboarding_progress` inside a useEffect keyed on
+      // `[user?.id]`; after save the user id hasn't changed, so a soft
+      // `navigate('/dashboard')` keeps the stale `onboardingComplete=false`
+      // state and the chatbot gate immediately bounces the user back to
+      // /onboarding/chat — re-mounting this component with an empty chat.
+      // A hard reload remounts App.jsx so the effect re-runs and sees the
+      // freshly-flipped `completed_at`.
+      window.location.assign('/dashboard?profile_pending=1');
     } catch (e) {
       setError(e.message);
       setSaving(false);
