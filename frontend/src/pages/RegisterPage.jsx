@@ -187,13 +187,16 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
     try {
-      // Task #50 — defer the verification email until the user finishes the
-      // chatbot. Otherwise the email arrives minutes before the "Check Your
-      // Email" screen and users think no email was ever sent.
-      const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, defer_email: true });
+      // Task #66 — the inline pre-login chatbot (legacy step 2) is retired.
+      // The full-screen post-login `/onboarding/chat` page is now the single
+      // arbiter of role assignment, gated by `onboarding_progress.flow='chat'`
+      // and unlocked by `/api/profiling/save` (auth-bound). Register sends
+      // the verification email immediately and jumps straight to the
+      // "Check Your Email" step; the chatbot runs after the user logs in.
+      const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined });
       setEmailWarning(res?.email_sent === false);
       if (res?.verification_url) setVerificationUrl(res.verification_url);
-      setStep(2);
+      setStep(3);
     } catch (e) {
       setError(e.message);
       if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {

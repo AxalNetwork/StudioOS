@@ -746,11 +746,36 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Task #66 — onboarding-chatbot gate.
+  // Every new account (email + Google signup) gets an `onboarding_progress`
+  // row written with `flow='chat'` and `completed_at=NULL` at signup time.
+  // The profiling /save endpoint flips `completed_at` once the chatbot is
+  // finished. While that row exists and is unfinished, this gate pins the
+  // user to /onboarding/chat — accidentally clicking any sidebar link or
+  // typing a URL directly bounces them back. This makes the chatbot the
+  // single arbiter of role assignment.
+  //
+  // Bypassed for admins, impersonation sessions, and admin-granted
+  // `access_level='limited'` accounts. Existing pre-Task-#66 users have no
+  // chat row, so `onboardingFlow !== 'chat'` and this gate does nothing
+  // for them.
+  const onChatPath = location.pathname === '/onboarding/chat';
+  if (
+    onboardingLoaded &&
+    onboardingFlow === 'chat' &&
+    !onboardingComplete &&
+    !onChatPath &&
+    user.role !== 'admin' &&
+    !isImpersonating &&
+    accessLevel !== 'limited'
+  ) {
+    return <Navigate to="/onboarding/chat" replace />;
+  }
+
   // Task #51 follow-up — fresh Google signups land on /onboarding/chat
   // via the auth_google callback redirect (newSignup branch). The users
   // row is created with role='partner' (CHECK-compliant default); admin
-  // assigns the final role from partner_profiles review. No SPA-side
-  // gate here — the chatbot is best-effort capture, not a hard wall.
+  // assigns the final role from partner_profiles review.
 
   // Phase 0.2 / Task #23 — wizard resume gate.
   // Roles that have a dedicated wizard land back on it until completion.
@@ -809,6 +834,16 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     !onOnboardingPath
   ) {
     return <Navigate to="/kyc" replace />;
+  }
+
+  // Task #66 — render the onboarding chatbot full-screen, without the
+  // app sidebar / topbar. The chatbot must be the single visible surface
+  // until the user finishes it; rendering it inside ProtectedLayout used
+  // to expose sidebar nav links (notably "Identity Verification" → /kyc)
+  // that an accidental click would follow, tripping the KYC gate before
+  // the chat row's completed_at flipped.
+  if (onChatPath) {
+    return children;
   }
 
   return (

@@ -333,6 +333,16 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   // are needed for support/analytics.
   const regEmailHash = await hashEmail(email);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`registered as ${role || 'partner'} — pending email verification (email_hash=${regEmailHash})`}, ${regEmailHash}, ${user.id})`;
+  // Task #66 — seed the onboarding-chatbot gate row. The frontend
+  // RequireAuth guard pins this user to /onboarding/chat until the
+  // chatbot save flips completed_at. INSERT OR IGNORE so this is safe
+  // to re-run (the row's UNIQUE on user_id makes a second pass a no-op).
+  try {
+    await c.env.DB.prepare(
+      `INSERT OR IGNORE INTO onboarding_progress (user_id, flow, step, total_steps, completed_at)
+       VALUES (?, 'chat', 0, 0, NULL)`
+    ).bind(user.id).run();
+  } catch (e) { console.error('[auth] onboarding_progress seed failed', e); }
   await sql.end();
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: role === 'investor' ? 'investor' : 'partner', id: user.id }); } catch {}
 

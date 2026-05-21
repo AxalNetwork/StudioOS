@@ -564,6 +564,16 @@ authGoogle.get('/callback', async (c) => {
         // UNIQUE constraint on users would also have rejected one of
         // the two INSERTs further upstream in most cases.)
         await sql`INSERT OR IGNORE INTO user_google_links (user_id, google_sub) VALUES (${user.id}, ${sub})`;
+        // Task #66 — seed the onboarding-chatbot gate row. The frontend
+        // RequireAuth guard pins this user to /onboarding/chat until the
+        // chatbot save flips completed_at. INSERT OR IGNORE keeps a
+        // double-callback race a no-op.
+        try {
+          await c.env.DB.prepare(
+            `INSERT OR IGNORE INTO onboarding_progress (user_id, flow, step, total_steps, completed_at)
+             VALUES (?, 'chat', 0, 0, NULL)`
+          ).bind(user.id).run();
+        } catch (e) { console.error('[auth_google] onboarding_progress seed failed', e); }
         newSignup = true;
         const eh = await hashEmail(user.email);
         await sql`INSERT INTO activity_logs (action, details, actor, user_id)
