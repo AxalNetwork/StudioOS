@@ -674,8 +674,11 @@ calendar.get('/google/callback', async (c) => {
     }
     return successRedirect(c.env, 'google');
   } catch (e: any) {
-    console.error('[CAL:g_callback]', e?.message || e);
-    return failureRedirect(c.env, 'google', 'token_exchange');
+    const msg = String(e?.message || e);
+    console.error('[CAL:g_callback]', msg);
+    const m = msg.match(/^token_exchange_failed:(\d+):(.+)$/);
+    const reason = m ? `token_exchange:${m[1]}:${m[2]}` : 'token_exchange';
+    return failureRedirect(c.env, 'google', reason);
   }
 });
 

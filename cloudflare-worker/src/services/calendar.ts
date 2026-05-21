@@ -272,8 +272,11 @@ export async function exchangeGoogleCode(env: Env, code: string): Promise<any> {
     method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
   if (!r.ok) {
-    console.warn('[CAL] google token exchange', r.status);
-    throw new Error(`token_exchange_failed:${r.status}`);
+    const txt = await r.text().catch(() => '');
+    let code = '';
+    try { code = (JSON.parse(txt) as any)?.error || ''; } catch {}
+    console.warn('[CAL] google token exchange', r.status, code, txt.slice(0, 300));
+    throw new Error(`token_exchange_failed:${r.status}:${code || 'unknown'}`);
   }
   return r.json();
 }
