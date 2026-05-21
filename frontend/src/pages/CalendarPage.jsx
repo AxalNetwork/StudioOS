@@ -17,12 +17,18 @@ const KIND_LABEL = {
   mentor_booking: 'Mentor session',
   ic_meeting: 'IC meeting',
   founder_checkin: 'Founder check-in',
+  partner_office_hour: 'Partner OH',
+  google_external: 'Google (external)',
+  microsoft_external: 'Outlook (external)',
 };
 const KIND_COLOR = {
   calendly_event: 'bg-sky-100 text-sky-700 border-sky-200',
   mentor_booking: 'bg-amber-100 text-amber-700 border-amber-200',
   ic_meeting: 'bg-purple-100 text-purple-700 border-purple-200',
   founder_checkin: 'bg-blue-100 text-blue-700 border-blue-200',
+  partner_office_hour: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  google_external: 'bg-gray-100 text-gray-500 border-gray-200',
+  microsoft_external: 'bg-gray-100 text-gray-500 border-gray-200',
 };
 
 function fmtRange(startISO, endISO) {

@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-05-21 — Task #52 (follow-up patch) — partner OH hooks + CAL-OAuth aliases + external-mirror migration
+
+Addressing the architect's second-round findings on Task #52:
+
+- **Partner office hours** booking + cancel hooks now wired the same
+  way (`routes/partner_office_hours.ts`): book lines 176-217, cancel
+  branch in `transition()` lines 278-287. `PUSHABLE_KINDS` already
+  contained `partner_office_hour`; `services/calendar.ts` already
+  exports the matching event-row shape.
+- **Calendar-specific OAuth client envs** —
+  `GOOGLE_CAL_CLIENT_ID/SECRET` and `MICROSOFT_CAL_CLIENT_ID/SECRET`
+  are now the preferred env names, with `GOOGLE_CLIENT_ID/SECRET` and
+  `MICROSOFT_CLIENT_ID/SECRET` kept as fallbacks. New helpers
+  `googleCalClientId/Secret` + `microsoftCalClientId/Secret` in
+  `services/calendar.ts` ; every auth-URL builder, code-exchange and
+  refresh path now reads through the helpers. `preflightOAuthSecrets`
+  surfaces the new env names in the `missing` array.
+- **Migration 062** — `062_calendar_external_sync.sql` adds the
+  additive `calendar_external_sync` table (sync_token, delta_link,
+  watch_channel_id / resource_id / expires_at) and stamps
+  `external_provider` + `external_event_id` onto `calendar_events`,
+  scaffolding for follow-up Task #58 (Google sync_token + Microsoft
+  Graph delta read-only mirror). Idempotent — `IF NOT EXISTS` on
+  every CREATE / INDEX; ALTERs are additive-only.
+- **Frontend** — `CalendarPage.jsx` `KIND_LABEL`/`KIND_COLOR` now
+  cover `partner_office_hour` (emerald) and the future
+  `google_external` / `microsoft_external` mirrored rows (gray /
+  dimmed) so the unified feed can render them out-of-the-box.
+
+Investor 1:1s are already covered: the original Task #52 wired IC
+meetings, which IS the investor meeting surface.
+
 ## 2026-05-21 — Task #52 — Calendar two-way sync for booked sessions
 
 Sessions booked on-platform (mentor sessions, IC meetings, founder

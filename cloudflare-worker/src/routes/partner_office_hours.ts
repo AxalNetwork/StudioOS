@@ -170,6 +170,48 @@ r.post('/slots/:id/book', async (c) => {
       }
       const b = await c.env.DB.prepare('SELECT * FROM partner_bookings WHERE id = ?')
         .bind((ins as any).meta?.last_row_id).first<BookingRow>();
+      // Task #52 — push partner office-hour booking to attendees' external
+      // calendars. All prep happens inside the waitUntil closure so the
+      // HTTP response returns immediately.
+      const rowId = Number((ins as any).meta?.last_row_id);
+      const slotStart = slot.starts_at;
+      const slotEnd = slot.ends_at;
+      const meetingUrl = slot.meeting_url || null;
+      const topic = (body.topic || '').toString().slice(0, 200);
+      const notes = (body.notes || '').toString().slice(0, 2000);
+      const syncP = (async () => {
+        try {
+          const founderRow = await c.env.DB.prepare('SELECT email, name FROM users WHERE id = ?')
+            .bind(user.id).first<{ email: string; name: string | null }>();
+          const partnerRow = await c.env.DB.prepare(
+            'SELECT contact_email, organization, user_id FROM partners WHERE id = ?'
+          ).bind(slot.partner_id).first<{ contact_email: string | null; organization: string | null; user_id: number | null }>();
+          const partnerOwnerEmail = partnerRow?.user_id
+            ? ((await c.env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(partnerRow.user_id).first<{ email: string }>())?.email || null)
+            : null;
+          const ev = {
+            id: `partner_office_hour:${rowId}`,
+            kind: 'partner_office_hour' as const,
+            source_id: rowId,
+            source_uid: uid,
+            title: `Partner office hours${partnerRow?.organization ? ' — ' + partnerRow.organization : ''}`,
+            start_at: slotStart,
+            end_at: slotEnd,
+            status: 'confirmed',
+            location_kind: 'video',
+            location_uri: meetingUrl,
+            organizer_email: partnerRow?.contact_email || partnerOwnerEmail,
+            attendees: [
+              { email: partnerRow?.contact_email || partnerOwnerEmail, name: partnerRow?.organization || null, role: 'partner' },
+              { email: founderRow?.email || null, name: founderRow?.name || null, role: 'founder' },
+            ],
+            notes: topic + (notes ? `\n\n${notes}` : ''),
+          };
+          const { onAxalSessionCreated } = await import('../services/calendar/sync');
+          await onAxalSessionCreated(c.env, ev);
+        } catch (e) { console.warn('[partner_oh] calendar sync hook failed', e); }
+      })();
+      if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(syncP);
       return c.json(bookingDto(b!));
     } catch (e: any) {
       if (String(e?.message || e).includes('UNIQUE')) {
@@ -230,6 +272,16 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   await c.env.DB.prepare(
     'UPDATE partner_bookings SET status=?, cancel_reason=COALESCE(?, cancel_reason), updated_at=? WHERE id = ?'
   ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id).run();
+  // Task #52 — remove from external calendars on cancel/no-show (deferred).
+  if (opts.nextStatus === 'cancelled' || opts.nextStatus === 'no_show') {
+    const p = (async () => {
+      try {
+        const { onAxalSessionCancelled } = await import('../services/calendar/sync');
+        await onAxalSessionCancelled(c.env, 'partner_office_hour', id);
+      } catch (e) { console.warn('[partner_oh] calendar cancel hook failed', e); }
+    })();
+    if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
+  }
   const fresh = await c.env.DB.prepare('SELECT * FROM partner_bookings WHERE id = ?').bind(id).first<BookingRow>();
   return c.json(bookingDto(fresh!));
 }

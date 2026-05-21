@@ -155,11 +155,28 @@ export function microsoftRedirectUri(env: Env): string {
 // secret is present and a redirect URI can be resolved (explicit env var OR
 // derived from APP_URL).
 // ---------------------------------------------------------------------------
+// Task #52 — operators may configure a *calendar-specific* OAuth client
+// (`GOOGLE_CAL_CLIENT_ID/SECRET`, `MICROSOFT_CAL_CLIENT_ID/SECRET`) so the
+// Calendar consent screen is decoupled from the platform-wide sign-in client
+// (`GOOGLE_AUTH_CLIENT_ID/SECRET` → Task #51) and the legacy combined
+// (`GOOGLE_CLIENT_ID/SECRET`). Resolution order: CAL-specific → legacy → null.
+export function googleCalClientId(env: Env): string | undefined {
+  return (env as any).GOOGLE_CAL_CLIENT_ID || env.GOOGLE_CLIENT_ID;
+}
+export function googleCalClientSecret(env: Env): string | undefined {
+  return (env as any).GOOGLE_CAL_CLIENT_SECRET || env.GOOGLE_CLIENT_SECRET;
+}
+export function microsoftCalClientId(env: Env): string | undefined {
+  return (env as any).MICROSOFT_CAL_CLIENT_ID || env.MICROSOFT_CLIENT_ID;
+}
+export function microsoftCalClientSecret(env: Env): string | undefined {
+  return (env as any).MICROSOFT_CAL_CLIENT_SECRET || env.MICROSOFT_CLIENT_SECRET;
+}
 export function googleOAuthAvailable(env: Env): boolean {
-  return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && googleRedirectUri(env));
+  return !!(googleCalClientId(env) && googleCalClientSecret(env) && googleRedirectUri(env));
 }
 export function microsoftOAuthAvailable(env: Env): boolean {
-  return !!(env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET && microsoftRedirectUri(env));
+  return !!(microsoftCalClientId(env) && microsoftCalClientSecret(env) && microsoftRedirectUri(env));
 }
 
 /**
@@ -175,12 +192,12 @@ export function preflightOAuthSecrets(
   const missing: string[] = [];
   if (!env.JWT_SECRET) missing.push('JWT_SECRET');
   if (provider === 'google') {
-    if (!env.GOOGLE_CLIENT_ID) missing.push('GOOGLE_CLIENT_ID');
-    if (!env.GOOGLE_CLIENT_SECRET) missing.push('GOOGLE_CLIENT_SECRET');
+    if (!googleCalClientId(env)) missing.push('GOOGLE_CAL_CLIENT_ID (or GOOGLE_CLIENT_ID)');
+    if (!googleCalClientSecret(env)) missing.push('GOOGLE_CAL_CLIENT_SECRET (or GOOGLE_CLIENT_SECRET)');
     if (!googleRedirectUri(env)) missing.push('PUBLIC_BASE_URL');
   } else {
-    if (!env.MICROSOFT_CLIENT_ID) missing.push('MICROSOFT_CLIENT_ID');
-    if (!env.MICROSOFT_CLIENT_SECRET) missing.push('MICROSOFT_CLIENT_SECRET');
+    if (!microsoftCalClientId(env)) missing.push('MICROSOFT_CAL_CLIENT_ID (or MICROSOFT_CLIENT_ID)');
+    if (!microsoftCalClientSecret(env)) missing.push('MICROSOFT_CAL_CLIENT_SECRET (or MICROSOFT_CLIENT_SECRET)');
     if (!microsoftRedirectUri(env)) missing.push('PUBLIC_BASE_URL');
   }
   return missing;
@@ -191,7 +208,7 @@ export function preflightOAuthSecrets(
 // ===========================================================================
 export function buildGoogleAuthUrl(env: Env, state: string): string {
   const p = new URLSearchParams({
-    client_id: env.GOOGLE_CLIENT_ID!,
+    client_id: googleCalClientId(env)!,
     redirect_uri: googleRedirectUri(env),
     response_type: 'code',
     scope: GOOGLE_SCOPES.join(' '),
@@ -205,7 +222,7 @@ export function buildGoogleAuthUrl(env: Env, state: string): string {
 
 export function buildMicrosoftAuthUrl(env: Env, state: string): string {
   const p = new URLSearchParams({
-    client_id: env.MICROSOFT_CLIENT_ID!,
+    client_id: microsoftCalClientId(env)!,
     redirect_uri: microsoftRedirectUri(env),
     response_type: 'code',
     response_mode: 'query',
@@ -234,8 +251,8 @@ export async function exchangeGoogleCode(env: Env, code: string): Promise<any> {
   if (!googleOAuthAvailable(env)) throw new Error('google_oauth_unavailable');
   const body = new URLSearchParams({
     code,
-    client_id: env.GOOGLE_CLIENT_ID!,
-    client_secret: env.GOOGLE_CLIENT_SECRET!,
+    client_id: googleCalClientId(env)!,
+    client_secret: googleCalClientSecret(env)!,
     redirect_uri: googleRedirectUri(env),
     grant_type: 'authorization_code',
   });
@@ -253,8 +270,8 @@ export async function refreshGoogleAccessToken(env: Env, refreshToken: string): 
   if (!googleOAuthAvailable(env)) throw new Error('google_oauth_unavailable');
   const body = new URLSearchParams({
     refresh_token: refreshToken,
-    client_id: env.GOOGLE_CLIENT_ID!,
-    client_secret: env.GOOGLE_CLIENT_SECRET!,
+    client_id: googleCalClientId(env)!,
+    client_secret: googleCalClientSecret(env)!,
     grant_type: 'refresh_token',
   });
   const r = await fetchWithTimeout(GOOGLE_TOKEN_URL, {
@@ -283,8 +300,8 @@ export async function exchangeMicrosoftCode(env: Env, code: string): Promise<any
   if (!microsoftOAuthAvailable(env)) throw new Error('microsoft_oauth_unavailable');
   const body = new URLSearchParams({
     code,
-    client_id: env.MICROSOFT_CLIENT_ID!,
-    client_secret: env.MICROSOFT_CLIENT_SECRET!,
+    client_id: microsoftCalClientId(env)!,
+    client_secret: microsoftCalClientSecret(env)!,
     redirect_uri: microsoftRedirectUri(env),
     grant_type: 'authorization_code',
     scope: MICROSOFT_SCOPES.join(' '),
@@ -303,8 +320,8 @@ export async function refreshMicrosoftAccessToken(env: Env, refreshToken: string
   if (!microsoftOAuthAvailable(env)) throw new Error('microsoft_oauth_unavailable');
   const body = new URLSearchParams({
     refresh_token: refreshToken,
-    client_id: env.MICROSOFT_CLIENT_ID!,
-    client_secret: env.MICROSOFT_CLIENT_SECRET!,
+    client_id: microsoftCalClientId(env)!,
+    client_secret: microsoftCalClientSecret(env)!,
     grant_type: 'refresh_token',
     scope: MICROSOFT_SCOPES.join(' '),
   });
