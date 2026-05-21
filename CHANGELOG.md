@@ -7,6 +7,64 @@
 > entries at the top (newest-first) and reference the originating task
 > or commit.
 
+## 2026-05-21 — Task #51 — Optional "Continue with Google" sign-in / sign-up
+
+Adds an OPTIONAL Google identity path alongside the existing magic-link
++ TOTP flows. Never the only way in: every account retains its
+magic-link + TOTP fallback. Google counts as ONE factor only —
+sensitive routes still demand TOTP/passkey/SMS via `requireFactor()`.
+
+- **Migration #061** (`061_google_sub.sql`, additive-only, IF NOT EXISTS):
+  `users.google_sub TEXT` + partial unique index
+  `idx_users_google_sub WHERE google_sub IS NOT NULL`.
+- **New route** `cloudflare-worker/src/routes/auth_google.ts` mounted at
+  `/api/auth/google` (sibling of `/api/auth/recover`):
+  - `GET /start` — HMAC-signed state (JWT_SECRET, 10-min window),
+    accepts `?action=signin|link` + `?redirect=<absolute-path>`.
+    503 when `GOOGLE_AUTH_CLIENT_ID/SECRET` unset.
+  - `GET /callback` — exchanges code, decodes id_token (aud + iss
+    defence-in-depth), applies precedence rules: (1) `google_sub`
+    match → sign in; (2) case-insensitive email + `email_verified=true`
+    → auto-link no-merge; (3) `email_verified=false` → REFUSE
+    `link_blocked_unverified`; (4) no row → fresh signup with
+    `email_verified=true`, role `partner`, seeded trust obligations.
+    Session minted with `user_sessions.factor='google'`.
+  - Auth-linking from Settings parallels with L1-L4 rules
+    (already_linked / sub_owned_by_other / caller_email_unverified
+    / cross-email accepted-with-audit-log).
+- **Settings endpoints** (in `routes/settings.ts`):
+  - `GET /settings/connected-accounts` — returns Google link state +
+    `unlinkable` flag based on no-orphan guard.
+  - `POST /settings/connected-accounts/google/unlink` — fail-closed
+    409 `last_sign_in_path` when no other factor exists (TOTP / SMS /
+    verified-email magic-link).
+- **Frontend**:
+  - `LoginPage.jsx` + `RegisterPage.jsx` step 1 — "Continue with
+    Google" button hidden when `/start` returns 503. Error toasts
+    map every `?google_error=*` code back to human copy.
+  - `SettingsPage.jsx → Security tab` — new `ConnectedAccountsPanel`
+    above the TOTP card. Link button kicks off `/start?action=link`;
+    unlink shows "Cannot unlink — only sign-in path" badge when the
+    server flags it.
+  - `lib/api.js` — `googleStartUrl`, `getConnectedAccounts`,
+    `unlinkGoogle` helpers.
+- **Env**: new `GOOGLE_AUTH_CLIENT_ID` + `GOOGLE_AUTH_CLIENT_SECRET`
+  (SEPARATE OAuth client from the existing `GOOGLE_CLIENT_ID/SECRET`
+  used for Calendar/Mail — different scopes, different refresh-token
+  policy). Both added to the `Env` type in `types.ts`.
+- **Tests** (`test/auth_google.test.ts`, 14 cases, all pass via
+  `--experimental-strip-types`): four spec-mandated scenarios
+  (link-verified, link-unverified-blocked, fresh-signup,
+  no-merge-double-account) via the pure exported helpers
+  `decideSigninAction` + `decideLinkAction`, plus state-HMAC
+  roundtrip / tamper-reject / expiry-reject / future-skew-reject /
+  bogus-action-reject.
+- **Operator action**: apply migration with
+  `wrangler d1 execute studioos-db --remote --file=cloudflare-worker/sql/migrations/061_google_sub.sql`
+  (Node 22 path documented in replit.md). Add the redirect URI
+  `https://app.axal.vc/api/auth/google/callback` to the Google Cloud
+  Console OAuth client BEFORE the next worker deploy.
+
 ## 2026-05-21 — /directory page reachable (public partner list endpoint)
 
 - `cloudflare-worker/src/routes/public.ts` — added

@@ -1343,6 +1343,119 @@ function RecoveryActivityPanel() {
   );
 }
 
+// Task #51 — Connected sign-in accounts (Google). Renders inline inside
+// the Security tab so the user can link / unlink Google alongside their
+// TOTP + SMS + recovery state. The unlink button is hidden when the
+// worker reports `unlinkable=false` (no other sign-in path) — see
+// /api/settings/connected-accounts.
+function ConnectedAccountsPanel({ flash }) {
+  const [row, setRow] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try { setRow(await api.getConnectedAccounts()); }
+    catch (e) { flash(e.message || 'Failed to load connected accounts', 'error'); }
+  };
+  useEffect(() => {
+    load();
+    // Honour the ?google_linked=1 / ?google_error=… query params the
+    // /callback bounce drops on us, so the user sees a confirmation
+    // toast right after returning from Google.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('google_linked') === '1') {
+      flash('Google account linked.');
+    }
+    const err = params.get('google_error');
+    if (err) {
+      const copy = {
+        already_linked: 'A Google account is already linked to this user.',
+        sub_owned_by_other: 'That Google account is linked to a different Axal user.',
+        caller_email_unverified: 'Verify your email before linking Google.',
+        cancelled: 'Google linking cancelled.',
+        provider_error: 'Google could not link the account. Please try again.',
+        exchange_failed: 'Could not verify your Google account. Please try again.',
+        email_unverified_at_google: 'Your Google email is not verified at Google.',
+        bad_state: 'Linking link expired. Please retry.',
+        internal_error: 'Something went wrong on our side. Please try again.',
+      };
+      flash(copy[err] || 'Google linking failed.', 'error');
+    }
+    if (params.has('google_linked') || params.has('google_error')) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('google_linked');
+      url.searchParams.delete('google_error');
+      window.history.replaceState({}, '', url.pathname + (url.search ? `?${url.searchParams}` : ''));
+    }
+  }, []);
+
+  const link = async () => {
+    setBusy(true);
+    try {
+      const { url } = await api.googleStartUrl({ action: 'link', redirect: '/settings/security' });
+      if (!url) throw new Error('No redirect URL.');
+      window.location.href = url;
+    } catch (e) {
+      flash(e.message || 'Google linking unavailable', 'error');
+      setBusy(false);
+    }
+  };
+  const unlink = async () => {
+    if (!window.confirm('Unlink Google sign-in from this account?')) return;
+    setBusy(true);
+    try {
+      await api.unlinkGoogle();
+      flash('Google sign-in unlinked.');
+      await load();
+    } catch (e) {
+      flash(e.message || 'Unlink failed', 'error');
+    } finally { setBusy(false); }
+  };
+
+  if (!row) return null;
+  if (!row.available?.configured) return null; // env not set — hide the card entirely
+  const google = (row.accounts || []).find(a => a.provider === 'google') || { connected: false };
+
+  return (
+    <Card
+      title="Connected sign-in accounts"
+      description="Link your Google account for one-click sign-in. Google counts as one factor — sensitive actions still ask for your authenticator.">
+      <div className="flex items-center justify-between py-2">
+        <div className="flex items-center gap-3">
+          <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+            <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" />
+            <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.2-8l-6.6 5.1C9.6 39.6 16.2 44 24 44z" />
+            <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.7-4.9 6.7-14.8 0-1.3-.1-2.4-.4-3.5z" />
+          </svg>
+          <div>
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Google</div>
+            <div className={`text-xs ${google.connected ? 'text-emerald-700' : 'text-gray-500 dark:text-gray-400'}`}>
+              {google.connected ? 'Linked' : 'Not linked'}
+            </div>
+          </div>
+        </div>
+        {google.connected ? (
+          google.unlinkable ? (
+            <button onClick={unlink} disabled={busy}
+              className="text-xs text-red-600 hover:text-red-800 disabled:text-gray-400">
+              {busy ? 'Working…' : 'Unlink'}
+            </button>
+          ) : (
+            <span className="text-xs text-amber-700" title="Set up TOTP, SMS, or verify your email first.">
+              Cannot unlink — only sign-in path
+            </span>
+          )
+        ) : (
+          <button onClick={link} disabled={busy}
+            className="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+            {busy ? 'Redirecting…' : 'Link Google'}
+          </button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function AuthSection({ data, flash }) {
   const [code, setCode] = useState('');
   const [qrPayload, setQrPayload] = useState(null);
@@ -1453,6 +1566,7 @@ function AuthSection({ data, flash }) {
 
   return (
     <>
+      <ConnectedAccountsPanel flash={flash} />
       <Card title="Two-factor authentication" description="Re-pair your authenticator if you lost or replaced your device.">
         {!qrPayload ? (
           <div className="space-y-3">

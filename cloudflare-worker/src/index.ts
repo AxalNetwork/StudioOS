@@ -25,6 +25,10 @@ import realtime from './routes/realtime';
 import auth from './routes/auth';
 import authSms from './routes/auth_sms';
 import authRecover from './routes/auth_recover';
+// Task #51 — Optional "Continue with Google" sign-in. Sits alongside
+// /api/auth (magic link + TOTP); never the only path in. See
+// routes/auth_google.ts for the linking precedence and step-up rules.
+import authGoogle from './routes/auth_google';
 import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
 import projects from './routes/projects';
@@ -300,6 +304,9 @@ app.route('/api/auth', authSms);
 // Task #50 — Lost-TOTP recovery flow (layered). Mounted at /api/auth/recover
 // so the existing /api/auth surface remains untouched.
 app.route('/api/auth/recover', authRecover);
+// Task #51 — Google sign-in (optional). Mounted on its own /api/auth/google
+// prefix so it never shadows the magic-link / TOTP routes on /api/auth.
+app.route('/api/auth/google', authGoogle);
 
 // Task #50 — 24h cool-off middleware. Blocks the listed sensitive
 // surfaces while users.recovery_cooling_off_until is in the future

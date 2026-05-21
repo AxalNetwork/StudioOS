@@ -13,12 +13,69 @@ import { api } from '../lib/api';
 // fails closed in production when the secret is unset.
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
+// Task #51 — "Continue with Google" error → toast copy. Mirrors the codes
+// raised by routes/auth_google.ts::callbackError() so the user gets a
+// human-readable explanation when the callback couldn't sign them in.
+const GOOGLE_ERROR_COPY = {
+  not_configured: 'Google sign-in is not enabled on this environment.',
+  cancelled: 'Google sign-in cancelled.',
+  provider_error: 'Google sign-in failed. Please try again.',
+  missing_code: 'Google sign-in failed. Please try again.',
+  bad_state: 'Sign-in link expired. Please try again.',
+  exchange_failed: 'Could not verify your Google account. Please try again.',
+  email_unverified_at_google: 'Your Google email is not verified. Verify it with Google, then retry.',
+  link_blocked_unverified: 'An Axal account exists for that email but the address is unverified. Sign in with a magic link first to verify, then link Google in Settings → Security.',
+  account_inactive: 'Your Axal account is inactive. Contact support.',
+  internal_error: 'Something went wrong on our side. Please try again.',
+};
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [googleAvailable, setGoogleAvailable] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+
+  // Discover whether the worker has Google OAuth configured; hide the
+  // button otherwise so we don't show users a control that returns 503.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await api.googleStartUrl({ action: 'signin' });
+        if (!cancelled) setGoogleAvailable(true);
+      } catch {
+        if (!cancelled) setGoogleAvailable(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // One-shot toast for any error the callback bounced us back with.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('google_error');
+    if (code) {
+      setError(GOOGLE_ERROR_COPY[code] || 'Google sign-in failed.');
+      const url = new URL(window.location.href);
+      url.searchParams.delete('google_error');
+      window.history.replaceState({}, '', url.pathname + (url.search ? `?${url.searchParams}` : ''));
+    }
+  }, []);
+
+  const continueWithGoogle = async () => {
+    setGoogleBusy(true); setError('');
+    try {
+      const { url } = await api.googleStartUrl({ action: 'signin' });
+      if (!url) throw new Error('No redirect URL returned.');
+      window.location.href = url;
+    } catch (e) {
+      setError(e?.message || 'Google sign-in unavailable.');
+      setGoogleBusy(false);
+    }
+  };
 
   // ---- Turnstile widget lifecycle (mirrors RegisterPage) ----
   const turnstileRef = useRef(null);
@@ -177,6 +234,33 @@ export default function LoginPage() {
               className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white flex items-center justify-center gap-2">
               {loading ? 'Signing in…' : <>Sign in <LogIn size={14} /></>}
             </button>
+
+            {googleAvailable && (
+              <>
+                <div className="flex items-center gap-3 my-1">
+                  <div className="flex-1 h-px bg-gray-200" />
+                  <span className="text-[10px] uppercase tracking-wider text-gray-500">or</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+                <button
+                  type="button"
+                  onClick={continueWithGoogle}
+                  disabled={googleBusy}
+                  className="w-full bg-white hover:bg-gray-50 border border-gray-300 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-gray-700 flex items-center justify-center gap-2"
+                >
+                  <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+                    <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+                    <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" />
+                    <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.2-8l-6.6 5.1C9.6 39.6 16.2 44 24 44z" />
+                    <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.7-4.9 6.7-14.8 0-1.3-.1-2.4-.4-3.5z" />
+                  </svg>
+                  {googleBusy ? 'Redirecting…' : 'Continue with Google'}
+                </button>
+                <p className="text-[10px] text-gray-500 text-center">
+                  Google is one factor — sensitive actions still ask for your authenticator.
+                </p>
+              </>
+            )}
 
             {showDemoQuickLogin && (
               <div className="pt-2 border-t border-gray-200">

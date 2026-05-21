@@ -182,6 +182,19 @@ export const api = {
   smsVerifyChallenge: (email, session_info, code) =>
     request('/auth/sms/verify-challenge', { method: 'POST', body: JSON.stringify({ email, session_info, code }) }),
   getMe: () => request('/auth/me'),
+  // Task #51 — "Continue with Google" sign-in. /auth/google/start returns
+  // {url} when called with Accept: application/json so the SPA can do a
+  // top-level navigation (window.location.href = url). 503 means the
+  // env vars GOOGLE_AUTH_CLIENT_ID/SECRET aren't set — the buttons hide.
+  googleStartUrl: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.action) qs.set('action', params.action);
+    if (params.redirect) qs.set('redirect', params.redirect);
+    const q = qs.toString();
+    return request(`/auth/google/start${q ? `?${q}` : ''}`, { headers: { accept: 'application/json' } });
+  },
+  getConnectedAccounts: () => request('/settings/connected-accounts'),
+  unlinkGoogle: () => request('/settings/connected-accounts/google/unlink', { method: 'POST' }),
   // Task #7 (IG) — Cmd+K + Help widget + Customer chat.
   getRecentActivity: (limit = 20) => request(`/activity/recent?limit=${encodeURIComponent(limit)}`),
   getCustomerChatThread: () => request('/customer-chat/thread'),

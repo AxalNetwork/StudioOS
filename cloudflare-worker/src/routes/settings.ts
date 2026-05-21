@@ -1433,6 +1433,84 @@ settings.get('/integrations', async (c) => {
   });
 });
 
+// --- Task #51 — Connected sign-in accounts (Google) ------------------------
+// Sits next to /settings/integrations but is conceptually separate: that
+// route covers Calendar/Mail/Slack OAuth links (productivity), this one
+// covers identity providers that can SIGN IN. The Settings → Security
+// panel renders it inline so the user sees "Google sign-in: linked /
+// not linked" alongside their TOTP + SMS + recovery state.
+//
+// The unlink path enforces a no-orphan guard: we refuse to unlink the
+// last sign-in path. "Sign-in paths" here means anything that lets the
+// user authenticate without an admin-resolved recovery flow — TOTP,
+// passkey (future), or magic-link to a verified email. Without that
+// guard a user could lock themselves out by unlinking Google from an
+// account that has no other factor configured.
+settings.get('/connected-accounts', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT google_sub, email_verified FROM users WHERE id = ${user.id}` as any[];
+  await sql.end();
+  const row = rows[0] || {};
+  const factors = await getUserFactors(c.env, user.id);
+  const totpConfigured = await hasTotpConfigured(c.env, user.id);
+  const smsRow = await loadSms(c.env, user.id);
+  const emailVerified = !!row.email_verified;
+  // A user can safely unlink Google iff at least one OTHER sign-in path
+  // remains. Magic link counts only when the email is verified.
+  const otherSignInPathRemaining = totpConfigured || !!smsRow || emailVerified;
+  return c.json({
+    accounts: [
+      {
+        provider: 'google',
+        connected: !!row.google_sub,
+        unlinkable: !!row.google_sub && otherSignInPathRemaining,
+        unlink_blocked_reason: row.google_sub && !otherSignInPathRemaining
+          ? 'last_sign_in_path'
+          : null,
+      },
+    ],
+    available: {
+      configured: !!(c.env.GOOGLE_AUTH_CLIENT_ID && c.env.GOOGLE_AUTH_CLIENT_SECRET),
+    },
+    factors,
+  });
+});
+
+settings.post('/connected-accounts/google/unlink', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  try {
+    const rows = await sql`SELECT google_sub, email_verified FROM users WHERE id = ${user.id}` as any[];
+    const row = rows[0];
+    if (!row?.google_sub) {
+      return c.json({ error: 'No Google account linked.' }, 400);
+    }
+    const totpConfigured = await hasTotpConfigured(c.env, user.id);
+    const smsRow = await loadSms(c.env, user.id);
+    const otherSignInPathRemaining = totpConfigured || !!smsRow || !!row.email_verified;
+    if (!otherSignInPathRemaining) {
+      // No-orphan guard. Fail-closed: refuse to leave the account with
+      // zero sign-in paths.
+      return c.json({
+        error: 'Set up TOTP, SMS, or verify your email before unlinking Google — it is currently your only sign-in path.',
+        code: 'last_sign_in_path',
+      }, 409);
+    }
+    await sql`UPDATE users SET google_sub = NULL WHERE id = ${user.id}`;
+    const eh = await hashEmail(user.email);
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+              VALUES ('google_account_unlinked', 'user unlinked Google sign-in', ${eh}, ${user.id})`;
+    return c.json({ ok: true });
+  } catch (e: any) {
+    return c.json({ error: e?.message || 'Unlink failed' }, 500);
+  } finally {
+    try { await sql.end(); } catch {}
+  }
+});
+
 // --- Developer sub-route (admin only): feature flag toggles + raw user object
 settings.get('/developer', async (c) => {
   await ensureUserSettingsTable(c.env);

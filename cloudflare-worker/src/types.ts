@@ -32,6 +32,16 @@ export interface Env {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   GOOGLE_CALENDAR_REDIRECT_URI?: string;
+  // Task #51 — "Continue with Google" sign-in / sign-up. SEPARATE OAuth
+  // client from GOOGLE_CLIENT_ID/SECRET (which power Google Calendar +
+  // Mail) because the Calendar client uses incremental-auth scopes for
+  // long-lived refresh tokens, whereas the auth client only ever asks
+  // for `openid email profile` and never stores a refresh token. Mixing
+  // the two would forces the wrong scopes onto sign-in users. When
+  // unset, /api/auth/google/start returns 503 and the SPA hides the
+  // "Continue with Google" buttons.
+  GOOGLE_AUTH_CLIENT_ID?: string;
+  GOOGLE_AUTH_CLIENT_SECRET?: string;
   MICROSOFT_CLIENT_ID?: string;
   MICROSOFT_CLIENT_SECRET?: string;
   MICROSOFT_TENANT_ID?: string;
