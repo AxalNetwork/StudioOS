@@ -170,12 +170,15 @@ async function getFreshAccessToken(env: Env, account: any): Promise<string> {
   const exp = account.expires_at ? Date.parse(account.expires_at) : 0;
   const needRefresh = !exp || exp - Date.now() < 60_000;
   if (!needRefresh) {
-    return await decryptString(env, account.access_token_ct);
+    const at = await decryptString(env, account.access_token_ct);
+    if (!at) throw new XError('x_account_not_linked', 'Stored access token unreadable. Re-authorise the account.');
+    return at;
   }
   if (!account.refresh_token_ct) {
     throw new XError('x_refresh_missing', 'Access token expired and no refresh token stored. Re-authorise the account.');
   }
   const rt = await decryptString(env, account.refresh_token_ct);
+  if (!rt) throw new XError('x_refresh_missing', 'Stored refresh token unreadable. Re-authorise the account.');
   const fresh = await refreshAccessToken(env, rt);
   const newAtCt = await encryptString(env, fresh.access_token);
   const newRtCt = fresh.refresh_token ? await encryptString(env, fresh.refresh_token) : account.refresh_token_ct;
@@ -197,17 +200,48 @@ function isoDay(d = new Date()): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Read sent-today via the source-of-truth D1 query (atomic + consistent).
+ * KV is only used as a non-authoritative cache hint for fast UI reads.
+ */
 async function readSentToday(env: Env, accountId: number): Promise<number> {
   try {
-    const v = await env.RATE_LIMITS.get(quotaKey(accountId, isoDay()));
-    return Number(v || 0);
+    const row: any = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM x_posts
+        WHERE account_id = ? AND status = 'sent'
+          AND date(sent_at) = date('now')`,
+    ).bind(accountId).first();
+    return Number(row?.n || 0);
+  } catch { return 0; }
+}
+
+/**
+ * Atomic reservation count: sent-today PLUS every row currently in 'sending'
+ * for this account. Because `/send` CAS-flips head + children to 'sending'
+ * BEFORE the cap check, two concurrent thread sends on the same account
+ * cannot both pass the check — the second one sees the first one's 'sending'
+ * rows and gets bounced.
+ */
+async function reservedTodayWithInflight(env: Env, accountId: number): Promise<number> {
+  try {
+    const row: any = await env.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM x_posts
+            WHERE account_id = ? AND status = 'sent'
+              AND date(sent_at) = date('now')) +
+         (SELECT COUNT(*) FROM x_posts
+            WHERE account_id = ? AND status = 'sending') AS n`,
+    ).bind(accountId, accountId).first();
+    return Number(row?.n || 0);
   } catch { return 0; }
 }
 
 async function bumpSentToday(env: Env, accountId: number, by = 1) {
+  // Non-authoritative cache for fast reads on the Accounts tab. Real cap
+  // accounting lives in D1 via reservedTodayWithInflight() above.
   try {
-    const n = (await readSentToday(env, accountId)) + by;
-    await env.RATE_LIMITS.put(quotaKey(accountId, isoDay()), String(n), { expirationTtl: 60 * 60 * 36 });
+    const cur = Number((await env.RATE_LIMITS.get(quotaKey(accountId, isoDay()))) || 0);
+    await env.RATE_LIMITS.put(quotaKey(accountId, isoDay()), String(cur + by), { expirationTtl: 60 * 60 * 36 });
   } catch (e) {
     console.warn('[admin_x] quota bump failed', (e as Error).message);
   }
@@ -370,12 +404,24 @@ r.get('/oauth/callback', async (c) => {
   const land = (q: string) => Response.redirect(`${appBase(c.env)}/admin/x?${q}`, 302);
   if (err) return land(`x_oauth_error=${encodeURIComponent(err)}`);
   if (!code || !state) return land('x_oauth_error=missing_code');
+  // CSRF: the callback MUST be hit by the same admin session that started the
+  // flow. Without this check, an attacker who tricked an admin into clicking a
+  // crafted `/oauth/callback?code=…&state=…` URL (where `state` was minted from
+  // the attacker's own /oauth/start) could bind the attacker's X account to
+  // ours. requireAdmin throws on no-auth / non-admin, which we map to a
+  // user-facing redirect rather than letting the global 401 page swallow it.
+  let admin: { id: number } | null = null;
+  try { admin = await requireAdmin(c); } catch { return land('x_oauth_error=admin_required'); }
   let bound: { verifier?: string; account_id?: number; admin_id?: number } | null = null;
   try {
     const raw = await c.env.TOKENS.get(`xstate:${state}`);
     bound = raw ? JSON.parse(raw) : null;
   } catch {}
   if (!bound?.verifier || !bound.account_id) return land('x_oauth_error=bad_state');
+  if (bound.admin_id && bound.admin_id !== admin.id) {
+    try { await c.env.TOKENS.delete(`xstate:${state}`); } catch {}
+    return land('x_oauth_error=state_admin_mismatch');
+  }
   try { await c.env.TOKENS.delete(`xstate:${state}`); } catch {}
 
   try {
@@ -667,15 +713,9 @@ r.post('/posts/:id/send', async (c) => {
     return c.json({ error: 'cannot_send_thread_child_directly', head_id: post.thread_continuation_of }, 400);
   }
 
-  // Daily cap check BEFORE compare-and-set so cap rejections leave the
-  // draft editable.
-  const used = await readSentToday(c.env, post.account_id);
-  const cap = dailyCap(c.env);
-  if (used >= cap) {
-    return c.json({ error: 'daily_cap_reached', used, cap }, 429);
-  }
-
-  // Compare-and-set: atomically transition draft|approved|scheduled|failed -> sending
+  // Compare-and-set: atomically transition the head row draft|approved|scheduled|failed -> sending.
+  // We CAS BEFORE the cap check so the head's own reservation is visible to
+  // any concurrent /send racing the same account (see reservedTodayWithInflight).
   const claim = await c.env.DB.prepare(
     `UPDATE x_posts SET status = 'sending', updated_at = datetime('now')
        WHERE id = ? AND status IN ('draft', 'approved', 'scheduled', 'failed')`,
@@ -684,17 +724,43 @@ r.post('/posts/:id/send', async (c) => {
     return c.json({ error: 'already_sending_or_sent' }, 409);
   }
 
+  // Reserve every thread child to 'sending' as well so the cap check sees
+  // the full thread's reservation footprint atomically. Children that have
+  // already been sent stay 'sent' and are skipped at send time.
+  await c.env.DB.prepare(
+    `UPDATE x_posts SET status = 'sending', updated_at = datetime('now')
+       WHERE thread_continuation_of = ?
+         AND status IN ('draft', 'approved', 'scheduled', 'failed')`,
+  ).bind(id).run();
+
   const reqBody: any = await c.req.json().catch(() => ({}));
   const overrideReason = reqBody.override_reason ? String(reqBody.override_reason).trim() : null;
 
+  // Release helper — flips the head AND any children we reserved back to a
+  // recoverable state. Idempotent: only touches rows we left in 'sending'.
   const releaseClaim = async (next: 'draft' | 'failed' = 'draft', errMsg?: string) => {
     try {
       await c.env.DB.prepare(
         `UPDATE x_posts SET status = ?, send_error = ?, updated_at = datetime('now')
            WHERE id = ? AND status = 'sending'`,
       ).bind(next, errMsg ? errMsg.slice(0, 500) : null, id).run();
+      await c.env.DB.prepare(
+        `UPDATE x_posts SET status = ?, send_error = ?, updated_at = datetime('now')
+           WHERE thread_continuation_of = ? AND status = 'sending'`,
+      ).bind(next, errMsg ? errMsg.slice(0, 500) : null, id).run();
     } catch {}
   };
+
+  // Atomic cap enforcement: with head + children now reserved in 'sending',
+  // count sent-today + every in-flight 'sending' row for this account. Two
+  // concurrent sends racing the same account both reach this point, but each
+  // sees the other's reservations, so only the first one can fit under cap.
+  const used = await reservedTodayWithInflight(c.env, post.account_id);
+  const cap = dailyCap(c.env);
+  if (used > cap) {
+    await releaseClaim('draft');
+    return c.json({ error: 'daily_cap_reached', used, cap }, 429);
+  }
 
   // PII linter — concatenate head + every child of the thread so a leak
   // hidden in tweet 3 still blocks the whole thread.

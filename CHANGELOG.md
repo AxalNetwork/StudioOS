@@ -1,6 +1,66 @@
 # Changelog
 
 
+## Task #4 — Admin X (Twitter) posts + aggregator
+
+Twin of Task #3 (Telegram). Admins link one or more X accounts via OAuth 2.0
+PKCE, compose tweets / threads in a 280-char composer (live counter, X-style
+preview, media + alt-text via Workers AI LLaVA), and broadcast through the
+same PII-redaction gate as Telegram (`telegramRedactCheck.lintForSend` with
+`audience='public'` — the strictest setting). Per-day cap is 20 sends per
+account per day (KV `x_quota:{account_id}:{yyyy-mm-dd}`, TTL 36h, override
+via `X_DAILY_CAP`). Threads send head-first, then children anchor via
+`thread_continuation_of`; partial failures are recorded so a half-sent thread
+can be inspected. Aggregator reuses the six canonical audiences from Task #3
+and appends hashtags, persisting head + child rows.
+
+**Schema (`cloudflare-worker/sql/migrations/068_x_twitter.sql` — pending apply)**
+- `x_accounts` (handle, x_user_id UNIQUE, scopes, access_token_ct,
+  refresh_token_ct, expires_at, status). Tokens are AES-GCM via `cryptoBox`.
+- `x_posts` (account_id, status `draft|approved|scheduled|sent|failed|retracted`,
+  body, media_keys JSON, thread_continuation_of, scheduled_at, sent_at,
+  remote_tweet_id, override_reason, override_findings, created_by).
+- Worker carries `ensureXSchema()` lazy bootstrap (same pattern as
+  `ensureTelegramSchema` / `ensureNewsSchema`), so the tables auto-create on
+  first hit if the migration hasn't been applied yet.
+
+**Worker routes (`/api/admin/x`, mounted BEFORE `/api/admin` catch-all)**
+- Accounts: `GET /accounts`, `POST /accounts`, `DELETE /accounts/:id`,
+  `POST /accounts/:id/test` (GET `/users/me` round-trip).
+- OAuth: `GET /oauth/start?account_id=` (PKCE, KV `xstate:{state}` TTL 10m),
+  `GET /oauth/callback` (redirects to `/admin/x?x_oauth_linked|error=`).
+- Posts: list/create/update/delete drafts, `/lint`, `/approve`, `/schedule`,
+  `/send` (daily-cap compare-and-set + head→children + PII override path
+  requiring `override_reason ≥8 chars`), `/retract` (X API DELETE).
+- Media: `POST /posts/:id/media` (R2 `x/{account_id}/{post_id}/{uuid}.{ext}`,
+  magic-byte sniff, ≤5 MB, ≤4 per tweet), `POST /posts/:id/alt-text`
+  (Workers AI `@cf/llava-hf/llava-1.5-7b-hf`).
+- Aggregator: `POST /aggregator/run` (6 audiences, hashtag append, persists
+  head + child rows; never auto-sends).
+
+**Frontend (`/admin/x`)**
+- 5 tabs: Accounts / Compose / Drafts / History / Aggregator.
+- Composer: live 280-char counter, thread mode (auto-split via
+  `splitIntoThread`), media uploader, alt-text generator, override modal,
+  X-style preview pane.
+- Surfaces `?x_oauth_linked` query param as a success toast after callback.
+
+**Envs / secrets**
+- `X_CLIENT_ID`, `X_CLIENT_SECRET`, `X_BEARER_TOKEN` — Worker secrets only
+  (push via `wrangler secret put`, never `.replit`).
+- `X_DAILY_CAP` — optional override (default 20). When OAuth secrets are
+  unset, all send paths return 503 `{code:'x_config_missing'}`; draft +
+  linter still work.
+
+**Reuses**
+- `telegramRedactCheck.ts` (Task #3) — no duplication; X is always public so
+  callers pass `audience='public'` unconditionally.
+- `cryptoBox` AES-GCM at-rest encryption (same 100k PBKDF2 + 200k legacy
+  fallback as Telegram and the calendar tokens).
+- `hashEmail` for `admin_audit_log.actor` (`x_account_*`, `x_post_*`,
+  `x_pii_override`, `x_post_retracted`, `x_aggregator_run`).
+
+
 ## Task #2 — News with author proposals + admin review queue
 
 Public `/news` reader (Jekyll-side, separate repo — out of scope here)
