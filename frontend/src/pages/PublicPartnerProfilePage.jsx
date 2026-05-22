@@ -4,6 +4,8 @@ import {
   ArrowLeft, Star, ShieldCheck, Clock, Globe, Sparkles, CheckCircle2, Calendar,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import PublicNav from '../components/PublicNav';
+import PublicFooter from '../components/PublicFooter';
 
 // Task #3 — Calendly inline CTA. Public read-only lookup; renders only
 // when the partner has connected Calendly + configured a booking URL.
@@ -66,19 +68,16 @@ export default function PublicPartnerProfilePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <Link to="/directory" className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
-            <ArrowLeft size={16} /> Back to directory
-          </Link>
-          <div className="flex items-center gap-3 text-sm">
-            <Link to="/login" className="text-gray-600 hover:text-gray-900">Sign in</Link>
-            <Link to="/register" className="rounded-lg bg-violet-600 px-3 py-1.5 text-white hover:bg-violet-700">Get Started</Link>
-          </div>
-        </div>
-      </header>
+      <PublicNav />
 
-      <main className="mx-auto max-w-5xl px-6 py-10">
+      <main className="mx-auto max-w-5xl px-6 pt-32 pb-10">
+        <Link
+          to="/directory"
+          className="mb-6 inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+        >
+          <ArrowLeft size={16} /> Back to directory
+        </Link>
+
         {loading && <p className="text-sm text-gray-500">Loading…</p>}
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-6">
@@ -211,6 +210,8 @@ export default function PublicPartnerProfilePage() {
           </>
         )}
       </main>
+
+      <PublicFooter />
     </div>
   );
 }

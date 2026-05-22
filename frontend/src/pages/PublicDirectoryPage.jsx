@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Search, Star, ShieldCheck, Clock, Sparkles, ArrowLeft, Filter, X,
+  Search, Star, ShieldCheck, Clock, Sparkles, Filter, X,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import PublicNav from '../components/PublicNav';
+import PublicFooter from '../components/PublicFooter';
 
 const CATEGORIES = ['legal', 'accounting', 'design', 'recruiting', 'fractional_cfo', 'gtm', 'engineering', 'marketing'];
 const CAPACITY = ['available', 'limited', 'unavailable'];
@@ -118,19 +120,9 @@ export default function PublicDirectoryPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link to="/" className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
-            <ArrowLeft size={16} /> Back to Axal
-          </Link>
-          <div className="flex items-center gap-3 text-sm">
-            <Link to="/login" className="text-gray-600 hover:text-gray-900">Sign in</Link>
-            <Link to="/register" className="rounded-lg bg-violet-600 px-3 py-1.5 text-white hover:bg-violet-700">Get Started</Link>
-          </div>
-        </div>
-      </header>
+      <PublicNav />
 
-      <section className="mx-auto max-w-6xl px-6 py-10">
+      <section className="mx-auto max-w-6xl px-6 pt-32 pb-10">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Service Provider Directory</h1>
           <p className="mt-1 text-gray-600">Browse vetted partners — ranked by completed engagements, ratings, response time and KYB status.</p>
@@ -233,6 +225,8 @@ export default function PublicDirectoryPage() {
           </>
         )}
       </section>
+
+      <PublicFooter />
     </div>
   );
 }
