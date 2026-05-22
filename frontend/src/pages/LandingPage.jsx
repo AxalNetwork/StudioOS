@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Zap, Users, Banknote, GitBranch, Radar, Scale,
+  Zap, Users, Banknote, GitBranch, Scale, Globe,
   Handshake, Rocket, ArrowRight, ChevronRight,
-  Search, ClipboardCheck, Hammer, Sparkles,
+  Hammer, Sparkles, GraduationCap, HeartHandshake,
+  ShieldCheck, BadgeCheck, LockKeyhole, Cloud, Cpu, Archive,
+  UserPlus,
 } from 'lucide-react';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
@@ -12,22 +14,23 @@ import { NETWORK_LAYERS } from '../brand/gvpn';
 const THESIS_PILLS = ['AI', 'Blockchain', 'Quantum', 'Digital Infrastructure', 'Frontier Software'];
 
 const LAYER_ICONS = {
-  partners: Users,
+  trust: ShieldCheck,
+  build: Hammer,
+  validate_grow: Sparkles,
   capital: Banknote,
-  deals: GitBranch,
-  intelligence: Radar,
   legal: Scale,
+  network: Globe,
 };
 
 const LANES = [
   {
     id: 'partner',
-    title: 'For Partners & Operators',
+    title: 'For Partners',
     bullets: [
-      'Weighted community voting on every deal (your vote counts 2x)',
-      'Referral codes + revenue share on closed deals',
-      'Partner directory + integrations marketplace',
-      'Direct line into deal flow before public announcement',
+      'Source thesis-aligned companies',
+      'Monetise services with portfolio companies',
+      'Co-invest alongside the network',
+      'KYB, conflicts, and contractual scaffolding handled',
     ],
     cta: 'Apply as Partner',
     href: '/register?lane=partner',
@@ -37,12 +40,12 @@ const LANES = [
   },
   {
     id: 'lp',
-    title: 'For LPs & Funds',
+    title: 'For Capital',
     bullets: [
-      'Track commitments, calls, distributions in one ledger',
-      'Auto-generated LPAs (AI-drafted, human-reviewed)',
-      'TVPI / DPI charts per fund vintage',
-      'Secondary marketplace for early liquidity',
+      'Disciplined, evidence-backed deal flow',
+      'Founder numbers verified via Stripe + Plaid',
+      'Sanctions-screened parties on every deal',
+      'One ledger for commitments, calls, distributions',
     ],
     cta: 'Open LP Account',
     href: '/register?lane=lp',
@@ -54,10 +57,10 @@ const LANES = [
     id: 'founder',
     title: 'For Founders',
     bullets: [
-      'Get scored within 72 hours (100-point diligence)',
-      'AI deal memo generated automatically',
-      'If selected, enter Spin-Out Lab — funded in 30 days',
-      'Lifetime founder portal: legal, capital, advisory',
+      '30-day Spin-Out Lab to incorporate from an idea',
+      'Pitch deck → cap table → fundraise for existing companies',
+      'Personal Advisor + mentor track + investor exposure',
+      'Lifetime alumni community',
     ],
     cta: 'Submit Your Pitch',
     href: '/register?lane=founder',
@@ -65,23 +68,90 @@ const LANES = [
     tint: 'bg-indigo-50/40 border-indigo-200',
     icon: Rocket,
   },
+  {
+    id: 'mentor',
+    title: 'For Mentors',
+    bullets: [
+      'Operators sharing time on their schedule',
+      'Office Hours and one-off mentor sessions',
+      'Advisor grants via the FAST template',
+      'Pick the sectors and stages you care about',
+    ],
+    cta: 'Become a Mentor',
+    href: '/register?lane=mentor',
+    btn: 'bg-teal-600 hover:bg-teal-700',
+    tint: 'bg-teal-50/40 border-teal-200',
+    icon: GraduationCap,
+  },
+  {
+    id: 'coach',
+    title: 'For Coaches',
+    bullets: [
+      'Executive, performance, and wellbeing coaching',
+      'Founders match by category + rating + availability',
+      'Booking, scheduling, and payments handled',
+      'Build a reputation inside a vetted founder pool',
+    ],
+    cta: 'Join as Coach',
+    href: '/register?lane=coach',
+    btn: 'bg-rose-600 hover:bg-rose-700',
+    tint: 'bg-rose-50/40 border-rose-200',
+    icon: HeartHandshake,
+  },
 ];
 
 const HOW_IT_WORKS = [
-  { week: 'Step 1', title: 'Sourcing', icon: Search, desc: 'Partners refer founders and deals through warm channels and shared diligence packs.' },
-  { week: 'Step 2', title: 'Scoring', icon: ClipboardCheck, desc: 'A 100-point engine plus AI memo turns intake into a decision in 72 hours.' },
-  { week: 'Step 3', title: 'Capital', icon: Banknote, desc: 'LPs commit through the Capital Lane; capital calls and distributions live in one ledger.' },
-  { week: 'Step 4', title: 'Build', icon: Hammer, desc: 'Selected founders enter Spin-Out Lab — incorporation, SAFE, advisor network in 30 days.' },
+  {
+    week: 'Step 1',
+    title: 'Join the lane that fits',
+    icon: UserPlus,
+    desc: 'Founder, investor, partner, mentor, or coach — pick the door that matches what you do.',
+  },
+  {
+    week: 'Step 2',
+    title: 'The platform verifies you',
+    icon: BadgeCheck,
+    desc: 'KYC, KYB, accreditation, and NDAs only where the activity actually requires it.',
+  },
+  {
+    week: 'Step 3',
+    title: 'Unlock progressively',
+    icon: LockKeyhole,
+    desc: 'Introductions and deal data open up gated by signed pairwise NDAs and evidence-backed scoring.',
+  },
 ];
 
 const PLATFORM_FEATURES = [
-  { icon: Users, title: 'Partner Matchmaking', desc: 'AI-powered matching with referral tracking and deal syndication.', to: '/matches' },
-  { icon: Banknote, title: 'Capital & LP Portal', desc: 'Capital calls, LP ledger, TVPI/DPI per vintage, distributions.', to: '/funds' },
-  { icon: GitBranch, title: 'Deal Flow', desc: 'Pipeline, scoring engine, AI memos, real-time pipeline updates.', to: '/deals' },
-  { icon: Radar, title: 'Market Intelligence', desc: 'Real-time sector signals, competitive data, semantic search.', to: '/market-intel' },
-  { icon: Scale, title: 'Legal Engine', desc: 'Auto incorporation, SAFE agreements, equity splits, IP licensing.', to: '/legal' },
-  { icon: Sparkles, title: 'AI Advisory', desc: 'Strategy, GTM, fundraising advice and financial planning for founders.', to: '/advisory' },
-  { icon: Rocket, title: 'Spin-Out Lab', desc: 'Niche 30-day venture sprint — idea to funded in four weeks.', to: '/spinout-lab' },
+  {
+    icon: Cloud,
+    title: 'Cloudflare-native infrastructure',
+    desc: 'Workers + D1 + R2 + Durable Objects + Vectorize, deployed at the edge.',
+  },
+  {
+    icon: Cpu,
+    title: 'One AI model in production',
+    desc: 'Workers AI — Llama 3.3 70B FP8 — routed through a dedicated AI Gateway slug.',
+  },
+  {
+    icon: Archive,
+    title: '7-year encrypted audit retention',
+    desc: 'Every privileged action is logged and persisted to R2 with at-rest encryption.',
+  },
+  {
+    icon: GitBranch,
+    title: 'GitHub Enterprise + supply-chain checks',
+    desc: 'CodeQL, Dependabot, gitleaks, and SAML SSO on every commit and review.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Cloudflare Access on admin paths',
+    desc: 'Identity-aware proxy in front of every admin surface — no public attack surface.',
+  },
+  {
+    icon: LockKeyhole,
+    title: 'Column-level AES-GCM on PII',
+    desc: 'Sensitive fields encrypted at rest with a rotated, per-isolate-cached key.',
+  },
 ];
 
 const FALLBACK_STATS = { partners: 200, funds: 4, deals_scored: 1200, spinouts: 38 };
@@ -168,8 +238,8 @@ export default function LandingPage() {
               <br />globally.
             </h1>
             <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto mb-8 leading-relaxed">
-              One network. Three lanes — partners, capital, founders. Built on a 7-engine venture OS,
-              with <span className="text-violet-700 font-medium">Spin-Out Lab</span> as our niche 30-day sprint.
+              One network. Five lanes — partners, capital, founders, mentors, coaches. Built on a six-layer
+              venture OS, with <span className="text-violet-700 font-medium">Spin-Out Lab</span> as our niche 30-day sprint.
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-2 mb-10">
@@ -211,14 +281,14 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="max-w-3xl mx-auto text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">
-              Five layers, one operating system.
+              Six layers, one operating system.
             </h2>
             <p className="text-gray-600 leading-relaxed">
               Every layer is live in production — built, integrated, and ready for partners,
-              LPs, and founders to use day one.
+              LPs, founders, mentors, and coaches to use day one.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {NETWORK_LAYERS.map((layer) => {
               const Icon = LAYER_ICONS[layer.id] || Users;
               return (
@@ -247,35 +317,32 @@ export default function LandingPage() {
                 Niche product
               </span>
               <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mt-4 mb-4">
-                Spin-Out Lab — a focused 30-day venture sprint.
+                Spin-Out Lab — 30-day venture sprint.
               </h2>
               <div className="space-y-3 text-base text-gray-700 leading-relaxed">
                 <p>
-                  Most of the network is a continuous platform. <strong>Spin-Out Lab</strong> is the opposite —
-                  a finite, 30-day cohort sprint for founders we underwrite from intake to incorporation.
-                </p>
-                <p>
-                  Powered by the same engine: 100-point scoring, AI deal memos, automated diligence,
-                  legal formation across 18 templates, capital match. Squeezed into four weeks.
+                  For founders with an idea and no incorporated company yet. Four weeks. Four milestones.
+                  Ends with a Delaware C-Corp (or alt), cap table, 83(b), pitch deck, and venture-readiness score.
                 </p>
                 <p className="text-sm text-gray-600">
-                  Cohort-based · ~12 sprints/year · Apply once, get scored within 72 hours.
+                  <strong>What founders get:</strong> Personal Advisor, mentor track, investor exposure,
+                  services-for-equity / -fee partners, lifetime alumni community.
                 </p>
               </div>
               <Link
                 to="/spinout-lab"
                 className="inline-flex items-center gap-2 mt-6 bg-violet-600 hover:bg-violet-700 transition-colors px-6 py-3 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20"
               >
-                See the 4-week playbook <ArrowRight size={16} />
+                See the full Lab <ArrowRight size={16} />
               </Link>
             </div>
             <div className="md:col-span-1">
               <ol className="space-y-4">
                 {[
-                  { n: 1, title: 'Diligence & scoring', desc: '100-pt scoring, AI memo, references.' },
-                  { n: 2, title: 'Legal formation', desc: 'Delaware C-Corp via the legal engine.' },
-                  { n: 3, title: 'Capital match', desc: 'LP intros and SAFE generation.' },
-                  { n: 4, title: 'Public launch', desc: 'First capital call + portal handoff.' },
+                  { n: 1, title: 'Idea & Customer', desc: 'Frame the problem, pick the beachhead, validate intent.' },
+                  { n: 2, title: 'Solution & Roadmap', desc: 'Scope the MVP, plan the build, lock the milestones.' },
+                  { n: 3, title: 'Validate & Team', desc: 'Customer evidence, co-founder match, advisor grants.' },
+                  { n: 4, title: 'Incorporate & Capital', desc: 'Delaware C-Corp (or alt), 83(b), cap table, fundraise.' },
                 ].map((w) => (
                   <li key={w.n} className="flex gap-3">
                     <div className="flex-shrink-0 w-7 h-7 rounded-full bg-violet-600 text-white text-xs font-bold flex items-center justify-center">
@@ -298,13 +365,13 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="max-w-2xl mx-auto text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">
-              Three lanes into the network.
+              Five lanes into the network.
             </h2>
             <p className="text-gray-600">
               Pick the door that fits — every lane is a first-class citizen.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             {LANES.map((lane) => {
               const Icon = lane.icon;
               return (
@@ -345,12 +412,12 @@ export default function LandingPage() {
             </div>
             <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">How the network works.</h2>
             <p className="text-gray-600 max-w-xl mx-auto">
-              Not a linear funnel. A loop — every deal feeds the next.
+              Three steps. Join, get verified, unlock progressively.
             </p>
           </div>
-          <div className="grid md:grid-cols-4 gap-4">
+          <div className="grid md:grid-cols-3 gap-4">
             {HOW_IT_WORKS.map((step, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg hover:border-violet-300 transition-all">
+              <div key={i} className="relative bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg hover:border-violet-300 transition-all">
                 <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500 to-violet-600 rounded-t-2xl" />
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs text-gray-500 font-medium">{step.week}</div>
@@ -370,27 +437,24 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">The Platform Underneath</h2>
             <p className="text-gray-600 max-w-xl mx-auto">
-              Seven integrated engines powering the entire venture lifecycle. Spin-Out Lab is one of them.
+              Edge-native infrastructure, one production AI model, and the security posture
+              you'd expect from a venture studio handling real deals.
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {PLATFORM_FEATURES.map((f, i) => (
-              <Link
+              <div
                 key={i}
-                to={f.to}
-                className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all group"
+                className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5"
               >
                 <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
                   <f.icon size={18} className="text-violet-600" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-sm font-semibold mb-1 text-gray-900 flex items-center gap-1.5">
-                    {f.title}
-                    <ChevronRight size={12} className="text-gray-400 group-hover:text-violet-600 group-hover:translate-x-0.5 transition-all" />
-                  </h3>
+                  <h3 className="text-sm font-semibold mb-1 text-gray-900">{f.title}</h3>
                   <p className="text-xs text-gray-600 leading-relaxed">{f.desc}</p>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         </div>
@@ -407,17 +471,17 @@ export default function LandingPage() {
             disciplined deal flow, or a founder going global from day one — start with a 30-second intake.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link
-              to="/register"
+            <a
+              href="https://app.axal.vc/signup"
               className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-7 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/30"
             >
               Get Started <ArrowRight size={16} />
-            </Link>
+            </a>
             <Link
-              to="/login"
+              to="/contact"
               className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium text-white"
             >
-              Sign In
+              Talk to us <ArrowRight size={16} />
             </Link>
           </div>
         </div>
