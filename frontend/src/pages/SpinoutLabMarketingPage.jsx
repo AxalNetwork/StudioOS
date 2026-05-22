@@ -5,29 +5,32 @@ import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
 
 const APPLY_HREF = '/register?lane=founder&product=spinout-lab';
-const CONTACT_HREF = '/contact?topic=spinout';
+// No public /contact route yet — keep the secondary CTA on a guaranteed
+// mailto so cold traffic never lands on a dead page. Swap to /contact
+// once the route ships.
+const CONTACT_HREF = 'mailto:hello@axal.vc?subject=Spin-Out%20Lab';
 
-// Stable feature route map used across the playbook unlocks. When a
-// feature has a real in-app route the bullet renders as a <Link>;
-// otherwise it stays as bold inline text so the deep link never 404s
-// silently. See frontend/src/App.jsx for the source of truth.
+// Stable feature route map used across the playbook unlocks. Every name
+// here resolves to a real route in frontend/src/App.jsx — verified
+// against the source of truth at edit time.
 const FEATURE_LINK = {
   Projects: '/projects',
   'Customer Discovery': '/customer-discovery',
   'Market Intelligence': '/market-intel',
-  Roadmap: '/roadmap',
-  'Pitch Deck Builder': null,
-  'Brand Builder': null,
+  Roadmap: '/build/roadmap',
+  'Pitch Deck Builder': '/build/deck',
+  'Brand Builder': '/build/brand',
   'Diligence & Scoring Engine': '/scoring',
   Mentors: '/mentors',
   'Office Hours': '/office-hours',
   'Co-founder Match': '/cofounder',
   Incorporate: '/incorporate',
-  'Cap Table': null,
+  'Cap Table': '/build/captable',
   'Section 83(b)': '/incorporate/83b',
   'Cofounder Agreement': '/incorporate/cofounder-agreement',
   Capital: '/capital',
   Compliance: '/compliance',
+  KYC: '/kyc',
 };
 
 function FeatureLink({ name }) {
@@ -73,8 +76,9 @@ const PLAYBOOK = [
     title: 'Incorporate & Capital',
     youDo:
       'Incorporate the entity, issue founder stock with vesting, file 83(b), sign cofounder agreement, lock the fundraise ask.',
-    unlocks: ['Incorporate', 'Cap Table', 'Section 83(b)', 'Cofounder Agreement', 'Capital', 'Compliance'],
-    unlocksTail: ', plus LP / partner introductions on Axal\u2019s network.',
+    unlocks: ['Incorporate', 'Cap Table', 'Section 83(b)', 'Cofounder Agreement', 'Capital', 'Compliance', 'KYC'],
+    unlocksTail:
+      ' (KYC is investor-side — your introductions complete it before any wire). Plus LP / partner introductions on Axal\u2019s network.',
     leaveWith:
       'Incorporated entity, signed cap table with vesting, 83(b) filed in window, fundraise plan + ask, three warm investor introductions.',
   },
@@ -228,12 +232,12 @@ export default function SpinoutLabMarketingPage() {
             >
               Start your 30-day Lab <ArrowRight size={16} />
             </Link>
-            <Link
-              to={CONTACT_HREF}
+            <a
+              href={CONTACT_HREF}
               className="inline-flex items-center gap-2 border border-gray-300 hover:border-gray-400 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium text-gray-800"
             >
               Talk to us first
-            </Link>
+            </a>
           </div>
         </div>
       </section>
@@ -453,12 +457,12 @@ export default function SpinoutLabMarketingPage() {
             >
               Start your 30-day Lab <ArrowRight size={16} />
             </Link>
-            <Link
-              to={CONTACT_HREF}
+            <a
+              href={CONTACT_HREF}
               className="inline-flex items-center gap-2 border border-gray-300 hover:border-gray-400 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium text-gray-800"
             >
               Talk to us first
-            </Link>
+            </a>
           </div>
         </div>
       </section>

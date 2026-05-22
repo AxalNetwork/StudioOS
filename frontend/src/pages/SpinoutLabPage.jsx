@@ -133,6 +133,17 @@ const EXPLAINER_CARDS = [
     ),
   },
   {
+    id: 'pricing',
+    title: 'Pricing',
+    body: (
+      <p className="text-sm text-gray-700 leading-relaxed">
+        <span className="font-semibold text-gray-900">Free during the 30-day sprint.</span> After
+        graduation: standard Founder tiers (Free / Growth / Studio). Services partners are
+        separately priced.
+      </p>
+    ),
+  },
+  {
     id: 'faq',
     title: 'FAQ',
     body: (
