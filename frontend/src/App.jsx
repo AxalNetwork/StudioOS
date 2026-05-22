@@ -43,6 +43,11 @@ import AdminTelegram from './pages/admin/AdminTelegram';
 import AdminX from './pages/admin/AdminX';
 import AdminNewsQueue from './pages/admin/AdminNewsQueue';
 import NewsAuthorPage from './pages/NewsAuthorPage';
+// Task #1 — Articles surfaces (public + author + admin queue).
+import ArticlesPage from './pages/ArticlesPage';
+import ArticleReaderPage from './pages/ArticleReaderPage';
+import ArticleAuthorPage from './pages/ArticleAuthorPage';
+import ArticlesQueuePage from './pages/admin/ArticlesQueuePage';
 import AdminPublicationNew from './pages/admin/PublicationNew';
 import AdminPublicationDetail from './pages/admin/PublicationDetail';
 import PublicInsight from './pages/insights/PublicInsight';
@@ -1040,6 +1045,12 @@ function AppInner() {
       <Route path="/admin/x" element={guard(['admin'], <AdminX />)} />
       <Route path="/admin/news" element={guard(['admin'], <AdminNewsQueue />)} />
       <Route path="/news" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <NewsAuthorPage />)} />
+      {/* Task #1 — Articles. Reader pages are public (no guard); author + admin gated. */}
+      <Route path="/articles" element={<ArticlesPage />} />
+      <Route path="/articles/draft" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor', 'coach'], <ArticleAuthorPage />)} />
+      <Route path="/articles/edit/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor', 'coach'], <ArticleAuthorPage />)} />
+      <Route path="/admin/articles" element={guard(['admin'], <ArticlesQueuePage />)} />
+      <Route path="/articles/:slug" element={<ArticleReaderPage />} />
       <Route path="/admin/publications" element={guard(['admin'], <AdminPublications />)} />
       <Route path="/admin/publications/new" element={guard(['admin'], <AdminPublicationNew />)} />
       <Route path="/admin/publications/:id" element={guard(['admin'], <AdminPublicationDetail />)} />

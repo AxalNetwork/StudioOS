@@ -168,3 +168,25 @@ export async function bustEdgeCache(env: Env, slug: string, id: number): Promise
     console.warn('[newsRender] cache bust failed:', (e as Error).message);
   }
 }
+
+// Task #1 — Article cache buster. /api/articles list responses vary by
+// sector/role/tag/search/limit/offset/featured query strings; we can't
+// enumerate every variant, so we delete the canonical list URL plus the
+// slug + cover keys and rely on the next request to repopulate. The list
+// endpoint sets a short s-maxage so cold variants self-heal quickly.
+export async function bustArticleEdgeCache(env: Env, slug: string, id: number, authorUserId?: number): Promise<void> {
+  try {
+    const cache = (caches as any).default;
+    if (!cache) return;
+    const base = env.APP_URL || 'https://axal.vc';
+    await cache.delete(new Request(`${base}/api/articles`));
+    await cache.delete(new Request(`${base}/api/articles?featured=1`));
+    await cache.delete(new Request(`${base}/api/articles/${slug}`));
+    await cache.delete(new Request(`${base}/api/articles/cover/${id}`));
+    if (authorUserId) {
+      await cache.delete(new Request(`${base}/api/articles/by-author/${authorUserId}`));
+    }
+  } catch (e) {
+    console.warn('[newsRender] article cache bust failed:', (e as Error).message);
+  }
+}

@@ -45,6 +45,8 @@ import adminX from './routes/admin_x';
 // Task #2 — News with author proposals + admin queue.
 import newsRoutes from './routes/news';
 import adminNews from './routes/admin_news';
+import articlesRoutes from './routes/articles';
+import adminArticles from './routes/admin_articles';
 import teamPublic from './routes/team_public';
 import partnerOnboarding from './routes/partner_onboarding';
 import partnerPortal from './routes/partner_portal';
@@ -491,6 +493,8 @@ app.route('/api/admin/x', adminX);
 // Task #2 — News admin queue. Mounted BEFORE catch-all /api/admin so the
 // nested /api/admin/news/* routes resolve here.
 app.route('/api/admin/news', adminNews);
+// Task #1 (Articles) — same mount-before-catch-all precedence as News.
+app.route('/api/admin/articles', adminArticles);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);
@@ -590,6 +594,10 @@ app.route('/api/public', teamPublic);
 // Task #2 — Public + author-facing /api/news. Public GETs are CORS-open
 // to axal.vc and edge-cached 60d; author writes self-gate on trust>=70.
 app.route('/api/news', newsRoutes);
+// Task #1 (Articles) — Public + author-facing /api/articles. Shares the
+// articles tables with /api/news; adds role filter, by-author endpoint,
+// and sector taxonomy. Public GETs are CORS-open + edge-cached 60d.
+app.route('/api/articles', articlesRoutes);
 app.route('/api/references', referencesRoutes);
 // Task #1 (AG) — service offerings (founder marketplace) alphabetically
 // after /api/references and before /api/spinout-lab/comarketing.

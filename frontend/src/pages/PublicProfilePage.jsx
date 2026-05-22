@@ -4,8 +4,43 @@ import {
   ArrowLeft, Globe, ShieldCheck, Sparkles,
   Briefcase, Target, Star, Users, DollarSign,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, articles as articlesApi } from '../lib/api';
 import TrustScoreBadge from '../components/TrustScoreBadge';
+
+// Task #1 — Author's published-articles strip. Renders on every public
+// profile (any role); hides itself when the author has nothing live.
+function ArticlesTab({ userId }) {
+  const [items, setItems] = useState(null);
+  useEffect(() => {
+    if (!userId) return undefined;
+    let alive = true;
+    articlesApi.byAuthor(userId, { limit: 12 })
+      .then((r) => { if (alive) setItems(r.items || []); })
+      .catch(() => { if (alive) setItems([]); });
+    return () => { alive = false; };
+  }, [userId]);
+  if (!items || items.length === 0) return null;
+  return (
+    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 className="mb-3 text-base font-semibold text-gray-900">Articles</h2>
+      <ul className="space-y-3">
+        {items.map((a) => (
+          <li key={a.id} className="border-b border-gray-100 pb-3 last:border-0">
+            <Link to={`/articles/${a.slug}`} className="block group">
+              <p className="font-medium text-sm text-gray-900 group-hover:text-violet-700">{a.title}</p>
+              {a.subtitle && <p className="mt-0.5 text-xs text-gray-600 line-clamp-2">{a.subtitle}</p>}
+              <p className="mt-1 text-[11px] text-gray-400">
+                {a.sector ? `${a.sector.replace(/_/g, ' ')} · ` : ''}
+                {a.read_minutes ? `${a.read_minutes} min · ` : ''}
+                {a.published_at ? new Date(a.published_at).toLocaleDateString() : ''}
+              </p>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 // Task #4 (Y-2) — admin / partner / investor viewers see the profile
 // owner's trust score next to their identity badge. Other roles + the
@@ -302,6 +337,7 @@ export default function PublicProfilePage() {
               {role === 'founder'  && <FounderBlock  p={p} />}
               {role === 'investor' && <InvestorBlock p={p} />}
               {role === 'partner'  && <PartnerBlock  p={p} />}
+              {p.user_id && <ArticlesTab userId={p.user_id} />}
             </div>
 
             <p className="mt-8 text-center text-xs text-gray-400">

@@ -200,6 +200,64 @@ function StatsBar() {
   );
 }
 
+function LatestArticles() {
+  const [items, setItems] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    import('../lib/api').then(({ articles }) =>
+      articles.list({ limit: 3 })
+        .then((r) => { if (alive) setItems(r.items || []); })
+        .catch(() => { if (alive) setItems([]); }),
+    );
+    return () => { alive = false; };
+  }, []);
+  if (!items || items.length === 0) return null;
+  return (
+    <section className="py-20 px-6 bg-white">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900">Latest from the network</h2>
+            <p className="mt-2 text-sm text-gray-600">Long-form writing from Axal founders, investors, partners, and the studio.</p>
+          </div>
+          <Link to="/articles" className="hidden sm:inline-flex items-center gap-1 text-sm text-violet-700 hover:text-violet-800 font-medium">
+            All articles <ChevronRight size={14} />
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {items.map((a) => (
+            <Link
+              key={a.id}
+              to={`/articles/${a.slug}`}
+              className="group block rounded-xl border border-gray-200 bg-white overflow-hidden hover:border-violet-400 transition"
+            >
+              {a.cover_url ? (
+                <img src={a.cover_url} alt="" className="w-full aspect-[16/9] object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+              ) : (
+                <div className="w-full aspect-[16/9] bg-gradient-to-br from-violet-100 to-violet-50" />
+              )}
+              <div className="p-4">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-gray-500 mb-2">
+                  {a.sector && <span>{a.sector.replace(/_/g, ' ')}</span>}
+                  {a.read_minutes ? <><span>·</span><span>{a.read_minutes} min</span></> : null}
+                </div>
+                <h3 className="font-semibold text-base text-gray-900 group-hover:text-violet-700 line-clamp-2">{a.title}</h3>
+                {a.subtitle && <p className="mt-1 text-sm text-gray-600 line-clamp-2">{a.subtitle}</p>}
+                <p className="mt-3 text-xs text-gray-500">by {a.author || '—'}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+        <div className="mt-6 text-center sm:hidden">
+          <Link to="/articles" className="inline-flex items-center gap-1 text-sm text-violet-700 hover:text-violet-800 font-medium">
+            All articles <ChevronRight size={14} />
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-white text-gray-900">
@@ -560,6 +618,10 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Task #1 — Latest from the network (3 most recent published articles).
+          Public surface; renders nothing on empty/fetch error so it never breaks the page. */}
+      <LatestArticles />
 
       {/* CTA */}
       <section className="py-20 px-6 bg-gray-900 text-white">
