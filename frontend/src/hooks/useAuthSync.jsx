@@ -91,6 +91,26 @@ export function AuthProvider({ children }) {
       try {
         const me = await api.getMe();
         const stored = safeReadJSON('user', {}) || {};
+        // Task #4 — identity-change purge. If /me returned a different user
+        // than the one we had cached (e.g. someone signed in with Google on
+        // a browser that still had a previous admin's localStorage), wipe
+        // every cross-user crumb: stale Bearer (which auth.ts now ignores
+        // server-side but the SPA would still ship on every fetch),
+        // viewMode (defaults to 'admin' in App.jsx), and any active
+        // impersonation handles. Replace `user` outright rather than merge
+        // so we don't inherit the prior user's role/founder_id/etc.
+        if (stored?.id && me?.id && Number(stored.id) !== Number(me.id)) {
+          try {
+            localStorage.removeItem('token');
+            localStorage.removeItem('viewMode');
+            localStorage.removeItem('realUser');
+            localStorage.removeItem('realToken');
+          } catch { /* quota / disabled storage */ }
+          try { localStorage.setItem('user', JSON.stringify(me)); } catch { /* ignore */ }
+          setUserState(me);
+          lastFetchRef.current = Date.now();
+          return;
+        }
         const merged = { ...stored, ...me };
         try { localStorage.setItem('user', JSON.stringify(merged)); } catch { /* ignore */ }
         setUserState(merged);
@@ -129,6 +149,19 @@ export function AuthProvider({ children }) {
   // above — by the time this effect runs the URL may already be /login.
   useEffect(() => {
     if (postOAuthMarker) {
+      // Task #4 — proactively drop any stale localStorage Bearer + viewMode
+      // BEFORE the first /me probe. The cookie minted server-side by the
+      // Google callback is the canonical session; a stale admin Bearer
+      // sitting in localStorage from a prior browser user must not ride
+      // along on the /me request (auth.ts now also defends against this
+      // server-side, but clearing here means even an outdated worker
+      // build can't leak the wrong account into the SPA).
+      try {
+        localStorage.removeItem('token');
+        localStorage.removeItem('viewMode');
+        localStorage.removeItem('realUser');
+        localStorage.removeItem('realToken');
+      } catch { /* ignore */ }
       refresh({ force: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

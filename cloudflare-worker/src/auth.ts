@@ -116,34 +116,95 @@ export async function decodeJWT(env: Env, token: string): Promise<JWTPayload> {
  * T6 — Read the JWT from either `Authorization: Bearer ...` (legacy / Bearer
  * flow used by impersonation, websocket subprotocols and signed-download
  * URLs) OR the `studioos_auth` httpOnly cookie (cookie flow used by
- * api.js → /api/* calls). Bearer takes precedence so that an admin who is
- * impersonating a user (Bearer token in localStorage) overrides their own
- * still-valid cookie session in the background.
+ * api.js → /api/* calls).
+ *
+ * Task #4 — When BOTH are present we no longer blindly prefer Bearer. A
+ * cross-account session leak was possible: an admin impersonation Bearer
+ * lingering in localStorage would override the fresh cookie minted by
+ * the next user's sign-in, dropping them into the admin's account.
+ * Precedence is now resolved by `pickAuthToken` against the decoded
+ * payloads — Bearer only wins when it is the SAME identity as the
+ * cookie OR a legitimate impersonation Bearer (impersonated_by ===
+ * cookie.user_id). Otherwise the cookie (the freshest sign-in) wins.
  */
-function extractJwt(c: Context<{ Bindings: Env }>): string | null {
+export function extractJwtCandidates(c: Context<{ Bindings: Env }>): { bearer: string | null; cookie: string | null } {
   const authHeader = c.req.header('Authorization');
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.slice(7);
-  }
+  const bearer = (authHeader && authHeader.startsWith('Bearer ')) ? (authHeader.slice(7) || null) : null;
+  let cookie: string | null = null;
   const cookieHeader = c.req.header('Cookie') || '';
-  if (!cookieHeader) return null;
-  for (const part of cookieHeader.split(';')) {
-    const trimmed = part.trim();
-    if (!trimmed) continue;
-    const eq = trimmed.indexOf('=');
-    if (eq === -1) continue;
-    if (trimmed.slice(0, eq) === 'studioos_auth') {
-      return trimmed.slice(eq + 1) || null;
+  if (cookieHeader) {
+    for (const part of cookieHeader.split(';')) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq === -1) continue;
+      if (trimmed.slice(0, eq) === 'studioos_auth') {
+        cookie = trimmed.slice(eq + 1) || null;
+        break;
+      }
     }
   }
+  return { bearer, cookie };
+}
+
+/**
+ * Pure, exported for unit tests. Given decoded Bearer + Cookie payloads
+ * (or nulls when the slot is empty / undecodable), decide which token's
+ * session should authenticate this request.
+ *
+ *   - Cookie only present                       → 'cookie'
+ *   - Bearer only present                       → 'bearer'
+ *   - Both present, same user_id                → 'bearer' (back-compat)
+ *   - Both present, Bearer is admin impersonating cookie.user_id → 'bearer'
+ *   - Both present, identities differ           → 'cookie'  (the fresh sign-in
+ *                                                            always wins over a
+ *                                                            stale Bearer)
+ *   - Neither present                           → null
+ */
+export type TokenChoice = 'bearer' | 'cookie' | null;
+export function pickAuthToken(opts: {
+  bearer: { user_id?: number; impersonated_by?: number } | null;
+  cookie: { user_id?: number } | null;
+}): TokenChoice {
+  const { bearer, cookie } = opts;
+  if (!bearer && !cookie) return null;
+  if (!bearer) return 'cookie';
+  if (!cookie) return 'bearer';
+  if (bearer.impersonated_by && cookie.user_id && Number(bearer.impersonated_by) === Number(cookie.user_id)) {
+    return 'bearer';
+  }
+  if (bearer.user_id && cookie.user_id && Number(bearer.user_id) === Number(cookie.user_id)) {
+    return 'bearer';
+  }
+  return 'cookie';
+}
+
+/**
+ * Select and decode the authenticating JWT for this request, applying the
+ * cross-identity precedence above. Returns null when neither side decodes.
+ * Used by getCurrentUser and requireFactor so both look at the same session.
+ */
+async function selectJwt(c: Context<{ Bindings: Env }>): Promise<{ token: string; payload: JWTPayload } | null> {
+  const { bearer, cookie } = extractJwtCandidates(c);
+  if (!bearer && !cookie) return null;
+  let bP: JWTPayload | null = null;
+  let cP: JWTPayload | null = null;
+  if (bearer) { try { bP = await decodeJWT(c.env, bearer); } catch { bP = null; } }
+  if (cookie) { try { cP = await decodeJWT(c.env, cookie); } catch { cP = null; } }
+  const choice = pickAuthToken({ bearer: bP as any, cookie: cP as any });
+  if (choice === 'bearer' && bearer && bP) return { token: bearer, payload: bP };
+  if (choice === 'cookie' && cookie && cP) return { token: cookie, payload: cP };
+  // Chosen side failed to decode — fall back to the other if it did.
+  if (bearer && bP) return { token: bearer, payload: bP };
+  if (cookie && cP) return { token: cookie, payload: cP };
   return null;
 }
 
 export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<User | null> {
-  const token = extractJwt(c);
-  if (!token) return null;
+  const sel = await selectJwt(c);
+  if (!sel) return null;
   try {
-    const payload = await decodeJWT(c.env, token);
+    const payload = sel.payload;
     const sql = getSQL(c.env);
     const users = await sql`SELECT * FROM users WHERE id = ${payload.user_id}` as unknown as User[];
     await sql.end();
@@ -293,10 +354,11 @@ export async function requireFactor(
   factor: 'totp',
 ): Promise<User> {
   const user = await requireAuth(c);
-  const token = extractJwt(c);
-  if (!token) throw new Error('TOTP required');
-  let jti: string | undefined;
-  try { jti = (await decodeJWT(c.env, token))?.jti as string | undefined; } catch {}
+  // Task #4 — share the same selection logic getCurrentUser used so a stale
+  // cross-identity Bearer can't step up via its own jti.
+  const sel = await selectJwt(c);
+  if (!sel) throw new Error('TOTP required');
+  const jti = sel.payload?.jti as string | undefined;
   if (!jti) throw new Error('TOTP required');
   try {
     const row = await c.env.DB.prepare(
