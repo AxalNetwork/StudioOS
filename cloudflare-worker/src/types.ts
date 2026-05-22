@@ -15,6 +15,19 @@ export interface Env {
   // 503 `{code:'telegram_token_missing'}` — no silent fallback. The
   // schema + admin UI stay fully usable for draft authoring regardless.
   TELEGRAM_BOT_TOKEN?: string;
+  // Task #4 — X (Twitter) admin broadcaster. OAuth 2.0 PKCE client
+  // credentials. Provisioned via
+  //   wrangler secret put X_CLIENT_ID     --env production
+  //   wrangler secret put X_CLIENT_SECRET --env production
+  //   wrangler secret put X_BEARER_TOKEN  --env production  (optional; app-only reads)
+  // When CLIENT_ID/SECRET are unset, all /api/admin/x send paths return
+  // 503 `{code:'x_config_missing'}` and the breaker stays neutral —
+  // draft authoring + linter still work. Per-account daily cap defaults
+  // to 20; override via env var `X_DAILY_CAP`.
+  X_CLIENT_ID?: string;
+  X_CLIENT_SECRET?: string;
+  X_BEARER_TOKEN?: string;
+  X_DAILY_CAP?: string;
   STUDIOOS_ENV?: string;
   // Set by wrangler.toml in production deploys (`ENVIRONMENT = "production"`).
   // Used by the boot guards in auth.ts to decide whether to throw on missing

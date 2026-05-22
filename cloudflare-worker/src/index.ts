@@ -41,6 +41,7 @@ import adminPublications from './routes/admin_publications';
 import adminTeam from './routes/admin_team';
 // Task #3 — Admin Telegram channels + aggregator + post send.
 import adminTelegram from './routes/admin_telegram';
+import adminX from './routes/admin_x';
 import teamPublic from './routes/team_public';
 import partnerOnboarding from './routes/partner_onboarding';
 import partnerPortal from './routes/partner_portal';
@@ -482,6 +483,8 @@ app.route('/api/admin/team', adminTeam);
 // nested `/api/admin/telegram/*` routes resolve here rather than 404ing
 // inside the generic admin router.
 app.route('/api/admin/telegram', adminTelegram);
+// Task #4 — same mount-before-catch-all precedence as Telegram.
+app.route('/api/admin/x', adminX);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);

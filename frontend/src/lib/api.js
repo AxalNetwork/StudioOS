@@ -1939,6 +1939,70 @@ export const adminTelegram = {
     }),
 };
 
+// Task #4 — Admin X (Twitter) accounts + posts + aggregator.
+export const adminX = {
+  // Accounts
+  listAccounts: () => request('/admin/x/accounts'),
+  createAccount: (payload) =>
+    request('/admin/x/accounts', { method: 'POST', body: JSON.stringify(payload) }),
+  updateAccount: (id, patch) =>
+    request(`/admin/x/accounts/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  removeAccount: (id) => request(`/admin/x/accounts/${id}`, { method: 'DELETE' }),
+  testAccount: (id) => request(`/admin/x/accounts/${id}/test`, { method: 'POST', body: '{}' }),
+  oauthStart: (account_id) =>
+    request(`/admin/x/oauth/start?account_id=${encodeURIComponent(account_id)}`),
+  // Posts
+  listPosts: ({ status, account_id, limit = 50, offset = 0 } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    if (account_id) qs.set('account_id', String(account_id));
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    return request(`/admin/x/posts?${qs.toString()}`);
+  },
+  createPost: (payload) =>
+    request('/admin/x/posts', { method: 'POST', body: JSON.stringify(payload) }),
+  updatePost: (id, patch) =>
+    request(`/admin/x/posts/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  removePost: (id) => request(`/admin/x/posts/${id}`, { method: 'DELETE' }),
+  addMedia: (id, data_uri, alt_text) =>
+    request(`/admin/x/posts/${id}/media`, {
+      method: 'POST',
+      body: JSON.stringify(alt_text ? { data_uri, alt_text } : { data_uri }),
+    }),
+  generateAltText: (id, index = 0) =>
+    request(`/admin/x/posts/${id}/alt-text`, {
+      method: 'POST', body: JSON.stringify({ index }),
+    }),
+  lintPost: (id) => request(`/admin/x/posts/${id}/lint`, { method: 'POST', body: '{}' }),
+  approvePost: (id) => request(`/admin/x/posts/${id}/approve`, { method: 'POST', body: '{}' }),
+  sendPost: (id, { override_reason } = {}) =>
+    request(`/admin/x/posts/${id}/send`, {
+      method: 'POST',
+      body: JSON.stringify(override_reason ? { override_reason } : {}),
+    }),
+  schedulePost: (id, scheduled_for) =>
+    request(`/admin/x/posts/${id}/schedule`, {
+      method: 'POST', body: JSON.stringify({ scheduled_for }),
+    }),
+  retractPost: (id, reason) =>
+    request(`/admin/x/posts/${id}/retract`, {
+      method: 'POST', body: JSON.stringify(reason ? { reason } : {}),
+    }),
+  // Aggregator
+  previewAggregator: ({ kind, period_days = 7 } = {}) => {
+    const qs = new URLSearchParams();
+    if (kind) qs.set('kind', kind);
+    qs.set('period_days', String(period_days));
+    return request(`/admin/x/aggregator/preview?${qs.toString()}`);
+  },
+  runAggregator: ({ account_id, period_days = 7 }) =>
+    request('/admin/x/aggregator/run', {
+      method: 'POST',
+      body: JSON.stringify({ account_id, period_days }),
+    }),
+};
+
 // Spin-Out Lab — 4-week guided sprint for pre-incorporation founders.
 // Namespaced separately from `api` to keep the surface small and obvious
 // for the call sites that wire milestone completion in feature pages.

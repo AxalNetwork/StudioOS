@@ -40,6 +40,7 @@ import AdminPartnerInvitations from './pages/admin/PartnerInvitations';
 import AdminPublications from './pages/admin/Publications';
 import AdminTeam from './pages/admin/AdminTeam';
 import AdminTelegram from './pages/admin/AdminTelegram';
+import AdminX from './pages/admin/AdminX';
 import AdminPublicationNew from './pages/admin/PublicationNew';
 import AdminPublicationDetail from './pages/admin/PublicationDetail';
 import PublicInsight from './pages/insights/PublicInsight';
@@ -1037,6 +1038,7 @@ function AppInner() {
       <Route path="/admin/partners" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/team" element={guard(['admin'], <AdminTeam />)} />
       <Route path="/admin/telegram" element={guard(['admin'], <AdminTelegram />)} />
+      <Route path="/admin/x" element={guard(['admin'], <AdminX />)} />
       <Route path="/admin/publications" element={guard(['admin'], <AdminPublications />)} />
       <Route path="/admin/publications/new" element={guard(['admin'], <AdminPublicationNew />)} />
       <Route path="/admin/publications/:id" element={guard(['admin'], <AdminPublicationDetail />)} />
