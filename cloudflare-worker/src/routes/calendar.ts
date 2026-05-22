@@ -162,6 +162,7 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
   }
   const kinds = kindsQ ? kindsQ.split(',').map(s => s.trim()).filter(Boolean) : undefined;
   const events = await fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds);
+  await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   const tok = (await sql`SELECT 1 FROM google_oauth_tokens WHERE user_id = ${user.id}` as any[])[0];
   return c.json({
@@ -523,11 +524,83 @@ function successRedirect(env: Env, provider: string): Response {
   return Response.redirect(`${base}/calendar?${provider}=connected`, 302);
 }
 
+/**
+ * Task #69 — bucket a thrown error message from the OAuth callback into a
+ * stable, URL-safe reason code so the user-facing toast surfaces something
+ * actionable instead of a misleading bare `token_exchange`. Buckets:
+ *   - `token_exchange:<status>:<code>` — real upstream Google/MS rejection
+ *   - `oauth_unavailable` — server-side secret/redirect-uri config gap
+ *   - `db_write` — SQLite/D1 error reaching the *_oauth_tokens table
+ *   - `encrypt` — AES-GCM key derivation or encryption failure
+ *   - `timeout` — fetch abort hit the 10s timeout in fetchWithTimeout
+ *   - `unknown:<slug>` — everything else, slug = first ≤40 chars URL-safe
+ */
+function bucketCallbackFailure(msg: string): string {
+  // Google throws `token_exchange_failed:<status>:<code>`, Microsoft throws
+  // `token_exchange_failed:<status>` — accept both and normalise.
+  const m = msg.match(/^token_exchange_failed:(\d+)(?::(.+))?$/);
+  if (m) return `token_exchange:${m[1]}:${m[2] || 'unknown'}`;
+  if (msg.includes('oauth_unavailable')) return 'oauth_unavailable';
+  if (/sqlite|no such table|UNIQUE constraint|D1_|FOREIGN KEY/i.test(msg)) return 'db_write';
+  if (/^(encrypt|crypto|AXAL_ENCRYPTION)/i.test(msg) || /AES-GCM|PBKDF2/i.test(msg)) return 'encrypt';
+  if (/aborted|timeout|TimedOut/i.test(msg)) return 'timeout';
+  const slug = msg.slice(0, 40).replace(/[^a-zA-Z0-9._:-]+/g, '_').replace(/^_+|_+$/g, '');
+  return `unknown:${slug || 'no_message'}`;
+}
+
+// ---------------------------------------------------------------------------
+// Task #69 — Lazy schema check for the calendar OAuth tables. `calendar.sql`
+// is the canonical schema but is *not* a numbered migration, so on a fresh
+// D1 it would be absent and the callback's INSERT would throw the
+// misclassified `token_exchange` reason. This mirrors the documented
+// `ensureAdvisorWeekColumn()` / `ensureMarketIntelSchema()` pattern in
+// replit.md. Per-isolate cache keyed by env identity so the
+// CREATE TABLE IF NOT EXISTS only runs on the first request of an isolate.
+// ---------------------------------------------------------------------------
+const calendarOAuthSchemaChecked = new WeakSet<object>();
+async function ensureCalendarOAuthSchema(env: Env): Promise<void> {
+  if (calendarOAuthSchemaChecked.has(env as unknown as object)) return;
+  try {
+    const sql = getSQL(env);
+    await sql`
+      CREATE TABLE IF NOT EXISTS google_oauth_tokens (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id         INTEGER NOT NULL UNIQUE REFERENCES users(id),
+        refresh_token   TEXT    NOT NULL,
+        scope           TEXT    NOT NULL DEFAULT '',
+        google_email    TEXT,
+        google_sub      TEXT,
+        last_synced_at  TEXT,
+        created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS microsoft_oauth_tokens (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id         INTEGER NOT NULL UNIQUE REFERENCES users(id),
+        refresh_token   TEXT    NOT NULL,
+        scope           TEXT    NOT NULL DEFAULT '',
+        microsoft_email TEXT,
+        microsoft_sub   TEXT,
+        last_synced_at  TEXT,
+        created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )
+    `;
+    calendarOAuthSchemaChecked.add(env as unknown as object);
+  } catch (e: any) {
+    // Don't poison the cache on failure — let the next call retry.
+    console.error('[CAL] ensureCalendarOAuthSchema:', e?.message || e);
+  }
+}
+
 // ===========================================================================
 // Google
 // ===========================================================================
 calendar.get('/google/status', safe('g_status', 'Could not load Google status', async (c) => {
   const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   const row = (await sql`
     SELECT google_email, last_synced_at, scope FROM google_oauth_tokens WHERE user_id = ${user.id}
@@ -636,6 +709,7 @@ calendar.post('/google/start',   safe('g_start',   'Could not start Google OAuth
 calendar.get('/google/callback', async (c) => {
   // Intentionally no requireAuth — the user_id comes from the state row.
   try {
+    await ensureCalendarOAuthSchema(c.env);
     const url = new URL(c.req.url);
     const code = url.searchParams.get('code');
     const stateRaw = url.searchParams.get('state');
@@ -675,15 +749,14 @@ calendar.get('/google/callback', async (c) => {
     return successRedirect(c.env, 'google');
   } catch (e: any) {
     const msg = String(e?.message || e);
-    console.error('[CAL:g_callback]', msg);
-    const m = msg.match(/^token_exchange_failed:(\d+):(.+)$/);
-    const reason = m ? `token_exchange:${m[1]}:${m[2]}` : 'token_exchange';
-    return failureRedirect(c.env, 'google', reason);
+    console.error('[CAL:g_callback]', msg, e?.stack || '');
+    return failureRedirect(c.env, 'google', bucketCallbackFailure(msg));
   }
 });
 
 calendar.delete('/google', safe('g_disconnect', 'Could not disconnect Google', async (c) => {
   const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${user.id}`;
   await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'google'`;
@@ -692,6 +765,7 @@ calendar.delete('/google', safe('g_disconnect', 'Could not disconnect Google', a
 
 calendar.post('/google/sync', safe('g_sync', 'Google sync failed', async (c) => {
   const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
   if (!googleOAuthAvailable(c.env)) {
     return c.json({ detail: 'Google OAuth not configured on server' }, 503);
   }
@@ -713,6 +787,7 @@ calendar.post('/google/sync', safe('g_sync', 'Google sync failed', async (c) => 
 // ===========================================================================
 calendar.get('/microsoft/status', safe('m_status', 'Could not load Microsoft status', async (c) => {
   const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   const row = (await sql`
     SELECT microsoft_email, last_synced_at, scope FROM microsoft_oauth_tokens WHERE user_id = ${user.id}
@@ -741,6 +816,7 @@ calendar.post('/outlook/start',     safe('o_start',   'Could not start Outlook O
 
 calendar.get('/microsoft/callback', async (c) => {
   try {
+    await ensureCalendarOAuthSchema(c.env);
     const url = new URL(c.req.url);
     const code = url.searchParams.get('code');
     const stateRaw = url.searchParams.get('state');
@@ -780,13 +856,15 @@ calendar.get('/microsoft/callback', async (c) => {
     }
     return successRedirect(c.env, 'microsoft');
   } catch (e: any) {
-    console.error('[CAL:m_callback]', e?.message || e);
-    return failureRedirect(c.env, 'microsoft', 'token_exchange');
+    const msg = String(e?.message || e);
+    console.error('[CAL:m_callback]', msg, e?.stack || '');
+    return failureRedirect(c.env, 'microsoft', bucketCallbackFailure(msg));
   }
 });
 
 calendar.delete('/microsoft', safe('m_disconnect', 'Could not disconnect Microsoft', async (c) => {
   const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   await sql`DELETE FROM microsoft_oauth_tokens WHERE user_id = ${user.id}`;
   await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'microsoft'`;
@@ -795,6 +873,7 @@ calendar.delete('/microsoft', safe('m_disconnect', 'Could not disconnect Microso
 
 calendar.post('/microsoft/sync', safe('m_sync', 'Microsoft sync failed', async (c) => {
   const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
   if (!microsoftOAuthAvailable(c.env)) {
     return c.json({ detail: 'Microsoft OAuth not configured on server' }, 503);
   }
@@ -874,6 +953,7 @@ calendar.delete('/events/:id', async (c) => {
 // both verbs are valid per the spec contract.
 calendar.post('/google/disconnect', safe('g_disconnect_post', 'Could not disconnect Google', async (c) => {
   const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${user.id}`;
   await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'google'`;
@@ -881,6 +961,7 @@ calendar.post('/google/disconnect', safe('g_disconnect_post', 'Could not disconn
 }));
 calendar.post('/microsoft/disconnect', safe('m_disconnect_post', 'Could not disconnect Microsoft', async (c) => {
   const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   await sql`DELETE FROM microsoft_oauth_tokens WHERE user_id = ${user.id}`;
   await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'microsoft'`;

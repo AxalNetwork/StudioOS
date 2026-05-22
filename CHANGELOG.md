@@ -1,5 +1,27 @@
 # Changelog
 
+## Google/Outlook Calendar connect surfaces real failure reason
+
+The OAuth callback used to bucket every uncaught exception into a bare
+`(token_exchange)` toast, hiding whether the real cause was the upstream
+provider, the database, encryption, or a timeout. Fixed:
+
+- **`routes/calendar.ts::bucketCallbackFailure()`** — new helper maps
+  caught messages into stable, URL-safe reason codes:
+  `token_exchange:<status>:<code>`, `oauth_unavailable`, `db_write`,
+  `encrypt`, `timeout`, or `unknown:<slug>` (first ≤40 chars URL-safe).
+  Both `/google/callback` and `/microsoft/callback` now use it.
+- **`routes/calendar.ts::ensureCalendarOAuthSchema()`** — defensive
+  lazy `CREATE TABLE IF NOT EXISTS` for `google_oauth_tokens` and
+  `microsoft_oauth_tokens` (per-isolate `WeakSet` cache, mirrors
+  `ensureAdvisorWeekColumn` / `ensureMarketIntelSchema`). The tables
+  exist on prod D1 today, but the canonical schema lives in
+  `sql/calendar.sql` (not a numbered migration) so a fresh D1 would
+  otherwise hit "no such table" — now self-heals.
+- **`frontend/src/pages/CalendarPage.jsx::humanizeOAuthReason()`** —
+  translates the new reason codes into a short English sentence; falls
+  back to `(rawCode)` so support can still triage unrecognised values.
+
 ## 2026-05-21 — Service Provider Directory admin approval/feature toggle
 
 Admin console can now approve who appears on the public `/directory`

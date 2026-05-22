@@ -31,6 +31,31 @@ const KIND_COLOR = {
   microsoft_external: 'bg-gray-100 text-gray-500 border-gray-200',
 };
 
+/**
+ * Task #69 — translate the worker's OAuth-callback `reason` query-string
+ * code into a short, user-facing sentence. Unknown codes fall through with
+ * the raw code in parentheses so support can still triage.
+ */
+function humanizeOAuthReason(reason) {
+  if (!reason) return '';
+  if (reason === 'invalid_state') return 'the sign-in link expired, please try again';
+  if (reason === 'no_refresh_token') return 'the provider did not return a refresh token (revoke access and reconnect)';
+  if (reason === 'oauth_unavailable') return 'the server is missing OAuth credentials';
+  if (reason === 'db_write') return 'the server could not save the connection';
+  if (reason === 'encrypt') return 'the server could not encrypt the token';
+  if (reason === 'timeout') return 'the request to the provider timed out';
+  const tx = reason.match(/^token_exchange:(\d+):(.+)$/);
+  if (tx) {
+    const [, status, code] = tx;
+    if (code === 'redirect_uri_mismatch') return 'redirect URL is not authorized in the OAuth client settings';
+    if (code === 'invalid_grant') return 'the authorization code was rejected (please try connecting again)';
+    if (code === 'invalid_client') return 'the OAuth client credentials are invalid';
+    return `the provider rejected the token exchange (${status} ${code})`;
+  }
+  if (reason.startsWith('unknown:')) return `unexpected error (${reason.slice(8)})`;
+  return `(${reason})`;
+}
+
 function fmtRange(startISO, endISO) {
   const s = new Date(startISO);
   const e = new Date(endISO);
@@ -97,13 +122,13 @@ export default function CalendarPage() {
       setSyncResult({ kind: 'success', text: 'Google Calendar connected.' });
       window.history.replaceState({}, '', window.location.pathname);
     } else if (g === 'error' || g === 'failed') {
-      setSyncResult({ kind: 'error', text: `Google connection failed${qs.get('reason') ? ` (${qs.get('reason')})` : ''}.` });
+      setSyncResult({ kind: 'error', text: `Google connection failed${qs.get('reason') ? ` — ${humanizeOAuthReason(qs.get('reason'))}` : ''}.` });
       window.history.replaceState({}, '', window.location.pathname);
     } else if (m === 'connected') {
       setSyncResult({ kind: 'success', text: 'Outlook / Microsoft 365 calendar connected.' });
       window.history.replaceState({}, '', window.location.pathname);
     } else if (m === 'error' || m === 'failed') {
-      setSyncResult({ kind: 'error', text: `Outlook connection failed${qs.get('reason') ? ` (${qs.get('reason')})` : ''}.` });
+      setSyncResult({ kind: 'error', text: `Outlook connection failed${qs.get('reason') ? ` — ${humanizeOAuthReason(qs.get('reason'))}` : ''}.` });
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
