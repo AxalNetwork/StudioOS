@@ -1,0 +1,39 @@
+#11 - LE — News with author proposals + admin queue
+What & Why
+Public /news section on axal.vc. Authoring is gated by a trust score (users.trust_score >= 70); submissions go to an admin review queue with comments, request-changes / approve / reject paths, notifications at every state change, and an iteration loop for rejected drafts. Published articles cache for 60 days at the Cloudflare edge.
+Two repos, one feature: schema, Worker routes, author editor, and admin queue UI live in StudioOS. The public /news index + /news/:slug reader live in the Jekyll marketing repo with a build-time fetch of /api/news (and committed _data/articles.json fallback). Markdown rendering reuses the existing sanitiser.
+Done looks like
+* New D1 tables articles, article_revisions, article_review_comments exist in prod.
+* Trust score available on users (or computed at read time per the spec formula); enforced server-side on every author write endpoint — never trust client claim.
+* Public routes: GET /api/news (published only) and GET /api/news/:slug (CORS for axal.vc).
+* Author routes: POST /api/news/draft, GET /api/news/mine, PUT /api/news/:id, POST /api/news/:id/submit, POST /api/news/:id/retract (all auth + trust ≥ 70, with the rate limit of 3 submissions/week/author).
+* Admin routes: queue list, start-review, request-changes, reject, approve, publish, unpublish, threaded inline comments.
+* Notifications (email + in-app) fire on every state transition for both author and admins per the spec table.
+* Frontend: NewsAuthorPage.jsx (markdown editor with live preview, cover image upload, tags, submit button gated on required fields, inline review comments once admin starts review). AdminNewsQueuePage.jsx (queue list, side-by-side editor + comments, approve/request-changes/reject).
+* Public /news on Jekyll renders the published list with pagination + sector filters; individual article page renders sanitised HTML.
+* PII redact checker runs on every submission; blocks submit if other users' private data detected.
+* Rejected articles preserve prior text via article_revisions so author can iterate.
+* Published articles cached 60-day TTL via Cloudflare Cache API; cache busted on unpublish.
+Out of scope
+* Public comments on published articles.
+* Email digests of new articles to subscribers.
+* Author analytics dashboard (views, read-time).
+* Co-authoring / multi-author articles.
+* Translation / i18n.
+Steps
+1. Trust score availability — Verify users.trust_score exists; if missing, add a side table (per the persistent-gotcha — users is at D1's ALTER column limit) OR compute at read time from the spec formula (admin 100, KYB +15, signed partner_deal +10, Spin-Out grad +10, 90-day-clean +10, KYC+verified email +5; cap 100). Re-compute on profile changes.
+2. Schema — Migration creates articles, article_revisions, article_review_comments with all fields from the spec.
+3. Worker routes — Public, author, and admin routes per the spec; admin routes gated by admin role + Cf-Access; author routes server-validate trust ≥ 70 and the 3-submissions/week rate limit. Snapshot to article_revisions on every state transition that changes body_markdown.
+4. Notifications — Hook the seven state-transition notifications (author submitted, admin submitted, author in_review, author changes_requested, author approved, author published, author rejected) into the existing email + in-app notification service.
+5. PII linter on submit — Reuse the existing PII redact checker (or scaffold one if missing — would be shared with LC); block submit when other users' private data detected.
+6. Author + admin UIs — Build NewsAuthorPage.jsx and AdminNewsQueuePage.jsx per the spec; reuse existing markdown sanitiser for preview.
+7. Jekyll public surface — /news index page + /news/:slug reader in the marketing repo with build-time fetch of /api/news (fallback _data/articles.json).
+8. Caching — Wrap GET /api/news + GET /api/news/:slug in Cloudflare Cache API with 60-day TTL; bust on publish/unpublish.
+Relevant files
+* cloudflare-worker/sql/migrations/ (new — three tables)
+* cloudflare-worker/src/routes/ (new news_public.ts, news_author.ts, admin_news.ts)
+* cloudflare-worker/src/services/ (notification service, trust score, PII redact)
+* frontend/src/pages/NewsAuthorPage.jsx (new)
+* frontend/src/pages/AdminNewsQueuePage.jsx (new)
+* (Jekyll repo) news.md, _includes/news/, _layouts/article.html
+* cloudflare-worker/src/util/pagination.ts
