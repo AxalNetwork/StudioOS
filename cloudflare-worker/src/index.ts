@@ -42,6 +42,9 @@ import adminTeam from './routes/admin_team';
 // Task #3 — Admin Telegram channels + aggregator + post send.
 import adminTelegram from './routes/admin_telegram';
 import adminX from './routes/admin_x';
+// Task #2 — News with author proposals + admin queue.
+import newsRoutes from './routes/news';
+import adminNews from './routes/admin_news';
 import teamPublic from './routes/team_public';
 import partnerOnboarding from './routes/partner_onboarding';
 import partnerPortal from './routes/partner_portal';
@@ -485,6 +488,9 @@ app.route('/api/admin/team', adminTeam);
 app.route('/api/admin/telegram', adminTelegram);
 // Task #4 — same mount-before-catch-all precedence as Telegram.
 app.route('/api/admin/x', adminX);
+// Task #2 — News admin queue. Mounted BEFORE catch-all /api/admin so the
+// nested /api/admin/news/* routes resolve here.
+app.route('/api/admin/news', adminNews);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);
@@ -581,6 +587,9 @@ app.route('/api/public', publicRoutes);
 // marketing build (axalnetwork.github.io) curls /api/public/team into
 // _data/team.json before rendering /team on axal.vc.
 app.route('/api/public', teamPublic);
+// Task #2 — Public + author-facing /api/news. Public GETs are CORS-open
+// to axal.vc and edge-cached 60d; author writes self-gate on trust>=70.
+app.route('/api/news', newsRoutes);
 app.route('/api/references', referencesRoutes);
 // Task #1 (AG) — service offerings (founder marketplace) alphabetically
 // after /api/references and before /api/spinout-lab/comarketing.

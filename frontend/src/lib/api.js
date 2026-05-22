@@ -2003,6 +2003,56 @@ export const adminX = {
     }),
 };
 
+// Task #2 — News (author + admin queue).
+export const news = {
+  // Public
+  list: ({ limit = 20, offset = 0, sector, tag } = {}) => {
+    const qs = new URLSearchParams();
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    if (sector) qs.set('sector', sector);
+    if (tag) qs.set('tag', tag);
+    return request(`/news?${qs.toString()}`);
+  },
+  read: (slug) => request(`/news/${encodeURIComponent(slug)}`),
+  // Author
+  trustMe: () => request('/news/trust/me'),
+  mine: () => request('/news/mine'),
+  draft: (id) => request(`/news/draft/${id}`),
+  createDraft: (payload) =>
+    request('/news/draft', { method: 'POST', body: JSON.stringify(payload) }),
+  updateDraft: (id, patch) =>
+    request(`/news/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  submit: (id) => request(`/news/${id}/submit`, { method: 'POST', body: '{}' }),
+  retract: (id) => request(`/news/${id}/retract`, { method: 'POST', body: '{}' }),
+  uploadCover: (id, dataUri) =>
+    request(`/news/${id}/cover`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
+};
+
+export const adminNews = {
+  queue: ({ status, limit = 50, offset = 0 } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    return request(`/admin/news/queue?${qs.toString()}`);
+  },
+  get: (id) => request(`/admin/news/${id}`),
+  startReview: (id) => request(`/admin/news/${id}/start-review`, { method: 'POST', body: '{}' }),
+  requestChanges: (id, reason) =>
+    request(`/admin/news/${id}/request-changes`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  reject: (id, reason) =>
+    request(`/admin/news/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  approve: (id) => request(`/admin/news/${id}/approve`, { method: 'POST', body: '{}' }),
+  publish: (id) => request(`/admin/news/${id}/publish`, { method: 'POST', body: '{}' }),
+  unpublish: (id) => request(`/admin/news/${id}/unpublish`, { method: 'POST', body: '{}' }),
+  addComment: (id, body, anchor) =>
+    request(`/admin/news/${id}/comments`, { method: 'POST', body: JSON.stringify({ body, anchor }) }),
+  resolveComment: (cid, resolved) =>
+    request(`/admin/news/comments/${cid}`, { method: 'PUT', body: JSON.stringify({ resolved }) }),
+  deleteComment: (cid) => request(`/admin/news/comments/${cid}`, { method: 'DELETE' }),
+};
+
 // Spin-Out Lab — 4-week guided sprint for pre-incorporation founders.
 // Namespaced separately from `api` to keep the surface small and obvious
 // for the call sites that wire milestone completion in feature pages.

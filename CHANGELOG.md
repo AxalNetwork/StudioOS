@@ -1,6 +1,107 @@
 # Changelog
 
 
+## Task #2 — News with author proposals + admin review queue
+
+Public `/news` reader (Jekyll-side, separate repo — out of scope here)
+backed by a new author/admin workflow inside StudioOS. Trusted members
+(`trust_score >= 70`) write articles in markdown, submit them for
+review, iterate on comments, and watch admins approve → publish to the
+60-day edge cache. PII linter is shared with Task #3 — emails, phone
+numbers, IDs, and cross-user mentions all block submit (no admin
+override on the author side; admins can still post-edit).
+
+**Schema (`cloudflare-worker/sql/migrations/068_news_articles.sql` — pending apply)**
+- `articles` (slug, title, subtitle, body_markdown, body_html, sector,
+  tags JSON, status `draft|submitted|in_review|changes_requested|approved|published|rejected`,
+  author_user_id, reviewer_user_id, submitted_at, reviewed_at, approved_at,
+  published_at, rejected_at, rejection_reason, cover_r2_key, cover_mime,
+  word_count, read_minutes). Slug unique; status+published_at and
+  status+submitted_at indexed for the public list and admin queue.
+- `article_revisions` — snapshot on every state transition + manual save.
+- `article_review_comments` — admin comments with optional `anchor`
+  (paragraph index) and resolve toggle.
+- `article_submission_log` — feeds the 3-per-week rate limit.
+
+Worker carries `ensureNewsSchema()` lazy bootstrap mirroring
+`ensureTelegramSchema()` / `ensureTeamMembersSchema()`, so the four
+tables auto-create on first hit when 068 lands unapplied. Apply via
+`wrangler d1 execute studioos-db --remote --env production
+--file=cloudflare-worker/sql/migrations/068_news_articles.sql`.
+
+**Trust score (`services/newsTrust.ts`)**
+Computed at read time (the `users` table is at the D1 ALTER column
+limit — see `replit.md`). Per the spec formula: base 50, admin=100,
+KYB+15, signed partner deal +10, Spin-Out Lab grad +10, 90-day-clean
++10, KYC + verified email +5, cap 100. `90-day-clean` requires
+account age ≥ 90d and no rejected article or flagged scoring alert in
+that window. Surfaced to the author via `GET /api/news/trust/me`.
+
+**Routes (`routes/news.ts`)** — mounted at `/api/news`, outside the
+admin perimeter so the public GETs work:
+- Public: `GET /` (list), `GET /:slug`, `GET /cover/:id`. CORS-open to
+  `axal.vc` / `www.axal.vc`; served from Cloudflare's edge cache
+  (`caches.default`) with `max-age = s-maxage = 60 * 86400`. Publish +
+  unpublish bust the three cache keys (`bustEdgeCache()` in
+  `services/newsRender.ts`).
+- Author (auth + trust gate): `POST /draft`, `GET /draft/:id`,
+  `PUT /:id`, `POST /:id/submit` (rate-limited 3/week + PII linter),
+  `POST /:id/retract`, `POST /:id/cover` (R2, 5 MB, jpg/png/webp),
+  `GET /mine`, `GET /trust/me`.
+
+**Admin queue (`routes/admin_news.ts`)** — mounted at
+`/api/admin/news` **before** the catch-all `/api/admin` (same
+precedence trick as `/api/admin/telegram`). Inside the existing
+`/api/admin/*` CF-Access perimeter; per-route `requireAdmin`. Endpoints:
+queue list (with status filter), single-article detail (article +
+revisions + comments), start-review / approve / publish / unpublish /
+request-changes / reject (the last two require a reason ≥ 8 chars and
+are sent to the author via the notification fanout), and comment
+CRUD with resolved-state toggle.
+
+**Notifications (`services/newsNotify.ts`)** — seven state-transition
+events via the existing `notify()` channel (in-app + email): submit
+confirms to the author, alerts every admin; in-review / changes
+requested / approved / rejected / published all email the author.
+
+**Markdown renderer (`services/newsRender.ts`)** — in-house sanitised
+renderer (no new bundle deps). Input is HTML-escaped first, then
+tokenised: headings, bold, italic, links (forced
+`rel="noopener nofollow" target="_blank"`), unordered + ordered
+lists, blockquotes, fenced code blocks, inline code, paragraphs.
+Anything else passes through as text — no attacker-controlled HTML
+can survive. The same helper computes `word_count` + `read_minutes`
+(220 wpm).
+
+**Frontend**
+- `frontend/src/pages/NewsAuthorPage.jsx` (route `/news`, gated to
+  `admin|founder|partner|investor|mentor`) — sidebar of own drafts,
+  markdown editor + live preview, title/subtitle/sector/tag inputs,
+  cover upload, save / submit / retract, inline view of reviewer
+  comments and rejection reasons, trust-score chip with min-required
+  hint.
+- `frontend/src/pages/admin/AdminNewsQueue.jsx` (route
+  `/admin/news`, admin-only) — status tabs (new / in review /
+  changes requested / ready to publish / all open), three-pane review
+  layout with body, comment thread, and revision history. Prompt
+  modals for request-changes + reject (reason required).
+- API helpers `news` and `adminNews` added to
+  `frontend/src/lib/api.js`.
+
+**Public Jekyll surface** — the `/news` index and per-article pages
+on `axal.vc` are templated in the separate `axalnetwork.github.io`
+repo and remain out of scope for this task. Their build curls
+`https://app.axal.vc/api/news` and `…/api/news/:slug` (CORS-open) at
+publish time; once that repo is updated, no further StudioOS change
+is needed.
+
+**Persistent gotcha** — when adding new admin sub-routers in future,
+keep the `app.route('/api/admin/<sub>', …)` mounts **above** the
+catch-all `app.route('/api/admin', admin)`; otherwise Hono matches
+the catch-all first and the sub-routes 404 inside the generic admin
+router.
+
+
 ## Task #3 — Admin Telegram channels + aggregator + PII linter
 
 Admin-only system to broadcast curated digests to the public `@axalvc`
