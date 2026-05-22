@@ -118,10 +118,8 @@ const FEATURE_EXPLAINERS = {
     label: 'Compliance Calendar',
     blurb: 'Standard post-incorporation events seeded for your jurisdiction (annual report, franchise tax, etc.).',
   },
-  kyc: {
-    label: 'Identity Verification',
-    blurb: 'KYC required before signing binding incorporation / SAFE documents.',
-  },
+  // Task #2 — KYC is now investor-only; founders never need it, so the
+  // Spinout Lab no longer renders a kyc explainer card.
 };
 
 function ProgressBar({ week }) {

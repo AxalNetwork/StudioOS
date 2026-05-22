@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import {
   Info, Rocket, Zap, MessageSquare, Globe, Layers, Sparkles, Users,
   UserCircle, Calendar, Target, Scale, PieChart as PieIcon, DollarSign,
-  ShieldCheck, Check, Loader2,
+  Check, Loader2,
 } from 'lucide-react';
 import { useSpinoutLabState } from '../hooks/useSpinoutLabState';
 
@@ -113,12 +113,8 @@ const FEATURE_CATALOGUE = {
     label: 'Compliance Calendar',
     blurb: 'Standard post-incorporation events seeded for your jurisdiction (annual report, franchise tax, etc.).',
   },
-  kyc: {
-    to: '/kyc',
-    icon: ShieldCheck,
-    label: 'Identity Verification',
-    blurb: 'KYC required before signing binding incorporation / SAFE documents.',
-  },
+  // Task #2 — KYC is now investor-only; founders never need it, so the
+  // Spinout Lab no longer surfaces an Identity Verification week-4 item.
 };
 
 // Per-week ordering. The sidebar shows every unlocked feature returned by
@@ -128,7 +124,7 @@ const WEEK_ORDER = {
   1: ['spinout-lab', 'projects', 'customer-discovery', 'market-intelligence'],
   2: ['roadmap', 'brand-builder', 'pitch-deck'],
   3: ['cofounder-match', 'mentors', 'office-hours', 'scoring'],
-  4: ['incorporate', 'captable', 'section-83b', 'cofounder-agreement', 'capital', 'compliance', 'kyc'],
+  4: ['incorporate', 'captable', 'section-83b', 'cofounder-agreement', 'capital', 'compliance'],
 };
 
 function orderFeatures(unlocked) {

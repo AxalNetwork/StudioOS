@@ -813,13 +813,11 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     return <Navigate to={myWizard} replace />;
   }
 
-  // Onboarding gate: non-admin users must complete KYC before accessing other pages.
-  // Bypassed for:
-  //   - admins (and impersonation sessions)
-  //   - founders — KYC for founders is only mandatory at the moment they
-  //     sign binding incorporation/SAFE docs; the signing endpoints enforce
-  //     that server-side, and the eSign page shows a banner pointing to /kyc.
-  //   - users with admin-granted `access_level === 'limited'`
+  // Onboarding gate: only investors must complete KYC before accessing other
+  // pages. Founders, partners, and mentors do not require KYC at all — and
+  // admins (or impersonation sessions) always bypass for support purposes.
+  // Investor signing endpoints (capital actions, deal-flow gating) still
+  // enforce KYC server-side regardless of this client-side gate.
   // The /kyc, /activity, /tickets routes remain reachable for everyone.
   const effectiveRole = (realUser || user)?.role;
   const ALLOWED_BEFORE_KYC = ['/kyc', '/activity', '/tickets'];
@@ -829,8 +827,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   // redirect loop for incomplete, not-yet-approved users.
   const onOnboardingPath = location.pathname.startsWith('/onboarding/');
   if (
-    effectiveRole !== 'admin' &&
-    effectiveRole !== 'founder' &&
+    effectiveRole === 'investor' &&
     !isImpersonating &&
     accessLevel !== 'limited' &&
     kycStatus &&

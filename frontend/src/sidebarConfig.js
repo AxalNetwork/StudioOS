@@ -216,7 +216,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'legal', label: 'Legal & Compliance', items: [
       { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
       { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-      { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
       { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
     { key: 'account', label: 'Account', items: [

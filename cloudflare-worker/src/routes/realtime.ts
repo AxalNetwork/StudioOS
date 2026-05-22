@@ -92,7 +92,13 @@ function buildUpgradeRequest(c: any, user: { id: number; role: string }): Reques
 // Authorization-header-based middleware because browsers can only auth via
 // ?token=. Admins are exempt — same policy as the HTTP gate.
 function kycOk(user: { role: string; kyc_status: string | null }): boolean {
-  return user.role === 'admin' || user.kyc_status === 'approved';
+  // Task #2 — KYC is investor-only. Admins always bypass; founders,
+  // partners, and mentors never need KYC and pass through. Only
+  // investors are required to be approved to subscribe to per-deal
+  // realtime channels (the overview channel allows any authed user).
+  if (user.role === 'admin') return true;
+  if (user.role !== 'investor') return true;
+  return user.kyc_status === 'approved';
 }
 
 // GET /api/pipeline/ws/:deal_id — broadcasts pipeline events for one deal.

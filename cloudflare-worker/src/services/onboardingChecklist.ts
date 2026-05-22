@@ -88,7 +88,11 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'op.profile',    label: 'Complete profiling chatbot',         route: '/onboarding/persona',         autoDetect: true },
     { key: 'op.conflicts',  label: 'Disclose conflicts',                 route: '/partner-portal',             autoDetect: true },
     { key: 'op.deal_type',  label: 'Pick deal-type proposal + sign',     route: '/partner-portal',             autoDetect: true },
-    { key: 'op.kyb',        label: 'Configure KYB documents',            route: '/kyc',                        autoDetect: true },
+    // Task #2 — KYC is investor-only, so the partner KYB step no longer
+    // deep-links to /kyc (which now renders a "not required" state for
+    // non-investors). The item still tracks KYB completion; admins handle
+    // KYB collection via the partner portal.
+    { key: 'op.kyb',        label: 'Configure KYB documents',            route: '/partner-portal',             autoDetect: true },
     { key: 'op.service',    label: 'Add at least one service / offer',   route: '/services',                   autoDetect: true },
     { key: 'op.refs',       label: 'Provide 2 references',               route: '/settings/profile',           autoDetect: true },
     { key: 'op.referral',   label: 'Receive one-time referral code',     route: '/refer',                      autoDetect: true },

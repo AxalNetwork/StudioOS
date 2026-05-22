@@ -57,7 +57,6 @@ export const MILESTONES: WeekDef[] = [
       'cofounder-agreement',
       'capital',
       'compliance',
-      'kyc',
     ],
   },
 ];

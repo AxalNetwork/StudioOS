@@ -450,7 +450,12 @@ export async function requireFactor(
 
 export async function requireApprovedKyc(c: Context<{ Bindings: Env }>): Promise<User> {
   const user = await requireAuth(c);
+  // Task #2 — KYC is investor-only. Admins always bypass (for support);
+  // founders, partners, and mentors are never required to complete KYC
+  // and pass through. Only investors must be approved before reaching
+  // gated capital / deal-flow / signing endpoints.
   if (user.role === 'admin') return user;
+  if (user.role !== 'investor') return user;
   if ((user as any).kyc_status === 'approved') return user;
   throw new Error('KYC required');
 }

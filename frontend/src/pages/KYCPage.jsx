@@ -114,6 +114,34 @@ export default function KYCPage() {
     return <div className="flex items-center justify-center py-16 text-gray-500"><Loader2 className="animate-spin mr-2" size={18} /> Loading verification status…</div>;
   }
 
+  // Task #2 — KYC is only required for investor accounts. Founders,
+  // partners, and mentors who land here directly see a short explanatory
+  // state instead of the form. Admins keep the full form for support.
+  const role = authUser?.role;
+  if (role && role !== 'investor' && role !== 'admin') {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="mb-6 flex items-start gap-3">
+          <div className="h-10 w-10 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center flex-shrink-0">
+            <ShieldCheck size={20} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Identity Verification</h1>
+            <p className="text-sm text-gray-600 mt-1">Not required for your account type.</p>
+          </div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-700">
+          Identity Verification (KYC / AML) is only required for investor accounts. Your {role} account does not need to complete this step.
+          <div className="mt-4">
+            <button onClick={() => navigate('/dashboard')} className="px-3 py-1.5 text-sm bg-violet-600 text-white rounded-md font-medium hover:bg-violet-700">
+              Back to dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const s = status?.kyc_status || 'not_started';
   const meta = STATUS_META[s] || STATUS_META.not_started;
   const Icon = meta.icon;

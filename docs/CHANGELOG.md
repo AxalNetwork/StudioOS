@@ -1,6 +1,346 @@
 # Changelog
 
 
+## Task #7 — Mask integration keys + promote to Cloudflare Worker secrets
+
+Admin Integration Keys panel no longer leaves long-lived encrypted DB
+rows. Save / Rotate now push directly to the live Worker script as
+real Worker secrets via the Cloudflare API, the encrypted
+`provider_oauth_keys` row is dropped on success, and `client_id` is
+masked as `first4••••last4` everywhere it surfaces.
+
+- **`cloudflare-worker/src/services/cloudflareSecrets.ts`** (new) —
+  `setSecret(env, name, value)` + `deleteSecret(env, name)` wrap CF's
+  `PUT/DELETE /accounts/{id}/workers/scripts/{script}/secrets`.
+  Returns a typed `{ok, status, code, error}` with stable codes
+  `cloudflare_api_token_missing` / `cf_api_forbidden` / `cf_api_failed`.
+  Reads `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` (+ optional
+  `CF_WORKER_SCRIPT_NAME`, default `studioos`). Never logs token
+  values. Idempotent delete (404 → ok). Also exports the shared
+  `maskClientId()` helper.
+- **`cloudflare-worker/src/services/providerOauthKeys.ts`** —
+  `listProviderKeyStatus()` now masks `client_id_preview` via
+  `maskClientId()` for both env and DB sources. Added
+  `deleteOauthCredsRowOnly()` that drops the row WITHOUT cascading
+  `integrations.status='disconnected'` — used after a successful CF
+  push so existing user OAuth tokens stay valid.
+- **`cloudflare-worker/src/routes/admin_integration_keys.ts`** —
+  PUT pushes ID then SECRET; if SECRET fails, ID is rolled back via
+  `deleteSecret()` so no half-set pair survives. Only after both
+  succeed does `deleteOauthCredsRowOnly()` clear the DB row. Rotate
+  pushes the SECRET half and clears the row. Delete removes both
+  Worker secrets then runs the existing
+  `deleteOauthCredsAndDisconnect()` cascade. Every push/rotate/delete
+  writes an `admin_audit_log` row with `report_type='integration_keys'`
+  and action `integration_key_cf_secret_{push,rotate,delete}` (same
+  shape as `telegram_pii_override`). When the token is unset, Rotate
+  falls back to the legacy encrypted-DB path so admins aren't locked
+  out; Save returns 503 `{error:'cloudflare_api_token_missing'}`.
+- **`cloudflare-worker/src/types.ts`** — `CLOUDFLARE_API_TOKEN?` and
+  `CF_WORKER_SCRIPT_NAME?` declared on `Env`.
+- **`frontend/src/pages/AdminPage.jsx`** — Integration Keys card
+  renders `row.client_id_preview` verbatim (no client-side
+  truncation). The Edit/Rotate modal already never pre-filled the
+  field, so no UX regression on rotate.
+
+**Ops to-do (user)** — see `replit.md` item (f). Create a Cloudflare
+API token scoped to `Workers Scripts: Edit` on the studioos worker
+and `wrangler secret put CLOUDFLARE_API_TOKEN --env production`.
+Until then, Save returns the actionable 503; existing rows already in
+`provider_oauth_keys` keep working until an admin re-saves them
+(lazy migration, no destructive backfill).
+
+
+## Task #4 — Admin X (Twitter) posts + aggregator
+
+Twin of Task #3 (Telegram). Admins link one or more X accounts via OAuth 2.0
+PKCE, compose tweets / threads in a 280-char composer (live counter, X-style
+preview, media + alt-text via Workers AI LLaVA), and broadcast through the
+same PII-redaction gate as Telegram (`telegramRedactCheck.lintForSend` with
+`audience='public'` — the strictest setting). Per-day cap is 20 sends per
+account per day (KV `x_quota:{account_id}:{yyyy-mm-dd}`, TTL 36h, override
+via `X_DAILY_CAP`). Threads send head-first, then children anchor via
+`thread_continuation_of`; partial failures are recorded so a half-sent thread
+can be inspected. Aggregator reuses the six canonical audiences from Task #3
+and appends hashtags, persisting head + child rows.
+
+**Schema (`cloudflare-worker/sql/migrations/068_x_twitter.sql` — pending apply)**
+- `x_accounts` (handle, x_user_id UNIQUE, scopes, access_token_ct,
+  refresh_token_ct, expires_at, status). Tokens are AES-GCM via `cryptoBox`.
+- `x_posts` (account_id, status `draft|approved|scheduled|sent|failed|retracted`,
+  body, media_keys JSON, thread_continuation_of, scheduled_at, sent_at,
+  remote_tweet_id, override_reason, override_findings, created_by).
+- Worker carries `ensureXSchema()` lazy bootstrap (same pattern as
+  `ensureTelegramSchema` / `ensureNewsSchema`), so the tables auto-create on
+  first hit if the migration hasn't been applied yet.
+
+**Worker routes (`/api/admin/x`, mounted BEFORE `/api/admin` catch-all)**
+- Accounts: `GET /accounts`, `POST /accounts`, `DELETE /accounts/:id`,
+  `POST /accounts/:id/test` (GET `/users/me` round-trip).
+- OAuth: `GET /oauth/start?account_id=` (PKCE, KV `xstate:{state}` TTL 10m),
+  `GET /oauth/callback` (redirects to `/admin/x?x_oauth_linked|error=`).
+- Posts: list/create/update/delete drafts, `/lint`, `/approve`, `/schedule`,
+  `/send` (daily-cap compare-and-set + head→children + PII override path
+  requiring `override_reason ≥8 chars`), `/retract` (X API DELETE).
+- Media: `POST /posts/:id/media` (R2 `x/{account_id}/{post_id}/{uuid}.{ext}`,
+  magic-byte sniff, ≤5 MB, ≤4 per tweet), `POST /posts/:id/alt-text`
+  (Workers AI `@cf/llava-hf/llava-1.5-7b-hf`).
+- Aggregator: `POST /aggregator/run` (6 audiences, hashtag append, persists
+  head + child rows; never auto-sends).
+
+**Frontend (`/admin/x`)**
+- 5 tabs: Accounts / Compose / Drafts / History / Aggregator.
+- Composer: live 280-char counter, thread mode (auto-split via
+  `splitIntoThread`), media uploader, alt-text generator, override modal,
+  X-style preview pane.
+- Surfaces `?x_oauth_linked` query param as a success toast after callback.
+
+**Envs / secrets**
+- `X_CLIENT_ID`, `X_CLIENT_SECRET`, `X_BEARER_TOKEN` — Worker secrets only
+  (push via `wrangler secret put`, never `.replit`).
+- `X_DAILY_CAP` — optional override (default 20). When OAuth secrets are
+  unset, all send paths return 503 `{code:'x_config_missing'}`; draft +
+  linter still work.
+
+**Reuses**
+- `telegramRedactCheck.ts` (Task #3) — no duplication; X is always public so
+  callers pass `audience='public'` unconditionally.
+- `cryptoBox` AES-GCM at-rest encryption (same 100k PBKDF2 + 200k legacy
+  fallback as Telegram and the calendar tokens).
+- `hashEmail` for `admin_audit_log.actor` (`x_account_*`, `x_post_*`,
+  `x_pii_override`, `x_post_retracted`, `x_aggregator_run`).
+
+
+## Task #2 — News with author proposals + admin review queue
+
+Public `/news` reader (Jekyll-side, separate repo — out of scope here)
+backed by a new author/admin workflow inside StudioOS. Trusted members
+(`trust_score >= 70`) write articles in markdown, submit them for
+review, iterate on comments, and watch admins approve → publish to the
+60-day edge cache. PII linter is shared with Task #3 — emails, phone
+numbers, IDs, and cross-user mentions all block submit (no admin
+override on the author side; admins can still post-edit).
+
+**Schema (`cloudflare-worker/sql/migrations/068_news_articles.sql` — pending apply)**
+- `articles` (slug, title, subtitle, body_markdown, body_html, sector,
+  tags JSON, status `draft|submitted|in_review|changes_requested|approved|published|rejected`,
+  author_user_id, reviewer_user_id, submitted_at, reviewed_at, approved_at,
+  published_at, rejected_at, rejection_reason, cover_r2_key, cover_mime,
+  word_count, read_minutes). Slug unique; status+published_at and
+  status+submitted_at indexed for the public list and admin queue.
+- `article_revisions` — snapshot on every state transition + manual save.
+- `article_review_comments` — admin comments with optional `anchor`
+  (paragraph index) and resolve toggle.
+- `article_submission_log` — feeds the 3-per-week rate limit.
+
+Worker carries `ensureNewsSchema()` lazy bootstrap mirroring
+`ensureTelegramSchema()` / `ensureTeamMembersSchema()`, so the four
+tables auto-create on first hit when 068 lands unapplied. Apply via
+`wrangler d1 execute studioos-db --remote --env production
+--file=cloudflare-worker/sql/migrations/068_news_articles.sql`.
+
+**Trust score (`services/newsTrust.ts`)**
+Computed at read time (the `users` table is at the D1 ALTER column
+limit — see `replit.md`). Per the spec formula: base 50, admin=100,
+KYB+15, signed partner deal +10, Spin-Out Lab grad +10, 90-day-clean
++10, KYC + verified email +5, cap 100. `90-day-clean` requires
+account age ≥ 90d and no rejected article or flagged scoring alert in
+that window. Surfaced to the author via `GET /api/news/trust/me`.
+
+**Routes (`routes/news.ts`)** — mounted at `/api/news`, outside the
+admin perimeter so the public GETs work:
+- Public: `GET /` (list), `GET /:slug`, `GET /cover/:id`. CORS-open to
+  `axal.vc` / `www.axal.vc`; served from Cloudflare's edge cache
+  (`caches.default`) with `max-age = s-maxage = 60 * 86400`. Publish +
+  unpublish bust the three cache keys (`bustEdgeCache()` in
+  `services/newsRender.ts`).
+- Author (auth + trust gate): `POST /draft`, `GET /draft/:id`,
+  `PUT /:id`, `POST /:id/submit` (rate-limited 3/week + PII linter),
+  `POST /:id/retract`, `POST /:id/cover` (R2, 5 MB, jpg/png/webp),
+  `GET /mine`, `GET /trust/me`.
+
+**Admin queue (`routes/admin_news.ts`)** — mounted at
+`/api/admin/news` **before** the catch-all `/api/admin` (same
+precedence trick as `/api/admin/telegram`). Inside the existing
+`/api/admin/*` CF-Access perimeter; per-route `requireAdmin`. Endpoints:
+queue list (with status filter), single-article detail (article +
+revisions + comments), start-review / approve / publish / unpublish /
+request-changes / reject (the last two require a reason ≥ 8 chars and
+are sent to the author via the notification fanout), and comment
+CRUD with resolved-state toggle.
+
+**Notifications (`services/newsNotify.ts`)** — seven state-transition
+events via the existing `notify()` channel (in-app + email): submit
+confirms to the author, alerts every admin; in-review / changes
+requested / approved / rejected / published all email the author.
+
+**Markdown renderer (`services/newsRender.ts`)** — in-house sanitised
+renderer (no new bundle deps). Input is HTML-escaped first, then
+tokenised: headings, bold, italic, links (forced
+`rel="noopener nofollow" target="_blank"`), unordered + ordered
+lists, blockquotes, fenced code blocks, inline code, paragraphs.
+Anything else passes through as text — no attacker-controlled HTML
+can survive. The same helper computes `word_count` + `read_minutes`
+(220 wpm).
+
+**Frontend**
+- `frontend/src/pages/NewsAuthorPage.jsx` (route `/news`, gated to
+  `admin|founder|partner|investor|mentor`) — sidebar of own drafts,
+  markdown editor + live preview, title/subtitle/sector/tag inputs,
+  cover upload, save / submit / retract, inline view of reviewer
+  comments and rejection reasons, trust-score chip with min-required
+  hint.
+- `frontend/src/pages/admin/AdminNewsQueue.jsx` (route
+  `/admin/news`, admin-only) — status tabs (new / in review /
+  changes requested / ready to publish / all open), three-pane review
+  layout with body, comment thread, and revision history. Prompt
+  modals for request-changes + reject (reason required).
+- API helpers `news` and `adminNews` added to
+  `frontend/src/lib/api.js`.
+
+**Public Jekyll surface** — the `/news` index and per-article pages
+on `axal.vc` are templated in the separate `axalnetwork.github.io`
+repo and remain out of scope for this task. Their build curls
+`https://app.axal.vc/api/news` and `…/api/news/:slug` (CORS-open) at
+publish time; once that repo is updated, no further StudioOS change
+is needed.
+
+**Persistent gotcha** — when adding new admin sub-routers in future,
+keep the `app.route('/api/admin/<sub>', …)` mounts **above** the
+catch-all `app.route('/api/admin', admin)`; otherwise Hono matches
+the catch-all first and the sub-routes 404 inside the generic admin
+router.
+
+
+## Task #3 — Admin Telegram channels + aggregator + PII linter
+
+Admin-only system to broadcast curated digests to the public `@axalvc`
+channel + five invite-only cohort channels (founders, investors,
+mentors, operating partners, alumni). Drafts are produced by an
+aggregator from existing platform signals; admin reviews, edits, and
+sends. No automatic posting without admin approval; PII linter blocks
+leaky drafts unless the admin supplies a typed override reason
+(recorded in `admin_audit_log`).
+
+**Schema (`cloudflare-worker/sql/migrations/067_telegram.sql` — pending apply)**
+- `telegram_channels` (slug, label, chat_id, audience, is_invite_only,
+  enabled, last_test_at, last_error). Seeds the six canonical channels
+  with `chat_id = NULL` so the admin can paste real IDs after the
+  bot is added.
+- `telegram_posts` (channel_id, status `draft|scheduled|sent|failed`,
+  body_md, media_r2_key, scheduled_for, sent_at,
+  telegram_message_id, telegram_link, source `manual|aggregator`,
+  source_kind, body_hash, send_error, override_reason,
+  override_findings, created_by).
+- `telegram_aggregations` (audience, kind, payload_json, period_start,
+  period_end, draft_post_id) — dedup + audit trail for aggregator runs.
+- `user_promotion_consent` (user_id PK, consented, consented_at,
+  source) — side table because `users` is at the D1 ALTER limit.
+- Worker carries lazy `ensureTelegramSchema()` bootstrap so routes
+  keep working if 067 lands unapplied.
+
+**Worker — Telegram client + breaker (`services/telegramClient.ts`)**
+- Wraps `sendMessage` / `sendPhoto` / `sendDocument` / `getChat` with
+  in-isolate circuit breaker (5 consecutive failures → 60s recovery),
+  exponential retry on 5xx, and 429 retry honouring `retry_after`.
+- Typed errors: `TelegramTokenMissing` and `TelegramError` with
+  code-based mapping (`telegram_token_missing`,
+  `telegram_chat_not_found`, `telegram_rate_limited`,
+  `telegram_forbidden`, `telegram_breaker_open`,
+  `telegram_upstream`). Never a silent 500.
+- MarkdownV2 escape helper + public-channel/private-channel permalink
+  builder.
+
+**Worker — PII linter (`services/telegramRedactCheck.ts`)**
+- Regex scan for email / phone / SSN-ish tax ID / IBAN / 13-19 digit
+  card-like sequences. Tax-ID and card hits are masked in findings.
+- User-mention scan: matches body against `users` by email and by
+  full-legal name; emits `consent_missing` when the user has no
+  `user_promotion_consent` row, OR `private_in_public` when the
+  channel audience is `public` (the public channel is aggregate-only).
+- Returns `{ ok, findings[] }` — the route layer enforces the gate.
+  Shared module so Task #4 LF (LinkedIn auto-poster) can reuse it.
+
+**Worker — aggregator (`services/telegramAggregator.ts`)**
+- Per-audience builders (`public`, `founders`, `investors`, `mentors`,
+  `partners`, `alumni`) read counts from `projects`, `mentor_sessions`,
+  `introductions`, `matches`, `deals`, `portfolio_updates`,
+  `partner_deals`, `partner_office_hours`, `refer_earn_payouts`.
+- Public-channel drafts use a k-anonymity gate (counts < 5 are
+  suppressed).
+- Every counter wrapped in `safeCount()` so missing tables degrade to
+  zero instead of 500.
+- `runAggregator()` inserts one draft per audience that has an
+  enabled channel and writes a row to `telegram_aggregations`.
+
+**Worker — admin routes (`routes/admin_telegram.ts`, mounted at
+`/api/admin/telegram` — BEFORE the catch-all `/api/admin` per the
+route-precedence invariant; sits behind the existing
+`/api/admin/*` Cf-Access perimeter)**
+- Channels: list, create, update (label / chat_id / enabled /
+  is_invite_only), delete (refuses when sent posts exist — disable
+  instead), test (calls `getChat` + sends a Markdown hello probe,
+  records `last_test_at` / `last_error`).
+- Posts: list (`?status=&channel_id=` with `clampLimit` + offset),
+  create draft, edit (forbidden once sent), delete (forbidden once
+  sent), media upload (data-URI body, R2-backed at
+  `telegram/{channel_id}/{post_id}/{uuid}.{ext}`, 8 MB cap, photo
+  jpeg/png/webp or document pdf/csv/txt), lint preview, schedule
+  (status → `scheduled` with `scheduled_for`), send.
+- Send path: runs lint → if findings and no `override_reason` (≥8
+  chars) returns 422 `{ code: 'pii_linter_blocked', findings }`. With
+  override: persists `override_reason` + `override_findings` and
+  audits `telegram_pii_override` before the actual send. On success
+  persists `telegram_message_id`, `telegram_link`, sha256 `body_hash`.
+- Consent: GET/PUT `/consent/:user_id` for admin override; UPSERT
+  honours `consented_at` only when flipping to true.
+- Audit: every channel create/update/delete/test, every post
+  create/edit/delete/media/schedule/send + every PII override writes
+  `admin_audit_log` with `report_type='telegram'`, JSON `filters_json`
+  carrying `post_id` / `channel_id` / `body_hash`, and SHA-256
+  `email_hash` actor when the column is present (lazy PRAGMA check
+  matches `admin_publications.ts`).
+
+**Worker wiring**
+- `types.ts` — `TELEGRAM_BOT_TOKEN?: string` added to `Env`. Never
+  committed; provisioned via
+  `wrangler secret put TELEGRAM_BOT_TOKEN --env production`. When
+  unset, send endpoints return 503 `{code:'telegram_token_missing'}`
+  — schema + admin UI remain fully usable for draft authoring.
+- `index.ts` — imports `adminTelegram` and mounts it at
+  `/api/admin/telegram` BEFORE `app.route('/api/admin', admin)`.
+
+**Frontend — `/admin/telegram` (`pages/admin/AdminTelegram.jsx`)**
+- Four tabs: Channels / Drafts / Compose / History.
+- Channels: table with inline chat_id editing, enable/disable toggle,
+  test-connect button (sends "hello" probe), add-channel modal with
+  slug/label/audience/chat_id/invite-only fields.
+- Drafts: aggregator panel (period-days input + run button) listing
+  every open draft; cards show channel, audience, source badge,
+  3-line body preview, edit + delete.
+- Compose: full-page composer with title, MarkdownV2 body
+  (4000-char counter), media attachment (lucide icon, native file
+  picker), inline lint button + colour-coded findings panel,
+  schedule input, send-now button. PII findings inline → override
+  textarea (min 8 chars) → "Override and send" button.
+- History: paginated sent-post list with audience badge, override
+  badge, Telegram permalink, body-hash prefix.
+- Toasts via `useToast`, modals via `useEscapeClose`, lucide icons
+  + inline brand SVG only (no brand-icon packages), full `dark:`
+  variants.
+- API surface in `lib/api.js` as `adminTelegram` namespace mirroring
+  the worker routes.
+- Route registered in `App.jsx` as
+  `guard(['admin'], <AdminTelegram />)` at `/admin/telegram`.
+
+**Ops to-do (user)**
+- Create the bot via BotFather, add it as admin (with
+  "Post Messages") to all six channels, paste the real `chat_id`
+  values in the admin UI.
+- `wrangler secret put TELEGRAM_BOT_TOKEN --env production`
+- Apply migration 067 against prod D1.
+
+
 ## Task #5 — Post-login redirect to axal.vc + onboarding-first routing
 
 Completed the Phase 2 canonical-host flip and wired the post-login
