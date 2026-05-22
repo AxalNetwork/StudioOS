@@ -44,6 +44,16 @@ function humanizeOAuthReason(reason) {
   if (reason === 'db_write') return 'the server could not save the connection';
   if (reason === 'secret_missing') return 'the server is missing an encryption secret — contact support';
   if (reason === 'encrypt') return 'the server could not encrypt the token';
+  // Task #71 follow-up — step-tagged encrypt failures from cryptoBox.
+  // Surface the step + sanitized slug verbatim so support can trace it.
+  const encStep = typeof reason === 'string' ? reason.match(/^encrypt:(importkey|derive|aesgcm)(?::(.+))?$/) : null;
+  if (encStep) {
+    const stepLabel = encStep[1] === 'importkey' ? 'key import'
+      : encStep[1] === 'derive' ? 'PBKDF2 key derivation'
+      : 'AES-GCM encrypt';
+    const slug = encStep[2] ? ` (${encStep[2]})` : '';
+    return `the server crypto step failed at ${stepLabel}${slug} — please share this code with support`;
+  }
   if (reason === 'timeout') return 'the request to the provider timed out';
   const tx = reason.match(/^token_exchange:(\d+):(.+)$/);
   if (tx) {

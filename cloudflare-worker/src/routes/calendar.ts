@@ -565,6 +565,18 @@ function bucketCallbackFailure(msg: string): string {
   // Bucket BEFORE the generic encrypt regex so the toast surfaces the more
   // actionable cause.
   if (msg.startsWith('cryptoBox:secret_missing')) return 'secret_missing';
+  // Task #71 follow-up — cryptoBox now step-tags its WebCrypto throws:
+  //   cryptoBox:encrypt:importkey:<slug>  ← PBKDF2 importKey threw
+  //   cryptoBox:encrypt:derive:<slug>     ← PBKDF2 deriveKey threw
+  //   cryptoBox:encrypt:aesgcm:<slug>     ← AES-GCM encrypt threw
+  // Surface the step + slug verbatim so the toast tells us WHERE inside
+  // WebCrypto the failure happened.
+  const stepM = msg.match(/^cryptoBox:encrypt:(importkey|derive|aesgcm)(?::(.+))?$/);
+  if (stepM) {
+    const step = stepM[1];
+    const slug = (stepM[2] || '').slice(0, 40).replace(/[^a-zA-Z0-9._:-]+/g, '_');
+    return slug ? `encrypt:${step}:${slug}` : `encrypt:${step}`;
+  }
   if (/sqlite|no such table|UNIQUE constraint|D1_|FOREIGN KEY/i.test(msg)) return 'db_write';
   if (/^(encrypt|crypto|AXAL_ENCRYPTION)/i.test(msg) || /AES-GCM|PBKDF2/i.test(msg)) return 'encrypt';
   if (/aborted|timeout|TimedOut/i.test(msg)) return 'timeout';

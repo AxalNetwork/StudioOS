@@ -62,25 +62,51 @@ function getSecret(env: { AXAL_ENCRYPTION_SECRET?: string; JWT_SECRET?: string }
   throw new Error(`cryptoBox:secret_missing AXAL_ENCRYPTION_SECRET=${a} JWT_SECRET=${j}`);
 }
 
+// Task #71 follow-up — sanitize a WebCrypto error message into a short
+// URL-safe slug we can append to the bucket reason without leaking the
+// secret itself or producing a giant query string. Strips quoted values
+// (which could echo back parts of the input) and clamps to 60 chars.
+function sanitizeCryptoError(e: unknown): string {
+  const raw = String((e as any)?.name || '') + ':' + String((e as any)?.message || e || 'unknown');
+  return raw
+    .replace(/['"]/g, '')
+    .replace(/[^a-zA-Z0-9._:-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 60) || 'unknown';
+}
+
 async function deriveKey(secret: string): Promise<CryptoKey> {
   const cached = keyCache.get(secret);
   if (cached) return cached;
   const promise = (async () => {
-    const baseKey = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(secret),
-      { name: 'PBKDF2' },
-      false,
-      ['deriveKey'],
-    );
-    return crypto.subtle.deriveKey(
-      { name: 'PBKDF2', salt: SALT, iterations: ITERATIONS, hash: 'SHA-256' },
-      baseKey,
-      { name: 'AES-GCM', length: 256 },
-      false,
-      ['encrypt', 'decrypt'],
-    );
+    let baseKey: CryptoKey;
+    try {
+      baseKey = await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(secret),
+        { name: 'PBKDF2' },
+        false,
+        ['deriveKey'],
+      );
+    } catch (e) {
+      // Tag with step so routes/calendar.ts::bucketCallbackFailure can
+      // surface `encrypt:importkey:<slug>` instead of a generic `encrypt`.
+      throw new Error(`cryptoBox:encrypt:importkey:${sanitizeCryptoError(e)}`);
+    }
+    try {
+      return await crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: SALT, iterations: ITERATIONS, hash: 'SHA-256' },
+        baseKey,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt'],
+      );
+    } catch (e) {
+      throw new Error(`cryptoBox:encrypt:derive:${sanitizeCryptoError(e)}`);
+    }
   })();
+  // Don't cache a rejected promise — next call should retry and re-surface.
+  promise.catch(() => keyCache.delete(secret));
   keyCache.set(secret, promise);
   return promise;
 }
@@ -102,15 +128,26 @@ export async function encryptString(
   env: { AXAL_ENCRYPTION_SECRET?: string; JWT_SECRET?: string },
   plaintext: string,
 ): Promise<string> {
+  // getSecret() throws `cryptoBox:secret_missing ...` on its own; deriveKey()
+  // throws `cryptoBox:encrypt:{importkey|derive}:<slug>`. Only the final
+  // AES-GCM encrypt step needs an explicit wrapper here.
   const key = await deriveKey(getSecret(env));
-  const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
-  const ct = new Uint8Array(
-    await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext)),
-  );
-  const out = new Uint8Array(iv.length + ct.length);
-  out.set(iv, 0);
-  out.set(ct, iv.length);
-  return b64encode(out);
+  let ct: Uint8Array;
+  try {
+    const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+    ct = new Uint8Array(
+      await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext)),
+    );
+    const out = new Uint8Array(iv.length + ct.length);
+    out.set(iv, 0);
+    out.set(ct, iv.length);
+    return b64encode(out);
+  } catch (e) {
+    // If getSecret/deriveKey already prefixed, don't double-wrap.
+    const msg = String((e as any)?.message || e);
+    if (msg.startsWith('cryptoBox:')) throw e;
+    throw new Error(`cryptoBox:encrypt:aesgcm:${sanitizeCryptoError(e)}`);
+  }
 }
 
 export async function decryptString(
