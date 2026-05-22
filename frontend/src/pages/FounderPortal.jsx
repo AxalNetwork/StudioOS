@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
-import { Rocket, CheckCircle, XCircle, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Rocket, CheckCircle, XCircle, AlertTriangle, ChevronDown, ArrowRight } from 'lucide-react';
 
 // Task #2 — The legacy stage-gated "Identity verification recommended"
 // banner for founders has been removed. KYC is now investor-only; founders
