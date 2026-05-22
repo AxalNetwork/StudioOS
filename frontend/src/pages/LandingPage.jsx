@@ -129,6 +129,12 @@ const PLATFORM_FEATURES = [
   { icon: Scale, title: 'Legal Engine', desc: 'Auto incorporation, SAFE agreements, equity splits, IP licensing.', to: '/legal' },
   { icon: Sparkles, title: 'AI Advisory', desc: 'Strategy, GTM, fundraising advice and financial planning for founders.', to: '/advisory' },
   { icon: Rocket, title: 'Spin-Out Lab', desc: 'Niche 30-day venture sprint — idea to funded in four weeks.', to: '/spinout-lab' },
+  { icon: BadgeCheck, title: 'Personal Advisor', desc: 'Always-on AI advisor with full founder context, weekly check-ins, evidence-backed answers.', to: '/advisory' },
+  { icon: UserPlus, title: 'Co-founder Match', desc: 'Match by skill, sector, and working style — equity split + cofounder agreement included.', to: '/cofounder' },
+  { icon: Handshake, title: 'Services Marketplace', desc: 'Services-for-equity / -fee partners, refer & earn, co-marketing.', to: '/marketplace' },
+  { icon: ShieldCheck, title: 'Trust & Verification', desc: 'KYC, KYB, accreditation, NDAs, and sanctions screening on every party.', to: '/trust' },
+  { icon: GraduationCap, title: 'Mentor Network', desc: 'Office Hours, mentor sessions, and advisor grants via the FAST template.', to: '/mentors' },
+  { icon: HeartHandshake, title: 'Coaching Marketplace', desc: 'Executive, performance, and wellbeing coaches matched by category, rating, availability.', to: '/wellbeing' },
 ];
 
 const FALLBACK_STATS = { partners: 200, funds: 4, deals_scored: 1200, spinouts: 38 };

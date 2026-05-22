@@ -1,0 +1,27 @@
+import type { DeckData } from './DeckBase';
+
+export const SAMPLE_PREVIEW_DATA: DeckData = {
+  company: 'Demo Co.',
+  tagline: 'The fastest way to ship venture-grade decks.',
+  problem: 'Founders waste weeks on slide formatting instead of pitching.',
+  solution: 'Auto-filled, on-brand decks generated from your project data in minutes.',
+  product: 'Twelve battle-tested templates with inline editing and one-click export.',
+  business_model: 'SaaS subscription with usage-based AI export credits.',
+  market: 'Every early-stage founder raising under $5M.',
+  why_now: 'AI made pixel-perfect decks a commodity — founders need speed, not slide artistry.',
+  team: 'Operators from YC, Stripe, and Notion.',
+  tam: 8_400_000_000,
+  sam: 1_200_000_000,
+  som: 120_000_000,
+  mrr: 48_000,
+  arr: 576_000,
+  paying_customers: 312,
+  growth_pct: 22,
+  ask_amount: 2_500_000,
+  use_of_funds: 'Engineering, AI inference, GTM.',
+  contact: 'hello@demoCo.example',
+  traction: '$48k MRR · 22% MoM · 312 paying.',
+  competition: 'PowerPoint, Pitch, Canva — none auto-fill from your data.',
+  moat: 'Proprietary scoring + integrated cap table + LP ledger.',
+  milestones: 'Series A in 18 months at $5M ARR.',
+};

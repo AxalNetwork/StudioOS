@@ -38,3 +38,15 @@ export const TEMPLATES: Record<string, TemplateMeta> = {
 };
 
 export const TEMPLATE_KEYS = Object.keys(TEMPLATES);
+
+export const TEMPLATE_LIST: TemplateMeta[] = Object.values(TEMPLATES);
+
+if (typeof process === 'undefined' || process.env?.NODE_ENV !== 'production') {
+  if (TEMPLATE_LIST.length !== 12) {
+     
+    console.warn(
+      `[decks/templates] Expected 12 templates, found ${TEMPLATE_LIST.length}. ` +
+      `Check frontend/src/decks/templates/index.ts.`,
+    );
+  }
+}

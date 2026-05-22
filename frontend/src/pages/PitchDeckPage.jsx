@@ -738,77 +738,100 @@ function FieldEditor({ field, onChange }) {
 // =====================================================================
 // Method picker modal — 12-template grid with locked badges.
 //
-// Each card renders a live scaled mini-preview of the matching template's
-// first slide (1920x1080 React component scaled to fit). The templates
-// module is code-split via a one-shot dynamic import so it only loads
-// when the picker opens (keeps it out of the main route bundle).
+// Iterates the static TEMPLATE_LIST from the deck registry (single source
+// of truth), not the `/api/decks/methods` payload. Merges per-method
+// metadata (category, premium/locked, best_for, prompt_hint, recommendation)
+// by joining on `template.key === method.id`. This means the grid always
+// renders 12 thumbnails even if the methods API is slow, partial, or its
+// id-namespace ever drifts from the registry keys.
+//
+// Each card renders the actual template Component via <Thumbnail>, which
+// owns the bounded 320x180 box, the scaled 1920x1080 inner viewport, and
+// a per-card React error boundary so one broken template can't blank the
+// whole grid.
+//
+// The templates module is code-split via a one-shot dynamic import so it
+// only loads when the picker opens (keeps it out of the main bundle).
 // =====================================================================
 let _templatesPromise = null;
 function loadTemplates() {
   if (!_templatesPromise) {
     _templatesPromise = import('../decks/templates')
-      .then((m) => m.TEMPLATES)
+      .then((m) => ({ list: m.TEMPLATE_LIST || [], record: m.TEMPLATES || {} }))
       .catch((err) => {
         // Reset so a transient failure (e.g. network blip) can retry next open.
         _templatesPromise = null;
         reportError(err);
-        return {};
+        return { list: [], record: {}, error: err };
       });
   }
   return _templatesPromise;
 }
 
-function TemplateThumb({ methodId, templates }) {
-  // 1920x1080 wrapper scaled into a 280x157.5 viewport. overflow:hidden
-  // clips to the FIRST Slide16x9 of the deck (subsequent slides flow
-  // below the 1080 cutoff). pointer-events:none keeps the parent button
-  // fully clickable.
-  const meta = templates && templates[methodId];
-  const Comp = meta?.Component;
-  if (!Comp) return null;
-  const W = 280;
-  const SCALE = W / 1920; // 0.14583...
-  return (
-    <div
-      aria-hidden="true"
-      style={{
-        width: W, height: W * 9 / 16,
-        overflow: 'hidden',
-        borderRadius: 6,
-        border: '1px solid rgba(148, 163, 184, 0.35)',
-        background: '#FFFFFF',
-        marginBottom: 10,
-        pointerEvents: 'none',
-        position: 'relative',
-      }}
-    >
-      <div
-        style={{
-          width: 1920, height: 1080,
-          transform: `scale(${SCALE})`,
-          transformOrigin: 'top left',
-          position: 'absolute', top: 0, left: 0,
-        }}
-      >
-        <Comp data={{}} />
-      </div>
-    </div>
-  );
+let _thumbnailModulePromise = null;
+function loadThumbnailModule() {
+  if (!_thumbnailModulePromise) {
+    _thumbnailModulePromise = import('../decks/Thumbnail').catch((err) => {
+      _thumbnailModulePromise = null;
+      reportError(err);
+      return null;
+    });
+  }
+  return _thumbnailModulePromise;
 }
 
 function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, busy }) {
   useEscapeClose(onClose);
   const [filter, setFilter] = useState('all');
-  const [templates, setTemplates] = useState(null);
+  const [templates, setTemplates] = useState(null); // { list, record, error? } | null
+  const [Thumbnail, setThumbnail] = useState(null);
   useEffect(() => {
     let alive = true;
     loadTemplates().then((t) => { if (alive) setTemplates(t); });
+    loadThumbnailModule().then((m) => { if (alive && m) setThumbnail(() => m.Thumbnail); });
     return () => { alive = false; };
   }, []);
-  const list = useMemo(
-    () => methods.filter((m) => filter === 'all' || m.category === filter),
-    [methods, filter],
+
+  // Merge: registry is source of truth for the 12 cards; methods API
+  // contributes per-method UX metadata when the ids match.
+  const methodById = useMemo(() => {
+    const map = new Map();
+    for (const m of methods || []) map.set(m.id, m);
+    return map;
+  }, [methods]);
+
+  const cards = useMemo(() => {
+    const list = templates?.list || [];
+    return list.map((tpl) => {
+      const m = methodById.get(tpl.key) || {};
+      // Backend is the single source of truth for paywall — registry
+      // `required_tier` is display metadata only, never feeds locked/premium.
+      const premium = !!m.premium;
+      const locked = !!m.locked;
+      return {
+        key: tpl.key,
+        template: tpl,
+        label: m.label || tpl.label,
+        description: m.prompt_hint || tpl.description,
+        best_for: m.best_for || '',
+        category: m.category || 'general',
+        slide_count: m.slide_count ?? tpl.slide_count,
+        premium,
+        locked,
+        isRec: recommendation?.method_id === tpl.key,
+      };
+    });
+  }, [templates, methodById, premiumIds, recommendation]);
+
+  const filtered = useMemo(
+    () => cards.filter((c) => filter === 'all' || c.category === filter),
+    [cards, filter],
   );
+
+  const registryLoaded = templates !== null;
+  const registryEmpty = registryLoaded && cards.length === 0;
+  const registryError = templates?.error;
+
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
       <div
@@ -833,44 +856,67 @@ function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, bu
             >{c}</button>
           ))}
         </div>
-        <div className="overflow-y-auto p-5 grid grid-cols-2 lg:grid-cols-3 gap-3">
-          {list.map((m) => {
-            const isRec = recommendation?.method_id === m.id;
-            return (
+
+        {!registryLoaded && (
+          <div className="p-10 flex items-center justify-center text-sm text-gray-500 dark:text-slate-400">
+            <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading templates…
+          </div>
+        )}
+
+        {registryEmpty && (
+          <div className="p-10 text-center text-sm">
+            <div className="font-medium text-red-600 mb-1">No templates registered</div>
+            <div className="text-gray-500 dark:text-slate-400 text-xs">
+              Check <code>frontend/src/decks/templates/index.ts</code> — the registry returned 0 entries.
+              {registryError ? ' (load error — see console)' : ''}
+            </div>
+          </div>
+        )}
+
+        {registryLoaded && !registryEmpty && (
+          <div className="overflow-y-auto p-5 grid grid-cols-2 lg:grid-cols-3 gap-3">
+            {filtered.map((c) => (
               <button
-                key={m.id}
+                key={c.key}
                 disabled={busy}
-                onClick={() => !m.locked && onPick(m.id)}
+                onClick={() => !c.locked && onPick(c.key)}
                 className={`relative text-left border rounded-lg p-4 transition ${
-                  m.locked
+                  c.locked
                     ? 'border-gray-200 dark:border-slate-800 opacity-80'
                     : 'border-gray-200 dark:border-slate-800 hover:border-violet-400 hover:shadow'
                 }`}
               >
-                {isRec && (
+                {c.isRec && (
                   <span className="absolute -top-2 -right-2 bg-violet-600 text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1">
                     <Wand2 className="w-3 h-3" /> Suggested
                   </span>
                 )}
-                {m.premium && (
+                {c.premium && (
                   <span className="absolute top-2 right-2 z-10 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1">
-                    {m.locked && <Lock className="w-3 h-3" />} Premium
+                    {c.locked && <Lock className="w-3 h-3" />} Premium
                   </span>
                 )}
-                <TemplateThumb methodId={m.id} templates={templates} />
-                <div className="text-xs uppercase text-gray-400 mb-1">{m.category} · {m.slide_count} slides</div>
-                <div className="font-medium mb-1">{m.label}</div>
-                <p className="text-xs text-gray-600 dark:text-slate-400 mb-2">{m.prompt_hint}</p>
-                <p className="text-[11px] text-gray-500 dark:text-slate-500 italic">{m.best_for}</p>
-                {m.locked && (
+                <div className="mb-3">
+                  {Thumbnail
+                    ? <Thumbnail template={c.template} />
+                    : <div style={{ width: 320, height: 180, background: '#F1F5F9', borderRadius: 6 }} />}
+                </div>
+                <div className="text-xs uppercase text-gray-400 mb-1">{c.category} · {c.slide_count} slides</div>
+                <div className="font-medium mb-1">{c.label}</div>
+                <p className="text-xs text-gray-600 dark:text-slate-400 mb-2">{c.description}</p>
+                {c.best_for && (
+                  <p className="text-[11px] text-gray-500 dark:text-slate-500 italic">{c.best_for}</p>
+                )}
+                {c.locked && (
                   <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">
                     Upgrade to Growth to unlock this template.
                   </div>
                 )}
               </button>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
+
         {busy && (
           <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 flex items-center justify-center">
             <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
