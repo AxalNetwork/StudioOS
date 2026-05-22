@@ -15,7 +15,6 @@ import network from './network';
 import portals from './portals';
 import integrations from './integrations';
 import account from './account';
-import admin from './admin';
 import troubleshooting from './troubleshooting';
 import changelog from './changelog';
 
@@ -31,7 +30,6 @@ export const SECTIONS = [
   portals,
   integrations,
   account,
-  admin,
   troubleshooting,
   changelog,
 ];
