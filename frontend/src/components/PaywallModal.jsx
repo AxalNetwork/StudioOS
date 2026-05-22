@@ -104,6 +104,18 @@ export default function PaywallModal({ user }) {
         : raw === 'investor_institutional' ? 'institutional'
         : raw;
       const norm = (r === 'studio' || r === 'professional' || r === 'institutional') ? r : 'growth';
+      // Auto-fires (background 402 from api.js, fired by data fetches on
+      // page load) are gated to once-per-session per tier so refreshing the
+      // page doesn't keep re-opening the same upsell. Explicit user actions
+      // — sidebar lock pill, openPaywall(), CTA buttons — omit `source` and
+      // always open the modal.
+      if (detail.source === 'auto') {
+        try {
+          const key = `paywall_auto_shown:${norm}`;
+          if (window.sessionStorage.getItem(key)) return;
+          window.sessionStorage.setItem(key, '1');
+        } catch { /* sessionStorage unavailable — fall through and show */ }
+      }
       setRequired(norm);
       setMessage(typeof detail.message === 'string' ? detail.message : '');
       setOpen(true);

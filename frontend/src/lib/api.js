@@ -113,8 +113,13 @@ export async function request(path, options = {}) {
         const tierPayload = (err && (err.required ? err : (err.error === 'tier_required' ? err : null))) || null;
         if (tierPayload && tierPayload.required) {
           try {
+            // source: 'auto' tells PaywallModal this came from a background
+            // 402 (likely a fetch fired on page load). PaywallModal gates
+            // auto-fires to once per session so refreshing the page doesn't
+            // keep re-opening the same upsell. Explicit user actions (sidebar
+            // lock click, CTA buttons) use the default source and always show.
             window.dispatchEvent(new CustomEvent('studioos:tier_required', {
-              detail: { required: tierPayload.required, message: tierPayload.message || '' },
+              detail: { required: tierPayload.required, message: tierPayload.message || '', source: 'auto' },
             }));
           } catch { /* noop */ }
         }
