@@ -199,6 +199,34 @@ export default function DocsLayout() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Scroll the docs content container (NOT the window) to the given
+  // anchor. Using el.scrollIntoView() would also scroll the page body
+  // and the protected app shell, which pushes the content area out of
+  // view — the user then sees a blank docs body until they manually
+  // scroll inside the inner container. Computing scrollTop directly
+  // keeps the scroll confined to contentRef.
+  //
+  // Section-level placeholder divs (line ~431) share the first
+  // subsection's data-anchor for "click section header → jump to its
+  // top" behavior. querySelectorAll returns them in DOM order, so the
+  // SubsectionView (the one we actually want to anchor on) is the
+  // LAST match — pick that.
+  const SCROLL_MARGIN_PX = 24;
+  const scrollContentTo = useCallback((anchor, behavior = 'smooth') => {
+    const container = contentRef.current;
+    if (!container) return false;
+    const nodes = container.querySelectorAll(`[data-anchor="${anchor}"]`);
+    if (!nodes.length) return false;
+    const el = nodes[nodes.length - 1];
+    const top =
+      el.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      container.scrollTop -
+      SCROLL_MARGIN_PX;
+    container.scrollTo({ top: Math.max(0, top), behavior });
+    return true;
+  }, []);
+
   // Scroll-to-anchor on initial load and when the URL hash changes.
   // Task #2 (DD) — When a non-admin tries to deep-link to an admin
   // anchor (e.g. `#admin/users`), strip the hash so the page behaves
@@ -211,12 +239,10 @@ export default function DocsLayout() {
       navigate('/docs', { replace: true });
       return;
     }
-    const el = document.querySelector(`[data-anchor="${hash}"]`);
-    if (el) {
-      requestAnimationFrame(() => el.scrollIntoView({ behavior: 'auto', block: 'start' }));
-      setActiveAnchor(hash);
-    }
-  }, [location.hash, isAdmin, restrictedAnchors, navigate]);
+    requestAnimationFrame(() => {
+      if (scrollContentTo(hash, 'auto')) setActiveAnchor(hash);
+    });
+  }, [location.hash, isAdmin, restrictedAnchors, navigate, scrollContentTo]);
 
   // Track which subsection is currently in view to highlight the rail.
   useEffect(() => {
@@ -237,13 +263,10 @@ export default function DocsLayout() {
 
   const goToAnchor = useCallback((anchor) => {
     navigate(`#${anchor}`, { replace: false });
-    const el = document.querySelector(`[data-anchor="${anchor}"]`);
-    if (el) {
-      requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-    }
+    requestAnimationFrame(() => scrollContentTo(anchor, 'smooth'));
     setActiveAnchor(anchor);
     setQuery('');
-  }, [navigate]);
+  }, [navigate, scrollContentTo]);
 
   // Activated section in the rail derives from the activeAnchor's section prefix.
   const activeSectionId = activeAnchor.split('/')[0];
