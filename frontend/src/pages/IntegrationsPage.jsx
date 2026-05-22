@@ -3,15 +3,28 @@ import {
   Plug, Plus, RefreshCw, Trash2, FileText, X, AlertCircle, Check,
   ExternalLink, Webhook, Database, Shield, Calendar, Cloud, PieChart,
   MessageSquare, PenTool, Network, Building2, Lock, Bell, Sparkles,
+  Mail,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
-import { safeReadJSON } from '../lib/storage';
+import { safeReadJSON, safeWriteJSON } from '../lib/storage';
+import { parseLinkedInCsv, PENDING_LINKEDIN_IMPORT_KEY } from '../lib/linkedinCsv';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuthSync';
 import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
 import Skeleton from '../components/Skeleton';
+
+// lucide-react in this repo predates the `Linkedin` glyph, so we ship
+// a tiny inline SVG (same approach as the Twitter glyph in
+// ReferEarnPage.jsx). Sized + coloured via currentColor so it matches
+// the surrounding tile typography.
+const Linkedin = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.024-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.049c.476-.9 1.637-1.85 3.37-1.85 3.602 0 4.268 2.37 4.268 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.063 2.063 0 112.063 2.065zm1.778 13.019H3.555V9h3.56v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+  </svg>
+);
 
 const ICON_MAP = {
   Building2, Calendar, Cloud, PieChart, MessageSquare, PenTool, Database,
@@ -49,9 +62,28 @@ export default function IntegrationsPage() {
   const [logsFor, setLogsFor] = useState(null);
   const [logs, setLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  // Task #70 — Google (Calendar + Gmail / Continue with Google) and
+  // LinkedIn (OIDC + CSV import) tiles. These don't sit in the
+  // backend REGISTRY because they wire to first-party routes
+  // (`/api/calendar/google/*`, `/api/linkedin/*`) — calendar tokens
+  // are the single source of truth per replit.md, so we render
+  // synthetic tiles instead of duplicating the providers contract.
+  const [googleStatus, setGoogleStatus] = useState(null);
+  const [linkedinStatus, setLinkedinStatus] = useState(null);
+  // One-shot return-flash from the OAuth round-trip cookie redirect.
+  // Parsed from query params on mount, then the URL is cleaned so a
+  // refresh doesn't keep replaying the banner.
+  const [returnFlash, setReturnFlash] = useState(null);
+  // Task #70 — per-tile inline error/warn slots so OAuth failures
+  // surface ON the tile that owns them, not as a generic banner
+  // somewhere up the page. `{ kind: 'error'|'warn', text }`.
+  const [googleTileError, setGoogleTileError] = useState(null);
+  const [linkedinTileError, setLinkedinTileError] = useState(null);
+  const [csvModalOpen, setCsvModalOpen] = useState(false);
   // Task #2 — HubSpot pipeline picker modal target.
   const [configFor, setConfigFor] = useState(null);
   const { toast, showToast } = useToast(2500);
+  const navigate = useNavigate();
 
   // Task #18 — `bypassesTier` lets admin/partner/investor/mentor unlock
   // tier-gated providers, so we MUST read the live AuthProvider role
@@ -75,14 +107,20 @@ export default function IntegrationsPage() {
     try {
       setError('');
       setLoadError('');
-      const [av, mine, wl] = await Promise.all([
+      const [av, mine, wl, gs, ls] = await Promise.all([
         api.integrationsAvailable(),
         api.integrationsList(),
         api.integrationsWaitlist().catch(() => ({ items: [] })),
+        // Google/LinkedIn status are best-effort — a missing/legacy
+        // worker must not collapse the marketplace into an error.
+        api.googleCalStatus().catch(() => ({ configured: false, connected: false })),
+        api.linkedinStatus().catch(() => ({ configured: false, connected: false })),
       ]);
       setProviders(av.providers || []);
       setItems(mine.items || []);
       setWaitlist(wl.items || []);
+      setGoogleStatus(gs || null);
+      setLinkedinStatus(ls || null);
     } catch (e) {
       const status = Number(e?.status) || 0;
       if (status >= 500 || status === 0) {
@@ -96,6 +134,115 @@ export default function IntegrationsPage() {
   };
 
   useEffect(() => { refresh(); }, []);
+
+  // Task #70 — one-shot return-flash from the OAuth round-trip.
+  // The callback redirects to /integrations with one of:
+  //   ?google=connected                          → success on Google tile
+  //   ?google=connected&warn=google_email_mismatch&google_email=… (legacy /calendar flow only)
+  //   ?google=error&reason=email_mismatch&google_email=… → INLINE tile error
+  //   ?google=error&reason=email_unverified&google_email=…
+  //   ?google=error&reason=<bucket>              → INLINE tile error
+  //   ?linkedin=connected                        → success on LinkedIn tile
+  //   ?linkedin=error&linkedin_error=<code>      → INLINE tile error
+  // We parse + clean the URL so a refresh doesn't keep replaying. Email
+  // mismatch is routed to the tile-local error slot (not the top banner)
+  // so the user sees exactly which connection failed and why.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    let tileGoogle = null, tileLi = null, topFlash = null;
+    if (p.get('google') === 'connected') {
+      const warn = p.get('warn');
+      if (warn === 'google_email_mismatch') {
+        // Legacy /calendar flow: connection succeeded but sign-in wasn't linked.
+        const ge = p.get('google_email') || '';
+        tileGoogle = {
+          kind: 'warn',
+          text: ge
+            ? `Connected, but the Google account ${ge} doesn't match your StudioOS email — "Continue with Google" sign-in was not linked.`
+            : `Connected, but the Google account doesn't match your StudioOS email — "Continue with Google" sign-in was not linked.`,
+        };
+      } else {
+        topFlash = { type: 'success', text: 'Google connected — Calendar, Gmail, and "Continue with Google" sign-in are now enabled.' };
+      }
+    } else if (p.get('google') === 'error') {
+      const reason = p.get('reason') || 'unknown';
+      const ge = p.get('google_email') || '';
+      if (reason === 'email_mismatch') {
+        tileGoogle = {
+          kind: 'error',
+          text: ge
+            ? `That Google account (${ge}) doesn't match your StudioOS email. Sign in to Google with the same email and try again — nothing was saved.`
+            : `That Google account doesn't match your StudioOS email. Sign in to Google with the same email and try again — nothing was saved.`,
+        };
+      } else if (reason === 'email_unverified') {
+        tileGoogle = {
+          kind: 'error',
+          text: ge
+            ? `Google reports ${ge} as unverified. Verify the address with Google, then try connecting again — nothing was saved.`
+            : `Google reports your account email as unverified. Verify it with Google, then try connecting again — nothing was saved.`,
+        };
+      } else {
+        tileGoogle = { kind: 'error', text: `Google connection failed (${reason}). Please try again.` };
+      }
+    }
+    if (p.get('linkedin') === 'connected') {
+      topFlash = { type: 'success', text: 'LinkedIn connected.' };
+    } else if (p.get('linkedin') === 'error') {
+      tileLi = { kind: 'error', text: `LinkedIn connection failed (${p.get('linkedin_error') || 'unknown'}). Please try again.` };
+    }
+    if (tileGoogle || tileLi || topFlash) {
+      if (tileGoogle) setGoogleTileError(tileGoogle);
+      if (tileLi) setLinkedinTileError(tileLi);
+      if (topFlash) setReturnFlash(topFlash);
+      ['google', 'warn', 'google_email', 'reason', 'linkedin', 'linkedin_error']
+        .forEach(k => p.delete(k));
+      const qs = p.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    }
+  }, []);
+
+  const connectGoogle = async () => {
+    setGoogleTileError(null);
+    try {
+      const res = await api.googleCalConnect({ return_to: 'integrations' });
+      const url = res?.redirect_url || res?.auth_url;
+      if (!url) throw new Error(res?.error?.message || 'Could not start Google connect.');
+      window.location.href = url;
+    } catch (e) { setGoogleTileError({ kind: 'error', text: e?.message || 'Could not start Google connect.' }); }
+  };
+  const disconnectGoogle = async () => {
+    if (!confirm('Disconnect Google? This removes Calendar + Gmail access AND unlinks "Continue with Google" sign-in. You can reconnect at any time.')) return;
+    setGoogleTileError(null);
+    try { await api.googleCalDisconnect(); await refresh(); showToast('Google disconnected.'); }
+    catch (e) { setGoogleTileError({ kind: 'error', text: e?.message || 'Could not disconnect Google.' }); }
+  };
+  const connectLinkedin = async () => {
+    setLinkedinTileError(null);
+    try {
+      const res = await api.linkedinOAuthStart({ return_to: 'integrations' });
+      if (!res?.authorize_url) throw new Error(res?.detail || 'Could not start LinkedIn connect.');
+      window.location.href = res.authorize_url;
+    } catch (e) { setLinkedinTileError({ kind: 'error', text: e?.message || 'Could not start LinkedIn connect.' }); }
+  };
+  const disconnectLinkedin = async () => {
+    if (!confirm('Disconnect LinkedIn? Any imported CSV contacts already saved to Refer & Earn stay there.')) return;
+    setLinkedinTileError(null);
+    try { await api.linkedinDisconnect(); await refresh(); showToast('LinkedIn disconnected.'); }
+    catch (e) { setLinkedinTileError({ kind: 'error', text: e?.message || 'Could not disconnect LinkedIn.' }); }
+  };
+  // Task #70 — hand-off after the CSV modal parses a file. We stash the
+  // parsed rows in localStorage under a known key and navigate to /refer,
+  // where the existing send-invites flow picks them up on mount. Keeping
+  // the actual send pipeline in one place avoids duplicating the
+  // mailto-template + per-row personalisation logic.
+  const onCsvImported = (rows) => {
+    try {
+      safeWriteJSON(PENDING_LINKEDIN_IMPORT_KEY, { rows, at: Date.now() });
+    } catch { /* storage quota etc — best-effort */ }
+    setCsvModalOpen(false);
+    showToast(`Imported ${rows.length} contacts. Opening Refer & Earn…`);
+    setTimeout(() => navigate('/refer'), 600);
+  };
 
   const onConnect = async (form) => {
     setBusy(true);
@@ -231,6 +378,60 @@ export default function IntegrationsPage() {
           <Check size={14} /> {toast}
         </div>
       )}
+      {returnFlash && (
+        <div
+          data-testid="integrations-return-flash"
+          data-flash-type={returnFlash.type}
+          className={`mb-4 text-sm rounded-lg px-4 py-2 flex items-start gap-2 border ${
+            returnFlash.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+            : returnFlash.type === 'warn'  ? 'bg-amber-50 border-amber-200 text-amber-900'
+            :                                'bg-red-50 border-red-200 text-red-700'
+          }`}
+        >
+          {returnFlash.type === 'success' ? <Check size={14} className="mt-0.5" />
+           : <AlertCircle size={14} className="mt-0.5" />}
+          <span className="flex-1">{returnFlash.text}</span>
+          <button onClick={() => setReturnFlash(null)} className="opacity-60 hover:opacity-100"><X size={14} /></button>
+        </div>
+      )}
+
+      {/* Identity & Calendar — Task #70 synthetic tiles wired to
+          /api/calendar/google and /api/linkedin (calendar tokens are
+          the single source of truth; LinkedIn handles OIDC + CSV). */}
+      <section className="mb-10">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Identity &amp; Calendar</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <ExternalProviderCard
+            testId="google"
+            icon={Mail}
+            title="Google — Calendar &amp; Gmail"
+            type="identity / calendar"
+            description="Sync your Google Calendar, read Gmail-linked event invites, and enable Continue with Google sign-in."
+            capabilities={['Calendar', 'Gmail', 'Sign in with Google']}
+            status={googleStatus}
+            connectedLabel={googleStatus?.google_email}
+            onConnect={connectGoogle}
+            onDisconnect={disconnectGoogle}
+            inlineError={googleTileError}
+            onDismissError={() => setGoogleTileError(null)}
+          />
+          <ExternalProviderCard
+            testId="linkedin"
+            icon={Linkedin}
+            title="LinkedIn — Contacts"
+            type="identity / contacts"
+            description="Sign in with LinkedIn to verify your identity, then upload your Connections.csv to import contacts for referrals."
+            capabilities={['OIDC sign-in', 'CSV contact import']}
+            status={linkedinStatus}
+            connectedLabel={linkedinStatus?.linkedin_email}
+            onConnect={connectLinkedin}
+            onDisconnect={disconnectLinkedin}
+            inlineError={linkedinTileError}
+            onDismissError={() => setLinkedinTileError(null)}
+            secondaryAction={{ label: 'Import contacts (CSV)', onClick: () => setCsvModalOpen(true) }}
+          />
+        </div>
+      </section>
 
       {/* Connected */}
       <section className="mb-10">
@@ -433,6 +634,13 @@ export default function IntegrationsPage() {
           onClose={() => { setLogsFor(null); setLogs([]); }}
         />
       )}
+
+      {csvModalOpen && (
+        <LinkedInCsvImportModal
+          onClose={() => setCsvModalOpen(false)}
+          onImported={onCsvImported}
+        />
+      )}
     </div>
   );
 }
@@ -483,6 +691,230 @@ function ProviderCard({ provider, connected, bypassesTier, onConnect }) {
             : tierLocked ? <><Lock size={12} /> Upgrade to connect</>
             : <><Plus size={12} /> Connect</>}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// Task #70 — synthetic tile for providers that wire to first-party
+// routes (Google Calendar/Gmail, LinkedIn) rather than the integrations
+// REGISTRY. Renders the same visual language as ProviderCard but talks
+// to `/api/calendar/google` and `/api/linkedin` via custom handlers.
+// Honors the missing-secrets disabled state via `status.configured`.
+function ExternalProviderCard({
+  testId, icon: Icon, title, type, description, capabilities,
+  status, connectedLabel, onConnect, onDisconnect, secondaryAction,
+  inlineError, onDismissError,
+}) {
+  // status may be null while the parallel fetch is in flight — treat
+  // that as "loading" and disable the action so we don't kick off a
+  // round-trip against a provider we haven't probed yet.
+  const loading = status === null || status === undefined;
+  const configured = !loading && status.configured !== false;
+  const connected = !!status?.connected;
+  return (
+    <div
+      data-testid="integration-external-card"
+      data-provider-key={testId}
+      data-connected={connected ? '1' : '0'}
+      data-configured={configured ? '1' : '0'}
+      className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col"
+    >
+      <div className="flex items-start gap-3 mb-2">
+        <div className="w-10 h-10 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 flex items-center justify-center">
+          <Icon size={18} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="font-medium text-gray-900 dark:text-gray-100">{title}</div>
+            {connected && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">Connected</span>
+            )}
+            {!loading && !configured && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200" title="Server secrets are not configured on this deployment.">
+                Not configured
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-gray-500 uppercase tracking-wide">{type}</div>
+        </div>
+      </div>
+      <p className="text-xs text-gray-600 dark:text-gray-400 flex-1">{description}</p>
+      {connectedLabel && (
+        <div className="text-[11px] text-gray-500 mt-1">account: {connectedLabel}</div>
+      )}
+      {!!capabilities?.length && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {capabilities.map(cap => (
+            <span key={cap} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">{cap}</span>
+          ))}
+        </div>
+      )}
+      {inlineError && (
+        <div
+          data-testid="integration-tile-error"
+          data-tile-error-kind={inlineError.kind}
+          className={`mt-2 text-[11px] rounded-md border px-2 py-1.5 flex items-start gap-1.5 ${
+            inlineError.kind === 'warn'
+              ? 'bg-amber-50 border-amber-200 text-amber-900'
+              : 'bg-red-50 border-red-200 text-red-700'
+          }`}
+        >
+          <AlertCircle size={12} className="mt-0.5 shrink-0" />
+          <span className="flex-1">{inlineError.text}</span>
+          {onDismissError && (
+            <button onClick={onDismissError} className="opacity-60 hover:opacity-100" aria-label="Dismiss"><X size={11} /></button>
+          )}
+        </div>
+      )}
+      <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+        {/* secondaryAction is shown on a connected tile and may be either
+            a link (href) or an in-place handler (onClick) — the LinkedIn
+            CSV import opens a modal so we want an onClick. */}
+        {secondaryAction && connected ? (
+          secondaryAction.onClick ? (
+            <button onClick={secondaryAction.onClick} className="text-[11px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
+              <FileText size={10} /> {secondaryAction.label}
+            </button>
+          ) : (
+            <a href={secondaryAction.href} className="text-[11px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
+              {secondaryAction.label} <ExternalLink size={10} />
+            </a>
+          )
+        ) : <span />}
+        {connected ? (
+          <button
+            onClick={onDisconnect}
+            className="text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-red-600 hover:bg-red-50"
+          >
+            <Trash2 size={12} /> Disconnect
+          </button>
+        ) : (
+          <button
+            onClick={onConnect}
+            disabled={loading || !configured}
+            title={!configured ? 'Server secrets are missing — ask an admin to configure this provider.' : undefined}
+            className={`text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${
+              loading || !configured
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-violet-600 text-white hover:bg-violet-700'
+            }`}
+          >
+            <Plus size={12} /> Connect
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Task #70 — LinkedIn CSV import modal lives directly inside Settings →
+// Integrations so users can preview and import their Connections.csv in
+// place. After parsing we hand the rows off to /refer via
+// PENDING_LINKEDIN_IMPORT_KEY (localStorage) so the existing referral
+// send flow stays the single owner of the personalised-mailto + invite
+// pipeline. Keeps responsibilities clean: Integrations imports, Refer
+// sends. Max 2 MB file size mirrors the ReferEarnPage check.
+function LinkedInCsvImportModal({ onClose, onImported }) {
+  useEscapeClose(onClose);
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const fileRef = React.useRef(null);
+
+  const handleFile = async (e) => {
+    setError('');
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2_000_000) {
+      setError('File too large (max 2 MB). LinkedIn exports above this size are unusual — please trim before re-uploading.');
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
+    setBusy(true);
+    try {
+      const text = await file.text();
+      const parsed = parseLinkedInCsv(text);
+      if (parsed.length === 0) {
+        setError('No emailed contacts found. LinkedIn only includes email for connections who chose to share theirs — you may need to invite them manually.');
+        setRows(null);
+      } else {
+        setRows(parsed);
+      }
+    } catch (err) {
+      setError('Could not parse the CSV: ' + (err?.message || 'unknown error'));
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" data-testid="linkedin-csv-modal" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-lg border border-gray-200 dark:border-gray-800">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-2">
+            <Linkedin size={16} className="text-[#0a66c2]" />
+            <h3 className="font-medium text-gray-900 dark:text-gray-100 text-sm">Import LinkedIn contacts</h3>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X size={16} /></button>
+        </div>
+        <div className="p-4 space-y-3">
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            Export your connections from LinkedIn: <span className="font-medium">Settings → Data privacy → Get a copy of your data → Connections</span>.
+            Upload the <code className="text-[11px] bg-gray-100 dark:bg-gray-800 px-1 rounded">Connections.csv</code> file below.
+          </p>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleFile}
+            disabled={busy}
+            data-testid="linkedin-csv-input"
+            className="block w-full text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
+          />
+          {error && (
+            <div className="text-xs bg-red-50 border border-red-200 text-red-700 rounded-md px-2 py-1.5 flex items-start gap-1.5">
+              <AlertCircle size={12} className="mt-0.5 shrink-0" /> {error}
+            </div>
+          )}
+          {rows && rows.length > 0 && (
+            <div data-testid="linkedin-csv-preview" className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+              <div className="text-[11px] px-3 py-2 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 flex items-center justify-between">
+                <span><span className="font-semibold">{rows.length}</span> contacts ready to import</span>
+                <span className="text-gray-500">showing first {Math.min(5, rows.length)}</span>
+              </div>
+              <table className="w-full text-[11px]">
+                <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500">
+                  <tr><th className="text-left px-3 py-1.5 font-normal">Name</th><th className="text-left px-3 py-1.5 font-normal">Email</th></tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, 5).map((r, i) => (
+                    <tr key={i} className="border-t border-gray-100 dark:border-gray-800">
+                      <td className="px-3 py-1.5 text-gray-900 dark:text-gray-100 truncate max-w-[180px]">{r.name || '—'}</td>
+                      <td className="px-3 py-1.5 text-gray-600 dark:text-gray-400 truncate max-w-[220px]">{r.email}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-100 dark:border-gray-800">
+          <button onClick={onClose} className="text-xs font-medium px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</button>
+          <button
+            onClick={() => rows && onImported(rows)}
+            disabled={!rows || rows.length === 0}
+            data-testid="linkedin-csv-import-btn"
+            className={`text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${
+              !rows || rows.length === 0
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-violet-600 text-white hover:bg-violet-700'
+            }`}
+          >
+            <Check size={12} /> Import {rows ? `${rows.length} contacts` : ''}
+          </button>
+        </div>
       </div>
     </div>
   );

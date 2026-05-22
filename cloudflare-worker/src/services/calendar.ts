@@ -75,9 +75,16 @@ const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 // (follow-up #58) can list external events via sync_token without a
 // second consent screen. `userinfo.profile` is included so the consent
 // screen names the connecting user.
+// Task #70 — single Google consent screen now covers Calendar AND Gmail
+// AND "Continue with Google" sign-in. Gmail is read-only metadata so the
+// app can show event invites/threads adjacent to calendar items without
+// asking for a second consent. Adding `gmail.readonly` will force any
+// pre-Task-#70 connection to re-consent on its next OAuth round-trip,
+// which is the intended behaviour for the consolidated Google tile.
 const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
   'openid',

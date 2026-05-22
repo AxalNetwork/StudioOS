@@ -1,5 +1,6 @@
 # Changelog
 
+
 ## Calendar connect `secret_missing` bucket pinpoints which env var is at fault
 
 Task #69 surfaced a real cause (`encrypt`) instead of the bare
@@ -38,6 +39,77 @@ whitespace and silently break decryption of every existing ciphertext
 refresh tokens, DocuSign tokens).
 
 Deployed: worker version `0f57ef31-96d4-412c-9338-c4808319a8af`.
+
+## Settings → Integrations: Google (Calendar + Gmail) and LinkedIn tiles (review fixes)
+
+Code-review fixes on top of the Task #70 first pass:
+
+- **`cloudflare-worker/src/services/calendar.ts`** — added
+  `gmail.readonly` to `GOOGLE_SCOPES` so the single Google tile actually
+  delivers the Gmail consent it advertises. Pre-Task-#70 connections
+  will re-consent on their next OAuth round-trip (intended).
+- **`cloudflare-worker/src/routes/calendar.ts`** — Google callback now
+  validates verified-email + StudioOS-email match BEFORE writing any
+  tokens when the round-trip was started from `/integrations`. Mismatch
+  redirects with `google=error&reason=email_mismatch&google_email=…`
+  (or `email_unverified`) and persists **zero** state — no calendar
+  tokens, no `user_google_links` row. Legacy `/calendar` flow keeps its
+  prior behaviour (mismatch surfaces as a warn flash, calendar tokens
+  still saved).
+- **`cloudflare-worker/src/routes/calendar.ts`** — `DELETE /google`
+  now cascades `user_google_links` deletion so the Integrations Google
+  tile flips fully to disconnected and "Continue with Google" sign-in
+  is unlinked alongside Calendar + Gmail.
+- **`frontend/src/lib/linkedinCsv.js`** (new) — extracted
+  `parseLinkedInCsv` + `PENDING_LINKEDIN_IMPORT_KEY` from
+  `ReferEarnPage.jsx` so it can be reused by the Integrations CSV
+  import modal without duplication. ReferEarnPage now imports from it
+  and gained a one-shot mount effect that picks up a stashed import
+  (`localStorage[PENDING_LINKEDIN_IMPORT_KEY]`, 10-minute freshness
+  window) and re-personalises rows with the current referral code /
+  template before clearing the key.
+- **`frontend/src/pages/IntegrationsPage.jsx`** — new
+  `LinkedInCsvImportModal` rendered directly in Integrations: file
+  picker → preview (count + first 5 rows) → "Import" button stashes
+  the rows and navigates to `/refer` to send. The LinkedIn tile now
+  opens this modal in-place instead of redirecting to `/refer`. Added
+  per-tile inline error/warn slot (`inlineError` prop) so email
+  mismatch and other connect failures render ON the tile that owns
+  them; updated the Google disconnect confirm copy to reflect the new
+  cascade behaviour. lucide-react in this repo doesn't ship a
+  `Linkedin` glyph, so a small inline SVG component is used (mirrors
+  the Twitter glyph pattern in `ReferEarnPage.jsx`).
+
+
+## Settings → Integrations: Google (Calendar + Gmail) and LinkedIn tiles
+
+Task #70 — adds two synthetic tiles to the Integrations page that wire to
+existing first-party routes instead of duplicating the providers
+contract. Calendar tokens remain the single source of truth.
+
+- **`frontend/src/pages/IntegrationsPage.jsx`** — new "Identity &
+  Calendar" section with Google and LinkedIn tiles via a new
+  `ExternalProviderCard`. Probes `googleCalStatus()` + `linkedinStatus()`
+  in parallel with the marketplace, disables the Connect button when
+  `status.configured === false` (missing server secrets), and surfaces a
+  one-shot return-flash banner driven by `?google=…`/`?linkedin=…` query
+  params (cleaned from the URL after read).
+- **`frontend/src/lib/api.js`** — `googleCalConnect`/`linkedinOAuthStart`
+  now accept `{ return_to: 'integrations' }`.
+- **`cloudflare-worker/src/routes/calendar.ts`** — Google `/start` writes
+  a short-lived, path-scoped cookie when `?return_to=integrations`; the
+  Google callback reads + deletes it and routes back to `/integrations`
+  instead of `/calendar`. On a verified, matching Google email, the
+  callback also `INSERT OR IGNORE`s into `user_google_links` so the
+  same consent unlocks "Continue with Google" sign-in (side table per
+  the documented D1 column-limit pattern). Mismatched emails skip the
+  link and surface a `warn=google_email_mismatch` flash without failing
+  the calendar/Gmail connect. Microsoft callback honours the same cookie
+  but doesn't auto-link.
+- **`cloudflare-worker/src/routes/linkedin.ts`** — `/oauth/start`
+  accepts `return_to` via query or JSON body, sets a path-scoped cookie,
+  and the callback redirects to `/integrations` instead of `/refer` when
+  set.
 
 ## Google/Outlook Calendar connect surfaces real failure reason
 

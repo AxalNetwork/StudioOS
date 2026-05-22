@@ -178,6 +178,18 @@ linkedin.post('/oauth/start', async (c) => {
   // binding or transient infra hiccup returns a friendly 503 to the modal
   // instead of a generic 500 ("Internal server error") that leaks into the UI.
   const user = await requireAuth(c);
+  // Task #70 — Integrations page hand-off. The Connect button there posts
+  // ?return_to=integrations (or { return_to: "integrations" } in the body)
+  // so the callback can route the user back to /integrations instead of
+  // the default /refer. Short-lived, scoped cookie keeps the round-trip
+  // self-contained (mirrors the calendar return_to cookie).
+  let returnTo = String(c.req.query('return_to') || '').toLowerCase();
+  if (!returnTo) {
+    try {
+      const body: any = await c.req.json().catch(() => null);
+      if (body && typeof body.return_to === 'string') returnTo = body.return_to.toLowerCase();
+    } catch { /* body may be empty */ }
+  }
   try {
     await ensureColumns(c.env);
     const state = await makeState(c.env, user.id);
@@ -188,6 +200,13 @@ linkedin.post('/oauth/start', async (c) => {
       scope: 'openid profile email',
       state,
     });
+    if (returnTo === 'integrations') {
+      c.header(
+        'Set-Cookie',
+        'studioos_li_return=integrations; HttpOnly; Secure; SameSite=Lax; Path=/api/linkedin; Max-Age=600',
+        { append: true },
+      );
+    }
     return c.json({ authorize_url: `${LINKEDIN_AUTHORIZE_URL}?${params.toString()}` });
   } catch (e: any) {
     console.error('[LINKEDIN] oauth/start failed:', e?.message || e);
@@ -202,11 +221,23 @@ linkedin.post('/oauth/start', async (c) => {
 // Exchanges code → access_token, fetches /v2/userinfo, attaches identity to
 // the user row, discards the token, and redirects back to /refer.
 // ---------------------------------------------------------------------------
-function redirectBack(env: Env, status: 'connected' | 'error', message?: string) {
+const LINKEDIN_RETURN_COOKIE_RE = /(?:^|;\s*)studioos_li_return=([^;]+)/;
+function readLinkedinReturnTo(c: any): string {
+  const m = (c.req.header('cookie') || '').match(LINKEDIN_RETURN_COOKIE_RE);
+  return m ? decodeURIComponent(m[1]).slice(0, 32) : '';
+}
+function clearLinkedinReturnCookie(): string {
+  return 'studioos_li_return=; HttpOnly; Secure; SameSite=Lax; Path=/api/linkedin; Max-Age=0';
+}
+function redirectBack(env: Env, status: 'connected' | 'error', returnTo: string, message?: string) {
   const base = stripTrailingSlashes(env.APP_URL || 'https://app.axal.vc');
   const params = new URLSearchParams({ linkedin: status });
   if (message) params.set('linkedin_error', message);
-  return Response.redirect(`${base}/refer?${params.toString()}`, 302);
+  const path = returnTo === 'integrations' ? '/integrations' : '/refer';
+  return new Response(null, {
+    status: 302,
+    headers: { Location: `${base}${path}?${params.toString()}`, 'Set-Cookie': clearLinkedinReturnCookie() },
+  });
 }
 
 // Coarse error codes the frontend's /refer flash mapper understands. Keep in
@@ -222,8 +253,9 @@ type LinkedInCallbackCode =
   | 'save_failed';
 
 linkedin.get('/oauth/callback', async (c) => {
+  const returnTo = readLinkedinReturnTo(c);
   if (!configured(c.env)) {
-    return redirectBack(c.env, 'error', 'not_configured' satisfies LinkedInCallbackCode);
+    return redirectBack(c.env, 'error', returnTo, 'not_configured' satisfies LinkedInCallbackCode);
   }
   const code = c.req.query('code');
   const state = c.req.query('state');
@@ -235,16 +267,16 @@ linkedin.get('/oauth/callback', async (c) => {
     // `oauth_denied` code which is sufficient for the UI; if provider-side
     // diagnostics are ever needed, surface them via a structured metric
     // (not a console call) so CodeQL has no string sink to taint.
-    return redirectBack(c.env, 'error', 'oauth_denied' satisfies LinkedInCallbackCode);
+    return redirectBack(c.env, 'error', returnTo, 'oauth_denied' satisfies LinkedInCallbackCode);
   }
   if (!code || !state) {
-    return redirectBack(c.env, 'error', 'state_invalid' satisfies LinkedInCallbackCode);
+    return redirectBack(c.env, 'error', returnTo, 'state_invalid' satisfies LinkedInCallbackCode);
   }
 
   const stateCheck = await consumeState(c.env, state);
   if (!stateCheck.ok) {
     console.warn('[LINKEDIN] callback state rejected:', stateCheck.reason);
-    return redirectBack(c.env, 'error', 'state_invalid' satisfies LinkedInCallbackCode);
+    return redirectBack(c.env, 'error', returnTo, 'state_invalid' satisfies LinkedInCallbackCode);
   }
   const userId = stateCheck.userId;
 
@@ -265,14 +297,14 @@ linkedin.get('/oauth/callback', async (c) => {
     if (!tokenRes.ok) {
       const txt = await tokenRes.text().catch(() => '');
       console.error('[LINKEDIN] token exchange failed:', tokenRes.status, txt.slice(0, 300));
-      return redirectBack(c.env, 'error', 'token_unavailable' satisfies LinkedInCallbackCode);
+      return redirectBack(c.env, 'error', returnTo, 'token_unavailable' satisfies LinkedInCallbackCode);
     }
     const tokenJson: any = await tokenRes.json();
     accessToken = String(tokenJson?.access_token || '');
-    if (!accessToken) return redirectBack(c.env, 'error', 'token_unavailable' satisfies LinkedInCallbackCode);
+    if (!accessToken) return redirectBack(c.env, 'error', returnTo, 'token_unavailable' satisfies LinkedInCallbackCode);
   } catch (e: any) {
     console.error('[LINKEDIN] token exchange threw:', e?.message || e);
-    return redirectBack(c.env, 'error', 'token_unavailable' satisfies LinkedInCallbackCode);
+    return redirectBack(c.env, 'error', returnTo, 'token_unavailable' satisfies LinkedInCallbackCode);
   }
 
   // Fetch verified identity. /v2/userinfo (OIDC) returns { sub, email, name, ... }
@@ -284,16 +316,16 @@ linkedin.get('/oauth/callback', async (c) => {
     if (!uiRes.ok) {
       const txt = await uiRes.text().catch(() => '');
       console.error('[LINKEDIN] userinfo failed:', uiRes.status, txt.slice(0, 300));
-      return redirectBack(c.env, 'error', 'identity_unavailable' satisfies LinkedInCallbackCode);
+      return redirectBack(c.env, 'error', returnTo, 'identity_unavailable' satisfies LinkedInCallbackCode);
     }
     const ui: any = await uiRes.json();
     sub = String(ui?.sub || '');
     email = String(ui?.email || '');
     name = String(ui?.name || [ui?.given_name, ui?.family_name].filter(Boolean).join(' ') || '');
-    if (!sub) return redirectBack(c.env, 'error', 'identity_unavailable' satisfies LinkedInCallbackCode);
+    if (!sub) return redirectBack(c.env, 'error', returnTo, 'identity_unavailable' satisfies LinkedInCallbackCode);
   } catch (e: any) {
     console.error('[LINKEDIN] userinfo threw:', e?.message || e);
-    return redirectBack(c.env, 'error', 'identity_unavailable' satisfies LinkedInCallbackCode);
+    return redirectBack(c.env, 'error', returnTo, 'identity_unavailable' satisfies LinkedInCallbackCode);
   } finally {
     // Discard the token — we never persist it.
     accessToken = '';
@@ -318,10 +350,10 @@ linkedin.get('/oauth/callback', async (c) => {
     await sql.end();
   } catch (e: any) {
     console.error('[LINKEDIN] persist failed:', e?.message || e);
-    return redirectBack(c.env, 'error', 'save_failed' satisfies LinkedInCallbackCode);
+    return redirectBack(c.env, 'error', returnTo, 'save_failed' satisfies LinkedInCallbackCode);
   }
 
-  return redirectBack(c.env, 'connected');
+  return redirectBack(c.env, 'connected', returnTo);
 });
 
 // ---------------------------------------------------------------------------

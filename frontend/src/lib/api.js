@@ -1264,7 +1264,8 @@ export const api = {
   // current user. The connections-CSV import is parsed in-browser and
   // never hits the worker.
   linkedinStatus: () => request('/linkedin/status'),
-  linkedinOAuthStart: () => request('/linkedin/oauth/start', { method: 'POST', body: JSON.stringify({}) }),
+  linkedinOAuthStart: ({ return_to } = {}) =>
+    request('/linkedin/oauth/start', { method: 'POST', body: JSON.stringify(return_to ? { return_to } : {}) }),
   linkedinDisconnect: () => request('/linkedin/disconnect', { method: 'POST', body: JSON.stringify({}) }),
 
   // ---------- Settings (Epic 3) ----------
@@ -1591,7 +1592,8 @@ export const api = {
 
   // Google Calendar sync
   googleCalStatus: () => request('/calendar/google/status'),
-  googleCalConnect: () => request('/calendar/google/connect', { method: 'POST' }),
+  googleCalConnect: ({ return_to } = {}) =>
+    request(`/calendar/google/connect${return_to ? `?return_to=${encodeURIComponent(return_to)}` : ''}`, { method: 'POST' }),
   googleCalDisconnect: () => request('/calendar/google', { method: 'DELETE' }),
   googleCalSync: () => request('/calendar/google/sync', { method: 'POST' }),
 

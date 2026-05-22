@@ -514,14 +514,33 @@ calendar.post('/push/:kind/:source_id', safe('push_one', 'Could not push event',
 // ===========================================================================
 // Provider OAuth — generic helpers shared by Google + Microsoft routes.
 // ===========================================================================
-function failureRedirect(env: Env, provider: string, reason?: string): Response {
-  const base = env.APP_URL || '';
-  const url = `${base}/calendar?${provider}=error${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`;
-  return Response.redirect(url, 302);
+// Task #70 — the Integrations page can hand the OAuth round-trip off to
+// the Calendar router (Google is the SINGLE-source-of-truth tokens store
+// for the worker, so we don't duplicate it). The Connect button there
+// sets `?return_to=integrations` on /google/start which writes a short-
+// lived cookie; the callback reads + deletes the cookie and routes the
+// user back to /integrations instead of /calendar. Same `?google=…`
+// flash contract on the destination either way.
+const CALENDAR_RETURN_COOKIE_RE = /(?:^|;\s*)studioos_cal_return=([^;]+)/;
+function readReturnTo(c: any): string {
+  const m = (c.req.header('cookie') || '').match(CALENDAR_RETURN_COOKIE_RE);
+  return m ? decodeURIComponent(m[1]).slice(0, 32) : '';
 }
-function successRedirect(env: Env, provider: string): Response {
+function clearReturnToHeader(): string {
+  return 'studioos_cal_return=; HttpOnly; Secure; SameSite=Lax; Path=/api/calendar; Max-Age=0';
+}
+function destFor(env: Env, returnTo: string): string {
   const base = env.APP_URL || '';
-  return Response.redirect(`${base}/calendar?${provider}=connected`, 302);
+  return returnTo === 'integrations' ? `${base}/integrations` : `${base}/calendar`;
+}
+function failureRedirect(env: Env, provider: string, reason: string | undefined, returnTo: string): Response {
+  const url = `${destFor(env, returnTo)}?${provider}=error${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`;
+  return new Response(null, { status: 302, headers: { Location: url, 'Set-Cookie': clearReturnToHeader() } });
+}
+function successRedirect(env: Env, provider: string, returnTo: string, extra?: Record<string, string>): Response {
+  const params = new URLSearchParams({ [provider]: 'connected', ...(extra || {}) });
+  const url = `${destFor(env, returnTo)}?${params.toString()}`;
+  return new Response(null, { status: 302, headers: { Location: url, 'Set-Cookie': clearReturnToHeader() } });
 }
 
 /**
@@ -705,6 +724,16 @@ export async function buildMicrosoftOAuthStartResponse(
 async function startGoogleOAuth(c: any) {
   const user = await requireAuth(c);
   const { status, body } = await buildGoogleOAuthStartResponse(c.env, user.id);
+  // Task #70 — let the Integrations page hand-off remember its origin
+  // across the Google round-trip via a short-lived, scoped cookie.
+  const returnTo = String(c.req.query('return_to') || '').toLowerCase();
+  if (status === 200 && returnTo === 'integrations') {
+    c.header(
+      'Set-Cookie',
+      'studioos_cal_return=integrations; HttpOnly; Secure; SameSite=Lax; Path=/api/calendar; Max-Age=600',
+      { append: true },
+    );
+  }
   return c.json(body, status);
 }
 calendar.post('/google/connect', safe('g_connect', 'Could not start Google OAuth', startGoogleOAuth));
@@ -713,25 +742,60 @@ calendar.post('/google/start',   safe('g_start',   'Could not start Google OAuth
 
 calendar.get('/google/callback', async (c) => {
   // Intentionally no requireAuth — the user_id comes from the state row.
+  const returnTo = readReturnTo(c);
   try {
     await ensureCalendarOAuthSchema(c.env);
     const url = new URL(c.req.url);
     const code = url.searchParams.get('code');
     const stateRaw = url.searchParams.get('state');
     const error = url.searchParams.get('error');
-    if (error || !code || !stateRaw) return failureRedirect(c.env, 'google', error || 'invalid_state');
+    if (error || !code || !stateRaw) return failureRedirect(c.env, 'google', error || 'invalid_state', returnTo);
     const nonce = await verifyState(c.env, stateRaw);
-    if (!nonce) return failureRedirect(c.env, 'google', 'invalid_state');
+    if (!nonce) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
     const userId = await consumeState(c.env, nonce, 'google');
-    if (!userId) return failureRedirect(c.env, 'google', 'invalid_state');
+    if (!userId) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
 
     const tokens = await exchangeGoogleCode(c.env, code);
     const refreshToken = tokens?.refresh_token;
-    if (!refreshToken) return failureRedirect(c.env, 'google', 'no_refresh_token');
+    if (!refreshToken) return failureRedirect(c.env, 'google', 'no_refresh_token', returnTo);
     const info = await fetchGoogleUserinfo(tokens.access_token || '');
-    const refreshEnc = await encryptString(c.env, refreshToken);
 
+    // Task #70 — when the OAuth round-trip was initiated from the
+    // Integrations page (single combined "Google" tile that covers
+    // Calendar + Gmail + Continue-with-Google), the connect is meant
+    // to bind the user's StudioOS account to ONE Google identity.
+    // We therefore validate verified-email + exact match BEFORE any
+    // write so a mismatch leaves zero residue (no calendar tokens, no
+    // user_google_links row). The legacy /calendar entry point keeps
+    // its prior behaviour: users may intentionally connect a personal
+    // Google calendar that differs from their work StudioOS email.
     const sql = getSQL(c.env);
+    const googleEmailRaw = info.email || '';
+    const googleEmail = String(googleEmailRaw).toLowerCase().trim();
+    const googleSub = String(info.id || '');
+    const verified = info.verified_email === true || info.verified_email === 1;
+    const me = (await sql`SELECT email FROM users WHERE id = ${userId}` as any[])[0];
+    const userEmail = String(me?.email || '').toLowerCase().trim();
+    const emailsMatch = !!(verified && googleEmail && userEmail && googleEmail === userEmail);
+
+    if (returnTo === 'integrations' && !emailsMatch) {
+      // Strict: no token persistence, no link write, no calendar_sync
+      // touch. Surface the mismatch as an explicit error (not a warn)
+      // so the tile renders it inline as a failure, not a partial
+      // success — matches the Task #70 contract.
+      const reason = (!verified && googleEmailRaw) ? 'email_unverified' : 'email_mismatch';
+      const params = new URLSearchParams({ google: 'error', reason });
+      if (googleEmailRaw) params.set('google_email', googleEmailRaw);
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: `${destFor(c.env, returnTo)}?${params.toString()}`,
+          'Set-Cookie': clearReturnToHeader(),
+        },
+      });
+    }
+
+    const refreshEnc = await encryptString(c.env, refreshToken);
     const nowIso = new Date().toISOString();
     const existing = (await sql`SELECT id FROM google_oauth_tokens WHERE user_id = ${userId}` as any[])[0];
     if (existing) {
@@ -751,11 +815,43 @@ calendar.get('/google/callback', async (c) => {
            ${info.email || null}, ${info.id || null})
       `;
     }
-    return successRedirect(c.env, 'google');
+
+    // Task #70 — populate `user_google_links` so the same consent also
+    // unlocks "Continue with Google" sign-in. Side-table because the
+    // `users` table has hit D1's ALTER-rewrite column limit (see
+    // replit.md). INSERT OR IGNORE defends against double-click races
+    // (the legacy auth_google.ts path uses the same pattern).
+    //
+    // For Integrations flow this is unconditional on success (we already
+    // gated on emailsMatch above). For the legacy /calendar flow we keep
+    // the opportunistic behaviour: link only when the verified Google
+    // email matches the StudioOS account email.
+    let warn: string | null = null;
+    let warnEmail = '';
+    if (googleSub && googleEmail) {
+      if (emailsMatch) {
+        try {
+          await sql`CREATE TABLE IF NOT EXISTS user_google_links (user_id INTEGER PRIMARY KEY, google_sub TEXT NOT NULL UNIQUE)`;
+          await sql`INSERT OR IGNORE INTO user_google_links (user_id, google_sub) VALUES (${userId}, ${googleSub})`;
+        } catch (linkErr: any) {
+          console.warn('[CAL:g_callback] user_google_links insert failed:', linkErr?.message || linkErr);
+        }
+      } else if (userEmail && googleEmail !== userEmail) {
+        // Legacy /calendar flow — surface a warn so the user knows
+        // sign-in wasn't auto-linked, but the calendar/Gmail connect
+        // itself succeeded.
+        warn = 'google_email_mismatch';
+        warnEmail = info.email || '';
+      }
+    }
+
+    const extra: Record<string, string> = {};
+    if (warn) { extra.warn = warn; if (warnEmail) extra.google_email = warnEmail; }
+    return successRedirect(c.env, 'google', returnTo, extra);
   } catch (e: any) {
     const msg = String(e?.message || e);
     console.error('[CAL:g_callback]', msg, e?.stack || '');
-    return failureRedirect(c.env, 'google', bucketCallbackFailure(msg));
+    return failureRedirect(c.env, 'google', bucketCallbackFailure(msg), returnTo);
   }
 });
 
@@ -765,6 +861,17 @@ calendar.delete('/google', safe('g_disconnect', 'Could not disconnect Google', a
   const sql = getSQL(c.env);
   await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${user.id}`;
   await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'google'`;
+  // Task #70 — the Integrations Google tile bundles Calendar + Gmail +
+  // "Continue with Google" sign-in behind a single consent. Disconnect
+  // therefore cascades the sign-in link too so the tile flips fully to
+  // "Not connected" instead of leaving a stale identity binding that
+  // the user can't see or revoke from the UI. Guarded so it doesn't
+  // fail on legacy deployments missing the side table.
+  try {
+    await sql`DELETE FROM user_google_links WHERE user_id = ${user.id}`;
+  } catch (e: any) {
+    if (!/no such table/i.test(String(e?.message || e))) throw e;
+  }
   return c.json({ ok: true });
 }));
 
@@ -820,21 +927,22 @@ calendar.get('/outlook/start',      safe('o_start',   'Could not start Outlook O
 calendar.post('/outlook/start',     safe('o_start',   'Could not start Outlook OAuth',   startMicrosoftOAuth));
 
 calendar.get('/microsoft/callback', async (c) => {
+  const returnTo = readReturnTo(c);
   try {
     await ensureCalendarOAuthSchema(c.env);
     const url = new URL(c.req.url);
     const code = url.searchParams.get('code');
     const stateRaw = url.searchParams.get('state');
     const error = url.searchParams.get('error');
-    if (error || !code || !stateRaw) return failureRedirect(c.env, 'microsoft', error || 'invalid_state');
+    if (error || !code || !stateRaw) return failureRedirect(c.env, 'microsoft', error || 'invalid_state', returnTo);
     const nonce = await verifyState(c.env, stateRaw);
-    if (!nonce) return failureRedirect(c.env, 'microsoft', 'invalid_state');
+    if (!nonce) return failureRedirect(c.env, 'microsoft', 'invalid_state', returnTo);
     const userId = await consumeState(c.env, nonce, 'microsoft');
-    if (!userId) return failureRedirect(c.env, 'microsoft', 'invalid_state');
+    if (!userId) return failureRedirect(c.env, 'microsoft', 'invalid_state', returnTo);
 
     const tokens = await exchangeMicrosoftCode(c.env, code);
     const refreshToken = tokens?.refresh_token;
-    if (!refreshToken) return failureRedirect(c.env, 'microsoft', 'no_refresh_token');
+    if (!refreshToken) return failureRedirect(c.env, 'microsoft', 'no_refresh_token', returnTo);
     const info = await fetchMicrosoftUserinfo(tokens.access_token || '');
     const email = info.mail || info.userPrincipalName || null;
     const subId = info.id || null;
@@ -859,11 +967,11 @@ calendar.get('/microsoft/callback', async (c) => {
           (${userId}, ${refreshEnc}, ${tokens.scope || ''}, ${email}, ${subId})
       `;
     }
-    return successRedirect(c.env, 'microsoft');
+    return successRedirect(c.env, 'microsoft', returnTo);
   } catch (e: any) {
     const msg = String(e?.message || e);
     console.error('[CAL:m_callback]', msg, e?.stack || '');
-    return failureRedirect(c.env, 'microsoft', bucketCallbackFailure(msg));
+    return failureRedirect(c.env, 'microsoft', bucketCallbackFailure(msg), returnTo);
   }
 });
 

@@ -10,6 +10,8 @@ import {
 
 import QRCode from 'qrcode';
 import { api } from '../lib/api';
+import { parseLinkedInCsv, PENDING_LINKEDIN_IMPORT_KEY } from '../lib/linkedinCsv';
+import { safeReadJSON, safeRemove } from '../lib/storage';
 
 const Twitter = ({ size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -144,6 +146,44 @@ export default function ReferEarnPage() {
     }
   };
   useEffect(() => { refreshInvites(); }, []);
+
+  // Task #70 — pick up a CSV import that was parsed in Settings →
+  // Integrations and stashed in localStorage. We re-personalise each
+  // row here (rather than carrying the personalised mailto links across
+  // pages) so that any updated email template / referral code is
+  // reflected, and so the IntegrationsPage handler doesn't need to
+  // know about template/link formatting. Best-effort: a missing key,
+  // bad shape, or stale entry just no-ops.
+  useEffect(() => {
+    const pending = safeReadJSON(PENDING_LINKEDIN_IMPORT_KEY, null);
+    if (!pending || !Array.isArray(pending.rows) || pending.rows.length === 0) return;
+    // Only honour imports stashed in the last 10 minutes — anything
+    // older is almost certainly a forgotten leftover from a previous
+    // session and shouldn't override what the user is actively doing.
+    if (typeof pending.at === 'number' && (Date.now() - pending.at) > 10 * 60 * 1000) {
+      safeRemove(PENDING_LINKEDIN_IMPORT_KEY);
+      return;
+    }
+    const skipped = pending.rows.length > 100 ? pending.rows.length - 100 : 0;
+    const personalized = pending.rows.slice(0, 100).map(r => {
+      const personalizedLink = buildPersonalizedInviteLink(link, code, r.email);
+      return {
+        name: r.name || '',
+        email: r.email || '',
+        link: personalizedLink,
+        mailto: `mailto:${encodeURIComponent(r.email || '')}?subject=${encodeURIComponent(fillTemplate(templates.email_subject, personalizedLink, code))}&body=${encodeURIComponent(fillTemplate(templates.email_body, personalizedLink, code))}`,
+      };
+    });
+    setImported(personalized);
+    setSelected(new Set(personalized.map((_, i) => i)));
+    setSendResult(null);
+    setImportError(skipped > 0 ? `Imported the first 100 contacts from Integrations; ${skipped} more were skipped (per-send limit).` : '');
+    safeRemove(PENDING_LINKEDIN_IMPORT_KEY);
+    // Intentionally not in the deps list — we want this to run exactly
+    // once on mount, with whatever link/code/templates exist at that
+    // moment. ESLint exhaustive-deps disabled with the comment below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-clear the toast so it can't leak into an unmounted modal.
   useEffect(() => {
@@ -1328,83 +1368,7 @@ function parseCsv(text) {
   return rows;
 }
 
-// ---------------------------------------------------------------------------
-// LinkedIn-aware CSV parser. The "Connections.csv" file LinkedIn ships in
-// the data export starts with a "Notes:" preamble (3-5 lines of human-
-// readable text) BEFORE the actual header row. We scan for the first line
-// containing both "First Name" and "Email Address" and treat it as the
-// header, then parse the remainder with the same quoted-field logic.
-// ---------------------------------------------------------------------------
-function parseLinkedInCsv(text) {
-  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
-  // Reuse the row splitter via parseCsv on the trimmed substring once we
-  // find the header line. Quote handling for the header search is naive
-  // (LinkedIn never quotes the header), so a substring-includes check
-  // is sufficient.
-  const allLines = text.split(/\r\n|\n|\r/);
-  let headerIdx = -1;
-  for (let i = 0; i < Math.min(allLines.length, 10); i++) {
-    const lc = allLines[i].toLowerCase();
-    if (lc.includes('first name') && lc.includes('email address')) {
-      headerIdx = i;
-      break;
-    }
-  }
-  // No LinkedIn-style header — fall back to the generic parser. This handles
-  // the case where the user uploaded a plain name,email CSV via this picker.
-  if (headerIdx === -1) return parseCsv(text);
-
-  const trimmed = allLines.slice(headerIdx).join('\n');
-  // Reuse the generic splitter, but we need First Name + Last Name + Email Address
-  // semantics, not name+email. Inline the parse here.
-  const lines = [];
-  let cur = '';
-  let inQuotes = false;
-  for (let i = 0; i < trimmed.length; i++) {
-    const ch = trimmed[i];
-    if (ch === '"' && trimmed[i + 1] === '"') { cur += '"'; i++; continue; }
-    if (ch === '"') { inQuotes = !inQuotes; continue; }
-    if ((ch === '\n' || ch === '\r') && !inQuotes) {
-      if (ch === '\r' && trimmed[i + 1] === '\n') i++;
-      if (cur.length > 0) lines.push(cur);
-      cur = '';
-      continue;
-    }
-    cur += ch;
-  }
-  if (cur.length > 0) lines.push(cur);
-  if (lines.length === 0) return [];
-
-  const splitRow = (line) => {
-    const out = [];
-    let f = '';
-    let q = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"' && line[i + 1] === '"') { f += '"'; i++; continue; }
-      if (ch === '"') { q = !q; continue; }
-      if (ch === ',' && !q) { out.push(f); f = ''; continue; }
-      f += ch;
-    }
-    out.push(f);
-    return out.map(s => s.trim());
-  };
-
-  const header = splitRow(lines[0]).map(h => h.toLowerCase());
-  const firstIdx = header.findIndex(h => h === 'first name');
-  const lastIdx = header.findIndex(h => h === 'last name');
-  const emailIdx = header.findIndex(h => h === 'email address' || h === 'email');
-  if (emailIdx === -1) return [];
-
-  const rows = [];
-  for (let li = 1; li < lines.length; li++) {
-    const cols = splitRow(lines[li]);
-    const email = (cols[emailIdx] || '').trim();
-    if (!email || !email.includes('@')) continue;
-    const first = firstIdx >= 0 ? (cols[firstIdx] || '').trim() : '';
-    const last = lastIdx >= 0 ? (cols[lastIdx] || '').trim() : '';
-    const name = [first, last].filter(Boolean).join(' ').trim();
-    rows.push({ email, name });
-  }
-  return rows;
-}
+// Task #70 — LinkedIn-aware CSV parser moved to
+// `frontend/src/lib/linkedinCsv.js` so the Settings → Integrations
+// in-place CSV import modal can share the exact same parsing semantics.
+// Imported at the top of this file.
