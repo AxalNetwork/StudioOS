@@ -981,12 +981,15 @@ function TemplatePreviewModal({ card, PreviewStage, onClose, onPick, busy }) {
 }
 
 function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, busy }) {
-  useEscapeClose(onClose);
   const [filter, setFilter] = useState('all');
   const [templates, setTemplates] = useState(null); // { list, record, error? } | null
   const [Thumbnail, setThumbnail] = useState(null);
   const [PreviewStage, setPreviewStage] = useState(null);
   const [previewCard, setPreviewCard] = useState(null);
+  // Suspend the picker's Esc handler while the preview modal is open so
+  // a single Esc only closes the topmost modal. The preview owns Esc
+  // until it closes, then control returns to the picker.
+  useEscapeClose(previewCard ? null : onClose);
   useEffect(() => {
     let alive = true;
     loadTemplates().then((t) => { if (alive) setTemplates(t); });
