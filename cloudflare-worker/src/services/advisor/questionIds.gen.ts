@@ -192,11 +192,19 @@ export type AdvisorQuestionId =
   | 'founder.product.tech_debt_score'
   | 'founder.product.what_breaks'
   | 'founder.product.what_works'
+  | 'founder.project.cac_usd'
+  | 'founder.project.contact_email'
+  | 'founder.project.gross_margin_pct'
+  | 'founder.project.logo_url'
   | 'founder.project.name'
   | 'founder.project.pitch'
   | 'founder.project.sector'
+  | 'founder.project.som_usd'
   | 'founder.project.stage'
+  | 'founder.project.tagline'
   | 'founder.project.traction'
+  | 'founder.project.traction_summary'
+  | 'founder.project.vision'
   | 'founder.team.attrition_12m'
   | 'founder.team.cofounders'
   | 'founder.team.compensation_philosophy'
@@ -707,11 +715,19 @@ export const ADVISOR_QUESTION_IDS: readonly AdvisorQuestionId[] = [
   "founder.product.tech_debt_score",
   "founder.product.what_breaks",
   "founder.product.what_works",
+  "founder.project.cac_usd",
+  "founder.project.contact_email",
+  "founder.project.gross_margin_pct",
+  "founder.project.logo_url",
   "founder.project.name",
   "founder.project.pitch",
   "founder.project.sector",
+  "founder.project.som_usd",
   "founder.project.stage",
+  "founder.project.tagline",
   "founder.project.traction",
+  "founder.project.traction_summary",
+  "founder.project.vision",
   "founder.team.attrition_12m",
   "founder.team.cofounders",
   "founder.team.compensation_philosophy",

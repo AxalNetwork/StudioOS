@@ -769,6 +769,17 @@ export async function routeAnswer(
       'founder.project.sector':   'sector',
       'founder.project.stage':    'stage',
       'founder.project.traction': 'growth_signals',
+      // Task #14 — deck-autofill fields. Migration 069 added these
+      // columns; the catch-block below silently falls through to the
+      // advisor_extras_json fallback on DBs that haven't migrated yet.
+      'founder.project.tagline':           'tagline',
+      'founder.project.logo_url':          'logo_url',
+      'founder.project.som_usd':           'som',
+      'founder.project.cac_usd':           'cac',
+      'founder.project.gross_margin_pct':  'gross_margin_pct',
+      'founder.project.contact_email':     'contact_email',
+      'founder.project.vision':            'vision',
+      'founder.project.traction_summary':  'traction_summary',
       // Task #3 (AS) — financials + capital + cap-table columns
       // added by migration 042. The catch-block below silently
       // falls through to the advisor_extras_json fallback if the
@@ -810,6 +821,10 @@ export async function routeAnswer(
       const n = parseInt(value.replace(/[^0-9-]/g, ''), 10);
       dbValue = Number.isFinite(n) ? n : value;
     } else if (column === 'monthly_burn_usd' || column === 'mrr_usd' || column === 'raise_target_usd') {
+      const n = parseFloat(value.replace(/[^0-9.\-]/g, ''));
+      dbValue = Number.isFinite(n) ? n : value;
+    } else if (column === 'som' || column === 'cac' || column === 'gross_margin_pct') {
+      // Task #14 — numeric coercion for the new deck-autofill columns.
       const n = parseFloat(value.replace(/[^0-9.\-]/g, ''));
       dbValue = Number.isFinite(n) ? n : value;
     }

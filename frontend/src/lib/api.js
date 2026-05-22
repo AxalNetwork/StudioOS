@@ -1008,6 +1008,12 @@ export const api = {
   deckRecommend: (projectId) => request(`/decks/recommend?project_id=${projectId}`),
   deckApplyMethod: (projectId, methodId) =>
     request('/decks/apply-method', { method: 'POST', body: JSON.stringify({ project_id: projectId, method_id: methodId }) }),
+  // Task #14 — re-runs autofill against the deck's existing method_id and
+  // overwrites the current version's slides in place. Returns the deck
+  // plus a per-slide `slide_confidence[]` array for the editor's confidence
+  // rail. 409 `no_method_id` means the deck was created before the new
+  // fielded editor; client should direct the user to /apply-method first.
+  deckAutofill: (id) => request(`/decks/${id}/autofill`, { method: 'POST', body: '{}' }),
   deckExport: (id, format) =>
     fetch(`${BASE}/decks/${id}/export`, {
       method: 'POST',

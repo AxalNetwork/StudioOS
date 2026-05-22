@@ -86,6 +86,41 @@ async function ensureSchema(env: Env): Promise<void> {
   _migrated = true;
 }
 
+// Task #14 — lazy bootstrap of the projects columns added by migration
+// 069. D1 has no `ADD COLUMN IF NOT EXISTS`; we probe PRAGMA and ALTER
+// on demand so autofill works in any environment regardless of whether
+// `wrangler d1 execute … 069_deck_autofill_fields.sql` has run.
+// Mirrors `ensureAdvisorWeekColumn` / `ensureCalendarOAuthSchema`.
+let _projectAutofillCols = false;
+async function ensureProjectAutofillColumns(env: Env): Promise<void> {
+  if (_projectAutofillCols) return;
+  try {
+    const cols = await env.DB.prepare(`PRAGMA table_info(projects)`).all<any>();
+    const have = new Set(((cols.results || []) as any[]).map((r) => String(r.name)));
+    const adds: Array<[string, string]> = [
+      ['tagline', 'TEXT'],
+      ['logo_url', 'TEXT'],
+      ['som', 'REAL'],
+      ['cac', 'REAL'],
+      ['gross_margin_pct', 'REAL'],
+      ['contact_email', 'TEXT'],
+      ['vision', 'TEXT'],
+      ['traction_summary', 'TEXT'],
+    ];
+    for (const [name, type] of adds) {
+      if (have.has(name)) continue;
+      try { await env.DB.prepare(`ALTER TABLE projects ADD COLUMN ${name} ${type}`).run(); }
+      catch (e: any) {
+        // `too many columns on sqlite_altertab` would block here; surface
+        // it once so we know to move to a side table (see users-table
+        // pattern in user_google_links from migration 065).
+        console.error('[decks] ensureProjectAutofillColumns:', name, e?.message);
+      }
+    }
+  } catch {}
+  _projectAutofillCols = true;
+}
+
 // Task #53 — best-effort hashing of viewer identifiers. Stored
 // per-impression so the founder can see "5 views, 12 min read" without
 // learning the visitor's IP or UA verbatim. SHA-256(secret || value)
@@ -121,61 +156,71 @@ async function latestScore(env: Env, projectId: number): Promise<any | null> {
 }
 
 function heuristicSlides(p: any, snap: any | null): any[] {
-  const name = p.name || 'Untitled';
-  const sector = p.sector || 'your sector';
-  const problem = (p.problem_statement || '').trim() || `Founders in ${sector} lack a fast way to ship and scale.`;
-  const solution = (p.solution || '').trim() || (p.description || `${name} delivers an integrated platform for ${sector}.`);
-  const whyNow = (p.why_now || '').trim() || 'Recent shifts in tooling and demand make this the right moment.';
+  // Task #14 — extended to read every project column the 12 deck templates
+  // reference, preserving the literal '—' placeholder when the column is
+  // empty so the editor renders a visible "needs filling" cue instead of
+  // an opinionated default. The dash mirrors `autofill.ts::PLACEHOLDER`.
+  const DASH = '—';
+  const orDash = (v: any): string => {
+    const s = (v == null ? '' : String(v)).trim();
+    return s ? s : DASH;
+  };
+  const name = orDash(p.name);
+  const sector = orDash(p.sector);
+  const tagline = orDash(p.tagline);
+  const vision = orDash(p.vision);
+  const tractionSummary = orDash(p.traction_summary);
+  const contactEmail = orDash(p.contact_email);
+  const logoUrl = (p.logo_url && String(p.logo_url).trim()) ? String(p.logo_url).trim() : null;
+  const problem = orDash(p.problem_statement);
+  const solution = (p.solution || p.description || '').toString().trim() || DASH;
+  const whyNow = orDash(p.why_now);
   const tam = fmtMoney(p.tam);
   const sam = fmtMoney(p.sam);
+  const som = fmtMoney(p.som);
   const users = Number(p.users_count || 0);
   const revenue = fmtMoney(p.revenue);
   const funding = fmtMoney(p.funding_needed);
-  const useOf = (p.use_of_funds || 'Product, GTM, key hires.').trim();
+  const useOf = orDash(p.use_of_funds);
+  const cac = fmtMoney(p.cac);
+  const grossMarginPct = p.gross_margin_pct != null && p.gross_margin_pct !== ''
+    ? `${Math.round(Number(p.gross_margin_pct) * 100) / 100}%` : null;
   const scoreLine = snap ? `Internal score: ${Math.round(Number(snap.total_score) * 10) / 10}/100 (${snap.tier}).` : '';
   const marketLine = snap ? `Market scoring: ${Math.round(Number(snap.market_total) * 10) / 10} (urgency + trend signal).` : '';
   const arr = (xs: (string | null | undefined)[]) => xs.filter((x): x is string => !!x);
 
   return [
-    { title: 'Problem', subtitle: name, body: problem, bullets: arr([whyNow]), image_url: null },
+    { title: 'Title', subtitle: name, body: tagline, bullets: arr([vision !== DASH ? `Vision: ${vision}` : null]), image_url: logoUrl },
+    { title: 'Problem', subtitle: name, body: problem, bullets: arr([whyNow !== DASH ? whyNow : null]), image_url: null },
     { title: 'Solution', subtitle: name, body: solution, bullets: [], image_url: null },
     { title: 'Market', subtitle: sector, body: '', bullets: arr([
-      tam ? `TAM: ${tam}` : 'TAM: large and growing',
-      sam ? `SAM: ${sam}` : 'SAM: clearly addressable',
-      whyNow, marketLine,
+      tam ? `TAM: ${tam}` : `TAM: ${DASH}`,
+      sam ? `SAM: ${sam}` : `SAM: ${DASH}`,
+      som ? `SOM: ${som}` : `SOM: ${DASH}`,
+      whyNow !== DASH ? whyNow : null, marketLine,
     ]), image_url: null },
-    { title: 'Traction', subtitle: "What's working", body: '', bullets: arr([
-      users > 0 ? `${users.toLocaleString()} users` : 'Early design partners engaged',
-      revenue ? `${revenue} revenue` : 'Pre-revenue, pilots in motion',
-      p.growth_signals || 'Strong week-over-week engagement signals.',
+    { title: 'Traction', subtitle: "What's working", body: tractionSummary, bullets: arr([
+      users > 0 ? `${users.toLocaleString()} users` : `Users: ${DASH}`,
+      revenue ? `${revenue} revenue` : `Revenue: ${DASH}`,
+      p.growth_signals || DASH,
       scoreLine,
     ]), image_url: null },
-    { title: 'Business model', subtitle: 'How we make money', body: '', bullets: [
-      'Subscription / usage tier (to be locked in this quarter).',
-      'Gross margin trending toward 70%+ at scale.',
-    ], image_url: null },
-    { title: 'Go-to-market', subtitle: 'Channels & motion', body: '', bullets: [
-      'Founder-led sales into design partners → outbound + community.',
-      'Distribution: integrations, referrals, content.',
-    ], image_url: null },
-    { title: 'Competition', subtitle: 'Landscape', body: '', bullets: [
-      'Incumbents are slow and unbundled.',
-      'Our wedge: speed-to-value + integrated workflow.',
-    ], image_url: null },
-    { title: 'Team', subtitle: 'Why us', body: '', bullets: [
-      'Founders with domain + execution track record.',
-      'Hiring plan: 2-3 senior ICs in the next 6 months.',
-    ], image_url: null },
+    { title: 'Business model', subtitle: 'How we make money', body: '', bullets: arr([
+      cac ? `Blended CAC: ${cac}` : `CAC: ${DASH}`,
+      grossMarginPct ? `Gross margin: ${grossMarginPct}` : `Gross margin: ${DASH}`,
+    ]), image_url: null },
+    { title: 'Go-to-market', subtitle: 'Channels & motion', body: '', bullets: [DASH], image_url: null },
+    { title: 'Competition', subtitle: 'Landscape', body: '', bullets: [DASH], image_url: null },
+    { title: 'Team', subtitle: 'Why us', body: '', bullets: [DASH], image_url: null },
     { title: 'Ask', subtitle: 'Round', body: '', bullets: arr([
-      funding ? `Raising ${funding}` : 'Raising a focused pre-seed/seed round',
+      funding ? `Raising ${funding}` : `Raise: ${DASH}`,
       '18-24 months of runway to hit the next milestone.',
       useOf,
     ]), image_url: null },
     { title: 'Financials', subtitle: 'Plan', body: '', bullets: arr([
-      'Year 1: get to repeatable revenue motion.',
-      'Year 2: scale GTM, expand product surface.',
-      funding ? `Burn target reflecting ${funding} raise.` : 'Disciplined burn, default-alive plan.',
+      funding ? `Burn target reflecting ${funding} raise.` : `Burn target: ${DASH}`,
     ]), image_url: null },
+    { title: 'Contact', subtitle: name, body: contactEmail, bullets: [], image_url: null },
   ];
 }
 
@@ -810,6 +855,7 @@ decks.post('/apply-method', async (c) => {
     return c.json({ error: 'forbidden' }, 403);
   }
   await ensureSchema(c.env);
+  await ensureProjectAutofillColumns(c.env);
   // Run autofill, then convert to the editor slide JSON shape stored in
   // pitch_decks.slides. We also stash the method_id + spec_id on each
   // slide so the editor can re-render the right field controls.
@@ -840,6 +886,88 @@ decks.post('/apply-method', async (c) => {
     deck: rowToDeck(row),
     method_id: methodId,
     coverage_pct: filled.total_coverage_pct,
+  });
+});
+
+/**
+ * Task #14 — POST /api/decks/:id/autofill
+ * Re-runs the auto-fill pipeline against the deck's existing method_id
+ * and overwrites the current version's `slides` in place (no new
+ * version). Used by the editor's "Fill from project" button.
+ *
+ * The method_id is read from the first slide's `method_id` stamp that
+ * `/apply-method` writes on creation. If the deck was created before
+ * the new fielded editor (legacy 10-slide shape), or the stamp is
+ * missing, returns 409 with `code:'no_method_id'` so the client can
+ * direct the user to pick a template first via `/apply-method`.
+ */
+decks.post('/:id/autofill', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  if (!id) return c.json({ error: 'id required' }, 400);
+  await ensureSchema(c.env);
+  await ensureProjectAutofillColumns(c.env);
+  let row: any;
+  try { row = await getDeckRow(c.env, id); }
+  catch { return c.json({ error: 'not found' }, 404); }
+  try { await projectOwned(c.env, user, Number(row.project_id)); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+
+  // Extract method_id from the persisted slides. /apply-method stamps
+  // it on every slide; we accept any non-empty match.
+  let slides: any[] = [];
+  try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
+  const methodId = String(
+    slides.find((s) => s && typeof s.method_id === 'string')?.method_id || '',
+  ).trim();
+  if (!methodId) {
+    return c.json({
+      error: 'no_method_id',
+      code: 'no_method_id',
+      message: 'Deck has no template. Pick one via "Apply template" first.',
+    }, 409);
+  }
+  const method = getMethod(methodId);
+  if (!method) return c.json({ error: 'unknown_method_id', method_id: methodId }, 400);
+  try {
+    ensureMethodAllowed(user, methodId, PREMIUM_METHOD_IDS);
+  } catch {
+    return c.json({
+      error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD',
+      method_id: methodId, required_tier: 'growth',
+    }, 402);
+  }
+
+  const filled = await autofillDeck(c.env, method, Number(row.project_id));
+  const editorSlides = toEditorSlides(method, filled);
+  const wrapped = editorSlides.map((s) => ({
+    title: s.title,
+    subtitle: s.subtitle || null,
+    spec_id: s.spec_id,
+    appendix: s.appendix,
+    method_id: methodId,
+    fields: s.fields,
+    body: s.fields.find((f) => f.kind === 'paragraph')?.value || '',
+    bullets: (s.fields.find((f) => f.kind === 'bullets')?.value as any) || [],
+    image_url: (s.fields.find((f) => f.kind === 'image')?.value as any) || null,
+  }));
+  const safeWrapped = sanitizeSlides(wrapped);
+  await c.env.DB.prepare(`UPDATE pitch_decks SET slides = ? WHERE id = ?`)
+    .bind(JSON.stringify(safeWrapped), id).run();
+  const fresh = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
+  // Per-slide confidence — surfaced in the editor rail. `filled.slides`
+  // and `editorSlides` share the same order/length.
+  const slide_confidence = filled.slides.map((s, i) => ({
+    index: i,
+    spec_id: s.spec_id,
+    title: s.title,
+    coverage_pct: s.coverage_pct,
+  }));
+  return c.json({
+    deck: rowToDeck(fresh),
+    method_id: methodId,
+    coverage_pct: filled.total_coverage_pct,
+    slide_confidence,
   });
 });
 

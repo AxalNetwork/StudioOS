@@ -125,6 +125,62 @@
       },
       {
         "persona": "founder",
+        "id": "founder.project.tagline",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "section": "BUILD"
+      },
+      {
+        "persona": "founder",
+        "id": "founder.project.vision",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "section": "BUILD"
+      },
+      {
+        "persona": "founder",
+        "id": "founder.project.contact_email",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "section": "BUILD"
+      },
+      {
+        "persona": "founder",
+        "id": "founder.project.logo_url",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "section": "BUILD"
+      },
+      {
+        "persona": "founder",
+        "id": "founder.project.som_usd",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "section": "BUILD"
+      },
+      {
+        "persona": "founder",
+        "id": "founder.project.cac_usd",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "section": "BUILD"
+      },
+      {
+        "persona": "founder",
+        "id": "founder.project.gross_margin_pct",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "section": "BUILD"
+      },
+      {
+        "persona": "founder",
+        "id": "founder.project.traction_summary",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "section": "BUILD"
+      },
+      {
+        "persona": "founder",
         "id": "founder.team.cofounders",
         "page_target": "/cofounder-match",
         "doc_anchor": "getting-started/invite-team",
@@ -466,6 +522,62 @@
         "doc_anchor": "build/projects",
         "id": "founder.project.traction",
         "mi_section": "demand_supply"
+      },
+      {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "id": "founder.project.tagline"
+      },
+      {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "id": "founder.project.logo_url"
+      },
+      {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "id": "founder.project.som_usd"
+      },
+      {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "id": "founder.project.cac_usd"
+      },
+      {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "id": "founder.project.gross_margin_pct"
+      },
+      {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "id": "founder.project.contact_email"
+      },
+      {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "id": "founder.project.vision"
+      },
+      {
+        "persona": "founder",
+        "section": "BUILD",
+        "page_target": "/projects",
+        "doc_anchor": "build/projects",
+        "id": "founder.project.traction_summary"
       },
       {
         "persona": "founder",

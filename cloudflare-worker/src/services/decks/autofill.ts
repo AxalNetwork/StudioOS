@@ -36,7 +36,10 @@ export type FilledDeck = {
   total_coverage_pct: number;
 };
 
-const PLACEHOLDER = '[Founder, fill in]';
+// Task #14 — single em-dash placeholder; the editor renders this verbatim
+// and the autofill test asserts no whole-slide stays this way once the
+// project + financials + cap-table are populated.
+const PLACEHOLDER = '—';
 
 function fmtMoney(n: any): string | null {
   const v = Number(n);
@@ -143,10 +146,14 @@ async function aiBatchFill(
     name: project.name, sector: project.sector, stage: project.stage,
     description: project.description, problem: project.problem_statement,
     solution: project.solution, why_now: project.why_now,
-    tam: project.tam, sam: project.sam, users: project.users_count,
+    tam: project.tam, sam: project.sam, som: project.som,
+    users: project.users_count,
     revenue: project.revenue, funding_needed: project.funding_needed,
     use_of_funds: project.use_of_funds, growth_signals: project.growth_signals,
     contact_email: project.contact_email,
+    tagline: project.tagline, vision: project.vision,
+    traction_summary: project.traction_summary,
+    cac: project.cac, gross_margin_pct: project.gross_margin_pct,
   };
   const prompt = `You are a senior VC associate drafting a pitch deck. Style: ${aiHint}.
 Startup data: ${JSON.stringify(ctx)}

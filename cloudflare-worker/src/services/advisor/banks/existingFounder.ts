@@ -53,6 +53,17 @@ export const EXISTING_FOUNDER_BANK: Question[] = [
     { id: 'founder.project.sector', prompt: 'Sector?', kind: 'select', opts: SECTORS, imp: 'high', mi: 'sector_heat' },
     { id: 'founder.project.stage', prompt: 'Current stage?', kind: 'select', opts: STAGES, imp: 'high', mi: 'capital_velocity' },
     { id: 'founder.project.traction', prompt: 'Latest traction — top 2-3 numbers (MRR, paid logos, growth).', skip: true, mi: 'demand_supply' },
+    // Task #14 — deck-autofill fields. Every entry maps to a projects
+    // column added by migration 069 (lazy-bootstrapped at runtime).
+    // writeRouter colMap routes each id directly to its column.
+    { id: 'founder.project.tagline', prompt: 'A one-line tagline for your company — the line you would put on a billboard.', kind: 'short', imp: 'high' },
+    { id: 'founder.project.logo_url', prompt: 'Drop a public HTTPS URL to your logo (used on the title + closing slides of every deck).', kind: 'short', skip: true },
+    { id: 'founder.project.som_usd', prompt: 'Serviceable Obtainable Market (USD) — the slice you realistically capture in 3 years.', kind: 'number', skip: true, ev: true },
+    { id: 'founder.project.cac_usd', prompt: 'Blended CAC (USD). Used on the business-model slide of every deck.', kind: 'number', skip: true, ev: true },
+    { id: 'founder.project.gross_margin_pct', prompt: 'Gross margin %. Used on the business-model + unit-economics slides.', kind: 'number', skip: true, ev: true },
+    { id: 'founder.project.contact_email', prompt: 'Best contact email for inbound from investors. Renders on the closing slide of every deck.', kind: 'short', imp: 'high' },
+    { id: 'founder.project.vision', prompt: 'One-paragraph vision — where the company is in 10 years if everything goes right.', imp: 'high' },
+    { id: 'founder.project.traction_summary', prompt: 'A short summary of your traction so far (3-4 sentences). Used as the body of the Traction slide.', skip: true },
     { id: 'founder.product.what_works', prompt: 'In one paragraph — what is consistently working in the product right now?', mi: 'sentiment', sent: true, followups: ['founder.product.what_breaks'] },
     { id: 'founder.product.what_breaks', prompt: 'And what is consistently breaking, or where do users churn / get confused?', mi: 'sentiment', sent: true, followups: ['founder.product.next_big_bet'] },
     { id: 'founder.product.next_big_bet', prompt: 'What is the next big bet on the product roadmap, and why now?' },

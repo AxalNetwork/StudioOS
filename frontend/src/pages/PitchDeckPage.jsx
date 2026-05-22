@@ -53,6 +53,9 @@ export default function PitchDeckPage() {
   const [engagement, setEngagement] = useState(null);
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
+  // Task #14 — per-slide coverage_pct[] from POST /decks/:id/autofill,
+  // rendered as a colored dot on each slide row in the left rail.
+  const [slideConfidence, setSlideConfidence] = useState([]);
   const [error, setError] = useState('');
 
   const saveTimer = useRef(null);
@@ -209,6 +212,7 @@ export default function PitchDeckPage() {
       const r = await api.deckApplyMethod(projectId, methodId);
       setDeck(r?.deck || r);
       setActiveIdx(0);
+      setSlideConfidence([]);
       const refreshed = await api.deckListVersions(projectId);
       setVersions(Array.isArray(refreshed) ? refreshed : (refreshed?.versions || []));
       addToast(`Applied ${methods.find((m) => m.id === methodId)?.label || 'template'} (${r.coverage_pct || 0}% auto-filled)`, 'success');
@@ -217,6 +221,31 @@ export default function PitchDeckPage() {
         addToast('That template is on the Growth plan — upgrade to unlock.', 'info');
       } else {
         setError(e.message || 'Failed to apply method'); reportError(e);
+      }
+    } finally { setBusy(false); }
+  };
+
+  // ---------------- Task #14 — Fill from project ----------------
+  // POST /api/decks/:id/autofill returns the deck + a per-slide
+  // coverage_pct[] used by the confidence rail in the slide list.
+  // Cleared by applyMethod / version restore so stale values don't
+  // bleed across deck swaps.
+  const fillFromProject = async () => {
+    if (!deck?.id) { addToast('No deck loaded', 'error'); return; }
+    setBusy(true);
+    try {
+      const r = await api.deckAutofill(deck.id);
+      setDeck(r?.deck || deck);
+      setSlideConfidence(Array.isArray(r?.slide_confidence) ? r.slide_confidence : []);
+      addToast(`Refilled from project (${r?.coverage_pct ?? 0}% covered)`, 'success');
+    } catch (e) {
+      if (e.status === 409 || /no_method_id/i.test(e.message || '')) {
+        addToast('Pick a template first — then refill.', 'info');
+        setPickerOpen(true);
+      } else if (e.status === 402) {
+        addToast('That template is on the Growth plan — upgrade to unlock.', 'info');
+      } else {
+        setError(e.message || 'Refill failed'); reportError(e);
       }
     } finally { setBusy(false); }
   };
@@ -343,6 +372,17 @@ export default function PitchDeckPage() {
           >
             <LayoutGrid className="w-4 h-4" /> Pick template
           </button>
+          {/* Task #14 — refill the current deck from project data without
+              creating a new version. 409 (no_method_id) re-opens the
+              picker so the user can choose a template first. */}
+          <button
+            onClick={fillFromProject}
+            disabled={!deck?.id || busy}
+            className="px-3 py-2 border border-violet-300 dark:border-violet-800 text-violet-700 dark:text-violet-300 rounded hover:bg-violet-50 dark:hover:bg-violet-950/40 disabled:opacity-50 flex items-center gap-2"
+            title="Re-run autofill against this project's current data"
+          >
+            <Wand2 className="w-4 h-4" /> Fill from project
+          </button>
         </div>
 
         {error && (
@@ -412,6 +452,18 @@ export default function PitchDeckPage() {
                       <GripVertical className="w-3 h-3 text-gray-300 group-hover:text-gray-500 shrink-0" />
                       <span className="w-5 text-gray-400">{i + 1}</span>
                       <span className="flex-1 truncate">{s.title || 'Untitled'}</span>
+                      {/* Task #14 — coverage dot. Green ≥70%, amber 30-69%,
+                          red <30%. Tooltip surfaces the exact %. */}
+                      {slideConfidence[i] && typeof slideConfidence[i].coverage_pct === 'number' && (
+                        <span
+                          title={`Auto-filled ${slideConfidence[i].coverage_pct}%`}
+                          className={`w-2 h-2 rounded-full shrink-0 ${
+                            slideConfidence[i].coverage_pct >= 70 ? 'bg-emerald-500'
+                            : slideConfidence[i].coverage_pct >= 30 ? 'bg-amber-500'
+                            : 'bg-red-500'
+                          }`}
+                        />
+                      )}
                       {s.appendix && <span className="text-[10px] text-gray-400">apx</span>}
                       <Trash2
                         className="w-3 h-3 text-gray-300 hover:text-red-500"
