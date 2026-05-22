@@ -344,6 +344,41 @@ export const api = {
     request(`/wellbeing/experts/${encodeURIComponent(uid)}/rate`, {
       method: 'POST', body: JSON.stringify(data),
     }),
+  // Task #4 — expert self-service
+  wellbeingExpertApply: (data) =>
+    request('/wellbeing/experts/apply', { method: 'POST', body: JSON.stringify(data || {}) }),
+  wellbeingExpertMe: () => request('/wellbeing/experts/me'),
+  wellbeingExpertMeUpdate: (data) =>
+    request('/wellbeing/experts/me', { method: 'PUT', body: JSON.stringify(data) }),
+  wellbeingExpertMyServices: () => request('/wellbeing/experts/me/services'),
+  wellbeingExpertServiceCreate: (data) =>
+    request('/wellbeing/experts/me/services', { method: 'POST', body: JSON.stringify(data) }),
+  wellbeingExpertServiceUpdate: (uid, data) =>
+    request(`/wellbeing/experts/me/services/${encodeURIComponent(uid)}`, { method: 'PUT', body: JSON.stringify(data) }),
+  wellbeingExpertServiceDelete: (uid) =>
+    request(`/wellbeing/experts/me/services/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  wellbeingExpertMyAvailability: () => request('/wellbeing/experts/me/availability'),
+  wellbeingExpertAvailabilityCreate: (data) =>
+    request('/wellbeing/experts/me/availability', { method: 'POST', body: JSON.stringify(data) }),
+  wellbeingExpertAvailabilityDelete: (uid) =>
+    request(`/wellbeing/experts/me/availability/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  wellbeingExpertStripeConnect: () =>
+    request('/wellbeing/experts/me/stripe/connect', { method: 'POST', body: '{}' }),
+  wellbeingExpertStripeStatus: () => request('/wellbeing/experts/me/stripe/status'),
+  wellbeingExpertMyBookings: () => request('/wellbeing/experts/me/bookings'),
+  wellbeingExpertBookingPatch: (uid, data) =>
+    request(`/wellbeing/experts/me/bookings/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  wellbeingMyBookings: () => request('/wellbeing/bookings/mine'),
+  wellbeingAdminHide: (uid, hidden) =>
+    request(`/wellbeing/admin/experts/${encodeURIComponent(uid)}/hide`, {
+      method: 'POST', body: JSON.stringify({ hidden: !!hidden }),
+    }),
+  wellbeingAdminVerify: (uid, verified) =>
+    request(`/wellbeing/admin/experts/${encodeURIComponent(uid)}/verify`, {
+      method: 'POST', body: JSON.stringify({ verified: !!verified }),
+    }),
+  articlesByAuthor: (userId) =>
+    request(`/articles/by-author/${encodeURIComponent(userId)}`),
 
   legal83bUploadReceipt: (id, file) => {
     const fd = new FormData();

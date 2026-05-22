@@ -175,8 +175,8 @@ export async function ensureSeededExperts(env: Env): Promise<void> {
            (uid, name, headline, bio, photo_url, categories_json, sectors_json,
             languages_json, timezones_json, modalities_json, pricing_model,
             hourly_rate_usd, first_session_free, calendly_url, website_url,
-            verified, is_active)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`,
+            verified, is_active, profile_completion_pct)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 80)`,
       ).bind(
         s.uid, s.name, s.headline, s.bio, s.photo_url,
         JSON.stringify(s.categories), JSON.stringify(s.sectors),

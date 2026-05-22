@@ -386,7 +386,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'mentor_booking' | 'partner_office_hour' | 'calendly_event';
+  kind: 'ic_meeting' | 'founder_checkin' | 'mentor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking';
   source_id: number;
   source_uid: string;
   title: string;

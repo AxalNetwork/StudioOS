@@ -43,7 +43,7 @@ function isValidPlan(p: unknown): p is 'mi_pro_monthly' | 'mi_pro_annual' {
   return p === 'mi_pro_monthly' || p === 'mi_pro_annual';
 }
 
-async function stripeCall<T>(env: Env, path: string, body: Record<string, string>): Promise<T> {
+export async function stripeCall<T>(env: Env, path: string, body: Record<string, string>): Promise<T> {
   const key = env.STRIPE_SECRET_KEY;
   if (!key) throw new Error('stripe_not_configured');
   const form = new URLSearchParams(body);
@@ -475,6 +475,23 @@ billing.post('/stripe/webhook', async (c) => {
     if (ev.type === 'account.updated') {
       const { applyConnectAccountUpdated } = await import('../services/referralPayouts');
       await applyConnectAccountUpdated(c.env, ev.data.object as Parameters<typeof applyConnectAccountUpdated>[1]);
+      // Task #4 — mirror Connect flags onto experts.* so the directory can
+      // gate paid bookings on (stripe_charges_enabled = 1).
+      try {
+        const acct = ev.data.object as { id?: string; charges_enabled?: boolean; payouts_enabled?: boolean };
+        if (acct?.id) {
+          await c.env.DB.prepare(
+            `UPDATE experts SET stripe_charges_enabled = ?, stripe_payouts_enabled = ?
+               WHERE stripe_account_id = ?`,
+          ).bind(
+            acct.charges_enabled ? 1 : 0,
+            acct.payouts_enabled ? 1 : 0,
+            acct.id,
+          ).run();
+        }
+      } catch (e: any) {
+        console.warn('[billing] expert connect mirror failed:', String(e?.message || e));
+      }
     } else if (ev.type === 'transfer.paid') {
       const transferId = (ev.data.object as { id?: string }).id;
       if (transferId) {
@@ -508,9 +525,17 @@ async function handleStripeEvent(
     || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('tier:'));
   const isInvestor = meta.kind === 'investor'
     || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('investor:'));
+  const isExpertBooking = meta.kind === 'expert_booking'
+    || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('expert_booking:'));
 
   switch (event.type) {
     case 'checkout.session.completed': {
+      // Task #4 — wellbeing expert booking fulfilment.
+      if (isExpertBooking) {
+        const { confirmBookingFromStripe } = await import('../services/wellbeing/bookings');
+        await confirmBookingFromStripe(env, obj);
+        return;
+      }
       const userId = Number(meta.user_id ??
         (typeof obj.client_reference_id === 'string'
           ? (obj.client_reference_id as string).replace(/^(tier|investor):/, '')

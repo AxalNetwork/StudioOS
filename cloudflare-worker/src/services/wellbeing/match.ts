@@ -34,6 +34,14 @@ export interface ExpertRow {
   website_url: string | null;
   verified: number;
   is_active: number;
+  // Task #4 — added by migration 070 / ensureWellbeingSchema ALTERs.
+  profile_completion_pct?: number;
+  stripe_account_id?: string | null;
+  stripe_charges_enabled?: number;
+  stripe_payouts_enabled?: number;
+  application_fee_pct?: number | null;
+  updated_at?: string | null;
+  hidden_by_admin?: number;
 }
 
 export interface MatchPrefs {

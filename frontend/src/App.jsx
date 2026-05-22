@@ -28,6 +28,8 @@ import CofounderAgreementPage from './pages/CofounderAgreementPage';
 import Section83bPage from './pages/Section83bPage';
 import CompliancePage from './pages/CompliancePage';
 import WellbeingPage from './pages/WellbeingPage';
+import ExpertProfilePage from './pages/ExpertProfilePage';
+import ExpertEditorPage from './pages/ExpertEditorPage';
 import PartnersPage from './pages/PartnersPage';
 import CapitalPage from './pages/CapitalPage';
 import TicketsPage from './pages/TicketsPage';
@@ -1066,6 +1068,8 @@ function AppInner() {
       <Route path="/incorporate/83b" element={guard(['admin', 'founder', 'partner'], <Section83bPage />)} />
       <Route path="/compliance" element={guard(['admin', 'founder', 'partner'], <CompliancePage />)} />
       <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
+      <Route path="/wellbeing/expert-dashboard" element={guard(['admin', 'founder', 'partner', 'mentor'], <ExpertEditorPage />)} />
+      <Route path="/wellbeing/expert/:uid" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ExpertProfilePage />)} />
       <Route path="/partners" element={guard(['admin', 'partner', 'investor'], <PartnersPage />)} />
       <Route path="/capital" element={guard(['admin', 'investor'], <CapitalPage />)} />
       <Route path="/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <TicketsPage />)} />

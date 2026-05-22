@@ -47,6 +47,10 @@ import {
 } from '../services/wellbeing/match';
 import { ensureSeededExperts } from '../services/wellbeing/seedExperts';
 import { userMeetsTier, type TierUser } from '../middleware/requireTier';
+import {
+  createBookingCheckout, mirrorBookingToCalendar, fanoutBookingNotifications,
+} from '../services/wellbeing/bookings';
+import { stripeCall } from './billing';
 
 const wellbeing = new Hono<{ Bindings: Env }>();
 
@@ -185,6 +189,36 @@ async function ensureWellbeingSchema(env: Env): Promise<void> {
      )`,
     `CREATE INDEX IF NOT EXISTS idx_expert_views_user_time
        ON expert_profile_views(user_id, viewed_at DESC)`,
+    // Task #4 — services + recurring availability
+    `CREATE TABLE IF NOT EXISTS expert_services (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
+       expert_id INTEGER NOT NULL,
+       title TEXT NOT NULL,
+       description TEXT,
+       duration_minutes INTEGER NOT NULL DEFAULT 30,
+       price_cents INTEGER NOT NULL DEFAULT 0,
+       currency TEXT NOT NULL DEFAULT 'usd',
+       is_active INTEGER NOT NULL DEFAULT 1,
+       sort_order INTEGER NOT NULL DEFAULT 100,
+       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_expert_services_expert
+       ON expert_services(expert_id, is_active, sort_order)`,
+    `CREATE TABLE IF NOT EXISTS expert_availability (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
+       expert_id INTEGER NOT NULL,
+       day_of_week INTEGER NOT NULL,
+       start_minute INTEGER NOT NULL,
+       end_minute INTEGER NOT NULL,
+       timezone TEXT NOT NULL DEFAULT 'UTC',
+       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_expert_availability_expert
+       ON expert_availability(expert_id, day_of_week)`,
+    `CREATE INDEX IF NOT EXISTS idx_expert_bookings_expert_status
+       ON expert_bookings(expert_id, status, scheduled_at)`,
   ];
   for (const sql of STMTS) {
     try { await env.DB.prepare(sql).run(); }
@@ -208,6 +242,24 @@ async function ensureWellbeingSchema(env: Env): Promise<void> {
     `ALTER TABLE wellbeing_checkins ADD COLUMN decisions_plain INTEGER`,
     `ALTER TABLE wellbeing_checkins ADD COLUMN energy_plain INTEGER`,
     `ALTER TABLE wellbeing_checkins ADD COLUMN notes_plain TEXT`,
+    // Task #4 — expert profile completion + Stripe Connect + booking payment.
+    `ALTER TABLE experts ADD COLUMN profile_completion_pct INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE experts ADD COLUMN stripe_account_id TEXT`,
+    `ALTER TABLE experts ADD COLUMN stripe_charges_enabled INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE experts ADD COLUMN stripe_payouts_enabled INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE experts ADD COLUMN application_fee_pct REAL`,
+    `ALTER TABLE experts ADD COLUMN updated_at TEXT`,
+    `ALTER TABLE experts ADD COLUMN hidden_by_admin INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE expert_bookings ADD COLUMN service_id INTEGER`,
+    `ALTER TABLE expert_bookings ADD COLUMN payment_status TEXT NOT NULL DEFAULT 'unpaid'`,
+    `ALTER TABLE expert_bookings ADD COLUMN stripe_session_id TEXT`,
+    `ALTER TABLE expert_bookings ADD COLUMN stripe_payment_intent_id TEXT`,
+    `ALTER TABLE expert_bookings ADD COLUMN amount_total_cents INTEGER`,
+    `ALTER TABLE expert_bookings ADD COLUMN application_fee_cents INTEGER`,
+    `ALTER TABLE expert_bookings ADD COLUMN currency TEXT`,
+    `ALTER TABLE expert_bookings ADD COLUMN meet_link TEXT`,
+    `ALTER TABLE expert_bookings ADD COLUMN hidden_by_admin INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE expert_bookings ADD COLUMN booker_note TEXT`,
   ];
   for (const sql of ALTERS) {
     try { await env.DB.prepare(sql).run(); }
@@ -706,10 +758,11 @@ wellbeing.delete('/resources/:id', async (c) => {
 // ---------------------------------------------------------------------------
 // Expert directory (Task #8 DI)
 // ---------------------------------------------------------------------------
-function serializeExpert(e: ExpertRow, opts: { include_score?: number; rating_avg?: number; rating_count?: number; breakdown?: any } = {}) {
+function serializeExpert(e: ExpertRow, opts: { include_score?: number; rating_avg?: number; rating_count?: number; breakdown?: any; services?: any[] } = {}) {
   const parse = (s: string) => { try { return JSON.parse(s); } catch { return []; } };
   return {
     uid: e.uid,
+    user_id: e.user_id ?? null,
     name: e.name,
     headline: e.headline,
     bio: e.bio,
@@ -726,11 +779,47 @@ function serializeExpert(e: ExpertRow, opts: { include_score?: number; rating_av
     booking_url: e.booking_url,
     website_url: e.website_url,
     verified: !!e.verified,
+    profile_completion_pct: Number(e.profile_completion_pct || 0),
+    accepts_payments: !!(e.stripe_account_id && e.stripe_charges_enabled),
     rating_avg: opts.rating_avg ?? 0,
     rating_count: opts.rating_count ?? 0,
     match_score: opts.include_score ?? null,
     match_breakdown: opts.breakdown ?? null,
+    services: opts.services ?? null,
   };
+}
+
+// Task #4 — completion %. Weighted across the fields a published expert
+// needs to be useful in the directory. >=70 unlocks listing + bookings.
+function computeProfileCompletion(e: ExpertRow, serviceCount: number, availabilityCount: number): number {
+  const parse = (s: string | null | undefined) => { try { return s ? JSON.parse(s) : []; } catch { return []; } };
+  const checks: Array<{ w: number; ok: boolean }> = [
+    { w: 10, ok: !!e.name },
+    { w: 8,  ok: !!(e.headline && e.headline.length >= 8) },
+    { w: 12, ok: !!(e.bio && e.bio.length >= 60) },
+    { w: 5,  ok: !!e.photo_url },
+    { w: 12, ok: parse(e.categories_json).length >= 1 },
+    { w: 6,  ok: parse(e.languages_json).length >= 1 },
+    { w: 6,  ok: parse(e.timezones_json).length >= 1 },
+    { w: 6,  ok: parse(e.modalities_json).length >= 1 },
+    { w: 5,  ok: !!e.pricing_model },
+    { w: 10, ok: serviceCount >= 1 },
+    { w: 10, ok: availabilityCount >= 1 || !!e.calendly_url || !!e.booking_url },
+    { w: 10, ok: !!(e.stripe_account_id && e.stripe_charges_enabled) || e.pricing_model === 'free' },
+  ];
+  const total = checks.reduce((s, c) => s + c.w, 0);
+  const got = checks.reduce((s, c) => s + (c.ok ? c.w : 0), 0);
+  return Math.round((got / total) * 100);
+}
+
+async function recomputeExpertCompletion(env: Env, expertId: number): Promise<number> {
+  const e = await env.DB.prepare('SELECT * FROM experts WHERE id = ?').bind(expertId).first<ExpertRow>();
+  if (!e) return 0;
+  const svc = await env.DB.prepare('SELECT COUNT(*) AS n FROM expert_services WHERE expert_id = ? AND is_active = 1').bind(expertId).first<{ n: number }>();
+  const av = await env.DB.prepare('SELECT COUNT(*) AS n FROM expert_availability WHERE expert_id = ?').bind(expertId).first<{ n: number }>();
+  const pct = computeProfileCompletion(e, Number(svc?.n || 0), Number(av?.n || 0));
+  await env.DB.prepare('UPDATE experts SET profile_completion_pct = ?, updated_at = datetime(\'now\') WHERE id = ?').bind(pct, expertId).run();
+  return pct;
 }
 
 async function countMonthlyProfileViews(env: Env, userId: number): Promise<number> {
@@ -763,9 +852,18 @@ wellbeing.get('/experts', async (c) => {
     await ensureWellbeingSchema(c.env);
     await ensureSeededExperts(c.env);
 
-    const all = await c.env.DB.prepare(
-      `SELECT * FROM experts WHERE is_active = 1`,
-    ).all<ExpertRow>();
+    // Task #4 — directory only shows verified experts with completion >= 70
+    // and not admin-hidden. Admins see everything (review surface).
+    const isAdmin = role(user) === 'admin';
+    const all = isAdmin
+      ? await c.env.DB.prepare(`SELECT * FROM experts WHERE is_active = 1`).all<ExpertRow>()
+      : await c.env.DB.prepare(
+          `SELECT * FROM experts
+             WHERE is_active = 1
+               AND verified = 1
+               AND COALESCE(hidden_by_admin, 0) = 0
+               AND COALESCE(profile_completion_pct, 0) >= 70`,
+        ).all<ExpertRow>();
     const experts = (all.results || []) as ExpertRow[];
 
     const filtered = applyFilters(experts, {
@@ -945,11 +1043,28 @@ wellbeing.post('/experts/:uid/book', async (c) => {
     'SELECT * FROM experts WHERE uid = ? AND is_active = 1',
   ).bind(uid).first<ExpertRow>();
   if (!expert) return c.json({ detail: 'Expert not found' }, 404);
+  // Task #4 — booking gated on completion >= 70 + not admin-hidden.
+  if (role(user) !== 'admin') {
+    if ((expert.hidden_by_admin ?? 0) === 1) return c.json({ detail: 'Expert unavailable' }, 404);
+    if ((expert.profile_completion_pct ?? 0) < 70) {
+      return c.json({ detail: 'Expert profile is incomplete and cannot accept bookings yet.' }, 409);
+    }
+  }
 
   const body = await c.req.json().catch(() => ({}));
   const launchUrl = expert.calendly_url || expert.booking_url || expert.website_url || null;
   const notes = typeof (body as any)?.notes === 'string' ? (body as any).notes.slice(0, 1000) : null;
-  const duration = Number((body as any)?.duration_minutes) || 30;
+  const bookerNote = typeof (body as any)?.booker_note === 'string'
+    ? (body as any).booker_note.slice(0, 1000)
+    : notes;
+  const serviceUid = typeof (body as any)?.service_uid === 'string' ? (body as any).service_uid : null;
+  const service = serviceUid
+    ? await c.env.DB.prepare(
+        'SELECT * FROM expert_services WHERE uid = ? AND expert_id = ? AND is_active = 1',
+      ).bind(serviceUid, expert.id).first<{ id: number; uid: string; expert_id: number; title: string; duration_minutes: number; price_cents: number; currency: string }>()
+    : null;
+  if (serviceUid && !service) return c.json({ detail: 'Service not found' }, 404);
+  const duration = service?.duration_minutes || Number((body as any)?.duration_minutes) || 30;
 
   // Internal-scheduling path: founder picked an explicit slot from /slots.
   let scheduledAt: string | null = null;
@@ -983,23 +1098,89 @@ wellbeing.post('/experts/:uid/book', async (c) => {
   }
 
   const bookingUid = uuidHex();
+  // Task #4 — payment routing:
+  //   • paid service + expert has Connect + Stripe configured → Stripe Checkout,
+  //     status='pending_payment' until webhook confirms.
+  //   • free service OR no Connect / no Stripe key → behave like before
+  //     (status='scheduled'|'requested', no payment).
+  const wantsPaid = !!service && service.price_cents > 0;
+  const canChargeStripe =
+    wantsPaid
+    && !!c.env.STRIPE_SECRET_KEY
+    && !!expert.stripe_account_id
+    && (expert.stripe_charges_enabled ?? 0) === 1;
+  const initialStatus = canChargeStripe
+    ? 'pending_payment'
+    : (usingInternal ? 'scheduled' : 'requested');
+  const meetLink = scheduledAt ? `https://meet.jit.si/axal-${bookingUid}` : null;
+
   try {
     await c.env.DB.prepare(
       `INSERT INTO expert_bookings
          (uid, expert_id, user_id, scheduled_at, duration_minutes, status,
-          booking_external_url, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          booking_external_url, notes, service_id, payment_status,
+          amount_total_cents, currency, meet_link, booker_note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       bookingUid, expert.id, user.id,
       scheduledAt, duration,
-      usingInternal ? 'scheduled' : 'requested',
+      initialStatus,
       launchUrl, notes,
+      service?.id || null,
+      canChargeStripe ? 'unpaid' : (wantsPaid ? 'unpaid' : 'free'),
+      service?.price_cents ?? null,
+      service?.currency ?? null,
+      meetLink,
+      bookerNote,
     ).run();
   } catch (e: any) {
     console.warn('[wellbeing] booking insert failed:', String(e?.message || e));
+    return c.json({ detail: 'Booking failed — please try again.' }, 500);
   }
 
-  // Fan out notifications. Founder always gets one; expert too if linked to a user_id.
+  // Stripe Checkout path. On failure we surface 502; the caller can retry.
+  if (canChargeStripe && service) {
+    try {
+      const row = await c.env.DB.prepare(
+        `SELECT id, uid, expert_id, user_id, service_id, scheduled_at, duration_minutes,
+                status, payment_status, booker_note, notes, amount_total_cents, currency,
+                stripe_session_id, stripe_payment_intent_id, meet_link
+           FROM expert_bookings WHERE uid = ? LIMIT 1`,
+      ).bind(bookingUid).first<any>();
+      const checkout = await createBookingCheckout(
+        c.env,
+        {
+          id: expert.id, uid: expert.uid, user_id: expert.user_id ?? null, name: expert.name,
+          stripe_account_id: expert.stripe_account_id ?? null,
+          stripe_charges_enabled: expert.stripe_charges_enabled ?? 0,
+          application_fee_pct: expert.application_fee_pct ?? null,
+        },
+        { id: service.id, uid: service.uid, expert_id: service.expert_id, title: service.title,
+          duration_minutes: service.duration_minutes, price_cents: service.price_cents,
+          currency: service.currency },
+        row,
+        (user as any).email || null,
+      );
+      await c.env.DB.prepare(
+        `UPDATE expert_bookings
+            SET stripe_session_id = ?, application_fee_cents = ?
+          WHERE uid = ?`,
+      ).bind(checkout.session_id, checkout.application_fee_cents, bookingUid).run();
+      return c.json({
+        booking_uid: bookingUid,
+        checkout_url: checkout.url,
+        status: 'pending_payment',
+        amount_cents: service.price_cents,
+        currency: service.currency,
+      });
+    } catch (e: any) {
+      console.warn('[wellbeing] stripe checkout failed:', String(e?.message || e));
+      await c.env.DB.prepare(`DELETE FROM expert_bookings WHERE uid = ?`).bind(bookingUid).run();
+      return c.json({ detail: 'Payment setup failed. Please try again.' }, 502);
+    }
+  }
+
+  // Free / no-Stripe path — keep legacy notify behaviour.
   try {
     const when = scheduledAt ? new Date(scheduledAt).toUTCString() : 'time TBD via external scheduler';
     await notify(c.env, {
@@ -1019,21 +1200,31 @@ wellbeing.post('/experts/:uid/book', async (c) => {
         type: 'expert_booking_received',
         title: `New booking request`,
         body: usingInternal
-          ? `A founder booked you for ${when} (${duration} min).${notes ? ` Notes: ${notes}` : ''}`
+          ? `A founder booked you for ${when} (${duration} min).${bookerNote ? ` Note: ${bookerNote}` : ''}`
           : `A founder is opening your external scheduler.`,
-        link: '/wellbeing',
+        link: '/wellbeing/expert-dashboard',
         category: 'calendar',
-        channels: ['in_app', 'email'],
+        channels: ['in_app', 'email', 'slack'],
       });
     }
   } catch (e) {
     console.warn('[wellbeing] booking notify failed:', String((e as any)?.message || e));
   }
 
+  // Free path with internal scheduling — mirror to calendar immediately.
+  if (!canChargeStripe && usingInternal && scheduledAt) {
+    try {
+      const row = await c.env.DB.prepare('SELECT id FROM expert_bookings WHERE uid = ?').bind(bookingUid).first<{ id: number }>();
+      if (row?.id) await mirrorBookingToCalendar(c.env, row.id);
+    } catch (e: any) { console.warn('[wellbeing] calendar mirror failed:', String(e?.message || e)); }
+  }
+
   return c.json({
     booking_uid: bookingUid,
     launch_url: launchUrl,
     scheduled_at: scheduledAt,
+    status: initialStatus,
+    meet_link: meetLink,
     fallback: usingInternal ? 'internal_scheduled' : null,
     message: usingInternal
       ? `Confirmed for ${new Date(scheduledAt!).toUTCString()}. Both of you have been emailed.`
@@ -1070,6 +1261,415 @@ wellbeing.post('/experts/:uid/rate', async (c) => {
        created_at = datetime('now')`,
   ).bind(uuidHex(), expert.id, user.id, stars, review, matchPctNum).run();
   return c.json({ ok: true });
+});
+
+// ===========================================================================
+// Task #4 — Expert self-service surface
+// ===========================================================================
+
+async function loadMyExpert(env: Env, userId: number): Promise<ExpertRow | null> {
+  return await env.DB.prepare(
+    'SELECT * FROM experts WHERE user_id = ? LIMIT 1',
+  ).bind(userId).first<ExpertRow>();
+}
+
+function parseStringArray(v: unknown, max = 25): string[] {
+  if (!Array.isArray(v)) return [];
+  return Array.from(new Set(v.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length < 80))).slice(0, max);
+}
+
+function sanitiseExpertInput(body: any): Record<string, any> {
+  const out: Record<string, any> = {};
+  const str = (k: string, max = 2000) => {
+    if (typeof body[k] === 'string') out[k] = body[k].slice(0, max);
+  };
+  str('name', 120);
+  str('headline', 240);
+  str('bio', 4000);
+  str('photo_url', 500);
+  str('calendly_url', 500);
+  str('booking_url', 500);
+  str('website_url', 500);
+  if (Array.isArray(body.categories)) out.categories_json = JSON.stringify(parseStringArray(body.categories));
+  if (Array.isArray(body.sectors)) out.sectors_json = JSON.stringify(parseStringArray(body.sectors));
+  if (Array.isArray(body.languages)) out.languages_json = JSON.stringify(parseStringArray(body.languages));
+  if (Array.isArray(body.timezones)) out.timezones_json = JSON.stringify(parseStringArray(body.timezones));
+  if (Array.isArray(body.modalities)) {
+    const ms = parseStringArray(body.modalities).filter((m) => (VALID_MODALITIES as readonly string[]).includes(m));
+    out.modalities_json = JSON.stringify(ms);
+  }
+  if (typeof body.pricing_model === 'string' && (VALID_PRICING_MODELS as readonly string[]).includes(body.pricing_model)) {
+    out.pricing_model = body.pricing_model;
+  }
+  if (Number.isFinite(Number(body.hourly_rate_usd))) {
+    out.hourly_rate_usd = Math.max(0, Math.min(5000, Math.round(Number(body.hourly_rate_usd))));
+  }
+  if (body.first_session_free != null) out.first_session_free = body.first_session_free ? 1 : 0;
+  if (Number.isFinite(Number(body.application_fee_pct))) {
+    out.application_fee_pct = Math.max(0, Math.min(50, Number(body.application_fee_pct)));
+  }
+  return out;
+}
+
+// Apply / create an expert profile bound to the calling user.
+wellbeing.post('/experts/apply', async (c) => {
+  const user = await requireAuth(c);
+  if (role(user) === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
+  await ensureWellbeingSchema(c.env);
+
+  const existing = await loadMyExpert(c.env, user.id);
+  if (existing) return c.json({ detail: 'You already have an expert profile.', expert: serializeExpert(existing) }, 409);
+
+  const body = await c.req.json().catch(() => ({}));
+  const fields = sanitiseExpertInput(body);
+  const name = (fields.name as string) || (user as any).name || (user as any).email || `Expert ${user.id}`;
+  const newUid = uuidHex();
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO experts (uid, user_id, name, headline, bio, photo_url,
+         categories_json, sectors_json, languages_json, timezones_json, modalities_json,
+         pricing_model, hourly_rate_usd, first_session_free,
+         calendly_url, booking_url, website_url, application_fee_pct,
+         verified, is_active, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, datetime('now'))`,
+    ).bind(
+      newUid, user.id, name,
+      fields.headline ?? null, fields.bio ?? null, fields.photo_url ?? null,
+      fields.categories_json ?? '[]', fields.sectors_json ?? '[]',
+      fields.languages_json ?? '["en"]', fields.timezones_json ?? '[]',
+      fields.modalities_json ?? '["video"]',
+      fields.pricing_model ?? 'paid', fields.hourly_rate_usd ?? null,
+      fields.first_session_free ?? 0,
+      fields.calendly_url ?? null, fields.booking_url ?? null, fields.website_url ?? null,
+      fields.application_fee_pct ?? null,
+    ).run();
+  } catch (e: any) {
+    console.warn('[wellbeing] expert apply failed:', String(e?.message || e));
+    return c.json({ detail: 'Could not create expert profile.' }, 500);
+  }
+  const row = await loadMyExpert(c.env, user.id);
+  if (!row) return c.json({ detail: 'Could not create expert profile.' }, 500);
+  await recomputeExpertCompletion(c.env, row.id);
+  const fresh = await loadMyExpert(c.env, user.id);
+  return c.json(serializeExpert(fresh!));
+});
+
+wellbeing.get('/experts/me', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const e = await loadMyExpert(c.env, user.id);
+  if (!e) return c.json({ detail: 'No expert profile' }, 404);
+  const services = await c.env.DB.prepare(
+    'SELECT * FROM expert_services WHERE expert_id = ? ORDER BY sort_order, id',
+  ).bind(e.id).all<any>();
+  const availability = await c.env.DB.prepare(
+    'SELECT * FROM expert_availability WHERE expert_id = ? ORDER BY day_of_week, start_minute',
+  ).bind(e.id).all<any>();
+  return c.json({
+    ...serializeExpert(e, { services: services.results || [] }),
+    availability: availability.results || [],
+    stripe: {
+      account_id: e.stripe_account_id || null,
+      charges_enabled: !!e.stripe_charges_enabled,
+      payouts_enabled: !!e.stripe_payouts_enabled,
+    },
+  });
+});
+
+wellbeing.put('/experts/me', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const e = await loadMyExpert(c.env, user.id);
+  if (!e) return c.json({ detail: 'No expert profile' }, 404);
+  const body = await c.req.json().catch(() => ({}));
+  const fields = sanitiseExpertInput(body);
+  const keys = Object.keys(fields);
+  if (keys.length === 0) return c.json(serializeExpert(e));
+  const setClause = keys.map((k) => `${k} = ?`).join(', ');
+  const values = keys.map((k) => fields[k]);
+  try {
+    await c.env.DB.prepare(
+      `UPDATE experts SET ${setClause}, updated_at = datetime('now') WHERE id = ?`,
+    ).bind(...values, e.id).run();
+  } catch (e2: any) {
+    console.warn('[wellbeing] expert update failed:', String(e2?.message || e2));
+    return c.json({ detail: 'Update failed' }, 500);
+  }
+  await recomputeExpertCompletion(c.env, e.id);
+  const fresh = await loadMyExpert(c.env, user.id);
+  return c.json(serializeExpert(fresh!));
+});
+
+// --- services CRUD ---
+wellbeing.get('/experts/me/services', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const e = await loadMyExpert(c.env, user.id);
+  if (!e) return c.json({ services: [] });
+  const rs = await c.env.DB.prepare(
+    'SELECT * FROM expert_services WHERE expert_id = ? ORDER BY sort_order, id',
+  ).bind(e.id).all<any>();
+  return c.json({ services: rs.results || [] });
+});
+
+wellbeing.post('/experts/me/services', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const e = await loadMyExpert(c.env, user.id);
+  if (!e) return c.json({ detail: 'No expert profile' }, 404);
+  const body = await c.req.json().catch(() => ({}));
+  const title = String(body?.title || '').slice(0, 240);
+  if (!title) return c.json({ detail: 'title required' }, 400);
+  const description = typeof body?.description === 'string' ? body.description.slice(0, 2000) : null;
+  const duration = Math.max(5, Math.min(480, Number(body?.duration_minutes) || 30));
+  const priceCents = Math.max(0, Math.min(10_000_00, Math.round(Number(body?.price_cents) || 0)));
+  const currency = String(body?.currency || 'usd').toLowerCase().slice(0, 8);
+  const newUid = uuidHex();
+  await c.env.DB.prepare(
+    `INSERT INTO expert_services (uid, expert_id, title, description, duration_minutes, price_cents, currency, is_active, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 1, 100)`,
+  ).bind(newUid, e.id, title, description, duration, priceCents, currency).run();
+  await recomputeExpertCompletion(c.env, e.id);
+  const row = await c.env.DB.prepare('SELECT * FROM expert_services WHERE uid = ?').bind(newUid).first<any>();
+  return c.json(row);
+});
+
+wellbeing.put('/experts/me/services/:uid', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const e = await loadMyExpert(c.env, user.id);
+  if (!e) return c.json({ detail: 'No expert profile' }, 404);
+  const uid = c.req.param('uid');
+  const svc = await c.env.DB.prepare('SELECT * FROM expert_services WHERE uid = ? AND expert_id = ?').bind(uid, e.id).first<any>();
+  if (!svc) return c.json({ detail: 'Not found' }, 404);
+  const body = await c.req.json().catch(() => ({}));
+  const set: string[] = []; const vals: any[] = [];
+  const push = (col: string, val: any) => { set.push(`${col} = ?`); vals.push(val); };
+  if (typeof body.title === 'string') push('title', body.title.slice(0, 240));
+  if (typeof body.description === 'string' || body.description === null) push('description', body.description ? String(body.description).slice(0, 2000) : null);
+  if (Number.isFinite(Number(body.duration_minutes))) push('duration_minutes', Math.max(5, Math.min(480, Number(body.duration_minutes))));
+  if (Number.isFinite(Number(body.price_cents))) push('price_cents', Math.max(0, Math.min(10_000_00, Math.round(Number(body.price_cents)))));
+  if (typeof body.currency === 'string') push('currency', body.currency.toLowerCase().slice(0, 8));
+  if (body.is_active != null) push('is_active', body.is_active ? 1 : 0);
+  if (Number.isFinite(Number(body.sort_order))) push('sort_order', Number(body.sort_order));
+  if (!set.length) return c.json(svc);
+  await c.env.DB.prepare(`UPDATE expert_services SET ${set.join(', ')} WHERE id = ?`).bind(...vals, svc.id).run();
+  await recomputeExpertCompletion(c.env, e.id);
+  const row = await c.env.DB.prepare('SELECT * FROM expert_services WHERE id = ?').bind(svc.id).first<any>();
+  return c.json(row);
+});
+
+wellbeing.delete('/experts/me/services/:uid', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const e = await loadMyExpert(c.env, user.id);
+  if (!e) return c.json({ detail: 'No expert profile' }, 404);
+  await c.env.DB.prepare('DELETE FROM expert_services WHERE uid = ? AND expert_id = ?').bind(c.req.param('uid'), e.id).run();
+  await recomputeExpertCompletion(c.env, e.id);
+  return c.json({ ok: true });
+});
+
+// --- availability CRUD ---
+wellbeing.get('/experts/me/availability', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const e = await loadMyExpert(c.env, user.id);
+  if (!e) return c.json({ availability: [] });
+  const rs = await c.env.DB.prepare(
+    'SELECT * FROM expert_availability WHERE expert_id = ? ORDER BY day_of_week, start_minute',
+  ).bind(e.id).all<any>();
+  return c.json({ availability: rs.results || [] });
+});
+
+wellbeing.post('/experts/me/availability', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const e = await loadMyExpert(c.env, user.id);
+  if (!e) return c.json({ detail: 'No expert profile' }, 404);
+  const body = await c.req.json().catch(() => ({}));
+  const dow = Number(body?.day_of_week);
+  const start = Number(body?.start_minute);
+  const end = Number(body?.end_minute);
+  const tz = String(body?.timezone || 'UTC').slice(0, 64);
+  if (!Number.isInteger(dow) || dow < 0 || dow > 6) return c.json({ detail: 'day_of_week 0..6' }, 400);
+  if (!Number.isInteger(start) || start < 0 || start >= 1440) return c.json({ detail: 'start_minute 0..1439' }, 400);
+  if (!Number.isInteger(end) || end <= start || end > 1440) return c.json({ detail: 'end_minute > start_minute and <= 1440' }, 400);
+  const newUid = uuidHex();
+  await c.env.DB.prepare(
+    `INSERT INTO expert_availability (uid, expert_id, day_of_week, start_minute, end_minute, timezone)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).bind(newUid, e.id, dow, start, end, tz).run();
+  await recomputeExpertCompletion(c.env, e.id);
+  const row = await c.env.DB.prepare('SELECT * FROM expert_availability WHERE uid = ?').bind(newUid).first<any>();
+  return c.json(row);
+});
+
+wellbeing.delete('/experts/me/availability/:uid', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const e = await loadMyExpert(c.env, user.id);
+  if (!e) return c.json({ detail: 'No expert profile' }, 404);
+  await c.env.DB.prepare('DELETE FROM expert_availability WHERE uid = ? AND expert_id = ?').bind(c.req.param('uid'), e.id).run();
+  await recomputeExpertCompletion(c.env, e.id);
+  return c.json({ ok: true });
+});
+
+// --- Stripe Connect onboarding ---
+wellbeing.post('/experts/me/stripe/connect', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const e = await loadMyExpert(c.env, user.id);
+  if (!e) return c.json({ detail: 'No expert profile' }, 404);
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ detail: 'Stripe not configured on this environment.' }, 503);
+  const appUrl = c.env.APP_URL || 'https://axal.vc';
+  let accountId = e.stripe_account_id || null;
+  try {
+    if (!accountId) {
+      const acct = await stripeCall<{ id: string }>(c.env, '/accounts', {
+        type: 'express',
+        'capabilities[transfers][requested]': 'true',
+        'capabilities[card_payments][requested]': 'true',
+        email: (user as any).email || '',
+        'metadata[expert_id]': String(e.id),
+        'metadata[user_id]': String(user.id),
+      });
+      accountId = acct.id;
+      await c.env.DB.prepare('UPDATE experts SET stripe_account_id = ? WHERE id = ?').bind(accountId, e.id).run();
+    }
+    const link = await stripeCall<{ url: string }>(c.env, '/account_links', {
+      account: accountId,
+      refresh_url: `${appUrl}/wellbeing/expert-dashboard?stripe=refresh`,
+      return_url: `${appUrl}/wellbeing/expert-dashboard?stripe=return`,
+      type: 'account_onboarding',
+    });
+    return c.json({ url: link.url, account_id: accountId });
+  } catch (err: any) {
+    console.warn('[wellbeing] connect failed:', String(err?.message || err));
+    return c.json({ detail: 'Stripe Connect setup failed.' }, 502);
+  }
+});
+
+wellbeing.get('/experts/me/stripe/status', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const e = await loadMyExpert(c.env, user.id);
+  if (!e) return c.json({ detail: 'No expert profile' }, 404);
+  if (!c.env.STRIPE_SECRET_KEY || !e.stripe_account_id) {
+    return c.json({
+      account_id: e.stripe_account_id || null,
+      charges_enabled: !!e.stripe_charges_enabled,
+      payouts_enabled: !!e.stripe_payouts_enabled,
+    });
+  }
+  try {
+    const key = c.env.STRIPE_SECRET_KEY;
+    const res = await fetch(`https://api.stripe.com/v1/accounts/${e.stripe_account_id}`, {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    if (!res.ok) throw new Error(`stripe_${res.status}`);
+    const acct = await res.json() as { charges_enabled?: boolean; payouts_enabled?: boolean };
+    const ce = acct.charges_enabled ? 1 : 0;
+    const pe = acct.payouts_enabled ? 1 : 0;
+    await c.env.DB.prepare(
+      'UPDATE experts SET stripe_charges_enabled = ?, stripe_payouts_enabled = ? WHERE id = ?',
+    ).bind(ce, pe, e.id).run();
+    await recomputeExpertCompletion(c.env, e.id);
+    return c.json({
+      account_id: e.stripe_account_id,
+      charges_enabled: !!ce,
+      payouts_enabled: !!pe,
+    });
+  } catch (err: any) {
+    console.warn('[wellbeing] connect status failed:', String(err?.message || err));
+    return c.json({
+      account_id: e.stripe_account_id,
+      charges_enabled: !!e.stripe_charges_enabled,
+      payouts_enabled: !!e.stripe_payouts_enabled,
+      error: 'refresh_failed',
+    });
+  }
+});
+
+// --- expert-side bookings ---
+wellbeing.get('/experts/me/bookings', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const e = await loadMyExpert(c.env, user.id);
+  if (!e) return c.json({ bookings: [] });
+  const rs = await c.env.DB.prepare(
+    `SELECT b.uid, b.status, b.payment_status, b.scheduled_at, b.duration_minutes,
+            b.amount_total_cents, b.currency, b.application_fee_cents,
+            b.meet_link, b.booker_note, b.created_at,
+            u.name AS booker_name
+       FROM expert_bookings b
+       LEFT JOIN users u ON u.id = b.user_id
+      WHERE b.expert_id = ? AND COALESCE(b.hidden_by_admin,0) = 0
+      ORDER BY b.created_at DESC
+      LIMIT 100`,
+  ).bind(e.id).all<any>();
+  // Experts see ONLY booker_note (NOT wellbeing check-ins). Privacy contract.
+  return c.json({ bookings: rs.results || [] });
+});
+
+wellbeing.patch('/experts/me/bookings/:uid', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const e = await loadMyExpert(c.env, user.id);
+  if (!e) return c.json({ detail: 'No expert profile' }, 404);
+  const uid = c.req.param('uid');
+  const booking = await c.env.DB.prepare(
+    'SELECT * FROM expert_bookings WHERE uid = ? AND expert_id = ?',
+  ).bind(uid, e.id).first<any>();
+  if (!booking) return c.json({ detail: 'Not found' }, 404);
+  const body = await c.req.json().catch(() => ({}));
+  const newStatus = typeof body?.status === 'string' ? body.status : null;
+  const allowed = new Set(['confirmed', 'cancelled', 'completed', 'no_show']);
+  if (!newStatus || !allowed.has(newStatus)) return c.json({ detail: 'invalid status' }, 400);
+  await c.env.DB.prepare('UPDATE expert_bookings SET status = ? WHERE id = ?').bind(newStatus, booking.id).run();
+  if (newStatus === 'cancelled') {
+    await fanoutBookingNotifications(c.env, booking.id, 'cancelled');
+  }
+  return c.json({ ok: true, status: newStatus });
+});
+
+// --- founder bookings ---
+wellbeing.get('/bookings/mine', async (c) => {
+  const user = await requireAuth(c);
+  await ensureWellbeingSchema(c.env);
+  const rs = await c.env.DB.prepare(
+    `SELECT b.uid, b.status, b.payment_status, b.scheduled_at, b.duration_minutes,
+            b.amount_total_cents, b.currency, b.meet_link, b.created_at,
+            e.uid AS expert_uid, e.name AS expert_name, e.photo_url AS expert_photo
+       FROM expert_bookings b
+       JOIN experts e ON e.id = b.expert_id
+      WHERE b.user_id = ?
+      ORDER BY b.created_at DESC
+      LIMIT 50`,
+  ).bind(user.id).all<any>();
+  return c.json({ bookings: rs.results || [] });
+});
+
+// --- admin review-hide ---
+wellbeing.post('/admin/experts/:uid/hide', async (c) => {
+  const user = await requireAuth(c);
+  if (role(user) !== 'admin') return c.json({ detail: 'admin only' }, 403);
+  await ensureWellbeingSchema(c.env);
+  const body = await c.req.json().catch(() => ({}));
+  const hidden = body?.hidden ? 1 : 0;
+  const res = await c.env.DB.prepare(
+    'UPDATE experts SET hidden_by_admin = ? WHERE uid = ?',
+  ).bind(hidden, c.req.param('uid')).run();
+  return c.json({ ok: true, hidden: !!hidden, changes: (res.meta as any)?.changes ?? 0 });
+});
+
+wellbeing.post('/admin/experts/:uid/verify', async (c) => {
+  const user = await requireAuth(c);
+  if (role(user) !== 'admin') return c.json({ detail: 'admin only' }, 403);
+  await ensureWellbeingSchema(c.env);
+  const body = await c.req.json().catch(() => ({}));
+  const verified = body?.verified ? 1 : 0;
+  await c.env.DB.prepare('UPDATE experts SET verified = ? WHERE uid = ?').bind(verified, c.req.param('uid')).run();
+  return c.json({ ok: true, verified: !!verified });
 });
 
 // Expose schema bootstrap for tests / admin.
