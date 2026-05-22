@@ -26,8 +26,9 @@ const EXPLAINER_CARDS = [
         <p>
           <span className="font-semibold text-gray-900">Week 2 — Solution & Roadmap.</span> Scope the
           MVP, set 90-day OKRs, draft brand v1, draft pitch deck v1. Unlocks{' '}
-          <Link to="/roadmap" className="text-violet-700 hover:underline">Roadmap</Link>, Brand
-          Builder, Pitch Deck Builder.
+          <Link to="/build/roadmap" className="text-violet-700 hover:underline">Roadmap</Link>,{' '}
+          <Link to="/build/brand" className="text-violet-700 hover:underline">Brand Builder</Link>,{' '}
+          <Link to="/build/deck" className="text-violet-700 hover:underline">Pitch Deck Builder</Link>.
         </p>
         <p>
           <span className="font-semibold text-gray-900">Week 3 — Validate & Team.</span> Run your
@@ -40,12 +41,13 @@ const EXPLAINER_CARDS = [
         <p>
           <span className="font-semibold text-gray-900">Week 4 — Incorporate & Capital.</span>{' '}
           Incorporate, vest, file 83(b), sign cofounder agreement, lock the ask. Unlocks{' '}
-          <Link to="/incorporate" className="text-violet-700 hover:underline">Incorporate</Link>, Cap
-          Table,{' '}
+          <Link to="/incorporate" className="text-violet-700 hover:underline">Incorporate</Link>,{' '}
+          <Link to="/build/captable" className="text-violet-700 hover:underline">Cap Table</Link>,{' '}
           <Link to="/incorporate/83b" className="text-violet-700 hover:underline">Section 83(b)</Link>,{' '}
           <Link to="/incorporate/cofounder-agreement" className="text-violet-700 hover:underline">Cofounder Agreement</Link>,{' '}
           <Link to="/capital" className="text-violet-700 hover:underline">Capital</Link>,{' '}
-          <Link to="/compliance" className="text-violet-700 hover:underline">Compliance</Link>.
+          <Link to="/compliance" className="text-violet-700 hover:underline">Compliance</Link>, and{' '}
+          <Link to="/kyc" className="text-violet-700 hover:underline">KYC</Link> (investor-side, before any wire).
         </p>
       </div>
     ),
