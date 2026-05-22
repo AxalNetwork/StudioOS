@@ -131,8 +131,6 @@ const SECTIONS = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'privacy', label: 'Privacy', icon: Lock },
   { id: 'integrations', label: 'Integrations', icon: Plug },
-  // Task #8 (IH) — Data Imports list + per-type wizards.
-  { id: 'imports', label: 'Data Imports', icon: Database },
   { id: 'billing', label: 'Billing', icon: CreditCard, roles: ['founder', 'investor'] },
   { id: 'appearance', label: 'Appearance', icon: Palette },
 ];
@@ -152,7 +150,6 @@ const PATH_TO_SECTION = {
   integrations: 'integrations',
   billing: 'billing',
   appearance: 'appearance',
-  imports: 'imports',
   // Back-compat: old deep links still resolve to a sensible new tab.
   jurisdictions: 'profile',
   email: 'account',
@@ -299,7 +296,6 @@ export default function SettingsPage() {
           )}
           {safeActive === 'onboarding' && <OnboardingSettingsTab />}
           {safeActive === 'integrations' && allowedIds.has('integrations') && <IntegrationsTab flash={flash} />}
-          {safeActive === 'imports' && <DataImportsTab flash={flash} />}
           {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
           {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
         </div>
