@@ -1870,6 +1870,17 @@ export const publications = {
   publicGet: (slug) => request(`/market-intel-public/publications/${slug}`),
 };
 
+// Task #10 (LD) — Admin team roster (Public /team page lives on axal.vc).
+export const adminTeam = {
+  list: () => request('/admin/team'),
+  create: (payload) => request('/admin/team', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id, patch) => request(`/admin/team/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  remove: (id) => request(`/admin/team/${id}`, { method: 'DELETE' }),
+  uploadPhoto: (id, dataUri) =>
+    request(`/admin/team/${id}/photo`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
+  reorder: (order) => request('/admin/team/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
+};
+
 // Spin-Out Lab — 4-week guided sprint for pre-incorporation founders.
 // Namespaced separately from `api` to keep the surface small and obvious
 // for the call sites that wire milestone completion in feature pages.

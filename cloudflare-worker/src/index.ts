@@ -37,6 +37,9 @@ import legalcap from './routes/legalcap';
 import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
 import adminPublications from './routes/admin_publications';
+// Task #10 (LD) — Admin team roster + public team endpoint.
+import adminTeam from './routes/admin_team';
+import teamPublic from './routes/team_public';
 import partnerOnboarding from './routes/partner_onboarding';
 import partnerPortal from './routes/partner_portal';
 // Task #10 (AC-1) — Personal advisor backend + write-router.
@@ -470,6 +473,9 @@ app.use('/api/infra/*', requireCfAccess());
 app.route('/api/admin/contracts', adminContracts);
 app.route('/api/admin/integration-keys', adminIntegrationKeys);
 app.route('/api/admin/advisor-audit', adminAdvisorAudit);
+// Task #10 (LD) — Admin team roster CRUD + photo upload. Mounted BEFORE
+// the generic /api/admin router so the more-specific prefix wins.
+app.route('/api/admin/team', adminTeam);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);
@@ -561,6 +567,11 @@ app.route('/api/portfolio', portfolioRoutes);
 // Task #1 (AG) — public profile facade (no auth) sits between /api/portfolio
 // and /api/references alphabetically.
 app.route('/api/public', publicRoutes);
+// Task #10 (LD) — Public team roster. Mounted under /api/public so it
+// sits OUTSIDE auth + the /api/admin/* CF Access perimeter; the Jekyll
+// marketing build (axalnetwork.github.io) curls /api/public/team into
+// _data/team.json before rendering /team on axal.vc.
+app.route('/api/public', teamPublic);
 app.route('/api/references', referencesRoutes);
 // Task #1 (AG) — service offerings (founder marketplace) alphabetically
 // after /api/references and before /api/spinout-lab/comarketing.
