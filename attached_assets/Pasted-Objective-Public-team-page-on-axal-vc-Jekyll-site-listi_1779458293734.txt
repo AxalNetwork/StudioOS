@@ -1,0 +1,74 @@
+Objective
+  Public /team page on axal.vc Jekyll site listing leadership and
+  venture partners. Admin Console > Team panel selects who appears.
+  Default member: Guillaume Lauzier.
+
+Two repos, one feature
+
+  StudioOS (Cloudflare side)
+    Schema:
+      CREATE TABLE team_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        slug TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        title TEXT NOT NULL,
+        location TEXT,
+        short_bio TEXT,
+        long_bio TEXT,
+        photo_r2_key TEXT,
+        focus_areas_json TEXT,
+        social_linkedin TEXT,
+        social_x TEXT,
+        social_website TEXT,
+        social_email TEXT,
+        display_order INTEGER DEFAULT 100,
+        published INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    Worker routes:
+      GET    /api/public/team           — public, returns published
+                                            members ordered by display_order
+      GET    /api/admin/team             — admin only, all members
+      POST   /api/admin/team             — add member
+      PUT    /api/admin/team/:id         — edit
+      DELETE /api/admin/team/:id
+      POST   /api/admin/team/:id/photo   — upload to R2
+    Seed migration inserts Guillaume:
+      slug: 'guillaume-lauzier'
+      name: 'Guillaume Lauzier'
+      title: 'CEO & Founder · Venture Partner'
+      social_linkedin: 'https://www.linkedin.com/in/guillaumelauzier/'
+      social_x: 'https://x.com/guilauzier'
+      social_website: 'https://guillaumelauzier.com'
+
+    Admin UI /admin/team:
+      Table with name, title, published toggle, order, edit, delete.
+      Edit form: photo upload, social links with auto-icon, focus
+      areas multi-select, long bio textarea.
+      Reorder by drag.
+
+  Marketing site (Jekyll, axal.vc)
+    New page /team.md backed by a Jekyll include _includes/team.html
+    that fetches the public list via JS at build OR at runtime:
+      Recommended: build-time JSON pull from
+      https://app.axal.vc/api/public/team into _data/team.json.
+      Add a build hook in the Jekyll repo's workflow:
+        before build → curl https://app.axal.vc/api/public/team >
+                        _data/team.json
+      Falls back to a committed _data/team.json if the fetch fails.
+    Card layout similar to the platform's Public Directory:
+      square photo, name, title, focus chips, social icon row.
+    Mobile: 1-column stack.
+
+CORS
+  /api/public/team returns Access-Control-Allow-Origin:
+    https://axal.vc (so the Jekyll build can fetch it; the
+    runtime fallback also works since CORS is the only constraint).
+
+Acceptance
+  - /team renders on axal.vc with Guillaume's card.
+  - Admin can add a second member; /team rebuilds and shows it.
+  - LinkedIn + X icons link out in a new tab.
+  - Photo uploads round-trip from Admin to R2 to the rendered card.
+  - Toggling published off hides the member without delete.

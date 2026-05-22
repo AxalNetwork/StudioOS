@@ -1,0 +1,97 @@
+Objective
+  Twin to the Telegram system but for X (Twitter). Admin reviews,
+  edits, optionally attaches media, and approves posts before they
+  go live. Drafts are aggregated from real platform activity.
+
+Auth
+  X OAuth 2.0 with PKCE. Scopes:
+    tweet.read tweet.write users.read offline.access
+  Secrets:
+    X_CLIENT_ID
+    X_CLIENT_SECRET
+    X_BEARER_TOKEN  (read-only fallback)
+  Per-Axal-account OAuth tokens stored encrypted in:
+    CREATE TABLE x_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      handle TEXT UNIQUE,             -- e.g. 'axalvc'
+      remote_user_id TEXT,
+      access_token_ciphertext TEXT,
+      refresh_token_ciphertext TEXT,
+      expires_at DATETIME,
+      added_by_admin_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE x_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      x_account_id INTEGER NOT NULL,
+      draft_source TEXT,
+      source_event_ids_json TEXT,
+      body TEXT NOT NULL,
+      thread_continuation_of INTEGER,   -- self-reference for threads
+      media_r2_keys_json TEXT,
+      remote_media_ids_json TEXT,
+      status TEXT NOT NULL,             -- 'draft','queued','posted',
+                                        -- 'failed','retracted'
+      created_by_admin_id INTEGER NOT NULL,
+      approved_by_admin_id INTEGER,
+      scheduled_at DATETIME,
+      posted_at DATETIME,
+      remote_post_id TEXT,
+      error TEXT
+    );
+
+Worker routes (admin + Cf-Access)
+  GET    /api/admin/x/accounts
+  GET    /api/admin/x/auth/start
+  GET    /api/admin/x/auth/callback
+  POST   /api/admin/x/posts                create draft
+  PUT    /api/admin/x/posts/:id            edit draft
+  POST   /api/admin/x/posts/:id/media      upload to R2 + register with X
+  POST   /api/admin/x/posts/:id/approve    flips status to queued
+  POST   /api/admin/x/posts/:id/send       post now (admin)
+  POST   /api/admin/x/posts/:id/schedule   { scheduled_at }
+  POST   /api/admin/x/posts/:id/retract    deletes from X if posted
+  POST   /api/admin/x/aggregator/run
+
+Aggregator (cloudflare-worker/src/services/x/aggregator.ts)
+  Same platform-event taxonomy as the Telegram aggregator, but with
+  X-specific copy constraints:
+    - 280 chars per tweet
+    - Suggest thread (multi-tweet) splits when content > 280
+    - Generate hashtags from sector + audience tags
+    - Suggest 1 media if MI chart available
+  Draft examples produced:
+    "Week recap @ Axal: 3 new ventures incorporated, 14 founder–
+     investor introductions, 6 mentor sessions booked. Sector heat
+     ↑ in #AI infra and #fintech. axal.vc"
+    "New on /news: <author> on <title>. axal.vc/news/<slug>"
+
+Composer UX (/admin/x)
+  - Character counter live (280 limit).
+  - Thread mode: + button adds another tweet, drag to reorder.
+  - Media uploader with image preview + automatic alt-text suggestion
+    (via the existing Workers AI model).
+  - Send / Schedule / Save Draft buttons.
+  - "Aggregator suggestions" panel pulls fresh drafts on click.
+  - Preview pane shows what the tweet will look like on X.
+
+Safety
+  - PII linter — same as Telegram (Prompt LC).
+  - Per-day cap: 20 posts / account / day (X's free tier limit is
+    lower; respect rate limits returned by X API).
+  - Retraction: deletes via X API and updates status='retracted'.
+    All retractions logged.
+  - Image safety: run uploaded images through a moderation pass
+    before upload to X (the existing magic-byte check + a simple
+    NSFW classifier if available).
+
+Audit
+  Every state change logged to admin_audit_log with full body hash.
+
+Acceptance
+  - Admin connects @axalvc via OAuth.
+  - Aggregator produces at least one draft per audience.
+  - Admin edits, approves, posts. Tweet appears on X within seconds.
+  - Thread mode works; replies chain correctly via in_reply_to_tweet_id.
+  - Media upload round-trips through R2 then to X media upload.
+  - Rate-limit hit returns typed error with retry-after; not 500.

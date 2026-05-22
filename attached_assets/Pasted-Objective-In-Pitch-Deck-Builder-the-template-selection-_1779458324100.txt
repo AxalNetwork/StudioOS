@@ -1,0 +1,133 @@
+Objective
+  In Pitch Deck Builder, the template-selection thumbnail grid is
+  empty/blank despite multiple prior PRs. Diagnose root cause + fix
+  with a known-good render path.
+
+Diagnostic checklist (run all four; commit findings in PR description)
+
+  1. Are the templates actually registered?
+     grep -rn "TEMPLATES\|TEMPLATE_KEYS\|TEMPLATE_LIST" frontend/src/decks/
+     Confirm templates/index.ts exports a non-empty object/array AND
+     PitchDeckPage imports it via the same path. A subtle case-
+     sensitive path mismatch on macOS-dev vs Linux-CI builds is the
+     #1 cause of "works locally, blank in prod".
+
+  2. Is the registry shape what the page expects?
+     If PitchDeckPage maps over `Object.values(TEMPLATES)` but the
+     registry exports a plain array, the map silently returns
+     nothing. Add a runtime assert in the page:
+       console.assert(Array.isArray(items) && items.length > 0,
+                       'pitch deck registry empty');
+     plus a visible fallback empty state explaining the problem.
+
+  3. Is the thumbnail render attempting to invoke the deck component
+     at full 1920×1080 inside a flex grid (causing 0-sized children)?
+     Each thumbnail needs an EXPLICIT bounding box + CSS scale:
+       <div style={{ width: 320, height: 180, overflow: 'hidden',
+                      borderRadius: 12, border: '1px solid #E2E8F0',
+                      background: '#FAFAFA', position: 'relative' }}>
+         <div style={{ width: 1920, height: 1080,
+                        transform: 'scale(0.1667)',
+                        transformOrigin: 'top left' }}>
+           <Component data={previewData} editable={false}
+                       currentSlide={0} />
+         </div>
+       </div>
+     Without the fixed outer box, the inner 1920×1080 absolutely-
+     positioned content collapses to nothing inside flex layouts.
+
+  4. Does the deck component render *all* slides at once?
+     If yes, the thumbnail shows page 1 — but it's 1080px tall before
+     scaling. Make sure the thumbnail wrapper has overflow:hidden so
+     subsequent slides don't bleed. Optionally pass `currentSlide={0}`
+     to a registry component that returns only the requested slide.
+
+Fix (preferred path)
+
+  1. frontend/src/decks/templates/index.ts must export both:
+     - TEMPLATES        Record<key, TemplateMeta>
+     - TEMPLATE_LIST     TemplateMeta[]   = Object.values(TEMPLATES)
+     where TemplateMeta = { key, label, description, slide_count,
+                              required_tier, Component }.
+
+  2. frontend/src/decks/Thumbnail.tsx (new):
+       export const Thumbnail: React.FC<{
+         meta: TemplateMeta; previewData: any; onPick: () => void;
+       }> = ({ meta, previewData, onPick }) => {
+         const C = meta.Component;
+         return (
+           <button
+             onClick={onPick}
+             className="block text-left w-full"
+             style={{ background: 'transparent', border: 'none', padding: 0 }}>
+             <div style={{ width: 320, height: 180, overflow: 'hidden',
+                            borderRadius: 12, border: '1px solid #E2E8F0',
+                            background: '#FAFAFA', position: 'relative' }}>
+               <div style={{ width: 1920, height: 1080,
+                              transform: 'scale(0.1667)',
+                              transformOrigin: 'top left',
+                              pointerEvents: 'none' }}>
+                 <C data={previewData} editable={false} />
+               </div>
+             </div>
+             <div style={{ marginTop: 8 }}>
+               <div style={{ fontWeight: 600 }}>{meta.label}</div>
+               <div style={{ fontSize: 12, color: '#64748B' }}>
+                 {meta.slide_count} slides · {meta.required_tier}
+               </div>
+             </div>
+           </button>
+         );
+       };
+
+  3. frontend/src/pages/PitchDeckPage.jsx — selection screen:
+       import { TEMPLATE_LIST } from '../decks/templates';
+       import { Thumbnail } from '../decks/Thumbnail';
+
+       <div className="grid grid-cols-3 gap-6">
+         {TEMPLATE_LIST.length === 0 && (
+           <div className="col-span-3 text-center text-red-600">
+             No templates registered. Check
+             frontend/src/decks/templates/index.ts.
+           </div>
+         )}
+         {TEMPLATE_LIST.map((meta) => (
+           <Thumbnail
+             key={meta.key}
+             meta={meta}
+             previewData={SAMPLE_PREVIEW_DATA}
+             onPick={() => selectTemplate(meta.key)}
+           />
+         ))}
+       </div>
+
+  4. SAMPLE_PREVIEW_DATA: small fixture with company name "Demo Co.",
+     tagline, MRR $48k, ARR $576k, etc. Lives in
+     frontend/src/decks/sample.ts so designers can tweak the
+     preview without touching pages.
+
+  5. Tier gating overlay: meta.required_tier > user tier → render
+     the thumbnail with a lock pill overlay + "Upgrade to use" CTA.
+     Clicking opens the existing paywall modal.
+
+Diagnostics that should be visible in the UI on failure
+  - "Templates list is empty (0)." with the import path printed.
+  - "Failed to render <key>." caught per-thumbnail via React error
+    boundary; the rest of the grid keeps working.
+
+Tests
+  test/decks/registry.test.tsx
+    - asserts TEMPLATE_LIST.length === 12
+    - asserts every entry has Component, key, label, slide_count
+  test/decks/thumbnail.test.tsx
+    - renders one Thumbnail with mock data; asserts the rendered
+      container has the expected box-size + the inner Component
+      mounts without throwing.
+
+Acceptance
+  - Pick-a-deck grid renders 12 thumbnails on first paint.
+  - Each thumbnail visually matches its template's identity.
+  - Clicking a thumbnail loads its full editor.
+  - On Free tier, locked templates show the paywall pill.
+  - If the registry is ever empty in the future, the page shows a
+    diagnostic message instead of a blank grid.
