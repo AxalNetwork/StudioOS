@@ -488,6 +488,19 @@ function isMissingTableError(e: any): boolean {
   return msg.includes('no such table') || msg.includes('does not exist');
 }
 
+// Some D1 deployments have `mentor_bookings`/`partner_bookings` from an
+// older schema variant (migration 034) that does NOT include the
+// scheduled_start/scheduled_end/requester_user_id/meeting_uri columns this
+// service expects (those live on a related slots table in that variant).
+// Treat a missing-column error the same as missing-table — return [] so
+// the rest of the calendar sync still runs instead of 500-ing the whole
+// Google sync. The "real" fix is a migration that adds those columns or
+// rewrites these queries to join through slots; until then, fail-soft.
+function isMissingColumnError(e: any): boolean {
+  const msg = String(e?.message || e || '').toLowerCase();
+  return msg.includes('no such column');
+}
+
 async function mentorBookingEvents(env: Env, userId: number, isAdmin: boolean,
                                    fromIso: string, toIso: string): Promise<CalendarEvent[]> {
   const sql = getSQL(env);
@@ -529,7 +542,7 @@ async function mentorBookingEvents(env: Env, userId: number, isAdmin: boolean,
     }
     return out;
   } catch (e) {
-    if (isMissingTableError(e)) return [];
+    if (isMissingTableError(e) || isMissingColumnError(e)) return [];
     throw e;
   }
 }
@@ -574,7 +587,7 @@ async function partnerOfficeHourEvents(env: Env, userId: number, isAdmin: boolea
     }
     return out;
   } catch (e) {
-    if (isMissingTableError(e)) return [];
+    if (isMissingTableError(e) || isMissingColumnError(e)) return [];
     throw e;
   }
 }
@@ -618,7 +631,7 @@ async function calendlyEvents(env: Env, userId: number, isAdmin: boolean,
       project_id: null,
     }));
   } catch (e) {
-    if (isMissingTableError(e)) return [];
+    if (isMissingTableError(e) || isMissingColumnError(e)) return [];
     throw e;
   }
 }
