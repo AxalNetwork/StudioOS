@@ -291,49 +291,164 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* SPIN-OUT LAB NICHE CALLOUT */}
+      {/* SPIN-OUT LAB NICHE CALLOUT
+          Task #13 — copy aligned 1:1 with /spinout-lab. Each sub-block
+          deep-links into the matching anchor on the full Lab page for
+          depth. Layout (2/3 + 1/3 grid) and styling are unchanged. */}
       <section className="py-20 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="rounded-3xl border-2 border-violet-200 bg-violet-50/40 p-10 md:p-14 grid md:grid-cols-3 gap-10">
-            <div className="md:col-span-2">
-              <span className="inline-block text-[11px] uppercase tracking-wider font-semibold text-violet-700 bg-violet-100 px-2.5 py-1 rounded">
-                Niche product
-              </span>
-              <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mt-4 mb-4">
-                Spin-Out Lab — 30-day venture sprint.
-              </h2>
-              <div className="space-y-3 text-base text-gray-700 leading-relaxed">
-                <p>
-                  For founders with an idea and no incorporated company yet. Four weeks. Four milestones.
-                  Ends with a Delaware C-Corp (or alt), cap table, 83(b), pitch deck, and venture-readiness score.
-                </p>
-                <p className="text-sm text-gray-600">
-                  <strong>What founders get:</strong> Personal Advisor, mentor track, investor exposure,
-                  services-for-equity / -fee partners, lifetime alumni community.
+            <div className="md:col-span-2 space-y-8">
+              <div>
+                <span className="inline-block text-[11px] uppercase tracking-wider font-semibold text-violet-700 bg-violet-100 px-2.5 py-1 rounded">
+                  Niche product
+                </span>
+                <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mt-4 mb-4">
+                  Spin-Out Lab — 30-day venture sprint.
+                </h2>
+                <p className="text-base text-gray-700 leading-relaxed">
+                  For founders with an idea and no incorporated company yet. Four weeks. Four
+                  milestones. Ends with a Delaware C-Corp (or alt), cap table, 83(b), pitch deck,
+                  and venture-readiness score.
                 </p>
               </div>
+
+              {/* What you get — 6 bullets, ≤16 words each, deep-linked. */}
+              <div>
+                <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-3">
+                  What you get
+                </h3>
+                <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-gray-700 leading-relaxed">
+                  {[
+                    'Personal Advisor on every screen — never a blank one.',
+                    'Three warm investor introductions in Week 4 for qualified founders.',
+                    'Sector-matched mentor track with availability calendars.',
+                    'Services partners (legal, design, recruiting) at Axal-network rates.',
+                    'Sector, investor, sentiment, TALC and capital-velocity intelligence.',
+                    'Document automation — incorporation, 83(b), cofounder agreement, SAFE.',
+                  ].map((b) => (
+                    <li key={b} className="flex items-start gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500 mt-1.5 shrink-0" />
+                      <span>{b}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  to="/spinout-lab#what-you-get"
+                  className="inline-flex items-center gap-1 mt-3 text-xs font-medium text-violet-700 hover:text-violet-900"
+                >
+                  See full list on the Lab page <ArrowRight size={12} />
+                </Link>
+              </div>
+
+              {/* What we look for — 6 strong signals + 4 filters, two columns. */}
+              <div>
+                <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-3">
+                  What we look for
+                </h3>
+                <div className="grid sm:grid-cols-2 gap-6 text-sm text-gray-700 leading-relaxed">
+                  <div>
+                    <div className="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-2">
+                      Strong signals
+                    </div>
+                    <ul className="space-y-1.5">
+                      {[
+                        'Domain expertise — years in the sector',
+                        'Customer access — warm intros from day 1',
+                        'Full-time commitment, not nights-and-weekends',
+                        'Lived insight — a non-obvious view',
+                        'Coachability — adjusts to evidence',
+                        'Founder ↔ market fit for this specific problem',
+                      ].map((s) => (
+                        <li key={s} className="flex items-start gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-violet-500 mt-1.5 shrink-0" />
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-2">
+                      Filters
+                    </div>
+                    <ul className="space-y-1.5">
+                      {[
+                        'Sector: AI · Blockchain · Quantum · Digital Infra · Frontier Software',
+                        'Geography we can support',
+                        'Founder ≥ 18',
+                        'No sanctions / PEP / bad-actor disqualifications',
+                      ].map((f) => (
+                        <li key={f} className="flex items-start gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-violet-500 mt-1.5 shrink-0" />
+                          <span>{f}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-4">
+                  We say no for clear reasons. Common ones listed on{' '}
+                  <Link
+                    to="/spinout-lab#what-we-look-for"
+                    className="text-violet-700 hover:text-violet-900 underline-offset-2 hover:underline"
+                  >
+                    /spinout-lab
+                  </Link>
+                  .
+                </p>
+              </div>
+
               <Link
                 to="/spinout-lab"
-                className="inline-flex items-center gap-2 mt-6 bg-violet-600 hover:bg-violet-700 transition-colors px-6 py-3 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20"
+                className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-colors px-6 py-3 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/20"
               >
                 See the full Lab <ArrowRight size={16} />
               </Link>
             </div>
+
+            {/* The 4-week playbook — one bullet per week with anchor deep-links. */}
             <div className="md:col-span-1">
+              <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-4">
+                The 4-week playbook
+              </h3>
               <ol className="space-y-4">
                 {[
-                  { n: 1, title: 'Idea & Customer', desc: 'Frame the problem, pick the beachhead, validate intent.' },
-                  { n: 2, title: 'Solution & Roadmap', desc: 'Scope the MVP, plan the build, lock the milestones.' },
-                  { n: 3, title: 'Validate & Team', desc: 'Customer evidence, co-founder match, advisor grants.' },
-                  { n: 4, title: 'Incorporate & Capital', desc: 'Delaware C-Corp (or alt), 83(b), cap table, fundraise.' },
+                  {
+                    n: 1,
+                    title: 'Idea & Customer',
+                    desc: 'Frame the problem, size the market, log ≥5 customer interviews.',
+                  },
+                  {
+                    n: 2,
+                    title: 'Solution & Roadmap',
+                    desc: 'Scope the MVP, set 90-day OKRs, draft brand v1 + deck v1.',
+                  },
+                  {
+                    n: 3,
+                    title: 'Validate & Team',
+                    desc: 'First venture-readiness score, mentor cadence, co-founder track.',
+                  },
+                  {
+                    n: 4,
+                    title: 'Incorporate & Capital',
+                    desc: 'Incorporate, vest, file 83(b), lock the ask, three warm intros.',
+                  },
                 ].map((w) => (
                   <li key={w.n} className="flex gap-3">
                     <div className="flex-shrink-0 w-7 h-7 rounded-full bg-violet-600 text-white text-xs font-bold flex items-center justify-center">
                       {w.n}
                     </div>
                     <div>
-                      <div className="text-sm font-semibold text-gray-900">Week {w.n} — {w.title}</div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        Week {w.n} — {w.title}
+                      </div>
                       <div className="text-xs text-gray-600 mt-0.5">{w.desc}</div>
+                      <Link
+                        to={`/spinout-lab#week${w.n}`}
+                        className="inline-flex items-center gap-1 mt-1 text-[11px] font-medium text-violet-700 hover:text-violet-900"
+                      >
+                        See Week {w.n} <ArrowRight size={10} />
+                      </Link>
                     </div>
                   </li>
                 ))}
