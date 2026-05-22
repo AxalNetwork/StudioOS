@@ -832,15 +832,170 @@ function loadThumbnailModule() {
   return _thumbnailModulePromise;
 }
 
+// =====================================================================
+// Template preview modal — opens a large readable rendering of a single
+// template without picking it. Page through slides with prev/next or the
+// keyboard; "Use this template" delegates to the picker's onPick (and is
+// disabled for locked templates, mirroring the picker grid rule).
+// =====================================================================
+function TemplatePreviewModal({ card, PreviewStage, onClose, onPick, busy }) {
+  useEscapeClose(onClose);
+  const [idx, setIdx] = useState(0);
+  const slideCount = Math.max(1, card.slide_count || 1);
+  const scrollerRef = useRef(null);
+
+  const registerScroller = React.useCallback((el) => {
+    scrollerRef.current = el;
+  }, []);
+
+  // Programmatic prev/next — scroll by exactly one slide height.
+  const goTo = (next) => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const clamped = Math.max(0, Math.min(slideCount - 1, next));
+    const slideH = scroller.scrollHeight / slideCount;
+    scroller.scrollTo({ top: slideH * clamped, behavior: 'smooth' });
+    setIdx(clamped);
+  };
+
+  // Keyboard navigation while the modal owns focus.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+        e.preventDefault();
+        goTo(idx + 1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        goTo(idx - 1);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        goTo(0);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        goTo(slideCount - 1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+     
+  }, [idx, slideCount]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4 sm:p-6"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Preview: ${card.label}`}
+      >
+        <div className="flex items-center justify-between px-5 py-3 border-b dark:border-slate-800">
+          <div className="min-w-0">
+            <h2 className="font-semibold truncate">{card.label}</h2>
+            <p className="text-xs text-gray-500 dark:text-slate-400">
+              <span className="uppercase">{card.category}</span> · {slideCount} slide{slideCount === 1 ? '' : 's'}
+              {card.premium && <span className="ml-2 text-amber-700 dark:text-amber-300">· Premium</span>}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 text-gray-500 hover:text-gray-800 dark:hover:text-slate-200"
+            aria-label="Close preview"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 min-h-0 bg-gray-100 dark:bg-slate-950 p-3 sm:p-4 flex items-center justify-center">
+          {PreviewStage ? (
+            <div style={{ width: '100%', height: '100%', maxHeight: '70vh' }}>
+              <div style={{ width: '100%', aspectRatio: '16 / 9', maxHeight: '100%', margin: '0 auto' }}>
+                <PreviewStage
+                  template={card.template}
+                  slideCount={slideCount}
+                  currentIndex={idx}
+                  onIndexChange={setIdx}
+                  registerScroller={registerScroller}
+                />
+              </div>
+            </div>
+          ) : (
+            <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
+          )}
+        </div>
+
+        <div className="border-t dark:border-slate-800 px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => goTo(idx - 1)}
+              disabled={idx <= 0}
+              className="p-1.5 border dark:border-slate-700 rounded disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-slate-800"
+              aria-label="Previous slide"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-xs text-gray-600 dark:text-slate-400 tabular-nums">
+              {idx + 1} / {slideCount}
+            </span>
+            <button
+              onClick={() => goTo(idx + 1)}
+              disabled={idx >= slideCount - 1}
+              className="p-1.5 border dark:border-slate-700 rounded disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-slate-800"
+              aria-label="Next slide"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-3">
+            {card.locked && (
+              <span className="text-[11px] text-amber-700 dark:text-amber-300">
+                Upgrade to Growth to unlock this template.
+              </span>
+            )}
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 text-sm border dark:border-slate-700 rounded hover:bg-gray-50 dark:hover:bg-slate-800"
+            >
+              Close
+            </button>
+            <button
+              onClick={() => onPick(card.key)}
+              disabled={card.locked || busy}
+              className={`px-4 py-1.5 text-sm rounded text-white flex items-center gap-1 ${
+                card.locked || busy
+                  ? 'bg-gray-300 dark:bg-slate-700 cursor-not-allowed'
+                  : 'bg-violet-600 hover:bg-violet-700'
+              }`}
+            >
+              {card.locked && <Lock className="w-3 h-3" />}
+              Use this template
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, busy }) {
   useEscapeClose(onClose);
   const [filter, setFilter] = useState('all');
   const [templates, setTemplates] = useState(null); // { list, record, error? } | null
   const [Thumbnail, setThumbnail] = useState(null);
+  const [PreviewStage, setPreviewStage] = useState(null);
+  const [previewCard, setPreviewCard] = useState(null);
   useEffect(() => {
     let alive = true;
     loadTemplates().then((t) => { if (alive) setTemplates(t); });
-    loadThumbnailModule().then((m) => { if (alive && m) setThumbnail(() => m.Thumbnail); });
+    loadThumbnailModule().then((m) => {
+      if (alive && m) {
+        setThumbnail(() => m.Thumbnail);
+        setPreviewStage(() => m.PreviewStage);
+      }
+    });
     return () => { alive = false; };
   }, []);
 
@@ -928,45 +1083,84 @@ function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, bu
         {registryLoaded && !registryEmpty && (
           <div className="overflow-y-auto p-3 sm:p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {filtered.map((c) => (
-              <button
+              <div
                 key={c.key}
-                disabled={busy}
-                onClick={() => !c.locked && onPick(c.key)}
-                className={`relative text-left border rounded-lg p-4 transition ${
+                className={`group relative text-left border rounded-lg p-4 transition flex flex-col ${
                   c.locked
                     ? 'border-gray-200 dark:border-slate-800 opacity-80'
                     : 'border-gray-200 dark:border-slate-800 hover:border-violet-400 hover:shadow'
                 }`}
               >
                 {c.isRec && (
-                  <span className="absolute -top-2 -right-2 bg-violet-600 text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="absolute -top-2 -right-2 z-20 bg-violet-600 text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1">
                     <Wand2 className="w-3 h-3" /> Suggested
                   </span>
                 )}
                 {c.premium && (
-                  <span className="absolute top-2 right-2 z-10 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                  <span className="absolute top-2 right-2 z-20 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1">
                     {c.locked && <Lock className="w-3 h-3" />} Premium
                   </span>
                 )}
-                <div className="mb-3">
+                {/* Thumbnail + Preview overlay. The thumbnail itself is
+                    purely decorative; the card body below it is the pick
+                    target. Preview button sits over the thumbnail and
+                    stops propagation so it never picks the card. */}
+                <div className="relative mb-3 rounded overflow-hidden">
                   {Thumbnail
                     ? <Thumbnail template={c.template} />
-                    : <div style={{ width: 320, height: 180, background: '#F1F5F9', borderRadius: 6 }} />}
+                    : <div style={{ width: '100%', aspectRatio: '16 / 9', background: '#F1F5F9', borderRadius: 6 }} />}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setPreviewCard(c); }}
+                    aria-label={`Preview ${c.label}`}
+                    className="absolute inset-0 flex items-center justify-center text-white text-xs font-medium bg-black/0 opacity-0 group-hover:bg-black/45 group-hover:opacity-100 focus-visible:bg-black/45 focus-visible:opacity-100 transition rounded"
+                  >
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/15 backdrop-blur-sm rounded ring-1 ring-white/40">
+                      <Eye className="w-3.5 h-3.5" /> Preview
+                    </span>
+                  </button>
+                  {/* Always-visible Preview chip for touch devices (no
+                      hover state) — sits in the bottom-right corner. */}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setPreviewCard(c); }}
+                    aria-label={`Preview ${c.label}`}
+                    className="md:hidden absolute bottom-2 right-2 inline-flex items-center gap-1 px-2 py-1 text-[10px] bg-black/60 text-white rounded"
+                  >
+                    <Eye className="w-3 h-3" /> Preview
+                  </button>
                 </div>
-                <div className="text-xs uppercase text-gray-400 mb-1">{c.category} · {c.slide_count} slides</div>
-                <div className="font-medium mb-1">{c.label}</div>
-                <p className="text-xs text-gray-600 dark:text-slate-400 mb-2">{c.description}</p>
-                {c.best_for && (
-                  <p className="text-[11px] text-gray-500 dark:text-slate-500 italic">{c.best_for}</p>
-                )}
-                {c.locked && (
-                  <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">
-                    Upgrade to Growth to unlock this template.
-                  </div>
-                )}
-              </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => !c.locked && onPick(c.key)}
+                  className="text-left flex-1 disabled:cursor-not-allowed"
+                >
+                  <div className="text-xs uppercase text-gray-400 mb-1">{c.category} · {c.slide_count} slides</div>
+                  <div className="font-medium mb-1">{c.label}</div>
+                  <p className="text-xs text-gray-600 dark:text-slate-400 mb-2">{c.description}</p>
+                  {c.best_for && (
+                    <p className="text-[11px] text-gray-500 dark:text-slate-500 italic">{c.best_for}</p>
+                  )}
+                  {c.locked && (
+                    <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">
+                      Upgrade to Growth to unlock this template.
+                    </div>
+                  )}
+                </button>
+              </div>
             ))}
           </div>
+        )}
+
+        {previewCard && (
+          <TemplatePreviewModal
+            card={previewCard}
+            PreviewStage={PreviewStage}
+            onClose={() => setPreviewCard(null)}
+            onPick={(key) => { setPreviewCard(null); onPick(key); }}
+            busy={busy}
+          />
         )}
 
         {busy && (
