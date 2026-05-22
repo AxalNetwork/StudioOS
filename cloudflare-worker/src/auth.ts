@@ -184,7 +184,7 @@ export function pickAuthToken(opts: {
  * cross-identity precedence above. Returns null when neither side decodes.
  * Used by getCurrentUser and requireFactor so both look at the same session.
  */
-async function selectJwt(c: Context<{ Bindings: Env }>): Promise<{ token: string; payload: JWTPayload } | null> {
+export async function selectJwt(c: Context<{ Bindings: Env }>): Promise<{ token: string; payload: JWTPayload } | null> {
   const { bearer, cookie } = extractJwtCandidates(c);
   if (!bearer && !cookie) return null;
   let bP: JWTPayload | null = null;
@@ -192,12 +192,87 @@ async function selectJwt(c: Context<{ Bindings: Env }>): Promise<{ token: string
   if (bearer) { try { bP = await decodeJWT(c.env, bearer); } catch { bP = null; } }
   if (cookie) { try { cP = await decodeJWT(c.env, cookie); } catch { cP = null; } }
   const choice = pickAuthToken({ bearer: bP as any, cookie: cP as any });
+  // Task #4 — audit-log every time we discarded a Bearer in favour of a
+  // cookie for a DIFFERENT identity. This is the cross-account leak
+  // signal — without the log there's no way to alert on it post-hoc.
+  // Fire-and-forget; the auth path must not block on activity_logs.
+  if (choice === 'cookie' && bP && cP && Number(bP.user_id) !== Number(cP.user_id)
+      && Number(bP.impersonated_by || 0) !== Number(cP.user_id)) {
+    try {
+      const ctx = (c as { executionCtx?: { waitUntil?: (p: Promise<unknown>) => void } }).executionCtx;
+      const p = c.env.DB.prepare(
+        `INSERT INTO activity_logs (action, details, user_id) VALUES (?, ?, ?)`
+      ).bind(
+        'cross_session_bearer_discarded',
+        JSON.stringify({
+          bearer_user_id: Number(bP.user_id),
+          cookie_user_id: Number(cP.user_id),
+          bearer_impersonated_by: bP.impersonated_by ? Number(bP.impersonated_by) : null,
+          path: c.req.path || null,
+        }),
+        Number(cP.user_id),
+      ).run().catch((e: unknown) => console.warn('[auth:selectJwt] audit log failed', e));
+      if (ctx?.waitUntil) ctx.waitUntil(p);
+    } catch (e) { console.warn('[auth:selectJwt] audit log dispatch failed', e); }
+  }
   if (choice === 'bearer' && bearer && bP) return { token: bearer, payload: bP };
   if (choice === 'cookie' && cookie && cP) return { token: cookie, payload: cP };
   // Chosen side failed to decode — fall back to the other if it did.
   if (bearer && bP) return { token: bearer, payload: bP };
   if (cookie && cP) return { token: cookie, payload: cP };
   return null;
+}
+
+/**
+ * Task #4 — Sign-in handlers call this AFTER authenticating `newUserId` to
+ * revoke any incoming Bearer/cookie session that belongs to a DIFFERENT
+ * user. Without this, a stale admin JWT in localStorage (or a stale
+ * `studioos_auth` cookie still scoped to .axal.vc from a prior browser
+ * user) keeps a valid `user_sessions` row that could be replayed from
+ * outside the browser even after the SPA's identity-change purge cleared
+ * localStorage. Defence-in-depth alongside the `pickAuthToken` precedence
+ * fix and the SPA-side purge in useAuthSync.jsx.
+ *
+ * Idempotent + fire-and-forget-safe: errors are logged, never thrown.
+ */
+export async function revokeStaleCrossIdentitySession(
+  c: Context<{ Bindings: Env }>,
+  newUserId: number,
+): Promise<void> {
+  try {
+    const { bearer, cookie } = extractJwtCandidates(c);
+    const toks = [bearer, cookie].filter(Boolean) as string[];
+    for (const tok of toks) {
+      let payload: JWTPayload | null = null;
+      try { payload = await decodeJWT(c.env, tok); } catch { continue; }
+      if (!payload?.jti || !payload?.user_id) continue;
+      if (Number(payload.user_id) === Number(newUserId)) continue;
+      try {
+        await c.env.DB.prepare(
+          "UPDATE user_sessions SET revoked_at = datetime('now') " +
+            "WHERE jti = ? AND user_id = ? AND revoked_at IS NULL"
+        ).bind(payload.jti, Number(payload.user_id)).run();
+        try {
+          await c.env.DB.prepare(
+            `INSERT INTO activity_logs (action, details, user_id) VALUES (?, ?, ?)`
+          ).bind(
+            'session_revoked_on_signin',
+            JSON.stringify({
+              prior_user_id: Number(payload.user_id),
+              new_user_id: Number(newUserId),
+              jti: payload.jti,
+              impersonated_by: payload.impersonated_by ? Number(payload.impersonated_by) : null,
+            }),
+            Number(newUserId),
+          ).run();
+        } catch {}
+      } catch (e) {
+        console.warn('[auth:revokeStaleCrossIdentitySession] revoke failed', e);
+      }
+    }
+  } catch (e) {
+    console.warn('[auth:revokeStaleCrossIdentitySession] outer failure', e);
+  }
 }
 
 export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<User | null> {

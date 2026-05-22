@@ -283,6 +283,13 @@ sms.post('/sms/verify-challenge', async (c) => {
   await sql.end();
   await markSmsUsed(c.env, user.id);
 
+  // Task #4 — defence-in-depth: revoke any lingering cross-identity session
+  // before the SMS-minted cookie/Bearer overwrites it.
+  try {
+    const { revokeStaleCrossIdentitySession } = await import('../auth');
+    await revokeStaleCrossIdentitySession(c, user.id);
+  } catch (e) { console.warn('[auth_sms] cross-session revoke failed', e); }
+
   const csrfToken = generateCsrfToken();
   setAuthCookies(c, jwtToken, csrfToken);
   return c.json({

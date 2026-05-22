@@ -3,7 +3,7 @@ import { TOTP, Secret } from 'otpauth';
 import * as QRCode from 'qrcode';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken } from '../auth';
+import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken, revokeStaleCrossIdentitySession } from '../auth';
 import { sendVerificationEmail } from '../services/email';
 import { verifyTurnstile } from '../services/turnstile';
 import { persistNewTotpEnrolment, loadTotp, updateRecoveryHashes, markTotpUsed, hasTotpConfigured, clearTotp } from '../services/authTotp';
@@ -684,6 +684,13 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   // subprotocol, signed-download URLs, impersonation flow) keep using the
   // JSON `token` field via localStorage until they migrate. Both auth
   // paths end at the same JWT, so the worker accepts whichever arrives.
+  // Task #4 — revoke any incoming stale session that belongs to a different
+  // user BEFORE we overwrite the cookie. Stops a lingering admin JWT in
+  // localStorage (or a still-valid `studioos_auth` cookie from a prior
+  // browser user) from being replayed from outside the browser even after
+  // the SPA's identity-change purge wipes localStorage.
+  await revokeStaleCrossIdentitySession(c, user.id);
+
   const csrfToken = generateCsrfToken();
   setAuthCookies(c, jwtToken, csrfToken);
 

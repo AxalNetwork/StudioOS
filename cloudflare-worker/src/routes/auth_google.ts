@@ -620,6 +620,16 @@ authGoogle.get('/callback', async (c) => {
     await sql`INSERT INTO activity_logs (action, details, actor, user_id)
               VALUES (${actionLabel}, 'sign-in via Google', ${eh}, ${user.id})`;
 
+    // Task #4 — kill any incoming stale cross-identity session before the
+    // new cookie overwrites it. This is THE bug that caused the Google
+    // sign-in account leak (a stale admin impersonation Bearer was still
+    // mounting an active user_sessions row that would have remained
+    // replayable outside the browser).
+    try {
+      const { revokeStaleCrossIdentitySession } = await import('../auth');
+      await revokeStaleCrossIdentitySession(c, user.id);
+    } catch (e) { console.warn('[auth_google] cross-session revoke failed', e); }
+
     const csrf = generateCsrfToken();
     setAuthCookies(c, token, csrf);
 
