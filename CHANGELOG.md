@@ -1,5 +1,44 @@
 # Changelog
 
+## Calendar connect `secret_missing` bucket pinpoints which env var is at fault
+
+Task #69 surfaced a real cause (`encrypt`) instead of the bare
+`token_exchange` toast, which revealed that `cryptoBox.encryptString` was
+throwing inside `/api/calendar/google/callback`. Encryption failures lump
+three distinct root causes into one bucket (missing secret, WebCrypto
+PBKDF2 throw, WebCrypto AES-GCM throw) — unactionable. Hardened:
+
+- **`services/cryptoBox.ts::getSecret()`** — trims both candidate secrets
+  before falling back so a whitespace-only `wrangler secret put` paste no
+  longer slips through and explodes downstream with an opaque WebCrypto
+  error. When neither resolves to a usable value, throws
+  `cryptoBox:secret_missing AXAL_ENCRYPTION_SECRET=<absent|empty|ok>
+  JWT_SECRET=<absent|empty|ok>` so the very next log line names which
+  secret to fix.
+- **`routes/calendar.ts::bucketCallbackFailure()`** — new
+  `secret_missing` bucket, matched BEFORE the generic `encrypt` regex so
+  the actionable cause wins.
+- **`frontend/src/pages/CalendarPage.jsx::humanizeOAuthReason()`** —
+  translates `secret_missing` to "the server is missing an encryption
+  secret — contact support".
+
+Production secrets are not touched by this change; rotating
+`JWT_SECRET` would invalidate every signed-in session (7-day TTL) and
+adding a fresh `AXAL_ENCRYPTION_SECRET` standalone would silently make
+existing rows encrypted with `JWT_SECRET` undecryptable (wellbeing
+answers, DD report blobs). The hardening makes the next failure
+self-describe so the safe remediation is one log line away.
+
+**Safety detail:** `getSecret()` returns the *untrimmed* secret to
+WebCrypto — trimming is only used to *detect* whitespace-only values and
+skip past them in the fallback chain. Otherwise, derived PBKDF2 keys
+would change for any deployed secret with accidental leading/trailing
+whitespace and silently break decryption of every existing ciphertext
+(wellbeing answers, DD report blobs, provider OAuth keys, calendar
+refresh tokens, DocuSign tokens).
+
+Deployed: worker version `0f57ef31-96d4-412c-9338-c4808319a8af`.
+
 ## Google/Outlook Calendar connect surfaces real failure reason
 
 The OAuth callback used to bucket every uncaught exception into a bare

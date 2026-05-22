@@ -29,12 +29,37 @@ const IV_BYTES = 12;
 
 const keyCache = new Map<string, Promise<CryptoKey>>();
 
+// Task #71 — describe each candidate secret's state so the error pinpoints
+// which env var to fix without guessing. `absent` = the binding is missing
+// entirely; `empty` = the binding is set but resolves to an empty / whitespace-
+// only string (most common cause of a partly-finished `wrangler secret put`).
+function describeSecret(v: string | undefined): 'absent' | 'empty' | 'ok' {
+  if (v === undefined || v === null) return 'absent';
+  if (String(v).trim().length === 0) return 'empty';
+  return 'ok';
+}
+
 function getSecret(env: { AXAL_ENCRYPTION_SECRET?: string; JWT_SECRET?: string }): string {
-  const s = env.AXAL_ENCRYPTION_SECRET || env.JWT_SECRET || '';
-  if (!s) {
-    throw new Error('AXAL_ENCRYPTION_SECRET (or JWT_SECRET) must be set to encrypt wellbeing data');
-  }
-  return s;
+  // IMPORTANT: do NOT trim the returned value — `deriveKey()` uses it as
+  // PBKDF2 input, so trimming would change every derived key and silently
+  // break decryption of every existing ciphertext (wellbeing answers, DD
+  // report blobs, provider OAuth keys, calendar refresh tokens, DocuSign
+  // tokens). We only use trimmed copies to *detect* whitespace-only secrets
+  // (e.g. accidentally pasted as a newline from `wrangler secret put`) and
+  // skip past them in the fallback chain; the original untrimmed value is
+  // what we hand to WebCrypto.
+  const axalRaw = env.AXAL_ENCRYPTION_SECRET;
+  const jwtRaw = env.JWT_SECRET;
+  const axalUsable = (axalRaw || '').trim().length > 0;
+  const jwtUsable = (jwtRaw || '').trim().length > 0;
+  if (axalUsable) return axalRaw as string;
+  if (jwtUsable) return jwtRaw as string;
+  // Message prefix `cryptoBox:secret_missing` is matched by the OAuth
+  // callback bucket in routes/calendar.ts::bucketCallbackFailure to surface
+  // a `secret_missing` reason code on the user-facing toast.
+  const a = describeSecret(axalRaw);
+  const j = describeSecret(jwtRaw);
+  throw new Error(`cryptoBox:secret_missing AXAL_ENCRYPTION_SECRET=${a} JWT_SECRET=${j}`);
 }
 
 async function deriveKey(secret: string): Promise<CryptoKey> {

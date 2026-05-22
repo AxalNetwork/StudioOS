@@ -42,6 +42,7 @@ function humanizeOAuthReason(reason) {
   if (reason === 'no_refresh_token') return 'the provider did not return a refresh token (revoke access and reconnect)';
   if (reason === 'oauth_unavailable') return 'the server is missing OAuth credentials';
   if (reason === 'db_write') return 'the server could not save the connection';
+  if (reason === 'secret_missing') return 'the server is missing an encryption secret — contact support';
   if (reason === 'encrypt') return 'the server could not encrypt the token';
   if (reason === 'timeout') return 'the request to the provider timed out';
   const tx = reason.match(/^token_exchange:(\d+):(.+)$/);

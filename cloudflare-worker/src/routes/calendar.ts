@@ -541,6 +541,11 @@ function bucketCallbackFailure(msg: string): string {
   const m = msg.match(/^token_exchange_failed:(\d+)(?::(.+))?$/);
   if (m) return `token_exchange:${m[1]}:${m[2] || 'unknown'}`;
   if (msg.includes('oauth_unavailable')) return 'oauth_unavailable';
+  // Task #71 — cryptoBox.getSecret throws `cryptoBox:secret_missing ...` when
+  // neither AXAL_ENCRYPTION_SECRET nor JWT_SECRET resolves to a usable value.
+  // Bucket BEFORE the generic encrypt regex so the toast surfaces the more
+  // actionable cause.
+  if (msg.startsWith('cryptoBox:secret_missing')) return 'secret_missing';
   if (/sqlite|no such table|UNIQUE constraint|D1_|FOREIGN KEY/i.test(msg)) return 'db_write';
   if (/^(encrypt|crypto|AXAL_ENCRYPTION)/i.test(msg) || /AES-GCM|PBKDF2/i.test(msg)) return 'encrypt';
   if (/aborted|timeout|TimedOut/i.test(msg)) return 'timeout';

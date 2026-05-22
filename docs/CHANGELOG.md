@@ -1,5 +1,36 @@
 # Changelog
 
+## Calendar connect `secret_missing` bucket pinpoints which env var is at fault
+
+Task #69 surfaced a real cause (`encrypt`) instead of the bare
+`token_exchange` toast, which revealed that `cryptoBox.encryptString` was
+throwing inside `/api/calendar/google/callback`. Encryption failures lump
+three distinct root causes into one bucket (missing secret, WebCrypto
+PBKDF2 throw, WebCrypto AES-GCM throw) — unactionable. Hardened:
+
+- **`services/cryptoBox.ts::getSecret()`** — trims both candidate secrets
+  before falling back so a whitespace-only `wrangler secret put` paste no
+  longer slips through and explodes downstream with an opaque WebCrypto
+  error. When neither resolves to a usable value, throws
+  `cryptoBox:secret_missing AXAL_ENCRYPTION_SECRET=<absent|empty|ok>
+  JWT_SECRET=<absent|empty|ok>` so the very next log line names which
+  secret to fix.
+- **`routes/calendar.ts::bucketCallbackFailure()`** — new
+  `secret_missing` bucket, matched BEFORE the generic `encrypt` regex so
+  the actionable cause wins.
+- **`frontend/src/pages/CalendarPage.jsx::humanizeOAuthReason()`** —
+  translates `secret_missing` to "the server is missing an encryption
+  secret — contact support".
+
+Production secrets are not touched by this change; rotating
+`JWT_SECRET` would invalidate every signed-in session (7-day TTL) and
+adding a fresh `AXAL_ENCRYPTION_SECRET` standalone would silently make
+existing rows encrypted with `JWT_SECRET` undecryptable (wellbeing
+answers, DD report blobs). The hardening makes the next failure
+self-describe so the safe remediation is one log line away.
+
+Deployed: worker version `1d515bbe-dddf-46af-81dc-ed2477186c20`.
+
 ## Google/Outlook Calendar connect surfaces real failure reason
 
 The OAuth callback used to bucket every uncaught exception into a bare
