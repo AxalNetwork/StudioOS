@@ -117,17 +117,17 @@ fallthrough = true
 
 # ---------- Public (non-secret) variables ----------
 [vars]
-# Task #30 — APP_URL now points at the dedicated SPA+API subdomain.
-# `axal.vc` apex stays on GitHub Pages (marketing). Email links, OAuth
-# redirect URIs, sitemap URLs, and signed-download URL bases all derive
-# from APP_URL via `c.env.APP_URL`.
+# Phase 2 canonical-host flip in progress (see CHANGELOG). Code
+# defaults now point at axal.vc, but these env values are still
+# pinned to app.axal.vc because ~10 integration providers
+# (Calendar Google/MS, LinkedIn, HubSpot, Salesforce, DocuSign,
+# Carta, Slack, Stripe, Calendly) derive their OAuth redirect_uri
+# from APP_URL and their provider-side redirect URI registrations
+# all point at app.axal.vc. Flipping APP_URL here without updating
+# every provider registration first would break those OAuth flows.
+# Ops cutover plan: update provider registrations to axal.vc →
+# flip APP_URL + PUBLIC_BASE_URL here → wrangler deploy.
 APP_URL = "https://app.axal.vc"
-# Task #30 — explicit aliases. PUBLIC_BASE_URL is the canonical
-# product hostname (SPA+API); PUBLIC_MARKETING_URL is the brand apex
-# (GitHub Pages) that the marketing site lives on. New code should
-# prefer these over APP_URL for clarity; APP_URL is kept as the
-# legacy name to avoid breaking the wide blast radius of code that
-# already reads it.
 PUBLIC_BASE_URL = "https://app.axal.vc"
 PUBLIC_MARKETING_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"

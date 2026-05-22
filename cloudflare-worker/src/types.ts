@@ -23,6 +23,11 @@ export interface Env {
   // New code should prefer these; APP_URL stays as the legacy name.
   PUBLIC_BASE_URL?: string;
   PUBLIC_MARKETING_URL?: string;
+  // Phase 2 canonical-host flip: post-callback redirects go to axal.vc
+  // (via APP_URL / PUBLIC_BASE_URL), but the Google OAuth redirect_uri
+  // must stay on the host registered in Google Cloud Console
+  // (app.axal.vc). Override here when registering a new host.
+  OAUTH_CALLBACK_BASE_URL?: string;
   GMAIL_CLIENT_ID?: string;
   GMAIL_CLIENT_SECRET?: string;
   GMAIL_REFRESH_TOKEN?: string;

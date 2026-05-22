@@ -230,7 +230,7 @@ function clearLinkedinReturnCookie(): string {
   return 'studioos_li_return=; HttpOnly; Secure; SameSite=Lax; Path=/api/linkedin; Max-Age=0';
 }
 function redirectBack(env: Env, status: 'connected' | 'error', returnTo: string, message?: string) {
-  const base = stripTrailingSlashes(env.APP_URL || 'https://app.axal.vc');
+  const base = stripTrailingSlashes(env.APP_URL || 'https://axal.vc');
   const params = new URLSearchParams({ linkedin: status });
   if (message) params.set('linkedin_error', message);
   const path = returnTo === 'integrations' ? '/integrations' : '/refer';

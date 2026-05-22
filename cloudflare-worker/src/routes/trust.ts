@@ -253,7 +253,7 @@ trust.get('/agreements/:envelope_uuid/my_signing_url', async (c) => {
   if (row.status === 'signed') return c.json({ status: 'signed' });
   const exp = Date.parse(row.token_expires_at);
   if (Number.isFinite(exp) && exp < Date.now()) return c.json({ status: 'expired' });
-  const appUrl = stripTrailingSlashes(c.env.APP_URL || 'https://app.axal.vc');
+  const appUrl = stripTrailingSlashes(c.env.APP_URL || 'https://axal.vc');
   return c.json({
     status: 'pending',
     signing_url: `${appUrl}/esign/${row.signing_token}`,
@@ -384,7 +384,7 @@ export async function requestIntroLogic(
     envelope = await deps.createEnvelope(env, {
       founder: { user_id: founder.id, email: founder.email, name: founder.name || founder.email },
       investor: { user_id: investor.id, email: investor.email, name: investor.name || investor.email },
-      appUrl: env.APP_URL || 'https://app.axal.vc',
+      appUrl: env.APP_URL || 'https://axal.vc',
     });
   } catch (e) {
     console.error('[trust] 3-way envelope creation failed', e);
@@ -609,7 +609,7 @@ trust.post('/nda/sign/:envelope_uuid', async (c) => {
   if (row.status === 'signed') return c.json({ status: 'signed' });
   const exp = Date.parse(row.token_expires_at);
   if (Number.isFinite(exp) && exp < Date.now()) return c.json({ status: 'expired' });
-  const appUrl = stripTrailingSlashes(c.env.APP_URL || 'https://app.axal.vc');
+  const appUrl = stripTrailingSlashes(c.env.APP_URL || 'https://axal.vc');
   return c.json({ status: 'pending', signing_url: `${appUrl}/esign/${row.signing_token}` });
 });
 
@@ -717,7 +717,7 @@ trust.post('/pairwise-ndas/:id/resend', async (c) => {
       WHERE e.envelope_uuid = ? AND r.status = 'pending'`,
   ).bind(pair.nda_envelope_uuid).all();
   const pending = (recipients?.results || []) as any[];
-  const appUrl = stripTrailingSlashes(c.env.APP_URL || 'https://app.axal.vc');
+  const appUrl = stripTrailingSlashes(c.env.APP_URL || 'https://axal.vc');
   let sent = 0;
   try {
     const { sendAgreementAssignedEmail } = await import('../services/email');

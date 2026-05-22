@@ -262,7 +262,7 @@ async function oauthCallbackWorkersDevGuard(c: any, next: () => Promise<void>) {
     if (host.endsWith('.workers.dev')) {
       console.warn('[OAUTH-GUARD] blocked workers.dev callback', c.req.path, host);
       return c.text(
-        'This OAuth callback URL is no longer accepted. Please reconnect from https://app.axal.vc.',
+        'This OAuth callback URL is no longer accepted. Please reconnect from https://axal.vc.',
         410,
       );
     }
@@ -272,6 +272,29 @@ async function oauthCallbackWorkersDevGuard(c: any, next: () => Promise<void>) {
 app.use('/api/calendar/google/callback', oauthCallbackWorkersDevGuard);
 app.use('/api/calendar/microsoft/callback', oauthCallbackWorkersDevGuard);
 app.use('/api/linkedin/oauth/callback', oauthCallbackWorkersDevGuard);
+
+// Canonical-host flip — axal.vc is now the primary host. SPA navigations
+// (HTML page loads) hitting app.axal.vc are 301'd to the same path on
+// axal.vc so users, search engines, and external bookmarks all converge
+// on one origin. /api/* traffic is intentionally NOT redirected:
+//   - OAuth callbacks (Google/Microsoft/LinkedIn) are registered with the
+//     provider against app.axal.vc/api/auth/*/callback and MUST keep working
+//     on that host. 301-ing them would break the OAuth handshake (the
+//     provider POSTs back to app.axal.vc; redirecting that POST loses the
+//     body / state).
+//   - The SPA's same-origin /api/* XHRs already work on whichever host
+//     the user loaded; no need to bounce them.
+app.use('*', async (c, next) => {
+  const envName = String((c.env as any)?.ENVIRONMENT || '').toLowerCase();
+  const isProd = envName === 'production' || envName === 'prod';
+  if (!isProd) return next();
+  const host = (c.req.header('host') || '').toLowerCase();
+  if (host !== 'app.axal.vc') return next();
+  if (c.req.path.startsWith('/api/')) return next();
+  const url = new URL(c.req.url);
+  url.host = 'axal.vc';
+  return c.redirect(url.toString(), 301);
+});
 
 // Quick health probe used by uptime monitors.
 app.get('/api/health', (c) =>

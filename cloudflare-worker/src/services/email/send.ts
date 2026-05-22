@@ -193,7 +193,7 @@ export async function send(
     return { ok: false, log_id: null, notification_id: null, reason: 'suppressed_unsubscribed' };
   }
 
-  const appUrl = String((env as any).APP_URL || 'https://app.axal.vc');
+  const appUrl = String((env as any).APP_URL || 'https://axal.vc');
   const unsubscribeUrl = tmpl.marketing
     ? await buildUnsubscribeUrl(env, opts.userId, appUrl)
     : null;

@@ -95,11 +95,19 @@ const authGoogle = new Hono<{ Bindings: Env }>();
 // ----- helpers --------------------------------------------------------------
 
 function appUrl(env: Env): string {
-  return (env.PUBLIC_BASE_URL || env.APP_URL || 'https://app.axal.vc').replace(/\/$/, '');
+  return (env.PUBLIC_BASE_URL || env.APP_URL || 'https://axal.vc').replace(/\/$/, '');
+}
+
+// Google OAuth redirect URIs are registered in Google Cloud Console against
+// the app.axal.vc host. Keep the callback on that host even after the
+// canonical URL flip to axal.vc — the post-callback redirect (handled by
+// appUrl() above) is what bounces the user back to axal.vc/dashboard.
+function oauthCallbackHost(env: Env): string {
+  return (env.OAUTH_CALLBACK_BASE_URL || 'https://app.axal.vc').replace(/\/$/, '');
 }
 
 function redirectUri(env: Env): string {
-  return `${appUrl(env)}/api/auth/google/callback`;
+  return `${oauthCallbackHost(env)}/api/auth/google/callback`;
 }
 
 function hmacKey(env: Env): string {

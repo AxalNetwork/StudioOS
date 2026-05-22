@@ -173,7 +173,10 @@ export default function LoginPage() {
       if (!res?.token || !res?.user) throw new Error('Invalid response from server.');
       localStorage.setItem('token', res.token);
       localStorage.setItem('user', JSON.stringify(res.user));
-      window.location.href = 'https://axal.vc';
+      // Relative path — stays on whichever canonical host the user signed in
+      // on (axal.vc post-flip). The Worker serves the SPA on /dashboard for
+      // both axal.vc and app.axal.vc per the apex routing table in wrangler.toml.
+      window.location.href = '/dashboard';
     } catch (e) {
       setError(e?.message || 'Sign in failed.');
       resetTurnstile();

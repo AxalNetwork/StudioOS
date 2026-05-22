@@ -143,7 +143,7 @@ function isEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
 }
 
-const APP_URL = (env: Env) => env.APP_URL || 'https://app.axal.vc';
+const APP_URL = (env: Env) => env.APP_URL || 'https://axal.vc';
 
 // --- GET /api/settings ------------------------------------------------------
 

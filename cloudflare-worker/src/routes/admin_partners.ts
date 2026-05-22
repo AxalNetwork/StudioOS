@@ -36,7 +36,7 @@ function genInviteToken(): string {
 }
 
 function appUrl(env: Env): string {
-  return env.APP_URL || 'https://app.axal.vc';
+  return env.APP_URL || 'https://axal.vc';
 }
 
 async function logAdminAction(

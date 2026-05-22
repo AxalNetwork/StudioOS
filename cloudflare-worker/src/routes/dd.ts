@@ -419,7 +419,7 @@ dd.post('/cases/:uid/sections/:sectionId/assign', async (c) => {
       VALUES (${caseId}, ${sectionId}, ${assigneeId}, ${jti})
       ON CONFLICT(section_id, user_id) DO UPDATE SET invited_at = CURRENT_TIMESTAMP, magic_link_jti = excluded.magic_link_jti`;
 
-    const baseUrl = c.env.APP_URL || 'https://app.axal.vc';
+    const baseUrl = c.env.APP_URL || 'https://axal.vc';
     const link = `${baseUrl.replace(/\/+$/, '')}/admin/due-diligence/${cs.uid}?section=${sectionId}&inv=${jti}`;
     await notify(c.env, {
       userId: assigneeId,

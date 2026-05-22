@@ -474,7 +474,7 @@ profiling.post('/admin/:email/verify', async (c) => {
           recipientEmail: email,
           recipientName,
           documentType: agreement_type,
-          appUrl: c.env.APP_URL || 'https://app.axal.vc',
+          appUrl: c.env.APP_URL || 'https://axal.vc',
           viaProvider,
         });
       } else {

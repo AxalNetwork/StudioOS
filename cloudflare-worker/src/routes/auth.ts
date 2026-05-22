@@ -707,7 +707,7 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
             `Hi ${user.name || ''},\n\n` +
             `As part of a security upgrade, your account requires you to ` +
             `re-establish your sign-in credential. Please visit ` +
-            `${(c.env as { APP_URL?: string }).APP_URL || 'https://app.axal.vc'}/settings ` +
+            `${(c.env as { APP_URL?: string }).APP_URL || 'https://axal.vc'}/settings ` +
             `and complete the password-reset flow.\n\n` +
             `If you did not just sign in, please contact support immediately.`,
           );

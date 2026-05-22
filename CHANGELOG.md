@@ -1,6 +1,73 @@
 # Changelog
 
 
+## Canonical-host flip: code-side prep for `axal.vc` (Phase 2 part 1)
+
+Code-side groundwork for making `axal.vc` the canonical product host.
+**Production behaviour is unchanged after this commit** — the prod
+`APP_URL` / `PUBLIC_BASE_URL` env vars in `wrangler.toml` still point at
+`app.axal.vc`, so all OAuth flows keep working with their existing
+provider-side `redirect_uri` registrations. The flip becomes live when
+ops completes the cutover described below.
+
+What this commit changes (code defaults + new infrastructure):
+
+- **`cloudflare-worker/src/routes/auth_google.ts`** — `appUrl()` default
+  flipped to `https://axal.vc`. Split out `oauthCallbackHost()` (defaults
+  to `https://app.axal.vc`, overridable via the new
+  `OAUTH_CALLBACK_BASE_URL` env) so the Google OAuth `redirect_uri` keeps
+  pointing at the host registered in Google Cloud Console — only the
+  post-callback redirect target moves to `axal.vc`. New
+  `OAUTH_CALLBACK_BASE_URL` typed in `types.ts`.
+- **17 Worker source files** (`routes/{auth,auth_recover,trust,settings,
+  profiling,partner_onboarding,network,linkedin,esign,email,dd,
+  admin_partners,admin_contracts,admin}.ts`,
+  `services/{notifications,totpRemediation,email/send}.ts`) — every
+  hardcoded `'https://app.axal.vc'` fallback flipped to `'https://axal.vc'`.
+  These only fire when env vars are unset, so prod (env-pinned) is
+  unchanged; new fresh deploys / dev / preview pick up the new default.
+- **`cloudflare-worker/src/index.ts`** — new 301 middleware: in production,
+  any `host=app.axal.vc` request whose path does NOT start with `/api/`
+  is 301'd to the same path on `axal.vc`. `/api/*` is preserved because
+  OAuth callbacks (Google/Microsoft/LinkedIn) are registered with the
+  providers against `app.axal.vc/api/auth/*` and 301-ing a callback POST
+  would lose the body. **Caveat**: per `[assets] run_worker_first =
+  ["/api/*", "/landing/*"]`, the worker does NOT run before assets for
+  SPA paths like `/dashboard` — so this 301 only fires for `/landing/*`
+  and non-asset paths today. To converge all SPA bookmarks, either add
+  the app's top-level routes to `run_worker_first`, or (preferred) set
+  up a Cloudflare bulk-redirect rule on the `app.axal.vc` zone.
+- **`cloudflare-worker/src/middleware/securityHeaders.ts`** — CSP
+  `connect-src` reordered so `axal.vc` comes first (both still allowed).
+- **`frontend/src/pages/LoginPage.jsx`** — post-login redirect changed
+  from `https://axal.vc` (which landed on the Jekyll marketing root) to
+  `/dashboard` (relative, host-preserving). Fixes the long-standing
+  "I logged in but ended up on the marketing page" UX bug.
+- **`frontend/src/pages/RecoverPage.jsx`** — doc comment updated.
+- **`replit.md`** — Apex-routing gotcha updated to flag `axal.vc` as
+  intended canonical and document the `appUrl()`/`oauthCallbackHost()`
+  split.
+
+What still needs ops work to make `axal.vc` actually canonical in prod:
+
+1. **Update provider-side OAuth `redirect_uri` registrations** to
+   `https://axal.vc/api/...` for each of: Google Calendar, Microsoft
+   Calendar, LinkedIn, HubSpot, Salesforce, DocuSign, Carta, Slack,
+   Stripe, Calendly. (Google Auth is already split via
+   `OAUTH_CALLBACK_BASE_URL` and can keep `app.axal.vc`.)
+2. **Flip `APP_URL` and `PUBLIC_BASE_URL` in `wrangler.toml`** (both
+   `[vars]` and `[env.production.vars]`) to `https://axal.vc`, then
+   `wrangler deploy`.
+3. **Add a Cloudflare bulk-redirect rule** on the `app.axal.vc` zone:
+   `app.axal.vc/*` → `axal.vc/$1` (301), excluding `/api/auth/google/callback`
+   (and any other callback path still registered on app.axal.vc). This
+   handles SPA bookmarks that the in-Worker 301 misses due to
+   assets-first routing.
+4. **(Optional)** Once monitoring confirms zero cross-host traffic,
+   remove `app.axal.vc` from `PROD_ORIGINS` (`cloudflare-worker/src/index.ts`)
+   and from the CSP `connect-src` allowlist.
+
+
 ## Apex `axal.vc/<app-route>` now serves the SPA (Phase 1)
 
 Reverses the earlier "Worker never on apex" rule (see

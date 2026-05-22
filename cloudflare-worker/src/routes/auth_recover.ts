@@ -157,7 +157,7 @@ async function notifyAllChannels(
   const body = isResolved
     ? `Your account was recovered (ticket #${ticketId}). If this wasn't you, contact security@axal.vc immediately.`
     : `A recovery flow started on your account (ticket #${ticketId}). If this wasn't you, contact security@axal.vc immediately.`;
-  const appUrl = stripTrailingSlashes(String((env as any).APP_URL || 'https://app.axal.vc'));
+  const appUrl = stripTrailingSlashes(String((env as any).APP_URL || 'https://axal.vc'));
   try {
     await notify(env, {
       userId: user.id,
@@ -550,7 +550,7 @@ recover.post('/email/start', async (c) => {
   const { id: ticketId } = await createTicket(c.env, user.id, 'email_magic',
     { token_hash: tokenHash, expires_at: expires }, c);
 
-  const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://app.axal.vc'));
+  const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://axal.vc'));
   const magicUrl = `${appUrl}/auth/recover/email?token=${raw}&ticket=${ticketId}`;
 
   await sendEmail(c.env, 'auth_magic_link', user.email, {
@@ -630,7 +630,7 @@ recover.post('/trusted-contact/start', async (c) => {
         contacts: contacts.map((r) => ({ id: r.id, email: r.contact_email, user_id: r.contact_user_id })),
         attestations: [],
       }, c);
-      const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://app.axal.vc'));
+      const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://axal.vc'));
       const attestUrl = `${appUrl}/auth/recover/attest?ticket=${ticketId}`;
       for (const ctc of contacts) {
         try {
@@ -719,7 +719,7 @@ recover.post('/trusted-contact/attest', async (c) => {
       statePatch: { claim_token_hash: claimHash, claim_expires_at: inMin(EMAIL_MAGIC_TTL_MIN) },
     }, null);
 
-    const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://app.axal.vc'));
+    const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://axal.vc'));
     const claimUrl = `${appUrl}/auth/recover/email?token=${claim}&ticket=${ticketId}&trusted=1`;
     await sendEmail(c.env, 'auth_recovery_resolved', (target as any).email, {
       name: (target as any).name || (target as any).email,
@@ -878,7 +878,7 @@ recover.post('/admin/cosign', async (c) => {
     }, { template: 'auth_recovery_started', vars: { co_signers: cosigners.length, status: 'claim_emailed' } });
 
     if (ur.length) {
-      const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://app.axal.vc'));
+      const appUrl = stripTrailingSlashes(String((c.env as any).APP_URL || 'https://axal.vc'));
       const claimUrl = `${appUrl}/auth/recover/email?token=${claim}&ticket=${ticketId}&admin=1`;
       try {
         await sendEmail(c.env, 'auth_recovery_resolved', (target as any).email, {

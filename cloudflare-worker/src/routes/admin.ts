@@ -972,7 +972,7 @@ admin.post('/users/:user_id/resend-verification', async (c) => {
   let emailed = false;
   try {
     const { sendVerificationEmail } = await import('../services/email');
-    const verifyUrl = `${c.env.APP_URL || 'https://app.axal.vc'}/verify-email?token=${rawToken}`;
+    const verifyUrl = `${c.env.APP_URL || 'https://axal.vc'}/verify-email?token=${rawToken}`;
     emailed = await sendVerificationEmail(c.env, target.email, target.name || '', verifyUrl);
   } catch (e: any) {
     console.error('[admin/resend-verification] email send failed', e);

@@ -307,7 +307,7 @@ onboard.post('/:token/finalize', async (c) => {
     ).bind(deal.envelope_id).first();
     return c.json({
       envelope_id: deal.envelope_id,
-      signing_url: env?.signing_token ? `${c.env.APP_URL || 'https://app.axal.vc'}/esign/${env.signing_token}` : null,
+      signing_url: env?.signing_token ? `${c.env.APP_URL || 'https://axal.vc'}/esign/${env.signing_token}` : null,
       already_started: true,
     });
   }
@@ -325,7 +325,7 @@ onboard.post('/:token/finalize', async (c) => {
     // Required: partitions the createAndSendEnvelope dedupe key so two
     // different partner invitations don't collide on (partner_msa_v1, user_id=null).
     dealId: deal.id,
-    appUrl: c.env.APP_URL || 'https://app.axal.vc',
+    appUrl: c.env.APP_URL || 'https://axal.vc',
     mergeFields: {
       partner_name: profile?.full_name || gate.inv.recipient_name || gate.inv.recipient_email,
       partner_email: gate.inv.recipient_email,

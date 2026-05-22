@@ -375,7 +375,7 @@ network.get('/referral/code', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const code = await ensureReferralCode(c.env, user.id);
-  const baseUrl = c.env.APP_URL || 'https://app.axal.vc';
+  const baseUrl = c.env.APP_URL || 'https://axal.vc';
   // Task #4 (DH) — surface the legacy AXAL- code (if present) so the
   // Refer & Earn UI can show the "Previous code also works" tooltip.
   let legacyCode: string | null = null;

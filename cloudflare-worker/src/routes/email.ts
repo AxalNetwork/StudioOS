@@ -204,7 +204,7 @@ email.post('/send-referral-invites', async (c) => {
   }
 
   // Send emails sequentially to avoid hammering Gmail; record outcome.
-  const baseLink = `${c.env.APP_URL || 'https://app.axal.vc'}/register?ref=${encodeURIComponent(sender.referral_code)}`;
+  const baseLink = `${c.env.APP_URL || 'https://axal.vc'}/register?ref=${encodeURIComponent(sender.referral_code)}`;
   let sentCount = 0;
   for (const contact of toSend) {
     const personalizedLink = `${baseLink}&invitee=${encodeURIComponent(contact.email)}`;
@@ -331,7 +331,7 @@ email.post('/invites/:id/remind', async (c) => {
     await c.env.RATE_LIMITS.put(rateKey, String(usedToday + 1), { expirationTtl: dayTtl });
   } catch {}
 
-  const baseLink = `${c.env.APP_URL || 'https://app.axal.vc'}/register?ref=${encodeURIComponent(sender.referral_code)}`;
+  const baseLink = `${c.env.APP_URL || 'https://axal.vc'}/register?ref=${encodeURIComponent(sender.referral_code)}`;
   const personalizedLink = `${baseLink}&invitee=${encodeURIComponent(invite.recipient_email)}`;
   let ok = false;
   let reason = '';

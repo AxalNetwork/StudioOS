@@ -74,7 +74,7 @@ export function securityHeadersMiddleware() {
         `script-src 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' https:; ` +
         `style-src 'self' 'unsafe-inline'; ` +
         `img-src 'self' data: https:; ` +
-        `connect-src 'self' https://app.axal.vc https://axal.vc https://www.axal.vc https://api.stripe.com https://*.cloudflareaccess.com; ` +
+        `connect-src 'self' https://axal.vc https://app.axal.vc https://www.axal.vc https://api.stripe.com https://*.cloudflareaccess.com; ` +
         `frame-ancestors 'none'; ` +
         `base-uri 'self'; ` +
         `form-action 'self'; ` +

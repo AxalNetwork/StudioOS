@@ -5,7 +5,7 @@ import { ArrowLeft, Shield, Mail, MessageSquare, KeyRound, Users, ShieldAlert } 
 // Task #50 — Lost-TOTP recovery landing page. Lists available layers in
 // order of friction. Layers fan out into their own mini-flows below.
 //
-// All URLs in emitted emails / SMS land here (env.APP_URL → app.axal.vc).
+// All URLs in emitted emails / SMS land here (env.APP_URL → axal.vc).
 const API = '';  // same-origin via Cloudflare Worker
 
 async function post(path, body) {

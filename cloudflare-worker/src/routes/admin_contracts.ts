@@ -948,7 +948,7 @@ adminContracts.post('/:uid/resend', async (c) => {
       const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       await sql`UPDATE esign_recipients SET signing_token = ${token}, token_expires_at = ${newExpiry} WHERE id = ${rec.id}`;
     }
-    const appUrl = (c.env as any).APP_URL || 'https://app.axal.vc';
+    const appUrl = (c.env as any).APP_URL || 'https://axal.vc';
     const signingUrl = `${appUrl}/esign/${token}`;
     const emailSent = await sendAgreementAssignedEmail(
       c.env,

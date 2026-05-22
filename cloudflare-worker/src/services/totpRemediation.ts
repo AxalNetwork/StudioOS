@@ -114,7 +114,7 @@ export async function runTotpRemediation(env: Env): Promise<RemediationResult> {
         // Best-effort forced-reset email. We deliberately swallow failures
         // — the migration row is the source of truth; the user can also
         // request a new email from /forgot-password if this one bounces.
-        const url = `${env.APP_URL || 'https://app.axal.vc'}/verify-email?token=${encodeURIComponent(verifyToken)}&purpose=totp_repair`;
+        const url = `${env.APP_URL || 'https://axal.vc'}/verify-email?token=${encodeURIComponent(verifyToken)}&purpose=totp_repair`;
         try {
           const ok = await sendVerificationEmail(env, r.email, r.name || 'there', url);
           if (ok) out.emailed++;
