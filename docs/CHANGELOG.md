@@ -1,6 +1,189 @@
 # Changelog
 
 
+## Admin Integration Keys — 7 new providers
+
+Added LinkedIn, Calendly, Stripe, Carta, Crunchbase, Affinity, and
+Telegram to the Admin Console → Integration Keys panel so an admin
+can rotate / test / remove their OAuth or API credentials from the UI
+without redeploying the worker.
+
+- **`cloudflare-worker/src/services/providerOauthKeys.ts`** —
+  `ManagedProviderKey` union + `MANAGED_PROVIDERS` array + `PROVIDER_ENV_VARS`
+  map extended with the 7 new providers. OAuth providers (linkedin,
+  calendly, stripe, carta) use the natural `CLIENT_ID`/`CLIENT_SECRET`
+  pair. API-key providers (crunchbase, affinity, telegram) reuse the
+  same two-field schema: the `id` slot holds a public account label
+  (`CRUNCHBASE_USER_KEY_ID` / `AFFINITY_TEAM_DOMAIN` /
+  `TELEGRAM_BOT_USERNAME`) and the `secret` slot holds the actual
+  token (`CRUNCHBASE_API_KEY` / `AFFINITY_API_KEY` /
+  `TELEGRAM_BOT_TOKEN`). Env-var precedence over DB still applies.
+- **`cloudflare-worker/src/services/providerOauthTest.ts`** — per-provider
+  dry-run probes added so the panel's "Test" button works for each.
+  OAuth providers use the same invalid-grant probe as Slack/HubSpot.
+  Stripe probes `GET /v1/account` with the secret key. Crunchbase uses
+  a known org GET with `user_key`. Affinity uses `GET /auth/whoami`
+  with HTTP Basic. Telegram uses `GET /bot<token>/getMe`. The exhaustive
+  `switch` on `ManagedProviderKey` ensures the type system flags any
+  future provider that forgets a probe.
+- **`frontend/src/pages/AdminPage.jsx`** — `PROVIDER_LABELS`,
+  `PROVIDER_HINTS`, and `PROVIDER_ENV_NAMES` extended for the 7 new
+  providers. Hints for the API-key providers explicitly call out the
+  two-field convention so admins know what to paste where. No other
+  UI plumbing needed — the panel and `api.js` wrappers are generic
+  over the provider catalog.
+- **Runtime credential loaders refactored to use `loadOauthCreds()`**
+  so admin-saved keys actually flow to live OAuth/API code paths (not
+  just the admin "Test" button). Affected files:
+  - `integrations/providers/calendly.ts` — `ensureCreds()` now async
+    via `loadOauthCreds(env, 'calendly')`; 3 call sites awaited.
+  - `integrations/providers/stripe.ts` — same pattern for `stripe`;
+    3 call sites awaited.
+  - `integrations/providers/carta.ts` — same pattern for `carta`;
+    4 call sites awaited.
+  - `routes/linkedin.ts` — replaced sync `configured(env)` with async
+    `loadLinkedinCreds(env)`; oauth/start, oauth/callback, and the
+    /status endpoint all consume the loaded creds.
+  - `services/dueDiligence.ts` — Crunchbase connector now resolves the
+    API key via `loadOauthCreds(env, 'crunchbase')` (key lives in the
+    `secret` slot) instead of reading `env.CRUNCHBASE_API_KEY` directly.
+  Affinity and Telegram have no runtime consumers yet — their admin
+  panel rows are pre-provisioning slots for the upcoming
+  partner-comp Affinity sync and Telegram broadcast features.
+
+Notes:
+- For Stripe, the `client_id` field stores the public Connect Client ID
+  (ca_…); the secret field stores the platform `sk_live_…` / `sk_test_…`.
+  The test probe only validates the secret key — Stripe doesn't have a
+  standalone "is this ca_ valid" endpoint, but a valid secret key on a
+  Connect-enabled account is sufficient for the OAuth flow to work.
+- Telegram is not OAuth at all — it's a single bot token. The bot
+  username is stored alongside purely so the UI can show "configured
+  for @axalvc_bot" and so the existing two-column schema doesn't need
+  a migration.
+- Deleting a provider's keys still cascades `integrations.status =
+  'disconnected'` for any active user connections (existing behaviour
+  in `deleteOauthCredsAndDisconnect`). Same audit trail as the
+  original 4 providers.
+
+
+## Canonical-host flip: code-side prep for `axal.vc` (Phase 2 part 1)
+
+Code-side groundwork for making `axal.vc` the canonical product host.
+**Production behaviour is unchanged after this commit** — the prod
+`APP_URL` / `PUBLIC_BASE_URL` env vars in `wrangler.toml` still point at
+`app.axal.vc`, so all OAuth flows keep working with their existing
+provider-side `redirect_uri` registrations. The flip becomes live when
+ops completes the cutover described below.
+
+What this commit changes (code defaults + new infrastructure):
+
+- **`cloudflare-worker/src/routes/auth_google.ts`** — `appUrl()` default
+  flipped to `https://axal.vc`. Split out `oauthCallbackHost()` (defaults
+  to `https://app.axal.vc`, overridable via the new
+  `OAUTH_CALLBACK_BASE_URL` env) so the Google OAuth `redirect_uri` keeps
+  pointing at the host registered in Google Cloud Console — only the
+  post-callback redirect target moves to `axal.vc`. New
+  `OAUTH_CALLBACK_BASE_URL` typed in `types.ts`.
+- **17 Worker source files** (`routes/{auth,auth_recover,trust,settings,
+  profiling,partner_onboarding,network,linkedin,esign,email,dd,
+  admin_partners,admin_contracts,admin}.ts`,
+  `services/{notifications,totpRemediation,email/send}.ts`) — every
+  hardcoded `'https://app.axal.vc'` fallback flipped to `'https://axal.vc'`.
+  These only fire when env vars are unset, so prod (env-pinned) is
+  unchanged; new fresh deploys / dev / preview pick up the new default.
+- **`cloudflare-worker/src/index.ts`** — new 301 middleware: in production,
+  any `host=app.axal.vc` request whose path does NOT start with `/api/`
+  is 301'd to the same path on `axal.vc`. `/api/*` is preserved because
+  OAuth callbacks (Google/Microsoft/LinkedIn) are registered with the
+  providers against `app.axal.vc/api/auth/*` and 301-ing a callback POST
+  would lose the body. **Caveat**: per `[assets] run_worker_first =
+  ["/api/*", "/landing/*"]`, the worker does NOT run before assets for
+  SPA paths like `/dashboard` — so this 301 only fires for `/landing/*`
+  and non-asset paths today. To converge all SPA bookmarks, either add
+  the app's top-level routes to `run_worker_first`, or (preferred) set
+  up a Cloudflare bulk-redirect rule on the `app.axal.vc` zone.
+- **`cloudflare-worker/src/middleware/securityHeaders.ts`** — CSP
+  `connect-src` reordered so `axal.vc` comes first (both still allowed).
+- **`frontend/src/pages/LoginPage.jsx`** — post-login redirect changed
+  from `https://axal.vc` (which landed on the Jekyll marketing root) to
+  `/dashboard` (relative, host-preserving). Fixes the long-standing
+  "I logged in but ended up on the marketing page" UX bug.
+- **`frontend/src/pages/RecoverPage.jsx`** — doc comment updated.
+- **`replit.md`** — Apex-routing gotcha updated to flag `axal.vc` as
+  intended canonical and document the `appUrl()`/`oauthCallbackHost()`
+  split.
+
+What still needs ops work to make `axal.vc` actually canonical in prod:
+
+1. **Update provider-side OAuth `redirect_uri` registrations** to
+   `https://axal.vc/api/...` for each of: Google Calendar, Microsoft
+   Calendar, LinkedIn, HubSpot, Salesforce, DocuSign, Carta, Slack,
+   Stripe, Calendly. (Google Auth is already split via
+   `OAUTH_CALLBACK_BASE_URL` and can keep `app.axal.vc`.)
+2. **Flip `APP_URL` and `PUBLIC_BASE_URL` in `wrangler.toml`** (both
+   `[vars]` and `[env.production.vars]`) to `https://axal.vc`, then
+   `wrangler deploy`.
+3. **Add a Cloudflare bulk-redirect rule** on the `app.axal.vc` zone:
+   `app.axal.vc/*` → `axal.vc/$1` (301), excluding `/api/auth/google/callback`
+   (and any other callback path still registered on app.axal.vc). This
+   handles SPA bookmarks that the in-Worker 301 misses due to
+   assets-first routing.
+4. **(Optional)** Once monitoring confirms zero cross-host traffic,
+   remove `app.axal.vc` from `PROD_ORIGINS` (`cloudflare-worker/src/index.ts`)
+   and from the CSP `connect-src` allowlist.
+
+
+## Apex `axal.vc/<app-route>` now serves the SPA (Phase 1)
+
+Reverses the earlier "Worker never on apex" rule (see
+`attached_assets/Pasted-Hard-constraint-axal-vc-apex-is-served-by-GitHub-Pages-_*.txt`).
+The app now serves from both `app.axal.vc/<path>` and `axal.vc/<path>`,
+while `axal.vc/` and Jekyll-owned paths stay on GitHub Pages.
+
+- **`wrangler.toml`** — added 11 path-scoped `[[env.production.routes]]`
+  on the `axal.vc` zone: `/api/*`, `/app`, `/app/*`, `/dashboard`,
+  `/dashboard/*`, `/admin`, `/admin/*`, `/register`, `/register/*`,
+  `/login`, `/login/*`. Conservative starter set — each path uses both
+  an exact + `/*` variant so `/registered-foo` (hypothetical Jekyll
+  page) is NOT hijacked. Apex DNS was already a proxied CNAME →
+  `axalnetwork.github.io`, so the routes activated immediately on
+  deploy. `/api/*` MUST be in this list because the SPA calls `/api`
+  relative — without it, fetches on `axal.vc/dashboard` would hit
+  Jekyll and 404.
+- **`cloudflare-worker/src/auth.ts`** — `setAuthCookies` /
+  `clearAuthCookies` now emit `Domain=.axal.vc` when
+  `ENVIRONMENT=production` so a session set by
+  `app.axal.vc/api/auth/*` is also valid on
+  `axal.vc/<app-route>`. `clearAuthCookies` double-clears (with and
+  without `Domain`) to clean up legacy host-only cookies on logout.
+  Dev/preview deliberately omits `Domain` so localhost / *.workers.dev
+  cookies still work.
+- **CORS allow-list + CSP `connect-src`** — already included both
+  `https://axal.vc` and `https://app.axal.vc` from an earlier
+  migration pass, no change needed.
+- **Token permission needed** — first deploy failed with `Workers
+  Routes: Edit` missing on the `axal.vc` zone for
+  `CLOUDFLARE_API_TOKEN`. User granted the permission; redeploy
+  registered all 11 routes (version `71f5f68c-dd24-403c-8bb5-7996517f4ce3`).
+- **Smoke verified post-deploy**: `axal.vc/` → Jekyll 200,
+  `axal.vc/dashboard` → SPA HTML 200, `axal.vc/api/health` → Worker
+  JSON 200, `app.axal.vc/*` unchanged.
+
+**Still to do (Phase 2, deferred to a follow-up):**
+- Flip `APP_URL` / `PUBLIC_BASE_URL` in `wrangler.toml` from
+  `https://app.axal.vc` → `https://axal.vc` (affects referral URLs,
+  email magic-links, verification links, OAuth state callbacks
+  rendered into emails).
+- Add 301 redirects in the Worker on
+  `app.axal.vc/{dashboard,admin,register,login,app}*` →
+  `axal.vc<path>` so legacy bookmarks / outbound links survive.
+- Audit email templates for hardcoded `app.axal.vc` strings.
+- OAuth callbacks (`app.axal.vc/api/auth/google/callback`, etc) stay
+  on `app.axal.vc` — Google Cloud Console authorized redirect URI is
+  registered there, do NOT change.
+
+
 ## Calendar connect `secret_missing` bucket pinpoints which env var is at fault
 
 Task #69 surfaced a real cause (`encrypt`) instead of the bare

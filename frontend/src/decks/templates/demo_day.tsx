@@ -1,0 +1,87 @@
+import React from 'react';
+import { Slide16x9, Editable, DeckProps, v, fmtUSD } from '../DeckBase';
+
+const Screenshot: React.FC<{ caption?: string; src?: string }> = ({ caption, src }) => (
+  <div style={{ position: 'relative', flex: 1, marginTop: 32, borderRadius: 24, overflow: 'hidden',
+                 border: '2px solid #1F2937', background: '#0F172A',
+                 display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    {src
+      ? <img src={src} alt={caption || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      : <div style={{ color: '#475569', fontSize: 40 }}>📷 [Product screenshot]</div>}
+    {caption && (
+      <div style={{ position: 'absolute', bottom: 24, left: 24, right: 24, fontSize: 24,
+                     color: '#F8FAFC', background: 'rgba(15,23,42,0.85)',
+                     padding: '12px 20px', borderRadius: 12 }}>{caption}</div>
+    )}
+  </div>
+);
+
+export const Deck_demo_day: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const F = '"Space Grotesk", system-ui, sans-serif';
+  const INK = '#F8FAFC';
+  const BG = '#0F172A';
+  const ACCENT = '#22D3EE';
+  return <>
+    <Slide16x9 font={F} ink={INK} bg={BG}>
+      <div style={{ margin: 'auto', textAlign: 'center' }}>
+        <div style={{ fontSize: 22, letterSpacing: 8, color: ACCENT }}>DEMO DAY</div>
+        <Editable path="company" value={v(data,'company')} editable={editable} onEdit={onEdit}
+          placeholder="[Company]" style={{ fontSize: 192, fontWeight: 900, marginTop: 24 }} />
+        <Editable path="tagline" value={v(data,'tagline')} editable={editable} onEdit={onEdit}
+          placeholder="[Tagline]"
+          style={{ fontSize: 44, color: '#94A3B8', marginTop: 24 }} />
+      </div>
+    </Slide16x9>
+
+    <Slide16x9 font={F} ink={INK} bg={BG}>
+      <div style={{ fontSize: 24, color: ACCENT, letterSpacing: 4 }}>THE PROBLEM</div>
+      <Editable path="problem" value={v(data,'problem')} editable={editable} onEdit={onEdit}
+        placeholder="[Pain point]"
+        style={{ fontSize: 88, fontWeight: 700, lineHeight: 1.15, marginTop: 64 }} />
+    </Slide16x9>
+
+    <Slide16x9 font={F} ink={INK} bg={BG}>
+      <div style={{ fontSize: 24, color: ACCENT, letterSpacing: 4 }}>WATCH IT WORK</div>
+      <Editable path="demo_intro" value={v(data,'demo_intro')} editable={editable} onEdit={onEdit}
+        placeholder="[Setup: who is using the product, for what task]"
+        style={{ fontSize: 48, fontWeight: 500, marginTop: 32 }} />
+      <Screenshot caption={v(data,'demo_1_caption','[Demo flow step 1]')} src={v(data,'demo_1_src')} />
+    </Slide16x9>
+
+    <Slide16x9 font={F} ink={INK} bg={BG}>
+      <div style={{ fontSize: 24, color: ACCENT, letterSpacing: 4 }}>STEP 2</div>
+      <Screenshot caption={v(data,'demo_2_caption','[Demo flow step 2]')} src={v(data,'demo_2_src')} />
+    </Slide16x9>
+
+    <Slide16x9 font={F} ink={INK} bg={BG}>
+      <div style={{ fontSize: 24, color: ACCENT, letterSpacing: 4 }}>OUTCOME</div>
+      <Screenshot caption={v(data,'demo_3_caption','[Result the user gets]')} src={v(data,'demo_3_src')} />
+    </Slide16x9>
+
+    {[
+      ['HOW IT WORKS', 'how_it_works'],
+      ['TRACTION', 'traction'],
+      ['BUSINESS MODEL', 'business_model'],
+      ['TEAM', 'team'],
+      ['ROADMAP', 'roadmap'],
+    ].map(([label, key]) => (
+      <Slide16x9 key={key} font={F} ink={INK} bg={BG}>
+        <div style={{ fontSize: 24, color: ACCENT, letterSpacing: 4 }}>{label}</div>
+        <Editable path={key} value={v(data,key)} editable={editable} onEdit={onEdit}
+          placeholder={`[${label.toLowerCase()}]`}
+          style={{ fontSize: 64, fontWeight: 600, lineHeight: 1.2, marginTop: 64 }} />
+      </Slide16x9>
+    ))}
+
+    <Slide16x9 font={F} ink={INK} bg={BG}>
+      <div style={{ margin: 'auto', textAlign: 'center' }}>
+        <div style={{ fontSize: 24, color: ACCENT, letterSpacing: 4 }}>JOIN US</div>
+        <Editable path="ask_amount" value={fmtUSD(v(data,'ask_amount'))} editable={editable} onEdit={onEdit}
+          style={{ fontSize: 224, fontWeight: 900, marginTop: 24 }} />
+        <Editable path="contact" value={v(data,'contact')} editable={editable} onEdit={onEdit}
+          placeholder="founders@example.com"
+          style={{ fontSize: 36, color: '#94A3B8', marginTop: 32 }} />
+      </div>
+    </Slide16x9>
+  </>;
+};

@@ -1,0 +1,60 @@
+import React from 'react';
+import { Slide16x9, Editable, DeckProps, v, fmtUSD } from '../DeckBase';
+
+export const Deck_sequoia_classic: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const F = '"Source Serif Pro", Georgia, serif';
+  const INK = '#1E293B';
+  const ACCENT = '#B91C1C';
+  const SECTION = (label: string) => (
+    <div style={{ fontSize: 22, letterSpacing: 6, color: ACCENT, textTransform: 'uppercase' }}>{label}</div>
+  );
+  return <>
+    <Slide16x9 font={F} ink={INK} bg="#FAFAF9">
+      <div style={{ borderTop: `4px solid ${ACCENT}`, width: 200 }} />
+      <div style={{ marginTop: 'auto', marginBottom: 'auto' }}>
+        <Editable as="h1" path="company" value={v(data,'company')} editable={editable} onEdit={onEdit}
+          placeholder="[Company]" style={{ fontSize: 168, fontWeight: 700, letterSpacing: -3 }} />
+        <Editable path="hook" value={v(data,'hook')} editable={editable} onEdit={onEdit}
+          placeholder="[Irresistible one-liner]"
+          style={{ fontSize: 44, fontStyle: 'italic', marginTop: 32, color: '#475569' }} />
+      </div>
+    </Slide16x9>
+
+    {[
+      ['HOOK', 'hook', '[Irresistible one-liner]'],
+      ['THE PROBLEM', 'problem', '[The pain in one sentence]'],
+      ['OUR SOLUTION', 'solution', '[Solution in one paragraph]'],
+      ['WHY NOW', 'why_now', '[The shift]'],
+      ['MARKET', 'market', '[TAM / SAM / SOM narrative]'],
+      ['COMPETITION', 'competition', '[Where you sit vs. who else]'],
+      ['PRODUCT', 'product', '[What it does]'],
+      ['BUSINESS MODEL', 'business_model', '[How you make money]'],
+      ['TRACTION', 'traction', '[Numbers + momentum]'],
+      ['TEAM', 'team', '[Why this team specifically]'],
+      ['FINANCIALS', 'financials', '[18-month plan summary]'],
+    ].map(([label, key, ph]) => (
+      <Slide16x9 key={key} font={F} ink={INK} bg="#FAFAF9">
+        {SECTION(label)}
+        <Editable path={key} value={v(data,key)} editable={editable} onEdit={onEdit}
+          placeholder={ph}
+          style={{ fontSize: 64, fontWeight: 500, lineHeight: 1.25, marginTop: 56, maxWidth: 1500 }} />
+        <div style={{ position: 'absolute', bottom: 48, left: 96, right: 96,
+                       borderTop: '1px solid #CBD5E1', paddingTop: 16,
+                       display: 'flex', justifyContent: 'space-between',
+                       fontSize: 18, color: '#64748B' }}>
+          <span>{v(data,'company','Company')}</span>
+          <span>Confidential</span>
+        </div>
+      </Slide16x9>
+    ))}
+
+    <Slide16x9 font={F} ink={INK} bg="#FAFAF9">
+      {SECTION('THE ASK')}
+      <Editable path="ask_amount" value={fmtUSD(v(data,'ask_amount'))} editable={editable} onEdit={onEdit}
+        style={{ fontSize: 144, fontWeight: 700, marginTop: 56 }} />
+      <Editable path="use_of_funds" value={v(data,'use_of_funds')} editable={editable} onEdit={onEdit}
+        placeholder="[Use of funds breakdown]"
+        style={{ fontSize: 36, fontStyle: 'italic', marginTop: 24, color: '#475569', maxWidth: 1400 }} />
+    </Slide16x9>
+  </>;
+};

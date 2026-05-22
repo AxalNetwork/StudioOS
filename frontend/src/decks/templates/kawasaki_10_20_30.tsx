@@ -1,0 +1,36 @@
+import React from 'react';
+import { Slide16x9, Editable, DeckProps, v } from '../DeckBase';
+
+// 10 slides, 30pt minimum font ≈ 60-80px at 1920×1080. Big type only.
+export const Deck_kawasaki_10_20_30: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const F = '"IBM Plex Sans", system-ui, sans-serif';
+  const INK = '#111827';
+  const ACCENT = '#0891B2';
+  const N = (n: number) => (
+    <div style={{ fontSize: 18, letterSpacing: 4, color: ACCENT }}>{`SLIDE ${n} / 10`}</div>
+  );
+  const BIG = { fontSize: 96, fontWeight: 700, lineHeight: 1.1, marginTop: 64 } as const;
+  const slides: Array<[number, string, string, string]> = [
+    [1, 'Title',                   'company',                '[Company]'],
+    [2, 'Problem & Opportunity',   'problem',                '[Problem]'],
+    [3, 'Value Proposition',       'solution',                '[Value prop]'],
+    [4, 'Underlying Magic',        'product',                 '[Product / tech]'],
+    [5, 'Business Model',          'business_model',          '[Model]'],
+    [6, 'Go-to-Market Plan',       'gtm',                     '[GTM]'],
+    [7, 'Competitive Analysis',    'competition',             '[Competition]'],
+    [8, 'Management Team',         'team',                    '[Team]'],
+    [9, 'Projections & Milestones','milestones',              '[Milestones]'],
+    [10,'Status & Timeline / Ask', 'ask',                     '[Ask + timeline]'],
+  ];
+  return <>{slides.map(([n, label, key, ph]) => (
+    <Slide16x9 key={key} font={F} ink={INK}>
+      {N(n)}
+      <div style={{ fontSize: 48, fontWeight: 600, marginTop: 16 }}>{label}</div>
+      <Editable path={key} value={v(data,key)} editable={editable} onEdit={onEdit} placeholder={ph}
+        style={BIG} />
+      <div style={{ position: 'absolute', bottom: 48, left: 96, fontSize: 20, color: '#6B7280' }}>
+        {v(data,'company','Company')} · {n} / 10
+      </div>
+    </Slide16x9>
+  ))}</>;
+};

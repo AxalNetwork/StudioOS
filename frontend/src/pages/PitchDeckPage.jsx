@@ -737,10 +737,74 @@ function FieldEditor({ field, onChange }) {
 
 // =====================================================================
 // Method picker modal — 12-template grid with locked badges.
+//
+// Each card renders a live scaled mini-preview of the matching template's
+// first slide (1920x1080 React component scaled to fit). The templates
+// module is code-split via a one-shot dynamic import so it only loads
+// when the picker opens (keeps it out of the main route bundle).
 // =====================================================================
+let _templatesPromise = null;
+function loadTemplates() {
+  if (!_templatesPromise) {
+    _templatesPromise = import('../decks/templates')
+      .then((m) => m.TEMPLATES)
+      .catch((err) => {
+        // Reset so a transient failure (e.g. network blip) can retry next open.
+        _templatesPromise = null;
+        reportError(err);
+        return {};
+      });
+  }
+  return _templatesPromise;
+}
+
+function TemplateThumb({ methodId, templates }) {
+  // 1920x1080 wrapper scaled into a 280x157.5 viewport. overflow:hidden
+  // clips to the FIRST Slide16x9 of the deck (subsequent slides flow
+  // below the 1080 cutoff). pointer-events:none keeps the parent button
+  // fully clickable.
+  const meta = templates && templates[methodId];
+  const Comp = meta?.Component;
+  if (!Comp) return null;
+  const W = 280;
+  const SCALE = W / 1920; // 0.14583...
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        width: W, height: W * 9 / 16,
+        overflow: 'hidden',
+        borderRadius: 6,
+        border: '1px solid rgba(148, 163, 184, 0.35)',
+        background: '#FFFFFF',
+        marginBottom: 10,
+        pointerEvents: 'none',
+        position: 'relative',
+      }}
+    >
+      <div
+        style={{
+          width: 1920, height: 1080,
+          transform: `scale(${SCALE})`,
+          transformOrigin: 'top left',
+          position: 'absolute', top: 0, left: 0,
+        }}
+      >
+        <Comp data={{}} />
+      </div>
+    </div>
+  );
+}
+
 function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, busy }) {
   useEscapeClose(onClose);
   const [filter, setFilter] = useState('all');
+  const [templates, setTemplates] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    loadTemplates().then((t) => { if (alive) setTemplates(t); });
+    return () => { alive = false; };
+  }, []);
   const list = useMemo(
     () => methods.filter((m) => filter === 'all' || m.category === filter),
     [methods, filter],
@@ -789,10 +853,11 @@ function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, bu
                   </span>
                 )}
                 {m.premium && (
-                  <span className="absolute top-2 right-2 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                  <span className="absolute top-2 right-2 z-10 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1">
                     {m.locked && <Lock className="w-3 h-3" />} Premium
                   </span>
                 )}
+                <TemplateThumb methodId={m.id} templates={templates} />
                 <div className="text-xs uppercase text-gray-400 mb-1">{m.category} · {m.slide_count} slides</div>
                 <div className="font-medium mb-1">{m.label}</div>
                 <p className="text-xs text-gray-600 dark:text-slate-400 mb-2">{m.prompt_hint}</p>

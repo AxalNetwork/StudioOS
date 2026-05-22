@@ -1,0 +1,41 @@
+import React from 'react';
+import { Slide16x9, Editable, DeckProps, v, fmtUSD } from '../DeckBase';
+
+export const Deck_minimal_seed: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const F = 'Inter, system-ui, sans-serif';
+  const INK = '#0A0A0A';
+  return <>
+    <Slide16x9 font={F} ink={INK}>
+      <div style={{ margin: 'auto', textAlign: 'center', maxWidth: 1400 }}>
+        <Editable path="company" value={v(data,'company')} editable={editable} onEdit={onEdit}
+          placeholder="[Company]" style={{ fontSize: 200, fontWeight: 900, letterSpacing: -6, lineHeight: 1 }} />
+      </div>
+    </Slide16x9>
+
+    {[
+      ['Problem',  'problem',           '[One-sentence problem]'],
+      ['Solution', 'solution',          '[One-sentence solution]'],
+      ['Traction', 'traction',          '[Best traction number]'],
+      ['Team',     'team',              '[Founders, one line each]'],
+    ].map(([label, key, ph]) => (
+      <Slide16x9 key={key} font={F} ink={INK}>
+        <div style={{ margin: 'auto', textAlign: 'center', maxWidth: 1400 }}>
+          <div style={{ fontSize: 26, color: '#737373', letterSpacing: 4, textTransform: 'uppercase' }}>{label}</div>
+          <Editable path={key} value={v(data,key)} editable={editable} onEdit={onEdit} placeholder={ph}
+            style={{ fontSize: 96, fontWeight: 600, lineHeight: 1.2, marginTop: 48 }} />
+        </div>
+      </Slide16x9>
+    ))}
+
+    <Slide16x9 font={F} ink={INK}>
+      <div style={{ margin: 'auto', textAlign: 'center' }}>
+        <div style={{ fontSize: 26, color: '#737373', letterSpacing: 4, textTransform: 'uppercase' }}>The ask</div>
+        <Editable path="ask_amount" value={fmtUSD(v(data,'ask_amount'))} editable={editable} onEdit={onEdit}
+          style={{ fontSize: 224, fontWeight: 900, marginTop: 32 }} />
+        <Editable path="contact" value={v(data,'contact')} editable={editable} onEdit={onEdit}
+          placeholder="contact@example.com"
+          style={{ fontSize: 36, marginTop: 32, color: '#374151' }} />
+      </div>
+    </Slide16x9>
+  </>;
+};

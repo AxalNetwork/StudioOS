@@ -1,0 +1,58 @@
+import React from 'react';
+
+export type DeckData = Record<string, any>;
+
+export interface DeckProps {
+  data: DeckData;
+  editable?: boolean;
+  onEdit?: (path: string, value: string) => void;
+  currentSlide?: number;
+}
+
+export const Slide16x9: React.FC<React.PropsWithChildren<{
+  bg?: string; ink?: string; font?: string; className?: string;
+}>> = ({ bg = '#FFFFFF', ink = '#0F172A', font = 'Inter, system-ui, sans-serif', className = '', children }) => (
+  <div
+    className={`relative ${className}`}
+    style={{
+      width: 1920, height: 1080, background: bg, color: ink,
+      fontFamily: font, padding: 96, display: 'flex', flexDirection: 'column',
+      pageBreakAfter: 'always',
+    }}>
+    {children}
+  </div>
+);
+
+export const Editable: React.FC<{
+  value: string; path: string; editable?: boolean; onEdit?: (p: string, v: string) => void;
+  placeholder?: string; className?: string; style?: React.CSSProperties;
+  as?: 'div' | 'span' | 'h1' | 'h2' | 'h3' | 'p';
+}> = ({ value, path, editable, onEdit, placeholder, className, style, as = 'div' }) => {
+  const Tag: any = as;
+  return (
+    <Tag
+      contentEditable={!!editable} suppressContentEditableWarning
+      onBlur={(e: any) => onEdit?.(path, e.currentTarget.textContent || '')}
+      className={className}
+      style={{ outline: 'none', minHeight: '1em', color: !value ? '#94A3B8' : style?.color, ...style }}>
+      {value || placeholder || ''}
+    </Tag>
+  );
+};
+
+export const v = (data: DeckData, path: string, fallback = '') => {
+  const keys = path.split('.');
+  let cur: any = data;
+  for (const k of keys) {
+    if (cur == null) return fallback;
+    cur = cur[k];
+  }
+  return cur ?? fallback;
+};
+
+export const fmtUSD = (n: any) =>
+  typeof n === 'number' ? `$${n.toLocaleString()}` : (n ? String(n) : '—');
+export const fmtPct = (n: any) =>
+  typeof n === 'number' ? `${n}%` : (n ? String(n) : '—');
+export const fmtNum = (n: any) =>
+  typeof n === 'number' ? n.toLocaleString() : (n ? String(n) : '—');
