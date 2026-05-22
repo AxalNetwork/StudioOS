@@ -14,17 +14,29 @@
  *   bytes[12..]    — AES-GCM ciphertext + 128-bit auth tag
  *
  * Key derivation:
- *   PBKDF2-HMAC-SHA256, 200,000 iterations, salt = "axal-studioos-wellbeing-v1",
+ *   PBKDF2-HMAC-SHA256, 100,000 iterations, salt = "axal-studioos-wellbeing-v1",
  *   secret = AXAL_ENCRYPTION_SECRET || JWT_SECRET. Worker missing the
  *   secret raises at first encrypt/decrypt — never silently no-ops.
  *
+ * Iteration count: 100,000 is the Workers runtime cap on PBKDF2; values
+ * above that throw `NotSupportedError: PBKDF2 failed: iterations exceeds
+ * the maximum allowed`. The 200,000 LEGACY constant is retained as a
+ * best-effort decrypt fallback — it only succeeds in isolates that had
+ * cached a 200k key before the runtime cap tightened, or if Cloudflare
+ * later raises the cap. Under the current cap, legacy 200k ciphertext is
+ * effectively unreadable; we accept this for wellbeing/OAuth-token rows
+ * (re-auth or re-enter). Do NOT rely on it for DD report bytes — if any
+ * 200k DD reports exist they need a one-time migration in an environment
+ * that can still derive at 200k. New encrypts always use 100,000.
+ *
  * Per-isolate key cache: the derived CryptoKey is cached on a module
- * map keyed by the secret string so PBKDF2 only runs once per isolate
- * lifetime (Workers reuse isolates across requests).
+ * map keyed by `secret|iterations` so PBKDF2 only runs once per isolate
+ * lifetime per variant (Workers reuse isolates across requests).
  */
 
 const SALT = new TextEncoder().encode('axal-studioos-wellbeing-v1');
-const ITERATIONS = 200_000;
+const ITERATIONS = 100_000;
+const ITERATIONS_LEGACY = 200_000;
 const IV_BYTES = 12;
 
 const keyCache = new Map<string, Promise<CryptoKey>>();
@@ -75,8 +87,9 @@ function sanitizeCryptoError(e: unknown): string {
     .slice(0, 60) || 'unknown';
 }
 
-async function deriveKey(secret: string): Promise<CryptoKey> {
-  const cached = keyCache.get(secret);
+async function deriveKey(secret: string, iterations: number = ITERATIONS): Promise<CryptoKey> {
+  const cacheKey = `${iterations}|${secret}`;
+  const cached = keyCache.get(cacheKey);
   if (cached) return cached;
   const promise = (async () => {
     let baseKey: CryptoKey;
@@ -95,7 +108,7 @@ async function deriveKey(secret: string): Promise<CryptoKey> {
     }
     try {
       return await crypto.subtle.deriveKey(
-        { name: 'PBKDF2', salt: SALT, iterations: ITERATIONS, hash: 'SHA-256' },
+        { name: 'PBKDF2', salt: SALT, iterations, hash: 'SHA-256' },
         baseKey,
         { name: 'AES-GCM', length: 256 },
         false,
@@ -106,9 +119,30 @@ async function deriveKey(secret: string): Promise<CryptoKey> {
     }
   })();
   // Don't cache a rejected promise — next call should retry and re-surface.
-  promise.catch(() => keyCache.delete(secret));
-  keyCache.set(secret, promise);
+  promise.catch(() => keyCache.delete(cacheKey));
+  keyCache.set(cacheKey, promise);
   return promise;
+}
+
+// Try AES-GCM decrypt with the current-iteration key, then fall back to the
+// legacy 200k key. Used by decryptString/decryptBytes so older ciphertext
+// (written by isolates whose PBKDF2 cache predated the runtime's 100k cap)
+// remains readable. Returns the plaintext bytes or throws the last error.
+async function decryptWithFallback(
+  secret: string,
+  iv: Uint8Array,
+  ct: Uint8Array,
+): Promise<ArrayBuffer> {
+  let lastErr: unknown;
+  for (const iter of [ITERATIONS, ITERATIONS_LEGACY]) {
+    try {
+      const key = await deriveKey(secret, iter);
+      return await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
 }
 
 function b64encode(bytes: Uint8Array): string {
@@ -161,12 +195,11 @@ export async function decryptString(
   // in the UI. Caller (the route handler) can map this to a 500.
   const secret = getSecret(env);
   try {
-    const key = await deriveKey(secret);
     const bytes = b64decode(blob);
     if (bytes.length < IV_BYTES + 16) return null;
     const iv = bytes.slice(0, IV_BYTES);
     const ct = bytes.slice(IV_BYTES);
-    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    const pt = await decryptWithFallback(secret, iv, ct);
     return new TextDecoder().decode(pt);
   } catch {
     // Wrong key, tampered ciphertext, or malformed input — never crash a
@@ -202,12 +235,12 @@ export async function decryptBytes(
   env: { AXAL_ENCRYPTION_SECRET?: string; JWT_SECRET?: string },
   blob: ArrayBuffer | Uint8Array,
 ): Promise<Uint8Array> {
-  const key = await deriveKey(getSecret(env));
+  const secret = getSecret(env);
   const bytes = blob instanceof Uint8Array ? blob : new Uint8Array(blob);
   if (bytes.length < IV_BYTES + 16) throw new Error('decryptBytes: payload too short');
   const iv = bytes.slice(0, IV_BYTES);
   const ct = bytes.slice(IV_BYTES);
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  const pt = await decryptWithFallback(secret, iv, ct);
   return new Uint8Array(pt);
 }
 
