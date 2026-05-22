@@ -1,0 +1,48 @@
+#15 - Articles — author flow, admin approval, public reader
+What & Why
+Build /articles from scratch. Authoring is open to founders, investors, mentors, coaches, and partners with a sufficient trust score; admin approves before publication. Approved articles publish to /articles, filterable by sector + author role, and appear on the author's public profile under a new "Articles" tab. Front page surfaces the latest three.
+Done looks like
+* New schema applied (articles, article_revisions, article_review_comments) with the indexes from the brief.
+* Trust-gated draft + submit; rate limit 3 submissions/week/author; server-side PII redact check blocks submissions that leak third-party private data.
+* Worker routes mounted: public reader, by-author, author CRUD/submit/retract, full admin queue (start-review, comments, request-changes, approve, publish, reject, unpublish).
+* Notifications fire (email + in-app, Slack where connected) on every state transition.
+* Frontend pages live and routed: /articles (list), /articles/:slug (reader), /articles/draft + /articles/edit/:id (author editor), /admin/articles (admin queue).
+* Public profile pages (founder / investor / mentor / coach / partner) gain an "Articles" tab fetching /api/articles/by-author/:user_id.
+* LandingPage.jsx shows a "Latest from the network" block with 3 most-recent articles.
+* Category taxonomy lives in cloudflare-worker/src/data/sectors.ts as the single source.
+* Markdown rendered through the existing sanitiser; published articles cached via Cloudflare Cache API (60d TTL).
+* npm run test:drift still passes.
+Out of scope
+* Comments / reactions on published articles.
+* Newsletter / RSS distribution.
+* Translation / multi-locale.
+* Paywalled or gated articles.
+* Wellbeing experts page (separate task).
+Steps
+1. Schema migration — Add articles, article_revisions, article_review_comments with indexes; additive only.
+2. Category taxonomy — Centralise sector list in cloudflare-worker/src/data/sectors.ts; reuse from both backend filter + frontend chips.
+3. Worker routes — Implement cloudflare-worker/src/routes/articles.ts with the full public + author + admin route set; mount in index.ts; admin routes inside existing /api/admin/* perimeter.
+4. Trust gate + rate limit + PII scan — Enforce server-side; reuse existing telegramRedactCheck.ts for the PII check.
+5. Notifications — Wire every state transition through services/notifications/send.ts for author + admins (and Slack where connected).
+6. Public pages — ArticlesPage.jsx (masonry + filter chips + role filter + search + pagination + featured strip) and ArticleReaderPage.jsx.
+7. Author editor — ArticleAuthorPage.jsx: markdown editor with live preview, R2 cover image upload, sector picker, tags, save draft / submit, read-only banner during review, inline comment thread.
+8. Admin queue — ArticlesQueuePage.jsx: side-by-side preview + comment thread; approve, request changes, reject, publish, unpublish.
+9. Profile "Articles" tab — Add to public profile pages across roles.
+10. Front-page surface — Add "Latest from the network" block to LandingPage.jsx fetching /api/articles?limit=3.
+11. Caching — Cache rendered article responses via Cloudflare Cache API with 60d TTL; invalidate on update/unpublish.
+12. Drift + smoke — Update api.js shim; confirm npm run test:drift is green.
+Relevant files
+* cloudflare-worker/src/index.ts
+* cloudflare-worker/src/routes/
+* cloudflare-worker/src/services/notifications/
+* cloudflare-worker/src/services/telegramRedactCheck.ts
+* cloudflare-worker/sql/migrations/
+* frontend/src/pages/LandingPage.jsx
+* frontend/src/pages/PublicPartnerProfilePage.jsx
+* frontend/src/pages/PublicDirectoryPage.jsx
+* frontend/src/App.jsx
+* scripts/check-api-drift.mjs
+Dependencies
+Front-page playbook + value blocks
+
+Open task

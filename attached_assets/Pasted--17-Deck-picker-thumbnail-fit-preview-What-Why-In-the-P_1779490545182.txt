@@ -1,0 +1,28 @@
+#17 - Deck picker thumbnail fit + preview
+What & Why
+In the "Pick a deck template" modal, the template thumbnails render at a fixed 320×180 size and overflow the card's left/right borders at common viewport widths, so each thumbnail visually breaks out of its card. Fix the layout so the thumbnail always sits cleanly inside the card border, and add a way for users to preview a template (a larger, readable rendering) before committing to "pick" it.
+Done looks like
+* In the template picker grid, the thumbnail image is fully contained inside each card — no overflow past the left/right border at any breakpoint (1-col, 2-col, 3-col), in light and dark mode.
+* The thumbnail scales responsively to the card's available width while keeping the 16:9 slide aspect ratio (no squashing, no whitespace bars on the sides).
+* A clear "Preview" affordance appears on the thumbnail (e.g. a hover/focus overlay button, plus an always-visible icon for touch devices) that opens a larger preview of that template without selecting it.
+* The preview shows the first slide (and ideally lets the user page through the template's slides) at a comfortably readable size, with a "Use this template" CTA and a close/back control. Closing returns to the picker with no template applied.
+* Clicking the card body still picks the template (existing behaviour); clicking Preview does NOT pick it.
+* Keyboard accessible: Preview reachable via Tab, closable via Esc (use the existing useEscapeClose hook).
+* Premium/locked templates: Preview is allowed, but the "Use this template" CTA inside the preview stays disabled with the existing upgrade message.
+Out of scope
+* Redesigning the picker grid layout, filters, or card metadata.
+* Changing the template registry, sample data, or any individual template component.
+* Editing/customizing slides from inside the preview.
+* Server-side rendering of previews.
+Steps
+1. Make thumbnails fit the card. Replace the fixed 320×180 sizing in frontend/src/decks/Thumbnail.tsx with a responsive container that fills the card's width and derives height from a 16:9 aspect ratio. The 1920×1080 inner stage should scale to the actual measured width (via ResizeObserver or an aspect-ratio wrapper with transform: scale(width/1920)), keeping overflow: hidden and the existing border-radius/border so the slide content is clipped to the card. Verify visually that nothing pokes outside the card border at all three grid breakpoints in light + dark mode.
+2. Add a Preview affordance on each card. In the picker grid in frontend/src/pages/PitchDeckPage.jsx (MethodPickerModal), overlay a "Preview" button on the thumbnail (visible on hover/focus for pointer devices, always visible on touch). Make sure the button stops event propagation so clicking it does not also trigger the card's pick action, and that the card itself stays clickable to pick.
+3. Build the preview modal. Add a TemplatePreviewModal (same file or sibling) that renders the selected template via its Component against SAMPLE_PREVIEW_DATA at a large readable size (e.g. fit-to-viewport with 16:9 letterboxing). If the template defines multiple slides, add prev/next controls and a slide counter; otherwise show the single slide. Include a header with template name + category + slide count, a close button, and a primary "Use this template" CTA that calls the same onPick(c.key) path. Wire useEscapeClose, focus trap, and click-outside-to-close consistent with other modals in the codebase.
+4. Handle locked/premium in preview. When the template is locked, render the "Use this template" CTA disabled with the existing "Upgrade to Growth to unlock this template." copy beside it; Preview itself stays available.
+5. Smoke-check in dev. Run the frontend dev workflow, open the deck picker on a project, confirm: thumbnails fit cleanly in every card, hovering shows Preview, clicking Preview opens the bigger view without picking, Esc closes, "Use this template" applies the template, and locked templates behave as described.
+Relevant files
+* frontend/src/pages/PitchDeckPage.jsx:739-928
+* frontend/src/decks/Thumbnail.tsx
+* frontend/src/decks/templates
+* frontend/src/decks/sample
+* frontend/src/hooks (for useEscapeClose)

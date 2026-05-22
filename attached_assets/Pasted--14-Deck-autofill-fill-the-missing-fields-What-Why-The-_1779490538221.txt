@@ -1,0 +1,32 @@
+#14 - Deck autofill — fill the missing fields
+What & Why
+The 12 pitch-deck templates bind to platform fields that don't all exist yet, so autofill renders "—" for whole slides. Add the missing project / financial / cap-table / round / metrics columns, surface them via heuristicSlides(), and add Personal Advisor question-bank entries so founders actually populate them.
+Done looks like
+* DECK_AUTOFILL_AUDIT.md committed at the repo root, listing every template-required field with PRESENT / MISSING status post-migration.
+* New additive migration applied; missing columns exist on projects, financial_models, metrics_snapshots, rounds, captable.
+* heuristicSlides() exposes every field the templates reference; empty fields still return the existing "—" placeholder.
+* Personal Advisor existingFounder + newFounderSpinout banks gain question entries for every missing field with the right importance and evidence tags; npm run test:drift stays green.
+* Write-router maps each new advisor question id to the right table/column.
+* Pitch Deck editor's "Fill from project" button calls POST /api/decks/:id/autofill and surfaces per-slide confidence (filled vs. placeholder) in the right rail.
+* New tests in cloudflare-worker/test/decks.autofill.test.ts cover YC seed, series A growth, and series B diligence templates with a fully-seeded project asserting zero — placeholders.
+Out of scope
+* New deck templates.
+* Rewriting heuristicSlides() logic beyond reading the new fields.
+* Editing template markup itself.
+Steps
+1. Audit + commit DECK_AUTOFILL_AUDIT.md — Cross-reference every template binding against the current schema; mark PRESENT/MISSING.
+2. Additive migration — Add a new 00xx_deck_autofill_fields.sql with ALTER TABLE ... ADD COLUMN ... IF NOT EXISTS for every MISSING field. No drops, no renames, no indexes.
+3. Extend heuristicSlides() — Read every template-bound field; preserve the existing "—" placeholder when empty.
+4. Expand advisor question banks — Add entries to existingFounder.ts + newFounderSpinout.ts for every MISSING field with correct importance + evidence.
+5. Write-router mappings — Map each new question id to the destination table/column.
+6. Editor "Fill from project" + confidence rail — Wire the button to POST /api/decks/:id/autofill; render per-slide filled/placeholder counts in the right rail.
+7. Tests — Add decks.autofill.test.ts covering the three most field-hungry templates.
+Relevant files
+* cloudflare-worker/src/routes/decks.ts
+* cloudflare-worker/src/services/advisor/banks/existingFounder.ts
+* cloudflare-worker/src/services/advisor/banks/newFounderSpinout.ts
+* cloudflare-worker/src/services/advisor/writeRouter.ts
+* cloudflare-worker/sql/migrations/
+* frontend/src/pages/PitchDeckPage.jsx
+* scripts/check-advisor-bank-drift.mjs
+* scripts/check-write-router-coverage.mjs
