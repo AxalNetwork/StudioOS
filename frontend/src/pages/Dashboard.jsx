@@ -10,8 +10,10 @@ import { api } from '../lib/api';
 import SemanticSearch from '../components/SemanticSearch';
 import InvestorTrialBanner from '../components/InvestorTrialBanner';
 import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
-// Task #6 (IF) — onboarding checklist + first-login product tour.
-import OnboardingChecklistPanel from '../components/OnboardingChecklistPanel';
+// Task #6 (IF) — first-login product tour (the onboarding checklist panel
+// was removed 2026-05-22: signup flow already runs the persona chatbot and
+// the dashboard already surfaces the Personal Advisor, so the checklist
+// duplicated guidance the user already had).
 import ProductTour from '../components/ProductTour';
 
 export default function Dashboard() {
@@ -115,8 +117,6 @@ export default function Dashboard() {
           <div className="mt-3" data-tour="search"><SemanticSearch /></div>
         </div>
         <div className="flex items-start gap-3">
-          {/* Task #6 (IF) — persistent onboarding checklist panel. */}
-          <OnboardingChecklistPanel />
           <div className="flex items-center gap-2">
             <div className="relative" data-tour="notifications">
               <button onClick={() => setShowNotifs(s => !s)} className="relative p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
