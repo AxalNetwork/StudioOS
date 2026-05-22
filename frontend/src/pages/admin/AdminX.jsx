@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Send, Plus, RefreshCw, Loader2, Trash2, Edit3, AlertTriangle, CheckCircle2,
   X as XIcon, Image as ImageIcon, Calendar, Sparkles, ExternalLink,
-  ShieldAlert, Link2, Wifi, Undo2,
+  ShieldAlert, Link2, Wifi, Undo2, Clock,
 } from 'lucide-react';
 import { adminX as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
@@ -557,6 +557,28 @@ function PostsTab({ posts, accounts, onReload, toast, mode }) {
                       {busyId === p.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Send
                     </button>
                   )}
+                  {!p.thread_continuation_of && ['draft', 'approved', 'scheduled', 'failed'].includes(p.status) && (
+                    <button
+                      onClick={async () => {
+                        const def = p.scheduled_for
+                          ? new Date(p.scheduled_for).toISOString().slice(0, 16)
+                          : new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16);
+                        const v = window.prompt('Schedule for (YYYY-MM-DDTHH:MM, local time):', def);
+                        if (!v) return;
+                        const iso = new Date(v).toISOString();
+                        try {
+                          await api.schedulePost(p.id, iso);
+                          toast(`Scheduled for ${new Date(iso).toLocaleString()}`, 'success');
+                          onReload();
+                        } catch (e) {
+                          toast(e?.message || 'Failed to schedule', 'error');
+                        }
+                      }}
+                      className="px-2 py-1 text-xs border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 rounded flex items-center gap-1"
+                    >
+                      <Clock size={12} /> {p.status === 'scheduled' ? 'Reschedule' : 'Schedule'}
+                    </button>
+                  )}
                   {p.status !== 'sent' && p.status !== 'sending' && (
                     <button onClick={() => startEdit(p)} className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded flex items-center gap-1">
                       <Edit3 size={12} /> Edit
@@ -729,8 +751,11 @@ export default function AdminX() {
   const loadPosts = useCallback(async () => {
     setLoading(true);
     try {
+      // Drafts tab must surface every still-manageable state — scheduled +
+      // approved + failed all need to remain visible so Reschedule/Send/Edit
+      // stay reachable after the first state transition.
       const [d, h] = await Promise.all([
-        api.listPosts({ status: 'draft', limit: 50 }),
+        api.listPosts({ status: 'draft,approved,scheduled,failed', limit: 100 }),
         api.listPosts({ status: 'sent', limit: 50 }),
       ]);
       setPosts(d.posts || []);

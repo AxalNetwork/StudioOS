@@ -34,6 +34,45 @@ async function safeCount(env: Env, sql: string, ...binds: unknown[]): Promise<nu
   }
 }
 
+/**
+ * Top-N sectors active in the window — emitted as additional hashtags
+ * appended to the audience defaults. Degrades to [] on missing tables.
+ */
+async function safeTopSectors(env: Env, periodStart: string, periodEnd: string, limit = 3): Promise<string[]> {
+  try {
+    const rs = await env.DB.prepare(
+      `SELECT sector, COUNT(*) AS n FROM projects
+        WHERE sector IS NOT NULL AND sector <> ''
+          AND created_at >= ? AND created_at <= ?
+        GROUP BY sector ORDER BY n DESC LIMIT ?`,
+    ).bind(periodStart, periodEnd, limit).all<{ sector: string; n: number }>();
+    return (rs?.results || [])
+      .map(r => String(r.sector || '').trim())
+      .filter(Boolean)
+      .map(s => '#' + s.replace(/[^A-Za-z0-9]+/g, ''))
+      .filter(t => t.length > 1);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Best-effort check whether a Market Intel chart is available for the
+ * current period. Used to flip `needs_media` honestly instead of always
+ * nagging the admin. Probes `market_intel_personas` (canonical MI table
+ * per migration history); missing table → false (no nag).
+ */
+async function safeHasMIChart(env: Env, periodStart: string): Promise<boolean> {
+  try {
+    const r = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM market_intel_personas WHERE updated_at >= ?`,
+    ).bind(periodStart).first<{ n: number }>();
+    return Number(r?.n ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
 export interface XDraft {
   audience: XAudience;
   kind: string;
@@ -70,13 +109,16 @@ async function buildPublicDraft(env: Env, w: BuildInput): Promise<XDraft> {
   if (safeD) lines.push(`• ${safeD} partner introductions`);
   if (!safeV && !safeD) lines.push(`• Quiet week — heads down building.`);
   lines.push(``, `axal.vc`);
-  const body = append(lines.join('\n'), AUDIENCE_HASHTAGS.public);
+  const sectors = await safeTopSectors(env, w.periodStart, w.periodEnd);
+  const hasMI = await safeHasMIChart(env, w.periodStart);
+  const tags = [...AUDIENCE_HASHTAGS.public, ...sectors];
+  const body = append(lines.join('\n'), tags);
   return {
     audience: 'public', kind: 'weekly_pulse', title: 'Weekly pulse',
     body, thread: splitIntoThread(body),
-    hashtags: AUDIENCE_HASHTAGS.public,
-    needs_media: true,
-    payload: { ventures, deals, k_min: K_MIN, period_days: w.periodDays },
+    hashtags: tags,
+    needs_media: hasMI,
+    payload: { ventures, deals, sectors, has_mi_chart: hasMI, k_min: K_MIN, period_days: w.periodDays },
   };
 }
 
@@ -110,16 +152,19 @@ async function buildInvestorsDraft(env: Env, w: BuildInput): Promise<XDraft> {
     `SELECT COUNT(*) AS n FROM deals WHERE created_at >= ? AND created_at <= ?`,
     w.periodStart, w.periodEnd,
   );
+  const sectors = await safeTopSectors(env, w.periodStart, w.periodEnd);
+  const hasMI = await safeHasMIChart(env, w.periodStart);
+  const tags = [...AUDIENCE_HASHTAGS.investors, ...sectors];
   const body = append(
     `Investors — ${newDeals} new deals in the Axal pipeline this week. DM for diligence access.`,
-    AUDIENCE_HASHTAGS.investors,
+    tags,
   );
   return {
     audience: 'investors', kind: 'investor_brief', title: 'Investor brief',
     body, thread: splitIntoThread(body),
-    hashtags: AUDIENCE_HASHTAGS.investors,
-    needs_media: true,
-    payload: { new_deals: newDeals, period_days: w.periodDays },
+    hashtags: tags,
+    needs_media: hasMI,
+    payload: { new_deals: newDeals, sectors, has_mi_chart: hasMI, period_days: w.periodDays },
   };
 }
 

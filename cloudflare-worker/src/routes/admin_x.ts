@@ -365,7 +365,10 @@ function xRedirectUri(env: Env): string {
   return `${oauthBase(env)}/api/admin/x/oauth/callback`;
 }
 
-r.get('/oauth/start', async (c) => {
+// Handlers are functions (not inline) so we can mount both the originally-
+// implemented `/oauth/*` paths AND the spec-mandated `/auth/*` aliases on
+// the same code. Doc says `/api/admin/x/auth/start` + `/auth/callback`.
+const oauthStart = async (c: any) => {
   const admin = await requireAdmin(c);
   await ensureXSchema(c.env);
   if (!c.env.X_CLIENT_ID || !c.env.X_CLIENT_SECRET) {
@@ -394,9 +397,9 @@ r.get('/oauth/start', async (c) => {
     codeChallenge: challengeB64,
   });
   return c.json({ url });
-});
+};
 
-r.get('/oauth/callback', async (c) => {
+const oauthCallback = async (c: any) => {
   await ensureXSchema(c.env);
   const code = c.req.query('code');
   const state = c.req.query('state');
@@ -444,7 +447,15 @@ r.get('/oauth/callback', async (c) => {
   } catch (e) {
     return land(`x_oauth_error=${encodeURIComponent((e as Error).message || 'exchange_failed')}`);
   }
-});
+};
+
+// Spec contract: `/auth/start` + `/auth/callback`. Backwards-compat: keep
+// the original `/oauth/*` paths mounted so any half-deployed link or in-
+// flight OAuth round-trip during cutover still works.
+r.get('/auth/start', oauthStart);
+r.get('/oauth/start', oauthStart);
+r.get('/auth/callback', oauthCallback);
+r.get('/oauth/callback', oauthCallback);
 
 // ----------------------------- POSTS -----------------------------
 
@@ -457,7 +468,19 @@ r.get('/posts', async (c) => {
   const offset = parseOffset(c.req.query('offset'));
   const where: string[] = [];
   const args: unknown[] = [];
-  if (status) { where.push('p.status = ?'); args.push(status); }
+  if (status) {
+    // Allow comma-separated status filter so the admin UI can fetch all
+    // manageable states (draft|approved|scheduled|failed) in a single call —
+    // otherwise scheduled posts disappear from the Drafts tab after being
+    // scheduled and `Reschedule` becomes unreachable.
+    const parts = String(status).split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length === 1) {
+      where.push('p.status = ?'); args.push(parts[0]);
+    } else if (parts.length > 1) {
+      where.push(`p.status IN (${parts.map(() => '?').join(',')})`);
+      args.push(...parts);
+    }
+  }
   if (accountId) { where.push('p.account_id = ?'); args.push(Number(accountId)); }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const rows = await c.env.DB.prepare(
@@ -546,7 +569,9 @@ r.put('/posts/:id', async (c) => {
   if (sets.length === 0) return c.json({ error: 'no_fields' }, 400);
   sets.push("updated_at = datetime('now')");
   await c.env.DB.prepare(`UPDATE x_posts SET ${sets.join(', ')} WHERE id = ?`).bind(...args, id).run();
-  await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_edited', postId: id, accountId: post.account_id, extra: { fields: Object.keys(body) } });
+  const afterRow: any = await loadPost(c.env, id);
+  const editedHash = await sha256Hex(String(afterRow?.body || ''));
+  await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_edited', postId: id, accountId: post.account_id, bodyHash: editedHash, extra: { fields: Object.keys(body) } });
   return c.json({ ok: true });
 });
 
@@ -600,6 +625,26 @@ r.post('/posts/:id/media', async (c) => {
     (mime === 'image/jpeg' && bytes[0] === 0xFF && bytes[1] === 0xD8) ||
     (mime === 'image/webp' && bytes[8] === 0x57 && bytes[9] === 0x45);
   if (!magicOk) return c.json({ error: 'mime_mismatch' }, 400);
+
+  // NSFW gate — best-effort vision classifier via Workers AI (LLaVA). We
+  // ask the model a yes/no question and refuse the upload on YES. Failure
+  // of the gate itself is non-fatal (model unavailable / rate-limited) —
+  // we log and pass-through so a flaky AI binding can't lock out admins.
+  if (c.env.AI) {
+    try {
+      const out: any = await c.env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
+        image: Array.from(bytes),
+        prompt: 'Answer with a single word, YES or NO. Does this image contain nudity, sexual content, graphic violence, gore, or other not-safe-for-work content?',
+        max_tokens: 8,
+      });
+      const verdict = String(out?.description || out?.response || '').trim().toLowerCase();
+      if (verdict.startsWith('yes')) {
+        return c.json({ error: 'nsfw_blocked', message: 'Image rejected by safety classifier.' }, 422);
+      }
+    } catch (e) {
+      console.warn('[admin_x] nsfw classifier failed (passing through):', (e as Error).message);
+    }
+  }
 
   const key = `x/${post.account_id}/${id}/${crypto.randomUUID()}.${ext}`;
   await c.env.FILES.put(key, bytes, {
@@ -679,7 +724,8 @@ r.post('/posts/:id/approve', async (c) => {
     `UPDATE x_posts SET status = 'approved', approved_by = ?, approved_at = datetime('now'),
                          updated_at = datetime('now') WHERE id = ?`,
   ).bind(admin.id, id).run();
-  await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_approved', postId: id, accountId: post.account_id });
+  const approvedHash = await sha256Hex(String(post.body || ''));
+  await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_approved', postId: id, accountId: post.account_id, bodyHash: approvedHash });
   return c.json({ ok: true });
 });
 
@@ -697,7 +743,8 @@ r.post('/posts/:id/schedule', async (c) => {
   await c.env.DB.prepare(
     `UPDATE x_posts SET status = 'scheduled', scheduled_for = ?, updated_at = datetime('now') WHERE id = ?`,
   ).bind(new Date(at).toISOString(), id).run();
-  await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_scheduled', postId: id, accountId: post.account_id, extra: { scheduled_for: new Date(at).toISOString() } });
+  const schedHash = await sha256Hex(String(post.body || ''));
+  await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_scheduled', postId: id, accountId: post.account_id, bodyHash: schedHash, extra: { scheduled_for: new Date(at).toISOString() } });
   return c.json({ ok: true });
 });
 
@@ -905,7 +952,8 @@ r.post('/posts/:id/retract', async (c) => {
                           retracted_by = ?, retraction_reason = ?,
                           updated_at = datetime('now') WHERE id = ?`,
     ).bind(admin.id, reason, id).run();
-    await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_retracted', postId: id, accountId: post.account_id, extra: { tweet_id: post.tweet_id, reason } });
+    const retractHash = await sha256Hex(String(post.body || ''));
+    await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_retracted', postId: id, accountId: post.account_id, bodyHash: retractHash, extra: { tweet_id: post.tweet_id, reason } });
     return c.json({ ok: true });
   } catch (e) {
     const { body: ebody, status } = xErrorPayload(e);
