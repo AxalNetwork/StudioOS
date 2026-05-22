@@ -39,6 +39,8 @@ import adminPartners from './routes/admin_partners';
 import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
 import adminTeam from './routes/admin_team';
+// Task #3 — Admin Telegram channels + aggregator + post send.
+import adminTelegram from './routes/admin_telegram';
 import teamPublic from './routes/team_public';
 import partnerOnboarding from './routes/partner_onboarding';
 import partnerPortal from './routes/partner_portal';
@@ -476,6 +478,10 @@ app.route('/api/admin/advisor-audit', adminAdvisorAudit);
 // Task #10 (LD) — Admin team roster CRUD + photo upload. Mounted BEFORE
 // the generic /api/admin router so the more-specific prefix wins.
 app.route('/api/admin/team', adminTeam);
+// Task #3 — mount Telegram BEFORE the catch-all `/api/admin` so the
+// nested `/api/admin/telegram/*` routes resolve here rather than 404ing
+// inside the generic admin router.
+app.route('/api/admin/telegram', adminTelegram);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);

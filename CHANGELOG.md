@@ -1,6 +1,135 @@
 # Changelog
 
 
+## Task #3 — Admin Telegram channels + aggregator + PII linter
+
+Admin-only system to broadcast curated digests to the public `@axalvc`
+channel + five invite-only cohort channels (founders, investors,
+mentors, operating partners, alumni). Drafts are produced by an
+aggregator from existing platform signals; admin reviews, edits, and
+sends. No automatic posting without admin approval; PII linter blocks
+leaky drafts unless the admin supplies a typed override reason
+(recorded in `admin_audit_log`).
+
+**Schema (`cloudflare-worker/sql/migrations/067_telegram.sql` — pending apply)**
+- `telegram_channels` (slug, label, chat_id, audience, is_invite_only,
+  enabled, last_test_at, last_error). Seeds the six canonical channels
+  with `chat_id = NULL` so the admin can paste real IDs after the
+  bot is added.
+- `telegram_posts` (channel_id, status `draft|scheduled|sent|failed`,
+  body_md, media_r2_key, scheduled_for, sent_at,
+  telegram_message_id, telegram_link, source `manual|aggregator`,
+  source_kind, body_hash, send_error, override_reason,
+  override_findings, created_by).
+- `telegram_aggregations` (audience, kind, payload_json, period_start,
+  period_end, draft_post_id) — dedup + audit trail for aggregator runs.
+- `user_promotion_consent` (user_id PK, consented, consented_at,
+  source) — side table because `users` is at the D1 ALTER limit.
+- Worker carries lazy `ensureTelegramSchema()` bootstrap so routes
+  keep working if 067 lands unapplied.
+
+**Worker — Telegram client + breaker (`services/telegramClient.ts`)**
+- Wraps `sendMessage` / `sendPhoto` / `sendDocument` / `getChat` with
+  in-isolate circuit breaker (5 consecutive failures → 60s recovery),
+  exponential retry on 5xx, and 429 retry honouring `retry_after`.
+- Typed errors: `TelegramTokenMissing` and `TelegramError` with
+  code-based mapping (`telegram_token_missing`,
+  `telegram_chat_not_found`, `telegram_rate_limited`,
+  `telegram_forbidden`, `telegram_breaker_open`,
+  `telegram_upstream`). Never a silent 500.
+- MarkdownV2 escape helper + public-channel/private-channel permalink
+  builder.
+
+**Worker — PII linter (`services/telegramRedactCheck.ts`)**
+- Regex scan for email / phone / SSN-ish tax ID / IBAN / 13-19 digit
+  card-like sequences. Tax-ID and card hits are masked in findings.
+- User-mention scan: matches body against `users` by email and by
+  full-legal name; emits `consent_missing` when the user has no
+  `user_promotion_consent` row, OR `private_in_public` when the
+  channel audience is `public` (the public channel is aggregate-only).
+- Returns `{ ok, findings[] }` — the route layer enforces the gate.
+  Shared module so Task #4 LF (LinkedIn auto-poster) can reuse it.
+
+**Worker — aggregator (`services/telegramAggregator.ts`)**
+- Per-audience builders (`public`, `founders`, `investors`, `mentors`,
+  `partners`, `alumni`) read counts from `projects`, `mentor_sessions`,
+  `introductions`, `matches`, `deals`, `portfolio_updates`,
+  `partner_deals`, `partner_office_hours`, `refer_earn_payouts`.
+- Public-channel drafts use a k-anonymity gate (counts < 5 are
+  suppressed).
+- Every counter wrapped in `safeCount()` so missing tables degrade to
+  zero instead of 500.
+- `runAggregator()` inserts one draft per audience that has an
+  enabled channel and writes a row to `telegram_aggregations`.
+
+**Worker — admin routes (`routes/admin_telegram.ts`, mounted at
+`/api/admin/telegram` — BEFORE the catch-all `/api/admin` per the
+route-precedence invariant; sits behind the existing
+`/api/admin/*` Cf-Access perimeter)**
+- Channels: list, create, update (label / chat_id / enabled /
+  is_invite_only), delete (refuses when sent posts exist — disable
+  instead), test (calls `getChat` + sends a Markdown hello probe,
+  records `last_test_at` / `last_error`).
+- Posts: list (`?status=&channel_id=` with `clampLimit` + offset),
+  create draft, edit (forbidden once sent), delete (forbidden once
+  sent), media upload (data-URI body, R2-backed at
+  `telegram/{channel_id}/{post_id}/{uuid}.{ext}`, 8 MB cap, photo
+  jpeg/png/webp or document pdf/csv/txt), lint preview, schedule
+  (status → `scheduled` with `scheduled_for`), send.
+- Send path: runs lint → if findings and no `override_reason` (≥8
+  chars) returns 422 `{ code: 'pii_linter_blocked', findings }`. With
+  override: persists `override_reason` + `override_findings` and
+  audits `telegram_pii_override` before the actual send. On success
+  persists `telegram_message_id`, `telegram_link`, sha256 `body_hash`.
+- Consent: GET/PUT `/consent/:user_id` for admin override; UPSERT
+  honours `consented_at` only when flipping to true.
+- Audit: every channel create/update/delete/test, every post
+  create/edit/delete/media/schedule/send + every PII override writes
+  `admin_audit_log` with `report_type='telegram'`, JSON `filters_json`
+  carrying `post_id` / `channel_id` / `body_hash`, and SHA-256
+  `email_hash` actor when the column is present (lazy PRAGMA check
+  matches `admin_publications.ts`).
+
+**Worker wiring**
+- `types.ts` — `TELEGRAM_BOT_TOKEN?: string` added to `Env`. Never
+  committed; provisioned via
+  `wrangler secret put TELEGRAM_BOT_TOKEN --env production`. When
+  unset, send endpoints return 503 `{code:'telegram_token_missing'}`
+  — schema + admin UI remain fully usable for draft authoring.
+- `index.ts` — imports `adminTelegram` and mounts it at
+  `/api/admin/telegram` BEFORE `app.route('/api/admin', admin)`.
+
+**Frontend — `/admin/telegram` (`pages/admin/AdminTelegram.jsx`)**
+- Four tabs: Channels / Drafts / Compose / History.
+- Channels: table with inline chat_id editing, enable/disable toggle,
+  test-connect button (sends "hello" probe), add-channel modal with
+  slug/label/audience/chat_id/invite-only fields.
+- Drafts: aggregator panel (period-days input + run button) listing
+  every open draft; cards show channel, audience, source badge,
+  3-line body preview, edit + delete.
+- Compose: full-page composer with title, MarkdownV2 body
+  (4000-char counter), media attachment (lucide icon, native file
+  picker), inline lint button + colour-coded findings panel,
+  schedule input, send-now button. PII findings inline → override
+  textarea (min 8 chars) → "Override and send" button.
+- History: paginated sent-post list with audience badge, override
+  badge, Telegram permalink, body-hash prefix.
+- Toasts via `useToast`, modals via `useEscapeClose`, lucide icons
+  + inline brand SVG only (no brand-icon packages), full `dark:`
+  variants.
+- API surface in `lib/api.js` as `adminTelegram` namespace mirroring
+  the worker routes.
+- Route registered in `App.jsx` as
+  `guard(['admin'], <AdminTelegram />)` at `/admin/telegram`.
+
+**Ops to-do (user)**
+- Create the bot via BotFather, add it as admin (with
+  "Post Messages") to all six channels, paste the real `chat_id`
+  values in the admin UI.
+- `wrangler secret put TELEGRAM_BOT_TOKEN --env production`
+- Apply migration 067 against prod D1.
+
+
 ## Task #5 — Post-login redirect to axal.vc + onboarding-first routing
 
 Completed the Phase 2 canonical-host flip and wired the post-login

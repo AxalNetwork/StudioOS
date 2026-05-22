@@ -1881,6 +1881,64 @@ export const adminTeam = {
   reorder: (order) => request('/admin/team/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
 };
 
+// Task #3 — Admin Telegram channels + posts + aggregator.
+export const adminTelegram = {
+  // Channels
+  listChannels: () => request('/admin/telegram/channels'),
+  createChannel: (payload) =>
+    request('/admin/telegram/channels', { method: 'POST', body: JSON.stringify(payload) }),
+  updateChannel: (id, patch) =>
+    request(`/admin/telegram/channels/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  removeChannel: (id) =>
+    request(`/admin/telegram/channels/${id}`, { method: 'DELETE' }),
+  testChannel: (id) =>
+    request(`/admin/telegram/channels/${id}/test`, { method: 'POST', body: '{}' }),
+  // Posts
+  listPosts: ({ status, channel_id, limit = 50, offset = 0 } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    if (channel_id) qs.set('channel_id', String(channel_id));
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    return request(`/admin/telegram/posts?${qs.toString()}`);
+  },
+  createPost: (payload) =>
+    request('/admin/telegram/posts', { method: 'POST', body: JSON.stringify(payload) }),
+  updatePost: (id, patch) =>
+    request(`/admin/telegram/posts/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  removePost: (id) =>
+    request(`/admin/telegram/posts/${id}`, { method: 'DELETE' }),
+  uploadMedia: (id, dataUri) =>
+    request(`/admin/telegram/posts/${id}/media`, {
+      method: 'POST',
+      body: JSON.stringify({ data_uri: dataUri }),
+    }),
+  lintPost: (id) =>
+    request(`/admin/telegram/posts/${id}/lint`, { method: 'POST', body: '{}' }),
+  sendPost: (id, { override_reason } = {}) =>
+    request(`/admin/telegram/posts/${id}/send`, {
+      method: 'POST',
+      body: JSON.stringify(override_reason ? { override_reason } : {}),
+    }),
+  schedulePost: (id, scheduled_for) =>
+    request(`/admin/telegram/posts/${id}/schedule`, {
+      method: 'POST',
+      body: JSON.stringify({ scheduled_for }),
+    }),
+  // Aggregator
+  previewAggregator: ({ kind, period_days = 7 } = {}) => {
+    const qs = new URLSearchParams();
+    if (kind) qs.set('kind', kind);
+    qs.set('period_days', String(period_days));
+    return request(`/admin/telegram/aggregator/preview?${qs.toString()}`);
+  },
+  runAggregator: ({ period_days = 7 } = {}) =>
+    request('/admin/telegram/aggregator/run', {
+      method: 'POST',
+      body: JSON.stringify({ period_days }),
+    }),
+};
+
 // Spin-Out Lab — 4-week guided sprint for pre-incorporation founders.
 // Namespaced separately from `api` to keep the surface small and obvious
 // for the call sites that wire milestone completion in feature pages.

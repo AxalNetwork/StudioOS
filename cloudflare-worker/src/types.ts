@@ -9,6 +9,12 @@ export interface Env {
   // logs a one-shot startup warning. See `assertScoringHmacSecret` in
   // `auth.ts` for enforcement.
   SCORING_HMAC_SECRET?: string;
+  // Task #3 — Telegram Bot API token (`AxalNewsBot`). Provisioned via
+  // `wrangler secret put TELEGRAM_BOT_TOKEN --env production` (NEVER
+  // committed). When unset, /api/admin/telegram/* send endpoints return
+  // 503 `{code:'telegram_token_missing'}` — no silent fallback. The
+  // schema + admin UI stay fully usable for draft authoring regardless.
+  TELEGRAM_BOT_TOKEN?: string;
   STUDIOOS_ENV?: string;
   // Set by wrangler.toml in production deploys (`ENVIRONMENT = "production"`).
   // Used by the boot guards in auth.ts to decide whether to throw on missing
