@@ -611,6 +611,18 @@ async function ensureCalendarOAuthSchema(env: Env): Promise<void> {
         updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
       )
     `;
+    // Task #1 — atomic enforcement of one-Google-to-one-Axal at the DB
+    // boundary. Partial unique index so legacy rows with NULL google_sub
+    // (pre-Task #70) don't collide. Two concurrent callbacks for the
+    // same google_sub on different user_ids can both pass the pre-check,
+    // but only one INSERT/UPDATE can win the race — the other surfaces a
+    // UNIQUE constraint error which the callback maps to
+    // `google_already_linked_other_user`.
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_google_oauth_tokens_google_sub_unique
+      ON google_oauth_tokens(google_sub)
+      WHERE google_sub IS NOT NULL
+    `;
     await sql`
       CREATE TABLE IF NOT EXISTS microsoft_oauth_tokens (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -662,6 +674,7 @@ calendar.get('/google/status', safe('g_status', 'Could not load Google status', 
 export async function buildGoogleOAuthStartResponse(
   env: Env,
   userId: number,
+  loginHint?: string,
 ): Promise<{ status: 200 | 500; body: any }> {
   const missing = preflightOAuthSecrets(env, 'google');
   if (missing.length > 0) {
@@ -680,7 +693,12 @@ export async function buildGoogleOAuthStartResponse(
   try {
     await persistState(env, nonce, userId, 'google');
     const state = await makeState(env, nonce);
-    const url = buildGoogleAuthUrl(env, state);
+    // Task #1 — at connect time we always know the signed-in Axal user;
+    // pass their email to Google as `login_hint` so the account chooser
+    // pre-selects/highlights the matching row. The chooser still always
+    // appears (`prompt=select_account consent`) so the user can pick a
+    // different account if they really want to.
+    const url = buildGoogleAuthUrl(env, state, loginHint);
     return { status: 200, body: { redirect_url: url, auth_url: url } };
   } catch (e: any) {
     console.error('[CAL:g_start] persistState/makeState failed:', e?.message, e?.stack || '');
@@ -735,7 +753,11 @@ export async function buildMicrosoftOAuthStartResponse(
 
 async function startGoogleOAuth(c: any) {
   const user = await requireAuth(c);
-  const { status, body } = await buildGoogleOAuthStartResponse(c.env, user.id);
+  // Task #1 — pass the Axal user's email as `login_hint` so Google's
+  // account chooser pre-selects the matching row. Falls through as
+  // undefined if the JWT somehow lacks an email (older sessions).
+  const loginHint = user?.email ? String(user.email).toLowerCase().trim() : undefined;
+  const { status, body } = await buildGoogleOAuthStartResponse(c.env, user.id, loginHint);
   // Task #70 — let the Integrations page hand-off remember its origin
   // across the Google round-trip via a short-lived, scoped cookie.
   const returnTo = String(c.req.query('return_to') || '').toLowerCase();
@@ -751,6 +773,149 @@ async function startGoogleOAuth(c: any) {
 calendar.post('/google/connect', safe('g_connect', 'Could not start Google OAuth', startGoogleOAuth));
 calendar.get('/google/start',    safe('g_start',   'Could not start Google OAuth', startGoogleOAuth));
 calendar.post('/google/start',   safe('g_start',   'Could not start Google OAuth', startGoogleOAuth));
+
+/**
+ * Task #1 — pure persistence step of /google/callback, extracted for
+ * testability and so the one-Google-to-one-Axal collision guard can be
+ * exercised end-to-end (token write + sign-in link write) without
+ * mocking Hono, JWT, or Google's token exchange.
+ *
+ * Atomicity model:
+ *   - Pre-checks for collisions on both google_oauth_tokens and
+ *     user_google_links. Catches missing column/table on legacy
+ *     deployments so the upsert can proceed (the UNIQUE constraint
+ *     fallback below still applies once schema bootstraps).
+ *   - Writes the token row; the partial UNIQUE INDEX on
+ *     google_oauth_tokens(google_sub) (created by
+ *     ensureCalendarOAuthSchema) catches any racer that slipped past
+ *     the pre-check and is mapped back to
+ *     `google_already_linked_other_user`.
+ *   - Writes user_google_links with a plain INSERT (not OR IGNORE) so
+ *     a different Axal user racing in between the pre-check and the
+ *     write surfaces as the same explicit error instead of a silent
+ *     no-op (which would leave token rows for one user and a sign-in
+ *     link for another). Same-user reconnect remains idempotent
+ *     because we check for an existing self-row first.
+ */
+export type PersistGoogleCallbackArgs = {
+  userId: number;
+  refreshEnc: string;
+  scope: string;
+  googleEmail: string | null;
+  googleSub: string;
+  emailsMatch: boolean;
+  userEmail: string;
+};
+export type PersistGoogleCallbackResult =
+  | { ok: true; warn?: 'google_email_mismatch'; warnEmail?: string }
+  | { ok: false; reason: 'google_already_linked_other_user' };
+
+export async function persistGoogleCallbackTokens(
+  env: Env,
+  a: PersistGoogleCallbackArgs,
+): Promise<PersistGoogleCallbackResult> {
+  const sql = getSQL(env);
+  const { userId, refreshEnc, scope, googleEmail, googleSub, emailsMatch, userEmail } = a;
+  const isUniqueErr = (e: any): boolean =>
+    /UNIQUE constraint failed|UNIQUE constraint|constraint failed/i.test(String(e?.message || e));
+
+  // Pre-check token-side conflict.
+  if (googleSub) {
+    try {
+      const tokConflict = (await sql`
+        SELECT user_id FROM google_oauth_tokens
+         WHERE google_sub = ${googleSub} AND user_id <> ${userId}
+         LIMIT 1
+      ` as any[])[0];
+      if (tokConflict) return { ok: false, reason: 'google_already_linked_other_user' };
+    } catch (e: any) {
+      if (!/no such column|no such table/i.test(String(e?.message || e))) throw e;
+    }
+    // Pre-check link-side conflict.
+    try {
+      const linkConflict = (await sql`
+        SELECT user_id FROM user_google_links
+         WHERE google_sub = ${googleSub} AND user_id <> ${userId}
+         LIMIT 1
+      ` as any[])[0];
+      if (linkConflict) return { ok: false, reason: 'google_already_linked_other_user' };
+    } catch (e: any) {
+      if (!/no such table/i.test(String(e?.message || e))) throw e;
+    }
+  }
+
+  // Token upsert. UNIQUE on (user_id) makes same-user reconnect an
+  // UPDATE; partial UNIQUE on (google_sub) catches the concurrent-racer
+  // case that slipped past the pre-check.
+  const nowIso = new Date().toISOString();
+  try {
+    const existing = (await sql`SELECT id FROM google_oauth_tokens WHERE user_id = ${userId}` as any[])[0];
+    if (existing) {
+      await sql`
+        UPDATE google_oauth_tokens
+           SET refresh_token = ${refreshEnc}, scope = ${scope},
+               google_email = ${googleEmail}, google_sub = ${googleSub || null},
+               updated_at = ${nowIso}
+         WHERE user_id = ${userId}
+      `;
+    } else {
+      await sql`
+        INSERT INTO google_oauth_tokens
+          (user_id, refresh_token, scope, google_email, google_sub)
+        VALUES
+          (${userId}, ${refreshEnc}, ${scope}, ${googleEmail}, ${googleSub || null})
+      `;
+    }
+  } catch (e: any) {
+    if (isUniqueErr(e)) return { ok: false, reason: 'google_already_linked_other_user' };
+    throw e;
+  }
+
+  // Sign-in link write (only when emails verifiably match — legacy
+  // /calendar flow with a personal Google calendar deliberately skips
+  // the link so we don't bind a personal Google identity to the
+  // workplace Axal account).
+  let warn: 'google_email_mismatch' | undefined;
+  let warnEmail = '';
+  if (googleSub && googleEmail) {
+    const ge = String(googleEmail).toLowerCase().trim();
+    if (emailsMatch) {
+      try {
+        await sql`CREATE TABLE IF NOT EXISTS user_google_links (user_id INTEGER PRIMARY KEY, google_sub TEXT NOT NULL UNIQUE)`;
+        const existingLink = (await sql`
+          SELECT google_sub FROM user_google_links WHERE user_id = ${userId}
+        ` as any[])[0];
+        if (existingLink) {
+          // Same-user reconnect: idempotent if it's the same google_sub;
+          // explicit collision if it's a different one (the same user
+          // is trying to re-bind to a different Google identity, which
+          // we currently disallow at the sign-in layer too).
+          if (String(existingLink.google_sub) !== googleSub) {
+            return { ok: false, reason: 'google_already_linked_other_user' };
+          }
+        } else {
+          try {
+            await sql`INSERT INTO user_google_links (user_id, google_sub) VALUES (${userId}, ${googleSub})`;
+          } catch (insErr: any) {
+            if (isUniqueErr(insErr)) {
+              return { ok: false, reason: 'google_already_linked_other_user' };
+            }
+            throw insErr;
+          }
+        }
+      } catch (linkErr: any) {
+        // Non-UNIQUE errors here are best-effort logged (legacy
+        // deployments without the side table etc) — calendar tokens
+        // already wrote successfully.
+        console.warn('[CAL:g_callback] user_google_links write failed:', linkErr?.message || linkErr);
+      }
+    } else if (userEmail && ge !== userEmail) {
+      warn = 'google_email_mismatch';
+      warnEmail = googleEmail || '';
+    }
+  }
+  return warn ? { ok: true, warn, warnEmail } : { ok: true };
+}
 
 calendar.get('/google/callback', async (c) => {
   // Intentionally no requireAuth — the user_id comes from the state row.
@@ -808,57 +973,23 @@ calendar.get('/google/callback', async (c) => {
     }
 
     const refreshEnc = await encryptString(c.env, refreshToken);
-    const nowIso = new Date().toISOString();
-    const existing = (await sql`SELECT id FROM google_oauth_tokens WHERE user_id = ${userId}` as any[])[0];
-    if (existing) {
-      await sql`
-        UPDATE google_oauth_tokens
-           SET refresh_token = ${refreshEnc}, scope = ${tokens.scope || ''},
-               google_email = ${info.email || null}, google_sub = ${info.id || null},
-               updated_at = ${nowIso}
-         WHERE user_id = ${userId}
-      `;
-    } else {
-      await sql`
-        INSERT INTO google_oauth_tokens
-          (user_id, refresh_token, scope, google_email, google_sub)
-        VALUES
-          (${userId}, ${refreshEnc}, ${tokens.scope || ''},
-           ${info.email || null}, ${info.id || null})
-      `;
+    const persist = await persistGoogleCallbackTokens(c.env, {
+      userId,
+      refreshEnc,
+      scope: tokens.scope || '',
+      googleEmail: info.email || null,
+      googleSub,
+      emailsMatch,
+      userEmail,
+    });
+    if (!persist.ok) {
+      return failureRedirect(c.env, 'google', persist.reason, returnTo);
     }
-
-    // Task #70 — populate `user_google_links` so the same consent also
-    // unlocks "Continue with Google" sign-in. Side-table because the
-    // `users` table has hit D1's ALTER-rewrite column limit (see
-    // replit.md). INSERT OR IGNORE defends against double-click races
-    // (the legacy auth_google.ts path uses the same pattern).
-    //
-    // For Integrations flow this is unconditional on success (we already
-    // gated on emailsMatch above). For the legacy /calendar flow we keep
-    // the opportunistic behaviour: link only when the verified Google
-    // email matches the StudioOS account email.
-    let warn: string | null = null;
-    let warnEmail = '';
-    if (googleSub && googleEmail) {
-      if (emailsMatch) {
-        try {
-          await sql`CREATE TABLE IF NOT EXISTS user_google_links (user_id INTEGER PRIMARY KEY, google_sub TEXT NOT NULL UNIQUE)`;
-          await sql`INSERT OR IGNORE INTO user_google_links (user_id, google_sub) VALUES (${userId}, ${googleSub})`;
-        } catch (linkErr: any) {
-          console.warn('[CAL:g_callback] user_google_links insert failed:', linkErr?.message || linkErr);
-        }
-      } else if (userEmail && googleEmail !== userEmail) {
-        // Legacy /calendar flow — surface a warn so the user knows
-        // sign-in wasn't auto-linked, but the calendar/Gmail connect
-        // itself succeeded.
-        warn = 'google_email_mismatch';
-        warnEmail = info.email || '';
-      }
-    }
-
     const extra: Record<string, string> = {};
-    if (warn) { extra.warn = warn; if (warnEmail) extra.google_email = warnEmail; }
+    if (persist.warn) {
+      extra.warn = persist.warn;
+      if (persist.warnEmail) extra.google_email = persist.warnEmail;
+    }
     return successRedirect(c.env, 'google', returnTo, extra);
   } catch (e: any) {
     const msg = String(e?.message || e);

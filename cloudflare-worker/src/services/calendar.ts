@@ -225,17 +225,27 @@ export function preflightOAuthSecrets(
 // ===========================================================================
 // Auth URL builders
 // ===========================================================================
-export function buildGoogleAuthUrl(env: Env, state: string): string {
+export function buildGoogleAuthUrl(env: Env, state: string, loginHint?: string): string {
+  // Task #1 — `select_account consent` forces Google's account chooser
+  // every time, even when the browser is already signed into exactly one
+  // Google account. Without `select_account` Google silently re-uses the
+  // most-recently-used account, which is how a user can end up granting
+  // calendar access on the wrong identity. `consent` is retained so we
+  // always get a fresh refresh_token. `login_hint` (when provided) pre-
+  // selects/highlights the row matching the Axal user's email in the
+  // chooser, so the user has to actively pick a different account to
+  // override.
   const p = new URLSearchParams({
     client_id: googleCalClientId(env)!,
     redirect_uri: googleRedirectUri(env),
     response_type: 'code',
     scope: GOOGLE_SCOPES.join(' '),
     access_type: 'offline',
-    prompt: 'consent',
+    prompt: 'select_account consent',
     state,
     include_granted_scopes: 'true',
   });
+  if (loginHint) p.set('login_hint', loginHint);
   return `${GOOGLE_AUTH_URL}?${p.toString()}`;
 }
 

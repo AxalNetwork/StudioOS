@@ -1,6 +1,74 @@
 # Changelog
 
 
+## Task #1 — Force Google account picker + atomic one-Google-to-one-Axal guard
+
+Calendar / Integrations "Connect Google" now always renders Google's
+account chooser and refuses — atomically, even under concurrent connects —
+to bind a Google identity that already belongs to a different Axal user.
+
+Hardening pass after code review:
+
+- `ensureCalendarOAuthSchema` now also creates a **partial UNIQUE INDEX**
+  `idx_google_oauth_tokens_google_sub_unique` on
+  `google_oauth_tokens(google_sub) WHERE google_sub IS NOT NULL`. Two
+  concurrent callbacks for the same `google_sub` on different `user_id`s
+  can both pass the pre-check, but only one INSERT/UPDATE wins — the
+  loser surfaces a `UNIQUE constraint failed` which the callback maps
+  back to the same `google_already_linked_other_user` redirect.
+- `/api/calendar/google/callback` persistence logic extracted into a
+  pure exported helper `persistGoogleCallbackTokens(env, args)` for
+  testability.
+- `user_google_links` insert is no longer `INSERT OR IGNORE` (silent
+  no-op on UNIQUE) — it now checks for an existing self-row first
+  (same-user reconnect stays idempotent) and otherwise INSERTs with an
+  explicit UNIQUE catch that returns the same explicit collision
+  reason. Stops the failure mode where a different-user racer left
+  calendar tokens for one user but a sign-in link for another.
+- Tests: callback-level coverage in
+  `cloudflare-worker/test/calendar.google-oauth.test.ts` for (a)
+  token-side collision rejection, (b) link-side collision rejection,
+  (c) same-user reconnect idempotency, (d) racer-past-pre-check →
+  UNIQUE-catch → collision reason.
+
+- **`cloudflare-worker/src/services/calendar.ts::buildGoogleAuthUrl`** —
+  `prompt` flipped from `consent` to `select_account consent`; new
+  optional 3rd arg `loginHint` is attached as `login_hint=` so the
+  chooser pre-selects the row matching the signed-in Axal user.
+- **`cloudflare-worker/src/routes/calendar.ts::buildGoogleOAuthStartResponse`**
+  takes the new `loginHint` arg; the `startGoogleOAuth` Hono handler
+  passes the JWT user's email down (lower-cased, trimmed) so the
+  chooser always has the right hint at connect time.
+- **`/api/calendar/google/callback`** — before any write, looks up
+  the incoming `google_sub` in both `google_oauth_tokens` and
+  `user_google_links`; if either row exists with a different
+  `user_id`, short-circuits via
+  `failureRedirect(env, 'google', 'google_already_linked_other_user', returnTo)`.
+  Lookup → reject → upsert ordered inside the single request so a
+  concurrent connect can't slip past. Existing strict email-match
+  guard for `returnTo=integrations` is unchanged.
+- **`frontend/src/pages/IntegrationsPage.jsx`** — new
+  `google_already_linked_other_user` reason maps to a tile-local
+  red inline error: "That Google account (...) is already connected
+  to another Axal user — disconnect it there first, then try again."
+- **`frontend/src/pages/CalendarPage.jsx::humanizeOAuthReason`** —
+  same code, plus the previously-unmapped `email_mismatch` /
+  `email_unverified` reasons, are now rendered as human sentences in
+  the `/calendar` page's connect-result banner.
+- **Tests** — `cloudflare-worker/test/calendar.google-oauth.test.ts`
+  gains two assertions: (1) `prompt=select_account consent` is set
+  and `login_hint` is absent when not supplied; (2) `login_hint`
+  attaches verbatim when an email is passed. The existing redirect_uri
+  / start-response tests still pass unchanged.
+- **`replit.md`** — Calendar OAuth bullet extended with the
+  Task #1 contract.
+
+Out of scope (kept per the task spec): Google's "unverified app"
+interstitial (ops/Google Cloud Console matter), Microsoft OAuth flow,
+backfill of any pre-existing `google_oauth_tokens` rows that already
+share a `google_sub` across users.
+
+
 ## Task #7 — Mask integration keys + promote to Cloudflare Worker secrets
 
 Admin Integration Keys panel no longer leaves long-lived encrypted DB

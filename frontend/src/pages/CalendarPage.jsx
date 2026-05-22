@@ -38,6 +38,9 @@ const KIND_COLOR = {
  */
 function humanizeOAuthReason(reason) {
   if (!reason) return '';
+  if (reason === 'google_already_linked_other_user') return 'that Google account is already connected to another Axal user — disconnect it there first, then try again';
+  if (reason === 'email_mismatch') return "that Google account doesn't match your StudioOS email";
+  if (reason === 'email_unverified') return 'Google reports that account as unverified';
   if (reason === 'invalid_state') return 'the sign-in link expired, please try again';
   if (reason === 'no_refresh_token') return 'the provider did not return a refresh token (revoke access and reconnect)';
   if (reason === 'oauth_unavailable') return 'the server is missing OAuth credentials';

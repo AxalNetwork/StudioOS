@@ -174,6 +174,15 @@ export default function IntegrationsPage() {
             ? `That Google account (${ge}) doesn't match your StudioOS email. Sign in to Google with the same email and try again — nothing was saved.`
             : `That Google account doesn't match your StudioOS email. Sign in to Google with the same email and try again — nothing was saved.`,
         };
+      } else if (reason === 'google_already_linked_other_user') {
+        // Task #1 — collision guard: same Google account is already
+        // attached to a different Axal user. Nothing was written.
+        tileGoogle = {
+          kind: 'error',
+          text: ge
+            ? `That Google account (${ge}) is already connected to another Axal user — disconnect it there first, then try again.`
+            : `That Google account is already connected to another Axal user — disconnect it there first, then try again.`,
+        };
       } else if (reason === 'email_unverified') {
         tileGoogle = {
           kind: 'error',
