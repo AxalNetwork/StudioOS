@@ -370,9 +370,9 @@ export default function PitchDeckPage() {
         )}
 
         {deck && (
-          <div className="grid grid-cols-12 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
             {/* LEFT — slides + history */}
-            <div className="col-span-3 space-y-3">
+            <div className="col-span-1 lg:col-span-3 space-y-3">
               <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Slides</span>
@@ -446,7 +446,7 @@ export default function PitchDeckPage() {
             </div>
 
             {/* CENTER — slide editor */}
-            <div className="col-span-6">
+            <div className="col-span-1 lg:col-span-6">
               <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-6 min-h-[60vh]" data-card>
                 <div className="flex items-center justify-between mb-3 text-xs text-gray-500 dark:text-slate-400">
                   <span>Slide {activeIdx + 1} / {slides.length}</span>
@@ -475,7 +475,7 @@ export default function PitchDeckPage() {
             </div>
 
             {/* RIGHT — template card + export + brand */}
-            <div className="col-span-3 space-y-3">
+            <div className="col-span-1 lg:col-span-3 space-y-3">
               <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2">Template</div>
                 <div className="font-medium text-sm mb-1">
@@ -874,7 +874,7 @@ function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, bu
         )}
 
         {registryLoaded && !registryEmpty && (
-          <div className="overflow-y-auto p-5 grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="overflow-y-auto p-3 sm:p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {filtered.map((c) => (
               <button
                 key={c.key}

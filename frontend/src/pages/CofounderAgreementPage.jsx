@@ -230,35 +230,35 @@ export default function CofounderAgreementPage() {
             </div>
             <div className="space-y-2">
               {founders.map((f, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-end p-3 bg-gray-50 rounded-lg">
-                  <div className="col-span-3">
+                <div key={i} className="grid grid-cols-2 md:grid-cols-12 gap-2 items-end p-3 bg-gray-50 rounded-lg">
+                  <div className="col-span-2 md:col-span-3">
                     <div className="text-[11px] font-semibold text-gray-600 mb-1">Name</div>
                     <input value={f.name} onChange={(e) => updateFounder(i, { name: e.target.value })}
                       className="w-full border rounded-md px-2 py-1.5 text-sm" placeholder="Jane Doe" />
                   </div>
-                  <div className="col-span-3">
+                  <div className="col-span-2 md:col-span-3">
                     <div className="text-[11px] font-semibold text-gray-600 mb-1">Email</div>
                     <input value={f.email} onChange={(e) => updateFounder(i, { email: e.target.value })}
                       className="w-full border rounded-md px-2 py-1.5 text-sm" placeholder="jane@example.com" />
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-1 md:col-span-2">
                     <div className="text-[11px] font-semibold text-gray-600 mb-1">Role</div>
                     <input value={f.role} onChange={(e) => updateFounder(i, { role: e.target.value })}
                       className="w-full border rounded-md px-2 py-1.5 text-sm" placeholder="CEO" />
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-1 md:col-span-2">
                     <div className="text-[11px] font-semibold text-gray-600 mb-1">Equity %</div>
                     <input type="number" value={f.equity_pct} min={0} max={100} step={0.01}
                       onChange={(e) => updateFounder(i, { equity_pct: Number(e.target.value) })}
                       className="w-full border rounded-md px-2 py-1.5 text-sm" />
                   </div>
-                  <div className="col-span-1">
+                  <div className="col-span-1 md:col-span-1">
                     <div className="text-[11px] font-semibold text-gray-600 mb-1">Start</div>
                     <input type="date" value={f.start_date}
                       onChange={(e) => updateFounder(i, { start_date: e.target.value })}
                       className="w-full border rounded-md px-1 py-1.5 text-xs" />
                   </div>
-                  <div className="col-span-1 flex justify-end">
+                  <div className="col-span-1 md:col-span-1 flex justify-end">
                     {founders.length > 2 && (
                       <button onClick={() => removeFounder(i)}
                         className="text-gray-400 hover:text-red-600 p-2" title="Remove">

@@ -233,8 +233,8 @@ export default function CapTablePage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
-        <div>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <PieIcon className="text-violet-600" /> Cap-Table Simulator
           </h1>
@@ -243,11 +243,11 @@ export default function CapTablePage() {
             Model SAFE notes, priced rounds, dilution, and exit waterfalls before you sign.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             value={scenarioName}
             onChange={e => setScenarioName(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded"
+            className="flex-1 min-w-0 sm:flex-none sm:w-48 px-3 py-1.5 text-sm border border-gray-300 rounded"
             placeholder="Scenario name"
           />
           <button onClick={newScenario}

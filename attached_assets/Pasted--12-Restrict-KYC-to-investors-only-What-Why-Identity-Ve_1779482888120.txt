@@ -1,0 +1,40 @@
+#12 - Restrict KYC to investors only
+What & Why
+Identity Verification (KYC / AML) is currently presented as a required step for every non-admin role. Per product decision, only investors need to complete KYC. Founders, partners, and mentors should never be routed into the KYC flow, never see it in the sidebar, and never hit a server-side "KYC required" wall.
+The reporter is on a Founder account and was pushed to /kyc with a tier_required banner (see attached screenshot). That should not happen.
+Done looks like
+* Investors still see and can complete Identity Verification exactly as today (no behaviour change for them).
+* Founders, partners, and mentors:
+    * Never get auto-redirected to /kyc.
+    * Don't see "Identity Verification" in the sidebar.
+    * Don't see KYC steps inside any onboarding wizard / onboarding chatbot.
+    * Visiting /kyc directly shows a short "Not required for your role" message instead of the form.
+    * Are never blocked by a server-side "KYC required" / kyc_required: true error on endpoints that aren't investor-specific.
+* Admin views of users (admin panel, trust/compliance dashboards) still expose kyc_status for the investors who have one.
+Out of scope
+* KYB (corporate / partner business verification) — separate flow, unchanged.
+* Investor KYC content, provider, or UI itself — unchanged.
+* Removing the users.kyc_status column or any historical KYC data.
+* Server-side enforcement on signing endpoints that legitimately require investor KYC at the moment of a binding capital action — keep those, just make sure they only fire for investors.
+Steps
+1. Frontend route gate — Update the KYC redirect gate so it only fires when the effective role is investor. Today it fires for everyone except admin and founder; partner and mentor are incorrectly caught.
+2. Sidebar visibility — Remove the "Identity Verification" entry from the partner sidebar group (and confirm it's absent for founder and mentor). Keep it only in the investor sidebar.
+3. KYC page role guard — When a non-investor (non-admin) lands on /kyc directly, render a short explanatory state ("Identity Verification is only required for investor accounts") instead of the form + tier_required banner. Admins keep their current view for support purposes.
+4. Onboarding flows — Audit the onboarding wizards and the onboarding chatbot for any step that nudges non-investor roles toward KYC, and remove/skip those steps for founder/partner/mentor. Make sure removing them doesn't leave wizards unable to complete.
+5. Server-side enforcement — Adjust the shared "KYC required" gate so non-investor non-admin users pass through:
+    * The requireApprovedKyc helper in worker auth.
+    * The realtime kycOk check.
+    * Any other route that returns kyc_required: true / "KYC required" / 403 for KYC reasons. Investor endpoints (capital actions, deal flow gating, etc.) keep enforcing KYC as today.
+6. Trust / compliance obligations — In the trust service, only generate kyc_v1 obligations for investor users. Existing rows for non-investors should be treated as not-applicable rather than pending (don't delete historical data; just stop creating new ones and stop counting them as outstanding).
+7. Smoke test the four roles — Log in (or impersonate) as founder, partner, mentor, and investor. Confirm: no /kyc redirect for the first three, sidebar item only present for investor, direct visit to /kyc shows the explanatory state for non-investors, investor flow is unchanged end-to-end.
+Relevant files
+* frontend/src/App.jsx:816-842
+* frontend/src/sidebarConfig.js:154-228
+* frontend/src/sidebarConfig.js:258-270
+* frontend/src/pages/KYCPage.jsx
+* cloudflare-worker/src/auth.ts:451-456
+* cloudflare-worker/src/routes/realtime.ts:94-120
+* cloudflare-worker/src/routes/kyc.ts
+* cloudflare-worker/src/services/trust.ts:60-90,400-460
+* cloudflare-worker/src/index.ts:622
+* cloudflare-worker/src/routes/_t13t14t15_helpers.ts:55-62
