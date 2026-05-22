@@ -389,6 +389,101 @@ def generate(payload: GeneratePayload, user: User = Depends(get_current_user), s
     return _row_to_deck(row)
 
 
+# ---------------------------------------------------------------------
+# Dev mirror of the Worker's `/api/decks/methods` endpoint.
+#
+# The Cloudflare Worker (production) returns the 12 deck-method specs
+# from `cloudflare-worker/src/services/decks/methods.ts`. The Pitch Deck
+# Builder's "Pick a deck template" modal calls /api/decks/methods to
+# populate the template grid. Without this route, the dev FastAPI backend
+# previously matched the request against /{deck_id}, failed parsing, and
+# the frontend received an error → empty `methods` array → blank grid.
+#
+# We mirror only the metadata fields the picker UI reads (id, key, label,
+# category, slide_count, premium, prompt_hint, best_for, locked). Slide
+# specs and auto-fill source lists are Worker-only — apply-method/generate
+# in dev fall back to the legacy heuristic generator.
+# ---------------------------------------------------------------------
+_DECK_METHODS_DEV: List[Dict[str, Any]] = [
+    {"id": "yc_seed", "key": "yc_seed", "label": "YC Seed (10)",
+     "prompt_hint": "The Y Combinator demo-day classic. Tight, narrative.",
+     "best_for": "Pre-seed / seed founders pitching accelerators.",
+     "slide_count": 10, "premium": False, "category": "fundraising"},
+    {"id": "sequoia_classic", "key": "sequoia_classic", "label": "Sequoia Classic (12)",
+     "prompt_hint": "The Sequoia 12-slide template. Story arc + market deep dive.",
+     "best_for": "Seed / Series A with a clear narrative + sizable market.",
+     "slide_count": 12, "premium": False, "category": "fundraising"},
+    {"id": "kawasaki_10_20_30", "key": "kawasaki_10_20_30", "label": "Kawasaki 10/20/30 (10)",
+     "prompt_hint": "10 slides, 20 minutes, 30-point font. Maximum clarity.",
+     "best_for": "Investor meetings where you need to be ruthlessly concise.",
+     "slide_count": 10, "premium": False, "category": "fundraising"},
+    {"id": "minimal_seed", "key": "minimal_seed", "label": "Minimal Seed (6)",
+     "prompt_hint": "Six slides. Cold-DM-friendly, easy to share async.",
+     "best_for": "Sending to investors over email; first-touch pitches.",
+     "slide_count": 6, "premium": False, "category": "fundraising"},
+    {"id": "series_a_growth", "key": "series_a_growth", "label": "Series A Growth (15)",
+     "prompt_hint": "Series A: depth on cohorts, retention, GTM motion.",
+     "best_for": "Companies with $500k+ ARR raising a Series A.",
+     "slide_count": 15, "premium": False, "category": "fundraising"},
+    {"id": "series_b_diligence", "key": "series_b_diligence", "label": "Series B + Diligence (22 + appendix)",
+     "prompt_hint": "Long-form Series B with diligence-grade appendix.",
+     "best_for": "Series B+ rounds where investors expect a data room in slides.",
+     "slide_count": 22, "premium": True, "category": "fundraising"},
+    {"id": "demo_day", "key": "demo_day", "label": "Demo Day (12)",
+     "prompt_hint": "Theatrical 12 slides. Designed for a live stage.",
+     "best_for": "Accelerator demo days, pitch competitions.",
+     "slide_count": 12, "premium": False, "category": "event"},
+    {"id": "sales_commercial", "key": "sales_commercial", "label": "Sales / Commercial (18)",
+     "prompt_hint": "Buyer-facing deck. ROI, security, references.",
+     "best_for": "Enterprise sales meetings; commercial pitches.",
+     "slide_count": 18, "premium": False, "category": "commercial"},
+    {"id": "partnership_bd", "key": "partnership_bd", "label": "Partnership / BD (12)",
+     "prompt_hint": "BD deck for channel + co-marketing partners.",
+     "best_for": "Strategic partnerships, channel deals, co-marketing.",
+     "slide_count": 12, "premium": False, "category": "commercial"},
+    {"id": "one_pager_teaser", "key": "one_pager_teaser", "label": "One-pager teaser (1)",
+     "prompt_hint": "Single-page summary for cold outreach.",
+     "best_for": "First-touch teaser to send to investors or partners.",
+     "slide_count": 1, "premium": False, "category": "narrative"},
+    {"id": "investor_appendix", "key": "investor_appendix", "label": "Investor + 30pp Appendix",
+     "prompt_hint": "Short investor deck plus a deep diligence appendix.",
+     "best_for": "Sophisticated investors who want both a TL;DR and source data.",
+     "slide_count": 12, "premium": True, "category": "fundraising"},
+    {"id": "narrative_brand", "key": "narrative_brand", "label": "Narrative / Brand (15)",
+     "prompt_hint": "Story-led brand deck. Heavy on imagery + tone.",
+     "best_for": "Mission-driven companies; brand-first founders.",
+     "slide_count": 15, "premium": True, "category": "narrative"},
+]
+_PREMIUM_METHOD_IDS_DEV = [m["id"] for m in _DECK_METHODS_DEV if m["premium"]]
+
+
+# IMPORTANT: must be registered BEFORE /{deck_id} so FastAPI doesn't
+# match "methods" as a deck_id path param.
+@router.get("/methods")
+def list_methods(user: User = Depends(get_current_user)):
+    # User.role is a UserRole(str, Enum) — str() on an Enum returns
+    # "UserRole.ADMIN", not "admin", so we must read .value (or fall
+    # back to the value itself when it's already a plain string).
+    raw_role = getattr(user, "role", "") or ""
+    role = str(getattr(raw_role, "value", raw_role)).lower()
+    raw_tier = getattr(user, "subscription_tier", "free") or "free"
+    tier = str(getattr(raw_tier, "value", raw_tier)).lower()
+    bypass = role in {"admin", "partner", "investor", "mentor"}
+    tier_ok = tier in {"growth", "studio", "enterprise"}
+    methods = [
+        {**m, "locked": bool(m["premium"]) and not bypass and not tier_ok}
+        for m in _DECK_METHODS_DEV
+    ]
+    return {
+        "methods": methods,
+        "premium_method_ids": _PREMIUM_METHOD_IDS_DEV,
+        "user_tier": tier,
+        "can_remove_footer": tier_ok,
+        "can_upload_watermark": tier in {"studio", "enterprise"},
+        "watermark_url": "",
+    }
+
+
 @router.get("/by-project/{project_id}")
 def list_versions(project_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
     _project_owned(session, project_id, user)
