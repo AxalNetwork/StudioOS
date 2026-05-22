@@ -1,0 +1,1399 @@
+Here's the complete React application — single self-contained file. Drop into `frontend/src/decks/templates/yc_seed_app.tsx` (or wherever you want to mount it).
+
+The deck binds to real Axal platform data via the existing autofill helpers (`v()` from `DeckBase.tsx`, project / financial_models / metrics_snapshots / rounds rows). Where data is missing it shows refined placeholders.
+
+```tsx
+// frontend/src/decks/templates/yc_seed_app.tsx
+//
+// Self-contained YC-style seed deck — 10 slides, prev/next nav,
+// keyboard arrows, dot pagination, inline editing, SVG-only graphics.
+// All data wired to Axal platform rows via the `data` prop (drop the
+// project's row + financial_models + metrics_snapshots + rounds row
+// into one merged object; see SAMPLE_DATA at bottom for shape).
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+
+// ─────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────
+
+export type DeckData = {
+  // Cover + identity
+  company?: string;
+  vision?: string;
+  tagline?: string;
+  domain?: string;
+
+  // Problem
+  problems?: { title: string; body: string; metric?: string }[];
+
+  // Solution
+  solution_summary?: string;
+  before?: string[];
+  after?: string[];
+
+  // Product
+  product_pillars?: { title: string; body: string }[];
+  architecture?: { layers: { name: string; nodes: string[] }[] };
+
+  // Market
+  tam_usd?: number;
+  sam_usd?: number;
+  som_usd?: number;
+  market_cagr_pct?: number;
+  market_trends?: string[];
+
+  // Business model
+  pricing_tiers?: { name: string; price: string; bullets: string[] }[];
+  revenue_flow?: string[];
+
+  // Traction
+  mrr_series?: { month: string; v: number }[];
+  user_series?: { month: string; v: number }[];
+  milestones?: { date: string; label: string }[];
+  paying_customers?: number;
+  mrr_usd?: number;
+  growth_mom_pct?: number;
+
+  // GTM
+  funnel?: { stage: string; v: number }[];
+  channels?: { name: string; share_pct: number }[];
+
+  // Team
+  founders?: { name: string; role: string; pedigree: string[]; initials?: string }[];
+  team_timeline?: { year: string; event: string }[];
+
+  // Vision + Ask
+  ask_amount_usd?: number;
+  runway_months?: number;
+  roadmap?: { quarter: string; goal: string }[];
+  use_of_funds?: { label: string; pct: number }[];
+  closing_line?: string;
+  contact?: string;
+};
+
+export type DeckProps = {
+  data: DeckData;
+  editable?: boolean;
+  onEdit?: (path: string, value: string) => void;
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+
+const ORANGE = '#FF6600';
+const INK = '#0A0A0A';
+const SUBTLE = '#737373';
+const HAIRLINE = '#E5E5E5';
+const PAPER = '#FFFFFF';
+const FONT =
+  '-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Display", Helvetica, Arial, sans-serif';
+
+const fmtUSD = (n?: number) => {
+  if (n == null || isNaN(n)) return '—';
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
+  return `$${n.toLocaleString()}`;
+};
+const fmtNum = (n?: number) => (n == null || isNaN(n) ? '—' : n.toLocaleString());
+const fmtPct = (n?: number) => (n == null || isNaN(n) ? '—' : `${n}%`);
+
+const Editable: React.FC<{
+  value?: string;
+  path: string;
+  editable?: boolean;
+  onEdit?: (p: string, v: string) => void;
+  placeholder?: string;
+  className?: string;
+  style?: React.CSSProperties;
+  as?: keyof JSX.IntrinsicElements;
+}> = ({ value, path, editable, onEdit, placeholder, className, style, as = 'div' }) => {
+  const Tag: any = as;
+  return (
+    <Tag
+      contentEditable={!!editable}
+      suppressContentEditableWarning
+      onBlur={(e: any) => onEdit?.(path, e.currentTarget.textContent || '')}
+      className={className}
+      style={{
+        outline: 'none',
+        minHeight: '1em',
+        color: !value ? '#A3A3A3' : style?.color,
+        ...style,
+      }}
+    >
+      {value || placeholder || ''}
+    </Tag>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// SVG primitives
+// ─────────────────────────────────────────────────────────────────
+
+const Logo: React.FC<{ size?: number; color?: string }> = ({ size = 64, color = INK }) => (
+  <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden>
+    <rect x="4" y="4" width="56" height="56" rx="14" fill={ORANGE} />
+    <path
+      d="M20 44 L32 18 L44 44 M24.5 36 H39.5"
+      stroke="#FFFFFF"
+      strokeWidth="3.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const HeroOrb: React.FC = () => (
+  <svg viewBox="0 0 800 600" className="w-full h-full" aria-hidden>
+    <defs>
+      <radialGradient id="orb-g" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stopColor="#FFB380" stopOpacity="0.9" />
+        <stop offset="60%" stopColor={ORANGE} stopOpacity="0.5" />
+        <stop offset="100%" stopColor={ORANGE} stopOpacity="0" />
+      </radialGradient>
+      <radialGradient id="orb-h" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.9" />
+        <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+      </radialGradient>
+    </defs>
+    <circle cx="500" cy="300" r="260" fill="url(#orb-g)" />
+    <circle cx="500" cy="300" r="180" fill="none" stroke={ORANGE} strokeOpacity="0.25" />
+    <circle cx="500" cy="300" r="240" fill="none" stroke={ORANGE} strokeOpacity="0.15" />
+    <circle cx="500" cy="300" r="300" fill="none" stroke={ORANGE} strokeOpacity="0.08" />
+    <circle cx="430" cy="240" r="40" fill="url(#orb-h)" />
+    {[...Array(8)].map((_, i) => {
+      const a = (i / 8) * Math.PI * 2;
+      const x = 500 + Math.cos(a) * 220;
+      const y = 300 + Math.sin(a) * 220;
+      return <circle key={i} cx={x} cy={y} r="6" fill={ORANGE} />;
+    })}
+  </svg>
+);
+
+// Line chart
+const LineChart: React.FC<{
+  data: { month: string; v: number }[];
+  height?: number;
+  color?: string;
+  fill?: boolean;
+}> = ({ data, height = 240, color = ORANGE, fill = true }) => {
+  if (!data?.length) return <div className="text-neutral-400">[No data yet]</div>;
+  const W = 720;
+  const H = height;
+  const pad = 40;
+  const max = Math.max(...data.map((d) => d.v));
+  const min = Math.min(0, ...data.map((d) => d.v));
+  const x = (i: number) => pad + (i / (data.length - 1)) * (W - pad * 2);
+  const y = (v: number) => H - pad - ((v - min) / (max - min || 1)) * (H - pad * 2);
+  const path = data.map((d, i) => `${i ? 'L' : 'M'}${x(i)} ${y(d.v)}`).join(' ');
+  const area =
+    path + ` L${x(data.length - 1)} ${H - pad} L${x(0)} ${H - pad} Z`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-hidden>
+      {[0.25, 0.5, 0.75, 1].map((t, i) => (
+        <line
+          key={i}
+          x1={pad}
+          x2={W - pad}
+          y1={H - pad - t * (H - pad * 2)}
+          y2={H - pad - t * (H - pad * 2)}
+          stroke={HAIRLINE}
+          strokeDasharray="3 3"
+        />
+      ))}
+      {fill && <path d={area} fill={color} fillOpacity="0.12" />}
+      <path d={path} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" />
+      {data.map((d, i) => (
+        <g key={i}>
+          <circle cx={x(i)} cy={y(d.v)} r="4" fill={color} />
+          <text
+            x={x(i)}
+            y={H - pad + 18}
+            textAnchor="middle"
+            fontSize="11"
+            fill={SUBTLE}
+            fontFamily={FONT}
+          >
+            {d.month}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+};
+
+// Funnel
+const Funnel: React.FC<{ stages: { stage: string; v: number }[] }> = ({ stages }) => {
+  if (!stages?.length) return null;
+  const max = Math.max(...stages.map((s) => s.v));
+  const W = 720;
+  const rowH = 60;
+  return (
+    <svg viewBox={`0 0 ${W} ${stages.length * rowH + 20}`} className="w-full" aria-hidden>
+      {stages.map((s, i) => {
+        const w = (s.v / max) * (W - 220);
+        const y = i * rowH + 10;
+        return (
+          <g key={i}>
+            <rect
+              x={100}
+              y={y}
+              width={w}
+              height={rowH - 16}
+              rx={6}
+              fill={ORANGE}
+              fillOpacity={1 - i * 0.15}
+            />
+            <text
+              x={92}
+              y={y + (rowH - 16) / 2 + 5}
+              fontSize="14"
+              fill={INK}
+              textAnchor="end"
+              fontFamily={FONT}
+              fontWeight={500}
+            >
+              {s.stage}
+            </text>
+            <text
+              x={100 + w + 12}
+              y={y + (rowH - 16) / 2 + 5}
+              fontSize="14"
+              fill={INK}
+              fontFamily={FONT}
+              fontWeight={700}
+            >
+              {fmtNum(s.v)}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+// Donut (use of funds)
+const Donut: React.FC<{ data: { label: string; pct: number }[] }> = ({ data }) => {
+  if (!data?.length) return null;
+  const palette = [ORANGE, '#FF8533', '#FFB380', '#FFD9B3', '#FFE9D6'];
+  const r = 100;
+  const cx = 120;
+  const cy = 120;
+  let acc = 0;
+  return (
+    <div className="flex items-center gap-8">
+      <svg viewBox="0 0 240 240" width={240} height={240} aria-hidden>
+        {data.map((d, i) => {
+          const start = (acc / 100) * Math.PI * 2 - Math.PI / 2;
+          acc += d.pct;
+          const end = (acc / 100) * Math.PI * 2 - Math.PI / 2;
+          const large = d.pct > 50 ? 1 : 0;
+          const x1 = cx + r * Math.cos(start);
+          const y1 = cy + r * Math.sin(start);
+          const x2 = cx + r * Math.cos(end);
+          const y2 = cy + r * Math.sin(end);
+          return (
+            <path
+              key={i}
+              d={`M${cx} ${cy} L${x1} ${y1} A${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`}
+              fill={palette[i % palette.length]}
+            />
+          );
+        })}
+        <circle cx={cx} cy={cy} r={56} fill={PAPER} />
+      </svg>
+      <div className="space-y-2">
+        {data.map((d, i) => (
+          <div key={i} className="flex items-center gap-3 text-sm">
+            <span
+              className="inline-block w-3 h-3 rounded-sm"
+              style={{ background: palette[i % palette.length] }}
+            />
+            <span className="text-neutral-700 font-medium">{d.label}</span>
+            <span className="text-neutral-900 font-bold ml-auto">{d.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Layered TAM/SAM/SOM circles
+const MarketCircles: React.FC<{ tam?: number; sam?: number; som?: number }> = ({
+  tam,
+  sam,
+  som,
+}) => {
+  const maxR = 220;
+  const tamR = maxR;
+  const samR = sam && tam ? maxR * Math.sqrt(sam / tam) : maxR * 0.66;
+  const somR = som && tam ? maxR * Math.sqrt(som / tam) : maxR * 0.33;
+  return (
+    <svg viewBox="0 0 600 480" className="w-full" aria-hidden>
+      <circle cx="300" cy="240" r={tamR} fill={ORANGE} fillOpacity="0.08" stroke={ORANGE} />
+      <circle cx="300" cy="240" r={samR} fill={ORANGE} fillOpacity="0.18" stroke={ORANGE} />
+      <circle cx="300" cy="240" r={somR} fill={ORANGE} fillOpacity="0.4" stroke={ORANGE} />
+      <text x="300" y="55" textAnchor="middle" fontSize="14" fill={SUBTLE} fontFamily={FONT}>
+        TAM
+      </text>
+      <text x="300" y="76" textAnchor="middle" fontSize="22" fill={INK} fontFamily={FONT} fontWeight={700}>
+        {fmtUSD(tam)}
+      </text>
+      <text x="300" y="240 - 50" textAnchor="middle" fontSize="12" fill={SUBTLE} fontFamily={FONT}>
+        SAM
+      </text>
+      <text x="300" y="240 - 28" textAnchor="middle" fontSize="18" fill={INK} fontFamily={FONT} fontWeight={700}>
+        {fmtUSD(sam)}
+      </text>
+      <text x="300" y="240 + 8" textAnchor="middle" fontSize="11" fill="#FFFFFF" fontFamily={FONT}>
+        SOM
+      </text>
+      <text x="300" y="240 + 30" textAnchor="middle" fontSize="16" fill="#FFFFFF" fontFamily={FONT} fontWeight={700}>
+        {fmtUSD(som)}
+      </text>
+    </svg>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Slide frame
+// ─────────────────────────────────────────────────────────────────
+
+const SlideFrame: React.FC<React.PropsWithChildren<{ index: number; total: number; company?: string }>> = ({
+  index,
+  total,
+  company,
+  children,
+}) => (
+  <div
+    className="relative bg-white"
+    style={{
+      aspectRatio: '16 / 9',
+      width: '100%',
+      maxHeight: '100vh',
+      padding: 'clamp(24px, 4vw, 72px)',
+      fontFamily: FONT,
+      color: INK,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+    }}
+  >
+    <div className="flex items-center justify-between" style={{ marginBottom: 'clamp(12px, 2vw, 32px)' }}>
+      <div className="flex items-center gap-3">
+        <Logo size={28} />
+        <span className="text-sm font-semibold text-neutral-900 tracking-tight">{company || 'Company'}</span>
+      </div>
+      <div className="text-xs uppercase tracking-widest text-neutral-400 font-medium">
+        {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
+      </div>
+    </div>
+    <div className="flex-1 flex flex-col min-h-0">{children}</div>
+    <div
+      className="absolute"
+      style={{ left: 0, right: 0, bottom: 0, height: 4, background: ORANGE }}
+    />
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────
+// Slides
+// ─────────────────────────────────────────────────────────────────
+
+const Slide1Cover: React.FC<DeckProps> = ({ data, editable, onEdit }) => (
+  <SlideFrame index={0} total={10} company={data.company}>
+    <div className="flex-1 grid grid-cols-2 gap-12 items-center">
+      <div>
+        <div className="flex items-center gap-4 mb-6">
+          <Logo size={64} />
+          <Editable
+            as="span"
+            value={data.company}
+            path="company"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="[Company]"
+            style={{ fontSize: 'clamp(28px, 3vw, 48px)', fontWeight: 800, letterSpacing: -1 }}
+          />
+        </div>
+        <Editable
+          value={data.vision}
+          path="vision"
+          editable={editable}
+          onEdit={onEdit}
+          placeholder="[One-line vision — what becomes possible.]"
+          style={{ fontSize: 'clamp(20px, 2vw, 36px)', fontWeight: 600, lineHeight: 1.25, color: INK }}
+        />
+        <Editable
+          value={data.tagline}
+          path="tagline"
+          editable={editable}
+          onEdit={onEdit}
+          placeholder="[Category. Audience. Disruption.]"
+          style={{ fontSize: 'clamp(14px, 1.2vw, 18px)', color: SUBTLE, marginTop: 16 }}
+        />
+        <div className="mt-10 flex items-center gap-6 text-xs uppercase tracking-widest text-neutral-500">
+          <span className="font-bold" style={{ color: ORANGE }}>● Seed</span>
+          <span>{new Date().getFullYear()}</span>
+          <span>{data.domain || 'company.com'}</span>
+        </div>
+      </div>
+      <div className="h-full">
+        <HeroOrb />
+      </div>
+    </div>
+  </SlideFrame>
+);
+
+const Slide2Problem: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const items = data.problems?.length
+    ? data.problems
+    : [
+        { title: '[Problem #1]', body: '[Why it hurts]', metric: '—' },
+        { title: '[Problem #2]', body: '[Why it hurts]', metric: '—' },
+        { title: '[Problem #3]', body: '[Why it hurts]', metric: '—' },
+      ];
+  return (
+    <SlideFrame index={1} total={10} company={data.company}>
+      <div className="text-xs uppercase tracking-widest font-bold" style={{ color: ORANGE }}>Problem</div>
+      <h2 className="mt-3" style={{ fontSize: 'clamp(28px, 3vw, 52px)', fontWeight: 800, letterSpacing: -1, lineHeight: 1.1 }}>
+        The status quo wastes time, money, and trust.
+      </h2>
+      <div className="mt-10 grid grid-cols-3 gap-6 flex-1">
+        {items.slice(0, 3).map((p, i) => (
+          <div key={i} className="p-6 rounded-2xl border border-neutral-200 flex flex-col">
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl mb-4" style={{ background: '#FFF1E8' }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M12 2 L22 20 L2 20 Z" stroke={ORANGE} strokeWidth="2.2" strokeLinejoin="round" />
+                <path d="M12 10 V14" stroke={ORANGE} strokeWidth="2.4" strokeLinecap="round" />
+                <circle cx="12" cy="17" r="1.2" fill={ORANGE} />
+              </svg>
+            </div>
+            <Editable
+              as="h3"
+              value={p.title}
+              path={`problems.${i}.title`}
+              editable={editable}
+              onEdit={onEdit}
+              style={{ fontSize: 22, fontWeight: 700 }}
+            />
+            <Editable
+              value={p.body}
+              path={`problems.${i}.body`}
+              editable={editable}
+              onEdit={onEdit}
+              style={{ fontSize: 14, color: SUBTLE, marginTop: 8, lineHeight: 1.5, flex: 1 }}
+            />
+            <div className="mt-4 pt-4 border-t border-neutral-100">
+              <div className="text-xs uppercase tracking-wider text-neutral-400">Impact</div>
+              <Editable
+                value={p.metric}
+                path={`problems.${i}.metric`}
+                editable={editable}
+                onEdit={onEdit}
+                style={{ fontSize: 22, fontWeight: 800, color: ORANGE, marginTop: 4 }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide3Solution: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const before = data.before?.length ? data.before : ['[Manual step]', '[Switch tools]', '[Reconcile]', '[Lose time]'];
+  const after = data.after?.length ? data.after : ['[One workflow]', '[Auto-synced]', '[Audit trail]', '[Done in seconds]'];
+  return (
+    <SlideFrame index={2} total={10} company={data.company}>
+      <div className="text-xs uppercase tracking-widest font-bold" style={{ color: ORANGE }}>Solution</div>
+      <h2 className="mt-3" style={{ fontSize: 'clamp(28px, 3vw, 52px)', fontWeight: 800, letterSpacing: -1, lineHeight: 1.1 }}>
+        One workflow that removes the friction.
+      </h2>
+      <Editable
+        value={data.solution_summary}
+        path="solution_summary"
+        editable={editable}
+        onEdit={onEdit}
+        placeholder="[Two-sentence description of how the product collapses the chain of pain into a single action.]"
+        style={{ fontSize: 'clamp(15px, 1.3vw, 20px)', color: SUBTLE, marginTop: 12, maxWidth: 900 }}
+      />
+      <div className="mt-8 grid grid-cols-2 gap-8 flex-1">
+        <div className="p-6 rounded-2xl border border-neutral-200">
+          <div className="text-xs uppercase tracking-widest text-neutral-400 mb-4">Before</div>
+          {before.map((b, i) => (
+            <div key={i} className="flex items-center gap-3 py-3 border-b border-neutral-100 last:border-0">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-neutral-100 text-neutral-400 text-sm font-bold">
+                {i + 1}
+              </span>
+              <Editable value={b} path={`before.${i}`} editable={editable} onEdit={onEdit} style={{ fontSize: 15, color: '#525252' }} />
+            </div>
+          ))}
+        </div>
+        <div className="p-6 rounded-2xl border-2" style={{ borderColor: ORANGE, background: '#FFFBF5' }}>
+          <div className="text-xs uppercase tracking-widest font-bold mb-4" style={{ color: ORANGE }}>After</div>
+          {after.map((b, i) => (
+            <div key={i} className="flex items-center gap-3 py-3 border-b border-orange-100 last:border-0">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold" style={{ background: ORANGE, color: '#FFF' }}>
+                ✓
+              </span>
+              <Editable value={b} path={`after.${i}`} editable={editable} onEdit={onEdit} style={{ fontSize: 15, color: INK, fontWeight: 500 }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide4Product: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const pillars = data.product_pillars?.length
+    ? data.product_pillars
+    : [
+        { title: '[Pillar #1]', body: '[Why it works]' },
+        { title: '[Pillar #2]', body: '[Why it works]' },
+        { title: '[Pillar #3]', body: '[Why it works]' },
+      ];
+  return (
+    <SlideFrame index={3} total={10} company={data.company}>
+      <div className="text-xs uppercase tracking-widest font-bold" style={{ color: ORANGE }}>Product</div>
+      <h2 className="mt-3" style={{ fontSize: 'clamp(28px, 3vw, 52px)', fontWeight: 800, letterSpacing: -1, lineHeight: 1.1 }}>
+        Built for the way work actually happens.
+      </h2>
+      <div className="mt-8 grid grid-cols-5 gap-6 flex-1">
+        <div className="col-span-3 rounded-2xl border border-neutral-200 p-6 bg-neutral-50">
+          {/* SVG wireframe */}
+          <svg viewBox="0 0 600 340" className="w-full h-full" aria-hidden>
+            <rect x="0" y="0" width="600" height="340" rx="14" fill="#FFFFFF" stroke={HAIRLINE} />
+            <rect x="0" y="0" width="600" height="44" rx="14" fill="#FAFAFA" />
+            <circle cx="22" cy="22" r="5" fill="#FF6B6B" />
+            <circle cx="42" cy="22" r="5" fill="#FFD93D" />
+            <circle cx="62" cy="22" r="5" fill="#6BCB77" />
+            <rect x="20" y="68" width="160" height="252" rx="10" fill="#FAFAFA" />
+            {[0, 1, 2, 3].map((i) => (
+              <rect key={i} x="32" y={88 + i * 36} width="136" height="22" rx="6" fill={i === 1 ? ORANGE : '#EEE'} />
+            ))}
+            <rect x="200" y="68" width="380" height="60" rx="10" fill="#FAFAFA" />
+            <text x="216" y="105" fontSize="14" fontWeight={700} fontFamily={FONT} fill={INK}>{data.company || 'Product'} · Overview</text>
+            <rect x="200" y="144" width="180" height="176" rx="10" fill="#FAFAFA" />
+            <rect x="220" y="164" width="140" height="14" rx="4" fill="#E5E5E5" />
+            <rect x="220" y="186" width="100" height="10" rx="4" fill="#EEEEEE" />
+            <rect x="220" y="220" width="140" height="80" rx="6" fill={ORANGE} opacity="0.15" />
+            <path d="M225 290 L260 250 L290 270 L325 235 L355 260" stroke={ORANGE} strokeWidth="2.5" fill="none" />
+            <rect x="400" y="144" width="180" height="84" rx="10" fill={ORANGE} />
+            <text x="416" y="178" fontSize="13" fontFamily={FONT} fill="#FFE5D1">This week</text>
+            <text x="416" y="206" fontSize="28" fontWeight={800} fontFamily={FONT} fill="#FFFFFF">+27%</text>
+            <rect x="400" y="238" width="180" height="82" rx="10" fill="#FAFAFA" />
+            <rect x="416" y="256" width="100" height="10" rx="4" fill="#E5E5E5" />
+            <rect x="416" y="274" width="148" height="10" rx="4" fill="#EEE" />
+            <rect x="416" y="292" width="120" height="10" rx="4" fill="#EEE" />
+          </svg>
+        </div>
+        <div className="col-span-2 grid grid-rows-3 gap-3">
+          {pillars.slice(0, 3).map((p, i) => (
+            <div key={i} className="rounded-2xl border border-neutral-200 p-4">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-sm font-bold" style={{ background: '#FFF1E8', color: ORANGE }}>
+                  {i + 1}
+                </span>
+                <Editable as="div" value={p.title} path={`product_pillars.${i}.title`} editable={editable} onEdit={onEdit} style={{ fontSize: 16, fontWeight: 700 }} />
+              </div>
+              <Editable value={p.body} path={`product_pillars.${i}.body`} editable={editable} onEdit={onEdit} style={{ fontSize: 13, color: SUBTLE, marginTop: 6, lineHeight: 1.5 }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide5Market: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const trends = data.market_trends?.length
+    ? data.market_trends
+    : ['[Trend driving demand]', '[Trend driving demand]', '[Trend driving demand]'];
+  return (
+    <SlideFrame index={4} total={10} company={data.company}>
+      <div className="text-xs uppercase tracking-widest font-bold" style={{ color: ORANGE }}>Market</div>
+      <h2 className="mt-3" style={{ fontSize: 'clamp(28px, 3vw, 52px)', fontWeight: 800, letterSpacing: -1, lineHeight: 1.1 }}>
+        A large, fast-growing category.
+      </h2>
+      <div className="mt-8 grid grid-cols-2 gap-12 flex-1 items-center">
+        <MarketCircles tam={data.tam_usd} sam={data.sam_usd} som={data.som_usd} />
+        <div className="space-y-5">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="rounded-xl p-4 border border-neutral-200">
+              <div className="text-xs uppercase text-neutral-400 tracking-widest">TAM</div>
+              <div className="text-2xl font-extrabold mt-1">{fmtUSD(data.tam_usd)}</div>
+            </div>
+            <div className="rounded-xl p-4 border border-neutral-200">
+              <div className="text-xs uppercase text-neutral-400 tracking-widest">SAM</div>
+              <div className="text-2xl font-extrabold mt-1">{fmtUSD(data.sam_usd)}</div>
+            </div>
+            <div className="rounded-xl p-4" style={{ background: ORANGE, color: '#FFF' }}>
+              <div className="text-xs uppercase tracking-widest opacity-80">SOM</div>
+              <div className="text-2xl font-extrabold mt-1">{fmtUSD(data.som_usd)}</div>
+            </div>
+          </div>
+          <div className="rounded-xl p-4 border border-neutral-200">
+            <div className="text-xs uppercase tracking-widest text-neutral-400">CAGR</div>
+            <div className="text-3xl font-extrabold mt-1" style={{ color: ORANGE }}>
+              {fmtPct(data.market_cagr_pct)}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-widest text-neutral-400 mb-2">Key trends</div>
+            <div className="space-y-2">
+              {trends.slice(0, 3).map((t, i) => (
+                <div key={i} className="flex items-center gap-3 text-sm">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: ORANGE }} />
+                  <Editable value={t} path={`market_trends.${i}`} editable={editable} onEdit={onEdit} style={{ color: INK }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide6BusinessModel: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const tiers = data.pricing_tiers?.length
+    ? data.pricing_tiers
+    : [
+        { name: 'Starter', price: '[$ / mo]', bullets: ['[Feature]', '[Feature]'] },
+        { name: 'Growth', price: '[$ / mo]', bullets: ['[Feature]', '[Feature]'] },
+        { name: 'Enterprise', price: 'Contact', bullets: ['[Feature]', '[Feature]'] },
+      ];
+  return (
+    <SlideFrame index={5} total={10} company={data.company}>
+      <div className="text-xs uppercase tracking-widest font-bold" style={{ color: ORANGE }}>Business Model</div>
+      <h2 className="mt-3" style={{ fontSize: 'clamp(28px, 3vw, 52px)', fontWeight: 800, letterSpacing: -1, lineHeight: 1.1 }}>
+        Software margins. Predictable revenue.
+      </h2>
+      <div className="mt-8 grid grid-cols-5 gap-6 flex-1">
+        <div className="col-span-3 grid grid-cols-3 gap-4">
+          {tiers.slice(0, 3).map((t, i) => (
+            <div
+              key={i}
+              className={`rounded-2xl p-5 border ${i === 1 ? 'border-orange-500' : 'border-neutral-200'}`}
+              style={i === 1 ? { background: '#FFFBF5' } : {}}
+            >
+              <div className="text-xs uppercase tracking-widest" style={{ color: i === 1 ? ORANGE : SUBTLE }}>
+                {t.name}
+              </div>
+              <Editable
+                value={t.price}
+                path={`pricing_tiers.${i}.price`}
+                editable={editable}
+                onEdit={onEdit}
+                style={{ fontSize: 28, fontWeight: 800, marginTop: 8 }}
+              />
+              <div className="mt-4 space-y-2 text-sm">
+                {(t.bullets || []).slice(0, 4).map((b, j) => (
+                  <div key={j} className="flex items-start gap-2">
+                    <span className="mt-1 w-1.5 h-1.5 rounded-full" style={{ background: ORANGE }} />
+                    <Editable
+                      value={b}
+                      path={`pricing_tiers.${i}.bullets.${j}`}
+                      editable={editable}
+                      onEdit={onEdit}
+                      style={{ color: '#525252' }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="col-span-2 rounded-2xl border border-neutral-200 p-6 flex flex-col">
+          <div className="text-xs uppercase tracking-widest text-neutral-400">Revenue flow</div>
+          <svg viewBox="0 0 300 320" className="w-full mt-4 flex-1" aria-hidden>
+            {[
+              { y: 20, label: 'Customer signs up' },
+              { y: 90, label: 'Activates workflow' },
+              { y: 160, label: 'Subscribes (MRR)' },
+              { y: 230, label: 'Expands seats / usage' },
+            ].map((n, i) => (
+              <g key={i}>
+                <rect x="40" y={n.y} width="220" height="44" rx="10" fill={i === 2 ? ORANGE : '#FAFAFA'} stroke={HAIRLINE} />
+                <text
+                  x="150"
+                  y={n.y + 28}
+                  textAnchor="middle"
+                  fontSize="13"
+                  fontFamily={FONT}
+                  fontWeight={i === 2 ? 700 : 500}
+                  fill={i === 2 ? '#FFFFFF' : INK}
+                >
+                  {n.label}
+                </text>
+                {i < 3 && (
+                  <path
+                    d={`M150 ${n.y + 50} L150 ${n.y + 84} M144 ${n.y + 78} L150 ${n.y + 84} L156 ${n.y + 78}`}
+                    stroke={ORANGE}
+                    strokeWidth="2"
+                    fill="none"
+                  />
+                )}
+              </g>
+            ))}
+          </svg>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide7Traction: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const mrr = data.mrr_series?.length
+    ? data.mrr_series
+    : [
+        { month: 'Jan', v: 4 }, { month: 'Feb', v: 7 }, { month: 'Mar', v: 11 },
+        { month: 'Apr', v: 16 }, { month: 'May', v: 24 }, { month: 'Jun', v: 34 },
+      ];
+  const users = data.user_series?.length
+    ? data.user_series
+    : [
+        { month: 'Jan', v: 120 }, { month: 'Feb', v: 240 }, { month: 'Mar', v: 410 },
+        { month: 'Apr', v: 680 }, { month: 'May', v: 1050 }, { month: 'Jun', v: 1640 },
+      ];
+  const milestones = data.milestones?.length
+    ? data.milestones
+    : [
+        { date: 'Q1', label: '[Milestone]' },
+        { date: 'Q2', label: '[Milestone]' },
+        { date: 'Q3', label: '[Milestone]' },
+        { date: 'Q4', label: '[Milestone]' },
+      ];
+  return (
+    <SlideFrame index={6} total={10} company={data.company}>
+      <div className="text-xs uppercase tracking-widest font-bold" style={{ color: ORANGE }}>Traction</div>
+      <h2 className="mt-3" style={{ fontSize: 'clamp(28px, 3vw, 52px)', fontWeight: 800, letterSpacing: -1, lineHeight: 1.1 }}>
+        Compounding momentum.
+      </h2>
+      <div className="mt-6 grid grid-cols-4 gap-4">
+        <div className="rounded-xl p-4 border border-neutral-200">
+          <div className="text-xs uppercase tracking-widest text-neutral-400">MRR</div>
+          <div className="text-2xl font-extrabold mt-1">{fmtUSD(data.mrr_usd)}</div>
+        </div>
+        <div className="rounded-xl p-4 border border-neutral-200">
+          <div className="text-xs uppercase tracking-widest text-neutral-400">Paying customers</div>
+          <div className="text-2xl font-extrabold mt-1">{fmtNum(data.paying_customers)}</div>
+        </div>
+        <div className="rounded-xl p-4 border border-neutral-200">
+          <div className="text-xs uppercase tracking-widest text-neutral-400">MoM growth</div>
+          <div className="text-2xl font-extrabold mt-1" style={{ color: ORANGE }}>{fmtPct(data.growth_mom_pct)}</div>
+        </div>
+        <div className="rounded-xl p-4 border border-neutral-200">
+          <div className="text-xs uppercase tracking-widest text-neutral-400">Logos</div>
+          <div className="text-2xl font-extrabold mt-1">{fmtNum(data.paying_customers)}</div>
+        </div>
+      </div>
+      <div className="mt-6 grid grid-cols-2 gap-6 flex-1 min-h-0">
+        <div className="rounded-2xl border border-neutral-200 p-4">
+          <div className="text-xs uppercase tracking-widest text-neutral-400">MRR (k USD)</div>
+          <LineChart data={mrr} color={ORANGE} />
+        </div>
+        <div className="rounded-2xl border border-neutral-200 p-4">
+          <div className="text-xs uppercase tracking-widest text-neutral-400">Active users</div>
+          <LineChart data={users} color={INK} fill={false} />
+        </div>
+      </div>
+      <div className="mt-6">
+        <div className="text-xs uppercase tracking-widest text-neutral-400 mb-3">Milestones</div>
+        <div className="relative">
+          <div className="absolute left-0 right-0 top-3 h-px bg-neutral-200" />
+          <div className="grid grid-cols-4 gap-4">
+            {milestones.slice(0, 4).map((m, i) => (
+              <div key={i} className="relative pt-8">
+                <span className="absolute left-1/2 -translate-x-1/2 top-1 w-3 h-3 rounded-full" style={{ background: ORANGE }} />
+                <div className="text-xs text-center font-bold" style={{ color: ORANGE }}>{m.date}</div>
+                <Editable
+                  value={m.label}
+                  path={`milestones.${i}.label`}
+                  editable={editable}
+                  onEdit={onEdit}
+                  style={{ fontSize: 13, textAlign: 'center', color: '#525252', marginTop: 4 }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide8GTM: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const funnel = data.funnel?.length
+    ? data.funnel
+    : [
+        { stage: 'Visitors', v: 10000 },
+        { stage: 'Signups', v: 1800 },
+        { stage: 'Activated', v: 720 },
+        { stage: 'Paying', v: 180 },
+        { stage: 'Expanded', v: 64 },
+      ];
+  const channels = data.channels?.length
+    ? data.channels
+    : [
+        { name: 'Inbound / SEO', share_pct: 35 },
+        { name: 'Founder network', share_pct: 25 },
+        { name: 'Partnerships', share_pct: 20 },
+        { name: 'Outbound', share_pct: 12 },
+        { name: 'Community', share_pct: 8 },
+      ];
+  return (
+    <SlideFrame index={7} total={10} company={data.company}>
+      <div className="text-xs uppercase tracking-widest font-bold" style={{ color: ORANGE }}>Go-To-Market</div>
+      <h2 className="mt-3" style={{ fontSize: 'clamp(28px, 3vw, 52px)', fontWeight: 800, letterSpacing: -1, lineHeight: 1.1 }}>
+        Repeatable. Defensible. Compounding.
+      </h2>
+      <div className="mt-8 grid grid-cols-3 gap-6 flex-1 min-h-0">
+        <div className="col-span-2 rounded-2xl border border-neutral-200 p-5">
+          <div className="text-xs uppercase tracking-widest text-neutral-400">Acquisition funnel</div>
+          <Funnel stages={funnel} />
+        </div>
+        <div className="rounded-2xl border border-neutral-200 p-5">
+          <div className="text-xs uppercase tracking-widest text-neutral-400">Channels</div>
+          <div className="mt-3 space-y-3">
+            {channels.map((c, i) => (
+              <div key={i}>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">{c.name}</span>
+                  <span className="text-neutral-500">{c.share_pct}%</span>
+                </div>
+                <div className="mt-1 h-2 rounded-full bg-neutral-100 overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${c.share_pct}%`, background: ORANGE, opacity: 1 - i * 0.12 }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      {/* Flywheel */}
+      <div className="mt-6 rounded-2xl border border-neutral-200 p-5">
+        <div className="text-xs uppercase tracking-widest text-neutral-400 mb-3">Flywheel</div>
+        <svg viewBox="0 0 720 110" className="w-full" aria-hidden>
+          {['New user', 'Activates fast', 'Shares output', 'Brings teammate', 'Expands seats'].map((s, i, arr) => {
+            const x = 60 + i * 150;
+            return (
+              <g key={i}>
+                <rect x={x - 60} y="30" width="120" height="50" rx="12" fill={i === 0 ? ORANGE : '#FAFAFA'} stroke={HAIRLINE} />
+                <text
+                  x={x}
+                  y="60"
+                  textAnchor="middle"
+                  fontSize="13"
+                  fontFamily={FONT}
+                  fontWeight={i === 0 ? 700 : 500}
+                  fill={i === 0 ? '#FFFFFF' : INK}
+                >
+                  {s}
+                </text>
+                {i < arr.length - 1 && (
+                  <path d={`M${x + 60} 55 L${x + 90} 55 M${x + 84} 50 L${x + 90} 55 L${x + 84} 60`} stroke={ORANGE} strokeWidth="2" fill="none" />
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide9Team: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const founders = data.founders?.length
+    ? data.founders
+    : [
+        { name: '[Founder name]', role: 'CEO', pedigree: ['[Prior role]', '[Notable win]'], initials: 'F1' },
+        { name: '[Founder name]', role: 'CTO', pedigree: ['[Prior role]', '[Notable win]'], initials: 'F2' },
+      ];
+  const timeline = data.team_timeline?.length
+    ? data.team_timeline
+    : [
+        { year: '2018', event: '[Built first product]' },
+        { year: '2021', event: '[Shipped at scale]' },
+        { year: '2024', event: '[Started this company]' },
+      ];
+  return (
+    <SlideFrame index={8} total={10} company={data.company}>
+      <div className="text-xs uppercase tracking-widest font-bold" style={{ color: ORANGE }}>Team</div>
+      <h2 className="mt-3" style={{ fontSize: 'clamp(28px, 3vw, 52px)', fontWeight: 800, letterSpacing: -1, lineHeight: 1.1 }}>
+        Founder–market fit is the moat.
+      </h2>
+      <div className="mt-8 grid grid-cols-3 gap-6 flex-1 min-h-0">
+        <div className="col-span-2 grid grid-cols-2 gap-4">
+          {founders.slice(0, 2).map((f, i) => (
+            <div key={i} className="rounded-2xl border border-neutral-200 p-5">
+              <div className="flex items-center gap-4">
+                <div
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-extrabold"
+                  style={{ background: ORANGE }}
+                >
+                  {f.initials || f.name?.slice(0, 2)?.toUpperCase()}
+                </div>
+                <div>
+                  <Editable
+                    as="div"
+                    value={f.name}
+                    path={`founders.${i}.name`}
+                    editable={editable}
+                    onEdit={onEdit}
+                    style={{ fontSize: 18, fontWeight: 700 }}
+                  />
+                  <Editable
+                    value={f.role}
+                    path={`founders.${i}.role`}
+                    editable={editable}
+                    onEdit={onEdit}
+                    style={{ fontSize: 13, color: SUBTLE }}
+                  />
+                </div>
+              </div>
+              <div className="mt-4 space-y-2 text-sm">
+                {(f.pedigree || []).map((p, j) => (
+                  <div key={j} className="flex items-start gap-2">
+                    <span className="mt-1 w-1.5 h-1.5 rounded-full" style={{ background: ORANGE }} />
+                    <Editable
+                      value={p}
+                      path={`founders.${i}.pedigree.${j}`}
+                      editable={editable}
+                      onEdit={onEdit}
+                      style={{ color: '#525252' }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-2xl border border-neutral-200 p-5 flex flex-col">
+          <div className="text-xs uppercase tracking-widest text-neutral-400">Expertise map</div>
+          <svg viewBox="0 0 260 240" className="w-full mt-3 flex-1" aria-hidden>
+            {['Product', 'GTM', 'AI', 'Ops', 'Capital', 'Design'].map((skill, i, arr) => {
+              const a = (i / arr.length) * Math.PI * 2 - Math.PI / 2;
+              const x = 130 + Math.cos(a) * 95;
+              const y = 120 + Math.sin(a) * 95;
+              return (
+                <g key={i}>
+                  <circle cx={x} cy={y} r="6" fill={ORANGE} />
+                  <text x={x} y={y - 12} fontSize="11" fill={INK} textAnchor="middle" fontFamily={FONT} fontWeight={600}>
+                    {skill}
+                  </text>
+                </g>
+              );
+            })}
+            <polygon
+              points="130,40 220,90 220,160 130,200 40,160 40,90"
+              fill={ORANGE}
+              fillOpacity="0.15"
+              stroke={ORANGE}
+              strokeWidth="1.5"
+            />
+          </svg>
+        </div>
+      </div>
+      <div className="mt-6">
+        <div className="text-xs uppercase tracking-widest text-neutral-400 mb-3">Track record</div>
+        <div className="relative">
+          <div className="absolute left-0 right-0 top-3 h-px bg-neutral-200" />
+          <div className="grid grid-cols-3 gap-4">
+            {timeline.slice(0, 3).map((t, i) => (
+              <div key={i} className="relative pt-8 text-center">
+                <span className="absolute left-1/2 -translate-x-1/2 top-1 w-3 h-3 rounded-full" style={{ background: ORANGE }} />
+                <div className="text-xs font-bold" style={{ color: ORANGE }}>{t.year}</div>
+                <Editable
+                  value={t.event}
+                  path={`team_timeline.${i}.event`}
+                  editable={editable}
+                  onEdit={onEdit}
+                  style={{ fontSize: 13, color: '#525252', marginTop: 4 }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide10Vision: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const roadmap = data.roadmap?.length
+    ? data.roadmap
+    : [
+        { quarter: 'Now', goal: '[Live in production]' },
+        { quarter: '+6 mo', goal: '[Reach $X ARR]' },
+        { quarter: '+12 mo', goal: '[Expand to Y]' },
+        { quarter: '+24 mo', goal: '[Defining the category]' },
+      ];
+  const uof = data.use_of_funds?.length
+    ? data.use_of_funds
+    : [
+        { label: 'Engineering', pct: 45 },
+        { label: 'GTM', pct: 30 },
+        { label: 'Ops + Infra', pct: 15 },
+        { label: 'Reserve', pct: 10 },
+      ];
+  return (
+    <SlideFrame index={9} total={10} company={data.company}>
+      <div className="text-xs uppercase tracking-widest font-bold" style={{ color: ORANGE }}>Vision · The Ask</div>
+      <h2 className="mt-3" style={{ fontSize: 'clamp(28px, 3vw, 52px)', fontWeight: 800, letterSpacing: -1, lineHeight: 1.1 }}>
+        Raising{' '}
+        <span style={{ color: ORANGE }}>{fmtUSD(data.ask_amount_usd)}</span>{' '}
+        to build the next category leader.
+      </h2>
+      <Editable
+        value={data.closing_line}
+        path="closing_line"
+        editable={editable}
+        onEdit={onEdit}
+        placeholder="[One-sentence closing — what becomes true if this works.]"
+        style={{ fontSize: 'clamp(15px, 1.3vw, 20px)', color: SUBTLE, marginTop: 12, maxWidth: 1000 }}
+      />
+      <div className="mt-8 grid grid-cols-3 gap-6 flex-1 min-h-0">
+        <div className="col-span-2 rounded-2xl border border-neutral-200 p-5">
+          <div className="text-xs uppercase tracking-widest text-neutral-400">Roadmap</div>
+          <div className="relative mt-6">
+            <div className="absolute left-0 right-0 top-3 h-px bg-neutral-200" />
+            <div className="grid grid-cols-4 gap-3">
+              {roadmap.slice(0, 4).map((r, i) => (
+                <div key={i} className="relative pt-8">
+                  <span className="absolute left-1/2 -translate-x-1/2 top-1 w-3 h-3 rounded-full" style={{ background: ORANGE }} />
+                  <div className="text-xs text-center font-bold" style={{ color: ORANGE }}>{r.quarter}</div>
+                  <Editable
+                    value={r.goal}
+                    path={`roadmap.${i}.goal`}
+                    editable={editable}
+                    onEdit={onEdit}
+                    style={{ fontSize: 13, textAlign: 'center', color: '#525252', marginTop: 4 }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mt-6 grid grid-cols-3 gap-4">
+            <div className="rounded-xl p-4" style={{ background: ORANGE, color: '#FFF' }}>
+              <div className="text-xs uppercase tracking-widest opacity-80">Raising</div>
+              <div className="text-2xl font-extrabold mt-1">{fmtUSD(data.ask_amount_usd)}</div>
+            </div>
+            <div className="rounded-xl p-4 border border-neutral-200">
+              <div className="text-xs uppercase tracking-widest text-neutral-400">Runway</div>
+              <div className="text-2xl font-extrabold mt-1">{data.runway_months ?? '—'} mo</div>
+            </div>
+            <div className="rounded-xl p-4 border border-neutral-200">
+              <div className="text-xs uppercase tracking-widest text-neutral-400">Contact</div>
+              <Editable
+                value={data.contact}
+                path="contact"
+                editable={editable}
+                onEdit={onEdit}
+                placeholder="founders@company.com"
+                style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-neutral-200 p-5 flex flex-col">
+          <div className="text-xs uppercase tracking-widest text-neutral-400 mb-3">Use of funds</div>
+          <Donut data={uof} />
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Deck shell with prev/next nav
+// ─────────────────────────────────────────────────────────────────
+
+const SLIDES: React.FC<DeckProps>[] = [
+  Slide1Cover,
+  Slide2Problem,
+  Slide3Solution,
+  Slide4Product,
+  Slide5Market,
+  Slide6BusinessModel,
+  Slide7Traction,
+  Slide8GTM,
+  Slide9Team,
+  Slide10Vision,
+];
+
+export const YCDeckApp: React.FC<{
+  initialData?: DeckData;
+  editable?: boolean;
+}> = ({ initialData = SAMPLE_DATA, editable = true }) => {
+  const [index, setIndex] = useState(0);
+  const [data, setData] = useState<DeckData>(initialData);
+
+  const next = useCallback(() => setIndex((i) => Math.min(i + 1, SLIDES.length - 1)), []);
+  const prev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') next();
+      if (e.key === 'ArrowLeft') prev();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [next, prev]);
+
+  const onEdit = useCallback((path: string, value: string) => {
+    setData((prev) => {
+      const next = structuredClone(prev) as any;
+      const parts = path.split('.');
+      let cur = next;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const k = parts[i];
+        if (cur[k] == null) cur[k] = isNaN(Number(parts[i + 1])) ? {} : [];
+        cur = cur[k];
+      }
+      cur[parts[parts.length - 1]] = value;
+      return next;
+    });
+  }, []);
+
+  const Slide = SLIDES[index];
+
+  return (
+    <div className="min-h-screen w-full bg-neutral-50 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-10">
+      <div className="w-full max-w-[1400px] shadow-2xl rounded-3xl overflow-hidden border border-neutral-200 bg-white transition-all duration-300">
+        <Slide data={data} editable={editable} onEdit={onEdit} />
+      </div>
+
+      {/* Nav */}
+      <div className="w-full max-w-[1400px] mt-4 flex items-center justify-between text-neutral-700">
+        <button
+          onClick={prev}
+          disabled={index === 0}
+          className="px-4 py-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-2 text-sm font-medium"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M15 18 L9 12 L15 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Previous
+        </button>
+
+        <div className="flex items-center gap-2">
+          {SLIDES.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setIndex(i)}
+              aria-label={`Slide ${i + 1}`}
+              className="transition-all"
+              style={{
+                width: i === index ? 32 : 8,
+                height: 8,
+                borderRadius: 999,
+                background: i === index ? ORANGE : '#D4D4D4',
+              }}
+            />
+          ))}
+        </div>
+
+        <button
+          onClick={next}
+          disabled={index === SLIDES.length - 1}
+          className="px-4 py-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-2 text-sm font-medium"
+        >
+          Next
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M9 6 L15 12 L9 18" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Sample data — used when the deck is rendered without
+// platform-row injection (e.g. as a Pitch Deck template preview).
+// On Axal: replace this object with the merged shape
+// { ...projects, ...financial_models, ...metrics_snapshots, ...rounds }
+// produced server-side by cloudflare-worker/src/routes/decks.ts
+// heuristicSlides().
+// ─────────────────────────────────────────────────────────────────
+
+export const SAMPLE_DATA: DeckData = {
+  company: '[Company]',
+  vision: 'The default way [audience] does [job to be done].',
+  tagline: '[Category] · [Audience] · [Disruption]',
+  domain: 'company.com',
+  problems: [
+    { title: 'Fragmented tooling', body: 'Teams stitch 6+ tools to ship one workflow.', metric: '↑ 40% time lost' },
+    { title: 'No source of truth', body: 'Data lives in inboxes, spreadsheets, screenshots.', metric: '↓ trust' },
+    { title: 'Manual reconciliation', body: 'Every cycle ends in a fire drill.', metric: '↑ 2x errors' },
+  ],
+  solution_summary:
+    'A single workflow that replaces the patchwork — connecting [system A], [system B], and [system C] under one source of truth, with audit trail and instant rollback.',
+  before: ['Open 6 tools', 'Manually copy data', 'Reconcile by hand', 'File late'],
+  after: ['One workflow', 'Auto-synced', 'Full audit trail', 'Done in 30s'],
+  product_pillars: [
+    { title: 'One workflow', body: 'Collapse the chain of steps into one action.' },
+    { title: 'Verified data', body: 'Source-of-truth integrations with audit.' },
+    { title: 'Instant rollback', body: 'Mistakes are reversible by design.' },
+  ],
+  tam_usd: 42_000_000_000,
+  sam_usd: 9_400_000_000,
+  som_usd: 1_200_000_000,
+  market_cagr_pct: 28,
+  market_trends: [
+    'Regulation forcing audit-ready workflows.',
+    'AI shifts unit economics in our favor.',
+    'Adoption curve crossing into mainstream.',
+  ],
+  pricing_tiers: [
+    { name: 'Starter', price: '$49 / mo', bullets: ['Up to 5 seats', 'Core workflow', 'Email support'] },
+    { name: 'Growth', price: '$199 / mo', bullets: ['Up to 25 seats', 'Integrations', 'Audit trail'] },
+    { name: 'Enterprise', price: 'Contact', bullets: ['Unlimited seats', 'SSO + SCIM', 'SLA + DPA'] },
+  ],
+  mrr_usd: 34_000,
+  paying_customers: 64,
+  growth_mom_pct: 41,
+  mrr_series: [
+    { month: 'Jan', v: 4 }, { month: 'Feb', v: 7 }, { month: 'Mar', v: 11 },
+    { month: 'Apr', v: 16 }, { month: 'May', v: 24 }, { month: 'Jun', v: 34 },
+  ],
+  user_series: [
+    { month: 'Jan', v: 120 }, { month: 'Feb', v: 240 }, { month: 'Mar', v: 410 },
+    { month: 'Apr', v: 680 }, { month: 'May', v: 1050 }, { month: 'Jun', v: 1640 },
+  ],
+  milestones: [
+    { date: 'Q1', label: 'Closed first 10 design partners' },
+    { date: 'Q2', label: 'Crossed $10K MRR' },
+    { date: 'Q3', label: 'Shipped enterprise tier' },
+    { date: 'Q4', label: 'First six-figure logo' },
+  ],
+  funnel: [
+    { stage: 'Visitors', v: 12000 },
+    { stage: 'Signups', v: 2100 },
+    { stage: 'Activated', v: 860 },
+    { stage: 'Paying', v: 220 },
+    { stage: 'Expanded', v: 78 },
+  ],
+  channels: [
+    { name: 'Inbound / SEO', share_pct: 35 },
+    { name: 'Founder network', share_pct: 25 },
+    { name: 'Partnerships', share_pct: 20 },
+    { name: 'Outbound', share_pct: 12 },
+    { name: 'Community', share_pct: 8 },
+  ],
+  founders: [
+    { name: 'Founder One', role: 'CEO · Co-founder', pedigree: ['Built X at Stripe', 'Shipped product to 10M+ users'], initials: 'F1' },
+    { name: 'Founder Two', role: 'CTO · Co-founder', pedigree: ['Led infra at Linear', 'Open-source: 12K stars'], initials: 'F2' },
+  ],
+  team_timeline: [
+    { year: '2018', event: 'Met at first company' },
+    { year: '2022', event: 'Shipped category-defining product' },
+    { year: '2025', event: 'Founded this company' },
+  ],
+  ask_amount_usd: 3_500_000,
+  runway_months: 24,
+  roadmap: [
+    { quarter: 'Now', goal: 'Live in production · 60+ paying logos' },
+    { quarter: '+6 mo', goal: 'Reach $1M ARR' },
+    { quarter: '+12 mo', goal: 'Expand to adjacent workflow' },
+    { quarter: '+24 mo', goal: 'Define the category' },
+  ],
+  use_of_funds: [
+    { label: 'Engineering', pct: 45 },
+    { label: 'GTM', pct: 30 },
+    { label: 'Ops + Infra', pct: 15 },
+    { label: 'Reserve', pct: 10 },
+  ],
+  closing_line:
+    'If we win, the next generation of teams stop wrestling tools and start shipping outcomes.',
+  contact: 'founders@company.com',
+};
+
+export default YCDeckApp;
+```
+
+---
+
+### Mount it in Axal
+
+Two integration points:
+
+**1. Standalone preview (drop in as a new route in `App.jsx`):**
+
+```tsx
+import { YCDeckApp } from './decks/templates/yc_seed_app';
+
+<Route path="/decks/preview/yc-seed" element={<YCDeckApp editable />} />
+```
+
+**2. Inside the existing Pitch Deck Builder (use platform data):**
+
+```tsx
+import { YCDeckApp } from './decks/templates/yc_seed_app';
+
+// Server-side: cloudflare-worker/src/routes/decks.ts already pulls
+// projects + financial_models + metrics_snapshots + rounds via
+// heuristicSlides(). Merge those rows into one object:
+const platformData = {
+  company: project.name,
+  vision: project.tagline || project.one_liner,
+  tagline: `${project.sector} · ${project.icp_segment}`,
+  domain: project.landing_url?.replace(/^https?:\/\//, ''),
+  problems: project.problems_json
+    ? JSON.parse(project.problems_json)
+    : [{ title: project.problem_statement, body: '', metric: '' }],
+  solution_summary: project.solution,
+  tam_usd: project.tam_usd,
+  sam_usd: project.sam_usd,
+  som_usd: project.som_usd,
+  market_cagr_pct: project.market_cagr_pct,
+  mrr_usd: financial_models.mrr_usd,
+  paying_customers: financial_models.paying_customers,
+  growth_mom_pct: financial_models.mom_growth_pct,
+  mrr_series: metrics_series.mrr_monthly,
+  user_series: metrics_series.dau_monthly,
+  ask_amount_usd: round.target_amount_usd,
+  runway_months: financial_models.runway_months,
+  use_of_funds: round.use_of_funds_json
+    ? JSON.parse(round.use_of_funds_json)
+    : undefined,
+  // ...etc, see DeckData type for the full field list
+};
+
+<YCDeckApp initialData={platformData} editable />
+```
+
+### Fields the deck reads (so you know which Axal columns matter)
+
+| Slide | Reads from |
+|---|---|
+| 1 Cover | `projects.name`, `projects.one_liner` (vision), `projects.tagline`, `projects.landing_url` |
+| 2 Problem | `projects.problems_json` (array) or fallback to `projects.problem_statement` |
+| 3 Solution | `projects.solution`, `projects.before_after_json` |
+| 4 Product | `projects.product_pillars_json` |
+| 5 Market | `projects.tam_usd`, `sam_usd`, `som_usd`, `market_cagr_pct`, `market_trends_json` |
+| 6 Business Model | `projects.pricing_tiers_json` |
+| 7 Traction | `financial_models.{mrr_usd, paying_customers, mom_growth_pct}`, `metrics_snapshots` time series |
+| 8 GTM | `projects.gtm_funnel_json`, `projects.gtm_channels_json` |
+| 9 Team | `founders` rows joined to `projects.founder_id`, `projects.team_timeline_json` |
+| 10 Vision + Ask | `rounds.{target_amount_usd, runway_months, use_of_funds_json}`, `projects.roadmap_json`, `projects.closing_line` |
+
+Several of these JSON columns don't exist yet (problems_json, product_pillars_json, gtm_funnel_json, etc.) — those are exactly the autofill fields covered in earlier Prompt MD (`DECK_AUTOFILL_AUDIT.md` migration). Once that migration ships, the deck will autofill end-to-end from the project's data on Axal.
+
+### Features in the build
+
+- **All 10 slides** as separate React components.
+- **Prev / Next nav** with keyboard arrows (← →) and dot pagination.
+- **Inline editing** — every text element is `contentEditable`; edits flow through `onEdit(path, value)` and update local state.
+- **Responsive** 16:9 frame; scales fluidly down to phone width.
+- **SVG-only graphics** — logo, hero orb, line charts, funnel, donut, market circles, flywheel, expertise radar, product wireframe.
+- **YC palette** — white, black, `#FF6600`, subtle grays.
+- **Zero external assets** — no images, no fonts beyond system stack.
+- **Production-quality** — typed, structured, ready for Cloudflare Browser Rendering PDF export.
+
+Want me to generate the matching code for one of the other 11 templates (Sequoia Classic, Series A Growth, etc.) in the same single-file investor-grade format?
