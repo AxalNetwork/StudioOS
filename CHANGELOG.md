@@ -1,6 +1,56 @@
 # Changelog
 
 
+## Apex `axal.vc/<app-route>` now serves the SPA (Phase 1)
+
+Reverses the earlier "Worker never on apex" rule (see
+`attached_assets/Pasted-Hard-constraint-axal-vc-apex-is-served-by-GitHub-Pages-_*.txt`).
+The app now serves from both `app.axal.vc/<path>` and `axal.vc/<path>`,
+while `axal.vc/` and Jekyll-owned paths stay on GitHub Pages.
+
+- **`wrangler.toml`** — added 11 path-scoped `[[env.production.routes]]`
+  on the `axal.vc` zone: `/api/*`, `/app`, `/app/*`, `/dashboard`,
+  `/dashboard/*`, `/admin`, `/admin/*`, `/register`, `/register/*`,
+  `/login`, `/login/*`. Conservative starter set — each path uses both
+  an exact + `/*` variant so `/registered-foo` (hypothetical Jekyll
+  page) is NOT hijacked. Apex DNS was already a proxied CNAME →
+  `axalnetwork.github.io`, so the routes activated immediately on
+  deploy. `/api/*` MUST be in this list because the SPA calls `/api`
+  relative — without it, fetches on `axal.vc/dashboard` would hit
+  Jekyll and 404.
+- **`cloudflare-worker/src/auth.ts`** — `setAuthCookies` /
+  `clearAuthCookies` now emit `Domain=.axal.vc` when
+  `ENVIRONMENT=production` so a session set by
+  `app.axal.vc/api/auth/*` is also valid on
+  `axal.vc/<app-route>`. `clearAuthCookies` double-clears (with and
+  without `Domain`) to clean up legacy host-only cookies on logout.
+  Dev/preview deliberately omits `Domain` so localhost / *.workers.dev
+  cookies still work.
+- **CORS allow-list + CSP `connect-src`** — already included both
+  `https://axal.vc` and `https://app.axal.vc` from an earlier
+  migration pass, no change needed.
+- **Token permission needed** — first deploy failed with `Workers
+  Routes: Edit` missing on the `axal.vc` zone for
+  `CLOUDFLARE_API_TOKEN`. User granted the permission; redeploy
+  registered all 11 routes (version `71f5f68c-dd24-403c-8bb5-7996517f4ce3`).
+- **Smoke verified post-deploy**: `axal.vc/` → Jekyll 200,
+  `axal.vc/dashboard` → SPA HTML 200, `axal.vc/api/health` → Worker
+  JSON 200, `app.axal.vc/*` unchanged.
+
+**Still to do (Phase 2, deferred to a follow-up):**
+- Flip `APP_URL` / `PUBLIC_BASE_URL` in `wrangler.toml` from
+  `https://app.axal.vc` → `https://axal.vc` (affects referral URLs,
+  email magic-links, verification links, OAuth state callbacks
+  rendered into emails).
+- Add 301 redirects in the Worker on
+  `app.axal.vc/{dashboard,admin,register,login,app}*` →
+  `axal.vc<path>` so legacy bookmarks / outbound links survive.
+- Audit email templates for hardcoded `app.axal.vc` strings.
+- OAuth callbacks (`app.axal.vc/api/auth/google/callback`, etc) stay
+  on `app.axal.vc` — Google Cloud Console authorized redirect URI is
+  registered there, do NOT change.
+
+
 ## Calendar connect `secret_missing` bucket pinpoints which env var is at fault
 
 Task #69 surfaced a real cause (`encrypt`) instead of the bare

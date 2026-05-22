@@ -28,6 +28,7 @@ API-first Venture Studio OS — manages startup lifecycle from intake to portfol
 
 ## Architecture invariants
 - Prod = Worker on D1; dev = FastAPI on SQLite. Never deploy FastAPI.
+- **Apex routing** — Worker serves the SPA on both `app.axal.vc/*` (custom domain) AND `axal.vc/{api,app,dashboard,admin,register,login}{,/*}` (path-scoped routes on the proxied apex CNAME → `axalnetwork.github.io`). Jekyll keeps `axal.vc/` and any other unrouted paths. Adding a new top-level app route means adding TWO patterns to `[[env.production.routes]]` in `wrangler.toml` (exact + `/*`) so Jekyll pages with similar prefixes (`/registered-*`) aren't hijacked. `/api/*` MUST stay routed on the apex or SPA fetches from `axal.vc/dashboard` 404 on Jekyll. OAuth redirect URIs stay on `app.axal.vc/api/auth/*` (Google Cloud Console registration).
 - API drift prevented by `npm run test:drift`.
 - Per-bucket rate limiting + strict CSP headers.
 - Theme/density via CSS-vars in `frontend/src/index.css` (`--app-bg/--app-surface/--app-text/--app-input-*`). Tailwind 4 `@custom-variant dark`. `SettingsContext` toggles both `data-theme` and `.dark` on `<html>`. New pages need `dark:` variants on hardcoded `bg-white`/`text-gray-*`.
