@@ -1,6 +1,48 @@
 # Changelog
 
 
+## Task #5 — Post-login redirect to axal.vc + onboarding-first routing
+
+Completed the Phase 2 canonical-host flip and wired the post-login
+onboarding gate for new users.
+
+**Canonical-host flip (`wrangler.toml`)**
+- `APP_URL` and `PUBLIC_BASE_URL` flipped to `https://axal.vc` in both
+  `[vars]` and `[env.production.vars]`.
+- Added `OAUTH_CALLBACK_BASE_URL = "https://app.axal.vc"` so all
+  OAuth `redirect_uri` registrations (Calendar, LinkedIn, HubSpot,
+  Salesforce, DocuSign, Carta, Slack, Stripe, Calendly) remain on
+  `app.axal.vc` until provider dashboards are updated.
+
+**`cloudflare-worker/src/util/url.ts`**
+- New `callbackBase(env)` helper: `OAUTH_CALLBACK_BASE_URL → APP_URL →
+  'https://app.axal.vc'`. All integration providers and LinkedIn/
+  calendar OAuth redirect URIs now route through this helper instead of
+  reading `APP_URL` directly.
+
+**Worker routes / services updated to use `callbackBase()`**
+- `integrations/providers/carta.ts`, `stripe.ts`, `slack.ts`,
+  `salesforce.ts`, `hubspot.ts`, `docusign.ts`, `calendly.ts`
+- `routes/linkedin.ts` (both `redirectUri()` and `redirectBack()`)
+- `services/calendar.ts` — `appBase()` now checks
+  `OAUTH_CALLBACK_BASE_URL` first
+
+**`cloudflare-worker/src/routes/auth.ts`**
+- `sendVerification()` now builds the verification URL from
+  `PUBLIC_BASE_URL || APP_URL` instead of bare `APP_URL`, so
+  email verification links point at `axal.vc`.
+
+**Frontend (already complete — no changes needed)**
+- `LoginPage.jsx` already uses relative `/dashboard` post-login.
+- `RegisterPage.jsx` already uses relative `/onboarding/chat` for new
+  signups.
+- `RequireAuth` in `App.jsx` already has the full onboarding-chat gate
+  (flow='chat', completed_at=NULL → redirect to /onboarding/chat,
+  bypassed for admin/impersonation/limited accounts).
+
+**Deployed**: Worker Version `251076e7-5c73-4b01-8b42-1eb0ab301769`.
+
+
 ## Admin Integration Keys — 7 new providers
 
 Added LinkedIn, Calendly, Stripe, Carta, Crunchbase, Affinity, and
