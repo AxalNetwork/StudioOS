@@ -1,0 +1,115 @@
+Objective
+  Refresh the existing front-page sections at axal.vc (Jekyll site).
+  Do NOT add new sections, do NOT change layout / typography /
+  spacing — edit only the copy + the labels and counts.
+
+Edit target
+  The Jekyll marketing repo at axal.vc. Find the home page (likely
+  index.md / _includes/sections/*.html / data/sections.yml). Whatever
+  the data driver is, update the strings below in place.
+
+Section-by-section updates
+
+  1. "Five layers, one operating system."
+     → Is it still five? The actual layers shipped on app.axal.vc:
+        Trust, Build, Validate & Grow, Capital, Legal, Network.
+        That's SIX. Update label to:
+        "Six layers, one operating system."
+     Update each layer card copy to match what's actually on the
+     platform:
+       Trust              — KYC, KYB, accreditation, NDAs, sanctions
+       Build              — Projects, Pipeline, Studio Ops, Brand,
+                            Pitch Deck, Roadmap, Customer Discovery
+       Validate & Grow    — Scoring, Mentors, Office Hours, Co-founder
+                            Match, Market Intelligence
+       Capital            — Capital, Investors, Cap Table, Funds,
+                            Reserves, Waterfall, Liquidity
+       Legal              — Incorporation, 83(b), Cofounder Agreement,
+                            Compliance, E-Sign
+       Network            — Marketplace, Partners, Co-marketing,
+                            Public Directory, Refer & Earn
+
+  2. Spin-Out Lab section
+     Keep the existing slot. Replace copy with:
+       Title: "Spin-Out Lab — 30-day venture sprint"
+       Subtitle: "For founders with an idea and no incorporated
+                   company yet. Four weeks. Four milestones. Ends with
+                   a Delaware C-Corp (or alt), cap table, 83(b),
+                   pitch deck, and venture-readiness score."
+       Bullets (week strip):
+         Week 1 — Idea & Customer
+         Week 2 — Solution & Roadmap
+         Week 3 — Validate & Team
+         Week 4 — Incorporate & Capital
+     Add the secondary line:
+       "What founders get: Personal Advisor, mentor track, investor
+        exposure, services-for-equity / -fee partners, lifetime alumni
+        community."
+     CTA: "See the full Lab →"  /spinout-lab
+
+  3. "Three lanes into the network"
+     → Mentors and Coaches were added, and operating partners now have
+        four sub-types. Update label to:
+        "Five lanes into the network"
+     Update the cards:
+       Partners  — Source thesis-aligned companies; monetise services;
+                    co-invest. We handle KYB, conflicts, and contractual
+                    scaffolding.
+       Capital    — Disciplined, evidence-backed deal flow. Founder
+                    numbers verified via Stripe + Plaid. Sanctions-
+                    screened parties.
+       Founders   — 30-day Spin-Out Lab to incorporate. Full workflow
+                    for existing companies — pitch deck to cap table to
+                    fundraise.
+       Mentors    — Operators sharing time. Office Hours, mentor
+                    sessions, advisor grants via the FAST template.
+       Coaches    — Executive, performance, and wellbeing coaches.
+                    Founders match by category + rating + availability.
+
+  4. "How the network works"
+     Replace stub copy with three short steps:
+       1. Join the lane that fits — founder, investor, partner,
+          mentor, coach.
+       2. The platform verifies you — KYC/KYB/accreditation/NDAs only
+          where the activity requires it.
+       3. Introductions and deal data unlock progressively, gated by
+          signed pairwise NDAs and the platform's evidence-backed
+          scoring.
+
+  5. "The Platform Underneath"
+     Update the credibility section to current truth (no fluff):
+       - Cloudflare Workers + D1 + R2 + Durable Objects + Vectorize
+       - One AI model in production (Workers AI — Llama 3.3 70B FP8)
+         routed through a dedicated AI Gateway slug
+       - 7-year encrypted audit retention to R2
+       - GitHub Enterprise, CodeQL, Dependabot, gitleaks, SAML SSO
+       - Cloudflare Access on admin paths
+       - Column-level AES-GCM encryption on PII
+
+  6. Investment-thesis CTA (just above the footer)
+     Use this exact copy (replaces any current text in the slot):
+
+       "Building in AI, Blockchain, Quantum, Digital Infrastructure,
+        or Frontier Software?
+
+        Whether you're a partner sourcing the next thesis-aligned
+        company, an LP looking for disciplined deal flow, or a
+        founder going global from day one — start with a 30-second
+        intake."
+
+       Primary CTA: "Get Started →" → https://app.axal.vc/signup
+       Secondary CTA: "Talk to us →" → /contact
+
+Constraints
+  - No new sections; no new components.
+  - No styling changes.
+  - All anchor links resolve.
+  - Mobile layout unchanged (≤ 360px viewport).
+
+Acceptance
+  - Each section above shows the new copy on a fresh page load.
+  - "Six layers" + "Five lanes" counts match the cards rendered.
+  - The investment-thesis CTA appears above the footer with the new
+    copy and routes correctly.
+  - Sitemap regenerated (Jekyll _site rebuild).
+  - Lighthouse score within 2 points of the previous build.
