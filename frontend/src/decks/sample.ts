@@ -1,5 +1,8 @@
 import type { DeckData } from './DeckBase';
 
+// Base preview sample used by the existing 11 templates. Keeps the
+// historical *string* shapes for `milestones`, `roadmap`, and
+// `use_of_funds` because those templates render them as plain text.
 export const SAMPLE_PREVIEW_DATA: DeckData = {
   company: 'Demo Co.',
   tagline: 'The fastest way to ship venture-grade decks.',
@@ -25,11 +28,17 @@ export const SAMPLE_PREVIEW_DATA: DeckData = {
   moat: 'Proprietary scoring + integrated cap table + LP ledger.',
   milestones: 'Series A in 18 months at $5M ARR.',
   roadmap: 'Live → $1M ARR → adjacent workflow → category leader.',
+};
 
-  // ── YC Seed redesign additive fields ────────────────────────
-  // Renamed where they would clobber a same-named string field used
-  // by other templates: milestones→milestone_events, roadmap→
-  // roadmap_phases, use_of_funds→use_of_funds_breakdown.
+// Per-template overlay. The YC Seed redesign reads the attachment's
+// richer DeckData shape — arrays under the same keys (`milestones`,
+// `roadmap`, `use_of_funds`) plus brand-new fields (problems[],
+// product_pillars[], pricing_tiers[], etc.). Splicing those arrays
+// into SAMPLE_PREVIEW_DATA directly would crash the other 11
+// templates' previews (they pass the array straight into <Editable>
+// which expects a string). The overlay is only applied when rendering
+// the YC Seed preview.
+const YC_SEED_OVERLAY: DeckData = {
   vision: 'The default way venture studios run their entire portfolio.',
   domain: 'demoCo.example',
   problems: [
@@ -70,7 +79,7 @@ export const SAMPLE_PREVIEW_DATA: DeckData = {
     { month: 'Jan', v: 140 }, { month: 'Feb', v: 260 }, { month: 'Mar', v: 430 },
     { month: 'Apr', v: 720 }, { month: 'May', v: 1100 }, { month: 'Jun', v: 1640 },
   ],
-  milestone_events: [
+  milestones: [
     { date: 'Q1', label: 'Closed first 10 design partners' },
     { date: 'Q2', label: 'Crossed $10K MRR' },
     { date: 'Q3', label: 'Shipped enterprise tier' },
@@ -101,13 +110,13 @@ export const SAMPLE_PREVIEW_DATA: DeckData = {
   ],
   ask_amount_usd: 2_500_000,
   runway_months: 24,
-  roadmap_phases: [
+  roadmap: [
     { quarter: 'Now', goal: 'Live in production · 312 paying logos' },
     { quarter: '+6 mo', goal: 'Reach $1M ARR' },
     { quarter: '+12 mo', goal: 'Expand to adjacent workflow' },
     { quarter: '+24 mo', goal: 'Define the category' },
   ],
-  use_of_funds_breakdown: [
+  use_of_funds: [
     { label: 'Engineering', pct: 45 },
     { label: 'GTM', pct: 30 },
     { label: 'Ops + Infra', pct: 15 },
@@ -116,3 +125,14 @@ export const SAMPLE_PREVIEW_DATA: DeckData = {
   closing_line:
     'If we win, the next generation of venture studios stop wrestling tools and start shipping outcomes.',
 };
+
+// Returns the sample preview data for a given template key. Most
+// templates get the base SAMPLE_PREVIEW_DATA verbatim; the YC Seed
+// redesign gets a richer overlay that replaces a handful of string
+// fields with the array shapes the new layout expects.
+export function previewDataFor(templateKey: string): DeckData {
+  if (templateKey === 'yc_seed') {
+    return { ...SAMPLE_PREVIEW_DATA, ...YC_SEED_OVERLAY };
+  }
+  return SAMPLE_PREVIEW_DATA;
+}

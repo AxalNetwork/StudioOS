@@ -10,9 +10,24 @@ import { Slide16x9, Editable, DeckProps, v } from '../DeckBase';
 // because they're self-contained.
 // NOTE: Field-name deviations from the attachment to avoid clobbering
 // other templates that read string keys with the same name:
-//   milestones  → milestone_events  (kawasaki reads milestones:string)
-//   roadmap     → roadmap_phases    (multiple templates read roadmap:string)
-//   use_of_funds → use_of_funds_breakdown (several templates read it:string)
+// Field paths follow the attachment spec exactly. To avoid colliding
+// with same-named string fields in the other 11 templates (kawasaki
+// reads `milestones`, sequoia et al read `roadmap` / `use_of_funds`
+// as plain strings), preview sample data is supplied per-template via
+// `previewDataFor()` in ../sample.ts — `Thumbnail.tsx` resolves which
+// shape to inject for each template's picker preview.
+//
+// TASK #2 (Deck autofill) follow-up note — the worker's
+// services/decks/methods.ts does NOT yet populate any of the new
+// rich arrays this template reads:
+//   problems[], product_pillars[], pricing_tiers[], market_trends[],
+//   funnel[], channels[], founders[], team_timeline[], mrr_series[],
+//   user_series[], milestones[] (array form), roadmap[] (array form),
+//   use_of_funds[] (array form), plus scalars vision, domain,
+//   solution_summary, mrr_usd, growth_mom_pct, ask_amount_usd,
+//   runway_months, closing_line, market_cagr_pct, tam_usd, sam_usd,
+//   som_usd, before[], after[]. Until autofill ships, the template
+//   gracefully falls back to refined placeholders.
 // ─────────────────────────────────────────────────────────────────
 
 const ORANGE = '#FF6600';
@@ -246,7 +261,7 @@ export const Deck_yc_seed: React.FC<DeckProps> = ({ data, editable, onEdit }) =>
     { month: 'Jan', v: 120 }, { month: 'Feb', v: 240 }, { month: 'Mar', v: 410 },
     { month: 'Apr', v: 680 }, { month: 'May', v: 1050 }, { month: 'Jun', v: 1640 },
   ];
-  const milestoneEvents: { date: string; label: string }[] = data?.milestone_events?.length ? data.milestone_events : [
+  const milestoneEvents: { date: string; label: string }[] = (Array.isArray(data?.milestones) && data.milestones.length) ? data.milestones : [
     { date: 'Q1', label: '[Milestone]' },
     { date: 'Q2', label: '[Milestone]' },
     { date: 'Q3', label: '[Milestone]' },
@@ -269,13 +284,13 @@ export const Deck_yc_seed: React.FC<DeckProps> = ({ data, editable, onEdit }) =>
     { year: '2021', event: '[Shipped at scale]' },
     { year: '2024', event: '[Started this company]' },
   ];
-  const roadmap: { quarter: string; goal: string }[] = data?.roadmap_phases?.length ? data.roadmap_phases : [
+  const roadmap: { quarter: string; goal: string }[] = (Array.isArray(data?.roadmap) && data.roadmap.length) ? data.roadmap : [
     { quarter: 'Now', goal: '[Live in production]' },
     { quarter: '+6 mo', goal: '[Reach $X ARR]' },
     { quarter: '+12 mo', goal: '[Expand to Y]' },
     { quarter: '+24 mo', goal: '[Define the category]' },
   ];
-  const uof: { label: string; pct: number }[] = data?.use_of_funds_breakdown?.length ? data.use_of_funds_breakdown : [
+  const uof: { label: string; pct: number }[] = (Array.isArray(data?.use_of_funds) && data.use_of_funds.length) ? data.use_of_funds : [
     { label: 'Engineering', pct: 45 }, { label: 'GTM', pct: 30 }, { label: 'Ops + Infra', pct: 15 }, { label: 'Reserve', pct: 10 },
   ];
 
@@ -546,7 +561,7 @@ export const Deck_yc_seed: React.FC<DeckProps> = ({ data, editable, onEdit }) =>
               <div key={i} style={{ position: 'relative', paddingTop: 32 }}>
                 <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: 4, width: 12, height: 12, borderRadius: 999, background: ORANGE }} />
                 <div style={{ fontSize: 12, textAlign: 'center', fontWeight: 700, color: ORANGE }}>{m.date}</div>
-                <Editable value={m.label} path={`milestone_events.${i}.label`} editable={editable} onEdit={onEdit}
+                <Editable value={m.label} path={`milestones.${i}.label`} editable={editable} onEdit={onEdit}
                   style={{ fontSize: 13, textAlign: 'center', color: '#525252', marginTop: 4 }} />
               </div>
             ))}
@@ -688,7 +703,7 @@ export const Deck_yc_seed: React.FC<DeckProps> = ({ data, editable, onEdit }) =>
                 <div key={i} style={{ position: 'relative', paddingTop: 32 }}>
                   <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: 4, width: 12, height: 12, borderRadius: 999, background: ORANGE }} />
                   <div style={{ fontSize: 12, textAlign: 'center', fontWeight: 700, color: ORANGE }}>{r.quarter}</div>
-                  <Editable value={r.goal} path={`roadmap_phases.${i}.goal`} editable={editable} onEdit={onEdit}
+                  <Editable value={r.goal} path={`roadmap.${i}.goal`} editable={editable} onEdit={onEdit}
                     style={{ fontSize: 13, textAlign: 'center', color: '#525252', marginTop: 4 }} />
                 </div>
               ))}

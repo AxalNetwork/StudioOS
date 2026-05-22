@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { TemplateMeta } from './templates';
-import { SAMPLE_PREVIEW_DATA } from './sample';
+import { previewDataFor } from './sample';
 
 const INNER_W = 1920;
 const INNER_H = 1080;
@@ -105,7 +105,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ template }) => {
             left: 0,
           }}
         >
-          <Comp data={SAMPLE_PREVIEW_DATA} editable={false} />
+          <Comp data={previewDataFor(template.key)} editable={false} />
         </div>
       </div>
     </ThumbnailBoundary>
@@ -215,7 +215,7 @@ export const PreviewStage: React.FC<PreviewStageProps> = ({
                 left: 0,
               }}
             >
-              <Comp data={SAMPLE_PREVIEW_DATA} editable={false} />
+              <Comp data={previewDataFor(template.key)} editable={false} />
             </div>
           </div>
         </div>
