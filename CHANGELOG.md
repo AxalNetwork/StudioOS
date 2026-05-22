@@ -1,6 +1,72 @@
 # Changelog
 
 
+## Admin Integration Keys — 7 new providers
+
+Added LinkedIn, Calendly, Stripe, Carta, Crunchbase, Affinity, and
+Telegram to the Admin Console → Integration Keys panel so an admin
+can rotate / test / remove their OAuth or API credentials from the UI
+without redeploying the worker.
+
+- **`cloudflare-worker/src/services/providerOauthKeys.ts`** —
+  `ManagedProviderKey` union + `MANAGED_PROVIDERS` array + `PROVIDER_ENV_VARS`
+  map extended with the 7 new providers. OAuth providers (linkedin,
+  calendly, stripe, carta) use the natural `CLIENT_ID`/`CLIENT_SECRET`
+  pair. API-key providers (crunchbase, affinity, telegram) reuse the
+  same two-field schema: the `id` slot holds a public account label
+  (`CRUNCHBASE_USER_KEY_ID` / `AFFINITY_TEAM_DOMAIN` /
+  `TELEGRAM_BOT_USERNAME`) and the `secret` slot holds the actual
+  token (`CRUNCHBASE_API_KEY` / `AFFINITY_API_KEY` /
+  `TELEGRAM_BOT_TOKEN`). Env-var precedence over DB still applies.
+- **`cloudflare-worker/src/services/providerOauthTest.ts`** — per-provider
+  dry-run probes added so the panel's "Test" button works for each.
+  OAuth providers use the same invalid-grant probe as Slack/HubSpot.
+  Stripe probes `GET /v1/account` with the secret key. Crunchbase uses
+  a known org GET with `user_key`. Affinity uses `GET /auth/whoami`
+  with HTTP Basic. Telegram uses `GET /bot<token>/getMe`. The exhaustive
+  `switch` on `ManagedProviderKey` ensures the type system flags any
+  future provider that forgets a probe.
+- **`frontend/src/pages/AdminPage.jsx`** — `PROVIDER_LABELS`,
+  `PROVIDER_HINTS`, and `PROVIDER_ENV_NAMES` extended for the 7 new
+  providers. Hints for the API-key providers explicitly call out the
+  two-field convention so admins know what to paste where. No other
+  UI plumbing needed — the panel and `api.js` wrappers are generic
+  over the provider catalog.
+- **Runtime credential loaders refactored to use `loadOauthCreds()`**
+  so admin-saved keys actually flow to live OAuth/API code paths (not
+  just the admin "Test" button). Affected files:
+  - `integrations/providers/calendly.ts` — `ensureCreds()` now async
+    via `loadOauthCreds(env, 'calendly')`; 3 call sites awaited.
+  - `integrations/providers/stripe.ts` — same pattern for `stripe`;
+    3 call sites awaited.
+  - `integrations/providers/carta.ts` — same pattern for `carta`;
+    4 call sites awaited.
+  - `routes/linkedin.ts` — replaced sync `configured(env)` with async
+    `loadLinkedinCreds(env)`; oauth/start, oauth/callback, and the
+    /status endpoint all consume the loaded creds.
+  - `services/dueDiligence.ts` — Crunchbase connector now resolves the
+    API key via `loadOauthCreds(env, 'crunchbase')` (key lives in the
+    `secret` slot) instead of reading `env.CRUNCHBASE_API_KEY` directly.
+  Affinity and Telegram have no runtime consumers yet — their admin
+  panel rows are pre-provisioning slots for the upcoming
+  partner-comp Affinity sync and Telegram broadcast features.
+
+Notes:
+- For Stripe, the `client_id` field stores the public Connect Client ID
+  (ca_…); the secret field stores the platform `sk_live_…` / `sk_test_…`.
+  The test probe only validates the secret key — Stripe doesn't have a
+  standalone "is this ca_ valid" endpoint, but a valid secret key on a
+  Connect-enabled account is sufficient for the OAuth flow to work.
+- Telegram is not OAuth at all — it's a single bot token. The bot
+  username is stored alongside purely so the UI can show "configured
+  for @axalvc_bot" and so the existing two-column schema doesn't need
+  a migration.
+- Deleting a provider's keys still cascades `integrations.status =
+  'disconnected'` for any active user connections (existing behaviour
+  in `deleteOauthCredsAndDisconnect`). Same audit trail as the
+  original 4 providers.
+
+
 ## Canonical-host flip: code-side prep for `axal.vc` (Phase 2 part 1)
 
 Code-side groundwork for making `axal.vc` the canonical product host.

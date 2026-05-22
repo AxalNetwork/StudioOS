@@ -176,7 +176,7 @@ function mockFindings(connector: ConnectorKey, subject: string): RawFinding[] {
       return [{
         source_kind: connector, severity: 'info',
         title: `Crunchbase profile lookup for "${subject}"`,
-        detail: 'No live Crunchbase API key on env (CRUNCHBASE_API_KEY) — set the secret to surface funding history, employee range, and operating-status flags.',
+        detail: 'No live Crunchbase API key configured — set CRUNCHBASE_API_KEY on the worker or configure it in Admin → Integration Keys to surface funding history, employee range, and operating-status flags.',
         evidence_url: `https://www.crunchbase.com/textsearch?q=${encodeURIComponent(subject)}`,
         section_key: 'market_position',
       }];
@@ -188,7 +188,12 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
     return { status: 'disabled', records_count: 0, raw_response: null, findings: [] };
   }
   if (connector.key === 'crunchbase') {
-    const apiKey = (env as unknown as Record<string, string | undefined>).CRUNCHBASE_API_KEY || '';
+    // Env-first via `loadOauthCreds`, falls back to admin-managed
+    // `provider_oauth_keys` row (Admin → Integration Keys). For
+    // Crunchbase the user_key lives in the `secret` slot.
+    const { loadOauthCreds } = await import('./providerOauthKeys');
+    const cred = await loadOauthCreds(env, 'crunchbase');
+    const apiKey = cred?.secret || '';
     if (apiKey) {
       try {
         const { searchOrganizations } = await import('../integrations/providers/crunchbase');

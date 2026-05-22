@@ -2677,18 +2677,39 @@ const PROVIDER_LABELS = {
   hubspot: 'HubSpot',
   salesforce: 'Salesforce',
   docusign: 'DocuSign',
+  linkedin: 'LinkedIn',
+  calendly: 'Calendly',
+  stripe: 'Stripe',
+  carta: 'Carta',
+  crunchbase: 'Crunchbase',
+  affinity: 'Affinity',
+  telegram: 'Telegram',
 };
 const PROVIDER_HINTS = {
   slack: 'Get Client ID + Client Secret from api.slack.com → your app → Basic Information.',
   hubspot: 'Get Client ID + Client Secret from your HubSpot Developer App → Auth tab.',
   salesforce: 'Get Consumer Key + Consumer Secret from Setup → App Manager → your Connected App.',
   docusign: 'Get Integration Key + Secret Key from DocuSign Admin → Apps and Keys.',
+  linkedin: 'Get Client ID + Client Secret from linkedin.com/developers → your app → Auth tab.',
+  calendly: 'Get Client ID + Client Secret from calendly.com → Integrations → OAuth applications.',
+  stripe: 'Connect Client ID is the ca_… from Stripe Dashboard → Connect → Settings. Secret Key is the sk_live_… (or sk_test_…) from API keys.',
+  carta: 'Get Client ID + Client Secret from your Carta Developer Portal app.',
+  crunchbase: 'API key — paste a label (e.g. "default") into Client ID and the user_key into Secret. Provision the key at data.crunchbase.com.',
+  affinity: 'API key — put your team subdomain (e.g. "acme") into Client ID and the Affinity API key into Secret. Generate at affinity.co → Settings → API.',
+  telegram: 'Bot token — put the bot username (e.g. "axalvc_bot") into Client ID and the BotFather token into Secret. Get the token from @BotFather on Telegram.',
 };
 const PROVIDER_ENV_NAMES = {
   slack: ['SLACK_CLIENT_ID', 'SLACK_CLIENT_SECRET'],
   hubspot: ['HUBSPOT_CLIENT_ID', 'HUBSPOT_CLIENT_SECRET'],
   salesforce: ['SF_CLIENT_ID', 'SF_CLIENT_SECRET'],
   docusign: ['DOCUSIGN_CLIENT_ID', 'DOCUSIGN_CLIENT_SECRET'],
+  linkedin: ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'],
+  calendly: ['CALENDLY_CLIENT_ID', 'CALENDLY_CLIENT_SECRET'],
+  stripe: ['STRIPE_CONNECT_CLIENT_ID', 'STRIPE_SECRET_KEY'],
+  carta: ['CARTA_CLIENT_ID', 'CARTA_CLIENT_SECRET'],
+  crunchbase: ['CRUNCHBASE_USER_KEY_ID', 'CRUNCHBASE_API_KEY'],
+  affinity: ['AFFINITY_TEAM_DOMAIN', 'AFFINITY_API_KEY'],
+  telegram: ['TELEGRAM_BOT_USERNAME', 'TELEGRAM_BOT_TOKEN'],
 };
 
 // Admin-managed Service Provider Directory approval (Task #53).

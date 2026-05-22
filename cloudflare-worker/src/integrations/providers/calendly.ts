@@ -55,13 +55,15 @@ function redirectUri(env: Env): string {
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
-function ensureCreds(env: Env): { id: string; secret: string } {
-  const id = (env as unknown as Record<string, string | undefined>).CALENDLY_CLIENT_ID;
-  const secret = (env as unknown as Record<string, string | undefined>).CALENDLY_CLIENT_SECRET;
-  if (!id || !secret) {
-    throw new Error('calendly_oauth_unconfigured: CALENDLY_CLIENT_ID/CALENDLY_CLIENT_SECRET secrets must be set on the worker.');
+async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {
+  // Env-first via `loadOauthCreds`, falls back to admin-managed
+  // `provider_oauth_keys` row. Mirrors the slack/hubspot pattern.
+  const { loadOauthCreds } = await import('../../services/providerOauthKeys');
+  const c = await loadOauthCreds(env, 'calendly');
+  if (!c) {
+    throw new Error('calendly_oauth_unconfigured: set CALENDLY_CLIENT_ID/CALENDLY_CLIENT_SECRET as secrets, or configure them in Admin → Integration Keys.');
   }
-  return { id, secret };
+  return { id: c.id, secret: c.secret };
 }
 
 // ───────────────────────────────────────────────────────────── token mgmt
@@ -77,7 +79,7 @@ interface TokenResponse {
 }
 
 async function exchangeCode(env: Env, code: string): Promise<TokenResponse> {
-  const { id, secret } = ensureCreds(env);
+  const { id, secret } = await ensureCreds(env);
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     client_id: id,
@@ -98,7 +100,7 @@ async function exchangeCode(env: Env, code: string): Promise<TokenResponse> {
 }
 
 async function refreshAccessToken(env: Env, refreshToken: string): Promise<TokenResponse> {
-  const { id, secret } = ensureCreds(env);
+  const { id, secret } = await ensureCreds(env);
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     client_id: id,
@@ -344,7 +346,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Extend
 // ───────────────────────────────────────────────────────────── authorize URL
 
 async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, state: string): Promise<string> {
-  const { id } = ensureCreds(c.env);
+  const { id } = await ensureCreds(c.env);
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: id,

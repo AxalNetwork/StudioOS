@@ -15,9 +15,32 @@
 import type { Env } from '../types';
 import { encryptString, decryptString } from './cryptoBox';
 
-export type ManagedProviderKey = 'slack' | 'hubspot' | 'salesforce' | 'docusign';
+export type ManagedProviderKey =
+  | 'slack'
+  | 'hubspot'
+  | 'salesforce'
+  | 'docusign'
+  | 'linkedin'
+  | 'calendly'
+  | 'stripe'
+  | 'carta'
+  | 'crunchbase'
+  | 'affinity'
+  | 'telegram';
 
-export const MANAGED_PROVIDERS: ManagedProviderKey[] = ['slack', 'hubspot', 'salesforce', 'docusign'];
+export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
+  'slack',
+  'hubspot',
+  'salesforce',
+  'docusign',
+  'linkedin',
+  'calendly',
+  'stripe',
+  'carta',
+  'crunchbase',
+  'affinity',
+  'telegram',
+];
 
 export interface ProviderEnvVarPair {
   id: string;
@@ -31,10 +54,22 @@ export interface ProviderEnvVarPair {
  * `ensureCreds` calls can never disagree on what env vars to consult.
  */
 export const PROVIDER_ENV_VARS: Record<ManagedProviderKey, { id: string; secret: string }> = {
-  slack:      { id: 'SLACK_CLIENT_ID',      secret: 'SLACK_CLIENT_SECRET' },
-  hubspot:    { id: 'HUBSPOT_CLIENT_ID',    secret: 'HUBSPOT_CLIENT_SECRET' },
-  salesforce: { id: 'SF_CLIENT_ID',         secret: 'SF_CLIENT_SECRET' },
-  docusign:   { id: 'DOCUSIGN_CLIENT_ID',   secret: 'DOCUSIGN_CLIENT_SECRET' },
+  slack:      { id: 'SLACK_CLIENT_ID',         secret: 'SLACK_CLIENT_SECRET' },
+  hubspot:    { id: 'HUBSPOT_CLIENT_ID',       secret: 'HUBSPOT_CLIENT_SECRET' },
+  salesforce: { id: 'SF_CLIENT_ID',            secret: 'SF_CLIENT_SECRET' },
+  docusign:   { id: 'DOCUSIGN_CLIENT_ID',      secret: 'DOCUSIGN_CLIENT_SECRET' },
+  // OAuth providers (real client_id + client_secret pair).
+  linkedin:   { id: 'LINKEDIN_CLIENT_ID',      secret: 'LINKEDIN_CLIENT_SECRET' },
+  calendly:   { id: 'CALENDLY_CLIENT_ID',      secret: 'CALENDLY_CLIENT_SECRET' },
+  stripe:     { id: 'STRIPE_CONNECT_CLIENT_ID', secret: 'STRIPE_SECRET_KEY' },
+  carta:      { id: 'CARTA_CLIENT_ID',         secret: 'CARTA_CLIENT_SECRET' },
+  // API-key providers (single secret + a non-secret account identifier).
+  // The "id" slot stores the public account label (user key id, team
+  // subdomain, bot username) so the UI can show "configured for
+  // <something>" and tests can target the right host.
+  crunchbase: { id: 'CRUNCHBASE_USER_KEY_ID',  secret: 'CRUNCHBASE_API_KEY' },
+  affinity:   { id: 'AFFINITY_TEAM_DOMAIN',    secret: 'AFFINITY_API_KEY' },
+  telegram:   { id: 'TELEGRAM_BOT_USERNAME',   secret: 'TELEGRAM_BOT_TOKEN' },
 };
 
 interface CacheEntry {

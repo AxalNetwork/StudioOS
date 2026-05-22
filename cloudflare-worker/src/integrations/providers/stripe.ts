@@ -45,13 +45,13 @@ function redirectUri(env: Env): string {
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
-function ensureCreds(env: Env): { clientId: string; secret: string } {
-  const clientId = env.STRIPE_CONNECT_CLIENT_ID;
-  const secret = env.STRIPE_SECRET_KEY;
-  if (!clientId || !secret) {
-    throw new Error('stripe_oauth_unconfigured: STRIPE_CONNECT_CLIENT_ID and STRIPE_SECRET_KEY must be set on the worker.');
+async function ensureCreds(env: Env): Promise<{ clientId: string; secret: string }> {
+  const { loadOauthCreds } = await import('../../services/providerOauthKeys');
+  const c = await loadOauthCreds(env, 'stripe');
+  if (!c) {
+    throw new Error('stripe_oauth_unconfigured: set STRIPE_CONNECT_CLIENT_ID and STRIPE_SECRET_KEY as secrets, or configure them in Admin → Integration Keys.');
   }
-  return { clientId, secret };
+  return { clientId: c.id, secret: c.secret };
 }
 
 // ───────────────────────────────────────────────────────────── token helpers
@@ -66,7 +66,7 @@ interface StripeOAuthToken {
 }
 
 async function exchangeCode(env: Env, code: string): Promise<StripeOAuthToken> {
-  const { secret } = ensureCreds(env);
+  const { secret } = await ensureCreds(env);
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
@@ -87,7 +87,7 @@ async function exchangeCode(env: Env, code: string): Promise<StripeOAuthToken> {
 }
 
 async function deauthorize(env: Env, stripeUserId: string): Promise<void> {
-  const { clientId, secret } = ensureCreds(env);
+  const { clientId, secret } = await ensureCreds(env);
   try {
     await fetch(`${STRIPE_CONNECT}/oauth/deauthorize`, {
       method: 'POST',
@@ -237,7 +237,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
 }
 
 async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, state: string): Promise<string> {
-  const { clientId } = ensureCreds(c.env);
+  const { clientId } = await ensureCreds(c.env);
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: clientId,

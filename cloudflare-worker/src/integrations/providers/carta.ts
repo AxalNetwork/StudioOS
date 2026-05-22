@@ -39,13 +39,13 @@ function redirectUri(env: Env): string {
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
-function ensureCreds(env: Env): { id: string; secret: string } {
-  const id = (env as unknown as Record<string, string | undefined>).CARTA_CLIENT_ID;
-  const secret = (env as unknown as Record<string, string | undefined>).CARTA_CLIENT_SECRET;
-  if (!id || !secret) {
-    throw new Error('carta_oauth_unconfigured: CARTA_CLIENT_ID/CARTA_CLIENT_SECRET secrets must be set on the worker.');
+async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {
+  const { loadOauthCreds } = await import('../../services/providerOauthKeys');
+  const c = await loadOauthCreds(env, 'carta');
+  if (!c) {
+    throw new Error('carta_oauth_unconfigured: set CARTA_CLIENT_ID/CARTA_CLIENT_SECRET as secrets, or configure them in Admin → Integration Keys.');
   }
-  return { id, secret };
+  return { id: c.id, secret: c.secret };
 }
 
 interface CartaTokenResponse {
@@ -61,7 +61,7 @@ function safeParse(s: string): Record<string, unknown> {
 }
 
 async function exchangeCode(env: Env, code: string, codeVerifier: string | null): Promise<CartaTokenResponse> {
-  const { id, secret } = ensureCreds(env);
+  const { id, secret } = await ensureCreds(env);
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
@@ -83,7 +83,7 @@ async function exchangeCode(env: Env, code: string, codeVerifier: string | null)
 }
 
 async function refreshAccessToken(env: Env, refreshToken: string): Promise<CartaTokenResponse> {
-  const { id, secret } = ensureCreds(env);
+  const { id, secret } = await ensureCreds(env);
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
@@ -239,7 +239,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
 }
 
 async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, state: string): Promise<string> {
-  const { id } = ensureCreds(c.env);
+  const { id } = await ensureCreds(c.env);
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: id,
@@ -587,7 +587,7 @@ async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: Integ
     const creds = await decryptCredentials(c.env, row.uid, row.credentials_enc);
     const refresh = typeof creds?.refresh_token === 'string' ? creds.refresh_token : '';
     if (refresh) {
-      const { id, secret } = ensureCreds(c.env);
+      const { id, secret } = await ensureCreds(c.env);
       const body = new URLSearchParams({
         token: refresh,
         client_id: id,

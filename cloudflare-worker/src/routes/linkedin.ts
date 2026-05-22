@@ -101,8 +101,17 @@ function linkedinRedirectUri(env: Env): string {
   return base ? `${base}/api/linkedin/oauth/callback` : '';
 }
 
-function configured(env: Env): boolean {
-  return !!(env.LINKEDIN_CLIENT_ID && env.LINKEDIN_CLIENT_SECRET && linkedinRedirectUri(env));
+/**
+ * Env-first via `loadOauthCreds`, falls back to admin-managed
+ * `provider_oauth_keys` row. Returns null if neither path yields creds
+ * or the redirect URI isn't derivable. Mirrors the
+ * slack/hubspot/calendly/stripe/carta pattern.
+ */
+async function loadLinkedinCreds(env: Env): Promise<{ id: string; secret: string } | null> {
+  if (!linkedinRedirectUri(env)) return null;
+  const { loadOauthCreds } = await import('../services/providerOauthKeys');
+  const c = await loadOauthCreds(env, 'linkedin');
+  return c ? { id: c.id, secret: c.secret } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +177,8 @@ async function consumeState(env: Env, raw: string | null | undefined): Promise<{
 // nav. Returns 503 if any required secret is missing.
 // ---------------------------------------------------------------------------
 linkedin.post('/oauth/start', async (c) => {
-  if (!configured(c.env)) {
+  const creds = await loadLinkedinCreds(c.env);
+  if (!creds) {
     return c.json({
       detail: 'LinkedIn sign-in is not configured on this deployment yet. Please use the CSV import tab instead, or contact support.',
     }, 503);
@@ -195,7 +205,7 @@ linkedin.post('/oauth/start', async (c) => {
     const state = await makeState(c.env, user.id);
     const params = new URLSearchParams({
       response_type: 'code',
-      client_id: c.env.LINKEDIN_CLIENT_ID!,
+      client_id: creds.id,
       redirect_uri: linkedinRedirectUri(c.env),
       scope: 'openid profile email',
       state,
@@ -254,7 +264,8 @@ type LinkedInCallbackCode =
 
 linkedin.get('/oauth/callback', async (c) => {
   const returnTo = readLinkedinReturnTo(c);
-  if (!configured(c.env)) {
+  const creds = await loadLinkedinCreds(c.env);
+  if (!creds) {
     return redirectBack(c.env, 'error', returnTo, 'not_configured' satisfies LinkedInCallbackCode);
   }
   const code = c.req.query('code');
@@ -290,8 +301,8 @@ linkedin.get('/oauth/callback', async (c) => {
         grant_type: 'authorization_code',
         code,
         redirect_uri: linkedinRedirectUri(c.env),
-        client_id: c.env.LINKEDIN_CLIENT_ID!,
-        client_secret: c.env.LINKEDIN_CLIENT_SECRET!,
+        client_id: creds.id,
+        client_secret: creds.secret,
       }).toString(),
     });
     if (!tokenRes.ok) {
@@ -398,7 +409,7 @@ linkedin.get('/status', async (c) => {
     await sql.end();
     const r = rows[0] || {};
     return c.json({
-      configured: configured(c.env),
+      configured: !!(await loadLinkedinCreds(c.env)),
       connected: !!r.linkedin_sub,
       linkedin_email: r.linkedin_email || null,
       linkedin_name: r.linkedin_name || null,
@@ -407,7 +418,7 @@ linkedin.get('/status', async (c) => {
   } catch (e: any) {
     console.error('[LINKEDIN] status failed:', e?.message || e);
     return c.json({
-      configured: configured(c.env),
+      configured: !!(await loadLinkedinCreds(c.env)),
       connected: false,
       linkedin_email: null,
       linkedin_name: null,
