@@ -117,18 +117,21 @@ fallthrough = true
 
 # ---------- Public (non-secret) variables ----------
 [vars]
-# Phase 2 canonical-host flip in progress (see CHANGELOG). Code
-# defaults now point at axal.vc, but these env values are still
-# pinned to app.axal.vc because ~10 integration providers
-# (Calendar Google/MS, LinkedIn, HubSpot, Salesforce, DocuSign,
-# Carta, Slack, Stripe, Calendly) derive their OAuth redirect_uri
-# from APP_URL and their provider-side redirect URI registrations
-# all point at app.axal.vc. Flipping APP_URL here without updating
-# every provider registration first would break those OAuth flows.
-# Ops cutover plan: update provider registrations to axal.vc →
-# flip APP_URL + PUBLIC_BASE_URL here → wrangler deploy.
-APP_URL = "https://app.axal.vc"
-PUBLIC_BASE_URL = "https://app.axal.vc"
+# Task #5 — canonical-host flip complete. APP_URL / PUBLIC_BASE_URL
+# now point at axal.vc (the canonical host). All post-login redirects
+# and user-facing links (email verification, magic links, etc.) will
+# use axal.vc.
+#
+# OAUTH_CALLBACK_BASE_URL pins OAuth redirect_uri registrations at
+# app.axal.vc until every provider dashboard is updated. Integration
+# providers (Calendar, LinkedIn, HubSpot, Salesforce, DocuSign, Carta,
+# Slack, Stripe, Calendly) read OAUTH_CALLBACK_BASE_URL via callbackBase()
+# in cloudflare-worker/src/util/url.ts. Once all provider registrations
+# are updated to axal.vc, delete OAUTH_CALLBACK_BASE_URL and the
+# callbackBase() fallback converges to APP_URL automatically.
+APP_URL = "https://axal.vc"
+PUBLIC_BASE_URL = "https://axal.vc"
+OAUTH_CALLBACK_BASE_URL = "https://app.axal.vc"
 PUBLIC_MARKETING_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
@@ -430,8 +433,12 @@ pattern    = "axal.vc/login/*"
 zone_name  = "axal.vc"
 
 [env.production.vars]
-APP_URL              = "https://app.axal.vc"
-PUBLIC_BASE_URL      = "https://app.axal.vc"
+# Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at
+# axal.vc. OAUTH_CALLBACK_BASE_URL keeps OAuth redirect_uri registrations
+# pinned to app.axal.vc until all provider dashboards are updated.
+APP_URL              = "https://axal.vc"
+PUBLIC_BASE_URL      = "https://axal.vc"
+OAUTH_CALLBACK_BASE_URL = "https://app.axal.vc"
 PUBLIC_MARKETING_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"

@@ -29,7 +29,7 @@
  * calendar.ts) reads from this table for `kind='calendly_event'`.
  */
 import type { Context } from 'hono';
-import { stripTrailingSlashes } from '../../util/url';
+import { callbackBase } from '../../util/url';
 import type { Env, User } from '../../types';
 import {
   registerProvider,
@@ -51,7 +51,7 @@ const CL_API = 'https://api.calendly.com';
 const CL_AUTH = 'https://auth.calendly.com';
 
 function redirectUri(env: Env): string {
-  const base = stripTrailingSlashes(env.APP_URL || '');
+  const base = callbackBase(env);
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
@@ -399,7 +399,7 @@ async function ensureWebhookSubscription(env: Env, row: IntegrationRow): Promise
     const userUri = typeof creds.user_uri === 'string' ? creds.user_uri as string : '';
     const orgUri = typeof creds.organization_uri === 'string' ? creds.organization_uri as string : '';
     if (!userUri || !orgUri) return;
-    const callback = `${stripTrailingSlashes(env.APP_URL || '')}/api/integrations/webhook/${PROVIDER_KEY}/${row.uid}`;
+    const callback = `${callbackBase(env)}/api/integrations/webhook/${PROVIDER_KEY}/${row.uid}`;
     if (!callback.startsWith('http')) return;
     const token = await getActiveAccessToken(env, { ...row, credentials_enc: recheck?.credentials_enc || row.credentials_enc });
     const sub = await createWebhookSubscription(env, token, callback, orgUri, userUri);

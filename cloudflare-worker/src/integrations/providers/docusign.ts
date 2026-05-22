@@ -37,7 +37,7 @@
  * IMPORTANT: imported once from index.ts so registerProvider() runs at boot.
  */
 import type { Context } from 'hono';
-import { stripTrailingSlashes } from '../../util/url';
+import { stripTrailingSlashes, callbackBase } from '../../util/url';
 import type { Env, User } from '../../types';
 import {
   registerProvider,
@@ -65,7 +65,7 @@ const DEMO_AUTH_HOST = 'https://account-d.docusign.com';
 function authHost(isDemo: boolean): string { return isDemo ? DEMO_AUTH_HOST : PROD_AUTH_HOST; }
 
 function redirectUri(env: Env): string {
-  const base = stripTrailingSlashes(env.APP_URL || '');
+  const base = callbackBase(env);
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
@@ -906,7 +906,7 @@ async function tearDownConnect(env: Env, row: IntegrationRow): Promise<void> {
  * configuration. The loser bails immediately; the winner persists.
  */
 async function postConnect(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<void> {
-  const appUrl = stripTrailingSlashes(c.env.APP_URL || '');
+  const appUrl = callbackBase(c.env);
   if (!appUrl.startsWith('http')) {
     console.warn('[docusign] postConnect skipped: APP_URL not set');
     return;

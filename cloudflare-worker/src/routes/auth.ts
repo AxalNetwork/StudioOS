@@ -174,7 +174,7 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
   const rawToken = generateToken();
   const tokenHash = await hashToken(rawToken);
   const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  const verificationUrl = `${env.APP_URL}/verify-email?token=${rawToken}`;
+  const verificationUrl = `${env.PUBLIC_BASE_URL || env.APP_URL || 'https://axal.vc'}/verify-email?token=${rawToken}`;
 
   let tokenStored = false;
   try {

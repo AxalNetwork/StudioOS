@@ -24,7 +24,7 @@
  *     the OAuth tab in that case.
  */
 import { Hono } from 'hono';
-import { stripTrailingSlashes } from '../util/url';
+import { stripTrailingSlashes, callbackBase } from '../util/url';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
@@ -97,7 +97,7 @@ function linkedinRedirectUri(env: Env): string {
     const stale = isProd && host.endsWith('.workers.dev');
     if (host && !stale) return override;
   }
-  const base = stripTrailingSlashes(env.APP_URL || '');
+  const base = callbackBase(env);
   return base ? `${base}/api/linkedin/oauth/callback` : '';
 }
 
@@ -240,7 +240,7 @@ function clearLinkedinReturnCookie(): string {
   return 'studioos_li_return=; HttpOnly; Secure; SameSite=Lax; Path=/api/linkedin; Max-Age=0';
 }
 function redirectBack(env: Env, status: 'connected' | 'error', returnTo: string, message?: string) {
-  const base = stripTrailingSlashes(env.APP_URL || 'https://axal.vc');
+  const base = callbackBase(env);
   const params = new URLSearchParams({ linkedin: status });
   if (message) params.set('linkedin_error', message);
   const path = returnTo === 'integrations' ? '/integrations' : '/refer';

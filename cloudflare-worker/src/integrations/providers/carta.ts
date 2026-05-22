@@ -16,7 +16,7 @@
  * IMPORTANT: imported once from index.ts so registerProvider() runs at boot.
  */
 import type { Context } from 'hono';
-import { stripTrailingSlashes } from '../../util/url';
+import { callbackBase } from '../../util/url';
 import type { Env, User } from '../../types';
 import {
   registerProvider,
@@ -35,7 +35,7 @@ const API_BASE = 'https://api.carta.com/v1alpha1';
 const SCOPES = ['read:cap_table', 'read:stakeholders', 'read:securities'];
 
 function redirectUri(env: Env): string {
-  const base = stripTrailingSlashes(env.APP_URL || '');
+  const base = callbackBase(env);
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 

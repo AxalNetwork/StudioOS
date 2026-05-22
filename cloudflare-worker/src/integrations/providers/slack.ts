@@ -17,7 +17,7 @@
  * IMPORTANT: imported once from index.ts so registerProvider() runs at boot.
  */
 import type { Context } from 'hono';
-import { stripTrailingSlashes } from '../../util/url';
+import { callbackBase } from '../../util/url';
 import type { Env, User } from '../../types';
 import {
   registerProvider,
@@ -33,7 +33,7 @@ const AUTH_HOST = 'https://slack.com';
 const SCOPES = ['incoming-webhook'];
 
 function redirectUri(env: Env): string {
-  const base = stripTrailingSlashes(env.APP_URL || '');
+  const base = callbackBase(env);
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 

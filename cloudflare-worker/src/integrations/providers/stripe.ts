@@ -21,7 +21,7 @@
  * is also wired as a fallback for direct account-level webhooks.
  */
 import type { Context } from 'hono';
-import { stripTrailingSlashes } from '../../util/url';
+import { callbackBase } from '../../util/url';
 import type { Env, User } from '../../types';
 import {
   registerProvider,
@@ -41,7 +41,7 @@ const STRIPE_API = 'https://api.stripe.com';
 const STRIPE_CONNECT = 'https://connect.stripe.com';
 
 function redirectUri(env: Env): string {
-  const base = stripTrailingSlashes(env.APP_URL || '');
+  const base = callbackBase(env);
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 

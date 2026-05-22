@@ -130,8 +130,8 @@ function msToken(env: Env): string {
 // resolves the OAuth redirect URI; PUBLIC_BASE_URL wins when both are
 // set.
 function appBase(env: Env): string {
-  const e = env as Env & { PUBLIC_BASE_URL?: string };
-  return ((e.PUBLIC_BASE_URL || e.APP_URL || '')).replace(/\/+$/, '');
+  const e = env as Env & { PUBLIC_BASE_URL?: string; OAUTH_CALLBACK_BASE_URL?: string };
+  return ((e.OAUTH_CALLBACK_BASE_URL || e.PUBLIC_BASE_URL || e.APP_URL || '')).replace(/\/+$/, '');
 }
 // Reject any override that still points at the workers.dev sandbox in
 // production — a stale env var set before Task #5 (DC) would otherwise
