@@ -20,8 +20,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { autofillDeck } from '../src/services/decks/autofill';
-import { getMethod } from '../src/services/decks/methods';
+import { autofillDeck } from '../src/services/decks/autofill.ts';
+import { getMethod } from '../src/services/decks/methods.ts';
 
 /** Fake D1 env where every prepare() returns the project / financials /
  *  cap-table row the autofill resolver expects, regardless of the SQL. */
