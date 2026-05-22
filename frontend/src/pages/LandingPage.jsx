@@ -122,36 +122,13 @@ const HOW_IT_WORKS = [
 ];
 
 const PLATFORM_FEATURES = [
-  {
-    icon: Cloud,
-    title: 'Cloudflare-native infrastructure',
-    desc: 'Workers + D1 + R2 + Durable Objects + Vectorize, deployed at the edge.',
-  },
-  {
-    icon: Cpu,
-    title: 'One AI model in production',
-    desc: 'Workers AI — Llama 3.3 70B FP8 — routed through a dedicated AI Gateway slug.',
-  },
-  {
-    icon: Archive,
-    title: '7-year encrypted audit retention',
-    desc: 'Every privileged action is logged and persisted to R2 with at-rest encryption.',
-  },
-  {
-    icon: GitBranch,
-    title: 'GitHub Enterprise + supply-chain checks',
-    desc: 'CodeQL, Dependabot, gitleaks, and SAML SSO on every commit and review.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Cloudflare Access on admin paths',
-    desc: 'Identity-aware proxy in front of every admin surface — no public attack surface.',
-  },
-  {
-    icon: LockKeyhole,
-    title: 'Column-level AES-GCM on PII',
-    desc: 'Sensitive fields encrypted at rest with a rotated, per-isolate-cached key.',
-  },
+  { icon: Users, title: 'Partner Matchmaking', desc: 'AI-powered matching with referral tracking and deal syndication.', to: '/matches' },
+  { icon: Banknote, title: 'Capital & LP Portal', desc: 'Capital calls, LP ledger, TVPI/DPI per vintage, distributions.', to: '/funds' },
+  { icon: GitBranch, title: 'Deal Flow', desc: 'Pipeline, scoring engine, AI memos, real-time pipeline updates.', to: '/deals' },
+  { icon: Globe, title: 'Market Intelligence', desc: 'Real-time sector signals, competitive data, semantic search.', to: '/market-intel' },
+  { icon: Scale, title: 'Legal Engine', desc: 'Auto incorporation, SAFE agreements, equity splits, IP licensing.', to: '/legal' },
+  { icon: Sparkles, title: 'AI Advisory', desc: 'Strategy, GTM, fundraising advice and financial planning for founders.', to: '/advisory' },
+  { icon: Rocket, title: 'Spin-Out Lab', desc: 'Niche 30-day venture sprint — idea to funded in four weeks.', to: '/spinout-lab' },
 ];
 
 const FALLBACK_STATS = { partners: 200, funds: 4, deals_scored: 1200, spinouts: 38 };
@@ -437,24 +414,27 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">The Platform Underneath</h2>
             <p className="text-gray-600 max-w-xl mx-auto">
-              Edge-native infrastructure, one production AI model, and the security posture
-              you'd expect from a venture studio handling real deals.
+              Integrated engines powering the entire venture lifecycle. Spin-Out Lab is one of them.
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {PLATFORM_FEATURES.map((f, i) => (
-              <div
+              <Link
                 key={i}
-                className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5"
+                to={f.to}
+                className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all group"
               >
                 <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
                   <f.icon size={18} className="text-violet-600" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-sm font-semibold mb-1 text-gray-900">{f.title}</h3>
+                  <h3 className="text-sm font-semibold mb-1 text-gray-900 flex items-center gap-1.5">
+                    {f.title}
+                    <ChevronRight size={12} className="text-gray-400 group-hover:text-violet-600 group-hover:translate-x-0.5 transition-all" />
+                  </h3>
                   <p className="text-xs text-gray-600 leading-relaxed">{f.desc}</p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
