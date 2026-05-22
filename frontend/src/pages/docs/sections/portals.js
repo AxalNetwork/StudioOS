@@ -96,31 +96,5 @@ export default {
         { label: 'Office Hours', href: '#validate-grow/office-hours' },
       ],
     },
-    {
-      id: 'admin',
-      // Task #2 (DD) — Admin Console overview is admin-only even
-      // though it lives in the public Portals section.
-      roles: ['admin'],
-      title: 'Admin Console (overview)',
-      overview:
-        "The Admin Console is the studio operator’s portal: users, roles, projects, deals, badges, contracts, audit trail, and feature flags. Most actions are reversible; destructive ones (delete user, void contract) require a typed confirmation.",
-      howto: [
-        'Open Admin Console from the sidebar (admins only).',
-        'Use the left rail to switch between Users, Projects, Deals, Trust, Contracts, and Audit.',
-        'Use "View as" to step into a user’s view for support — exit from the violet bar at the top.',
-      ],
-      tips: [
-        'Every admin action is recorded in the audit log with the actor’s identity hashed for storage.',
-        'Use feature flags to roll new modules out gradually — start with one cohort.',
-      ],
-      pitfalls: [
-        'Forgetting to exit "View as" mode causes confusing reports and missing data — exit before clicking around.',
-        'Bulk role changes are powerful; double-check the filter before applying.',
-      ],
-      related: [
-        { label: 'Admin overview', href: '#admin/overview' },
-        { label: 'Activity & audit log', href: '#account/activity' },
-      ],
-    },
   ],
 };

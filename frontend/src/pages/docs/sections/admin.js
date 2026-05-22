@@ -25,7 +25,6 @@ export default {
         'Bulk actions are powerful and not always reversible; double-check the filter before applying.',
       ],
       related: [
-        { label: 'Admin Console (overview)', href: '#portals/admin' },
         { label: 'Users & roles', href: '#admin/users' },
         { label: 'Trust management', href: '#admin/trust' },
         { label: 'Audit', href: '#admin/audit' },
