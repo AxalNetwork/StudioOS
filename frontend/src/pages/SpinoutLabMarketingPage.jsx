@@ -5,75 +5,197 @@ import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
 
 const APPLY_HREF = '/register?lane=founder&product=spinout-lab';
+const CONTACT_HREF = '/contact?topic=spinout';
+
+// Stable feature route map used across the playbook unlocks. When a
+// feature has a real in-app route the bullet renders as a <Link>;
+// otherwise it stays as bold inline text so the deep link never 404s
+// silently. See frontend/src/App.jsx for the source of truth.
+const FEATURE_LINK = {
+  Projects: '/projects',
+  'Customer Discovery': '/customer-discovery',
+  'Market Intelligence': '/market-intel',
+  Roadmap: '/roadmap',
+  'Pitch Deck Builder': null,
+  'Brand Builder': null,
+  'Diligence & Scoring Engine': '/scoring',
+  Mentors: '/mentors',
+  'Office Hours': '/office-hours',
+  'Co-founder Match': '/cofounder',
+  Incorporate: '/incorporate',
+  'Cap Table': null,
+  'Section 83(b)': '/incorporate/83b',
+  'Cofounder Agreement': '/incorporate/cofounder-agreement',
+  Capital: '/capital',
+  Compliance: '/compliance',
+};
+
+function FeatureLink({ name }) {
+  const href = FEATURE_LINK[name];
+  if (!href) return <span className="font-medium text-gray-900">{name}</span>;
+  return (
+    <Link to={href} className="font-medium text-violet-700 hover:text-violet-900 underline-offset-2 hover:underline">
+      {name}
+    </Link>
+  );
+}
 
 const PLAYBOOK = [
   {
     n: 1,
-    title: 'Diligence & scoring',
-    bullets: [
-      '100-point scoring across Market 25 / Team 20 / Product 15 / Capital 15 / Strategic Fit 15 / Distribution 10',
-      'AI deal memo generated and reviewed by an Axal partner',
-      'Reference + background checks; KYC initiated',
-    ],
+    title: 'Idea & Customer',
+    youDo:
+      'Define the problem, ICP, market sizing seed, talk to ≥5 customers, log every interview.',
+    unlocks: ['Projects', 'Customer Discovery', 'Market Intelligence'],
+    unlocksTail: ' (read-only), Personal Advisor (spinout persona, week 1 question bank).',
+    leaveWith: '1 Project record, ≥5 logged interviews, sized TAM/SAM with citations.',
   },
   {
     n: 2,
-    title: 'Legal formation',
-    bullets: [
-      'Delaware C-Corp incorporation via Stripe Atlas / Cooley GO integrations',
-      'IP assignment + employment templates issued from the legal engine',
-      'Cap table initialized; founder vesting installed',
-    ],
+    title: 'Solution & Roadmap',
+    youDo: 'Scope the MVP, set 90-day OKRs, draft brand v1, draft pitch deck v1.',
+    unlocks: ['Roadmap', 'Brand Builder', 'Pitch Deck Builder'],
+    unlocksTail: ', Studio Ops cadence.',
+    leaveWith: '3+ OKRs, brand basics, deck v1.',
   },
   {
     n: 3,
-    title: 'Capital match',
-    bullets: [
-      'LP introductions routed through the Capital Lane',
-      'SAFE generation and partner co-invest commitments',
-      'Investor data room published from the diligence pack',
-    ],
+    title: 'Validate & Team',
+    youDo:
+      'Run your first venture-readiness score, match with mentors, decide co-founder track, pressure-test scoring weak points.',
+    unlocks: ['Diligence & Scoring Engine', 'Mentors', 'Office Hours', 'Co-founder Match'],
+    unlocksTail: ', MI investor signals.',
+    leaveWith:
+      'A score with evidence-confidence %, a mentor cadence, a co-founder lead or a clear "going solo" plan.',
   },
   {
     n: 4,
-    title: 'Public launch',
-    bullets: [
-      'First capital call cleared into the operating account',
-      'Founder portal handoff: legal vault, advisor network, OKRs',
-      'Inclusion in monthly partner-network update',
-    ],
+    title: 'Incorporate & Capital',
+    youDo:
+      'Incorporate the entity, issue founder stock with vesting, file 83(b), sign cofounder agreement, lock the fundraise ask.',
+    unlocks: ['Incorporate', 'Cap Table', 'Section 83(b)', 'Cofounder Agreement', 'Capital', 'Compliance'],
+    unlocksTail: ', plus LP / partner introductions on Axal\u2019s network.',
+    leaveWith:
+      'Incorporated entity, signed cap table with vesting, 83(b) filed in window, fundraise plan + ask, three warm investor introductions.',
   },
 ];
 
-const SCORE_BREAKDOWN = [
-  { label: 'Market', weight: 25, bar: 'bg-violet-600' },
-  { label: 'Team', weight: 20, bar: 'bg-violet-500' },
-  { label: 'Product', weight: 15, bar: 'bg-purple-500' },
-  { label: 'Capital', weight: 15, bar: 'bg-purple-600' },
-  { label: 'Strategic Fit', weight: 15, bar: 'bg-indigo-500' },
-  { label: 'Distribution', weight: 10, bar: 'bg-indigo-600' },
+const WHAT_YOU_GET = [
+  {
+    title: 'Personal Advisor on every page',
+    body:
+      'Workers AI · Llama 3.3 70B FP8 via Axal\u2019s dedicated AI Gateway. Walks you through every screen — never a blank one.',
+  },
+  {
+    title: 'Founder → Investor introductions',
+    body:
+      'Gated by a three-way NDA (Founder + Investor + Axal). Three warm intros minimum in Week 4 for qualified founders.',
+  },
+  {
+    title: 'Mentor track',
+    body:
+      'Operators in your sector matched by expertise, availability, language, time zone, and rating.',
+  },
+  {
+    title: 'Services-for-equity / services-for-fee partners',
+    body:
+      'Legal, design, recruiting, technical DD — pre-vetted, Axal-network rates.',
+  },
+  {
+    title: 'Market intelligence access',
+    body:
+      'Sector heat, investor signals, sentiment, TALC positioning, demand & supply atlas, capital velocity — refreshed nightly.',
+  },
+  {
+    title: 'Document automation',
+    body:
+      'Incorporation packet, 83(b), cofounder agreement, SAFE template, NDAs. Generated by the platform, e-signed in-product.',
+  },
+  {
+    title: 'Alumni community for life',
+    body: 'Quarterly updates, alumni-only network, co-marketing slots.',
+  },
+  {
+    title: 'Equity-for-platform option',
+    body:
+      'For accepted ventures only, under a separately negotiated partnership. Never automatic.',
+  },
 ];
 
-const DELIVERABLES = [
-  'Delaware C-Corp registered & EIN issued',
-  'Founder + employee SAFE / equity templates',
-  'AI-generated deal memo (PDF + portal copy)',
-  'Capital intro list with warm partner routing',
-  'Founder portal: legal, capital, advisory, monitoring',
+const STRONG_SIGNALS = [
+  { t: 'Domain expertise', d: 'years in the target sector' },
+  { t: 'Customer access', d: 'warm intros to ICP from day 1' },
+  { t: 'Commitment level', d: 'full-time, not nights-and-weekends' },
+  { t: 'Lived insight', d: 'a non-obvious view about what\u2019s broken' },
+  { t: 'Coachability', d: 'you adjust when evidence contradicts you' },
+  {
+    t: 'Founder + market fit',
+    d: 'right person for this specific problem, not just "any startup"',
+  },
 ];
 
-const TIERS = [
-  { tier: 'Tier 1', score: '≥ 85', desc: 'Immediate cohort offer.' },
-  { tier: 'Tier 2', score: '≥ 70', desc: 'Conditional — 1–2 milestones, then re-score.' },
-  { tier: 'Tier 3', score: '< 70', desc: 'Declined for this cohort. Reapply with traction.' },
+const FILTERS = [
+  'Sector fit: AI · Blockchain · Quantum · Digital Infrastructure · Frontier Software',
+  'Geography we can support',
+  'Founder ≥ 18',
+  'No sanctions / PEP / bad-actor disqualifications',
+];
+
+const REASONS_WE_SAY_NO = [
+  'Too generic a thesis',
+  'No customer access',
+  'Part-time only with no plan to flip',
+  'Conflicts of interest',
+  'Sector mismatch',
+];
+
+const NETWORK = [
+  'Operating partners — legal, GTM, design, recruiting, data, technical DD, finance.',
+  'Investor signals from Axal\u2019s investor pipeline (anonymised until pairwise NDA signed).',
+  'Mentor pool with expertise tags and availability calendars.',
+  'Co-marketing partners across the network for distribution.',
+  'Alumni founders who graduated previous cohorts.',
+];
+
+const MARKET_DATA = [
+  { t: 'Sector compass', d: 'best sub-sectors given your profile' },
+  {
+    t: 'Investor signals',
+    d: 'live aggregate of investor thesis + deployment patterns (k-anonymity ≥ 5)',
+  },
+  {
+    t: 'TALC positioning',
+    d:
+      'where the market is on the technology-adoption lifecycle, where you think you are, and the gap',
+  },
+  { t: 'Demand & supply atlas', d: 'needs vs. offers across the network' },
+  { t: 'Founder ↔ investor fit', d: 'embeddings-based thesis match' },
+  { t: 'Capital velocity', d: 'deployment pace per stage per sector' },
 ];
 
 const FAQ = [
-  { q: 'How big is each cohort?', a: '6–10 founders per sprint. ~12 sprints/year.' },
-  { q: 'Is there a fee?', a: 'No upfront fee. Spin-Out Lab takes a standard founder-friendly equity stake at incorporation, disclosed in the term sheet.' },
-  { q: 'How much equity does Spin-Out Lab take?', a: 'Negotiated per deal but anchored at studio-standard ranges. Disclosed before you sign.' },
-  { q: 'What about my timezone?', a: 'Async-first. The capital match week requires a few synchronous LP calls.' },
-  { q: 'Do you lead follow-on rounds?', a: 'Axal partners frequently lead the seed round; we facilitate but do not require it.' },
+  {
+    q: 'I already have a co-founder.',
+    a: 'Week 3 is still useful for scoring and investor exposure.',
+  },
+  {
+    q: 'I missed a milestone.',
+    a:
+      'You stay at the current week until you complete it. Personal Advisor will list what\u2019s missing.',
+  },
+  {
+    q: 'Do you take equity?',
+    a: 'Only under a separately negotiated partnership / spin-out agreement. Never automatically.',
+  },
+  {
+    q: 'Can I bring an existing project?',
+    a: 'Yes — fast-forward through weeks you\u2019ve already completed.',
+  },
+  {
+    q: 'What jurisdictions?',
+    a:
+      'Delaware C-Corp default. LLC, UK Ltd, French SAS, German GmbH supported with partner counsel.',
+  },
 ];
 
 export default function SpinoutLabMarketingPage() {
@@ -85,150 +207,257 @@ export default function SpinoutLabMarketingPage() {
       <section className="pt-32 pb-16 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-violet-100 border border-violet-300 rounded-full text-xs text-violet-700 mb-6">
-            <Rocket size={12} /> Niche product · Axal VC · Global Venture Partner Network
+            <Rocket size={12} /> Spin-Out Lab · 30-day venture sprint
           </div>
           <h1
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
             className="text-4xl md:text-6xl font-bold leading-tight tracking-tight text-gray-900 mb-5"
           >
-            Spin-Out Lab — <span className="text-violet-600">30 days</span> from idea to funded.
+            Spin-Out Lab — <span className="text-violet-600">30 days</span> from idea to
+            incorporated.
           </h1>
-          <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            A niche product inside the Global Venture Partner Network. Cohort-based, finite, and
-            powered by the same engine that runs the rest of the platform.
+          <p className="text-lg md:text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+            Four weeks. Four milestones. Personal Advisor at every step. Ends with a Delaware
+            C-Corp (or your jurisdiction equivalent), a vesting cap table, 83(b) on file, a pitch
+            deck, and a venture-readiness score.
           </p>
-          <div className="mt-8">
+          <div className="mt-8 flex flex-col sm:flex-row gap-3 items-center justify-center">
             <Link
               to={APPLY_HREF}
               className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/30"
             >
-              Apply for next cohort <ArrowRight size={16} />
+              Start your 30-day Lab <ArrowRight size={16} />
+            </Link>
+            <Link
+              to={CONTACT_HREF}
+              className="inline-flex items-center gap-2 border border-gray-300 hover:border-gray-400 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium text-gray-800"
+            >
+              Talk to us first
             </Link>
           </div>
         </div>
       </section>
 
       {/* PLAYBOOK */}
-      <section className="py-20 px-6 bg-gray-50">
+      <section id="playbook" className="py-20 px-6 bg-gray-50 scroll-mt-24">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-3 text-gray-900">The 4-week playbook.</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-3 text-gray-900">
+              The 4-week playbook.
+            </h2>
             <p className="text-gray-600 max-w-xl mx-auto">
-              Same engine as the rest of the platform — just compressed.
+              Same engine as the rest of the platform — compressed into 30 days.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {PLAYBOOK.map((w) => (
-              <div key={w.n} className="bg-white border border-gray-200 rounded-2xl p-6 hover:border-violet-300 hover:shadow-lg transition-all">
+              <div
+                key={w.n}
+                id={`week${w.n}`}
+                className="scroll-mt-24 bg-white border border-gray-200 rounded-2xl p-6 hover:border-violet-300 hover:shadow-lg transition-all"
+              >
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-9 h-9 rounded-full bg-violet-600 text-white text-sm font-bold flex items-center justify-center">
                     {w.n}
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900">Week {w.n} — {w.title}</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Week {w.n} — {w.title}
+                  </h3>
                 </div>
-                <ul className="space-y-2">
-                  {w.bullets.map((b, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700 leading-relaxed">
-                      <Check size={14} className="text-violet-600 mt-0.5 shrink-0" />
-                      <span>{b}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* SCORING */}
-      <section className="py-20 px-6">
-        <div className="max-w-4xl mx-auto bg-violet-50/40 border-2 border-violet-200 rounded-3xl p-8 md:p-12">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3 text-center">
-            How we score — <span className="text-violet-600">100 points</span>.
-          </h2>
-          <p className="text-gray-600 text-center max-w-xl mx-auto mb-8">
-            One algorithm. Same weights for every founder.
-          </p>
-          <div className="flex w-full h-12 rounded-lg overflow-hidden border border-violet-200">
-            {SCORE_BREAKDOWN.map((s) => (
-              <div
-                key={s.label}
-                className={`${s.bar} flex items-center justify-center text-xs font-semibold text-white`}
-                style={{ width: `${s.weight}%` }}
-                title={`${s.label}: ${s.weight}`}
-              >
-                {s.weight}
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-6">
-            {SCORE_BREAKDOWN.map((s) => (
-              <div key={s.label} className="flex items-center gap-2 text-sm text-gray-700">
-                <span className={`w-3 h-3 rounded-sm ${s.bar}`} />
-                <span>{s.label} <span className="text-gray-500">({s.weight})</span></span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* DELIVERABLES + TIERS */}
-      <section className="py-20 px-6 bg-gray-50">
-        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-6">
-          <div className="bg-white border border-gray-200 rounded-2xl p-6">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">What you get</h3>
-            <ul className="space-y-3">
-              {DELIVERABLES.map((d, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                  <Check size={14} className="text-violet-600 mt-0.5 shrink-0" />
-                  <span>{d}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-2xl p-6">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">What we look for</h3>
-            <ul className="space-y-3">
-              {TIERS.map((t) => (
-                <li key={t.tier} className="flex items-start gap-3">
-                  <span className="text-xs uppercase tracking-wider text-violet-700 font-semibold w-16 shrink-0 mt-0.5">
-                    {t.tier}
-                  </span>
+                <dl className="space-y-3 text-sm leading-relaxed">
                   <div>
-                    <div className="text-sm text-gray-900 font-semibold">{t.score}</div>
-                    <div className="text-xs text-gray-600">{t.desc}</div>
+                    <dt className="text-xs uppercase tracking-wider text-violet-700 font-semibold mb-1">
+                      What you do
+                    </dt>
+                    <dd className="text-gray-700">{w.youDo}</dd>
                   </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wider text-violet-700 font-semibold mb-1">
+                      What unlocks
+                    </dt>
+                    <dd className="text-gray-700">
+                      {w.unlocks.map((name, i) => (
+                        <React.Fragment key={name}>
+                          <FeatureLink name={name} />
+                          {i < w.unlocks.length - 1 ? ', ' : ''}
+                        </React.Fragment>
+                      ))}
+                      {w.unlocksTail}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wider text-violet-700 font-semibold mb-1">
+                      You leave with
+                    </dt>
+                    <dd className="text-gray-700">{w.leaveWith}</dd>
+                  </div>
+                </dl>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* WHAT YOU GET */}
+      <section id="what-you-get" className="py-20 px-6 scroll-mt-24">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3 text-center">
+            What you get.
+          </h2>
+          <p className="text-gray-600 text-center max-w-xl mx-auto mb-12">
+            Every Lab founder gets the full operating stack.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {WHAT_YOU_GET.map((g) => (
+              <div key={g.title} className="bg-white border border-gray-200 rounded-2xl p-5">
+                <div className="flex items-start gap-2 mb-2">
+                  <Check size={14} className="text-violet-600 mt-1 shrink-0" />
+                  <h3 className="text-sm font-semibold text-gray-900">{g.title}</h3>
+                </div>
+                <p className="text-xs text-gray-600 leading-relaxed pl-6">{g.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* WHAT WE LOOK FOR */}
+      <section id="what-we-look-for" className="py-20 px-6 bg-gray-50 scroll-mt-24">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3 text-center">
+            What we look for.
+          </h2>
+          <p className="text-gray-600 text-center max-w-xl mx-auto mb-12">
+            Honest. Not every applicant is a fit.
+          </p>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="bg-white border border-gray-200 rounded-2xl p-6">
+              <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-4">
+                Strong signals
+              </h3>
+              <ul className="space-y-3">
+                {STRONG_SIGNALS.map((s) => (
+                  <li key={s.t} className="flex items-start gap-2 text-sm text-gray-700">
+                    <Check size={14} className="text-violet-600 mt-1 shrink-0" />
+                    <div>
+                      <span className="font-semibold text-gray-900">{s.t}</span> — {s.d}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-2xl p-6">
+              <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-4">
+                Filters
+              </h3>
+              <ul className="space-y-3 mb-6">
+                {FILTERS.map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-sm text-gray-700">
+                    <Check size={14} className="text-violet-600 mt-1 shrink-0" />
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold mb-3">
+                Reasons we say no
+              </h3>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {REASONS_WE_SAY_NO.join(' · ')}.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* NETWORK */}
+      <section id="network" className="py-20 px-6 scroll-mt-24">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3 text-center">
+            Network.
+          </h2>
+          <p className="text-gray-600 text-center max-w-xl mx-auto mb-10">
+            Inside the Lab you tap the full Axal network.
+          </p>
+          <div className="bg-white border border-gray-200 rounded-2xl p-6">
+            <ul className="space-y-3">
+              {NETWORK.map((n) => (
+                <li key={n} className="flex items-start gap-2 text-sm text-gray-700 leading-relaxed">
+                  <Check size={14} className="text-violet-600 mt-1 shrink-0" />
+                  <span>{n}</span>
                 </li>
               ))}
             </ul>
           </div>
+        </div>
+      </section>
+
+      {/* MARKET DATA */}
+      <section id="market-data" className="py-20 px-6 bg-gray-50 scroll-mt-24">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3 text-center">
+            Market data.
+          </h2>
+          <p className="text-gray-600 text-center max-w-xl mx-auto mb-12">
+            Six dashboards every founder gets on day one.{' '}
+            <Link to="/market-intel" className="text-violet-700 hover:text-violet-900 underline-offset-2 hover:underline">
+              Preview Market Intelligence →
+            </Link>
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {MARKET_DATA.map((m) => (
+              <div key={m.t} className="bg-white border border-gray-200 rounded-2xl p-5">
+                <h3 className="text-sm font-semibold text-gray-900 mb-1">{m.t}</h3>
+                <p className="text-xs text-gray-600 leading-relaxed">{m.d}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* PRICING */}
+      <section id="pricing" className="py-20 px-6 scroll-mt-24">
+        <div className="max-w-3xl mx-auto bg-violet-50/40 border-2 border-violet-200 rounded-3xl p-8 md:p-12 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Pricing.</h2>
+          <p className="text-base text-gray-700 leading-relaxed">
+            <span className="font-semibold text-gray-900">Free during the 30-day sprint.</span>{' '}
+            After graduation: standard Founder tiers (Free / Growth / Studio). Services partners
+            are separately priced.
+          </p>
         </div>
       </section>
 
       {/* FAQ */}
-      <section className="py-20 px-6">
+      <section id="faq" className="py-20 px-6 bg-gray-50 scroll-mt-24">
         <div className="max-w-3xl mx-auto">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-10 text-center">FAQ.</h2>
           <div className="space-y-3">
             {FAQ.map((f, i) => (
               <details
                 key={i}
-                className="group bg-gray-50 border border-gray-200 rounded-xl p-5 open:border-violet-300 open:bg-violet-50/40"
+                className="group bg-white border border-gray-200 rounded-xl p-5 open:border-violet-300 open:bg-violet-50/40"
               >
                 <summary className="cursor-pointer text-sm font-semibold text-gray-900 list-none flex items-center justify-between">
                   {f.q}
-                  <span className="text-violet-600 text-xs group-open:rotate-180 transition-transform">▾</span>
+                  <span className="text-violet-600 text-xs group-open:rotate-180 transition-transform">
+                    ▾
+                  </span>
                 </summary>
                 <p className="text-sm text-gray-700 leading-relaxed mt-3">{f.a}</p>
               </details>
             ))}
           </div>
-          <div className="mt-12 text-center">
+          <div className="mt-12 flex flex-col sm:flex-row gap-3 items-center justify-center">
             <Link
               to={APPLY_HREF}
               className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/30"
             >
-              Apply for next cohort <ArrowRight size={16} />
+              Start your 30-day Lab <ArrowRight size={16} />
+            </Link>
+            <Link
+              to={CONTACT_HREF}
+              className="inline-flex items-center gap-2 border border-gray-300 hover:border-gray-400 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium text-gray-800"
+            >
+              Talk to us first
             </Link>
           </div>
         </div>

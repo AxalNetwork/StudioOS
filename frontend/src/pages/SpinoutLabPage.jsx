@@ -1,10 +1,196 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
-import { Check, Loader2, Rocket, Sparkles, ArrowRight } from 'lucide-react';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Check, Loader2, Rocket, Sparkles, ArrowRight, BookOpen } from 'lucide-react';
 import { spinoutLab } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import SpinoutLabMarketingPage from './SpinoutLabMarketingPage';
+
+// Task #12 — Mid-sprint explainer cards rendered below the live tracker.
+// Same content as SpinoutLabMarketingPage, condensed and collapsed by
+// default so authed founders can re-read any section without losing
+// scroll on the dashboard.
+const EXPLAINER_CARDS = [
+  {
+    id: 'playbook',
+    title: 'The 4-week playbook',
+    body: (
+      <div className="space-y-4 text-sm text-gray-700 leading-relaxed">
+        <p>
+          <span className="font-semibold text-gray-900">Week 1 — Idea & Customer.</span> Define the
+          problem, ICP, market sizing seed, talk to ≥5 customers, log every interview. Unlocks{' '}
+          <Link to="/projects" className="text-violet-700 hover:underline">Projects</Link>,{' '}
+          <Link to="/customer-discovery" className="text-violet-700 hover:underline">Customer Discovery</Link>,{' '}
+          <Link to="/market-intel" className="text-violet-700 hover:underline">Market Intelligence</Link>.
+        </p>
+        <p>
+          <span className="font-semibold text-gray-900">Week 2 — Solution & Roadmap.</span> Scope the
+          MVP, set 90-day OKRs, draft brand v1, draft pitch deck v1. Unlocks{' '}
+          <Link to="/roadmap" className="text-violet-700 hover:underline">Roadmap</Link>, Brand
+          Builder, Pitch Deck Builder.
+        </p>
+        <p>
+          <span className="font-semibold text-gray-900">Week 3 — Validate & Team.</span> Run your
+          first venture-readiness score, match with mentors, decide co-founder track. Unlocks{' '}
+          <Link to="/scoring" className="text-violet-700 hover:underline">Scoring</Link>,{' '}
+          <Link to="/mentors" className="text-violet-700 hover:underline">Mentors</Link>,{' '}
+          <Link to="/office-hours" className="text-violet-700 hover:underline">Office Hours</Link>,{' '}
+          <Link to="/cofounder" className="text-violet-700 hover:underline">Co-founder Match</Link>.
+        </p>
+        <p>
+          <span className="font-semibold text-gray-900">Week 4 — Incorporate & Capital.</span>{' '}
+          Incorporate, vest, file 83(b), sign cofounder agreement, lock the ask. Unlocks{' '}
+          <Link to="/incorporate" className="text-violet-700 hover:underline">Incorporate</Link>, Cap
+          Table,{' '}
+          <Link to="/incorporate/83b" className="text-violet-700 hover:underline">Section 83(b)</Link>,{' '}
+          <Link to="/incorporate/cofounder-agreement" className="text-violet-700 hover:underline">Cofounder Agreement</Link>,{' '}
+          <Link to="/capital" className="text-violet-700 hover:underline">Capital</Link>,{' '}
+          <Link to="/compliance" className="text-violet-700 hover:underline">Compliance</Link>.
+        </p>
+      </div>
+    ),
+  },
+  {
+    id: 'what-you-get',
+    title: 'What you get',
+    body: (
+      <ul className="space-y-2 text-sm text-gray-700 leading-relaxed">
+        <li>Personal Advisor on every page — Workers AI Llama 3.3 70B FP8.</li>
+        <li>Three warm investor introductions in Week 4 for qualified founders (three-way NDA gated).</li>
+        <li>Mentor track matched by expertise, availability, language, time zone, rating.</li>
+        <li>Services partners (legal, design, recruiting, technical DD) at Axal-network rates.</li>
+        <li>Sector + investor + sentiment + TALC + atlas + capital-velocity intelligence.</li>
+        <li>Document automation: incorporation, 83(b), cofounder agreement, SAFE, NDAs.</li>
+        <li>Alumni community for life.</li>
+        <li>Equity-for-platform option for accepted ventures (separately negotiated, never automatic).</li>
+      </ul>
+    ),
+  },
+  {
+    id: 'what-we-look-for',
+    title: 'What we look for',
+    body: (
+      <div className="grid md:grid-cols-2 gap-6 text-sm text-gray-700 leading-relaxed">
+        <div>
+          <h4 className="text-xs uppercase tracking-wider text-violet-700 font-semibold mb-2">
+            Strong signals
+          </h4>
+          <ul className="space-y-1.5">
+            <li>Domain expertise — years in the target sector</li>
+            <li>Customer access — warm intros to ICP from day 1</li>
+            <li>Commitment level — full-time</li>
+            <li>Lived insight — non-obvious view about what's broken</li>
+            <li>Coachability — adjusts to evidence</li>
+            <li>Founder + market fit — right person for this specific problem</li>
+          </ul>
+        </div>
+        <div>
+          <h4 className="text-xs uppercase tracking-wider text-violet-700 font-semibold mb-2">
+            Filters
+          </h4>
+          <ul className="space-y-1.5">
+            <li>Sector fit: AI · Blockchain · Quantum · Digital Infra · Frontier Software</li>
+            <li>Geography we can support</li>
+            <li>Founder ≥ 18</li>
+            <li>No sanctions / PEP / bad-actor disqualifications</li>
+          </ul>
+          <p className="mt-3 text-xs text-gray-500">
+            Common reasons we say no: too generic a thesis, no customer access, part-time only,
+            conflicts of interest, sector mismatch.
+          </p>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: 'network',
+    title: 'Network',
+    body: (
+      <ul className="space-y-2 text-sm text-gray-700 leading-relaxed">
+        <li>Operating partners — legal, GTM, design, recruiting, data, technical DD, finance.</li>
+        <li>Investor signals from Axal's pipeline (anonymised until pairwise NDA signed).</li>
+        <li>Mentor pool with expertise tags and availability calendars.</li>
+        <li>Co-marketing partners across the network for distribution.</li>
+        <li>Alumni founders from previous cohorts.</li>
+      </ul>
+    ),
+  },
+  {
+    id: 'market-data',
+    title: 'Market data',
+    body: (
+      <ul className="space-y-2 text-sm text-gray-700 leading-relaxed">
+        <li>Sector compass — best sub-sectors given your profile.</li>
+        <li>Investor signals — live aggregate of investor thesis + deployment (k-anonymity ≥ 5).</li>
+        <li>TALC positioning — where the market is on the technology-adoption lifecycle.</li>
+        <li>Demand & supply atlas — needs vs. offers across the network.</li>
+        <li>Founder ↔ investor fit — embeddings-based thesis match.</li>
+        <li>Capital velocity — deployment pace per stage per sector.</li>
+        <li className="pt-2">
+          <Link to="/market-intel" className="text-violet-700 hover:underline">Open Market Intelligence →</Link>
+        </li>
+      </ul>
+    ),
+  },
+  {
+    id: 'faq',
+    title: 'FAQ',
+    body: (
+      <ul className="space-y-3 text-sm text-gray-700 leading-relaxed">
+        <li>
+          <span className="font-semibold text-gray-900">I already have a co-founder.</span> Week 3
+          is still useful for scoring and investor exposure.
+        </li>
+        <li>
+          <span className="font-semibold text-gray-900">I missed a milestone.</span> You stay at
+          the current week until you complete it. Personal Advisor will list what's missing.
+        </li>
+        <li>
+          <span className="font-semibold text-gray-900">Do you take equity?</span> Only under a
+          separately negotiated partnership / spin-out agreement. Never automatically.
+        </li>
+        <li>
+          <span className="font-semibold text-gray-900">Can I bring an existing project?</span>{' '}
+          Yes — fast-forward through weeks you've already completed.
+        </li>
+        <li>
+          <span className="font-semibold text-gray-900">What jurisdictions?</span> Delaware C-Corp
+          default; LLC, UK Ltd, French SAS, German GmbH supported with partner counsel.
+        </li>
+      </ul>
+    ),
+  },
+];
+
+function ExplainerCards() {
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+        <BookOpen size={16} className="text-violet-600" /> Explainers
+      </h2>
+      <p className="text-xs text-gray-500 -mt-1">
+        Same playbook your applicants see — collapsed by default so they don't crowd your sprint.
+      </p>
+      <div className="space-y-2">
+        {EXPLAINER_CARDS.map((card) => (
+          <details
+            key={card.id}
+            id={`explainer-${card.id}`}
+            className="group bg-white border border-gray-200 rounded-xl p-4 open:border-violet-300 open:bg-violet-50/30"
+          >
+            <summary className="cursor-pointer text-sm font-semibold text-gray-900 list-none flex items-center justify-between">
+              {card.title}
+              <span className="text-violet-600 text-xs group-open:rotate-180 transition-transform">
+                ▾
+              </span>
+            </summary>
+            <div className="mt-4">{card.body}</div>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 // Spin-Out Lab — authenticated dashboard.
 //   - Unauthenticated visitors still see the public marketing page so the
@@ -268,6 +454,8 @@ function Dashboard({ state, onComplete, completing, completeError }) {
           ))}
         </div>
       </section>
+
+      <ExplainerCards />
     </div>
   );
 }
