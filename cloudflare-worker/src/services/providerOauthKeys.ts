@@ -14,6 +14,7 @@
  */
 import type { Env } from '../types';
 import { encryptString, decryptString } from './cryptoBox';
+import { maskClientId } from './cloudflareSecrets';
 
 export type ManagedProviderKey =
   | 'slack'
@@ -256,9 +257,38 @@ export async function deleteOauthCredsAndDisconnect(
   return { removed_keys: removed, disconnected_users: disconnected };
 }
 
+/**
+ * Task #7 — Delete the encrypted DB row WITHOUT cascading
+ * `integrations.status='disconnected'`. Used after a successful
+ * Cloudflare-secret push (the credentials are now live as Worker
+ * secrets, so existing user OAuth tokens remain valid — we just want
+ * to drop the temporary admin-managed row). Returns whether a row
+ * was actually deleted. Invalidates the in-isolate cache so the next
+ * `loadOauthCreds` call re-reads from env.
+ */
+export async function deleteOauthCredsRowOnly(
+  env: Env,
+  providerKey: ManagedProviderKey,
+): Promise<{ removed_keys: boolean }> {
+  await ensureSchema(env);
+  let removed = false;
+  try {
+    const del = await env.DB.prepare(
+      `DELETE FROM provider_oauth_keys WHERE provider_key = ?`,
+    ).bind(providerKey).run();
+    removed = ((del?.meta as any)?.changes ?? 0) > 0;
+  } catch (e) {
+    console.warn('[providerOauthKeys] row-only delete failed', e);
+  }
+  cache.delete(providerKey);
+  return { removed_keys: removed };
+}
+
 /** Admin list — never returns the secret. `client_id_preview` is the
- *  full client_id (it's not a secret) so the UI can show "configured
- *  for app abc12345…". */
+ *  client_id masked as `first4••••last4` (Task #7) — even though the
+ *  client_id is not itself a secret, surfacing the full value to the
+ *  admin UI was an unnecessary leak surface. The Edit modal does NOT
+ *  pre-fill it; admins must retype on rotate-with-id-change. */
 export interface ProviderKeyStatus {
   provider_key: ManagedProviderKey;
   source: 'env' | 'db' | 'unconfigured';
@@ -298,10 +328,10 @@ export async function listProviderKeyStatus(env: Env): Promise<ProviderKeyStatus
     let preview: string | null = null;
     if (env_) {
       source = 'env';
-      preview = env_.id;
+      preview = maskClientId(env_.id);
     } else if (db) {
       source = 'db';
-      preview = db.client_id;
+      preview = maskClientId(db.client_id);
     }
     return {
       provider_key: pk,

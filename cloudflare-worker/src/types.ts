@@ -247,6 +247,13 @@ export interface Env {
   // 32-hex account UUID. Both unset → `loadTechnical` reads from D1.
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_AE_API_TOKEN?: string;
+  // Task #7 — Cloudflare API token scoped to `Workers Scripts: Edit`,
+  // used by services/cloudflareSecrets.ts to promote admin-entered
+  // integration keys into real Worker secrets via the CF API. Reuses
+  // CLOUDFLARE_ACCOUNT_ID (above). CF_WORKER_SCRIPT_NAME defaults to
+  // 'studioos' (the production script name from wrangler.toml).
+  CLOUDFLARE_API_TOKEN?: string;
+  CF_WORKER_SCRIPT_NAME?: string;
   // Task #2 — HubSpot OAuth app credentials. When unset, /oauth/start for
   // hubspot returns 503 and the connect modal surfaces the error inline.
   // Provision via `wrangler secret put HUBSPOT_CLIENT_ID --env=production`.

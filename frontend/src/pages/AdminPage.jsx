@@ -2982,7 +2982,7 @@ function IntegrationKeysPanel() {
                 </div>
                 {row.has_keys && row.client_id_preview && (
                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-3 font-mono break-all">
-                    Client ID: {row.client_id_preview.length > 40 ? `${row.client_id_preview.slice(0, 36)}…` : row.client_id_preview}
+                    Client ID: {row.client_id_preview}
                   </div>
                 )}
                 {row.source === 'db' && row.updated_at && (

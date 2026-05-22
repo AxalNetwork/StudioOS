@@ -1,6 +1,56 @@
 # Changelog
 
 
+## Task #7 — Mask integration keys + promote to Cloudflare Worker secrets
+
+Admin Integration Keys panel no longer leaves long-lived encrypted DB
+rows. Save / Rotate now push directly to the live Worker script as
+real Worker secrets via the Cloudflare API, the encrypted
+`provider_oauth_keys` row is dropped on success, and `client_id` is
+masked as `first4••••last4` everywhere it surfaces.
+
+- **`cloudflare-worker/src/services/cloudflareSecrets.ts`** (new) —
+  `setSecret(env, name, value)` + `deleteSecret(env, name)` wrap CF's
+  `PUT/DELETE /accounts/{id}/workers/scripts/{script}/secrets`.
+  Returns a typed `{ok, status, code, error}` with stable codes
+  `cloudflare_api_token_missing` / `cf_api_forbidden` / `cf_api_failed`.
+  Reads `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` (+ optional
+  `CF_WORKER_SCRIPT_NAME`, default `studioos`). Never logs token
+  values. Idempotent delete (404 → ok). Also exports the shared
+  `maskClientId()` helper.
+- **`cloudflare-worker/src/services/providerOauthKeys.ts`** —
+  `listProviderKeyStatus()` now masks `client_id_preview` via
+  `maskClientId()` for both env and DB sources. Added
+  `deleteOauthCredsRowOnly()` that drops the row WITHOUT cascading
+  `integrations.status='disconnected'` — used after a successful CF
+  push so existing user OAuth tokens stay valid.
+- **`cloudflare-worker/src/routes/admin_integration_keys.ts`** —
+  PUT pushes ID then SECRET; if SECRET fails, ID is rolled back via
+  `deleteSecret()` so no half-set pair survives. Only after both
+  succeed does `deleteOauthCredsRowOnly()` clear the DB row. Rotate
+  pushes the SECRET half and clears the row. Delete removes both
+  Worker secrets then runs the existing
+  `deleteOauthCredsAndDisconnect()` cascade. Every push/rotate/delete
+  writes an `admin_audit_log` row with `report_type='integration_keys'`
+  and action `integration_key_cf_secret_{push,rotate,delete}` (same
+  shape as `telegram_pii_override`). When the token is unset, Rotate
+  falls back to the legacy encrypted-DB path so admins aren't locked
+  out; Save returns 503 `{error:'cloudflare_api_token_missing'}`.
+- **`cloudflare-worker/src/types.ts`** — `CLOUDFLARE_API_TOKEN?` and
+  `CF_WORKER_SCRIPT_NAME?` declared on `Env`.
+- **`frontend/src/pages/AdminPage.jsx`** — Integration Keys card
+  renders `row.client_id_preview` verbatim (no client-side
+  truncation). The Edit/Rotate modal already never pre-filled the
+  field, so no UX regression on rotate.
+
+**Ops to-do (user)** — see `replit.md` item (f). Create a Cloudflare
+API token scoped to `Workers Scripts: Edit` on the studioos worker
+and `wrangler secret put CLOUDFLARE_API_TOKEN --env production`.
+Until then, Save returns the actionable 503; existing rows already in
+`provider_oauth_keys` keep working until an admin re-saves them
+(lazy migration, no destructive backfill).
+
+
 ## Task #4 — Admin X (Twitter) posts + aggregator
 
 Twin of Task #3 (Telegram). Admins link one or more X accounts via OAuth 2.0
