@@ -181,6 +181,24 @@ export async function seedObligations(
       if (kyb) kyb.required = 1;
     }
   }
+  // Task #2 — KYC is investor-only. Any legacy `kyc_v1` row attached to
+  // a non-investor user (seeded under a previous, broader role matrix or
+  // via a role-change that pre-dated the policy tightening) must be
+  // treated as not-applicable rather than counted as a pending /
+  // outstanding obligation. Force-waive in-place so trust summaries and
+  // scoring queries (which already respect `required=0` / `status='waived'`)
+  // naturally exclude them. Preserves the audit row instead of deleting.
+  if (role !== 'investor') {
+    try {
+      await env.DB.prepare(
+        `UPDATE legal_obligations
+            SET required = 0, status = 'waived', updated_at = CURRENT_TIMESTAMP
+          WHERE user_id = ?
+            AND obligation_key = 'kyc_v1'
+            AND status <> 'waived'`,
+      ).bind(userId).run();
+    } catch (e) { console.error('[trust] kyc_v1 legacy waive failed', e); }
+  }
   let inserted = 0;
   for (const d of defs) {
     try {
