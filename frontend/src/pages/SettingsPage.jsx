@@ -6,7 +6,7 @@ import { useToast } from '../components/useToast';
 import {
   User, Globe, Mail, ShieldCheck, Bell, Lock, Briefcase, Users,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
-  Plus, X, KeyRound, Palette, Plug, CreditCard, Code, UserCog,
+  Plus, X, KeyRound, Palette, Plug, CreditCard, UserCog,
   Sun, Moon, ChevronDown, Check, Database,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
@@ -135,7 +135,6 @@ const SECTIONS = [
   { id: 'imports', label: 'Data Imports', icon: Database },
   { id: 'billing', label: 'Billing', icon: CreditCard, roles: ['founder', 'investor'] },
   { id: 'appearance', label: 'Appearance', icon: Palette },
-  { id: 'developer', label: 'Developer', icon: Code, roles: ['admin'] },
 ];
 
 // ---------- Page ------------------------------------------------------------
@@ -153,7 +152,6 @@ const PATH_TO_SECTION = {
   integrations: 'integrations',
   billing: 'billing',
   appearance: 'appearance',
-  developer: 'developer',
   imports: 'imports',
   // Back-compat: old deep links still resolve to a sensible new tab.
   jurisdictions: 'profile',
@@ -304,7 +302,6 @@ export default function SettingsPage() {
           {safeActive === 'imports' && <DataImportsTab flash={flash} />}
           {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
           {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
-          {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperTab flash={flash} />}
         </div>
       </div>
     </div>
@@ -3546,114 +3543,3 @@ function HelpExplainersCard({ flash }) {
   );
 }
 
-function DeveloperTab({ flash }) {
-  const [row, setRow] = useState(null);
-  const [err, setErr] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [newFlag, setNewFlag] = useState('');
-  const [resyncing, setResyncing] = useState(false);
-
-  const load = async () => {
-    try { setRow(await api.getDeveloperSettings()); }
-    catch (e) { setErr(e.message || 'Failed to load developer settings'); }
-  };
-  useEffect(() => { load(); }, []);
-
-  const setFlags = async (flags) => {
-    setBusy(true);
-    try {
-      const res = await api.updateDeveloperSettings({ feature_flags: flags });
-      setRow({ ...row, feature_flags: res.feature_flags || flags });
-      flash('Saved');
-    } catch (e) {
-      flash(e.message || 'Failed to save', 'error');
-    } finally { setBusy(false); }
-  };
-
-  const toggleFlag = (key, value) => {
-    const next = { ...(row.feature_flags || {}), [key]: value };
-    setFlags(next);
-  };
-  const addFlag = () => {
-    const k = newFlag.trim();
-    if (!k) return;
-    if (!/^[a-z0-9_]{1,64}$/i.test(k)) {
-      flash('Flag names must be 1–64 alphanumeric or underscore characters', 'error');
-      return;
-    }
-    setNewFlag('');
-    setFlags({ ...(row.feature_flags || {}), [k]: true });
-  };
-  const removeFlag = (key) => {
-    const next = { ...(row.feature_flags || {}) };
-    delete next[key];
-    setFlags(next);
-  };
-
-  const resync = async () => {
-    setResyncing(true);
-    try {
-      const res = await api.resyncDeveloperIndices();
-      flash(res.message || 'Re-sync queued');
-    } catch (e) {
-      flash(e.message || 'Re-sync failed', 'error');
-    } finally { setResyncing(false); }
-  };
-
-  if (err) return <Card title="Developer"><div className="text-sm text-red-600">{err}</div></Card>;
-  if (!row) return <Card title="Developer"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
-
-  const flags = row.feature_flags || {};
-  const flagKeys = Object.keys(flags).sort();
-
-  return (
-    <>
-      <Card title="Feature flags" description="Per-account toggles. Use sparingly — most product flags belong in the worker bindings.">
-        {flagKeys.length === 0 ? (
-          <div className="text-sm text-gray-500 dark:text-gray-400 mb-3">No flags set.</div>
-        ) : (
-          <div className="divide-y divide-gray-100 dark:divide-gray-800 mb-3">
-            {flagKeys.map(k => (
-              <div key={k} className="flex items-center justify-between py-2">
-                <div className="font-mono text-sm text-gray-800 dark:text-gray-200">{k}</div>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                    <input type="checkbox" checked={!!flags[k]} disabled={busy}
-                      onChange={e => toggleFlag(k, e.target.checked)}
-                      className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
-                    {flags[k] ? 'On' : 'Off'}
-                  </label>
-                  <button onClick={() => removeFlag(k)} disabled={busy}
-                    className="text-xs text-red-600 hover:text-red-800 disabled:text-gray-400">
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="flex gap-2">
-          <input value={newFlag} onChange={e => setNewFlag(e.target.value)}
-            placeholder="new_flag_key" className={inputCls} maxLength={64} />
-          <button onClick={addFlag} disabled={busy || !newFlag.trim()}
-            className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium whitespace-nowrap flex items-center gap-1">
-            <Plus size={14} /> Add
-          </button>
-        </div>
-      </Card>
-
-      <Card title="Search indices" description="Force re-sync of derived caches and search indices for your account.">
-        <button onClick={resync} disabled={resyncing}
-          className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:border-gray-400 text-gray-800 dark:text-gray-200 rounded-lg text-sm disabled:opacity-50">
-          {resyncing ? 'Queueing…' : 'Re-sync indices'}
-        </button>
-      </Card>
-
-      <Card title="Raw user object" description="Read-only view of the user row backing this session.">
-        <pre className="bg-gray-900 text-gray-100 text-xs rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all">
-{JSON.stringify(row.raw_user, null, 2)}
-        </pre>
-      </Card>
-    </>
-  );
-}
