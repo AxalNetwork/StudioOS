@@ -779,6 +779,7 @@ function serializeExpert(e: ExpertRow, opts: { include_score?: number; rating_av
     booking_url: e.booking_url,
     website_url: e.website_url,
     verified: !!e.verified,
+    hidden: !!e.hidden_by_admin,
     profile_completion_pct: Number(e.profile_completion_pct || 0),
     accepts_payments: !!(e.stripe_account_id && e.stripe_charges_enabled),
     rating_avg: opts.rating_avg ?? 0,
