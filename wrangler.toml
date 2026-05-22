@@ -379,6 +379,56 @@ name = "studioos"
 pattern        = "app.axal.vc"
 custom_domain  = true
 
+# Path-scoped routes on the apex `axal.vc`. The apex DNS is proxied
+# through Cloudflare and points at GitHub Pages for everything else
+# (Jekyll marketing site at `/` and `/blogs/`). These routes carve out
+# app-owned paths so the same Worker serves the SPA from `axal.vc/<path>`
+# in addition to `app.axal.vc/<path>`. The SPA calls `/api/*` relative,
+# so `axal.vc/api/*` must also be routed here or fetches would hit
+# Jekyll (404). Patterns are conservative — only paths we own:
+#   /api/*                     — Worker API (cross-origin from axal.vc OK)
+#   /app, /app/*               — generic app shell catch-all
+#   /dashboard, /dashboard/*   — founder/investor dashboards
+#   /admin, /admin/*           — admin console (incl. /admin/due-diligence)
+#   /register, /register/*     — sign-up (referral landing: /register?ref=)
+#   /login, /login/*           — sign-in
+# Each path uses TWO patterns so `/register` matches but `/registered-*`
+# (a hypothetical Jekyll page) does NOT. Add more app paths here as the
+# Jekyll route inventory is confirmed.
+[[env.production.routes]]
+pattern    = "axal.vc/api/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/app"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/app/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/dashboard"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/dashboard/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/admin"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/admin/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/register"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/register/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/login"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/login/*"
+zone_name  = "axal.vc"
+
 [env.production.vars]
 APP_URL              = "https://app.axal.vc"
 PUBLIC_BASE_URL      = "https://app.axal.vc"

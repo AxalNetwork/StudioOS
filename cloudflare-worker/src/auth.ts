@@ -344,15 +344,35 @@ export function generateCsrfToken(): string {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// In production, scope auth cookies to `.axal.vc` so a session set by
+// `app.axal.vc/api/auth/*` is also valid when the SPA loads on the apex
+// (`axal.vc/dashboard`, `axal.vc/register`, etc). Leaf-host scoping
+// (the old default) would log users out the moment they navigated
+// between the two hosts. Dev/preview deliberately omits Domain so
+// localhost / *.workers.dev cookies still work.
+function authCookieDomainAttr(env: { ENVIRONMENT?: string }): string {
+  return String(env.ENVIRONMENT || '') === 'production' ? '; Domain=.axal.vc' : '';
+}
+
 export function setAuthCookies(c: Context<{ Bindings: Env }>, jwt: string, csrf: string): void {
-  const common = `Secure; SameSite=Lax; Path=/; Max-Age=${AUTH_COOKIE_TTL}`;
+  const dom = authCookieDomainAttr(c.env);
+  const common = `Secure; SameSite=Lax; Path=/${dom}; Max-Age=${AUTH_COOKIE_TTL}`;
   c.header('Set-Cookie', `studioos_auth=${jwt}; HttpOnly; ${common}`, { append: true });
   c.header('Set-Cookie', `studioos_csrf=${csrf}; ${common}`, { append: true });
 }
 
 export function clearAuthCookies(c: Context<{ Bindings: Env }>): void {
-  c.header('Set-Cookie', 'studioos_auth=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0', { append: true });
-  c.header('Set-Cookie', 'studioos_csrf=; Secure; SameSite=Lax; Path=/; Max-Age=0', { append: true });
+  const dom = authCookieDomainAttr(c.env);
+  // Clear with the production Domain attribute (matches what we now set)
+  // AND without it, so any legacy host-only cookie issued before this
+  // change still gets cleaned up on logout. Two Set-Cookie headers per
+  // cookie is the standard pattern for cookie-domain migrations.
+  c.header('Set-Cookie', `studioos_auth=; HttpOnly; Secure; SameSite=Lax; Path=/${dom}; Max-Age=0`, { append: true });
+  c.header('Set-Cookie', `studioos_csrf=; Secure; SameSite=Lax; Path=/${dom}; Max-Age=0`, { append: true });
+  if (dom) {
+    c.header('Set-Cookie', 'studioos_auth=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0', { append: true });
+    c.header('Set-Cookie', 'studioos_csrf=; Secure; SameSite=Lax; Path=/; Max-Age=0', { append: true });
+  }
 }
 
 export function generateToken(): string {
