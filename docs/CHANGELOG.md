@@ -1,5 +1,72 @@
 # Changelog
 
+> **Engineering changelog.** This file is the technical log read by
+> contributors and on GitHub — task IDs, file paths, code refs are
+> expected here.
+>
+> **User-facing changes also need a plain-English line in
+> `frontend/public/CHANGELOG-user.md`** (the file the in-app Docs
+> "What's new" page reads). Keep that one short, jargon-free, and
+> written for the people using the platform, not the engineers
+> building it.
+
+
+## Task #21 — Minimal Seed deck: Linear/Stripe/Figma-aesthetic upgrade
+
+Replaced the bare 6-slide Minimal Seed template (the ~40-line "big
+type on white" stub) with a richly-illustrated 6-slide deck in the
+Linear / Stripe / Notion / Figma visual register — one accent
+(`#5E6AD2`), one mono pairing, SVG-only illustrations (product
+window mockup, friction-grid illustration, before/after flow,
+gradient area charts, expertise radar, donut, timeline). One
+investor question per slide; designed to walk through the entire
+company in under three minutes.
+
+- **`frontend/src/decks/templates/minimal_seed.tsx`** — fully rewritten
+  (~1380 lines). Six slide components (`Slide1Company`, `Slide2Problem`,
+  `Slide3Solution`, `Slide4Traction`, `Slide5Team`, `Slide6Ask`) +
+  shared `SlideFrame` chrome (eyebrow, investor question, footer with
+  company name + "Confidential"). `SlideFrame` carries
+  `data-slide-frame=""`, a fixed `1920 × 1080` box, and
+  `pageBreakAfter: 'always'` — exactly the contract `Slide16x9` in
+  `DeckBase.tsx` exposes — so `PitchDeckPrintPage.jsx`'s keyboard
+  nav / page-break / PDF export pipeline picks the new slides up with
+  zero changes on the consumer side.
+- **`Deck_minimal_seed` registry adapter** — accepts the registry-wide
+  `DeckProps` from `DeckBase`, merges incoming Axal `data` (built by
+  `PitchDeckPrintPage.buildTemplateData`) over a rich `SAMPLE_DATA`
+  block **field-by-field**, then emits the 6 slides as a fragment.
+  Field-by-field (rather than whole-object) merge guarantees that any
+  field the founder hasn't filled in still renders with a plausible
+  default, so the deck never collapses to placeholder text mid-pitch.
+  Legacy editor field `ask_amount` is mapped to `ask_amount_usd` so
+  Kawasaki-style records keep rendering.
+- **`MinimalSeedDeckApp` standalone shell** — also exported, with
+  Framer Motion `AnimatePresence` + `useReducedMotion` page transitions,
+  keyboard nav, and dot pagination. Not used by the print pipeline; kept
+  for any caller that wants the live single-screen viewer.
+- **`frontend/package.json`** — added `framer-motion` (React 19
+  compatible). Print pipeline does not depend on it; only the
+  standalone viewer does.
+- **Local-prop rename** — the paste's local `DeckProps` type renamed
+  to `SlideProps` so it doesn't shadow the registry-wide `DeckProps`
+  re-exported by `DeckBase.tsx`.
+
+No registry, slide-count, or filename changes — the template is still
+keyed as `minimal_seed`, still declares `slide_count: 6`,
+`required_tier: 'free'`, `category: 'fundraising'`, and `Deck_minimal_seed`
+is still the named export. `frontend/src/decks/templates/index.ts`
+needs no edits.
+
+Out of scope (not landed here): the platform-side autofill columns
+referenced by the paste's "How to wire it" note
+(`problem_stat_json`, `before_state_json`, `differentiators_json`,
+`customer_logos_json`, `expertise_axes_json`, `expertise_values_json`,
+`team_timeline_json`, `closing_line`, etc.) — they live in the
+separate `DECK_AUTOFILL_AUDIT.md` migration thread. Until those land,
+the deck falls back to `SAMPLE_DATA` per-field for the unmapped
+columns, which is exactly the new field-level merge behaviour above.
+
 
 ## Task #15 — Keyboard arrows in fullscreen for one-time link decks
 
