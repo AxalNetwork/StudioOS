@@ -328,6 +328,8 @@ export const DECK_METHODS: DeckMethodSpec[] = [
           f.para('sam_usd', 'SAM (USD)', ['project.sam']),
           f.para('som_usd', 'SOM (USD)', ['project.som']),
           f.para('market_cagr_pct', 'CAGR (%)', ['project.market_cagr_pct', 'ai.market_cagr_pct']),
+          // Year:value pairs ("2024:38"); flattener parses to {year,v}.
+          f.bullets('market_curve', 'Market curve (year:value, 5 lines)', ['ai.market_curve']),
         ],
       },
       {
@@ -345,6 +347,8 @@ export const DECK_METHODS: DeckMethodSpec[] = [
         fields: [
           f.title('product_headline', ['ai.product_headline'], 'Three layers. One platform.'),
           f.bullets('product_pillars', 'Pillars (3 lines)', ['ai.product_pillars']),
+          // Architecture columns. "Capture: Web, API, Mobile" → column.
+          f.bullets('product_modules', 'Architecture modules (Col: node, node)', ['ai.product_modules']),
         ],
       },
       {
@@ -354,6 +358,8 @@ export const DECK_METHODS: DeckMethodSpec[] = [
           f.bullets('moats', 'Moats (3 lines)', ['ai.moats']),
           f.subtitle('axis_x', ['ai.axis_x'], 'X-axis label'),
           f.subtitle('axis_y', ['ai.axis_y'], 'Y-axis label'),
+          // "Name | x | y" 0–100 each; "Us"/"We" rendered as crimson focal pin.
+          f.bullets('competitors', 'Competitors (Name | x | y, 0–100)', ['ai.competitors']),
         ],
       },
       {
@@ -365,6 +371,10 @@ export const DECK_METHODS: DeckMethodSpec[] = [
           f.para('growth_mom_pct', 'MoM growth (%)', ['financials.mom_growth_pct', 'ai.growth_mom_pct']),
           f.para('nrr_pct', 'NRR (%)', ['financials.nrr_pct', 'ai.nrr_pct']),
           f.bullets('customer_logos', 'Logos (6 lines)', ['ai.customer_logos']),
+          // Month:value pairs; flattener parses to {month,v}.
+          f.bullets('revenue_curve', 'Revenue curve (month:value)', ['financials.revenue_curve', 'ai.revenue_curve']),
+          f.bullets('user_curve', 'Users curve (month:value)', ['financials.user_curve', 'ai.user_curve']),
+          f.bullets('retention_curve', 'Retention by cohort (M0:100, M1:92, …)', ['financials.retention_curve', 'ai.retention_curve']),
         ],
       },
       {

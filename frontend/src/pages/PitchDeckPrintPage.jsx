@@ -14,7 +14,11 @@ import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 // Task #53 — in share mode, heartbeat read-seconds to the worker every
 // 30s so the founder's Engagement panel can show "12 min read".
 
-const ADVANCED_TEMPLATES = new Set(['sequoia_classic', 'yc_seed']);
+// Task #1 scope: only the rebuilt Sequoia template uses the advanced
+// (live React template + window.print()) viewer path. All other
+// templates — including yc_seed — continue to render via the legacy
+// purple-card path + @react-pdf/renderer export below.
+const ADVANCED_TEMPLATES = new Set(['sequoia_classic']);
 
 // Slide16x9 fixed dimensions — every template renders at 1920×1080
 // inside transform: scale() so the viewer fits the browser width.
@@ -109,6 +113,37 @@ function normalizeBullets(key, value) {
         label: String(s),
         from: 20 + i * 15, to: 70 - i * 20,
       }));
+    case 'market_curve':
+    case 'revenue_curve':
+    case 'user_curve':
+      // Accept "2024:38" / "2024 — 38" / "Jan 12" / "Mar=24k".
+      return value.map((s) => {
+        const m = String(s).match(/^\s*([^:=\u2014\u2013\-,\s][^:=\u2014\u2013,]*?)\s*[:=\u2014\u2013\-,]\s*([\d.,kmKMbB]+)/);
+        const label = m ? m[1].trim() : String(s);
+        const num = m ? toNumber(m[2]) : undefined;
+        return key === 'market_curve' ? { year: label, v: num ?? 0 } : { month: label, v: num ?? 0 };
+      }).filter((p) => p.v !== 0 || /\d/.test(String(p.year || p.month || '')));
+    case 'retention_curve':
+      return value.map((s) => {
+        const m = String(s).match(/^\s*([^:=\u2014\u2013\-,\s]+)\s*[:=\u2014\u2013\-,]\s*([\d.]+)\s*%?/);
+        return m ? { m: m[1].trim(), v: parseFloat(m[2]) } : { m: String(s), v: 0 };
+      });
+    case 'competitors':
+      // "Name | x | y" or "Name: 80,40" — x/y on 0–100.
+      return value.map((s) => {
+        const parts = String(s).split(/\s*[|,;]\s*|\s*:\s*/);
+        const name = parts[0] || String(s);
+        const x = parseFloat(parts[1] || '50');
+        const y = parseFloat(parts[2] || '50');
+        return { name, x: Number.isFinite(x) ? x : 50, y: Number.isFinite(y) ? y : 50 };
+      });
+    case 'product_modules':
+      // "Capture: Web, API, Mobile" → {name, nodes:[…]}
+      return value.map((s) => {
+        const [name, rest = ''] = String(s).split(/\s*[:\u2014\u2013\-]\s*/);
+        const nodes = rest.split(/\s*[,;|]\s*/).filter(Boolean);
+        return { name: name || String(s), nodes };
+      });
     default:
       return value;
   }
