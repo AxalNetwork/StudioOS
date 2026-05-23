@@ -110,6 +110,7 @@ export default function PublicFooter() {
             <h3 className="font-semibold text-gray-900 mb-4">Products</h3>
             <ul className="space-y-2">
               <li><Link to="/spinout-lab" className="text-sm text-gray-600 hover:text-gray-900">Spin-Out Lab</Link></li>
+              <li><Link to="/articles" className="text-sm text-gray-600 hover:text-gray-900">Articles</Link></li>
               <li><Link to="/register?lane=lp" className="text-sm text-gray-600 hover:text-gray-900">LP Portal</Link></li>
               <li><Link to="/register?lane=partner" className="text-sm text-gray-600 hover:text-gray-900">Partner Network</Link></li>
             </ul>
