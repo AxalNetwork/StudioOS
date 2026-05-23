@@ -6,6 +6,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import type { DeckProps as RegistryDeckProps } from '../DeckBase';
 
 // ─────────────────────────────────────────────────────────────────
 // Types
@@ -1554,3 +1555,26 @@ export const SAMPLE_DATA: MinimalSeedData = {
 };
 
 export default MinimalSeedDeckApp;
+
+// ─────────────────────────────────────────────────────────────────
+// Registry adapter — exposes `MinimalSeedDeckApp` as a
+// `DeckProps`-compatible component for `frontend/src/decks/templates/
+// index.ts`. Accepts the registry's `data: DeckData` (Record<string,
+// any>) and casts to the standalone's typed `MinimalSeedData`; falls
+// back to SAMPLE_DATA when the row is empty so the picker preview
+// always has content.
+//
+// Note: the standalone shell owns its own slide nav (prev/next +
+// keyboard) and renders one slide at a time, so this wrapper is
+// intended for the live builder/picker preview. Print/PDF export
+// continues to use the `minimal_seed` registry entry, which renders
+// all six slides as fixed 1920×1080 `data-slide-frame=""` panels for
+// `PitchDeckPrintPage.jsx`.
+// ─────────────────────────────────────────────────────────────────
+
+export const Deck_minimal_seed_app: React.FC<RegistryDeckProps> = ({ data, editable }) => {
+  const seed = (data && Object.keys(data).length > 0)
+    ? (data as unknown as MinimalSeedData)
+    : SAMPLE_DATA;
+  return <MinimalSeedDeckApp initialData={seed} editable={!!editable} />;
+};
