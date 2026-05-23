@@ -35,6 +35,7 @@
     dimensions: ['supply', 'demand'],
     weight: 0.5,
     daily_cap: 1000,
+    status: 'draft',
     fetchLive: async (_env, { sectors }) => {
       // TODO: wire real Apple App Store top charts client. Falls back to stub semantics
       // until a contract / API token is in place — keeps the read pipeline

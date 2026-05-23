@@ -48,6 +48,14 @@ export interface SourceDescriptor {
   weight: number;
   /** True when access requires a paid contract (PitchBook etc.). */
   paid?: boolean;
+  /**
+   * Lifecycle status. 'live' = fetchLive is wired to a real provider;
+   * 'draft' = stub-only placeholder still returning seeded synthetic rows.
+   * Aggregator/UI can use this to skip drafts or badge them as such.
+   * Defaults to 'draft' when omitted so an un-marked source can't pretend
+   * to be production-ready.
+   */
+  status?: 'draft' | 'live';
   /** Per-day call cap surfaced to the quota tracker. */
   daily_cap?: number;
   /** Tier this source's data is gated to. */

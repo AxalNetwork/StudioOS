@@ -136,7 +136,7 @@ function BrowseTab({ user }) {
 
 function NeedCard({ n, onClick }) {
   return (
-    <button onClick={onClick} className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-violet-300 hover:shadow-sm transition">
+    <button type="button" onClick={onClick} className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-violet-300 hover:shadow-sm transition focus:outline-none focus:ring-2 focus:ring-violet-500">
       <div className="flex items-start justify-between gap-2">
         <div>
           <span className="text-[10px] bg-violet-50 text-violet-700 rounded-full px-2 py-0.5">{CAT_LABEL[n.category] || n.category}</span>
@@ -874,6 +874,7 @@ function CancelButton({ busy, onSubmit }) {
 // Shared bits
 // ---------------------------------------------------------------------------
 function Modal({ title, onClose, children, wide }) {
+  useEscapeClose(onClose);
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div className={`bg-white rounded-2xl shadow-xl ${wide ? 'max-w-2xl' : 'max-w-md'} w-full max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>

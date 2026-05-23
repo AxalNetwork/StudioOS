@@ -51,6 +51,7 @@ import {
   createBookingCheckout, mirrorBookingToCalendar, fanoutBookingNotifications,
 } from '../services/wellbeing/bookings';
 import { stripeCall } from './billing';
+import { clampLimit } from '../util/pagination';
 
 const wellbeing = new Hono<{ Bindings: Env }>();
 
@@ -409,8 +410,7 @@ wellbeing.get('/checkins', async (c) => {
   if (role(user) === 'investor') {
     return c.json({ detail: 'Not available for investors' }, 403);
   }
-  const limitRaw = Number(c.req.query('limit') ?? 30);
-  const limit = Math.max(1, Math.min(Number.isFinite(limitRaw) ? limitRaw : 30, 200));
+  const limit = clampLimit(c.req.query('limit'), 30, 200);
   try {
     await ensureWellbeingSchema(c.env);
     // Canonical read path is the daily-pulse table (Task #33).
@@ -890,7 +890,7 @@ wellbeing.get('/experts', async (c) => {
     };
 
     const ratings = await loadRatingAggregates(c.env, filtered.map((e) => e.id));
-    const limit = Math.max(1, Math.min(Number(c.req.query('limit') ?? 6), 50));
+    const limit = clampLimit(c.req.query('limit'), 6, 50);
     const ranked = rankExperts(filtered, prefs, ratings, limit);
 
     // Free-tier cap surface (informational; actual block on /experts/:uid)

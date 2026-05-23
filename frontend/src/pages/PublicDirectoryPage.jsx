@@ -12,7 +12,7 @@ const CAPACITY = ['available', 'limited', 'unavailable'];
 const PRICING = ['$', '$$', '$$$'];
 
 function Stars({ value }) {
-  if (value == null) return <span className="text-xs text-gray-400">No reviews yet</span>;
+  if (value == null) return <span className="text-xs text-gray-500">No reviews yet</span>;
   return (
     <span className="inline-flex items-center gap-0.5 text-amber-500">
       {[1, 2, 3, 4, 5].map((n) => (
@@ -130,7 +130,7 @@ export default function PublicDirectoryPage() {
 
         <div className="mb-6 flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[240px]">
-            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               type="text"
               placeholder="Search by name, company, or specialization"
@@ -210,7 +210,7 @@ export default function PublicDirectoryPage() {
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">
                 {featured.length > 0 ? 'All Partners' : 'Partners'}
-                <span className="ml-2 text-xs text-gray-400">({data?.total || 0} total)</span>
+                <span className="ml-2 text-xs text-gray-500">({data?.total || 0} total)</span>
               </h2>
             </div>
             {standard.length === 0 && featured.length === 0 ? (

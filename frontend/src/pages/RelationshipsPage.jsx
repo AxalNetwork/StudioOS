@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Users, Plus, Loader2, X, Award, TrendingUp, Activity, Network, Sparkles, Trophy } from 'lucide-react';
 import { api } from '../lib/api';
+import { useEscapeClose } from '../components/useEscapeClose';
 
 const REL_TYPES = [
   { id: 'co_investor', label: 'Co-Investor', color: 'bg-emerald-100 text-emerald-700' },
@@ -274,6 +275,7 @@ function EditRelModal({ rel, onClose, onSaved }) {
 }
 
 function Modal({ onClose, title, children }) {
+  useEscapeClose(onClose);
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>

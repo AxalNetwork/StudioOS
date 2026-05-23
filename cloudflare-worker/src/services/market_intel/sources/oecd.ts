@@ -35,6 +35,7 @@
     dimensions: ['capital', 'research'],
     weight: 0.55,
     daily_cap: 1000,
+    status: 'draft',
     fetchLive: async (_env, { sectors }) => {
       // TODO: wire real OECD productivity + R&D client. Falls back to stub semantics
       // until a contract / API token is in place — keeps the read pipeline

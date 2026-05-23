@@ -11,6 +11,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isAdmin, mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { clampLimit, parseOffset } from '../util/pagination';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -201,8 +202,8 @@ r.get('/companies', async (c) => {
     const stage = c.req.query('stage');
     const revenue = c.req.query('revenue_range');
     const q = (c.req.query('q') || '').trim().toLowerCase();
-    const limit = Math.max(1, Math.min(500, Number(c.req.query('limit') || 50)));
-    const offset = Math.max(0, Number(c.req.query('offset') || 0));
+    const limit = clampLimit(c.req.query('limit'), 50, 200);
+    const offset = parseOffset(c.req.query('offset'));
     let where = '1=1';
     const params: any[] = [];
     if (stage) { where += ' AND stage = ?'; params.push(stage); }

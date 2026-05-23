@@ -71,7 +71,7 @@ function ChartPanel({ title, data, dataKey = 'count', color = '#7c3aed', type = 
         </ResponsiveContainer>
       </div>
       {formatted.length === 0 && (
-        <div className="text-center text-xs text-gray-400 mt-2">No data in selected window.</div>
+        <div className="text-center text-xs text-gray-500 mt-2">No data in selected window.</div>
       )}
     </div>
   );
@@ -166,7 +166,7 @@ function ErrorDetailModal({ error, allErrors, onClose }) {
               <div className="font-mono text-gray-900 break-all">{error.endpoint}</div>
             </div>
             <div className="border border-gray-200 rounded-lg px-3 py-2 flex items-start gap-2">
-              <UserIcon size={13} className="text-gray-400 mt-0.5 shrink-0" />
+              <UserIcon size={13} className="text-gray-500 mt-0.5 shrink-0" />
               <div className="min-w-0">
                 <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">User</div>
                 <div className="text-gray-900 truncate">
@@ -176,7 +176,7 @@ function ErrorDetailModal({ error, allErrors, onClose }) {
               </div>
             </div>
             <div className="border border-gray-200 rounded-lg px-3 py-2 flex items-start gap-2">
-              <Hash size={13} className="text-gray-400 mt-0.5 shrink-0" />
+              <Hash size={13} className="text-gray-500 mt-0.5 shrink-0" />
               <div className="min-w-0">
                 <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Error ID</div>
                 <div className="font-mono text-gray-900">#{error.id}</div>
@@ -200,7 +200,7 @@ function ErrorDetailModal({ error, allErrors, onClose }) {
                 {error.stack_snippet}
               </pre>
             ) : (
-              <div className="text-xs text-gray-400 italic">No stack trace captured for this error.</div>
+              <div className="text-xs text-gray-500 italic">No stack trace captured for this error.</div>
             )}
           </div>
 
@@ -208,7 +208,7 @@ function ErrorDetailModal({ error, allErrors, onClose }) {
           {related.length > 0 && (
             <div>
               <div className="text-xs font-semibold text-gray-700 mb-1.5">
-                Other occurrences of this error <span className="text-gray-400 font-normal">({related.length})</span>
+                Other occurrences of this error <span className="text-gray-500 font-normal">({related.length})</span>
               </div>
               <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
                 {related.slice(0, 10).map(r => (
@@ -227,7 +227,7 @@ function ErrorDetailModal({ error, allErrors, onClose }) {
           {sameUser.length > 0 && (
             <div>
               <div className="text-xs font-semibold text-gray-700 mb-1.5">
-                Other recent errors from this user <span className="text-gray-400 font-normal">({sameUser.length})</span>
+                Other recent errors from this user <span className="text-gray-500 font-normal">({sameUser.length})</span>
               </div>
               <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
                 {sameUser.slice(0, 10).map(r => (
@@ -346,7 +346,7 @@ export default function MonitoringPage() {
               <option value={240}>Last 4 hours</option>
               <option value={1440}>Last 24 hours</option>
             </select>
-            <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" />
           </div>
           <button
             onClick={() => { loadAll(); loadAnomalies(); }}
@@ -439,7 +439,7 @@ export default function MonitoringPage() {
               </div>
             ))}
             {!metrics?.top_endpoints?.length && (
-              <div className="text-xs text-gray-400 text-center py-4">No data.</div>
+              <div className="text-xs text-gray-500 text-center py-4">No data.</div>
             )}
           </div>
         </div>
@@ -453,7 +453,7 @@ export default function MonitoringPage() {
           <span className="text-xs text-gray-500 ml-2">Last {rateLimits?.window_minutes}m</span>
         </div>
         {heatmap.length === 0 ? (
-          <div className="text-xs text-gray-400 text-center py-4">No rate-limit blocks in window.</div>
+          <div className="text-xs text-gray-500 text-center py-4">No rate-limit blocks in window.</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
             {heatmap.map((h, i) => {
@@ -509,7 +509,7 @@ export default function MonitoringPage() {
           <span className="text-sm font-semibold text-gray-900">Recent Errors</span>
         </div>
         {(errors?.errors || []).length === 0 ? (
-          <div className="text-xs text-gray-400 text-center py-4">No errors logged.</div>
+          <div className="text-xs text-gray-500 text-center py-4">No errors logged.</div>
         ) : (
           <div className="space-y-2">
             {errors.errors.slice(0, 10).map(e => (

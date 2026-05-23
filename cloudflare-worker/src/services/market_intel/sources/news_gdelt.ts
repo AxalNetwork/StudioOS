@@ -35,6 +35,7 @@
     dimensions: ['sentiment'],
     weight: 0.45,
     daily_cap: 5000,
+    status: 'draft',
     fetchLive: async (_env, { sectors }) => {
       // TODO: wire real GDELT global news graph client. Falls back to stub semantics
       // until a contract / API token is in place — keeps the read pipeline

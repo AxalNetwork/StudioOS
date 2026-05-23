@@ -24,6 +24,7 @@ import { ensurePartnerDirectoryColumns } from '../services/partnerDirectorySchem
 // Sourcing the value from INVESTOR_QUOTAS keeps the column in sync with
 // the user's actual tier even if the free cap shifts later.
 import { INVESTOR_QUOTAS } from '../middleware/requireInvestorTier';
+import { clampLimit } from '../util/pagination';
 
 const admin_partners = new Hono<{ Bindings: Env }>();
 
@@ -226,8 +227,7 @@ admin_partners.post('/invitations/:id/revoke', async (c) => {
 // `status=all` to rank across every lifecycle state. `limit` is clamped 1..50.
 admin_partners.get('/deals/top', async (c) => {
   await requireAdmin(c);
-  const limitRaw = parseInt(c.req.query('limit') || '10', 10);
-  const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 10, 1), 50);
+  const limit = clampLimit(c.req.query('limit'), 10, 50);
   const status = c.req.query('status') || 'active';
   const where = status === 'all' ? '' : 'WHERE pd.status = ?';
   const binds: unknown[] = status === 'all' ? [limit] : [status, limit];

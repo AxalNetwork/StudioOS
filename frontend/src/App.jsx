@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, createContext, useContext, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, createContext, useContext, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
@@ -559,8 +559,15 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     onTimeout: onLogout,
   });
 
+  // Memoize the context value so consumers of `useViewMode()` don't re-render
+  // on every App render. Stable identity unless one of the three inputs changes.
+  const viewModeContextValue = useMemo(
+    () => ({ viewMode: activeRole, isAdmin, isImpersonating }),
+    [activeRole, isAdmin, isImpersonating],
+  );
+
   return (
-    <ViewModeContext.Provider value={{ viewMode: activeRole, isAdmin, isImpersonating }}>
+    <ViewModeContext.Provider value={viewModeContextValue}>
       <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
         {isAdmin && (
           <PortalSwitcher
