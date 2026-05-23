@@ -341,6 +341,14 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
         await document.exitFullscreen();
       } else if (stageRef.current && stageRef.current.requestFullscreen) {
         await stageRef.current.requestFullscreen();
+        // Task #15 — Safari/Firefox route keyboard events to the
+        // fullscreen element first. Without an explicit focus the
+        // stage is not the activeElement, so arrow keys can be
+        // swallowed by the browser's default scroll handler before our
+        // document-level listener gets to preventDefault. tabIndex=-1
+        // on the stage div makes it programmatically focusable without
+        // entering the Tab order.
+        try { stageRef.current.focus({ preventScroll: true }); } catch { /* noop */ }
       }
     } catch { /* user gesture missing / unsupported — silently ignore */ }
   }, []);
@@ -399,8 +407,11 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
       if (target === curIdx && !isHome && !isEnd) return;
       frames[target].scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // Task #15 — listen on `document` (not `window`) so the listener
+    // also catches keys that are routed to the fullscreen element on
+    // Safari/Firefox, where `window`-level listeners can miss them.
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, [toggleFullscreen]);
 
   const templateData = useMemo(() => (isAdvanced && deck ? buildTemplateData(deck) : null), [isAdvanced, deck]);
@@ -479,7 +490,7 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
   // Advanced — render the actual template scaled to fit.
   if (isAdvanced) {
     return (
-      <div ref={stageRef} className="bg-gray-100 min-h-screen">
+      <div ref={stageRef} tabIndex={-1} className="bg-gray-100 min-h-screen outline-none">
         {/* Print-time rules — fit one Slide16x9 per A4 landscape page,
             kill margins, hide screen-only chrome. Fullscreen-time rules
             black out the page background and hide the sticky header so
@@ -508,7 +519,7 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
 
   // Legacy fallback — generic purple cards for decks without a method_id.
   return (
-    <div ref={stageRef} className="bg-gray-100 min-h-screen">
+    <div ref={stageRef} tabIndex={-1} className="bg-gray-100 min-h-screen outline-none">
       <style>{`
         :fullscreen .deck-print-chrome { display: none !important; }
         :fullscreen { background: #1e1b4b !important; overflow-y: auto; }

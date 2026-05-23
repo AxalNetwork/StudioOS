@@ -1,6 +1,45 @@
 # Changelog
 
 
+## Task #15 — Keyboard arrows in fullscreen for one-time link decks
+
+Pitch-deck share viewer (`/share/deck/:token` and legacy
+`/deck/share/:token`) now reliably advances slides via
+`→ / ← / ↑ / ↓ / PageDown / PageUp / Space / j / k / Home / End` (and
+`f` to toggle fullscreen) **while in fullscreen** for every registered
+deck template — Kawasaki, Sequoia, YC Seed, Series A/B, Sales,
+Partnership BD, One-Pager Teaser, Narrative Brand, Minimal Seed,
+Investor Appendix, Demo Day, plus the legacy purple-card fallback.
+
+Root cause was a focus / event-routing bug, not a missing handler.
+Task #11 already wired a window-level keydown listener and the
+`data-slide-frame` markers on both render paths; what was missing
+was that some browsers (Safari, Firefox) route keys to the
+fullscreen element before they reach `window`, and the stage was
+not focusable, so the browser's default scroll handler swallowed
+arrow keys before our handler ran.
+
+- **`frontend/src/pages/PitchDeckPrintPage.jsx`**:
+  - `toggleFullscreen()` now calls `stageRef.current.focus({preventScroll:true})`
+    immediately after `await requestFullscreen()` so the stage div
+    becomes `document.activeElement` in fullscreen.
+  - Both render branches (advanced + legacy fallback) on the
+    `ref={stageRef}` div now carry `tabIndex={-1}` (programmatically
+    focusable, stays out of the Tab order) and `outline-none` so the
+    focus ring doesn't render around the stage chrome.
+  - Keydown listener moved from `window` to `document` to also catch
+    keys routed to the fullscreen element on Safari / Firefox.
+  - All existing guards preserved (skip when an editable element is
+    focused, skip when modifier keys are held, fullscreen-aware
+    current-slide anchor, advance via `scrollIntoView`).
+
+No changes to the build/preview surface (`PitchDeckPage.jsx`), no
+new dependencies, no schema or worker changes. Verified every
+template in `frontend/src/decks/templates/*.tsx` routes through
+`Slide16x9` (which already carries `data-slide-frame`); the legacy
+gradient fallback already had the marker.
+
+
 ## Task #1 — Force Google account picker + atomic one-Google-to-one-Axal guard
 
 Calendar / Integrations "Connect Google" now always renders Google's
