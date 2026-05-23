@@ -14,9 +14,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import Fuse from 'fuse.js';
 import {
-  Search, ArrowRight, Compass, Activity, BookOpen, Sparkles, Loader2,
+  Search, ArrowRight, Compass, Activity, BookOpen, Sparkles, Loader2, FileText,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, articles as articlesApi } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { SIDEBAR_GROUPS, hasTier, hasInvestorTier } from '../sidebarConfig';
 import { SECTIONS, filterSectionsForRole } from '../pages/docs/sections';
@@ -26,10 +26,11 @@ const REFRESH_MS = 5 * 60 * 1000;
 const KIND_META = {
   page:     { label: 'Pages',           icon: Compass },
   action:   { label: 'Quick actions',   icon: Sparkles },
+  article:  { label: 'Articles',        icon: FileText },
   activity: { label: 'Recent activity', icon: Activity },
   doc:      { label: 'Documentation',   icon: BookOpen },
 };
-const KIND_ORDER = ['page', 'action', 'activity', 'doc'];
+const KIND_ORDER = ['page', 'action', 'article', 'activity', 'doc'];
 
 // Quick actions — role/tier-gated. Handler receives (navigate) and is
 // responsible for closing-side-effects (palette closes itself on any
@@ -145,10 +146,13 @@ export default function CommandPalette() {
   const [q, setQ] = useState('');
   const [activity, setActivity] = useState([]);
   const [loadingActivity, setLoadingActivity] = useState(false);
+  const [articleItems, setArticleItems] = useState([]);
+  const [loadingArticles, setLoadingArticles] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const lastFetchRef = useRef(0);
+  const lastArticlesFetchRef = useRef(0);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -186,10 +190,26 @@ export default function CommandPalette() {
     finally { setLoadingActivity(false); }
   }, [user, activity.length]);
 
+  // Published articles — same 5-min refresh pattern as recent activity.
+  // Fresh fetch on open if the cache is stale, otherwise reuse.
+  const refreshArticles = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastArticlesFetchRef.current < REFRESH_MS && articleItems.length > 0) return;
+    lastArticlesFetchRef.current = now;
+    setLoadingArticles(true);
+    try {
+      const res = await articlesApi.list({ limit: 50 });
+      const items = Array.isArray(res?.items) ? res.items : [];
+      setArticleItems(items.filter((a) => a && a.slug));
+    } catch { /* silent — palette stays usable without articles */ }
+    finally { setLoadingArticles(false); }
+  }, [articleItems.length]);
+
   useEffect(() => {
     if (!open) return;
     refreshActivity();
-  }, [open, refreshActivity]);
+    refreshArticles();
+  }, [open, refreshActivity, refreshArticles]);
 
   // Focus + scroll input into view when opening.
   useEffect(() => {
@@ -211,8 +231,15 @@ export default function CommandPalette() {
       hint: row.created_at ? new Date(row.created_at).toLocaleString() : '',
       row,
     }));
-    return [...pages, ...actions, ...activityItems, ...docs];
-  }, [user, role, activity]);
+    const articleResults = articleItems.map((a) => ({
+      id: `article:${a.id || a.slug}`,
+      kind: 'article',
+      label: a.title || a.slug,
+      hint: a.author || a.author_role || '',
+      to: `/articles/${a.slug}`,
+    }));
+    return [...pages, ...actions, ...articleResults, ...activityItems, ...docs];
+  }, [user, role, activity, articleItems]);
 
   const fuse = useMemo(() => {
     return new Fuse(allItems, {
@@ -305,7 +332,7 @@ export default function CommandPalette() {
             className="flex-1 bg-transparent text-sm outline-none text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
             aria-label="Search command palette"
           />
-          {loadingActivity && <Loader2 size={14} className="animate-spin text-gray-400" />}
+          {(loadingActivity || loadingArticles) && <Loader2 size={14} className="animate-spin text-gray-400" />}
           <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 text-gray-500">Esc</kbd>
         </div>
         <div ref={listRef} className="max-h-[60vh] overflow-y-auto py-1">
