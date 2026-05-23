@@ -536,7 +536,27 @@ decks.get('/share/:token', async (c) => {
   } catch {}
 
   // view_id is returned so the viewer can heartbeat read-time updates.
-  return c.json({ ...rowToDeck(row), view_id: viewId });
+  // Task #6 — surface method_id + project_id + project_name at the top
+  // level so the viewer can route to the right template renderer AND
+  // render category-aware CTA copy without a second authed roundtrip.
+  // method_id is extracted from the stamped slide blob via the same
+  // helper /apply-method writes (and which the frontend already falls
+  // back through), so a legacy deck saved before /apply-method (no
+  // slide-level method_id) still surfaces null and the viewer renders
+  // the generic fallback.
+  const methodId = extractDeckMethodId(row);
+  let projectName: string | null = null;
+  try {
+    const pr = await c.env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(Number(row.project_id)).first<any>();
+    if (pr?.name) projectName = String(pr.name).slice(0, 200);
+  } catch {}
+  return c.json({
+    ...rowToDeck(row),
+    view_id: viewId,
+    method_id: methodId,
+    project_id: Number(row.project_id) || null,
+    project_name: projectName,
+  });
 });
 
 /**
@@ -598,11 +618,41 @@ decks.get('/:id/engagement', async (c) => {
   const tokRows = (tokens.results || []) as any[];
   const viewRows = (views.results || []) as any[];
   const totalRead = viewRows.reduce((acc, v) => acc + (Number(v.read_seconds) || 0), 0);
+
+  // Task #6 — surface conversion funnel alongside the existing view
+  // metrics. We aggregate by type and join the latest conversion per
+  // view so the engagement panel can render a per-view badge.
+  let convAgg: Record<string, number> = {};
+  const convByView = new Map<number, string>();
+  try {
+    const { ensureDeckShareConversionSchema } = await import('./deck_share_actions');
+    await ensureDeckShareConversionSchema(c.env);
+    const convRows = await c.env.DB.prepare(
+      `SELECT view_id, type, created_at
+         FROM deck_share_conversions
+        WHERE deck_id = ?
+        ORDER BY created_at ASC`
+    ).bind(id).all<any>();
+    for (const r of (convRows.results || []) as any[]) {
+      convAgg[r.type] = (convAgg[r.type] || 0) + 1;
+      if (r.view_id) convByView.set(Number(r.view_id), String(r.type));
+    }
+  } catch (e) {
+    console.error('[decks engagement] conversion aggregation failed', (e as Error).message);
+  }
+
   return c.json({
     deck_id: id,
     total_views: viewRows.length,
     total_read_seconds: totalRead,
     last_viewed_at: viewRows[0]?.created_at || null,
+    conversions: {
+      signups:           convAgg.signup           || 0,
+      nda_signed:        convAgg.nda_signed       || 0,
+      feedbacks:         convAgg.feedback         || 0,
+      deal_pack_opened:  convAgg.deal_pack_opened || 0,
+      deals_signed:      convAgg.deal_signed      || 0,
+    },
     shares: tokRows.map((t) => ({
       id: t.id,
       created_at: t.created_at,
@@ -617,6 +667,7 @@ decks.get('/:id/engagement', async (c) => {
       ip_hash: v.ip_hash, ua_fingerprint: v.ua_fingerprint,
       read_seconds: Number(v.read_seconds) || 0,
       created_at: v.created_at, updated_at: v.updated_at,
+      conversion: convByView.get(Number(v.id)) || null,
     })),
   });
 });
@@ -752,7 +803,7 @@ async function mintSignedToken(env: Env, fileKey: string, ttlSeconds: number, ac
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
   return `${body}.${b64url(sig)}`;
 }
-async function verifySignedToken(env: Env, token: string): Promise<any> {
+export async function verifySignedToken(env: Env, token: string): Promise<any> {
   const idx = token.indexOf('.');
   if (idx <= 0) throw new Error('Malformed token');
   const body = token.slice(0, idx);

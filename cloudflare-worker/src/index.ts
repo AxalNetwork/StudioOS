@@ -128,6 +128,11 @@ import customerChat from './routes/customer_chat';
 import importsRoutes from './routes/imports';
 import brand, { renderLandingHtml } from './routes/brand';
 import decks from './routes/decks';
+// Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
+// + conversion tracking. MUST be mounted BEFORE the `/api/decks`
+// catch-all so its `/share/:token/...` subpaths take precedence over
+// the existing /share/:token reader in decks.ts.
+import deckShareActions from './routes/deck_share_actions';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -525,6 +530,10 @@ app.route('/api/customer-chat', customerChat);
 // partner/investor/mentor bypass).
 app.route('/api/imports', importsRoutes);
 app.route('/api/brand', brand);
+// Task #6 — viewer onboarding routes mounted FIRST so subpaths under
+// /api/decks/share/:token (signup, nda, feedback, deal-pack, context)
+// resolve to the new handlers before falling through to the catch-all.
+app.route('/api/decks', deckShareActions);
 app.route('/api/decks', decks);
 
 // Public landing page HTML (no /api prefix). Founders publish via the

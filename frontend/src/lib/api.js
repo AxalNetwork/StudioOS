@@ -55,7 +55,8 @@ export async function request(path, options = {}) {
       // route, not "your session expired".
       const isPublicEndpoint = path.startsWith('/partner-onboard')
         || path.startsWith('/esign/sign')
-        || path.startsWith('/public/');
+        || path.startsWith('/public/')
+        || path.startsWith('/decks/share/');
       if (res.status === 401 && !path.startsWith('/auth/') && !isPublicEndpoint) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -1038,6 +1039,28 @@ export const api = {
     { method: 'POST', body: JSON.stringify({ view_id: viewId, seconds }) },
   ),
   deckEngagement: (id) => request(`/decks/${id}/engagement`),
+  // Task #6 — share-link viewer onboarding + conversion endpoints.
+  deckShareContext: (token) => request(`/decks/share/${encodeURIComponent(token)}/context`),
+  deckShareSignup: (token, payload) => request(
+    `/decks/share/${encodeURIComponent(token)}/signup`,
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+  ),
+  deckShareNda: (token, payload) => request(
+    `/decks/share/${encodeURIComponent(token)}/nda`,
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+  ),
+  deckShareFeedback: (token, payload) => request(
+    `/decks/share/${encodeURIComponent(token)}/feedback`,
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+  ),
+  deckShareDealPack: (token, payload) => request(
+    `/decks/share/${encodeURIComponent(token)}/deal-pack`,
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+  ),
+  deckShareSignDealPack: (token, payload) => request(
+    `/decks/share/${encodeURIComponent(token)}/deal-pack/sign`,
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+  ),
   // Task #16 (DE) — Pitch Deck Builder rewrite.
   deckMethods: () => request('/decks/methods'),
   deckRecommend: (projectId) => request(`/decks/recommend?project_id=${projectId}`),

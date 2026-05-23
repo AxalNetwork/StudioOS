@@ -1203,6 +1203,22 @@ function EngagementPanel({ data }) {
   }
   const shares = Array.isArray(data.shares) ? data.shares : [];
   const views = Array.isArray(data.views) ? data.views : [];
+  const conv = data.conversions || {};
+  const convBadge = (kind) => {
+    if (!kind) return null;
+    const palette = {
+      signup:           'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+      nda_signed:       'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
+      feedback:         'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+      deal_pack_opened: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+      deal_signed:      'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
+    };
+    const label = {
+      signup: 'signup', nda_signed: 'NDA', feedback: 'fb',
+      deal_pack_opened: 'deal', deal_signed: 'signed',
+    }[kind] || kind;
+    return <span className={`px-1.5 py-0.5 rounded text-[10px] ${palette[kind] || 'bg-gray-100 text-gray-600'}`}>{label}</span>;
+  };
   return (
     <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
       <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2 flex items-center gap-1">
@@ -1218,6 +1234,18 @@ function EngagementPanel({ data }) {
           <div className="text-base font-semibold">{fmtReadTime(data.total_read_seconds)}</div>
         </div>
       </div>
+      {(conv.signups || conv.feedbacks || conv.deals_signed || conv.nda_signed || conv.deal_pack_opened) ? (
+        <div className="mb-3 border dark:border-slate-700 rounded p-2">
+          <div className="text-[10px] uppercase text-gray-400 mb-1">Conversions</div>
+          <div className="grid grid-cols-3 gap-1 text-[11px]">
+            <div><span className="font-semibold">{conv.signups || 0}</span> <span className="text-gray-400">signup</span></div>
+            <div><span className="font-semibold">{conv.nda_signed || 0}</span> <span className="text-gray-400">NDA</span></div>
+            <div><span className="font-semibold">{conv.feedbacks || 0}</span> <span className="text-gray-400">fb</span></div>
+            <div><span className="font-semibold">{conv.deal_pack_opened || 0}</span> <span className="text-gray-400">deal</span></div>
+            <div><span className="font-semibold">{conv.deals_signed || 0}</span> <span className="text-gray-400">signed</span></div>
+          </div>
+        </div>
+      ) : null}
       {shares.length > 0 && (
         <div className="mb-3">
           <div className="text-[10px] uppercase text-gray-400 mb-1">Share links</div>
@@ -1238,9 +1266,12 @@ function EngagementPanel({ data }) {
           <div className="text-[10px] uppercase text-gray-400 mb-1">Recent views</div>
           <div className="space-y-1 max-h-32 overflow-y-auto">
             {views.slice(0, 6).map((v) => (
-              <div key={v.id} className="flex items-center justify-between text-[11px] text-gray-500 dark:text-slate-400">
+              <div key={v.id} className="flex items-center justify-between text-[11px] text-gray-500 dark:text-slate-400 gap-2">
                 <span className="font-mono">{(v.ip_hash || '······').slice(0, 8)}</span>
-                <span>{fmtReadTime(v.read_seconds)}</span>
+                <span className="flex items-center gap-1">
+                  {convBadge(v.conversion)}
+                  <span>{fmtReadTime(v.read_seconds)}</span>
+                </span>
               </div>
             ))}
           </div>

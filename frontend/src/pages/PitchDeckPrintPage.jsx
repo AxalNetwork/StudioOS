@@ -1,24 +1,19 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { Download, Loader2 } from 'lucide-react';
+import { Download, Loader2, Maximize2, Minimize2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
+import ShareDeckCTA from '../components/ShareDeckCTA';
 
 // Task #25 — public viewer for an investor share link, plus an authenticated
-// preview at /deck/:id/print. For advanced narrative templates
-// (sequoia_classic, yc_seed) we render the actual Slide16x9 template
-// scaled to fit the viewport so investors see the same graphics in the
-// share link, the in-app preview, and the printed PDF. For older
-// templates we fall back to the generic purple card stack.
-// Task #53 — in share mode, heartbeat read-seconds to the worker every
-// 30s so the founder's Engagement panel can show "12 min read".
-
-// Task #1 scope: only the rebuilt Sequoia template uses the advanced
-// (live React template + window.print()) viewer path. All other
-// templates — including yc_seed — continue to render via the legacy
-// purple-card path + @react-pdf/renderer export below.
-const ADVANCED_TEMPLATES = new Set(['sequoia_classic', 'kawasaki_10_20_30']);
+// preview at /deck/:id/print. Task #6 expanded the advanced (live React
+// template + window.print()) path to cover ALL 12 registered templates so
+// the share viewer matches the in-app editor preview for every deck. Only
+// decks with no recognisable method_id at all still fall back to the
+// generic purple-card stack.
+// Task #53 — heartbeat read-seconds to the worker every 30s so the
+// founder's Engagement panel can show "12 min read".
 
 // Slide16x9 fixed dimensions — every template renders at 1920×1080
 // inside transform: scale() so the viewer fits the browser width.
@@ -266,8 +261,10 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
   const [exporting, setExporting] = useState(false);
   const [Template, setTemplate] = useState(null);
   const [templateMeta, setTemplateMeta] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const viewIdRef = useRef(null);
   const startedAtRef = useRef(null);
+  const stageRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -283,13 +280,13 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
   }, [id, token, shareMode]);
 
   const methodId = useMemo(() => detectMethodId(deck), [deck]);
-  const isAdvanced = methodId && ADVANCED_TEMPLATES.has(methodId);
 
-  // Lazy-load the templates registry only for advanced decks. The
-  // bundle would otherwise pull every SVG illustration into the public
-  // share viewer.
+  // Task #6 — lazy-load the templates registry whenever we have a
+  // method_id, regardless of which one. Only decks with no recognisable
+  // method_id at all fall through to the legacy purple-card path.
+  const [registryReady, setRegistryReady] = useState(false);
   useEffect(() => {
-    if (!isAdvanced) { setTemplate(null); setTemplateMeta(null); return; }
+    if (!methodId) { setTemplate(null); setTemplateMeta(null); setRegistryReady(false); return; }
     let cancelled = false;
     (async () => {
       try {
@@ -299,17 +296,25 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
         if (meta) {
           setTemplate(() => meta.Component);
           setTemplateMeta(meta);
+        } else {
+          setTemplate(null); setTemplateMeta(null);
         }
+        setRegistryReady(true);
       } catch (err) {
-         
         console.error('PitchDeckPrintPage: failed to load template registry', err);
+        setRegistryReady(true);
       }
     })();
     return () => { cancelled = true; };
-  }, [isAdvanced, methodId]);
+  }, [methodId]);
+
+  const isAdvanced = !!Template;
 
   // Task #53 — read-time heartbeat. Fires every 30s while the tab is
   // open and once more on unmount. Capped server-side at 2h per view.
+  // Task #6 — fullscreen toggling uses the same Page Visibility events,
+  // so visibilitychange below is still the right trigger (a fullscreen
+  // tab that loses focus / minimises still flushes its heartbeat).
   useEffect(() => {
     if (!shareMode || !token) return undefined;
     const tick = () => {
@@ -324,6 +329,24 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
     document.addEventListener('visibilitychange', onHide);
     return () => { tick(); clearInterval(iv); document.removeEventListener('visibilitychange', onHide); };
   }, [shareMode, token]);
+
+  // Task #6 — Fullscreen toggle. Uses the native Fullscreen API on the
+  // root stage element so Esc exits, fullscreenchange flips state back
+  // (covers Esc + browser-button exits + cross-app focus loss).
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else if (stageRef.current && stageRef.current.requestFullscreen) {
+        await stageRef.current.requestFullscreen();
+      }
+    } catch { /* user gesture missing / unsupported — silently ignore */ }
+  }, []);
+  useEffect(() => {
+    const onFs = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
 
   const templateData = useMemo(() => (isAdvanced && deck ? buildTemplateData(deck) : null), [isAdvanced, deck]);
 
@@ -355,50 +378,34 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
     </div>
   );
   if (!deck) return <div className="p-8 text-gray-500">Loading…</div>;
+  if (methodId && !registryReady) return <div className="p-8 text-gray-500">Loading template…</div>;
 
-  // Advanced (Sequoia / YC) — render the actual template scaled to fit.
-  if (isAdvanced) {
-    if (!Template) return <div className="p-8 text-gray-500">Loading template…</div>;
-    return (
-      <div className="bg-gray-100 min-h-screen">
-        {/* Print-time rules — fit one Slide16x9 per A4 landscape page,
-            kill margins, hide screen-only chrome. */}
-        <style>{`
-          @page { size: 1920px 1080px; margin: 0; }
-          @media print {
-            html, body { background: #FFFFFF !important; margin: 0 !important; padding: 0 !important; }
-            .deck-print-chrome { display: none !important; }
-            .deck-print-stage { background: #FFFFFF !important; padding: 0 !important; width: 1920px !important; }
-            .deck-print-scaler { width: 1920px !important; margin: 0 !important; }
-            /* Critical: the inner wrapper carries the live scale
-               transform via inline style. Override it for print so
-               every Slide16x9 lands at its native 1920×1080 on the
-               printed page instead of the shrunken on-screen preview. */
-            .deck-print-inner { transform: none !important; width: 1920px !important; }
-            .deck-print-frames { gap: 0 !important; }
-          }
-        `}</style>
-        <div className="deck-print-chrome sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-          <div className="text-sm text-gray-700 font-medium">{deck.title || 'Pitch deck'} · v{deck.version}</div>
-          <button
-            onClick={exportPdf} disabled={exporting}
-            className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50"
-          >
-            {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-            Save as PDF
-          </button>
-        </div>
-        <PrintStage Template={Template} data={templateData} />
-      </div>
-    );
-  }
+  // CTA card (share mode only — never on the authenticated /deck/:id/print).
+  const ctaCategory = templateMeta?.category || null;
+  const cta = (shareMode && ctaCategory && deck) ? (
+    <ShareDeckCTA
+      category={ctaCategory}
+      shareToken={token}
+      deckId={deck.id}
+      viewId={viewIdRef.current}
+      projectId={deck.project_id || null}
+      projectName={deck.project_name || deck.title || 'this project'}
+      methodId={methodId}
+    />
+  ) : null;
 
-  // Legacy fallback — generic purple cards for templates not yet
-  // upgraded to a graphical Slide16x9 implementation.
-  return (
-    <div className="bg-gray-100 min-h-screen">
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <div className="text-sm text-gray-700 font-medium">{deck.title || 'Pitch deck'} · v{deck.version}</div>
+  const Header = (
+    <div className="deck-print-chrome sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+      <div className="text-sm text-gray-700 font-medium truncate">{deck.title || 'Pitch deck'} · v{deck.version}</div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button" onClick={toggleFullscreen}
+          title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
+          className="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg"
+        >
+          {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          <span className="hidden sm:inline">{isFullscreen ? 'Exit' : 'Fullscreen'}</span>
+        </button>
         <button
           onClick={exportPdf} disabled={exporting}
           className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50"
@@ -407,6 +414,47 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
           Save as PDF
         </button>
       </div>
+    </div>
+  );
+
+  // Advanced — render the actual template scaled to fit.
+  if (isAdvanced) {
+    return (
+      <div ref={stageRef} className="bg-gray-100 min-h-screen">
+        {/* Print-time rules — fit one Slide16x9 per A4 landscape page,
+            kill margins, hide screen-only chrome. Fullscreen-time rules
+            black out the page background and hide the sticky header so
+            only the slides show. */}
+        <style>{`
+          @page { size: 1920px 1080px; margin: 0; }
+          @media print {
+            html, body { background: #FFFFFF !important; margin: 0 !important; padding: 0 !important; }
+            .deck-print-chrome { display: none !important; }
+            .deck-print-cta { display: none !important; }
+            .deck-print-stage { background: #FFFFFF !important; padding: 0 !important; width: 1920px !important; }
+            .deck-print-scaler { width: 1920px !important; margin: 0 !important; }
+            .deck-print-inner { transform: none !important; width: 1920px !important; }
+            .deck-print-frames { gap: 0 !important; }
+          }
+          :fullscreen .deck-print-chrome { display: none !important; }
+          :fullscreen { background: #000 !important; overflow-y: auto; }
+          :fullscreen .deck-print-stage { background: #000 !important; }
+        `}</style>
+        {Header}
+        <PrintStage Template={Template} data={templateData} />
+        {cta && <div className="deck-print-cta">{cta}</div>}
+      </div>
+    );
+  }
+
+  // Legacy fallback — generic purple cards for decks without a method_id.
+  return (
+    <div ref={stageRef} className="bg-gray-100 min-h-screen">
+      <style>{`
+        :fullscreen .deck-print-chrome { display: none !important; }
+        :fullscreen { background: #1e1b4b !important; overflow-y: auto; }
+      `}</style>
+      {Header}
       <div className="max-w-5xl mx-auto py-8 px-4 space-y-6">
         {(deck.slides || []).map((s, i) => (
           <div key={i} className="bg-gradient-to-br from-violet-600 to-violet-800 text-white rounded-xl shadow-md p-12 aspect-video flex flex-col overflow-hidden">
@@ -428,6 +476,7 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
             <div className="mt-auto pt-2 text-[11px] text-violet-200">{i + 1} / {deck.slides.length}</div>
           </div>
         ))}
+        {cta}
       </div>
     </div>
   );
@@ -471,9 +520,6 @@ function PrintStage({ Template, data }) {
             transformOrigin: 'top left',
           }}
         >
-          {/* Wrapping each emitted Slide16x9 in deck-print-frame lets
-              the @media print rules above force one slide per page
-              without touching DeckBase. */}
           <TemplateFrames Template={Template} data={data} />
         </div>
       </div>
