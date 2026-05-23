@@ -393,6 +393,10 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
       projectId={deck.project_id || null}
       projectName={deck.project_name || deck.title || 'this project'}
       methodId={methodId}
+      slides={Array.isArray(deck.slides) ? deck.slides.map((s, i) => ({
+        index: i,
+        title: s?.title || s?.subtitle || `Slide ${i + 1}`,
+      })) : []}
     />
   ) : null;
 

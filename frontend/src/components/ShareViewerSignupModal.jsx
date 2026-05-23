@@ -7,11 +7,13 @@ const STEPS = { SIGNUP: 'signup', NDA: 'nda', POST_NDA: 'post_nda', DONE: 'done'
 
 export default function ShareViewerSignupModal({
   category, shareToken, deckId, viewId, projectId, projectName, methodId, onClose,
+  slides,
 }) {
   useEscapeClose(onClose);
   const [step, setStep] = useState(STEPS.SIGNUP);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [requiresLogin, setRequiresLogin] = useState(false);
   const [form, setForm] = useState({
     email: '', name: '', role: category === 'commercial' ? 'partner' : 'investor',
   });
@@ -22,13 +24,27 @@ export default function ShareViewerSignupModal({
     overall_note: '', problem_fit: '', willingness_to_pay: '', contact: '',
     slide_reactions: {},
   });
+
+  function setSlideReaction(idx, value) {
+    setFeedback((prev) => {
+      const next = { ...(prev.slide_reactions || {}) };
+      if (next[idx] === value) delete next[idx];
+      else next[idx] = value;
+      return { ...prev, slide_reactions: next };
+    });
+  }
+  const REACTION_OPTS = [
+    { key: 'like', label: '👍 Like' },
+    { key: 'confused', label: '❓ Confused' },
+    { key: 'want_more', label: '💡 Want more' },
+  ];
   const [dealForm, setDealForm] = useState({
     check_size: '$25,000', valuation_cap: '$8M', discount: '20%',
   });
 
   async function submitSignup(e) {
     e.preventDefault();
-    setError(null); setBusy(true);
+    setError(null); setRequiresLogin(false); setBusy(true);
     try {
       const res = await api.deckShareSignup(shareToken, {
         email: form.email, name: form.name, role: form.role, view_id: viewId,
@@ -36,7 +52,16 @@ export default function ShareViewerSignupModal({
       setUser(res);
       setStep(STEPS.NDA);
     } catch (err) {
-      setError(err?.message || 'Signup failed');
+      // 409 from the worker when the email already maps to an existing
+      // account — we never auto-log-in across emails, so surface a
+      // "Sign in" path instead. (Closes the takeover vector flagged in
+      // code review.)
+      if (err?.status === 409 && err?.data?.requires_login) {
+        setRequiresLogin(true);
+        setError(err.data.message || 'An account already exists for this email. Please sign in to continue.');
+      } else {
+        setError(err?.message || 'Signup failed');
+      }
     } finally { setBusy(false); }
   }
 
@@ -166,6 +191,14 @@ export default function ShareViewerSignupModal({
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight size={14} />}
                 {busy ? 'Creating account…' : 'Continue'}
               </button>
+              {requiresLogin && (
+                <a
+                  href={`/login?next=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/')}&email=${encodeURIComponent(form.email)}`}
+                  className="block w-full mt-2 text-center bg-white border border-violet-300 text-violet-700 hover:bg-violet-50 text-sm font-medium px-4 py-2.5 rounded-lg"
+                >
+                  Sign in to your existing account
+                </a>
+              )}
             </form>
           )}
 
@@ -198,6 +231,37 @@ export default function ShareViewerSignupModal({
                 <MessageSquare className="inline w-4 h-4 mr-1" />
                 Quick structured feedback for the team.
               </p>
+              {Array.isArray(slides) && slides.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    Per-slide reactions <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
+                  <div className="border dark:border-slate-700 rounded-lg divide-y dark:divide-slate-700 max-h-56 overflow-y-auto">
+                    {slides.map((s) => {
+                      const cur = feedback.slide_reactions?.[s.index];
+                      return (
+                        <div key={s.index} className="flex items-center gap-2 px-3 py-2 text-xs">
+                          <span className="flex-1 truncate text-gray-700 dark:text-slate-300">
+                            <span className="text-gray-400 mr-1.5">{s.index + 1}.</span>{s.title}
+                          </span>
+                          <div className="flex gap-1 shrink-0">
+                            {REACTION_OPTS.map((opt) => (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                onClick={() => setSlideReaction(s.index, opt.key)}
+                                className={`px-2 py-1 rounded border text-[11px] ${cur === opt.key
+                                  ? 'bg-emerald-600 text-white border-emerald-600'
+                                  : 'bg-white dark:bg-slate-950 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800'}`}
+                              >{opt.label}</button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Problem fit</label>
                 <div className="flex gap-2">

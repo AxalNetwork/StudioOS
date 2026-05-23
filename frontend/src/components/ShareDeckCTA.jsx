@@ -12,6 +12,7 @@ import ShareViewerSignupModal from './ShareViewerSignupModal';
 // in ShareViewerSignupModal so it can be opened from anywhere later.
 export default function ShareDeckCTA({
   category, shareToken, deckId, viewId, projectId, projectName, methodId,
+  slides,
 }) {
   const [open, setOpen] = useState(false);
   if (!category) return null;
@@ -64,6 +65,7 @@ export default function ShareDeckCTA({
           projectId={projectId}
           projectName={projectName}
           methodId={methodId}
+          slides={slides}
           onClose={() => setOpen(false)}
         />
       )}
