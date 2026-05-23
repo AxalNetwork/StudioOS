@@ -39,8 +39,15 @@ company in under three minutes.
   Field-by-field (rather than whole-object) merge guarantees that any
   field the founder hasn't filled in still renders with a plausible
   default, so the deck never collapses to placeholder text mid-pitch.
-  Legacy editor field `ask_amount` is mapped to `ask_amount_usd` so
-  Kawasaki-style records keep rendering.
+  Object-valued fields listed in `NESTED_OBJECT_FIELDS` (currently
+  just `problem_stat`) are **deep-merged** per subfield so a partial
+  Axal payload like `problem_stat: { value: '$2B' }` keeps the
+  sample `.label` instead of nuking it. Arrays-of-objects (`founders`,
+  `milestones`, `roadmap`, `use_of_funds`, …) stay "replace if
+  provided" — a partial array from Axal means "render exactly what I
+  gave you," not zip-merge by index. Legacy editor field `ask_amount`
+  is normalised to `ask_amount_usd` so Kawasaki-style records keep
+  rendering.
 - **`MinimalSeedDeckApp` standalone shell** — also exported, with
   Framer Motion `AnimatePresence` + `useReducedMotion` page transitions,
   keyboard nav, and dot pagination. Not used by the print pipeline; kept
