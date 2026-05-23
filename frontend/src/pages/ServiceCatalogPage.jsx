@@ -26,14 +26,14 @@ export default function ServiceCatalogPage({ user }) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Service Catalogue</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Service Catalogue</h1>
         <p className="text-sm text-gray-500 mt-1">
           Productised partner offerings — fixed price, fixed scope, fixed SLA. Founders book
           directly; engagements run through the same lifecycle as accepted quotes.
         </p>
       </div>
 
-      <div className="border-b border-gray-200 flex gap-6 overflow-x-auto">
+      <div className="border-b border-gray-200 flex gap-6 overflow-x-auto dark:border-gray-800">
         {tabs.map((t) => {
           const Icon = t.icon;
           return (
@@ -88,14 +88,14 @@ function BrowseTab({ user, isFounder }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center gap-2">
+      <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center gap-2 dark:bg-gray-900 dark:border-gray-800">
         <Filter size={14} className="text-gray-500" />
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
           <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Search title / partner"
-            className="pl-8 border border-gray-300 rounded-md px-3 py-1.5 text-sm" />
+            className="pl-8 border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
         </div>
-        <select value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white">
+        <select value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
           <option value="">All categories</option>
           {CATEGORIES.map((c) => <option key={c} value={c}>{CAT_LABEL[c]}</option>)}
         </select>
@@ -124,17 +124,17 @@ function BrowseTab({ user, isFounder }) {
 
 function OfferingCard({ o, onClick }) {
   return (
-    <button onClick={onClick} className="text-left bg-white border border-gray-200 hover:border-violet-300 hover:shadow-sm transition rounded-xl p-4 flex flex-col gap-2">
+    <button onClick={onClick} className="text-left bg-white border border-gray-200 hover:border-violet-300 hover:shadow-sm transition rounded-xl p-4 flex flex-col gap-2 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <div className="text-sm font-semibold text-gray-900">{o.title}</div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{o.title}</div>
           <div className="text-xs text-gray-500 mt-0.5">{o.partner_name || 'Unknown partner'} · {CAT_LABEL[o.category] || o.category}</div>
         </div>
         <span className="text-xs px-2 py-0.5 rounded-full border bg-violet-50 text-violet-700 border-violet-200 whitespace-nowrap">
           ${o.price.toLocaleString()} {o.currency?.toUpperCase()}
         </span>
       </div>
-      <p className="text-sm text-gray-700 line-clamp-3">{o.description}</p>
+      <p className="text-sm text-gray-700 line-clamp-3 dark:text-gray-300">{o.description}</p>
       <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
         {o.sla_days != null && <span className="flex items-center gap-1"><Clock size={12} /> {o.sla_days}d SLA</span>}
         {o.partner_kyb_status === 'verified' && <span className="flex items-center gap-1 text-emerald-700"><ShieldCheck size={12} /> Verified</span>}
@@ -175,22 +175,22 @@ function OfferingDetailModal({ offering, user, isFounder, onClose }) {
       <div className="space-y-4 text-sm">
         <div className="text-xs text-gray-500">{offering.partner_name} · {CAT_LABEL[offering.category] || offering.category}</div>
         <div className="flex items-center gap-3">
-          <span className="text-lg font-semibold text-gray-900">${offering.price.toLocaleString()} {offering.currency?.toUpperCase()}</span>
-          {offering.sla_days != null && <span className="text-xs px-2 py-0.5 rounded-full border bg-gray-50 text-gray-700 border-gray-200">SLA {offering.sla_days} days</span>}
+          <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">${offering.price.toLocaleString()} {offering.currency?.toUpperCase()}</span>
+          {offering.sla_days != null && <span className="text-xs px-2 py-0.5 rounded-full border bg-gray-50 text-gray-700 border-gray-200 dark:text-gray-300 dark:border-gray-800">SLA {offering.sla_days} days</span>}
         </div>
-        <Field label="Description"><p className="text-gray-800 whitespace-pre-line">{offering.description}</p></Field>
-        <Field label="Deliverables"><p className="text-gray-800 whitespace-pre-line">{offering.deliverables}</p></Field>
+        <Field label="Description"><p className="text-gray-800 whitespace-pre-line dark:text-gray-200">{offering.description}</p></Field>
+        <Field label="Deliverables"><p className="text-gray-800 whitespace-pre-line dark:text-gray-200">{offering.deliverables}</p></Field>
 
         {isFounder && !done && (
           <div className="border-t pt-4 space-y-3">
             <Field label="Charge to project">
-              <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white">
+              <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white dark:border-gray-700 dark:bg-gray-900">
                 {projects.length === 0 && <option value="">No projects</option>}
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
             <Field label="Notes for the partner (optional)">
-              <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full" />
+              <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
             </Field>
             {error && <ErrorBox message={error} />}
             <button disabled={busy || !projectId} onClick={engage} className="bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-md px-4 py-2 text-sm font-medium flex items-center gap-2">
@@ -269,17 +269,17 @@ function MineTab({ user }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {rows.map((o) => (
-          <div key={o.id} className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
+          <div key={o.id} className="bg-white border border-gray-200 rounded-xl p-4 space-y-2 dark:bg-gray-900 dark:border-gray-800">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <div className="text-sm font-semibold text-gray-900">{o.title}</div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{o.title}</div>
                 <div className="text-xs text-gray-500 mt-0.5">{CAT_LABEL[o.category] || o.category} · ${o.price.toLocaleString()} {o.currency?.toUpperCase()}</div>
               </div>
               <span className={`text-xs px-2 py-0.5 rounded-full border ${o.listed ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
                 {o.listed ? 'Listed' : 'Unlisted'}
               </span>
             </div>
-            <p className="text-sm text-gray-700 line-clamp-2">{o.description}</p>
+            <p className="text-sm text-gray-700 line-clamp-2 dark:text-gray-300">{o.description}</p>
             <div className="flex items-center gap-2 pt-1">
               <button onClick={() => { setEditing(o); setShowForm(true); }} className="text-xs flex items-center gap-1 text-violet-700 hover:text-violet-900"><Edit3 size={12} /> Edit</button>
               <button onClick={() => toggleListed(o)} className="text-xs flex items-center gap-1 text-gray-600 hover:text-gray-900">
@@ -333,38 +333,38 @@ function OfferingFormModal({ offering, onClose }) {
     <Modal title={offering ? 'Edit offering' : 'New offering'} onClose={onClose} wide>
       <div className="space-y-3 text-sm">
         <Field label="Title">
-          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full" />
+          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Category">
-            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white">
+            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white dark:border-gray-700 dark:bg-gray-900">
               {CATEGORIES.map((c) => <option key={c} value={c}>{CAT_LABEL[c]}</option>)}
             </select>
           </Field>
           <Field label="SLA (days)">
-            <input type="number" value={form.sla_days} onChange={(e) => setForm({ ...form, sla_days: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full" />
+            <input type="number" value={form.sla_days} onChange={(e) => setForm({ ...form, sla_days: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Price">
-            <input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full" />
+            <input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
           </Field>
           <Field label="Currency">
-            <input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} maxLength={4} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full" />
+            <input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} maxLength={4} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
           </Field>
         </div>
         <Field label="Description (what the founder gets)">
-          <textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full" />
+          <textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
         </Field>
         <Field label="Deliverables (one per line)">
-          <textarea rows={5} value={form.deliverables} onChange={(e) => setForm({ ...form, deliverables: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full" />
+          <textarea rows={5} value={form.deliverables} onChange={(e) => setForm({ ...form, deliverables: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
         </Field>
-        <label className="flex items-center gap-2 text-sm text-gray-700">
+        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
           <input type="checkbox" checked={!!form.listed} onChange={(e) => setForm({ ...form, listed: e.target.checked })} /> Listed in public catalogue
         </label>
         {error && <ErrorBox message={error} />}
         <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="px-4 py-1.5 text-sm rounded-md border border-gray-300">Cancel</button>
+          <button onClick={onClose} className="px-4 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-700">Cancel</button>
           <button disabled={busy} onClick={save} className="px-4 py-1.5 text-sm rounded-md bg-violet-600 hover:bg-violet-700 text-white">
             {busy ? 'Saving…' : (offering ? 'Save changes' : 'Publish offering')}
           </button>
@@ -416,10 +416,10 @@ function StripeTab() {
   return (
     <div className="space-y-4 max-w-2xl">
       {error && <ErrorBox message={error} />}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3 dark:bg-gray-900 dark:border-gray-800">
         <div className="flex items-center gap-2">
           <ShieldCheck className={status.charges_enabled ? 'text-emerald-600' : 'text-gray-400'} size={20} />
-          <h2 className="text-base font-semibold text-gray-900">Stripe Connect</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Stripe Connect</h2>
           <span className={`ml-auto text-xs px-2 py-0.5 rounded-full border ${status.live_mode ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
             {status.live_mode ? 'Live mode' : 'Simulated'}
           </span>
@@ -431,19 +431,19 @@ function StripeTab() {
         </p>
         <dl className="grid grid-cols-2 gap-y-2 text-sm">
           <dt className="text-gray-500">Connected account</dt>
-          <dd className="font-mono text-xs text-gray-800">{status.stripe_account_id || '—'}</dd>
+          <dd className="font-mono text-xs text-gray-800 dark:text-gray-200">{status.stripe_account_id || '—'}</dd>
           <dt className="text-gray-500">Charges enabled</dt>
-          <dd className="text-gray-800">{status.charges_enabled ? 'Yes' : 'No'}</dd>
+          <dd className="text-gray-800 dark:text-gray-200">{status.charges_enabled ? 'Yes' : 'No'}</dd>
           <dt className="text-gray-500">Payouts enabled</dt>
-          <dd className="text-gray-800">{status.payouts_enabled ? 'Yes' : 'No'}</dd>
+          <dd className="text-gray-800 dark:text-gray-200">{status.payouts_enabled ? 'Yes' : 'No'}</dd>
           <dt className="text-gray-500">Onboarded at</dt>
-          <dd className="text-gray-800">{status.onboarded_at ? new Date(status.onboarded_at).toLocaleString() : '—'}</dd>
+          <dd className="text-gray-800 dark:text-gray-200">{status.onboarded_at ? new Date(status.onboarded_at).toLocaleString() : '—'}</dd>
         </dl>
         <div className="flex items-center gap-2 pt-2">
           <button disabled={busy} onClick={onboard} className="bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-md px-4 py-1.5 text-sm font-medium flex items-center gap-2">
             <ExternalLink size={14} /> {status.connected ? 'Re-open Stripe onboarding' : 'Connect Stripe'}
           </button>
-          <button disabled={busy} onClick={refresh} className="border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md px-4 py-1.5 text-sm">Refresh status</button>
+          <button disabled={busy} onClick={refresh} className="border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md px-4 py-1.5 text-sm dark:border-gray-700 dark:text-gray-300">Refresh status</button>
         </div>
       </div>
     </div>
@@ -457,8 +457,8 @@ function Modal({ title, onClose, children, wide }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div className={`bg-white rounded-2xl shadow-xl ${wide ? 'max-w-2xl' : 'max-w-md'} w-full max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
-          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
           <button onClick={onClose}><X size={18} /></button>
         </div>
         <div className="p-5">{children}</div>
@@ -479,7 +479,7 @@ function ErrorBox({ message }) {
 }
 function Empty({ icon: Icon, text }) {
   return (
-    <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center text-gray-500 text-sm">
+    <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-700">
       <Icon size={28} className="mx-auto text-gray-300 mb-2" /> {text}
     </div>
   );

@@ -167,7 +167,7 @@ export default function DiscoveryPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Customer Discovery</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Customer Discovery</h1>
         <PageExplainer pageKey="customer_discovery" />
           <p className="text-sm text-gray-500 mt-1">Mom-Test interview log. Each validated hypothesis lifts the traction signals score.</p>
         </div>
@@ -176,7 +176,7 @@ export default function DiscoveryPage() {
             value={projectId || ''}
             onChange={(e) => setProjectId(parseInt(e.target.value, 10))}
             disabled={!hasProjects}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400 dark:border-gray-700 dark:bg-gray-900"
           >
             {!hasProjects && <option value="">No projects available</option>}
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -194,9 +194,9 @@ export default function DiscoveryPage() {
       {error && <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-4 py-3 text-sm"><AlertCircle size={16} className="mt-0.5" />{error}</div>}
 
       {!hasProjects && (
-        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center">
+        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center dark:bg-gray-900 dark:border-gray-700">
           <FolderPlus size={32} className="mx-auto text-gray-400 mb-3" />
-          <h2 className="text-base font-semibold text-gray-900">No projects yet</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">No projects yet</h2>
           <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
             Customer discovery is scoped to a project. Create or join one first, then log Mom-Test interviews to start validating hypotheses.
           </p>
@@ -223,24 +223,24 @@ export default function DiscoveryPage() {
       {hasProjects && (
       <div className="space-y-3">
         {interviews.length === 0 && !loading && (
-          <div className="bg-white border border-dashed border-gray-300 rounded-xl p-8 text-center text-gray-500 text-sm">
+          <div className="bg-white border border-dashed border-gray-300 rounded-xl p-8 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-700">
             <MessageSquare size={28} className="mx-auto text-gray-300 mb-2" />
             No interviews yet. Log your first one to start building validated hypotheses.
           </div>
         )}
         {interviews.map((i) => (
-          <div key={i.id} className="bg-white border border-gray-200 rounded-xl p-4">
+          <div key={i.id} className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="font-semibold text-gray-900">{i.interviewee_name}</span>
+                  <span className="font-semibold text-gray-900 dark:text-gray-100">{i.interviewee_name}</span>
                   {i.interviewee_role && <span className="text-gray-500">· {i.interviewee_role}</span>}
                   <span className="text-xs text-gray-400">· {i.interview_date}</span>
                 </div>
                 {i.notes && <p className="text-sm text-gray-600 mt-1 whitespace-pre-line line-clamp-3">{i.notes}</p>}
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => setEditing(i)} className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50">Edit</button>
+                <button onClick={() => setEditing(i)} className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 dark:border-gray-800">Edit</button>
                 <button onClick={() => handleDelete(i.id)} className="text-rose-500 hover:text-rose-700 p-1"><Trash2 size={14} /></button>
               </div>
             </div>
@@ -252,7 +252,7 @@ export default function DiscoveryPage() {
                   return (
                     <div key={idx} className={`border rounded-lg p-2 text-xs ${meta.tone}`}>
                       <div className="flex items-center gap-1.5 font-medium"><Icon size={12} /> {meta.label}</div>
-                      <div className="text-gray-700 mt-1">{h.hypothesis}</div>
+                      <div className="text-gray-700 mt-1 dark:text-gray-300">{h.hypothesis}</div>
                       {h.evidence && <div className="text-gray-500 mt-1 italic">“{h.evidence}”</div>}
                     </div>
                   );
@@ -277,7 +277,7 @@ export default function DiscoveryPage() {
 function Stat({ label, value, sub, tone = 'gray' }) {
   const tones = { gray: 'text-gray-900', emerald: 'text-emerald-600', violet: 'text-violet-600' };
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
       <div className={`text-2xl font-semibold mt-1 ${tones[tone]}`}>{value}</div>
       {sub && <div className="text-xs text-gray-400 mt-1">{sub}</div>}
@@ -299,28 +299,28 @@ function InterviewModal({ value, onChange, onSave, onClose }) {
   }
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 sticky top-0 bg-white">
-          <h2 className="text-base font-semibold text-gray-900">{value.id ? 'Edit interview' : 'Log new interview'}</h2>
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 sticky top-0 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{value.id ? 'Edit interview' : 'Log new interview'}</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Field label="Interviewee name">
-              <input value={value.interviewee_name} onChange={(e) => onChange({ ...value, interviewee_name: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" />
+              <input value={value.interviewee_name} onChange={(e) => onChange({ ...value, interviewee_name: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
             </Field>
             <Field label="Role / context">
-              <input value={value.interviewee_role || ''} onChange={(e) => onChange({ ...value, interviewee_role: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" />
+              <input value={value.interviewee_role || ''} onChange={(e) => onChange({ ...value, interviewee_role: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
             </Field>
             <Field label="Date">
-              <input type="date" value={value.interview_date} onChange={(e) => onChange({ ...value, interview_date: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" />
+              <input type="date" value={value.interview_date} onChange={(e) => onChange({ ...value, interview_date: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
             </Field>
             <Field label="Pain points (comma-separated)">
-              <input value={(value.pains || []).join(', ')} onChange={(e) => onChange({ ...value, pains: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" />
+              <input value={(value.pains || []).join(', ')} onChange={(e) => onChange({ ...value, pains: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
             </Field>
           </div>
           <Field label="Notes (Mom-Test style — what they did, not what they say they'd do)">
-            <textarea rows={4} value={value.notes} onChange={(e) => onChange({ ...value, notes: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+            <textarea rows={4} value={value.notes} onChange={(e) => onChange({ ...value, notes: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:border-gray-700" />
           </Field>
 
           <div>
@@ -330,22 +330,22 @@ function InterviewModal({ value, onChange, onSave, onClose }) {
             </div>
             <div className="space-y-2">
               {value.hypotheses.map((h, idx) => (
-                <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-2 dark:border-gray-800">
                   <div className="flex items-center gap-2">
-                    <input placeholder="We believe that…" value={h.hypothesis} onChange={(e) => setH(idx, { hypothesis: e.target.value })} className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm" />
-                    <select value={h.status} onChange={(e) => setH(idx, { status: e.target.value })} className="border border-gray-300 rounded-md px-2 py-1 text-sm">
+                    <input placeholder="We believe that…" value={h.hypothesis} onChange={(e) => setH(idx, { hypothesis: e.target.value })} className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm dark:border-gray-700" />
+                    <select value={h.status} onChange={(e) => setH(idx, { status: e.target.value })} className="border border-gray-300 rounded-md px-2 py-1 text-sm dark:border-gray-700">
                       {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
                     <button onClick={() => removeH(idx)} className="text-rose-500 hover:text-rose-700 p-1"><Trash2 size={14} /></button>
                   </div>
-                  <input placeholder="Evidence / direct quote" value={h.evidence || ''} onChange={(e) => setH(idx, { evidence: e.target.value })} className="w-full border border-gray-200 rounded-md px-2 py-1 text-xs italic" />
+                  <input placeholder="Evidence / direct quote" value={h.evidence || ''} onChange={(e) => setH(idx, { evidence: e.target.value })} className="w-full border border-gray-200 rounded-md px-2 py-1 text-xs italic dark:border-gray-800" />
                 </div>
               ))}
             </div>
           </div>
         </div>
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-200 sticky bottom-0 bg-white">
-          <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-200 sticky bottom-0 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-700">Cancel</button>
           <button onClick={onSave} disabled={!value.interviewee_name.trim()} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg flex items-center gap-2"><Save size={14} /> Save</button>
         </div>
       </div>

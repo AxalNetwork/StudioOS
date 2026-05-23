@@ -82,7 +82,7 @@ export default function StatusPage() {
 
         <header className="mb-8 flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">System status</h1>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">System status</h1>
             <p className="text-sm text-gray-600 mt-1">Live health of Axal StudioOS services.</p>
           </div>
           {!loading && !error && (
@@ -105,15 +105,15 @@ export default function StatusPage() {
         {!loading && !error && (
           <>
             <section aria-labelledby="services" className="mb-10">
-              <h2 id="services" className="text-lg font-semibold text-gray-900 mb-3">Services</h2>
-              <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100" data-card>
+              <h2 id="services" className="text-lg font-semibold text-gray-900 mb-3 dark:text-gray-100">Services</h2>
+              <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100 dark:border-gray-800 dark:bg-gray-900" data-card>
                 {services.map((s) => {
                   const pill = STATUS_PILL[s.status] || STATUS_PILL.unknown;
                   const Icon = pill.icon;
                   return (
                     <div key={s.name} className="p-4 flex items-center justify-between gap-4 flex-wrap">
                       <div className="flex-1 min-w-[180px]">
-                        <div className="font-medium text-gray-900">{s.name}</div>
+                        <div className="font-medium text-gray-900 dark:text-gray-100">{s.name}</div>
                         {typeof s.uptime_pct === 'number' && (
                           <div className="text-xs text-gray-500 mt-0.5">{s.uptime_pct.toFixed(2)}% uptime · 90 days</div>
                         )}
@@ -129,17 +129,17 @@ export default function StatusPage() {
             </section>
 
             <section aria-labelledby="incidents">
-              <h2 id="incidents" className="text-lg font-semibold text-gray-900 mb-3">Recent incidents</h2>
+              <h2 id="incidents" className="text-lg font-semibold text-gray-900 mb-3 dark:text-gray-100">Recent incidents</h2>
               {incidents.length === 0 ? (
-                <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600 text-center" data-card>
+                <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600 text-center dark:border-gray-800 dark:bg-gray-900" data-card>
                   No incidents in the last 90 days. We'll post updates here when something needs your attention.
                 </div>
               ) : (
                 <div className="space-y-3">
                   {incidents.map((inc) => (
-                    <article key={inc.id} className="rounded-2xl border border-gray-200 bg-white p-5" data-card>
+                    <article key={inc.id} className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900" data-card>
                       <header className="flex items-center justify-between gap-3 flex-wrap mb-2">
-                        <h3 className="font-semibold text-gray-900">{inc.title}</h3>
+                        <h3 className="font-semibold text-gray-900 dark:text-gray-100">{inc.title}</h3>
                         <div className="flex items-center gap-2">
                           {SEVERITY_PILL[inc.severity] && (
                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${SEVERITY_PILL[inc.severity].color}`}>
@@ -149,15 +149,15 @@ export default function StatusPage() {
                           <span className="text-xs text-gray-500">{new Date(inc.created_at).toLocaleString()}</span>
                         </div>
                       </header>
-                      <div className="text-sm text-gray-700 mb-3">Status: <span className="font-medium capitalize">{inc.status.replace(/_/g, ' ')}</span></div>
+                      <div className="text-sm text-gray-700 mb-3 dark:text-gray-300">Status: <span className="font-medium capitalize">{inc.status.replace(/_/g, ' ')}</span></div>
                       {(inc.updates || []).length > 0 && (
-                        <ol className="border-l-2 border-gray-200 pl-4 space-y-3">
+                        <ol className="border-l-2 border-gray-200 pl-4 space-y-3 dark:border-gray-800">
                           {inc.updates.map((u) => (
                             <li key={u.id}>
                               <div className="text-xs uppercase tracking-wide text-gray-500">
                                 {u.status.replace(/_/g, ' ')} · {new Date(u.created_at).toLocaleString()}
                               </div>
-                              <div className="text-sm text-gray-800 mt-0.5">{u.body}</div>
+                              <div className="text-sm text-gray-800 mt-0.5 dark:text-gray-200">{u.body}</div>
                             </li>
                           ))}
                         </ol>

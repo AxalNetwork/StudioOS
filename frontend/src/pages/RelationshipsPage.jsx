@@ -67,7 +67,7 @@ export default function RelationshipsPage() {
         <div className="flex items-center gap-3">
           <Network className="text-violet-600" size={24} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Network & Relationships</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Network & Relationships</h1>
             <p className="text-sm text-gray-600">Your partner graph, activity, and reputation.</p>
           </div>
         </div>
@@ -109,7 +109,7 @@ export default function RelationshipsPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto [&>button]:whitespace-nowrap">
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto [&>button]:whitespace-nowrap dark:border-gray-800">
         {[
           {id: 'relationships', label: `Relationships (${rels.length})`, icon: Users},
           {id: 'activity', label: `Activity Feed (${logs.total})`, icon: Activity},
@@ -143,10 +143,10 @@ function RelationshipsTab({ rels, reload }) {
       {rels.map(r => {
         const t = REL_TYPES.find(x => x.id === r.relationship_type);
         return (
-          <div key={r.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:border-violet-400 transition-colors">
+          <div key={r.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:border-violet-400 transition-colors dark:bg-gray-900 dark:border-gray-800">
             <div className="flex items-start justify-between gap-2 mb-2">
               <div>
-                <div className="font-semibold text-sm text-gray-900">{r.other.name || r.other.email}</div>
+                <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">{r.other.name || r.other.email}</div>
                 <div className="text-xs text-gray-500">{r.other.email}</div>
               </div>
               <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${t?.color || 'bg-gray-100 text-gray-700'}`}>{t?.label || r.relationship_type}</span>
@@ -175,7 +175,7 @@ function RelationshipsTab({ rels, reload }) {
 function ActivityTab({ logs }) {
   if (logs.items.length === 0) return <Empty text="No domain activity yet. Actions like logins, KYC submissions, referrals, and role changes will appear here." />;
   return (
-    <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+    <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100 dark:bg-gray-900 dark:border-gray-800">
       {logs.items.map((l, idx) => {
         const action = l.action || l.action_type || '';
         const label = ACTION_LABELS[action] || action.replace(/_/g, ' ');
@@ -183,7 +183,7 @@ function ActivityTab({ logs }) {
         return (
           <div key={l.id ?? idx} className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50">
             <div className="flex-1 min-w-0">
-              <div className="font-medium text-gray-900">{label}</div>
+              <div className="font-medium text-gray-900 dark:text-gray-100">{label}</div>
               {detail && <div className="text-[10px] text-gray-500 truncate">{detail}</div>}
             </div>
             <div className="text-[10px] text-gray-400 shrink-0">{new Date(l.created_at).toLocaleString()}</div>
@@ -197,19 +197,19 @@ function ActivityTab({ logs }) {
 function LeaderboardTab({ leaderboard, meId }) {
   if (leaderboard.length === 0) return <Empty text="Leaderboard will populate as partners build their network." />;
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+    <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto dark:bg-gray-900 dark:border-gray-800">
       <table className="w-full text-sm min-w-[640px]">
-        <thead className="bg-gray-50 text-xs text-gray-700">
+        <thead className="bg-gray-50 text-xs text-gray-700 dark:text-gray-300">
           <tr><th className="text-left px-4 py-2">#</th><th className="text-left px-4 py-2">Partner</th><th className="text-center px-4 py-2">Score</th><th className="text-center px-4 py-2">Rels</th><th className="text-center px-4 py-2">Reach</th><th className="text-right px-4 py-2">Earnings</th><th className="text-left px-4 py-2">Badges</th></tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
           {leaderboard.map((p, i) => (
             <tr key={p.id} className={p.id === meId ? 'bg-violet-50' : 'hover:bg-gray-50'}>
-              <td className="px-4 py-2 font-bold text-gray-700">{i + 1}</td>
+              <td className="px-4 py-2 font-bold text-gray-700 dark:text-gray-300">{i + 1}</td>
               <td className="px-4 py-2"><div className="font-medium">{p.name || p.email}</div><div className="text-[10px] text-gray-500">{p.role}</div></td>
               <td className="px-4 py-2 text-center font-bold text-violet-700">{Math.round(p.network_score)}</td>
-              <td className="px-4 py-2 text-center text-gray-700">{p.active_relationships}</td>
-              <td className="px-4 py-2 text-center text-gray-700">{p.network_reach}</td>
+              <td className="px-4 py-2 text-center text-gray-700 dark:text-gray-300">{p.active_relationships}</td>
+              <td className="px-4 py-2 text-center text-gray-700 dark:text-gray-300">{p.network_reach}</td>
               <td className="px-4 py-2 text-right text-emerald-600 font-medium">${((p.total_earnings || 0) / 100).toFixed(0)}</td>
               <td className="px-4 py-2"><div className="flex gap-1 flex-wrap">{(p.verified_badges || []).map(b => <span key={b} className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{b.replace('_', ' ')}</span>)}</div></td>
             </tr>
@@ -241,7 +241,7 @@ function CreateRelModal({ onClose, onCreated }) {
       </Field>
       {err && <div className="text-xs text-red-600">{err}</div>}
       <div className="flex justify-end gap-2 pt-2">
-        <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded">Cancel</button>
+        <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded dark:text-gray-300">Cancel</button>
         <button onClick={submit} disabled={busy || !form.partner_id} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded">
           {busy ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} Create
         </button>
@@ -265,7 +265,7 @@ function EditRelModal({ rel, onClose, onSaved }) {
       <Field label={`Strength: ${strength}/100`}><input type="range" min="0" max="100" value={strength} onChange={e => setStrength(parseInt(e.target.value))} className="w-full" /></Field>
       {err && <div className="text-xs text-red-600">{err}</div>}
       <div className="flex justify-end gap-2 pt-2">
-        <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded">Cancel</button>
+        <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded dark:text-gray-300">Cancel</button>
         <button onClick={save} disabled={busy} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded">
           {busy ? <Loader2 className="animate-spin" size={14} /> : null} Save
         </button>
@@ -278,8 +278,8 @@ function Modal({ onClose, title, children }) {
   useEscapeClose(onClose);
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between"><h2 className="text-lg font-semibold">{title}</h2><button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button></div>
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800"><h2 className="text-lg font-semibold">{title}</h2><button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button></div>
         <div className="p-6 space-y-3">{children}</div>
       </div>
     </div>
@@ -287,7 +287,7 @@ function Modal({ onClose, title, children }) {
 }
 
 const inputCls = 'w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none';
-function Field({ label, children }) { return <div><label className="text-xs text-gray-700 font-medium block mb-1">{label}</label>{children}</div>; }
+function Field({ label, children }) { return <div><label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">{label}</label>{children}</div>; }
 function SumStat({ label, value }) { return <div className="bg-white/15 rounded-lg p-2 min-w-[80px]"><div className="text-[10px] uppercase opacity-80">{label}</div><div className="text-xl font-bold">{value}</div></div>; }
 function Empty({ text }) { return <div className="text-sm text-gray-500 py-12 text-center">{text}</div>; }
 function Loading() { return <div className="flex items-center gap-2 text-sm text-gray-500 py-20 justify-center"><Loader2 className="animate-spin" size={16} /> Loading…</div>; }

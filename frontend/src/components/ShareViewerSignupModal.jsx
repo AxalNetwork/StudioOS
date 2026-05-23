@@ -194,7 +194,7 @@ export default function ShareViewerSignupModal({
               {requiresLogin && (
                 <a
                   href={`/login?next=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/')}&email=${encodeURIComponent(form.email)}`}
-                  className="block w-full mt-2 text-center bg-white border border-violet-300 text-violet-700 hover:bg-violet-50 text-sm font-medium px-4 py-2.5 rounded-lg"
+                  className="block w-full mt-2 text-center bg-white border border-violet-300 text-violet-700 hover:bg-violet-50 text-sm font-medium px-4 py-2.5 rounded-lg dark:bg-gray-900"
                 >
                   Sign in to your existing account
                 </a>

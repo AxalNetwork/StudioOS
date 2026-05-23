@@ -180,7 +180,7 @@ export default function MetricsPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Metrics</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Metrics</h1>
         <PageExplainer pageKey="metrics" />
           <p className="text-sm text-gray-500 mt-1">Snapshot MRR, ARR, CAC, LTV, churn. Feeds users + revenue traction signals.</p>
         </div>
@@ -189,7 +189,7 @@ export default function MetricsPage() {
             value={projectId || ''}
             onChange={(e) => setProjectId(parseInt(e.target.value, 10))}
             disabled={!hasProjects}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400 dark:border-gray-700 dark:bg-gray-900"
           >
             {!hasProjects && <option value="">No projects available</option>}
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -197,7 +197,7 @@ export default function MetricsPage() {
           <button
             onClick={handleStripeImport}
             disabled={importing || !projectId}
-            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700"
           >
             <Download size={14} /> {importing ? 'Importing…' : 'Import from Stripe'}
           </button>
@@ -214,9 +214,9 @@ export default function MetricsPage() {
       {error && <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-4 py-3 text-sm"><AlertCircle size={16} className="mt-0.5" />{error}</div>}
 
       {!hasProjects && (
-        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center">
+        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center dark:bg-gray-900 dark:border-gray-700">
           <FolderPlus size={32} className="mx-auto text-gray-400 mb-3" />
-          <h2 className="text-base font-semibold text-gray-900">No projects yet</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">No projects yet</h2>
           <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
             Metrics snapshots are scoped to a project. Create or join one first, then come back here to start tracking MRR, CAC, LTV and churn.
           </p>
@@ -240,8 +240,8 @@ export default function MetricsPage() {
 
       {series.length > 1 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-2">MRR over time</h3>
+          <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+            <h3 className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">MRR over time</h3>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={series}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -252,8 +252,8 @@ export default function MetricsPage() {
               </LineChart>
             </ResponsiveContainer>
           </div>
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-2">Active users over time</h3>
+          <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+            <h3 className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Active users over time</h3>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={series}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -268,9 +268,9 @@ export default function MetricsPage() {
       )}
 
       {hasProjects && (
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900">Snapshot history</h3>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Snapshot history</h3>
           <span className="text-xs text-gray-500">{snapshots.length} entries</span>
         </div>
         <div className="overflow-x-auto">
@@ -289,13 +289,13 @@ export default function MetricsPage() {
               )}
               {snapshots.map((s) => (
                 <tr key={s.id} className="border-t border-gray-100">
-                  <td className="py-2 px-4 font-medium text-gray-900">{s.snapshot_date}</td>
+                  <td className="py-2 px-4 font-medium text-gray-900 dark:text-gray-100">{s.snapshot_date}</td>
                   <td className="py-2 px-3">
                     <span className={`text-[10px] px-2 py-0.5 rounded-full ${s.source === 'stripe' ? 'bg-violet-50 text-violet-700' : 'bg-gray-100 text-gray-600'}`}>
                       {s.source}
                     </span>
                   </td>
-                  {FIELDS.map((f) => <td key={f.key} className="text-right py-2 px-3 tabular-nums text-gray-700">{fmt(s[f.key], f.unit)}</td>)}
+                  {FIELDS.map((f) => <td key={f.key} className="text-right py-2 px-3 tabular-nums text-gray-700 dark:text-gray-300">{fmt(s[f.key], f.unit)}</td>)}
                   <td className="px-3">
                     <button onClick={() => handleDelete(s.id)} className="text-gray-400 hover:text-rose-600"><Trash2 size={13} /></button>
                   </td>
@@ -308,16 +308,16 @@ export default function MetricsPage() {
       )}
 
       {hasProjects && signals && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp size={16} className="text-violet-600" />
-            <h3 className="text-sm font-semibold text-gray-900">Traction signals → scoring engine</h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Traction signals → scoring engine</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {Object.entries(signals.factors).map(([key, f]) => (
               <div key={key} className="border border-gray-100 rounded-lg p-3">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-gray-900">{f.label}</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">{f.label}</span>
                   <span className="text-violet-700 font-semibold">{f.points} / {f.max}</span>
                 </div>
                 <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -338,7 +338,7 @@ export default function MetricsPage() {
 function Stat({ label, value, sub, tone = 'gray' }) {
   const tones = { gray: 'text-gray-900', violet: 'text-violet-600' };
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
       <div className={`text-2xl font-semibold mt-1 ${tones[tone]}`}>{value}</div>
       {sub && <div className="text-xs text-gray-400 mt-1">{sub}</div>}
@@ -349,32 +349,32 @@ function Stat({ label, value, sub, tone = 'gray' }) {
 function SnapshotModal({ value, onChange, onSave, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 sticky top-0 bg-white">
-          <h2 className="text-base font-semibold text-gray-900">New metrics snapshot</h2>
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 sticky top-0 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">New metrics snapshot</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-4">
           <div>
             <label className="text-xs uppercase tracking-wide text-gray-500 block mb-1">Snapshot date</label>
-            <input type="date" value={value.snapshot_date} onChange={(e) => onChange({ ...value, snapshot_date: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm" />
+            <input type="date" value={value.snapshot_date} onChange={(e) => onChange({ ...value, snapshot_date: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             {FIELDS.map((f) => (
               <div key={f.key}>
                 <label className="text-xs uppercase tracking-wide text-gray-500 block mb-1">{f.label} {f.unit && <span className="text-gray-400">({f.unit})</span>}</label>
-                <input type="number" step="any" value={value[f.key]} onChange={(e) => onChange({ ...value, [f.key]: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" />
+                <input type="number" step="any" value={value[f.key]} onChange={(e) => onChange({ ...value, [f.key]: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
                 {f.hint && <div className="text-[10px] text-gray-400 mt-0.5">{f.hint}</div>}
               </div>
             ))}
           </div>
           <div>
             <label className="text-xs uppercase tracking-wide text-gray-500 block mb-1">Notes</label>
-            <textarea rows={2} value={value.notes || ''} onChange={(e) => onChange({ ...value, notes: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+            <textarea rows={2} value={value.notes || ''} onChange={(e) => onChange({ ...value, notes: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:border-gray-700" />
           </div>
         </div>
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-200 sticky bottom-0 bg-white">
-          <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-200 sticky bottom-0 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-700">Cancel</button>
           <button onClick={onSave} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg flex items-center gap-2"><Save size={14} /> Save snapshot</button>
         </div>
       </div>

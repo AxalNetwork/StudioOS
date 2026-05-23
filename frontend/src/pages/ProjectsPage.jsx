@@ -126,8 +126,8 @@ export default function ProjectsPage() {
       </div>
 
       {showForm && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-          <h2 className="font-semibold text-gray-900 text-sm mb-4">Add New Project</h2>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
+          <h2 className="font-semibold text-gray-900 text-sm mb-4 dark:text-gray-100">Add New Project</h2>
           <div className="grid md:grid-cols-2 gap-4">
             <Input label="Project Name" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
             <SectorSelect value={form.sector} onChange={v => setForm(f => ({ ...f, sector: v }))} />
@@ -145,7 +145,7 @@ export default function ProjectsPage() {
           </div>
           <div className="flex gap-3 mt-4">
             <button onClick={submit} disabled={submitting} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm text-white font-medium transition-colors">{submitting ? 'Creating…' : 'Create'}</button>
-            <button onClick={() => setShowForm(false)} disabled={submitting} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm text-gray-900 disabled:opacity-50">Cancel</button>
+            <button onClick={() => setShowForm(false)} disabled={submitting} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm text-gray-900 disabled:opacity-50 dark:text-gray-100">Cancel</button>
           </div>
         </div>
       )}
@@ -156,7 +156,7 @@ export default function ProjectsPage() {
           <input
             type="text" placeholder="Filter projects..."
             value={filter} onChange={e => setFilter(e.target.value)}
-            className="w-full md:w-64 bg-white border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
+            className="w-full md:w-64 bg-white border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100"
           />
         </div>
       </div>
@@ -174,7 +174,7 @@ export default function ProjectsPage() {
           secondary={{ label: 'Learn more', to: '/docs#core/projects' }}
         />
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
           {filtered.length === 0 ? (
             <div className="px-5 py-8 text-center text-gray-500 text-sm">
               No projects match your filter
@@ -190,7 +190,7 @@ export default function ProjectsPage() {
                      className="hover:bg-gray-50/50 transition-colors border-b border-gray-100 text-sm">
                   <div style={{ display: 'grid', gridTemplateColumns: PROJECT_GRID, alignItems: 'center', height: '100%' }}>
                     <div className="px-5 py-3 min-w-0">
-                      <Link to={`/projects/${p.id}`} className="text-gray-900 hover:text-violet-600 font-medium truncate block">{p.name}</Link>
+                      <Link to={`/projects/${p.id}`} className="text-gray-900 hover:text-violet-600 font-medium truncate block dark:text-gray-100">{p.name}</Link>
                       <div className="text-xs text-gray-500 md:hidden truncate">{p.sector}</div>
                     </div>
                     <div className="px-5 py-3 hidden md:block text-gray-600 truncate">{p.sector || '—'}</div>
@@ -234,7 +234,7 @@ export default function ProjectsPage() {
               {(items) => (
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
+                    <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase dark:border-gray-800">
                       <th className="text-left px-5 py-3">Name</th>
                       <th className="text-left px-5 py-3 hidden md:table-cell">Sector</th>
                       <th className="text-left px-5 py-3">Status</th>
@@ -247,7 +247,7 @@ export default function ProjectsPage() {
                     {items.map(p => (
                       <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="px-5 py-3">
-                          <Link to={`/projects/${p.id}`} className="text-gray-900 hover:text-violet-600 font-medium">{p.name}</Link>
+                          <Link to={`/projects/${p.id}`} className="text-gray-900 hover:text-violet-600 font-medium dark:text-gray-100">{p.name}</Link>
                           <div className="text-xs text-gray-500 md:hidden">{p.sector}</div>
                         </td>
                         <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.sector || '—'}</td>
@@ -312,7 +312,7 @@ function Input({ label, value, onChange }) {
       <label className="block text-xs text-gray-600 mb-1">{label}</label>
       <input
         type="text" value={value} onChange={e => onChange(e.target.value)}
-        className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
+        className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:text-gray-100"
       />
     </div>
   );
@@ -342,7 +342,7 @@ function SectorSelect({ label = 'Sector', value, onChange }) {
       <label className="block text-xs text-gray-600 mb-1">{label}</label>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 hover:border-violet-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 hover:border-violet-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 transition-colors dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
       >
         <span className={value ? 'text-gray-900' : 'text-gray-500'}>{value || 'Select a sector...'}</span>
         <div className="flex items-center gap-1">
@@ -354,8 +354,8 @@ function SectorSelect({ label = 'Sector', value, onChange }) {
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-2 bg-white border border-gray-300 rounded-lg shadow-lg">
-          <div className="p-2 border-b border-gray-200">
+        <div className="absolute z-50 w-full mt-2 bg-white border border-gray-300 rounded-lg shadow-lg dark:bg-gray-900 dark:border-gray-700">
+          <div className="p-2 border-b border-gray-200 dark:border-gray-800">
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
@@ -363,7 +363,7 @@ function SectorSelect({ label = 'Sector', value, onChange }) {
                 placeholder="Search sectors..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
+                className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:border-gray-800 dark:text-gray-100"
                 autoFocus
               />
             </div>

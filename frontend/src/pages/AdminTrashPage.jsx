@@ -55,27 +55,27 @@ export default function AdminTrashPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Trash · Projects</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Trash · Projects</h1>
         <p className="text-sm text-gray-600">Soft-deleted projects. Restored within 30 days, otherwise auto-purged.</p>
       </div>
 
       {loading ? (
         <div className="text-gray-600 text-center py-10 text-sm">Loading…</div>
       ) : error ? (
-        <div className="bg-white border border-red-200 rounded-xl px-5 py-8 text-center text-sm">
+        <div className="bg-white border border-red-200 rounded-xl px-5 py-8 text-center text-sm dark:bg-gray-900">
           <div className="text-red-600 mb-2">Couldn't load trash</div>
           <div className="text-gray-600 mb-4">{error}</div>
           <button onClick={load} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-white text-sm">Retry</button>
         </div>
       ) : rows.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-xl px-5 py-12 text-center text-sm text-gray-500">
+        <div className="bg-white border border-gray-200 rounded-xl px-5 py-12 text-center text-sm text-gray-500 dark:bg-gray-900 dark:border-gray-800">
           Trash is empty.
         </div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
+              <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase dark:border-gray-800">
                 <th className="text-left px-5 py-3">Project</th>
                 <th className="text-left px-5 py-3 hidden md:table-cell">Founder</th>
                 <th className="text-left px-5 py-3 hidden md:table-cell">Sector</th>
@@ -90,7 +90,7 @@ export default function AdminTrashPage() {
                 const urgent = dl !== null && dl <= 3;
                 return (
                   <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-5 py-3 text-gray-900 font-medium">{p.name}</td>
+                    <td className="px-5 py-3 text-gray-900 font-medium dark:text-gray-100">{p.name}</td>
                     <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.founder_name || '—'}</td>
                     <td className="px-5 py-3 hidden md:table-cell text-gray-600">{p.sector || '—'}</td>
                     <td className="px-5 py-3 text-gray-600">{p.deleted_at ? new Date(p.deleted_at).toLocaleDateString() : '—'}</td>

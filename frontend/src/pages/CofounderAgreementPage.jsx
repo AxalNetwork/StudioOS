@@ -69,7 +69,7 @@ function Stepper({ current }) {
 function NumberField({ label, value, onChange, min = 0, max = 100, step = 1, suffix }) {
   return (
     <label className="block">
-      <div className="text-xs font-semibold text-gray-700 mb-1">{label}</div>
+      <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">{label}</div>
       <div className="flex items-center">
         <input
           type="number"
@@ -181,7 +181,7 @@ export default function CofounderAgreementPage() {
           <Briefcase size={18} />
           <span className="text-xs font-semibold uppercase tracking-wide">Incorporate</span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">Co-Founder Agreement</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Co-Founder Agreement</h1>
         <PageExplainer pageKey="cofounder_agreement" />
         <p className="text-sm text-gray-600 mt-1">
           Standardise the founder paperwork: vesting cliffs, IP assignment, decision rights, and exit/buyout.
@@ -191,10 +191,10 @@ export default function CofounderAgreementPage() {
       {step < STEPS.length && <Stepper current={step} />}
 
       {step === 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5 dark:bg-gray-900 dark:border-gray-800">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="block">
-              <div className="text-xs font-semibold text-gray-700 mb-1">Project</div>
+              <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Project</div>
               <select
                 value={projectId}
                 onChange={(e) => {
@@ -211,7 +211,7 @@ export default function CofounderAgreementPage() {
               </select>
             </label>
             <label className="block">
-              <div className="text-xs font-semibold text-gray-700 mb-1">Company name</div>
+              <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Company name</div>
               <input
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
@@ -223,7 +223,7 @@ export default function CofounderAgreementPage() {
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="text-sm font-semibold text-gray-900">Founders ({founders.length})</div>
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Founders ({founders.length})</div>
               <div className={`text-xs font-semibold ${totalEquity > 100 ? 'text-red-600' : 'text-gray-600'}`}>
                 Total equity: {totalEquity.toFixed(2)}%
               </div>
@@ -283,14 +283,14 @@ export default function CofounderAgreementPage() {
       )}
 
       {step === 1 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5 dark:bg-gray-900 dark:border-gray-800">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <NumberField label="Vesting period" value={vestingYears} onChange={setVestingYears} min={1} max={10} suffix="years" />
             <NumberField label="Cliff" value={cliffMonths} onChange={setCliffMonths} min={0} max={48} suffix="months" />
             <NumberField label="Cliff vest %" value={cliffPct} onChange={setCliffPct} min={0} max={100} suffix="%" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-gray-700 mb-2">Acceleration on Change of Control</div>
+            <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Acceleration on Change of Control</div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               {[
                 { v: 'none', label: 'None', desc: 'No acceleration.' },
@@ -301,7 +301,7 @@ export default function CofounderAgreementPage() {
                   className={`text-left p-3 rounded-lg border-2 transition ${
                     acceleration === o.v ? 'border-violet-600 bg-violet-50' : 'border-gray-200 hover:border-gray-300'
                   }`}>
-                  <div className="text-sm font-semibold text-gray-900">{o.label}</div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{o.label}</div>
                   <div className="text-xs text-gray-600 mt-1">{o.desc}</div>
                 </button>
               ))}
@@ -311,14 +311,14 @@ export default function CofounderAgreementPage() {
       )}
 
       {step === 2 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
-          <div className="text-sm text-gray-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm text-gray-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3 dark:text-gray-300">
             <strong>Default:</strong> all IP created by each founder (before that's related to the
             Company's business, or during) is assigned to the Company. Each founder will sign a
             standard PIIA. List any prior inventions you want to <em>exclude</em> below.
           </div>
           <label className="block">
-            <div className="text-xs font-semibold text-gray-700 mb-1">Pre-existing IP exclusions</div>
+            <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Pre-existing IP exclusions</div>
             <textarea value={ipExclusions} onChange={(e) => setIpExclusions(e.target.value)}
               rows={5} className="w-full border rounded-md px-3 py-2 text-sm font-mono"
               placeholder="e.g. Patent US 10,123,456 — held by founder Jane Doe, unrelated to Company business." />
@@ -327,15 +327,15 @@ export default function CofounderAgreementPage() {
       )}
 
       {step === 3 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5 dark:bg-gray-900 dark:border-gray-800">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="block">
-              <div className="text-xs font-semibold text-gray-700 mb-1">Day-to-day decisions made by</div>
+              <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Day-to-day decisions made by</div>
               <input value={decisionDayToDay} onChange={(e) => setDecisionDayToDay(e.target.value)}
                 className="w-full border rounded-md px-3 py-2 text-sm" />
             </label>
             <label className="block">
-              <div className="text-xs font-semibold text-gray-700 mb-1">Strategic decision threshold</div>
+              <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Strategic decision threshold</div>
               <select value={decisionThreshold} onChange={(e) => setDecisionThreshold(e.target.value)}
                 className="w-full border rounded-md px-3 py-2 text-sm">
                 <option value="majority">Majority</option>
@@ -344,7 +344,7 @@ export default function CofounderAgreementPage() {
               </select>
             </label>
             <label className="block">
-              <div className="text-xs font-semibold text-gray-700 mb-1">Commitment level</div>
+              <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Commitment level</div>
               <select value={commitmentLevel} onChange={(e) => setCommitmentLevel(e.target.value)}
                 className="w-full border rounded-md px-3 py-2 text-sm">
                 <option value="full-time">Full-time</option>
@@ -352,24 +352,24 @@ export default function CofounderAgreementPage() {
               </select>
             </label>
             <label className="block">
-              <div className="text-xs font-semibold text-gray-700 mb-1">Deadlock clause</div>
+              <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Deadlock clause</div>
               <input value={deadlockClause} onChange={(e) => setDeadlockClause(e.target.value)}
                 className="w-full border rounded-md px-3 py-2 text-sm"
                 placeholder="Mediation followed by binding arbitration." />
             </label>
             <label className="block">
-              <div className="text-xs font-semibold text-gray-700 mb-1">Governing law</div>
+              <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Governing law</div>
               <input value={governingLaw} onChange={(e) => setGoverningLaw(e.target.value)}
                 className="w-full border rounded-md px-3 py-2 text-sm" />
             </label>
             <label className="block">
-              <div className="text-xs font-semibold text-gray-700 mb-1">Arbitration venue</div>
+              <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Arbitration venue</div>
               <input value={arbitrationVenue} onChange={(e) => setArbitrationVenue(e.target.value)}
                 className="w-full border rounded-md px-3 py-2 text-sm" />
             </label>
           </div>
           <div>
-            <div className="text-xs font-semibold text-gray-700 mb-2">Matters requiring unanimous founder consent</div>
+            <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Matters requiring unanimous founder consent</div>
             <div className="space-y-2">
               {unanimousMatters.map((m, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -394,8 +394,8 @@ export default function CofounderAgreementPage() {
       )}
 
       {step === 4 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-          <h3 className="text-sm font-semibold text-gray-900">Review</h3>
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3 dark:bg-gray-900 dark:border-gray-800">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Review</h3>
           <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <div><dt className="text-gray-500 inline">Company:</dt> <dd className="inline font-medium">{companyName}</dd></div>
             <div><dt className="text-gray-500 inline">Founders:</dt> <dd className="inline font-medium">{founders.length} ({totalEquity.toFixed(2)}%)</dd></div>
@@ -414,11 +414,11 @@ export default function CofounderAgreementPage() {
       )}
 
       {step === STEPS.length && result && (
-        <div className="bg-white rounded-xl border border-emerald-200 p-6 text-center">
+        <div className="bg-white rounded-xl border border-emerald-200 p-6 text-center dark:bg-gray-900">
           <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-emerald-100 flex items-center justify-center">
             <CheckCircle2 size={28} className="text-emerald-600" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900">Agreement generated</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Agreement generated</h2>
           <p className="text-sm text-gray-600 mt-1">
             <strong>{result.document.title}</strong> is now in your project's legal documents.
           </p>

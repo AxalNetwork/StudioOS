@@ -65,7 +65,7 @@ function SliderInput({ label, value, onChange, min, max, step, suffix, hint, acc
     amber: 'accent-amber-600',
   };
   return (
-    <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4 shadow-sm">
+    <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4 shadow-sm dark:bg-gray-900">
       <div className="flex items-center justify-between">
         <label className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">{label}</label>
         <div className="text-sm font-semibold text-slate-900 tabular-nums">{value}{suffix}</div>
@@ -287,7 +287,7 @@ export default function ReservesPage() {
           <div className="flex items-center gap-2">
             <label className="text-xs text-slate-500 uppercase tracking-wider font-medium">Fund</label>
             <select
-              className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:bg-gray-900"
               value={fundId || ''}
               onChange={(e) => setFundId(Number(e.target.value))}
               disabled={!funds.length}
@@ -370,7 +370,7 @@ export default function ReservesPage() {
           />
         </div>
       ) : (
-        <div className="rounded-2xl bg-white ring-1 ring-dashed ring-slate-300 p-8 text-center mb-6">
+        <div className="rounded-2xl bg-white ring-1 ring-dashed ring-slate-300 p-8 text-center mb-6 dark:bg-gray-900">
           <Target className="w-8 h-8 text-slate-300 mx-auto" />
           <div className="mt-2 text-sm font-medium text-slate-700">No simulation yet</div>
           <p className="mt-1 text-xs text-slate-500">
@@ -382,7 +382,7 @@ export default function ReservesPage() {
       )}
 
       {/* Per-company allocation */}
-      <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden mb-6">
+      <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden mb-6 dark:bg-gray-900">
         <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-2">
           <Building2 className="w-4 h-4 text-slate-400" />
           <h2 className="font-medium text-sm text-slate-900">Per-company allocation</h2>
@@ -512,7 +512,7 @@ export default function ReservesPage() {
 
       {/* Save + Saved scenarios */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5">
+        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5 dark:bg-gray-900">
           <h3 className="font-medium text-sm text-slate-900 flex items-center gap-2 mb-3">
             <Bookmark className="w-4 h-4 text-blue-500" /> Save scenario
           </h3>
@@ -533,7 +533,7 @@ export default function ReservesPage() {
           </div>
           <p className="mt-2 text-[11px] text-slate-400">Snapshots current allocations + knobs together with the live projection.</p>
         </div>
-        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5">
+        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5 dark:bg-gray-900">
           <h3 className="font-medium text-sm text-slate-900 flex items-center gap-2 mb-3">
             <TrendingUp className="w-4 h-4 text-slate-400" /> Saved scenarios
             <span className="ml-auto text-xs font-normal text-slate-400">{scenarios.length}</span>

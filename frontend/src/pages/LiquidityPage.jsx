@@ -67,10 +67,10 @@ function MatchesPanel({ listingId, onClose, currentUser }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center p-3" onClick={() => onClose()}>
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-5 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-5 max-h-[80vh] overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-3">
           <div>
-            <div className="text-base font-semibold text-gray-900 flex items-center gap-2">
+            <div className="text-base font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
               <Sparkles size={16} className="text-violet-600" /> AI Buyer Matches · Listing #{listingId}
             </div>
             <p className="text-xs text-gray-500">Top candidates ranked by sector fit, capital and role.</p>
@@ -89,18 +89,18 @@ function MatchesPanel({ listingId, onClose, currentUser }) {
         ) : (
           <div className="space-y-2">
             {matches.map(m => (
-              <div key={m.id} className="border border-gray-200 rounded-lg p-3">
+              <div key={m.id} className="border border-gray-200 rounded-lg p-3 dark:border-gray-800">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <div className="text-sm font-medium text-gray-900">{m.buyer_name || m.buyer_email}</div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{m.buyer_name || m.buyer_email}</div>
                     <div className="text-xs text-gray-500">{m.buyer_type} · score {(m.match_score * 100).toFixed(0)}%</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-semibold text-gray-900">{fmt(m.proposed_price_cents)}</div>
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{fmt(m.proposed_price_cents)}</div>
                     <StatusPill status={m.status} />
                   </div>
                 </div>
-                {m.ai_explanation && <p className="text-xs text-gray-700 mt-2">{m.ai_explanation}</p>}
+                {m.ai_explanation && <p className="text-xs text-gray-700 mt-2 dark:text-gray-300">{m.ai_explanation}</p>}
                 {isAdmin && m.status === 'proposed' && (
                   <div className="mt-2 flex justify-end">
                     <button onClick={() => execute(m)} disabled={executing === m.buyer_user_id}
@@ -146,9 +146,9 @@ function ListWizard({ onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center p-3" onClick={() => onClose()}>
-      <form onSubmit={submit} className="bg-white rounded-xl shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+      <form onSubmit={submit} className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 dark:bg-gray-900" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-3">
-          <div className="text-base font-semibold text-gray-900 flex items-center gap-2">
+          <div className="text-base font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
             <Tag size={16} className="text-violet-600" /> List my shares
           </div>
           <button type="button" onClick={() => onClose()}><X size={18} className="text-gray-400 hover:text-gray-700" /></button>
@@ -157,29 +157,29 @@ function ListWizard({ onClose }) {
         {err && <div className="bg-red-50 text-red-700 text-xs rounded px-2 py-1 mb-2 flex items-center gap-1.5"><AlertTriangle size={12} /> {err}</div>}
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-gray-700 block mb-1">Subsidiary ID</label>
+            <label className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Subsidiary ID</label>
             <input type="number" value={subsidiaryId} onChange={e => setSubsidiaryId(e.target.value)}
-              required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900" />
+              required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:text-gray-100" />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-700 block mb-1">Shares</label>
+            <label className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Shares</label>
             <input type="number" step="any" value={shares} onChange={e => setShares(e.target.value)}
-              required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900" />
+              required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:text-gray-100" />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-700 block mb-1">Asking price (USD)</label>
+            <label className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Asking price (USD)</label>
             <input type="number" step="0.01" value={askingDollars} onChange={e => setAskingDollars(e.target.value)}
-              required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900" />
+              required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:text-gray-100" />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-700 block mb-1">Notes (optional)</label>
+            <label className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Notes (optional)</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900" />
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:text-gray-100" />
           </div>
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={() => onClose()}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg">Cancel</button>
+            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg dark:border-gray-700">Cancel</button>
           <button type="submit" disabled={busy}
             className="px-3 py-1.5 text-sm bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg">
             {busy ? 'Listing…' : 'Create listing'}
@@ -239,7 +239,7 @@ export default function LiquidityPage({ currentUser }) {
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 dark:text-gray-100">
             <TrendingUp size={22} className="text-violet-600" /> Liquidity & Exits
           </h1>
         <PageExplainer pageKey="liquidity" />
@@ -251,7 +251,7 @@ export default function LiquidityPage({ currentUser }) {
             <Plus size={13} /> List my shares
           </button>
           <button onClick={load} disabled={refreshing}
-            className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5">
+            className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
             <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
           </button>
         </div>
@@ -268,7 +268,7 @@ export default function LiquidityPage({ currentUser }) {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 flex gap-1 overflow-x-auto overflow-y-hidden [&>button]:whitespace-nowrap">
+      <div className="border-b border-gray-200 flex gap-1 overflow-x-auto overflow-y-hidden [&>button]:whitespace-nowrap dark:border-gray-800">
         {[
           { id: 'marketplace', label: 'Marketplace' },
           { id: 'portfolio', label: 'My Portfolio' },
@@ -284,10 +284,10 @@ export default function LiquidityPage({ currentUser }) {
       {tab === 'marketplace' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {(marketplace || []).map(l => (
-            <div key={l.id} className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-2">
+            <div key={l.id} className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-2 dark:bg-gray-900 dark:border-gray-800">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="text-sm font-semibold text-gray-900">{l.subsidiary_name}</div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{l.subsidiary_name}</div>
                   <div className="text-xs text-gray-500">{l.sector || 'Sector n/a'} · {l.jurisdiction || '—'}</div>
                 </div>
                 <StatusPill status={l.status} />
@@ -295,15 +295,15 @@ export default function LiquidityPage({ currentUser }) {
               <div className="grid grid-cols-2 gap-2 text-xs mt-1">
                 <div>
                   <div className="text-gray-500">Shares</div>
-                  <div className="font-medium text-gray-900">{l.shares}</div>
+                  <div className="font-medium text-gray-900 dark:text-gray-100">{l.shares}</div>
                 </div>
                 <div>
                   <div className="text-gray-500">Asking</div>
-                  <div className="font-medium text-gray-900">{fmt(l.asking_price_cents)}</div>
+                  <div className="font-medium text-gray-900 dark:text-gray-100">{fmt(l.asking_price_cents)}</div>
                 </div>
                 <div className="col-span-2">
                   <div className="text-gray-500 flex items-center gap-1"><Sparkles size={10} className="text-violet-600" /> AI Valuation</div>
-                  <div className="font-medium text-gray-900">{l.ai_valuation_cents ? fmt(l.ai_valuation_cents) : '— pending'}</div>
+                  <div className="font-medium text-gray-900 dark:text-gray-100">{l.ai_valuation_cents ? fmt(l.ai_valuation_cents) : '— pending'}</div>
                 </div>
               </div>
               {isPrivileged && (
@@ -323,8 +323,8 @@ export default function LiquidityPage({ currentUser }) {
 
       {tab === 'portfolio' && (
         <div className="space-y-4">
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <div className="text-sm font-semibold text-gray-900 mb-3">LP Holdings</div>
+          <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+            <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">LP Holdings</div>
             {(portfolio?.lp_holdings || []).length === 0
               ? <div className="text-xs text-gray-400 text-center py-4">No LP positions on file.</div>
               : (
@@ -339,7 +339,7 @@ export default function LiquidityPage({ currentUser }) {
                   <tbody>
                     {portfolio.lp_holdings.map(lp => (
                       <tr key={lp.id} className="border-t border-gray-100">
-                        <td className="py-1.5 text-gray-900">{lp.fund_name}</td>
+                        <td className="py-1.5 text-gray-900 dark:text-gray-100">{lp.fund_name}</td>
                         <td className="text-right">${Number(lp.commitment_amount || 0).toLocaleString()}</td>
                         <td className="text-right">${Number(lp.invested_amount || 0).toLocaleString()}</td>
                         <td className="text-right text-emerald-700">${Number(lp.returns || 0).toLocaleString()}</td>
@@ -351,14 +351,14 @@ export default function LiquidityPage({ currentUser }) {
               )}
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <div className="text-sm font-semibold text-gray-900 mb-3">My Listings</div>
+          <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+            <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">My Listings</div>
             {(portfolio?.my_listings || []).length === 0
               ? <div className="text-xs text-gray-400 text-center py-4">You haven't listed any shares.</div>
               : portfolio.my_listings.map(l => (
                 <div key={l.id} className="border-t border-gray-100 first:border-t-0 py-2 flex items-center justify-between text-xs">
                   <div>
-                    <div className="font-medium text-gray-900">{l.subsidiary_name}</div>
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{l.subsidiary_name}</div>
                     <div className="text-gray-500">{l.shares} shares · ask {fmt(l.asking_price_cents)}</div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -369,14 +369,14 @@ export default function LiquidityPage({ currentUser }) {
               ))}
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <div className="text-sm font-semibold text-gray-900 mb-3">Exit History</div>
+          <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+            <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Exit History</div>
             {(portfolio?.exit_history || []).length === 0
               ? <div className="text-xs text-gray-400 text-center py-4">No exit events yet.</div>
               : portfolio.exit_history.map(e => (
                 <div key={e.id} className="border-t border-gray-100 first:border-t-0 py-2 flex items-center justify-between text-xs">
                   <div>
-                    <div className="font-medium text-gray-900">{e.event_type}</div>
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{e.event_type}</div>
                     <div className="text-gray-500">{new Date(e.created_at + 'Z').toLocaleString()}</div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -390,8 +390,8 @@ export default function LiquidityPage({ currentUser }) {
       )}
 
       {tab === 'pipeline' && isPrivileged && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <div className="text-sm font-semibold text-gray-900 mb-3">Exit Pipeline (last 100 events)</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Exit Pipeline (last 100 events)</div>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={exitPipeline}>
               <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
@@ -403,7 +403,7 @@ export default function LiquidityPage({ currentUser }) {
           </ResponsiveContainer>
           <div className="mt-3 max-h-[300px] overflow-y-auto">
             <table className="w-full text-xs">
-              <thead className="text-gray-500 sticky top-0 bg-white"><tr>
+              <thead className="text-gray-500 sticky top-0 bg-white dark:bg-gray-900"><tr>
                 <th className="text-left py-1 font-medium">Type</th>
                 <th className="text-left font-medium">Subsidiary</th>
                 <th className="text-right font-medium">Valuation</th>
@@ -437,12 +437,12 @@ export default function LiquidityPage({ currentUser }) {
 
 function Card({ icon: Icon, label, value, sub, accent }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">{label}</span>
         {Icon && <Icon size={14} className={`text-${accent}-600`} />}
       </div>
-      <div className="text-2xl font-bold text-gray-900">{value}</div>
+      <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</div>
       {sub && <div className="text-[11px] text-gray-500 mt-1">{sub}</div>}
     </div>
   );

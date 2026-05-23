@@ -61,10 +61,10 @@ function ConnectBanner({ connect, busy, onConnect, onLoginLink, onRefresh }) {
             ) : null}
           </div>
           <div className="mt-3 flex gap-2">
-            <button onClick={onLoginLink} disabled={busy} className="px-3 py-1.5 text-sm bg-white border border-amber-300 rounded hover:bg-amber-100 disabled:opacity-60">
+            <button onClick={onLoginLink} disabled={busy} className="px-3 py-1.5 text-sm bg-white border border-amber-300 rounded hover:bg-amber-100 disabled:opacity-60 dark:bg-gray-900">
               Manage payout method
             </button>
-            <button onClick={onRefresh} disabled={busy} className="px-3 py-1.5 text-sm bg-white border border-amber-300 rounded hover:bg-amber-100 disabled:opacity-60 inline-flex items-center gap-1">
+            <button onClick={onRefresh} disabled={busy} className="px-3 py-1.5 text-sm bg-white border border-amber-300 rounded hover:bg-amber-100 disabled:opacity-60 inline-flex items-center gap-1 dark:bg-gray-900">
               <RefreshCw size={14} /> Refresh status
             </button>
           </div>
@@ -82,10 +82,10 @@ function ConnectBanner({ connect, busy, onConnect, onLoginLink, onRefresh }) {
           {connect.country ? <> Country: <strong>{connect.country}</strong>.</> : null}
         </div>
         <div className="mt-3 flex gap-2">
-          <button onClick={onLoginLink} disabled={busy} className="px-3 py-1.5 text-sm bg-white border border-green-300 rounded hover:bg-green-100 disabled:opacity-60 inline-flex items-center gap-1">
+          <button onClick={onLoginLink} disabled={busy} className="px-3 py-1.5 text-sm bg-white border border-green-300 rounded hover:bg-green-100 disabled:opacity-60 inline-flex items-center gap-1 dark:bg-gray-900">
             <ExternalLink size={14} /> Manage payout method &amp; tax docs
           </button>
-          <button onClick={onRefresh} disabled={busy} className="px-3 py-1.5 text-sm bg-white border border-green-300 rounded hover:bg-green-100 disabled:opacity-60 inline-flex items-center gap-1">
+          <button onClick={onRefresh} disabled={busy} className="px-3 py-1.5 text-sm bg-white border border-green-300 rounded hover:bg-green-100 disabled:opacity-60 inline-flex items-center gap-1 dark:bg-gray-900">
             <RefreshCw size={14} /> Refresh
           </button>
         </div>

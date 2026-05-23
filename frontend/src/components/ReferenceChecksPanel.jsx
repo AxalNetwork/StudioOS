@@ -43,18 +43,18 @@ export default function ReferenceChecksPanel({ dealId, currentUserRole }) {
 
   if (!isAuthorized) {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <h3 className="font-semibold text-gray-900 mb-1">Reference Checks</h3>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+        <h3 className="font-semibold text-gray-900 mb-1 dark:text-gray-100">Reference Checks</h3>
         <p className="text-sm text-gray-500">Visible to admin and investor users only.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="font-semibold text-gray-900">Reference Checks</h3>
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100">Reference Checks</h3>
           <p className="text-xs text-gray-500">Recorded with consent · transcribed · summarised</p>
         </div>
         <button
@@ -120,10 +120,10 @@ function ReferenceCard({ reference, onChange }) {
     () => api.captureReferenceConsent(reference.id, { consent_given: true }));
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4">
+    <div className="border border-gray-200 rounded-lg p-4 dark:border-gray-800">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-medium text-gray-900">
+          <div className="font-medium text-gray-900 dark:text-gray-100">
             {reference.reference_name}
             {reference.reference_role && (
               <span className="text-gray-500 font-normal"> · {reference.reference_role}</span>
@@ -133,7 +133,7 @@ function ReferenceCard({ reference, onChange }) {
             <div className="text-xs text-gray-500 mt-0.5">{reference.relationship}</div>
           )}
         </div>
-        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200 whitespace-nowrap">
+        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200 whitespace-nowrap dark:text-gray-300 dark:border-gray-800">
           {STATUS_LABELS[reference.status] || reference.status}
         </span>
       </div>
@@ -165,7 +165,7 @@ function ReferenceCard({ reference, onChange }) {
             <button
               onClick={() => fileInput.current?.click()}
               disabled={!!busy}
-              className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50 flex items-center gap-1"
+              className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50 flex items-center gap-1 dark:border-gray-700"
             >
               <Mic size={12} /> {busy === 'upload' ? 'Uploading…' : 'Upload recording'}
             </button>
@@ -176,7 +176,7 @@ function ReferenceCard({ reference, onChange }) {
           <button
             onClick={() => run('transcribe', () => api.transcribeReference(reference.id))}
             disabled={!!busy}
-            className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50"
+            className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50 dark:border-gray-700"
           >
             {busy === 'transcribe' ? 'Transcribing…' : 'Transcribe (Whisper)'}
           </button>
@@ -205,12 +205,12 @@ function ReferenceCard({ reference, onChange }) {
 
       {reference.summary && (
         <div className="mt-3 border-t border-gray-100 pt-3 space-y-2">
-          <p className="text-sm text-gray-800">{reference.summary.summary}</p>
+          <p className="text-sm text-gray-800 dark:text-gray-200">{reference.summary.summary}</p>
 
           {reference.summary.tags?.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {reference.summary.tags.map((t) => (
-                <span key={t} className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+                <span key={t} className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 dark:text-gray-300">
                   #{t}
                 </span>
               ))}
@@ -230,15 +230,15 @@ function ReferenceCard({ reference, onChange }) {
 
           {reference.summary.strengths?.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-gray-700 mb-1">Strengths</div>
-              <ul className="text-xs text-gray-700 list-disc pl-5 space-y-0.5">
+              <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Strengths</div>
+              <ul className="text-xs text-gray-700 list-disc pl-5 space-y-0.5 dark:text-gray-300">
                 {reference.summary.strengths.map((s, i) => <li key={i}>{s}</li>)}
               </ul>
             </div>
           )}
 
           {reference.summary.quotes?.length > 0 && (
-            <div className="border-l-2 border-gray-300 pl-3 space-y-1">
+            <div className="border-l-2 border-gray-300 pl-3 space-y-1 dark:border-gray-700">
               {reference.summary.quotes.map((q, i) => (
                 <p key={i} className="text-xs italic text-gray-600">"{q}"</p>
               ))}
@@ -282,7 +282,7 @@ function ScheduleModal({ dealId, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-md w-full p-5">
+      <div className="bg-white rounded-xl max-w-md w-full p-5 dark:bg-gray-900">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold">Schedule reference call</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
@@ -293,34 +293,34 @@ function ScheduleModal({ dealId, onClose, onSaved }) {
             placeholder="Reference name *"
             value={form.reference_name}
             onChange={(e) => setForm({ ...form, reference_name: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm dark:border-gray-700"
           />
           <input
             type="email"
             placeholder="Email (optional)"
             value={form.reference_email}
             onChange={(e) => setForm({ ...form, reference_email: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm dark:border-gray-700"
           />
           <input
             placeholder="Role / title (e.g. Former CTO)"
             value={form.reference_role}
             onChange={(e) => setForm({ ...form, reference_role: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm dark:border-gray-700"
           />
           <input
             placeholder="Relationship (how they know the founder)"
             value={form.relationship}
             onChange={(e) => setForm({ ...form, relationship: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm dark:border-gray-700"
           />
           <input
             type="datetime-local"
             value={form.scheduled_at}
             onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm dark:border-gray-700"
           />
-          <label className="flex items-start gap-2 text-xs text-gray-700 bg-amber-50 border border-amber-200 rounded p-2">
+          <label className="flex items-start gap-2 text-xs text-gray-700 bg-amber-50 border border-amber-200 rounded p-2 dark:text-gray-300">
             <input
               type="checkbox"
               checked={form.consent_given}
@@ -337,12 +337,12 @@ function ScheduleModal({ dealId, onClose, onSaved }) {
             placeholder="Notes (optional)"
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm dark:border-gray-700"
             rows={2}
           />
           {err && <div className="text-xs text-red-700">{err}</div>}
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="text-sm px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50">
+            <button type="button" onClick={onClose} className="text-sm px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50 dark:border-gray-700">
               Cancel
             </button>
             <button type="submit" disabled={saving} className="text-sm px-3 py-1.5 rounded bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50">

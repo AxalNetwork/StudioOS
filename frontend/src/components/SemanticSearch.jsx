@@ -56,7 +56,7 @@ export default function SemanticSearch() {
 
   return (
     <div ref={wrapRef} className="relative w-full max-w-xl">
-      <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 bg-white focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100">
+      <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 bg-white focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100 dark:border-gray-800 dark:bg-gray-900">
         <Search size={16} className="text-gray-400 shrink-0" />
         <input
           type="search"
@@ -96,7 +96,7 @@ export default function SemanticSearch() {
       </div>
 
       {showDropdown && (
-        <div className="absolute z-30 left-0 right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-96 overflow-auto">
+        <div className="absolute z-30 left-0 right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-96 overflow-auto dark:bg-gray-900 dark:border-gray-800">
           {warning && <div className="px-3 py-2 text-xs text-amber-700 bg-amber-50 border-b border-amber-100">{warning}</div>}
           {!loading && hits.length === 0 && !warning && (
             <div className="px-3 py-6 text-center text-xs text-gray-500">No matches</div>
@@ -110,7 +110,7 @@ export default function SemanticSearch() {
                     <Icon size={14} className="mt-0.5 text-gray-400 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <div className="text-sm font-medium text-gray-900 truncate">{h.title || `${h.type} #${h.entity_id}`}</div>
+                        <div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{h.title || `${h.type} #${h.entity_id}`}</div>
                         <span className="text-[10px] uppercase tracking-wide text-gray-400">{h.type}</span>
                       </div>
                       {h.snippet && <div className="text-xs text-gray-500 truncate">{h.snippet}</div>}

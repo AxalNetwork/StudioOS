@@ -38,7 +38,7 @@ export default function CompanyProfilePanel() {
       </div>
 
       {view === 'mine' && me === undefined && (
-        <div className="bg-white border border-gray-200 rounded-xl p-12 text-center text-gray-500">
+        <div className="bg-white border border-gray-200 rounded-xl p-12 text-center text-gray-500 dark:bg-gray-900 dark:border-gray-800">
           <Loader2 className="animate-spin mx-auto mb-2" size={20} /> Loading…
         </div>
       )}
@@ -61,7 +61,7 @@ export default function CompanyProfilePanel() {
 function CreateCompanyForm({ onCreated }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
+    <div className="bg-white border border-gray-200 rounded-xl p-8 text-center dark:bg-gray-900 dark:border-gray-800">
       <Building2 className="mx-auto text-violet-600 mb-3" size={32} />
       <h3 className="text-lg font-semibold text-black mb-1">No company profile yet</h3>
       <p className="text-sm text-gray-600 mb-5">Create one to unlock Growth Sprints, partner matching, and market intel.</p>
@@ -82,7 +82,7 @@ function CompanyDetail({ company, onChange, canEdit }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
+      <div className="bg-white border border-gray-200 rounded-xl p-6 dark:bg-gray-900 dark:border-gray-800">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="flex items-start gap-4 min-w-0">
             <div className="w-14 h-14 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
@@ -99,7 +99,7 @@ function CompanyDetail({ company, onChange, canEdit }) {
             </div>
           </div>
           {canEdit && (
-            <button onClick={() => setEditing(true)} className="text-sm bg-white border border-gray-300 hover:border-violet-400 text-gray-700 px-3 py-1.5 rounded-lg">
+            <button onClick={() => setEditing(true)} className="text-sm bg-white border border-gray-300 hover:border-violet-400 text-gray-700 px-3 py-1.5 rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
               Edit
             </button>
           )}
@@ -119,7 +119,7 @@ function CompanyDetail({ company, onChange, canEdit }) {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
+      <div className="bg-white border border-gray-200 rounded-xl p-6 dark:bg-gray-900 dark:border-gray-800">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Users size={16} className="text-gray-500" />
@@ -171,8 +171,8 @@ function CompanyDetailLoader({ uid, onBack }) {
   const [c, setC] = useState(null);
   const [err, setErr] = useState('');
   useEffect(() => { (async () => { try { setC(await api.getCompany(uid)); } catch (e) { setErr(e.message); } })(); }, [uid]);
-  if (err) return <div className="bg-white border border-gray-200 rounded-xl p-8 text-sm text-red-600">{err}</div>;
-  if (!c) return <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500"><Loader2 className="animate-spin mx-auto"/></div>;
+  if (err) return <div className="bg-white border border-gray-200 rounded-xl p-8 text-sm text-red-600 dark:bg-gray-900 dark:border-gray-800">{err}</div>;
+  if (!c) return <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 dark:bg-gray-900 dark:border-gray-800"><Loader2 className="animate-spin mx-auto"/></div>;
   return (
     <div className="space-y-3">
       <button onClick={onBack} className="text-sm text-violet-600 hover:underline">← Back to directory</button>
@@ -223,32 +223,32 @@ function CompanyDirectory({ onOpen }) {
 
   return (
     <div className="space-y-3">
-      <div className="bg-white border border-gray-200 rounded-xl p-3 flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-2 flex-1 min-w-[200px] bg-gray-50 border border-gray-200 rounded-lg px-3">
+      <div className="bg-white border border-gray-200 rounded-xl p-3 flex flex-wrap items-center gap-2 dark:bg-gray-900 dark:border-gray-800">
+        <div className="flex items-center gap-2 flex-1 min-w-[200px] bg-gray-50 border border-gray-200 rounded-lg px-3 dark:border-gray-800">
           <Search size={14} className="text-gray-400"/>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search companies"
             className="bg-transparent w-full py-2 text-sm text-black placeholder:text-gray-400 outline-none"/>
         </div>
-        <select value={stage} onChange={e => setStage(e.target.value)} className="text-sm bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-black">
+        <select value={stage} onChange={e => setStage(e.target.value)} className="text-sm bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-black dark:bg-gray-900 dark:border-gray-800">
           <option value="">All stages</option>
           {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         {isAdmin && (
-          <select value={revenue} onChange={e => setRevenue(e.target.value)} className="text-sm bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-black">
+          <select value={revenue} onChange={e => setRevenue(e.target.value)} className="text-sm bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-black dark:bg-gray-900 dark:border-gray-800">
             <option value="">All revenue</option>
             {REVENUE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         )}
       </div>
       {loading ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500"><Loader2 className="animate-spin mx-auto"/></div>
+        <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 dark:bg-gray-900 dark:border-gray-800"><Loader2 className="animate-spin mx-auto"/></div>
       ) : data.items.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 text-sm">No companies match your filters.</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">No companies match your filters.</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {data.items.map(c => (
             <button key={c.uid} onClick={() => onOpen(c.uid)}
-              className="text-left bg-white border border-gray-200 hover:border-violet-300 rounded-xl p-4 transition-colors">
+              className="text-left bg-white border border-gray-200 hover:border-violet-300 rounded-xl p-4 transition-colors dark:bg-gray-900 dark:border-gray-800">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
                   {c.logo_url ? <img src={c.logo_url} alt="" className="w-full h-full object-cover"/> : <Building2 size={18}/>}
@@ -329,7 +329,7 @@ function CompanyFormModal({ initial, onClose, onSaved }) {
         <Textarea label="Expansion goals" value={form.expansion_goals} onChange={v => setForm({...form, expansion_goals: v})}/>
         {err && <div className="text-sm text-red-600">{err}</div>}
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancel</button>
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300">Cancel</button>
           <button type="submit" disabled={busy} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg inline-flex items-center gap-1.5 disabled:opacity-50">
             {busy ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>}
             {isEdit ? 'Save' : 'Create'}
@@ -363,7 +363,7 @@ function AddMemberModal({ companyUid, onClose, onAdded }) {
         {err && <div className="text-sm text-red-600">{err}</div>}
         <div className="text-xs text-gray-500">User must already have a StudioOS account.</div>
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancel</button>
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300">Cancel</button>
           <button type="submit" disabled={busy || !email.trim()} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg inline-flex items-center gap-1.5 disabled:opacity-50">
             {busy ? <Loader2 size={14} className="animate-spin"/> : <UserPlus size={14}/>} Add
           </button>
@@ -379,8 +379,8 @@ function AddMemberModal({ companyUid, onClose, onAdded }) {
 function Modal({ title, children, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 sticky top-0 bg-white">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto dark:bg-gray-900">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 sticky top-0 bg-white dark:border-gray-800 dark:bg-gray-900">
           <h3 className="font-semibold text-black">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18}/></button>
         </div>
@@ -394,7 +394,7 @@ function Field({ label, children }) {
   return (
     <div>
       <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">{label}</div>
-      <div className="text-sm text-gray-800 whitespace-pre-wrap">{children}</div>
+      <div className="text-sm text-gray-800 whitespace-pre-wrap dark:text-gray-200">{children}</div>
     </div>
   );
 }
@@ -408,27 +408,27 @@ function Pill({ children, tone = 'gray' }) {
 function Input({ label, value, onChange, type = 'text', placeholder = '' }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-gray-700 block mb-1">{label}</span>
+      <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">{label}</span>
       <input type={type} value={value} placeholder={placeholder} onChange={e => onChange(e.target.value)}
-        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-black focus:border-violet-500 focus:outline-none"/>
+        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-black focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700"/>
     </label>
   );
 }
 function Textarea({ label, value, onChange }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-gray-700 block mb-1">{label}</span>
+      <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">{label}</span>
       <textarea value={value} onChange={e => onChange(e.target.value)} rows={2}
-        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-black focus:border-violet-500 focus:outline-none"/>
+        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-black focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700"/>
     </label>
   );
 }
 function Select({ label, value, onChange, options }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-gray-700 block mb-1">{label}</span>
+      <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">{label}</span>
       <select value={value} onChange={e => onChange(e.target.value)}
-        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-black focus:border-violet-500 focus:outline-none">
+        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-black focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700">
         {options.map(o => <option key={o} value={o}>{o || '—'}</option>)}
       </select>
     </label>

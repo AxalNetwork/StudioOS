@@ -31,14 +31,14 @@ function HealthBadge({ health }) {
 
 function StatCard({ icon: Icon, label, value, sub, accent = 'violet' }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</span>
         <div className={`h-8 w-8 rounded-lg bg-${accent}-100 text-${accent}-700 flex items-center justify-center`}>
           <Icon size={15} />
         </div>
       </div>
-      <div className="text-2xl font-bold text-gray-900">{value}</div>
+      <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</div>
       {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
     </div>
   );
@@ -47,8 +47,8 @@ function StatCard({ icon: Icon, label, value, sub, accent = 'violet' }) {
 function ChartPanel({ title, data, dataKey = 'count', color = '#7c3aed', type = 'line' }) {
   const formatted = (data || []).map(d => ({ ...d, t: formatBucket(d.bucket), [dataKey]: Number(d[dataKey]) || 0 }));
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <div className="text-sm font-semibold text-gray-900 mb-3">{title}</div>
+    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+      <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">{title}</div>
       <div style={{ width: '100%', height: 180 }}>
         <ResponsiveContainer>
           {type === 'bar' ? (
@@ -116,10 +116,10 @@ function ErrorDetailModal({ error, allErrors, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col dark:bg-gray-900"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-red-50">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-red-50 dark:border-gray-800">
           <div className="flex items-center gap-2 min-w-0">
             <Zap size={16} className="text-red-600 shrink-0" />
             <div className="min-w-0">
@@ -134,7 +134,7 @@ function ErrorDetailModal({ error, allErrors, onClose }) {
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={copyAll}
-              className="text-xs px-2.5 py-1.5 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1.5"
+              className="text-xs px-2.5 py-1.5 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1.5 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
               title="Copy details to clipboard"
             >
               {copied ? <Check size={12} /> : <Copy size={12} />}
@@ -153,48 +153,48 @@ function ErrorDetailModal({ error, allErrors, onClose }) {
         <div className="overflow-y-auto px-5 py-4 space-y-4">
           {/* Meta grid */}
           <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="border border-gray-200 rounded-lg px-3 py-2">
+            <div className="border border-gray-200 rounded-lg px-3 py-2 dark:border-gray-800">
               <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Status</div>
               <div className="font-mono text-red-700 font-semibold">{error.status_code}</div>
             </div>
-            <div className="border border-gray-200 rounded-lg px-3 py-2">
+            <div className="border border-gray-200 rounded-lg px-3 py-2 dark:border-gray-800">
               <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Method</div>
-              <div className="font-mono text-gray-900 font-semibold">{error.method}</div>
+              <div className="font-mono text-gray-900 font-semibold dark:text-gray-100">{error.method}</div>
             </div>
-            <div className="border border-gray-200 rounded-lg px-3 py-2 col-span-2">
+            <div className="border border-gray-200 rounded-lg px-3 py-2 col-span-2 dark:border-gray-800">
               <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Endpoint</div>
-              <div className="font-mono text-gray-900 break-all">{error.endpoint}</div>
+              <div className="font-mono text-gray-900 break-all dark:text-gray-100">{error.endpoint}</div>
             </div>
-            <div className="border border-gray-200 rounded-lg px-3 py-2 flex items-start gap-2">
+            <div className="border border-gray-200 rounded-lg px-3 py-2 flex items-start gap-2 dark:border-gray-800">
               <UserIcon size={13} className="text-gray-500 mt-0.5 shrink-0" />
               <div className="min-w-0">
                 <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">User</div>
-                <div className="text-gray-900 truncate">
+                <div className="text-gray-900 truncate dark:text-gray-100">
                   {error.email || (error.user_id ? `user#${error.user_id}` : 'Anonymous')}
                 </div>
                 {error.name && <div className="text-gray-500 text-[11px] truncate">{error.name}</div>}
               </div>
             </div>
-            <div className="border border-gray-200 rounded-lg px-3 py-2 flex items-start gap-2">
+            <div className="border border-gray-200 rounded-lg px-3 py-2 flex items-start gap-2 dark:border-gray-800">
               <Hash size={13} className="text-gray-500 mt-0.5 shrink-0" />
               <div className="min-w-0">
                 <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Error ID</div>
-                <div className="font-mono text-gray-900">#{error.id}</div>
+                <div className="font-mono text-gray-900 dark:text-gray-100">#{error.id}</div>
               </div>
             </div>
           </div>
 
           {/* Message */}
           <div>
-            <div className="text-xs font-semibold text-gray-700 mb-1.5">Message</div>
-            <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-800 font-mono whitespace-pre-wrap break-words">
+            <div className="text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">Message</div>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-800 font-mono whitespace-pre-wrap break-words dark:border-gray-800 dark:text-gray-200">
               {error.message || '(no message captured)'}
             </div>
           </div>
 
           {/* Stack */}
           <div>
-            <div className="text-xs font-semibold text-gray-700 mb-1.5">Stack trace</div>
+            <div className="text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">Stack trace</div>
             {error.stack_snippet ? (
               <pre className="bg-gray-900 text-gray-100 rounded-lg px-3 py-2.5 text-[11px] leading-relaxed font-mono overflow-x-auto whitespace-pre-wrap">
                 {error.stack_snippet}
@@ -207,13 +207,13 @@ function ErrorDetailModal({ error, allErrors, onClose }) {
           {/* Related occurrences */}
           {related.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-gray-700 mb-1.5">
+              <div className="text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">
                 Other occurrences of this error <span className="text-gray-500 font-normal">({related.length})</span>
               </div>
-              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
+              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto dark:border-gray-800">
                 {related.slice(0, 10).map(r => (
                   <div key={r.id} className="px-3 py-1.5 text-[11px] flex items-center justify-between">
-                    <span className="text-gray-700 truncate">{r.email || (r.user_id ? `user#${r.user_id}` : 'anon')}</span>
+                    <span className="text-gray-700 truncate dark:text-gray-300">{r.email || (r.user_id ? `user#${r.user_id}` : 'anon')}</span>
                     <span className="text-gray-500 font-mono shrink-0 ml-2">
                       {new Date(r.created_at + (r.created_at.endsWith('Z') ? '' : 'Z')).toLocaleString()}
                     </span>
@@ -226,10 +226,10 @@ function ErrorDetailModal({ error, allErrors, onClose }) {
           {/* Other errors from same user */}
           {sameUser.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-gray-700 mb-1.5">
+              <div className="text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">
                 Other recent errors from this user <span className="text-gray-500 font-normal">({sameUser.length})</span>
               </div>
-              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
+              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto dark:border-gray-800">
                 {sameUser.slice(0, 10).map(r => (
                   <div key={r.id} className="px-3 py-1.5 text-[11px] flex items-center justify-between gap-2">
                     <span className="text-red-700 font-mono truncate">{r.method} {r.endpoint} → {r.status_code}</span>
@@ -326,7 +326,7 @@ export default function MonitoringPage() {
     <div className="max-w-7xl mx-auto space-y-6" data-testid="monitoring-page">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 dark:text-gray-100">
             <Activity size={22} className="text-violet-600" /> Monitoring & Observability
           </h1>
           <p className="text-sm text-gray-600 mt-1">
@@ -339,7 +339,7 @@ export default function MonitoringPage() {
             <select
               value={window}
               onChange={e => setWindow(parseInt(e.target.value))}
-              className="appearance-none border border-gray-300 rounded-lg pl-3 pr-9 py-1.5 text-sm bg-white text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none cursor-pointer"
+              className="appearance-none border border-gray-300 rounded-lg pl-3 pr-9 py-1.5 text-sm bg-white text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none cursor-pointer dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             >
               <option value={15}>Last 15 min</option>
               <option value={60}>Last 60 min</option>
@@ -365,7 +365,7 @@ export default function MonitoringPage() {
       )}
 
       {/* Tab nav */}
-      <div className="border-b border-gray-200 flex gap-1 overflow-x-auto [&>button]:whitespace-nowrap">
+      <div className="border-b border-gray-200 flex gap-1 overflow-x-auto [&>button]:whitespace-nowrap dark:border-gray-800">
         {[
           { id: 'overview', label: 'Overview' },
           { id: 'analytics', label: 'User Analytics' },
@@ -411,13 +411,13 @@ export default function MonitoringPage() {
             <span className="text-xs text-violet-700/70 ml-auto">Updated {new Date(anomalies.generated_at).toLocaleTimeString()}</span>
           )}
         </div>
-        <p className="text-sm text-gray-800 whitespace-pre-line">{anomalies?.ai_summary || 'No analysis yet.'}</p>
+        <p className="text-sm text-gray-800 whitespace-pre-line dark:text-gray-200">{anomalies?.ai_summary || 'No analysis yet.'}</p>
         {anomalies?.anomalies?.length > 0 && (
           <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
             {anomalies.anomalies.map((a, i) => (
               <div key={i} className="bg-white/80 border border-violet-200 rounded-lg px-3 py-2 text-xs">
                 <div className="font-semibold text-violet-900">{a.type.toUpperCase()} · {a.endpoint}</div>
-                <div className="text-gray-700">{a.detail}</div>
+                <div className="text-gray-700 dark:text-gray-300">{a.detail}</div>
               </div>
             ))}
           </div>
@@ -429,12 +429,12 @@ export default function MonitoringPage() {
         <ChartPanel title="Requests / minute" data={metrics?.requests_per_minute} color="#7c3aed" />
         <ChartPanel title="AI calls / minute" data={metrics?.ai_calls_per_minute} color="#2563eb" />
         <ChartPanel title="Spin-outs / minute" data={metrics?.spinouts_per_minute} color="#059669" type="bar" />
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-sm font-semibold text-gray-900 mb-3">Top endpoints (by hits)</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Top endpoints (by hits)</div>
           <div className="space-y-1.5 max-h-[180px] overflow-y-auto">
             {(metrics?.top_endpoints || []).map((r, i) => (
               <div key={i} className="flex items-center justify-between text-xs border-b border-gray-100 last:border-0 py-1">
-                <span className="font-mono text-gray-700 truncate">{r.endpoint}</span>
+                <span className="font-mono text-gray-700 truncate dark:text-gray-300">{r.endpoint}</span>
                 <span className="text-gray-500">{r.hits} hits · {Math.round(Number(r.avg_latency) || 0)}ms</span>
               </div>
             ))}
@@ -446,10 +446,10 @@ export default function MonitoringPage() {
       </div>
 
       {/* Rate-limit heatmap */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
         <div className="flex items-center gap-2 mb-3">
           <ShieldAlert size={15} className="text-amber-600" />
-          <span className="text-sm font-semibold text-gray-900">Rate-limit Blocks</span>
+          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Rate-limit Blocks</span>
           <span className="text-xs text-gray-500 ml-2">Last {rateLimits?.window_minutes}m</span>
         </div>
         {heatmap.length === 0 ? (
@@ -462,7 +462,7 @@ export default function MonitoringPage() {
               return (
                 <div key={i} className="flex items-center justify-between rounded-lg px-3 py-2 text-xs border border-amber-200" style={{ background: bg }}>
                   <div>
-                    <div className="font-mono text-gray-900">{h.endpoint}</div>
+                    <div className="font-mono text-gray-900 dark:text-gray-100">{h.endpoint}</div>
                     <div className="text-[10px] text-gray-600 uppercase tracking-wide">bucket: {h.bucket}</div>
                   </div>
                   <div className="font-bold text-amber-900">{h.blocks}×</div>
@@ -473,7 +473,7 @@ export default function MonitoringPage() {
         )}
         {blocked.length > 0 && (
           <div className="border-t border-gray-100 pt-3">
-            <div className="text-xs font-semibold text-gray-700 mb-2">Recent blocks</div>
+            <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Recent blocks</div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="text-gray-500">
@@ -485,7 +485,7 @@ export default function MonitoringPage() {
                     <th className="text-right font-medium">Count</th>
                   </tr>
                 </thead>
-                <tbody className="text-gray-800">
+                <tbody className="text-gray-800 dark:text-gray-200">
                   {blocked.slice(0, 15).map(b => (
                     <tr key={b.id} className="border-t border-gray-100">
                       <td className="py-1.5">{new Date(b.created_at + 'Z').toLocaleTimeString()}</td>
@@ -503,10 +503,10 @@ export default function MonitoringPage() {
       </div>
 
       {/* Recent errors */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
         <div className="flex items-center gap-2 mb-3">
           <Zap size={15} className="text-red-600" />
-          <span className="text-sm font-semibold text-gray-900">Recent Errors</span>
+          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Recent Errors</span>
         </div>
         {(errors?.errors || []).length === 0 ? (
           <div className="text-xs text-gray-500 text-center py-4">No errors logged.</div>
@@ -524,7 +524,7 @@ export default function MonitoringPage() {
                   <span className="font-mono text-red-800 truncate">{e.method} {e.endpoint} → {e.status_code}</span>
                   <span className="text-gray-500 shrink-0">{new Date(e.created_at + 'Z').toLocaleString()}</span>
                 </div>
-                <div className="text-gray-700 mt-1 truncate">{e.message}</div>
+                <div className="text-gray-700 mt-1 truncate dark:text-gray-300">{e.message}</div>
               </button>
             ))}
           </div>
@@ -609,12 +609,12 @@ function ScoreIntegrityTab({ focusSnapshotId = null }) {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <ShieldAlert size={18} className="text-amber-600" />
-          <h2 className="text-base font-semibold text-gray-900">Score Integrity Queue</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Score Integrity Queue</h2>
           <span className="text-xs text-gray-500">{items.length} item(s)</span>
         </div>
         <div className="flex items-center gap-2">
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-900">
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
             <option value="flagged">Flagged (pending review)</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
@@ -632,20 +632,20 @@ function ScoreIntegrityTab({ focusSnapshotId = null }) {
       )}
 
       {items.length === 0 && !busy ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-sm text-gray-500">
+        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-sm text-gray-500 dark:bg-gray-900 dark:border-gray-800">
           No snapshots in this state. Tampering &amp; anomaly detection is healthy.
         </div>
       ) : (
         <div className="space-y-3">
           {items.map(it => (
-            <div key={it.id} id={`score-flag-${it.id}`} className="bg-white border border-gray-200 rounded-xl p-4 transition-shadow">
+            <div key={it.id} id={`score-flag-${it.id}`} className="bg-white border border-gray-200 rounded-xl p-4 transition-shadow dark:bg-gray-900 dark:border-gray-800">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
-                  <div className="text-sm font-semibold text-gray-900">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                     {it.project_name || `Project #${it.project_id}`} · snapshot #{it.id}
                   </div>
                   <div className="text-xs text-gray-500 mt-0.5">
-                    Score <strong className="text-gray-800">{it.total_score}</strong> · {it.tier} ·
+                    Score <strong className="text-gray-800 dark:text-gray-200">{it.total_score}</strong> · {it.tier} ·
                     {' '}created {new Date(it.created_at + (it.created_at?.endsWith('Z') ? '' : 'Z')).toLocaleString()}
                   </div>
                 </div>
@@ -668,7 +668,7 @@ function ScoreIntegrityTab({ focusSnapshotId = null }) {
               </div>
 
               {Array.isArray(it.anomaly_flags) && it.anomaly_flags.length > 0 && (
-                <ul className="mt-3 space-y-1 text-xs text-gray-700">
+                <ul className="mt-3 space-y-1 text-xs text-gray-700 dark:text-gray-300">
                   {it.anomaly_flags.map((f, i) => (
                     <li key={i} className="flex items-start gap-2">
                       <AlertTriangle size={12} className={`mt-0.5 ${f.severity === 'high' ? 'text-red-600' : f.severity === 'medium' ? 'text-amber-600' : 'text-gray-500'}`} />
@@ -695,7 +695,7 @@ function ScoreIntegrityTab({ focusSnapshotId = null }) {
                     Reject · revert tier
                   </button>
                   <button onClick={() => waive(it.id)}
-                          className="px-3 py-1.5 text-xs bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium">
+                          className="px-3 py-1.5 text-xs bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
                     Waive 7-day cooldown
                   </button>
                 </div>

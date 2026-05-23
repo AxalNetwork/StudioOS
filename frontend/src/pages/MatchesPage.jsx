@@ -33,12 +33,12 @@ export default function MatchesPage() {
         <div className="flex items-center gap-3">
           <Sparkles className="text-violet-600" size={24} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">AI Matching Engine</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">AI Matching Engine</h1>
             <p className="text-sm text-gray-600">Personalized deal flow, co-investment, and referral signals — scored by Cloudflare Workers AI.</p>
           </div>
         </div>
         <button onClick={() => setEditPrefs(true)}
-          className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-sm text-gray-700 px-3 py-2 rounded-lg">
+          className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-sm text-gray-700 px-3 py-2 rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
           <Settings size={14} /> Investor Preferences
         </button>
       </div>
@@ -50,7 +50,7 @@ export default function MatchesPage() {
         </div>
       )}
 
-      <div className="border-b border-gray-200 mb-6 flex gap-1">
+      <div className="border-b border-gray-200 mb-6 flex gap-1 dark:border-gray-800">
         {[
           { id: 'deal-flow', label: 'Deal Flow', icon: Target },
           { id: 'co-invest', label: 'Co-Investment', icon: TrendingUp },
@@ -130,7 +130,7 @@ function CoInvest() {
     <div className="space-y-3">
       <p className="text-xs text-gray-500 mb-3">Top {data.items.length} of {data.total} active deals, ranked for you.</p>
       {data.items.map((it, i) => (
-        <div key={it.project.id} className="bg-white border border-gray-200 rounded-xl p-5 flex gap-5 items-start">
+        <div key={it.project.id} className="bg-white border border-gray-200 rounded-xl p-5 flex gap-5 items-start dark:bg-gray-900 dark:border-gray-800">
           <div className="flex-shrink-0">
             <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${
               i === 0 ? 'bg-amber-400 text-white' : i < 3 ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-700'
@@ -138,11 +138,11 @@ function CoInvest() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-3 mb-1">
-              <h3 className="font-semibold text-gray-900 truncate">{it.project.name}</h3>
+              <h3 className="font-semibold text-gray-900 truncate dark:text-gray-100">{it.project.name}</h3>
               <ScorePill score={it.score} />
             </div>
             <div className="text-xs text-gray-500 mb-2">{it.project.sector} • {it.project.stage} • {it.project.status}</div>
-            <p className="text-sm text-gray-700 leading-relaxed">{it.explanation}</p>
+            <p className="text-sm text-gray-700 leading-relaxed dark:text-gray-300">{it.explanation}</p>
             {it.project.funding_needed && (
               <div className="text-xs text-gray-500 mt-2">Funding needed: ${Number(it.project.funding_needed).toLocaleString()}</div>
             )}
@@ -171,7 +171,7 @@ function ReferralScores() {
   if (!data?.items?.length) return <Empty text="No referrals yet. Share your link from the Refer & Earn page." />;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
       <table className="w-full text-sm">
         <thead className="bg-gray-50">
           <tr className="text-left text-xs text-gray-600">
@@ -186,13 +186,13 @@ function ReferralScores() {
           {data.items.map(it => (
             <tr key={it.referral.id}>
               <td className="px-6 py-3">
-                <div className="font-medium text-gray-900">{it.referral.name}</div>
+                <div className="font-medium text-gray-900 dark:text-gray-100">{it.referral.name}</div>
                 <div className="text-xs text-gray-500">{it.referral.email}</div>
               </td>
               <td className="px-6 py-3"><Pill v={it.referral.kyc_status || 'not_started'} /></td>
               <td className="px-6 py-3"><Pill v={it.referral.status} /></td>
               <td className="px-6 py-3"><ScorePill score={it.score} /></td>
-              <td className="px-6 py-3 text-xs text-gray-700 max-w-md">{it.explanation}</td>
+              <td className="px-6 py-3 text-xs text-gray-700 max-w-md dark:text-gray-300">{it.explanation}</td>
             </tr>
           ))}
         </tbody>
@@ -204,17 +204,17 @@ function ReferralScores() {
 function DealCard({ item }) {
   const p = item.project;
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow">
+    <div className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-start justify-between mb-2">
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-gray-900 truncate">{p.name}</h3>
+          <h3 className="font-semibold text-gray-900 truncate dark:text-gray-100">{p.name}</h3>
           <div className="text-xs text-gray-500 mt-0.5">{p.sector || 'Other'} • {p.stage} • {p.status}</div>
         </div>
         <ScorePill score={item.score} />
       </div>
-      {p.problem_statement && <p className="text-xs text-gray-700 mt-2 line-clamp-2">{p.problem_statement}</p>}
+      {p.problem_statement && <p className="text-xs text-gray-700 mt-2 line-clamp-2 dark:text-gray-300">{p.problem_statement}</p>}
       <div className="mt-3 pt-3 border-t border-gray-100">
-        <div className="flex items-start gap-2 text-xs text-gray-700">
+        <div className="flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300">
           <Brain size={12} className="text-violet-500 flex-shrink-0 mt-0.5" />
           <span className="leading-relaxed">{item.explanation}</span>
         </div>
@@ -236,7 +236,7 @@ function Loading({ text }) {
   return <div className="flex items-center gap-2 text-sm text-gray-500 py-12 justify-center"><Loader2 className="animate-spin" size={16} /> {text}</div>;
 }
 function Empty({ text }) {
-  return <div className="text-center py-12 text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl">{text}</div>;
+  return <div className="text-center py-12 text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl dark:border-gray-800">{text}</div>;
 }
 
 function PreferencesModal({ initial, onSave, onClose, saving }) {
@@ -255,14 +255,14 @@ function PreferencesModal({ initial, onSave, onClose, saving }) {
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Investor Preferences</h2>
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Investor Preferences</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-900 text-xl">×</button>
         </div>
         <div className="p-6 space-y-5">
           <div>
-            <label className="text-xs text-gray-700 font-medium block mb-2">Investment Focus (sectors)</label>
+            <label className="text-xs text-gray-700 font-medium block mb-2 dark:text-gray-300">Investment Focus (sectors)</label>
             <div className="flex flex-wrap gap-2">
               {SECTORS.map(s => (
                 <button key={s} onClick={() => toggle('investment_focus', s)}
@@ -274,7 +274,7 @@ function PreferencesModal({ initial, onSave, onClose, saving }) {
           </div>
 
           <div>
-            <label className="text-xs text-gray-700 font-medium block mb-2">Preferred Stages</label>
+            <label className="text-xs text-gray-700 font-medium block mb-2 dark:text-gray-300">Preferred Stages</label>
             <div className="flex flex-wrap gap-2">
               {STAGES.map(s => (
                 <button key={s} onClick={() => toggle('preferred_stages', s)}
@@ -286,7 +286,7 @@ function PreferencesModal({ initial, onSave, onClose, saving }) {
           </div>
 
           <div>
-            <label className="text-xs text-gray-700 font-medium block mb-2">Preferred Roles</label>
+            <label className="text-xs text-gray-700 font-medium block mb-2 dark:text-gray-300">Preferred Roles</label>
             <div className="flex flex-wrap gap-2">
               {ROLES.map(s => (
                 <button key={s} onClick={() => toggle('preferred_roles', s)}
@@ -299,24 +299,24 @@ function PreferencesModal({ initial, onSave, onClose, saving }) {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-700 font-medium block mb-1">Min Check ($)</label>
+              <label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Min Check ($)</label>
               <input type="number" min="0" value={form.min_check_dollars} onChange={e => setForm(f => ({ ...f, min_check_dollars: e.target.value }))}
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none" />
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none dark:border-gray-700" />
             </div>
             <div>
-              <label className="text-xs text-gray-700 font-medium block mb-1">Max Check ($)</label>
+              <label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Max Check ($)</label>
               <input type="number" min="0" value={form.max_check_dollars} onChange={e => setForm(f => ({ ...f, max_check_dollars: e.target.value }))}
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none" />
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none dark:border-gray-700" />
             </div>
           </div>
 
           <div>
-            <label className="text-xs text-gray-700 font-medium block mb-1">Risk Tolerance</label>
+            <label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Risk Tolerance</label>
             <div className="relative">
               <select
                 value={form.risk_tolerance}
                 onChange={e => setForm(f => ({ ...f, risk_tolerance: e.target.value }))}
-                className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 pr-9 py-2 text-sm text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer"
+                className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 pr-9 py-2 text-sm text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer dark:border-gray-700 dark:text-gray-100"
               >
                 <option value="low">Low — proven traction only</option>
                 <option value="medium">Medium — balanced</option>
@@ -327,14 +327,14 @@ function PreferencesModal({ initial, onSave, onClose, saving }) {
           </div>
 
           <div>
-            <label className="text-xs text-gray-700 font-medium block mb-1">Bio / Thesis (optional)</label>
+            <label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Bio / Thesis (optional)</label>
             <textarea rows={3} value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))}
               placeholder="What's your investment thesis or area of expertise?"
-              className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none" />
+              className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none dark:border-gray-700" />
           </div>
         </div>
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-2">
-          <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded-lg">Cancel</button>
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-2 dark:border-gray-800">
+          <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded-lg dark:text-gray-300">Cancel</button>
           <button onClick={() => onSave(form)} disabled={saving}
             className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
             {saving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}

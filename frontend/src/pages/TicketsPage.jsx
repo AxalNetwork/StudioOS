@@ -12,7 +12,7 @@ function ModernSelect({ value, onChange, children, ...props }) {
   return (
     <div className="relative">
       <select value={value} onChange={onChange} {...props}
-        className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400">
+        className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700">
         {children}
       </select>
       <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
@@ -69,10 +69,10 @@ function TicketDetail({ ticketId, onBack }) {
         <ArrowLeft size={14} /> Back to tickets
       </button>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-6 mb-4">
+      <div className="bg-white border border-gray-200 rounded-xl p-6 mb-4 dark:bg-gray-900 dark:border-gray-800">
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
-            <h2 className="text-xl font-bold text-gray-900">{ticket.title}</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{ticket.title}</h2>
             <div className="flex items-center gap-3 mt-2">
               <span className={`text-[10px] px-2 py-0.5 rounded-full ${priorityColors[ticket.priority]}`}>{ticket.priority}</span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[ticket.status]}`}>{ticket.status?.replace('_', ' ')}</span>
@@ -87,34 +87,34 @@ function TicketDetail({ ticketId, onBack }) {
 
         {ticket.description && (
           <div className="bg-gray-50 rounded-lg p-4 mb-4">
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap dark:text-gray-300">{ticket.description}</p>
           </div>
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs text-gray-500">
           <div>
             <span className="block text-gray-400 mb-0.5">Submitted by</span>
-            <span className="text-gray-700">{ticket.submitted_by || 'Unknown'}</span>
+            <span className="text-gray-700 dark:text-gray-300">{ticket.submitted_by || 'Unknown'}</span>
           </div>
           <div>
             <span className="block text-gray-400 mb-0.5">Created</span>
-            <span className="text-gray-700">{ticket.created_at ? new Date(ticket.created_at).toLocaleDateString() : '—'}</span>
+            <span className="text-gray-700 dark:text-gray-300">{ticket.created_at ? new Date(ticket.created_at).toLocaleDateString() : '—'}</span>
           </div>
           <div>
             <span className="block text-gray-400 mb-0.5">Last updated</span>
-            <span className="text-gray-700">{ticket.updated_at ? new Date(ticket.updated_at).toLocaleDateString() : '—'}</span>
+            <span className="text-gray-700 dark:text-gray-300">{ticket.updated_at ? new Date(ticket.updated_at).toLocaleDateString() : '—'}</span>
           </div>
           {ticket.assigned_to && (
             <div>
               <span className="block text-gray-400 mb-0.5">Assigned to</span>
-              <span className="text-gray-700">{ticket.assigned_to}</span>
+              <span className="text-gray-700 dark:text-gray-300">{ticket.assigned_to}</span>
             </div>
           )}
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+      <div className="bg-white border border-gray-200 rounded-xl p-6 dark:bg-gray-900 dark:border-gray-800">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 dark:text-gray-100">
           <MessageSquare size={14} />
           Comments {ticket.comments?.length > 0 && <span className="text-gray-400 font-normal">({ticket.comments.length})</span>}
         </h3>
@@ -131,13 +131,13 @@ function TicketDetail({ ticketId, onBack }) {
                   {comment.author_avatar && (
                     <img src={comment.author_avatar} alt="" className="w-5 h-5 rounded-full" />
                   )}
-                  <span className="text-xs font-medium text-gray-700">{comment.author}</span>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{comment.author}</span>
                   <span className="text-xs text-gray-400 flex items-center gap-1">
                     <Clock size={10} />
                     {new Date(comment.created_at).toLocaleString()}
                   </span>
                 </div>
-                <div className="text-sm text-gray-700 whitespace-pre-wrap">{comment.body}</div>
+                <div className="text-sm text-gray-700 whitespace-pre-wrap dark:text-gray-300">{comment.body}</div>
               </div>
             ))}
           </div>
@@ -220,7 +220,7 @@ export default function TicketsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Support Hub</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Support Hub</h1>
           <p className="text-sm text-gray-600">
             {isAdmin ? 'All user tickets — ticket management and operations support' : 'Your tickets — submit and track support requests'}
           </p>
@@ -233,14 +233,14 @@ export default function TicketsPage() {
       </div>
 
       {showForm && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-          <h2 className="font-semibold text-gray-900 text-sm mb-4">Submit a Support Ticket</h2>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
+          <h2 className="font-semibold text-gray-900 text-sm mb-4 dark:text-gray-100">Submit a Support Ticket</h2>
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-gray-600 mb-1">Title</label>
               <input type="text" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                 placeholder="Brief description of the issue"
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:border-violet-500 focus:outline-none" />
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:text-gray-100" />
             </div>
             <div>
               <label className="block text-xs text-gray-600 mb-1 font-medium">Priority</label>
@@ -256,17 +256,17 @@ export default function TicketsPage() {
               <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 rows={4}
                 placeholder="Provide details about the issue..."
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 resize-vertical min-h-[100px] focus:border-violet-500 focus:outline-none" />
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 resize-vertical min-h-[100px] focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:text-gray-100" />
             </div>
           </div>
           <div className="flex gap-3 mt-4">
             <button onClick={submit} disabled={submitting} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm text-white font-medium transition-colors disabled:opacity-50">{submitting ? 'Submitting...' : 'Submit Ticket'}</button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors">Cancel</button>
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors dark:text-gray-300">Cancel</button>
           </div>
         </div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
         {loadError ? (
           <div className="p-8 text-center">
             <p className="text-red-600 text-sm mb-2">Failed to load tickets</p>
@@ -294,7 +294,7 @@ export default function TicketsPage() {
                      className="hover:bg-violet-50 cursor-pointer transition-colors border-b border-gray-100 text-sm">
                   <div style={{ display: 'grid', gridTemplateColumns: cols, alignItems: 'center', height: '100%' }}>
                     <div className="px-5 py-3 min-w-0">
-                      <div className="text-gray-900 hover:text-violet-600 transition-colors truncate">{t.title}</div>
+                      <div className="text-gray-900 hover:text-violet-600 transition-colors truncate dark:text-gray-100">{t.title}</div>
                       {t.description && <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{t.description}</div>}
                     </div>
                     {isAdmin && <div className="px-5 py-3 hidden md:block text-gray-600 truncate">{t.submitted_by || '—'}</div>}
@@ -315,7 +315,7 @@ export default function TicketsPage() {
             {(items) => (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
+                  <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase dark:border-gray-800">
                     <th className="text-left px-5 py-3">Title</th>
                     {isAdmin && <th className="text-left px-5 py-3 hidden md:table-cell">Submitted By</th>}
                     <th className="text-left px-5 py-3">Priority</th>
@@ -328,7 +328,7 @@ export default function TicketsPage() {
                     <tr key={t.id} className="hover:bg-violet-50 cursor-pointer transition-colors"
                         onClick={() => setSelectedTicketId(t.id)}>
                       <td className="px-5 py-3">
-                        <div className="text-gray-900 hover:text-violet-600 transition-colors">{t.title}</div>
+                        <div className="text-gray-900 hover:text-violet-600 transition-colors dark:text-gray-100">{t.title}</div>
                         {t.description && <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{t.description}</div>}
                       </td>
                       {isAdmin && <td className="px-5 py-3 hidden md:table-cell text-gray-600">{t.submitted_by || '—'}</td>}

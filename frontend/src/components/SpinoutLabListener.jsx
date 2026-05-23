@@ -249,13 +249,13 @@ export default function SpinoutLabListener() {
           aria-modal="true"
           aria-labelledby="spinout-lab-completion-title"
         >
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-7 text-center relative">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-7 text-center relative dark:bg-gray-900">
             <div className="mx-auto w-14 h-14 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white flex items-center justify-center mb-4">
               <PartyPopper size={26} />
             </div>
             <h2
               id="spinout-lab-completion-title"
-              className="text-2xl font-bold text-gray-900 mb-2"
+              className="text-2xl font-bold text-gray-900 mb-2 dark:text-gray-100"
             >
               You incorporated!
             </h2>

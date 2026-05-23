@@ -84,7 +84,7 @@ export default function PartnerPortal() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Partner / Investor Portal</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Partner / Investor Portal</h1>
       <p className="text-gray-600 mb-6">Deal flow, capital calls, LP investors, and portfolio performance</p>
 
       {/* Task #7 (W-2) — investor-only quota bars (no-op for partners/admins) */}
@@ -116,10 +116,10 @@ export default function PartnerPortal() {
             <EmptyState message="No deals in the pipeline yet" />
           ) : (
             deals.map(deal => (
-              <div key={deal.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-4">
+              <div key={deal.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-4 dark:bg-gray-900 dark:border-gray-800">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
-                    <span className="text-gray-900 font-medium">{deal.project_name || `Project #${deal.project_id}`}</span>
+                    <span className="text-gray-900 font-medium dark:text-gray-100">{deal.project_name || `Project #${deal.project_id}`}</span>
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[deal.status] || 'bg-gray-200 text-gray-600'}`}>
                       {deal.status?.toUpperCase()}
                     </span>
@@ -146,12 +146,12 @@ export default function PartnerPortal() {
             <EmptyState message="No capital calls yet" />
           ) : (
             calls.map(call => (
-              <div key={call.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-4">
+              <div key={call.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-4 dark:bg-gray-900 dark:border-gray-800">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${call.status === 'paid' ? 'bg-green-100' : 'bg-amber-100'}`}>
                   {call.status === 'paid' ? <CheckCircle size={20} className="text-green-600" /> : <Clock size={20} className="text-amber-600" />}
                 </div>
                 <div className="flex-1">
-                  <div className="text-gray-900 font-medium">${call.amount?.toLocaleString()}</div>
+                  <div className="text-gray-900 font-medium dark:text-gray-100">${call.amount?.toLocaleString()}</div>
                   <div className="text-sm text-gray-600">
                     {call.due_date && <span className="mr-4">Due: {call.due_date}</span>}
                     <span className={call.status === 'paid' ? 'text-green-600' : 'text-amber-600'}>
@@ -173,9 +173,9 @@ export default function PartnerPortal() {
       {tab === 'investors' && (
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-900">LP Investors</h3>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">LP Investors</h3>
               </div>
               {investors.length === 0 ? (
                 <div className="p-8 text-center text-gray-500 text-sm">No investors registered yet.</div>
@@ -186,7 +186,7 @@ export default function PartnerPortal() {
                       onClick={() => selectLP(inv.id)}>
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="text-sm font-medium text-gray-900">{inv.name}</div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{inv.name}</div>
                           <div className="text-xs text-gray-500">{inv.email} {inv.fund_name ? `| ${inv.fund_name}` : ''}</div>
                         </div>
                         <div className="text-right">
@@ -207,13 +207,13 @@ export default function PartnerPortal() {
 
           <div>
             {selectedLP ? (
-              <div className="bg-white border border-gray-200 rounded-xl p-5">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">{selectedLP.name}</h3>
+              <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">{selectedLP.name}</h3>
                 <div className="space-y-2 text-xs mb-4">
-                  <div className="flex justify-between"><span className="text-gray-500">Committed</span><span className="text-gray-900">${selectedLP.committed_capital?.toLocaleString()}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Called</span><span className="text-gray-900">${selectedLP.called_capital?.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Committed</span><span className="text-gray-900 dark:text-gray-100">${selectedLP.committed_capital?.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Called</span><span className="text-gray-900 dark:text-gray-100">${selectedLP.called_capital?.toLocaleString()}</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Remaining</span><span className="text-emerald-600">${((selectedLP.committed_capital || 0) - (selectedLP.called_capital || 0)).toLocaleString()}</span></div>
-                  {selectedLP.fund_name && <div className="flex justify-between"><span className="text-gray-500">Fund</span><span className="text-gray-900">{selectedLP.fund_name}</span></div>}
+                  {selectedLP.fund_name && <div className="flex justify-between"><span className="text-gray-500">Fund</span><span className="text-gray-900 dark:text-gray-100">{selectedLP.fund_name}</span></div>}
                 </div>
                 {selectedLP.capital_calls?.length > 0 && (
                   <>
@@ -221,7 +221,7 @@ export default function PartnerPortal() {
                     <div className="space-y-2">
                       {selectedLP.capital_calls.map(c => (
                         <div key={c.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-xs">
-                          <span className="text-gray-900">${c.amount?.toLocaleString()}</span>
+                          <span className="text-gray-900 dark:text-gray-100">${c.amount?.toLocaleString()}</span>
                           <span className={`px-2 py-0.5 rounded-full ${
                             c.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'
                           }`}>{c.status}</span>
@@ -232,7 +232,7 @@ export default function PartnerPortal() {
                 )}
               </div>
             ) : (
-              <div className="bg-white border border-gray-200 rounded-xl p-5 text-center">
+              <div className="bg-white border border-gray-200 rounded-xl p-5 text-center dark:bg-gray-900 dark:border-gray-800">
                 <p className="text-sm text-gray-500">Select an LP to view details</p>
               </div>
             )}
@@ -243,14 +243,14 @@ export default function PartnerPortal() {
       {tab === 'portfolio' && portfolio && (
         <>
           {portfolio.projects?.length > 0 ? (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-900">Live Portfolio Performance</h3>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Live Portfolio Performance</h3>
               </div>
               <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[640px]">
                 <thead>
-                  <tr className="border-b border-gray-200">
+                  <tr className="border-b border-gray-200 dark:border-gray-800">
                     <th className="text-left px-4 py-2 text-gray-600 font-medium text-xs">Company</th>
                     <th className="text-left px-4 py-2 text-gray-600 font-medium text-xs">Sector</th>
                     <th className="text-center px-4 py-2 text-gray-600 font-medium text-xs">Status</th>
@@ -263,8 +263,8 @@ export default function PartnerPortal() {
                 <tbody>
                   {portfolio.projects.map(p => (
                     <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-2 text-gray-900 font-medium">{p.name}</td>
-                      <td className="px-4 py-2 text-gray-700 text-xs">{p.sector || '—'}</td>
+                      <td className="px-4 py-2 text-gray-900 font-medium dark:text-gray-100">{p.name}</td>
+                      <td className="px-4 py-2 text-gray-700 text-xs dark:text-gray-300">{p.sector || '—'}</td>
                       <td className="px-4 py-2 text-center">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full ${
                           p.status === 'spinout' ? 'bg-emerald-100 text-emerald-700' :
@@ -278,8 +278,8 @@ export default function PartnerPortal() {
                         </span>
                       </td>
                       <td className="px-4 py-2 text-center text-xs text-gray-600">{p.playbook_week?.replace('_', ' ') || '—'}</td>
-                      <td className="px-4 py-2 text-right text-xs text-gray-700">{p.revenue ? `$${p.revenue.toLocaleString()}` : '—'}</td>
-                      <td className="px-4 py-2 text-right text-xs text-gray-700">{p.users || '—'}</td>
+                      <td className="px-4 py-2 text-right text-xs text-gray-700 dark:text-gray-300">{p.revenue ? `$${p.revenue.toLocaleString()}` : '—'}</td>
+                      <td className="px-4 py-2 text-right text-xs text-gray-700 dark:text-gray-300">{p.users || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -297,7 +297,7 @@ export default function PartnerPortal() {
 
 function StatCard({ icon: Icon, label, value, color }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center gap-2 mb-2">
         <Icon size={16} className={color} />
         <span className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>
@@ -484,7 +484,7 @@ function RevshareWindowBadge({ daysRemaining, closesAt }) {
 
 function EmptyState({ message }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500">
+    <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 dark:bg-gray-900 dark:border-gray-800">
       {message}
     </div>
   );

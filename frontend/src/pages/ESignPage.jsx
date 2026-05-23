@@ -55,16 +55,16 @@ export default function ESignPage() {
   if (done) {
     return (
       <PageShell>
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-10 text-center">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-10 text-center dark:bg-gray-900 dark:border-gray-800">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-100 flex items-center justify-center">
             <Check className="w-8 h-8 text-emerald-600" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Signature received</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2 dark:text-gray-100">Signature received</h1>
           <p className="text-gray-600 mb-1">Thank you. Your signature has been recorded for:</p>
-          <p className="text-base font-semibold text-gray-900 mb-6">{envelope.document_title}</p>
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-left text-xs text-gray-600 space-y-1.5 max-w-sm mx-auto">
-            <div className="flex justify-between"><span>Envelope</span><span className="font-mono text-gray-800">{envelope.envelope_uuid.slice(0, 8)}…</span></div>
-            <div className="flex justify-between"><span>Signed at</span><span className="text-gray-800">{new Date(done.signed_at).toLocaleString()}</span></div>
+          <p className="text-base font-semibold text-gray-900 mb-6 dark:text-gray-100">{envelope.document_title}</p>
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-left text-xs text-gray-600 space-y-1.5 max-w-sm mx-auto dark:border-gray-800">
+            <div className="flex justify-between"><span>Envelope</span><span className="font-mono text-gray-800 dark:text-gray-200">{envelope.envelope_uuid.slice(0, 8)}…</span></div>
+            <div className="flex justify-between"><span>Signed at</span><span className="text-gray-800 dark:text-gray-200">{new Date(done.signed_at).toLocaleString()}</span></div>
             <div className="flex justify-between"><span>Status</span><span className="text-emerald-700 font-medium">{done.completed ? 'Completed' : 'Partially signed'}</span></div>
           </div>
           <p className="text-xs text-gray-500 mt-6">You will receive a copy by email shortly. You may now close this window.</p>
@@ -134,33 +134,33 @@ export default function ESignPage() {
           </div>
         )}
         {/* Document panel */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-3">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+          <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-3 dark:border-gray-800">
             <div className="w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center">
               <FileText className="w-4 h-4 text-violet-600" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-[11px] font-medium text-violet-600 uppercase tracking-wide">{envelope.document_type}</div>
-              <h1 className="text-lg font-bold text-gray-900 truncate">{envelope.document_title}</h1>
+              <h1 className="text-lg font-bold text-gray-900 truncate dark:text-gray-100">{envelope.document_title}</h1>
             </div>
             <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-500">
               <Shield className="w-3 h-3" /> SHA-256 verified
             </div>
           </div>
           <div className="px-6 py-5 max-h-[440px] overflow-y-auto bg-gray-50/50">
-            <pre className="whitespace-pre-wrap font-sans text-[13.5px] leading-relaxed text-gray-800">{envelope.document_body}</pre>
+            <pre className="whitespace-pre-wrap font-sans text-[13.5px] leading-relaxed text-gray-800 dark:text-gray-200">{envelope.document_body}</pre>
           </div>
-          <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500">
+          <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500 dark:border-gray-800">
             <div className="flex items-center gap-1.5"><Clock className="w-3 h-3" /> Expires {new Date(envelope.expires_at).toLocaleDateString()}</div>
             <div className="font-mono">Envelope {envelope.envelope_uuid.slice(0, 8)}…{envelope.envelope_uuid.slice(-4)}</div>
           </div>
         </div>
 
         {/* Signature panel */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-1">Your signature</h2>
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 dark:bg-gray-900 dark:border-gray-800">
+          <h2 className="text-base font-semibold text-gray-900 mb-1 dark:text-gray-100">Your signature</h2>
           <p className="text-xs text-gray-500 mb-4">
-            Signing as <span className="font-medium text-gray-800">{envelope.recipient_email}</span>
+            Signing as <span className="font-medium text-gray-800 dark:text-gray-200">{envelope.recipient_email}</span>
           </p>
 
           <SignaturePad
@@ -195,9 +195,9 @@ export default function ESignPage() {
 
       {showRejectDialog && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 dark:bg-gray-900">
             <div className="flex items-start justify-between mb-3">
-              <h3 className="text-base font-semibold text-gray-900">Decline this signing request?</h3>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Decline this signing request?</h3>
               <button onClick={() => setShowRejectDialog(false)}><X className="w-4 h-4 text-gray-500" /></button>
             </div>
             <p className="text-xs text-gray-600 mb-3">This action is permanent. The Axal team will be notified.</p>
@@ -206,10 +206,10 @@ export default function ESignPage() {
               onChange={(e) => setRejectReason(e.target.value)}
               placeholder="Optional: tell us why so we can follow up…"
               rows={3}
-              className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:border-violet-500 focus:outline-none resize-none"
+              className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:border-violet-500 focus:outline-none resize-none dark:border-gray-700"
             />
             <div className="mt-4 flex items-center justify-end gap-2">
-              <button onClick={() => setShowRejectDialog(false)} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Cancel</button>
+              <button onClick={() => setShowRejectDialog(false)} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg dark:text-gray-300">Cancel</button>
               <button onClick={reject} disabled={submitting} className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50">
                 {submitting ? 'Declining…' : 'Decline'}
               </button>
@@ -292,24 +292,24 @@ function SignaturePad({ onSubmit, disabled, typedName, setTypedName, accepted, s
     <div>
       <div className="space-y-3">
         <div>
-          <label className="text-xs font-medium text-gray-700 block mb-1.5">Type your full legal name</label>
+          <label className="text-xs font-medium text-gray-700 block mb-1.5 dark:text-gray-300">Type your full legal name</label>
           <input
             type="text"
             value={typedName}
             onChange={(e) => setTypedName(e.target.value)}
             placeholder="Jane Smith"
-            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition"
+            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
           />
         </div>
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-medium text-gray-700">Draw your signature</label>
+            <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Draw your signature</label>
             <button onClick={clear} type="button" className="text-[11px] text-gray-500 hover:text-gray-800 inline-flex items-center gap-1">
               <Eraser className="w-3 h-3" /> Clear
             </button>
           </div>
-          <div className="relative border-2 border-dashed border-gray-300 rounded-xl bg-white" style={{ height: 160 }}>
+          <div className="relative border-2 border-dashed border-gray-300 rounded-xl bg-white dark:border-gray-700 dark:bg-gray-900" style={{ height: 160 }}>
             <canvas
               ref={canvasRef}
               className="absolute inset-0 w-full h-full rounded-xl touch-none cursor-crosshair"
@@ -326,8 +326,8 @@ function SignaturePad({ onSubmit, disabled, typedName, setTypedName, accepted, s
 
         <label className="flex items-start gap-2 cursor-pointer">
           <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)}
-            className="mt-0.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
-          <span className="text-xs text-gray-700 leading-relaxed">
+            className="mt-0.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500 dark:border-gray-700" />
+          <span className="text-xs text-gray-700 leading-relaxed dark:text-gray-300">
             I agree that my electronic signature is the legal equivalent of my handwritten signature
             and that I am bound by the terms of this Agreement.
           </span>
@@ -352,7 +352,7 @@ function PageShell({ children }) {
         <div className="flex items-center gap-2 mb-6">
           <img src="/axal-mark.png" alt="Axal" className="w-8 h-8 rounded-lg" onError={(e) => { e.target.style.display = 'none'; }} />
           <div>
-            <div className="text-base font-bold text-gray-900 leading-none">Axal Deals</div>
+            <div className="text-base font-bold text-gray-900 leading-none dark:text-gray-100">Axal Deals</div>
             <div className="text-[11px] text-gray-500 mt-0.5">Secure electronic signature</div>
           </div>
         </div>
@@ -364,11 +364,11 @@ function PageShell({ children }) {
 
 function ErrorCard({ message }) {
   return (
-    <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-8 text-center">
+    <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-8 text-center dark:bg-gray-900">
       <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-red-100 flex items-center justify-center">
         <AlertCircle className="w-6 h-6 text-red-600" />
       </div>
-      <h2 className="text-lg font-semibold text-gray-900 mb-1">Unable to load signing envelope</h2>
+      <h2 className="text-lg font-semibold text-gray-900 mb-1 dark:text-gray-100">Unable to load signing envelope</h2>
       <p className="text-sm text-gray-600">{message}</p>
     </div>
   );
@@ -376,11 +376,11 @@ function ErrorCard({ message }) {
 
 function InfoCard({ title, message }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center">
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center dark:bg-gray-900 dark:border-gray-800">
       <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 flex items-center justify-center">
         <Check className="w-6 h-6 text-gray-500" />
       </div>
-      <h2 className="text-lg font-semibold text-gray-900 mb-1">{title}</h2>
+      <h2 className="text-lg font-semibold text-gray-900 mb-1 dark:text-gray-100">{title}</h2>
       <p className="text-sm text-gray-600">{message}</p>
     </div>
   );

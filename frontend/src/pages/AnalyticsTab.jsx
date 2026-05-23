@@ -56,7 +56,7 @@ function RetryCard({ tab, status, message, onRetry }) {
         {onRetry && (
           <button
             onClick={onRetry}
-            className="mt-1.5 text-xs px-2 py-1 rounded border border-red-300 bg-white hover:bg-red-50 text-red-700 inline-flex items-center gap-1"
+            className="mt-1.5 text-xs px-2 py-1 rounded border border-red-300 bg-white hover:bg-red-50 text-red-700 inline-flex items-center gap-1 dark:bg-gray-900"
           >
             <RefreshCw size={11} /> Retry
           </button>
@@ -67,7 +67,7 @@ function RetryCard({ tab, status, message, onRetry }) {
 }
 function EmptyPill({ label = 'No data for this range' }) {
   return (
-    <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-3 py-1 inline-block">
+    <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-3 py-1 inline-block dark:border-gray-800">
       {label}
     </div>
   );
@@ -110,9 +110,9 @@ function SortHeader({ sort, toggle, k, children, align = 'left' }) {
 
 function Stat({ label, value, sub }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="text-xs uppercase tracking-wide text-gray-500 font-medium">{label}</div>
-      <div className="text-2xl font-bold text-gray-900 mt-1">{value}</div>
+      <div className="text-2xl font-bold text-gray-900 mt-1 dark:text-gray-100">{value}</div>
       {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
     </div>
   );
@@ -124,14 +124,14 @@ function ExportButtons({ onExport, busy }) {
       <button
         onClick={() => onExport('csv')}
         disabled={busy}
-        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1.5 disabled:opacity-50"
+        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1.5 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
       >
         <Download size={13} /> Export CSV
       </button>
       <button
         onClick={() => onExport('pdf')}
         disabled={busy}
-        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1.5 disabled:opacity-50"
+        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1.5 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
       >
         <FileText size={13} /> Export PDF
       </button>
@@ -153,9 +153,9 @@ function RecentExports({ refreshKey }) {
     return () => { alive = false; };
   }, [refreshKey, reloadKey]);
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 mt-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 mt-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center justify-between mb-2">
-        <div className="text-sm font-semibold text-gray-900">Recent Exports</div>
+        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Recent Exports</div>
         <span className="text-xs text-gray-500">{items.length} item(s)</span>
       </div>
       {err && <RetryCard tab="recent exports" status={errStatus} message={err} onRetry={() => setReloadKey(k => k + 1)} />}
@@ -166,7 +166,7 @@ function RecentExports({ refreshKey }) {
           {items.map(it => (
             <div key={it.id} className="flex items-center justify-between gap-3 py-2 text-xs">
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-gray-900">
+                <div className="font-medium text-gray-900 dark:text-gray-100">
                   {it.report_type} · <span className="uppercase text-gray-500">{it.format}</span>
                 </div>
                 <div className="text-gray-500 truncate">
@@ -177,7 +177,7 @@ function RecentExports({ refreshKey }) {
                 <a
                   href={it.download_url}
                   target="_blank" rel="noreferrer"
-                  className="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1"
+                  className="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50 text-gray-700 inline-flex items-center gap-1 dark:border-gray-700 dark:text-gray-300"
                 >
                   <Download size={11} /> Open
                 </a>
@@ -205,7 +205,7 @@ function FxBadge({ code, asOf }) {
   if (!code) return null;
   return (
     <span className="text-[11px] text-gray-500 ml-2">
-      Display: <span className="font-medium text-gray-700">{code}</span>
+      Display: <span className="font-medium text-gray-700 dark:text-gray-300">{code}</span>
       {asOf && <> · FX as of {String(asOf).slice(0, 10)}</>}
     </span>
   );
@@ -253,8 +253,8 @@ function OverviewSub({ range, anonymized, currency, onExport, busy }) {
         <Stat label="Error rate" value={`${num(data.error_rate_pct)}%`} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-sm font-semibold text-gray-900 mb-2">Daily active users</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Daily active users</div>
           <div style={{ width: '100%', height: 200 }}>
             <ResponsiveContainer>
               <LineChart data={data.daily_active}>
@@ -267,12 +267,12 @@ function OverviewSub({ range, anonymized, currency, onExport, busy }) {
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-sm font-semibold text-gray-900 mb-2">Top pages</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Top pages</div>
           <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
             {(data.top_pages || []).map((p, i) => (
               <div key={i} className="flex items-center justify-between text-xs border-b border-gray-100 last:border-0 py-1">
-                <span className="font-mono text-gray-700 truncate">{p.endpoint}</span>
+                <span className="font-mono text-gray-700 truncate dark:text-gray-300">{p.endpoint}</span>
                 <span className="text-gray-500">{Number(p.hits).toLocaleString()} hits</span>
               </div>
             ))}
@@ -314,10 +314,10 @@ function UsersSub({ anonymized, onExport, busy, onFiltersChange }) {
           <input
             value={search} onChange={e => { setOffset(0); setSearch(e.target.value); }}
             placeholder="Search email/name…"
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-900 w-64"
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-900 w-64 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           />
           <select value={role} onChange={e => { setOffset(0); setRole(e.target.value); }}
-                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-900">
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
             <option value="">All roles</option>
             <option value="admin">admin</option>
             <option value="founder">founder</option>
@@ -325,7 +325,7 @@ function UsersSub({ anonymized, onExport, busy, onFiltersChange }) {
             <option value="investor">investor</option>
           </select>
           <select value={tier} onChange={e => { setOffset(0); setTier(e.target.value); }}
-                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-900">
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
             <option value="">All tiers</option>
             <option value="mi_pro_monthly">MI Pro · Monthly</option>
             <option value="mi_pro_annual">MI Pro · Annual</option>
@@ -334,7 +334,7 @@ function UsersSub({ anonymized, onExport, busy, onFiltersChange }) {
         <ExportButtons onExport={onExport} busy={busy} />
       </div>
       {err && <RetryCard tab="users" status={errStatus} message={err} onRetry={load} />}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-600">
             <tr>
@@ -352,7 +352,7 @@ function UsersSub({ anonymized, onExport, busy, onFiltersChange }) {
             {sorter.apply(data?.users || []).map(u => (
               <tr key={u.id} className="hover:bg-gray-50">
                 <td className="px-3 py-2">
-                  <div className="font-medium text-gray-900">{anonymized ? maskName(u.name, u.id) : (u.name || '—')}</div>
+                  <div className="font-medium text-gray-900 dark:text-gray-100">{anonymized ? maskName(u.name, u.id) : (u.name || '—')}</div>
                   <div className="text-gray-500">{anonymized ? maskEmail(u.email, u.id) : u.email}</div>
                 </td>
                 <td className="px-3 py-2">{u.role}</td>
@@ -377,9 +377,9 @@ function UsersSub({ anonymized, onExport, busy, onFiltersChange }) {
           <div>{data ? `${offset + 1}–${Math.min(offset + limit, data.total)} of ${data.total}` : '—'}</div>
           <div className="flex gap-1">
             <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}
-                    className="px-2 py-1 border border-gray-300 rounded disabled:opacity-50">Prev</button>
+                    className="px-2 py-1 border border-gray-300 rounded disabled:opacity-50 dark:border-gray-700">Prev</button>
             <button disabled={!data || offset + limit >= data.total} onClick={() => setOffset(offset + limit)}
-                    className="px-2 py-1 border border-gray-300 rounded disabled:opacity-50">Next</button>
+                    className="px-2 py-1 border border-gray-300 rounded disabled:opacity-50 dark:border-gray-700">Next</button>
           </div>
         </div>
       </div>
@@ -403,9 +403,9 @@ function UserDrillDown({ id, anonymized, onClose }) {
   }, [id, reloadKey]);
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-          <div className="font-semibold text-gray-900 text-sm">User drill-down · #{id}</div>
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+          <div className="font-semibold text-gray-900 text-sm dark:text-gray-100">User drill-down · #{id}</div>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-800 text-sm">Close</button>
         </div>
         <div className="p-4 space-y-3 text-xs">
@@ -421,11 +421,11 @@ function UserDrillDown({ id, anonymized, onClose }) {
                 </div>
               </div>
               <div>
-                <div className="font-semibold text-gray-700 mb-1">Feature usage (last 90d)</div>
-                <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-40 overflow-y-auto">
+                <div className="font-semibold text-gray-700 mb-1 dark:text-gray-300">Feature usage (last 90d)</div>
+                <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-40 overflow-y-auto dark:border-gray-800">
                   {data.feature_usage.map((f, i) => (
                     <div key={i} className="flex justify-between px-2 py-1">
-                      <span className="font-mono text-gray-700">{f.action}</span>
+                      <span className="font-mono text-gray-700 dark:text-gray-300">{f.action}</span>
                       <span className="text-gray-500">{f.c}</span>
                     </div>
                   ))}
@@ -433,11 +433,11 @@ function UserDrillDown({ id, anonymized, onClose }) {
                 </div>
               </div>
               <div>
-                <div className="font-semibold text-gray-700 mb-1">Support tickets ({data.support_tickets.length})</div>
-                <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-32 overflow-y-auto">
+                <div className="font-semibold text-gray-700 mb-1 dark:text-gray-300">Support tickets ({data.support_tickets.length})</div>
+                <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-32 overflow-y-auto dark:border-gray-800">
                   {data.support_tickets.map(t => (
                     <div key={t.id} className="flex justify-between px-2 py-1">
-                      <span className="text-gray-700 truncate">{t.subject}</span>
+                      <span className="text-gray-700 truncate dark:text-gray-300">{t.subject}</span>
                       <span className="text-gray-500">{t.status}</span>
                     </div>
                   ))}
@@ -445,11 +445,11 @@ function UserDrillDown({ id, anonymized, onClose }) {
                 </div>
               </div>
               <div>
-                <div className="font-semibold text-gray-700 mb-1">Billing history ({data.billing_history?.length || 0})</div>
-                <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-32 overflow-y-auto">
+                <div className="font-semibold text-gray-700 mb-1 dark:text-gray-300">Billing history ({data.billing_history?.length || 0})</div>
+                <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-32 overflow-y-auto dark:border-gray-800">
                   {(data.billing_history || []).map((b, i) => (
                     <div key={i} className="flex items-center justify-between px-2 py-1">
-                      <span className="text-gray-700">{b.event_type} · {b.plan}</span>
+                      <span className="text-gray-700 dark:text-gray-300">{b.event_type} · {b.plan}</span>
                       <span className="text-gray-500">${b.amount_usd} · {b.status}</span>
                     </div>
                   ))}
@@ -651,10 +651,10 @@ function PlanCatalog({ onChanged }) {
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center justify-between mb-2">
         <div>
-          <div className="text-sm font-semibold text-gray-900">Subscription plan catalog</div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Subscription plan catalog</div>
           <div className="text-xs text-gray-500">Edits update MRR / ARR immediately. Plan IDs are stable join keys and can't be renamed once created.</div>
         </div>
         <div className="flex items-center gap-2">
@@ -672,7 +672,7 @@ function PlanCatalog({ onChanged }) {
       </div>
       {creating && (
         <div className="mb-3 p-3 rounded-lg border border-violet-200 bg-violet-50/50">
-          <div className="text-xs font-semibold text-gray-900 mb-2">New plan</div>
+          <div className="text-xs font-semibold text-gray-900 mb-2 dark:text-gray-100">New plan</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <label className="text-xs">
               <span className="block text-gray-600 mb-0.5">Plan ID <span className="text-red-500">*</span></span>
@@ -680,7 +680,7 @@ function PlanCatalog({ onChanged }) {
                 value={creating.plan_id}
                 onChange={e => setCreating(s => ({ ...s, plan_id: e.target.value }))}
                 placeholder="e.g. mi_team_monthly"
-                className="border border-gray-300 rounded px-2 py-1 text-xs w-full font-mono"
+                className="border border-gray-300 rounded px-2 py-1 text-xs w-full font-mono dark:border-gray-700"
                 autoFocus
               />
             </label>
@@ -689,7 +689,7 @@ function PlanCatalog({ onChanged }) {
               <select
                 value={creating.currency}
                 onChange={e => setCreating(s => ({ ...s, currency: e.target.value }))}
-                className="border border-gray-300 rounded px-2 py-1 text-xs w-full bg-white"
+                className="border border-gray-300 rounded px-2 py-1 text-xs w-full bg-white dark:border-gray-700 dark:bg-gray-900"
               >
                 {planCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -702,7 +702,7 @@ function PlanCatalog({ onChanged }) {
                   value={creating.monthly_price_usd}
                   onChange={e => setCreating(s => ({ ...s, monthly_price_usd: e.target.value }))}
                   placeholder="e.g. 99"
-                  className="border border-gray-300 rounded px-2 py-1 text-xs w-full text-right"
+                  className="border border-gray-300 rounded px-2 py-1 text-xs w-full text-right dark:border-gray-700"
                 />
               </label>
             ) : (
@@ -713,7 +713,7 @@ function PlanCatalog({ onChanged }) {
                   value={creating.native_amount}
                   onChange={e => setCreating(s => ({ ...s, native_amount: e.target.value }))}
                   placeholder={`Native amount in ${creating.currency}`}
-                  className="border border-gray-300 rounded px-2 py-1 text-xs w-full text-right"
+                  className="border border-gray-300 rounded px-2 py-1 text-xs w-full text-right dark:border-gray-700"
                   title="USD price will be FX-derived from this amount."
                 />
                 {(() => {
@@ -753,7 +753,7 @@ function PlanCatalog({ onChanged }) {
                 value={creating.display_name}
                 onChange={e => setCreating(s => ({ ...s, display_name: e.target.value }))}
                 placeholder="e.g. Team · Monthly"
-                className="border border-gray-300 rounded px-2 py-1 text-xs w-full"
+                className="border border-gray-300 rounded px-2 py-1 text-xs w-full dark:border-gray-700"
               />
             </label>
             <label className="text-xs">
@@ -762,13 +762,13 @@ function PlanCatalog({ onChanged }) {
                 value={creating.stripe_price_id}
                 onChange={e => setCreating(s => ({ ...s, stripe_price_id: e.target.value }))}
                 placeholder="price_…"
-                className="border border-gray-300 rounded px-2 py-1 text-xs w-full font-mono"
+                className="border border-gray-300 rounded px-2 py-1 text-xs w-full font-mono dark:border-gray-700"
               />
             </label>
           </div>
           <div className="mt-2 flex items-center justify-end gap-2">
             <button onClick={cancelCreate} disabled={createBusy}
-                    className="px-2 py-1 rounded border border-gray-300 text-gray-600 text-xs inline-flex items-center gap-1">
+                    className="px-2 py-1 rounded border border-gray-300 text-gray-600 text-xs inline-flex items-center gap-1 dark:border-gray-700">
               <XIcon size={11} /> Cancel
             </button>
             <button onClick={submitCreate} disabled={createBusy}
@@ -805,14 +805,14 @@ function PlanCatalog({ onChanged }) {
             const isDeleting = deletingFlag === p.plan_id;
             return (
               <tr key={p.plan_id} className="border-t border-gray-100 align-middle">
-                <td className="py-1.5 font-mono text-gray-700">{p.plan_id}</td>
+                <td className="py-1.5 font-mono text-gray-700 dark:text-gray-300">{p.plan_id}</td>
                 <td className="py-1.5">
                   {isEdit ? (
                     <input
                       value={editing.display_name}
                       onChange={e => setEditing(s => ({ ...s, display_name: e.target.value }))}
                       placeholder="(none)"
-                      className="border border-gray-300 rounded px-2 py-1 text-xs w-full"
+                      className="border border-gray-300 rounded px-2 py-1 text-xs w-full dark:border-gray-700"
                     />
                   ) : (p.display_name || <span className="text-gray-400">—</span>)}
                 </td>
@@ -824,7 +824,7 @@ function PlanCatalog({ onChanged }) {
                           type="number" min="0" step="0.01"
                           value={editing.native_amount}
                           onChange={e => setEditing(s => ({ ...s, native_amount: e.target.value }))}
-                          className="border border-gray-300 rounded px-2 py-1 text-xs w-24 text-right"
+                          className="border border-gray-300 rounded px-2 py-1 text-xs w-24 text-right dark:border-gray-700"
                           title={(editing.currency || 'USD') === 'USD'
                             ? 'Monthly price in USD.'
                             : 'USD price will be FX-derived from this amount.'}
@@ -832,7 +832,7 @@ function PlanCatalog({ onChanged }) {
                         <select
                           value={editing.currency || 'USD'}
                           onChange={e => setEditing(s => ({ ...s, currency: e.target.value }))}
-                          className="border border-gray-300 rounded px-1.5 py-1 text-xs bg-white"
+                          className="border border-gray-300 rounded px-1.5 py-1 text-xs bg-white dark:border-gray-700 dark:bg-gray-900"
                           title="Plan billing currency. Changing this re-derives the USD price from FX."
                         >
                           {planCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
@@ -896,7 +896,7 @@ function PlanCatalog({ onChanged }) {
                         <Check size={11} /> Save
                       </button>
                       <button onClick={cancelEdit} disabled={saving}
-                              className="px-2 py-1 rounded border border-gray-300 text-gray-600 inline-flex items-center gap-1">
+                              className="px-2 py-1 rounded border border-gray-300 text-gray-600 inline-flex items-center gap-1 dark:border-gray-700">
                         <XIcon size={11} /> Cancel
                       </button>
                     </span>
@@ -908,14 +908,14 @@ function PlanCatalog({ onChanged }) {
                         <Check size={11} /> {isDeleting ? 'Deleting…' : 'Confirm'}
                       </button>
                       <button onClick={cancelDelete} disabled={isDeleting}
-                              className="px-2 py-1 rounded border border-gray-300 text-gray-600 inline-flex items-center gap-1">
+                              className="px-2 py-1 rounded border border-gray-300 text-gray-600 inline-flex items-center gap-1 dark:border-gray-700">
                         <XIcon size={11} /> Cancel
                       </button>
                     </span>
                   ) : (
                     <span className="inline-flex gap-1">
                       <button onClick={() => startEdit(p)}
-                              className="px-2 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1">
+                              className="px-2 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1 dark:border-gray-700 dark:text-gray-300">
                         <Pencil size={11} /> Edit
                       </button>
                       <button
@@ -1084,10 +1084,10 @@ function PlanAuditHistory({ refreshKey }) {
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center justify-between mb-2">
         <div>
-          <div className="text-sm font-semibold text-gray-900">Plan change history</div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Plan change history</div>
           <div className="text-xs text-gray-500">Most recent edits to subscription plans, including who made them.</div>
         </div>
         <span className="text-xs text-gray-500">
@@ -1100,7 +1100,7 @@ function PlanAuditHistory({ refreshKey }) {
           <select
             value={planFilter}
             onChange={e => setPlanFilter(e.target.value)}
-            className="text-xs border border-gray-300 rounded px-2 py-1 bg-white min-w-[140px]"
+            className="text-xs border border-gray-300 rounded px-2 py-1 bg-white min-w-[140px] dark:border-gray-700 dark:bg-gray-900"
           >
             <option value="">All plans</option>
             {planOptions.map(p => (
@@ -1118,12 +1118,12 @@ function PlanAuditHistory({ refreshKey }) {
               value={adminFilterDraft}
               onChange={e => setAdminFilterDraft(e.target.value)}
               placeholder="e.g. alice@ or 42"
-              className="text-xs border border-gray-300 rounded px-2 py-1 bg-white min-w-[180px]"
+              className="text-xs border border-gray-300 rounded px-2 py-1 bg-white min-w-[180px] dark:border-gray-700 dark:bg-gray-900"
             />
           </div>
           <button
             type="submit"
-            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50"
+            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900"
           >
             Apply
           </button>
@@ -1135,7 +1135,7 @@ function PlanAuditHistory({ refreshKey }) {
             value={fromDate}
             max={toDate || undefined}
             onChange={e => setFromDate(e.target.value)}
-            className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+            className="text-xs border border-gray-300 rounded px-2 py-1 bg-white dark:border-gray-700 dark:bg-gray-900"
           />
         </div>
         <div>
@@ -1145,7 +1145,7 @@ function PlanAuditHistory({ refreshKey }) {
             value={toDate}
             min={fromDate || undefined}
             onChange={e => setToDate(e.target.value)}
-            className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+            className="text-xs border border-gray-300 rounded px-2 py-1 bg-white dark:border-gray-700 dark:bg-gray-900"
           />
         </div>
         {hasFilters && (
@@ -1163,7 +1163,7 @@ function PlanAuditHistory({ refreshKey }) {
             onClick={exportCsv}
             disabled={exporting || (items !== null && items.length === 0 && !hasFilters)}
             title={hasFilters ? 'Export rows matching current filters' : 'Export all plan changes'}
-            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1"
+            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1 dark:border-gray-700 dark:bg-gray-900"
           >
             {exporting
               ? <><RefreshCw size={11} className="animate-spin" /> Exporting…</>
@@ -1185,11 +1185,11 @@ function PlanAuditHistory({ refreshKey }) {
             return (
               <div key={it.id} className="py-2 text-xs">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-medium text-gray-900 font-mono">{it.report_type || '—'}</div>
+                  <div className="font-medium text-gray-900 font-mono dark:text-gray-100">{it.report_type || '—'}</div>
                   <div className="text-gray-500 whitespace-nowrap">{new Date((it.exported_at || '').replace(' ', 'T') + 'Z').toLocaleString()}</div>
                 </div>
                 <div className="text-gray-600 mt-0.5">
-                  {summary ? <span className="text-gray-800">{summary}</span> : <span className="text-gray-400">No diff recorded</span>}
+                  {summary ? <span className="text-gray-800 dark:text-gray-200">{summary}</span> : <span className="text-gray-400">No diff recorded</span>}
                   <span className="text-gray-500"> · by {it.admin_email || it.admin_name || `user#${it.admin_user_id}`}</span>
                 </div>
               </div>
@@ -1203,7 +1203,7 @@ function PlanAuditHistory({ refreshKey }) {
             type="button"
             onClick={loadMore}
             disabled={loadingMore}
-            className="text-xs px-3 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="text-xs px-3 py-1 border border-gray-300 rounded bg-white hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900"
           >
             {loadingMore ? <><RefreshCw size={11} className="inline animate-spin mr-1" /> Loading…</> : `Load more (${total - items.length} remaining)`}
           </button>
@@ -1248,8 +1248,8 @@ function FinancialSub({ range, currency, onExport, busy }) {
         <Stat label={`New MRR (${ccy})`} value={fmtMoney(newMrr, ccy)} />
         <Stat label={`Churn MRR (${ccy})`} value={fmtMoney(churnMrr, ccy)} />
       </div>
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="text-sm font-semibold text-gray-900 mb-2">MRR by tier ({ccy})</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">MRR by tier ({ccy})</div>
         <div style={{ width: '100%', height: 220 }}>
           <ResponsiveContainer>
             <BarChart data={data.mrr_breakdown_by_tier}>
@@ -1291,8 +1291,8 @@ function FinancialSub({ range, currency, onExport, busy }) {
           serialised reports or when the assistant_conversations table
           doesn't exist yet. */}
       {data.assistant_cost && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-sm font-semibold text-gray-900 mb-2">Personal assistant cost ({ccy})</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Personal assistant cost ({ccy})</div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
             <Stat label="Conversations" value={String(data.assistant_cost.total_conversations || 0)} />
             <Stat label="Messages" value={String(data.assistant_cost.total_messages || 0)} />
@@ -1337,8 +1337,8 @@ function FinancialSub({ range, currency, onExport, busy }) {
           )}
         </div>
       )}
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="text-sm font-semibold text-gray-900 mb-2">LTV by signup cohort ({ccy})</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">LTV by signup cohort ({ccy})</div>
         <table className="w-full text-xs">
           <thead className="text-gray-500">
             <tr><th className="text-left py-1">Cohort</th><th className="text-right">Signups</th><th className="text-right">Paying</th><th className="text-right">Est. LTV</th></tr>
@@ -1396,8 +1396,8 @@ function TechnicalView({ data, onExport, busy }) {
         <Stat label="Routes tracked" value={data.by_route.length} />
         <Stat label="Top errors" value={data.top_errors.length} />
       </div>
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="text-sm font-semibold text-gray-900 mb-2">Per-route latency (p50 / p95 / p99)</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Per-route latency (p50 / p95 / p99)</div>
         <table className="w-full text-xs">
           <thead className="text-gray-500">
             <tr>
@@ -1426,8 +1426,8 @@ function TechnicalView({ data, onExport, busy }) {
           </tbody>
         </table>
       </div>
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="text-sm font-semibold text-gray-900 mb-2">Slow queries (highest P95)</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Slow queries (highest P95)</div>
         <table className="w-full text-xs">
           <thead className="text-gray-500">
             <tr><th className="text-left py-1">Endpoint</th><th className="text-right">P95</th><th className="text-right">Hits</th></tr>
@@ -1446,8 +1446,8 @@ function TechnicalView({ data, onExport, busy }) {
           </tbody>
         </table>
       </div>
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="text-sm font-semibold text-gray-900 mb-2">Top errors</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Top errors</div>
         <table className="w-full text-xs">
           <thead className="text-gray-500">
             <tr><th className="text-left py-1">Endpoint</th><th>Status</th><th className="text-left">Message</th><th className="text-right">Count</th></tr>
@@ -1491,10 +1491,10 @@ function ManagementSub({ range, currency, onExport, busy }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end"><ExportButtons onExport={onExport} busy={busy} /></div>
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="text-sm font-semibold text-gray-900 mb-2">Executive summary · {range.from} → {range.to}</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Executive summary · {range.from} → {range.to}</div>
         {overview && financial ? (
-          <ul className="text-sm text-gray-700 space-y-1">
+          <ul className="text-sm text-gray-700 space-y-1 dark:text-gray-300">
             <li><strong>{num(overview.active_users).toLocaleString()}</strong> active users · <strong>{num(overview.new_signups).toLocaleString()}</strong> new signups · <strong>{num(overview.conversion_to_paid_pct)}%</strong> paid conversion</li>
             <li><strong>{m$(financial.total_mrr ?? financial.total_mrr_usd)}</strong> total MRR · <strong>{m$(financial.arr ?? financial.arr_usd)}</strong> ARR · new {m$(financial.new_mrr ?? financial.new_mrr_usd)} / churn {m$(financial.churn_mrr ?? financial.churn_mrr_usd)} <span className="text-xs text-gray-500">({ccy}{financial.fx_as_of ? ` · FX ${String(financial.fx_as_of).slice(0,10)}` : ''})</span></li>
             <li>Reliability: P50 <strong>{num(overview.p50_latency_ms)}ms</strong> · P95 <strong>{num(overview.p95_latency_ms)}ms</strong> · error rate <strong>{num(overview.error_rate_pct)}%</strong></li>
@@ -1571,23 +1571,23 @@ export default function AnalyticsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-gray-200 rounded-xl p-3 flex flex-wrap items-center gap-3">
+      <div className="bg-white border border-gray-200 rounded-xl p-3 flex flex-wrap items-center gap-3 dark:bg-gray-900 dark:border-gray-800">
         <div className="flex items-center gap-1 text-xs text-gray-600">
           From
           <input type="date" value={range.from}
                  onChange={e => setRange(r => ({ ...r, from: e.target.value }))}
-                 className="border border-gray-300 rounded px-2 py-1" />
+                 className="border border-gray-300 rounded px-2 py-1 dark:border-gray-700" />
           To
           <input type="date" value={range.to}
                  onChange={e => setRange(r => ({ ...r, to: e.target.value }))}
-                 className="border border-gray-300 rounded px-2 py-1" />
+                 className="border border-gray-300 rounded px-2 py-1 dark:border-gray-700" />
         </div>
         <div className="flex items-center gap-1 text-xs text-gray-600">
           Currency
           <select
             value={currency}
             onChange={e => setCurrency(e.target.value)}
-            className="border border-gray-300 rounded px-2 py-1 bg-white"
+            className="border border-gray-300 rounded px-2 py-1 bg-white dark:border-gray-700 dark:bg-gray-900"
             title="Display MRR/ARR in this currency (FX-converted from USD)"
           >
             {currencies.map(c => <option key={c} value={c}>{c}</option>)}
@@ -1608,7 +1608,7 @@ export default function AnalyticsTab() {
         {exportNote && <span className="text-xs text-gray-600">{exportNote}</span>}
       </div>
 
-      <div className="border-b border-gray-200 flex gap-1 overflow-x-auto">
+      <div className="border-b border-gray-200 flex gap-1 overflow-x-auto dark:border-gray-800">
         {SUB_TABS.map(t => {
           const Icon = t.icon;
           return (

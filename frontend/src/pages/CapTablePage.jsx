@@ -37,9 +37,9 @@ const PALETTE = ['#7c3aed', '#10b981', '#0ea5e9', '#f59e0b', '#ef4444', '#8b5cf6
 
 function Section({ title, right, children }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+    <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-gray-900">{title}</h3>
+        <h3 className="font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
         {right}
       </div>
       {children}
@@ -53,7 +53,7 @@ function NumInput({ value, onChange, ...rest }) {
       type="number"
       value={value ?? ''}
       onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))}
-      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-violet-500 focus:border-violet-500 dark:border-gray-700"
       {...rest}
     />
   );
@@ -63,7 +63,7 @@ function TxtInput({ value, onChange, ...rest }) {
   return (
     <input
       type="text" value={value ?? ''} onChange={e => onChange(e.target.value)}
-      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-violet-500 focus:border-violet-500 dark:border-gray-700"
       {...rest}
     />
   );
@@ -235,7 +235,7 @@ export default function CapTablePage() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 dark:text-gray-100">
             <PieIcon className="text-violet-600" /> Cap-Table Simulator
           </h1>
         <PageExplainer pageKey="captable" />
@@ -247,11 +247,11 @@ export default function CapTablePage() {
           <input
             value={scenarioName}
             onChange={e => setScenarioName(e.target.value)}
-            className="flex-1 min-w-0 sm:flex-none sm:w-48 px-3 py-1.5 text-sm border border-gray-300 rounded"
+            className="flex-1 min-w-0 sm:flex-none sm:w-48 px-3 py-1.5 text-sm border border-gray-300 rounded dark:border-gray-700"
             placeholder="Scenario name"
           />
           <button onClick={newScenario}
-            className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1">
+            className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
             <Plus size={14} /> New
           </button>
           <button onClick={saveScenario}
@@ -262,7 +262,7 @@ export default function CapTablePage() {
             <a
               href={api.exportCapTableCsvUrl(activeUid)}
               target="_blank" rel="noreferrer"
-              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1"
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700"
               onClick={(e) => {
                 // Append the auth header by switching to fetch+blob — easier: open with token in URL hash.
                 e.preventDefault();
@@ -466,7 +466,7 @@ export default function CapTablePage() {
           )}
 
           {!result && !loading && (
-            <div className="bg-white border border-dashed border-gray-300 rounded p-8 text-center text-gray-500">
+            <div className="bg-white border border-dashed border-gray-300 rounded p-8 text-center text-gray-500 dark:bg-gray-900 dark:border-gray-700">
               <FileText className="mx-auto mb-2 text-gray-400" />
               Tweak the inputs on the left and hit <span className="font-semibold">Run simulation</span>.
             </div>
@@ -491,7 +491,7 @@ function CapTable({ rows }) {
             <td className="text-right">{h.pct.toFixed(2)}%</td>
           </tr>
         ))}
-        <tr className="border-t border-gray-300 font-semibold">
+        <tr className="border-t border-gray-300 font-semibold dark:border-gray-700">
           <td className="py-1">Total</td><td></td>
           <td className="text-right">{total.toLocaleString()}</td><td className="text-right">100.00%</td>
         </tr>
@@ -502,8 +502,8 @@ function CapTable({ rows }) {
 
 function Stat({ label, value }) {
   return (
-    <div className="border border-gray-200 rounded p-2">
-      <div className="text-base font-semibold text-gray-900">{value}</div>
+    <div className="border border-gray-200 rounded p-2 dark:border-gray-800">
+      <div className="text-base font-semibold text-gray-900 dark:text-gray-100">{value}</div>
       <div className="text-[10px] text-gray-500 uppercase">{label}</div>
     </div>
   );
@@ -587,7 +587,7 @@ function SourceBadge({ source }) {
     );
   }
   return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200 dark:border-gray-800">
       Manual
     </span>
   );
@@ -606,12 +606,12 @@ function LiveCapTablePanel({ live, loading, error, onRefresh }) {
   // disconnect (so the founder still has a "Connect Carta" upsell entry).
   if (!loading && !connected && holders.length === 0 && !error) {
     return (
-      <div className="mb-4 bg-white border border-dashed border-gray-300 rounded-lg p-4 text-sm">
+      <div className="mb-4 bg-white border border-dashed border-gray-300 rounded-lg p-4 text-sm dark:bg-gray-900 dark:border-gray-700">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-start gap-2">
             <CartaLogo size={18} />
             <div>
-              <div className="font-semibold text-gray-900">Live cap table</div>
+              <div className="font-semibold text-gray-900 dark:text-gray-100">Live cap table</div>
               <div className="text-gray-500 text-xs mt-0.5">
                 Connect Carta on the Integrations page to mirror your real cap table here.
               </div>
@@ -629,12 +629,12 @@ function LiveCapTablePanel({ live, loading, error, onRefresh }) {
   }
 
   return (
-    <div className="mb-4 bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div className="mb-4 bg-white border border-gray-200 rounded-lg overflow-hidden dark:bg-gray-900 dark:border-gray-800">
       <div className={`px-4 py-3 flex items-center justify-between gap-3 ${connected ? 'bg-orange-50 border-b border-orange-100' : 'bg-gray-50 border-b border-gray-200'}`}>
         <div className="flex items-start gap-2">
           <CartaLogo size={18} />
           <div>
-            <div className="font-semibold text-gray-900 flex items-center gap-2">
+            <div className="font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
               Live cap table
               {connected && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
@@ -658,13 +658,13 @@ function LiveCapTablePanel({ live, loading, error, onRefresh }) {
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-50"
+            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-50 dark:bg-gray-900 dark:border-gray-700"
           >
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
           <a
             href="/integrations"
-            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 inline-flex items-center gap-1"
+            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 inline-flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700"
           >
             Manage <ExternalLink size={12} />
           </a>
@@ -698,7 +698,7 @@ function LiveCapTablePanel({ live, loading, error, onRefresh }) {
               {holders.slice(0, 50).map((h) => (
                 <tr key={h.id} className={`border-t border-gray-100 ${h.source === 'carta' ? 'bg-orange-50/30' : ''}`}>
                   <td className="px-4 py-1.5">
-                    <div className="font-medium text-gray-900">{h.name}</div>
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{h.name}</div>
                     {h.email && <div className="text-[11px] text-gray-500">{h.email}</div>}
                   </td>
                   <td className="px-2 py-1.5 text-gray-600 text-xs">{h.security_type || '—'}</td>

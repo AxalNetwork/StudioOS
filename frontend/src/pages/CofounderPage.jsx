@@ -213,7 +213,7 @@ function BrowseCard({ card, onInterest }) {
   const sectors = asArray(card.sectors);
   const reasons = asArray(card.match_reasons);
   return (
-    <div className="border border-slate-200 rounded-lg bg-white p-4 hover:shadow-sm transition">
+    <div className="border border-slate-200 rounded-lg bg-white p-4 hover:shadow-sm transition dark:bg-gray-900">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -706,9 +706,9 @@ function ProfileTab({ profile, loading, onSaved }) {
 function ModalShell({ title, children, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900"
            onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b px-4 py-3 sticky top-0 bg-white">
+        <div className="flex items-center justify-between border-b px-4 py-3 sticky top-0 bg-white dark:bg-gray-900">
           <h3 className="font-semibold text-slate-900">{title}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
         </div>

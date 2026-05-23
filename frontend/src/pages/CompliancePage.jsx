@@ -116,16 +116,16 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg dark:bg-gray-900">
         <div className="flex items-center justify-between px-5 py-3 border-b">
-          <h3 className="font-semibold text-gray-900">New compliance event</h3>
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100">New compliance event</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X size={18} />
           </button>
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Project</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Project</label>
             <select
               className="w-full border rounded px-3 py-2 text-sm"
               value={projectId}
@@ -141,7 +141,7 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Event type</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Event type</label>
               <select
                 className="w-full border rounded px-3 py-2 text-sm"
                 value={eventType}
@@ -153,7 +153,7 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Recurrence</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Recurrence</label>
               <select
                 className="w-full border rounded px-3 py-2 text-sm"
                 value={recurrence}
@@ -167,7 +167,7 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Title</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Title</label>
             <input
               type="text"
               className="w-full border rounded px-3 py-2 text-sm"
@@ -177,7 +177,7 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Description (optional)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Description (optional)</label>
             <textarea
               className="w-full border rounded px-3 py-2 text-sm"
               rows={2}
@@ -186,7 +186,7 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Due date</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Due date</label>
             <input
               type="date"
               className="w-full border rounded px-3 py-2 text-sm"
@@ -197,7 +197,7 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
           {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</div>}
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t bg-gray-50">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded">
+          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded dark:text-gray-300">
             Cancel
           </button>
           <button
@@ -253,10 +253,10 @@ function EventCard({ event, projectName, onUpdated, onDeleted }) {
   };
 
   return (
-    <div className="bg-white rounded-lg border p-4 flex items-start justify-between gap-4">
+    <div className="bg-white rounded-lg border p-4 flex items-start justify-between gap-4 dark:bg-gray-900">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <h4 className="font-semibold text-gray-900 truncate">{event.title}</h4>
+          <h4 className="font-semibold text-gray-900 truncate dark:text-gray-100">{event.title}</h4>
           <StatusPill event={event} />
           {event.source === 'auto' && (
             <span className="text-[10px] uppercase tracking-wide text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
@@ -280,7 +280,7 @@ function EventCard({ event, projectName, onUpdated, onDeleted }) {
           )}
         </div>
         {event.description && (
-          <p className="mt-2 text-sm text-gray-700">{event.description}</p>
+          <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">{event.description}</p>
         )}
         {event.reminders_sent && event.reminders_sent.length > 0 && (
           <div className="mt-2 text-[11px] text-gray-500">
@@ -403,7 +403,7 @@ export default function CompliancePage() {
 
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 inline-flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-gray-900 inline-flex items-center gap-2 dark:text-gray-100">
             <CalendarCheck className="text-violet-600" /> Compliance Calendar
           </h1>
         <PageExplainer pageKey="compliance" />
@@ -422,19 +422,19 @@ export default function CompliancePage() {
 
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-          <div className="bg-white border rounded-lg p-4">
+          <div className="bg-white border rounded-lg p-4 dark:bg-gray-900">
             <div className="text-xs text-gray-500">Open</div>
-            <div className="text-2xl font-bold text-gray-900">{summary.total - summary.completed}</div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.total - summary.completed}</div>
           </div>
-          <div className="bg-white border rounded-lg p-4">
+          <div className="bg-white border rounded-lg p-4 dark:bg-gray-900">
             <div className="text-xs text-gray-500">Due ≤ 7 days</div>
             <div className="text-2xl font-bold text-amber-700">{summary.due_7d}</div>
           </div>
-          <div className="bg-white border rounded-lg p-4">
+          <div className="bg-white border rounded-lg p-4 dark:bg-gray-900">
             <div className="text-xs text-gray-500">Overdue</div>
             <div className="text-2xl font-bold text-red-700">{summary.overdue}</div>
           </div>
-          <div className="bg-white border rounded-lg p-4">
+          <div className="bg-white border rounded-lg p-4 dark:bg-gray-900">
             <div className="text-xs text-gray-500">Completed</div>
             <div className="text-2xl font-bold text-emerald-700">{summary.completed}</div>
           </div>
@@ -483,7 +483,7 @@ export default function CompliancePage() {
       ) : error ? (
         <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white border border-dashed rounded-lg p-8 text-center text-gray-500 text-sm">
+        <div className="bg-white border border-dashed rounded-lg p-8 text-center text-gray-500 text-sm dark:bg-gray-900">
           No {filter} compliance events.{' '}
           {filter !== 'all' && (
             <button onClick={() => setFilter('all')} className="text-violet-700 underline">

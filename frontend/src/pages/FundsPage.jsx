@@ -68,9 +68,9 @@ function CreateFundModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center p-3" onClick={() => onClose()}>
-      <form onSubmit={submit} className="bg-white rounded-xl shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+      <form onSubmit={submit} className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 dark:bg-gray-900" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-3">
-          <div className="text-base font-semibold text-gray-900 flex items-center gap-2">
+          <div className="text-base font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
             <Plus size={16} className="text-violet-600" /> Create new VC fund
           </div>
           <button type="button" onClick={() => onClose()}><X size={18} className="text-gray-400 hover:text-gray-700" /></button>
@@ -85,7 +85,7 @@ function CreateFundModal({ onClose }) {
           <Field label="Management Fee (0.02 = 2%)" type="number" step="0.005" value={mgmt} onChange={setMgmt} />
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={() => onClose()} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg">Cancel</button>
+          <button type="button" onClick={() => onClose()} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg dark:border-gray-700">Cancel</button>
           <button type="submit" disabled={busy} className="px-3 py-1.5 text-sm bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg">
             {busy ? 'Creating…' : 'Create fund'}
           </button>
@@ -98,10 +98,10 @@ function CreateFundModal({ onClose }) {
 function Field({ label, value, onChange, required, type = 'text', step, placeholder }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-gray-700">{label}</span>
+      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{label}</span>
       <input type={type} step={step} value={value} required={required} placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
-        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900" />
+        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:text-gray-100" />
     </label>
   );
 }
@@ -123,9 +123,9 @@ function CapitalCallModal({ fund, onClose }) {
   };
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3" onClick={() => onClose()}>
-      <form onSubmit={submit} className="bg-white rounded-xl shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+      <form onSubmit={submit} className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 dark:bg-gray-900" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-3">
-          <div className="text-base font-semibold text-gray-900 flex items-center gap-2">
+          <div className="text-base font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
             <Send size={16} className="text-violet-600" /> Capital call · {fund.name}
           </div>
           <button type="button" onClick={() => onClose()}><X size={18} className="text-gray-400" /></button>
@@ -134,7 +134,7 @@ function CapitalCallModal({ fund, onClose }) {
         <Field label="Amount ($M)" type="number" step="0.01" value={amountM} onChange={setAmountM} required />
         <div className="mt-3"><Field label="Note (optional)" value={note} onChange={setNote} /></div>
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={() => onClose()} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg">Cancel</button>
+          <button type="button" onClick={() => onClose()} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg dark:border-gray-700">Cancel</button>
           <button type="submit" disabled={busy} className="px-3 py-1.5 text-sm bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg">
             {busy ? 'Sending…' : 'Send notices'}
           </button>
@@ -173,9 +173,9 @@ function DistributionModal({ fund, onClose }) {
   };
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3" onClick={() => onClose()}>
-      <form onSubmit={submit} className="bg-white rounded-xl shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+      <form onSubmit={submit} className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 dark:bg-gray-900" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-3">
-          <div className="text-base font-semibold text-gray-900 flex items-center gap-2">
+          <div className="text-base font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
             <Banknote size={16} className="text-emerald-600" /> Run distribution · {fund.name}
           </div>
           <button type="button" onClick={() => onClose()}><X size={18} className="text-gray-400" /></button>
@@ -184,7 +184,7 @@ function DistributionModal({ fund, onClose }) {
         {err && <div className="bg-red-50 text-red-700 text-xs rounded px-2 py-1 mb-2">{err}</div>}
         <Field label="Proceeds ($M)" type="number" step="0.01" value={proceedsM} onChange={setProceedsM} required />
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={() => onClose()} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg">Cancel</button>
+          <button type="button" onClick={() => onClose()} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg dark:border-gray-700">Cancel</button>
           <button type="submit" disabled={busy || fundIdMissing} className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-lg">
             {busy ? 'Running…' : 'Distribute'}
           </button>
@@ -207,9 +207,9 @@ function LPADrawer({ fundId, onClose }) {
   }, [fundId]);
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex justify-end" onClick={onClose}>
-      <div className="bg-white w-full max-w-2xl h-full overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+      <div className="bg-white w-full max-w-2xl h-full overflow-y-auto p-6 dark:bg-gray-900" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-3">
-          <div className="text-base font-semibold text-gray-900 flex items-center gap-2"><ScrollText size={16} className="text-violet-600" /> LPA — Fund #{fundId}</div>
+          <div className="text-base font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100"><ScrollText size={16} className="text-violet-600" /> LPA — Fund #{fundId}</div>
           <button onClick={onClose}><X size={18} className="text-gray-400" /></button>
         </div>
         {err && <div className="bg-red-50 text-red-700 text-xs rounded px-2 py-1">{err}</div>}
@@ -281,14 +281,14 @@ function AdminFundsView() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold text-gray-900">All funds ({funds?.length ?? 0})</div>
+        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">All funds ({funds?.length ?? 0})</div>
         <div className="flex gap-2">
           <button onClick={() => setShowCreate(true)}
             className="px-3 py-1.5 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg flex items-center gap-1.5">
             <Plus size={13} /> New fund
           </button>
           <button onClick={load} disabled={busy}
-            className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5">
+            className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
             <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Refresh
           </button>
         </div>
@@ -302,15 +302,15 @@ function AdminFundsView() {
             className={`text-left bg-white border rounded-xl p-4 hover:border-violet-400 transition
               ${active?.id === f.id ? 'border-violet-500 ring-2 ring-violet-200' : 'border-gray-200'}`}>
             <div className="flex items-start justify-between">
-              <div className="text-sm font-semibold text-gray-900">{f.name}</div>
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{f.name}</div>
               <StatusPill status={f.status} />
             </div>
             <div className="text-xs text-gray-500 mt-0.5">Vintage {f.vintage_year || '—'}</div>
             <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
-              <div><div className="text-gray-500">Fund size</div><div className="font-medium text-gray-900">{fmtCents(f.fund_size_cents)}</div></div>
-              <div><div className="text-gray-500">LPs</div><div className="font-medium text-gray-900">{f.lp_count}</div></div>
-              <div><div className="text-gray-500">Carry</div><div className="font-medium text-gray-900">{((f.carried_interest ?? 0.2) * 100).toFixed(0)}%</div></div>
-              <div><div className="text-gray-500">Mgmt fee</div><div className="font-medium text-gray-900">{((f.management_fee ?? 0.02) * 100).toFixed(2)}%</div></div>
+              <div><div className="text-gray-500">Fund size</div><div className="font-medium text-gray-900 dark:text-gray-100">{fmtCents(f.fund_size_cents)}</div></div>
+              <div><div className="text-gray-500">LPs</div><div className="font-medium text-gray-900 dark:text-gray-100">{f.lp_count}</div></div>
+              <div><div className="text-gray-500">Carry</div><div className="font-medium text-gray-900 dark:text-gray-100">{((f.carried_interest ?? 0.2) * 100).toFixed(0)}%</div></div>
+              <div><div className="text-gray-500">Mgmt fee</div><div className="font-medium text-gray-900 dark:text-gray-100">{((f.management_fee ?? 0.02) * 100).toFixed(2)}%</div></div>
             </div>
             <div className="text-[11px] mt-2 flex items-center gap-1.5">
               <FileText size={11} className={f.lpa_doc_id ? 'text-emerald-600' : 'text-amber-600'} />
@@ -322,10 +322,10 @@ function AdminFundsView() {
       </div>
 
       {active && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
           <div className="flex items-start justify-between mb-3">
             <div>
-              <div className="text-sm font-semibold text-gray-900">{active.name}</div>
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{active.name}</div>
               <div className="text-xs text-gray-500">Vintage {active.vintage_year || '—'} · {active.lp_count} LPs · {fmtCents(active.fund_size_cents)} target</div>
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -337,7 +337,7 @@ function AdminFundsView() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
             <div>
-              <div className="text-xs font-medium text-gray-700 mb-2">Limited Partners</div>
+              <div className="text-xs font-medium text-gray-700 mb-2 dark:text-gray-300">Limited Partners</div>
               {!activeLPs.length ? <div className="text-xs text-gray-400">No LPs yet.</div> : (
                 <table className="w-full text-xs">
                   <thead className="text-gray-500"><tr>
@@ -360,7 +360,7 @@ function AdminFundsView() {
               )}
             </div>
             <div>
-              <div className="text-xs font-medium text-gray-700 mb-2">Recent distributions</div>
+              <div className="text-xs font-medium text-gray-700 mb-2 dark:text-gray-300">Recent distributions</div>
               {!activeDistribs.length ? <div className="text-xs text-gray-400">No distributions yet.</div> : (
                 <table className="w-full text-xs">
                   <thead className="text-gray-500"><tr>
@@ -434,8 +434,8 @@ function LPPortalView() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold text-gray-900">My LP Portal</div>
-        <button onClick={load} disabled={busy} className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5">
+        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">My LP Portal</div>
+        <button onClick={load} disabled={busy} className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
           <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Refresh
         </button>
       </div>
@@ -448,8 +448,8 @@ function LPPortalView() {
         <Card icon={PieIcon} accent="blue" label="Funds" value={data?.lp_holdings?.length ?? 0} sub="Active positions" />
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="text-sm font-semibold text-gray-900 mb-3">My commitments</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">My commitments</div>
         {!data?.lp_holdings?.length ? <div className="text-xs text-gray-400 text-center py-6">No LP positions on file.</div> : (
           <table className="w-full text-xs">
             <thead className="text-gray-500"><tr>
@@ -464,7 +464,7 @@ function LPPortalView() {
             <tbody>
               {data.lp_holdings.map(lp => (
                 <tr key={lp.id} className="border-t border-gray-100">
-                  <td className="py-1.5 text-gray-900">{lp.fund_name}</td>
+                  <td className="py-1.5 text-gray-900 dark:text-gray-100">{lp.fund_name}</td>
                   <td className="text-right">{fmtDollars(lp.commitment_amount)}</td>
                   <td className="text-right">{fmtDollars(lp.invested_amount)}</td>
                   <td className="text-right text-emerald-700">{fmtDollars(lp.returns)}</td>
@@ -484,8 +484,8 @@ function LPPortalView() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <div className="text-sm font-semibold text-gray-900 mb-3">Performance (TVPI / DPI)</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Performance (TVPI / DPI)</div>
           {perfChart.length === 0
             ? <div className="text-xs text-gray-400 text-center py-6">No data yet.</div>
             : (
@@ -501,8 +501,8 @@ function LPPortalView() {
               </ResponsiveContainer>
             )}
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <div className="text-sm font-semibold text-gray-900 mb-3">Distributions over time</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Distributions over time</div>
           {!data?.distributions?.length
             ? <div className="text-xs text-gray-400 text-center py-6">None yet.</div>
             : (
@@ -522,8 +522,8 @@ function LPPortalView() {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="text-sm font-semibold text-gray-900 mb-3">Capital calls</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Capital calls</div>
         {!data?.capital_calls?.length ? <div className="text-xs text-gray-400 text-center py-4">No calls yet.</div> : (
           <table className="w-full text-xs">
             <thead className="text-gray-500"><tr>
@@ -551,12 +551,12 @@ function LPPortalView() {
 
 function Card({ icon: Icon, label, value, sub, accent }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">{label}</span>
         {Icon && <Icon size={14} className={`text-${accent}-600`} />}
       </div>
-      <div className="text-2xl font-bold text-gray-900">{value}</div>
+      <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</div>
       {sub && <div className="text-[11px] text-gray-500 mt-1">{sub}</div>}
     </div>
   );
@@ -569,7 +569,7 @@ export default function FundsPage({ currentUser }) {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 dark:text-gray-100">
           <Banknote size={22} className="text-violet-600" /> VC Funds
         </h1>
         <PageExplainer pageKey="funds" />
@@ -577,7 +577,7 @@ export default function FundsPage({ currentUser }) {
       </div>
 
       {isAdmin && (
-        <div className="border-b border-gray-200 flex gap-1 overflow-x-auto [&>button]:whitespace-nowrap">
+        <div className="border-b border-gray-200 flex gap-1 overflow-x-auto [&>button]:whitespace-nowrap dark:border-gray-800">
           {[
             { id: 'admin', label: 'Fund Operations' },
             { id: 'lp', label: 'LP Portal (preview)' },

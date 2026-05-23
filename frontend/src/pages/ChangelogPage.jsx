@@ -51,14 +51,14 @@ export default function ChangelogPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white dark:bg-gray-900">
       <div className="max-w-3xl mx-auto px-6 py-12">
         <Link to="/" className="inline-flex items-center gap-2 text-violet-600 hover:text-violet-700 mb-8 min-h-[44px]">
           <ArrowLeft size={16} aria-hidden="true" /> Back to Axal Ventures
         </Link>
 
         <header className="mb-10">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Changelog</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2 dark:text-gray-100">Changelog</h1>
           <p className="text-gray-600">Every shipped change to Axal StudioOS — tagged by who it's for.</p>
         </header>
 
@@ -70,7 +70,7 @@ export default function ChangelogPage() {
         )}
 
         {!loading && !error && entries.length === 0 && (
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-600" data-card>
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-600 dark:border-gray-800" data-card>
             No public release notes yet — check back soon.
           </div>
         )}
@@ -84,11 +84,11 @@ export default function ChangelogPage() {
                 <span aria-hidden="true">·</span>
                 <AudienceBadge tag={e.audience || 'all'} />
               </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">{e.title}</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-2 dark:text-gray-100">{e.title}</h2>
               {e.image && (
-                <img src={e.image} alt="" className="rounded-xl border border-gray-200 mb-3 max-h-72 object-cover" loading="lazy" />
+                <img src={e.image} alt="" className="rounded-xl border border-gray-200 mb-3 max-h-72 object-cover dark:border-gray-800" loading="lazy" />
               )}
-              <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-line">{e.summary}</div>
+              <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-line dark:text-gray-300">{e.summary}</div>
               {e.url && (
                 <a href={e.url} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 mt-2 text-sm text-violet-600 hover:text-violet-700">

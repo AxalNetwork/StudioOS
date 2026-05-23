@@ -33,36 +33,36 @@ function NewSlotForm({ onCreated }) {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   }
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+    <div className="bg-white border border-gray-200 rounded-lg p-4 grid grid-cols-1 md:grid-cols-6 gap-3 items-end dark:bg-gray-900 dark:border-gray-800">
       <div className="md:col-span-2">
-        <label className="block text-xs font-medium text-gray-700 mb-1">Title (optional)</label>
+        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Title (optional)</label>
         <input value={draft.title} placeholder="e.g. GTM 1:1"
           onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
+          className="w-full px-3 py-2 border border-gray-300 rounded text-sm dark:border-gray-700" />
       </div>
       <div className="md:col-span-2">
-        <label className="block text-xs font-medium text-gray-700 mb-1">Start (local)</label>
+        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Start (local)</label>
         <input type="datetime-local" value={draft.start_at}
           onChange={(e) => setDraft({ ...draft, start_at: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
+          className="w-full px-3 py-2 border border-gray-300 rounded text-sm dark:border-gray-700" />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Duration (min)</label>
+        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Duration (min)</label>
         <input type="number" min="10" value={draft.duration_min}
           onChange={(e) => setDraft({ ...draft, duration_min: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
+          className="w-full px-3 py-2 border border-gray-300 rounded text-sm dark:border-gray-700" />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Capacity</label>
+        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Capacity</label>
         <input type="number" min="1" value={draft.capacity}
           onChange={(e) => setDraft({ ...draft, capacity: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
+          className="w-full px-3 py-2 border border-gray-300 rounded text-sm dark:border-gray-700" />
       </div>
       <div className="md:col-span-2">
-        <label className="block text-xs font-medium text-gray-700 mb-1">Location</label>
+        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Location</label>
         <select value={draft.location_kind}
           onChange={(e) => setDraft({ ...draft, location_kind: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+          className="w-full px-3 py-2 border border-gray-300 rounded text-sm dark:border-gray-700">
           <option value="video">Video</option>
           <option value="phone">Phone</option>
           <option value="in_person">In person</option>
@@ -71,7 +71,7 @@ function NewSlotForm({ onCreated }) {
       <div className="md:col-span-3">
         <input value={draft.location_uri} placeholder="https://meet.google.com/…"
           onChange={(e) => setDraft({ ...draft, location_uri: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
+          className="w-full px-3 py-2 border border-gray-300 rounded text-sm dark:border-gray-700" />
       </div>
       <div>
         <button disabled={busy || !draft.start_at} onClick={submit}
@@ -124,7 +124,7 @@ export default function PartnerOfficeHoursPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Partner office hours</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Partner office hours</h1>
         <p className="text-sm text-gray-600 mt-1">
           Publish bookable slots for founders and other portfolio members. Bookings appear
           here and on your unified calendar.
@@ -138,12 +138,12 @@ export default function PartnerOfficeHoursPage() {
       )}
 
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Publish a slot</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-3 dark:text-gray-100">Publish a slot</h2>
         <NewSlotForm onCreated={loadAll} />
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100">
           <Calendar size={18} /> Upcoming office hours
         </h2>
         {loading ? (
@@ -153,9 +153,9 @@ export default function PartnerOfficeHoursPage() {
         ) : (
           <div className="space-y-2">
             {slots.map((s) => (
-              <div key={s.id} className="bg-white border border-gray-200 rounded p-3 flex items-center justify-between">
+              <div key={s.id} className="bg-white border border-gray-200 rounded p-3 flex items-center justify-between dark:bg-gray-900 dark:border-gray-800">
                 <div className="text-sm">
-                  <div className="font-medium text-gray-900">
+                  <div className="font-medium text-gray-900 dark:text-gray-100">
                     {s.title ? `${s.title} · ` : ''}{new Date(s.start_at).toLocaleString()} · {s.duration_min} min
                   </div>
                   <div className="text-xs text-gray-500">
@@ -178,16 +178,16 @@ export default function PartnerOfficeHoursPage() {
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Bookings</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-3 dark:text-gray-100">Bookings</h2>
         {bookings.length === 0 ? (
           <div className="text-sm text-gray-500">No bookings yet.</div>
         ) : (
           <div className="space-y-2">
             {bookings.map((b) => (
-              <div key={b.id} className="bg-white border border-gray-200 rounded p-4">
+              <div key={b.id} className="bg-white border border-gray-200 rounded p-4 dark:bg-gray-900 dark:border-gray-800">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-medium text-gray-900">{b.topic}</div>
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{b.topic}</div>
                     <div className="text-xs text-gray-500 mt-0.5">
                       {new Date(b.scheduled_start).toLocaleString()} · status: <span className="font-medium">{b.status}</span>
                     </div>
@@ -201,7 +201,7 @@ export default function PartnerOfficeHoursPage() {
                           <CheckCircle size={12} /> Confirm
                         </button>
                         <button onClick={() => transition(b.id, 'cancel', prompt('Reason?') || '')}
-                          className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded">
+                          className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded dark:text-gray-200">
                           Decline
                         </button>
                       </>
@@ -217,7 +217,7 @@ export default function PartnerOfficeHoursPage() {
                           No-show
                         </button>
                         <button onClick={() => transition(b.id, 'cancel', prompt('Reason?') || '')}
-                          className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded">
+                          className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded dark:text-gray-200">
                           Cancel
                         </button>
                       </>

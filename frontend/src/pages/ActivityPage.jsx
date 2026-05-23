@@ -116,11 +116,11 @@ export default function ActivityPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <h1 className="text-2xl font-bold text-gray-900">Activity Log</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Activity Log</h1>
         <button
           onClick={handleSyncGithub}
           disabled={syncing}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors dark:text-gray-300 dark:bg-gray-900 dark:border-gray-700"
         >
           {syncing ? <Loader2 size={14} className="animate-spin" /> : <GitBranch size={14} />}
           {syncing ? 'Syncing...' : 'Sync to GitHub'}
@@ -182,25 +182,25 @@ export default function ActivityPage() {
         <>
           {summary && (
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <div className="bg-white border border-gray-200 rounded-xl p-4">
+              <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
                 <div className="text-[10px] text-gray-500 uppercase">Total Events</div>
-                <div className="text-2xl font-bold text-gray-900 mt-1">{summary.total_events}</div>
+                <div className="text-2xl font-bold text-gray-900 mt-1 dark:text-gray-100">{summary.total_events}</div>
               </div>
               {Object.entries(summary.action_breakdown || {}).slice(0, 3).map(([action, count]) => (
-                <div key={action} className="bg-white border border-gray-200 rounded-xl p-4">
+                <div key={action} className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
                   <div className="text-[10px] text-gray-500 uppercase truncate">
                     {ACTION_LABELS[action] || action.replace(/_/g, ' ')}
                   </div>
-                  <div className="text-2xl font-bold text-gray-900 mt-1">{count}</div>
+                  <div className="text-2xl font-bold text-gray-900 mt-1 dark:text-gray-100">{count}</div>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+            <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 dark:border-gray-800">
               <Activity size={16} className="text-violet-600" />
-              <span className="text-sm font-semibold text-gray-900">Event Stream</span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Event Stream</span>
               <span className="text-xs text-gray-500 ml-auto">{logs.length} events</span>
             </div>
 

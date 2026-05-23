@@ -245,7 +245,7 @@ studioos:
     <div>
       <div className="flex items-center gap-3 mb-1">
         <Code size={24} className="text-violet-600" />
-        <h1 className="text-2xl font-bold text-gray-900">API Bridge & Jekyll Integration</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">API Bridge & Jekyll Integration</h1>
       </div>
       <p className="text-gray-600 mb-6">Connect your external Jekyll portal to StudioOS private data</p>
 
@@ -279,8 +279,8 @@ studioos:
 
       {activeTab === 'bridge' && (
         <div className="space-y-4">
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-2">StudioOS Bridge Script</h3>
+          <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+            <h3 className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">StudioOS Bridge Script</h3>
             <p className="text-xs text-gray-600 mb-3">
               Save this as <code className="bg-gray-100 px-1 py-0.5 rounded text-violet-700">assets/js/studioos-bridge.js</code> in your Jekyll repo.
               It handles authentication, session management, and all private data fetching.
@@ -292,8 +292,8 @@ studioos:
 
       {activeTab === 'usage' && (
         <div className="space-y-4">
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-2">Role-Based Data Loading</h3>
+          <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+            <h3 className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Role-Based Data Loading</h3>
             <p className="text-xs text-gray-600 mb-3">
               Each page calls <code className="bg-gray-100 px-1 py-0.5 rounded text-violet-700">getPortfolioMetrics()</code> — the API automatically returns data scoped to the user's role.
             </p>
@@ -304,8 +304,8 @@ studioos:
 
       {activeTab === 'login' && (
         <div className="space-y-4">
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-2">Jekyll Login Page</h3>
+          <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+            <h3 className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Jekyll Login Page</h3>
             <p className="text-xs text-gray-600 mb-3">
               Create a <code className="bg-gray-100 px-1 py-0.5 rounded text-violet-700">login.html</code> in your Jekyll site.
               The bridge handles TOTP authentication and redirects by role.
@@ -317,8 +317,8 @@ studioos:
 
       {activeTab === 'config' && (
         <div className="space-y-4">
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-2">Jekyll Configuration</h3>
+          <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+            <h3 className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Jekyll Configuration</h3>
             <p className="text-xs text-gray-600 mb-3">
               Add the API URL to your Jekyll <code className="bg-gray-100 px-1 py-0.5 rounded text-violet-700">_config.yml</code> so templates can reference it.
             </p>
@@ -327,14 +327,14 @@ studioos:
         </div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mt-6">
-        <div className="px-4 py-3 border-b border-gray-200">
-          <h3 className="text-sm font-semibold text-gray-900">Private Data API Reference</h3>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mt-6 dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Private Data API Reference</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
+              <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800">
                 <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Method</th>
                 <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Endpoint</th>
                 <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Auth</th>
@@ -350,7 +350,7 @@ studioos:
                       ep.method === 'GET' ? 'text-green-600' : 'text-blue-600'
                     }`}>{ep.method}</span>
                   </td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-gray-700">{ep.path}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-gray-700 dark:text-gray-300">{ep.path}</td>
                   <td className="px-4 py-2.5 text-center">
                     {ep.auth ? (
                       <Key size={14} className="text-amber-500 mx-auto" />

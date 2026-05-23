@@ -36,12 +36,12 @@ function StatCard({ icon: Icon, label, value, sub, tone = 'violet' }) {
     rose: 'bg-rose-50 text-rose-700',
   };
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center gap-2 mb-2">
         <span className={`p-1.5 rounded-md ${tones[tone]}`}><Icon size={14} /></span>
         <span className="text-xs uppercase tracking-wide text-gray-500">{label}</span>
       </div>
-      <div className="text-2xl font-semibold text-gray-900">{value}</div>
+      <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{value}</div>
       {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
     </div>
   );
@@ -183,7 +183,7 @@ export default function FinancialsPage() {
       <AdvisorFilledBanner page="/build/financials" />
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Financial Model</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Financial Model</h1>
         <PageExplainer pageKey="financials" />
           <p className="text-sm text-gray-500 mt-1">
             3-statement-style drivers feed runway, breakeven, and the capital category of the scoring engine.
@@ -194,7 +194,7 @@ export default function FinancialsPage() {
             value={projectId || ''}
             onChange={(e) => setProjectId(parseInt(e.target.value, 10))}
             disabled={!hasProjects}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400 dark:border-gray-700 dark:bg-gray-900"
           >
             {!hasProjects && <option value="">No projects available</option>}
             {projects.map((p) => (
@@ -205,7 +205,7 @@ export default function FinancialsPage() {
             onClick={handleExport}
             disabled={!projectId || !model}
             title={!model ? 'Load a project model first' : 'Download as XLSX'}
-            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-700"
           >
             <Download size={14} /> Export XLSX
           </button>
@@ -219,9 +219,9 @@ export default function FinancialsPage() {
       )}
 
       {!hasProjects && (
-        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center">
+        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center dark:bg-gray-900 dark:border-gray-700">
           <FolderPlus size={32} className="mx-auto text-gray-400 mb-3" />
-          <h2 className="text-base font-semibold text-gray-900">No projects yet</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">No projects yet</h2>
           <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
             The financial model is scoped to a project. Create or join one first, then come back here to set drivers and see runway, breakeven, and capital scoring.
           </p>
@@ -270,8 +270,8 @@ export default function FinancialsPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Drivers panel */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5 lg:col-span-1">
-              <h2 className="text-sm font-semibold text-gray-900 mb-4">Drivers</h2>
+            <div className="bg-white rounded-xl border border-gray-200 p-5 lg:col-span-1 dark:bg-gray-900 dark:border-gray-800">
+              <h2 className="text-sm font-semibold text-gray-900 mb-4 dark:text-gray-100">Drivers</h2>
               <div className="space-y-3">
                 {Object.entries(DRIVER_LABELS).map(([key, meta]) => (
                   <div key={key}>
@@ -284,7 +284,7 @@ export default function FinancialsPage() {
                       step={meta.step}
                       value={assumptions[key]}
                       onChange={(e) => setDriver(key, e.target.value)}
-                      className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-400"
+                      className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-400 dark:border-gray-700"
                     />
                   </div>
                 ))}
@@ -300,7 +300,7 @@ export default function FinancialsPage() {
                 <button
                   onClick={handleReset}
                   disabled={!dirty}
-                  className="flex items-center gap-1 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="flex items-center gap-1 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
                   title="Discard unsaved changes"
                 >
                   <RefreshCw size={14} />
@@ -315,8 +315,8 @@ export default function FinancialsPage() {
 
             {/* Charts */}
             <div className="lg:col-span-2 space-y-4">
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <h2 className="text-sm font-semibold text-gray-900 mb-2">Cash trajectory</h2>
+              <div className="bg-white rounded-xl border border-gray-200 p-5 dark:bg-gray-900 dark:border-gray-800">
+                <h2 className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Cash trajectory</h2>
                 <ResponsiveContainer width="100%" height={240}>
                   <LineChart data={model.computed.months}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -333,8 +333,8 @@ export default function FinancialsPage() {
                 </ResponsiveContainer>
               </div>
 
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <h2 className="text-sm font-semibold text-gray-900 mb-2">Revenue vs net</h2>
+              <div className="bg-white rounded-xl border border-gray-200 p-5 dark:bg-gray-900 dark:border-gray-800">
+                <h2 className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Revenue vs net</h2>
                 <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={model.computed.months}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -352,8 +352,8 @@ export default function FinancialsPage() {
           </div>
 
           {/* Sensitivity */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="text-sm font-semibold text-gray-900 mb-3">Sensitivity — runway months at ±20%</h2>
+          <div className="bg-white rounded-xl border border-gray-200 p-5 dark:bg-gray-900 dark:border-gray-800">
+            <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Sensitivity — runway months at ±20%</h2>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
@@ -367,7 +367,7 @@ export default function FinancialsPage() {
                 <tbody>
                   {model.sensitivity.rows.map((row) => (
                     <tr key={row.driver} className="border-b last:border-0">
-                      <td className="py-2 px-3 font-medium text-gray-900">{row.label}</td>
+                      <td className="py-2 px-3 font-medium text-gray-900 dark:text-gray-100">{row.label}</td>
                       {row.cells.map((c, i) => {
                         const baseline = row.cells[Math.floor(row.cells.length / 2)].runway_months;
                         const delta = c.runway_months - baseline;
@@ -396,15 +396,15 @@ export default function FinancialsPage() {
 
           {/* Capital score breakdown */}
           {model.capital_recompute && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="text-sm font-semibold text-gray-900 mb-3">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 dark:bg-gray-900 dark:border-gray-800">
+              <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">
                 Capital category recompute — {model.capital_recompute.total} / {model.capital_recompute.max}
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {Object.entries(model.capital_recompute.factors).map(([key, f]) => (
                   <div key={key} className="border border-gray-100 rounded-lg p-3">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium text-gray-900">{f.label}</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{f.label}</span>
                       <span className="text-violet-700 font-semibold">{f.points} / {f.max}</span>
                     </div>
                     <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">

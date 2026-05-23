@@ -129,7 +129,7 @@ export default function RoadmapPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Roadmap</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Roadmap</h1>
         <PageExplainer pageKey="roadmap" />
           <p className="text-sm text-gray-500 mt-1">Now / Next / Later kanban with OKR-style key results.</p>
         </div>
@@ -138,7 +138,7 @@ export default function RoadmapPage() {
             value={projectId || ''}
             onChange={(e) => setProjectId(parseInt(e.target.value, 10))}
             disabled={!hasProjects}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400 dark:border-gray-700 dark:bg-gray-900"
           >
             {!hasProjects && <option value="">No projects available</option>}
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -156,9 +156,9 @@ export default function RoadmapPage() {
       {error && <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-4 py-3 text-sm"><AlertCircle size={16} className="mt-0.5" />{error}</div>}
 
       {!hasProjects && (
-        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center">
+        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center dark:bg-gray-900 dark:border-gray-700">
           <FolderPlus size={32} className="mx-auto text-gray-400 mb-3" />
-          <h2 className="text-base font-semibold text-gray-900">No projects yet</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">No projects yet</h2>
           <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
             The roadmap is scoped to a project. Create or join one first, then come back here to plan OKRs across Now / Next / Later.
           </p>
@@ -178,7 +178,7 @@ export default function RoadmapPage() {
           return (
             <div key={col.key} className={`rounded-xl border-2 border-dashed ${col.tone} p-3 min-h-[200px]`}>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">{col.label}</h3>
+                <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide dark:text-gray-100">{col.label}</h3>
                 <span className="text-xs text-gray-500">{items.length}</span>
               </div>
               <div className="space-y-2">
@@ -186,12 +186,12 @@ export default function RoadmapPage() {
                 {items.map((o) => {
                   const next = nextColumn(o.kanban_status);
                   return (
-                    <div key={o.id} className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+                    <div key={o.id} className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm dark:bg-gray-900 dark:border-gray-800">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start gap-1.5">
                             <Target size={13} className="text-violet-500 mt-0.5 flex-shrink-0" />
-                            <span className="text-sm font-medium text-gray-900 break-words">{o.objective}</span>
+                            <span className="text-sm font-medium text-gray-900 break-words dark:text-gray-100">{o.objective}</span>
                           </div>
                           {o.quarter && <div className="text-[10px] text-gray-400 mt-1 ml-5">{o.quarter}</div>}
                         </div>
@@ -264,26 +264,26 @@ function OkrModal({ value, onChange, onSave, onClose }) {
   }
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 sticky top-0 bg-white">
-          <h2 className="text-base font-semibold text-gray-900">{value.id ? 'Edit OKR' : 'New OKR'}</h2>
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 sticky top-0 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{value.id ? 'Edit OKR' : 'New OKR'}</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-4">
           <div>
             <label className="text-xs uppercase tracking-wide text-gray-500 block mb-1">Objective</label>
-            <textarea rows={2} value={value.objective} onChange={(e) => onChange({ ...value, objective: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="What we want to achieve" />
+            <textarea rows={2} value={value.objective} onChange={(e) => onChange({ ...value, objective: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:border-gray-700" placeholder="What we want to achieve" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs uppercase tracking-wide text-gray-500 block mb-1">Column</label>
-              <select value={value.kanban_status} onChange={(e) => onChange({ ...value, kanban_status: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm">
+              <select value={value.kanban_status} onChange={(e) => onChange({ ...value, kanban_status: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700">
                 {COLUMNS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
               </select>
             </div>
             <div>
               <label className="text-xs uppercase tracking-wide text-gray-500 block mb-1">Quarter (optional)</label>
-              <input value={value.quarter || ''} onChange={(e) => onChange({ ...value, quarter: e.target.value })} placeholder="2026-Q2" className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" />
+              <input value={value.quarter || ''} onChange={(e) => onChange({ ...value, quarter: e.target.value })} placeholder="2026-Q2" className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
             </div>
           </div>
 
@@ -294,23 +294,23 @@ function OkrModal({ value, onChange, onSave, onClose }) {
             </div>
             <div className="space-y-2">
               {value.key_results.map((kr, idx) => (
-                <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-2 dark:border-gray-800">
                   <div className="flex items-center gap-2">
-                    <input placeholder="Measurable result" value={kr.text} onChange={(e) => setKR(idx, { text: e.target.value })} className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm" />
+                    <input placeholder="Measurable result" value={kr.text} onChange={(e) => setKR(idx, { text: e.target.value })} className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm dark:border-gray-700" />
                     <button onClick={() => removeKR(idx)} className="text-rose-500 hover:text-rose-700 p-1"><Trash2 size={14} /></button>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
-                    <input type="number" placeholder="Current" value={kr.current ?? ''} onChange={(e) => setKR(idx, { current: e.target.value })} className="border border-gray-200 rounded-md px-2 py-1 text-xs" />
-                    <input type="number" placeholder="Target" value={kr.target ?? ''} onChange={(e) => setKR(idx, { target: e.target.value })} className="border border-gray-200 rounded-md px-2 py-1 text-xs" />
-                    <input placeholder="Unit (e.g. users)" value={kr.unit || ''} onChange={(e) => setKR(idx, { unit: e.target.value })} className="border border-gray-200 rounded-md px-2 py-1 text-xs" />
+                    <input type="number" placeholder="Current" value={kr.current ?? ''} onChange={(e) => setKR(idx, { current: e.target.value })} className="border border-gray-200 rounded-md px-2 py-1 text-xs dark:border-gray-800" />
+                    <input type="number" placeholder="Target" value={kr.target ?? ''} onChange={(e) => setKR(idx, { target: e.target.value })} className="border border-gray-200 rounded-md px-2 py-1 text-xs dark:border-gray-800" />
+                    <input placeholder="Unit (e.g. users)" value={kr.unit || ''} onChange={(e) => setKR(idx, { unit: e.target.value })} className="border border-gray-200 rounded-md px-2 py-1 text-xs dark:border-gray-800" />
                   </div>
                 </div>
               ))}
             </div>
           </div>
         </div>
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-200 sticky bottom-0 bg-white">
-          <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-200 sticky bottom-0 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-700">Cancel</button>
           <button onClick={onSave} disabled={!value.objective.trim()} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg flex items-center gap-2"><Save size={14} /> Save</button>
         </div>
       </div>

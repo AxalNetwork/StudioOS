@@ -15,7 +15,7 @@ import { useAuth } from '../../hooks/useAuthSync';
 function highlight(text, q) {
   return splitForHighlight(text, q).map((part, i) =>
     part.match ? (
-      <mark key={i} className="bg-yellow-200 text-gray-900 rounded px-0.5">{part.text}</mark>
+      <mark key={i} className="bg-yellow-200 text-gray-900 rounded px-0.5 dark:text-gray-100">{part.text}</mark>
     ) : (
       <React.Fragment key={i}>{part.text}</React.Fragment>
     )
@@ -54,7 +54,7 @@ function MarkdownBody({ url }) {
     );
   }
   return (
-    <div className="prose prose-sm max-w-none text-sm text-gray-700 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:text-gray-900 [&_h1]:mt-6 [&_h1]:mb-3 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-gray-900 [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-gray-900 [&_h3]:mt-4 [&_h3]:mb-2 [&_p]:leading-relaxed [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-3 [&_li]:leading-relaxed [&_li]:mb-1 [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono [&_blockquote]:border-l-2 [&_blockquote]:border-gray-200 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-600 [&_a]:text-violet-700 [&_a]:underline">
+    <div className="prose prose-sm max-w-none text-sm text-gray-700 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:text-gray-900 [&_h1]:mt-6 [&_h1]:mb-3 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-gray-900 [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-gray-900 [&_h3]:mt-4 [&_h3]:mb-2 [&_p]:leading-relaxed [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-3 [&_li]:leading-relaxed [&_li]:mb-1 [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono [&_blockquote]:border-l-2 [&_blockquote]:border-gray-200 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-600 [&_a]:text-violet-700 [&_a]:underline dark:text-gray-300">
       <ReactMarkdown>{state.text}</ReactMarkdown>
     </div>
   );
@@ -72,9 +72,9 @@ function SubsectionView({ section, sub }) {
       data-anchor={anchorId}
       className="scroll-mt-20 mb-12"
     >
-      <h3 className="text-lg font-semibold text-gray-900 mb-3">{sub.title}</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-3 dark:text-gray-100">{sub.title}</h3>
       {sub.overview && (
-        <p className="text-sm text-gray-700 leading-relaxed mb-4">{sub.overview}</p>
+        <p className="text-sm text-gray-700 leading-relaxed mb-4 dark:text-gray-300">{sub.overview}</p>
       )}
 
       {sub.markdownUrl && (
@@ -86,7 +86,7 @@ function SubsectionView({ section, sub }) {
       {Array.isArray(sub.howto) && sub.howto.length > 0 && (
         <div className="mb-4">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">How to use it</h4>
-          <ol className="list-decimal list-outside pl-5 text-sm text-gray-700 space-y-1.5">
+          <ol className="list-decimal list-outside pl-5 text-sm text-gray-700 space-y-1.5 dark:text-gray-300">
             {sub.howto.map((step, i) => <li key={i} className="leading-relaxed">{step}</li>)}
           </ol>
         </div>
@@ -95,7 +95,7 @@ function SubsectionView({ section, sub }) {
       {Array.isArray(sub.tips) && sub.tips.length > 0 && (
         <div className="mb-4 bg-violet-50 border border-violet-100 rounded-lg p-4">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-violet-700 mb-2">Tips</h4>
-          <ul className="list-disc list-outside pl-5 text-sm text-gray-700 space-y-1">
+          <ul className="list-disc list-outside pl-5 text-sm text-gray-700 space-y-1 dark:text-gray-300">
             {sub.tips.map((tip, i) => <li key={i} className="leading-relaxed">{tip}</li>)}
           </ul>
         </div>
@@ -106,14 +106,14 @@ function SubsectionView({ section, sub }) {
           <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-800 mb-2">
             <AlertTriangle size={12} /> Common pitfalls
           </h4>
-          <ul className="list-disc list-outside pl-5 text-sm text-gray-700 space-y-1">
+          <ul className="list-disc list-outside pl-5 text-sm text-gray-700 space-y-1 dark:text-gray-300">
             {sub.pitfalls.map((p, i) => <li key={i} className="leading-relaxed">{p}</li>)}
           </ul>
         </div>
       )}
 
       {sub.screenshot && (
-        <figure className="mb-4 border border-gray-200 rounded-lg overflow-hidden">
+        <figure className="mb-4 border border-gray-200 rounded-lg overflow-hidden dark:border-gray-800">
           <img src={sub.screenshot} alt={sub.title} className="w-full block" loading="lazy" />
           {sub.screenshotCaption && (
             <figcaption className="bg-gray-50 px-3 py-2 text-xs text-gray-500">{sub.screenshotCaption}</figcaption>
@@ -129,7 +129,7 @@ function SubsectionView({ section, sub }) {
               <li key={i}>
                 <a
                   href={r.href}
-                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-gray-200 text-violet-700 hover:bg-violet-50 hover:border-violet-200"
+                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-gray-200 text-violet-700 hover:bg-violet-50 hover:border-violet-200 dark:border-gray-800"
                 >
                   {r.label}
                   <ChevronRight size={11} />
@@ -275,7 +275,7 @@ export default function DocsLayout() {
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden -mx-6 -my-6">
       {/* Left rail */}
-      <aside className="w-64 shrink-0 border-r border-gray-200 bg-gray-50 overflow-y-auto py-5 px-3 hidden lg:block">
+      <aside className="w-64 shrink-0 border-r border-gray-200 bg-gray-50 overflow-y-auto py-5 px-3 hidden lg:block dark:border-gray-800">
         <div className="px-2 mb-3">
           <div className="flex items-center gap-2 mb-3">
             <BookOpen size={14} className="text-violet-600" />
@@ -290,7 +290,7 @@ export default function DocsLayout() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search docs… (press /)"
               aria-label="Search documentation"
-              className="w-full pl-8 pr-7 py-1.5 text-xs rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400"
+              className="w-full pl-8 pr-7 py-1.5 text-xs rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400 dark:border-gray-800 dark:bg-gray-900"
             />
             {query && (
               <button
@@ -316,7 +316,7 @@ export default function DocsLayout() {
                     onClick={() => goToAnchor(r.anchor)}
                     className="w-full text-left px-2 py-1.5 rounded-md hover:bg-gray-100 group"
                   >
-                    <div className="text-xs font-medium text-gray-900 truncate">
+                    <div className="text-xs font-medium text-gray-900 truncate dark:text-gray-100">
                       {highlight(r.subsectionTitle, trimmedQuery)}
                     </div>
                     <div className="text-[10px] text-gray-500 mb-0.5">{r.sectionTitle}</div>
@@ -377,7 +377,7 @@ export default function DocsLayout() {
       {/* Main content */}
       <div ref={contentRef} className="flex-1 min-w-0 overflow-y-auto">
         {/* Mobile: collapsed top search bar (rail hidden on small screens). */}
-        <div className="lg:hidden sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-2">
+        <div className="lg:hidden sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-2 dark:border-gray-800">
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -385,18 +385,18 @@ export default function DocsLayout() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search docs…"
-              className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400"
+              className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 dark:border-gray-800 dark:bg-gray-900"
             />
           </div>
           {trimmedQuery && searchResults.length > 0 && (
-            <ul className="mt-2 max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-sm">
+            <ul className="mt-2 max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-sm dark:bg-gray-900 dark:border-gray-800">
               {searchResults.slice(0, 8).map(r => (
                 <li key={r.anchor}>
                   <button
                     onClick={() => goToAnchor(r.anchor)}
                     className="w-full text-left px-3 py-2 hover:bg-gray-50"
                   >
-                    <div className="text-xs font-medium text-gray-900">{highlight(r.subsectionTitle, trimmedQuery)}</div>
+                    <div className="text-xs font-medium text-gray-900 dark:text-gray-100">{highlight(r.subsectionTitle, trimmedQuery)}</div>
                     <div className="text-[10px] text-gray-500">{r.sectionTitle}</div>
                   </button>
                 </li>
@@ -406,7 +406,7 @@ export default function DocsLayout() {
           {/* Mobile: section/subsection picker */}
           <details className="mt-2">
             <summary className="text-[11px] text-gray-600 cursor-pointer select-none">Browse all sections</summary>
-            <nav className="mt-2 max-h-72 overflow-y-auto bg-white border border-gray-200 rounded-md p-2">
+            <nav className="mt-2 max-h-72 overflow-y-auto bg-white border border-gray-200 rounded-md p-2 dark:bg-gray-900 dark:border-gray-800">
               {visibleSections.map(section => (
                 <div key={section.id} className="mb-2">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 px-1 mb-0.5">{section.title}</div>
@@ -434,14 +434,14 @@ export default function DocsLayout() {
             <nav aria-label="Breadcrumb" className="text-[11px] text-gray-500 mb-3 flex items-center gap-1.5">
               <span>Documentation</span>
               <ChevronRight size={11} />
-              <span className="text-gray-700 font-medium">{activeSection.title}</span>
+              <span className="text-gray-700 font-medium dark:text-gray-300">{activeSection.title}</span>
             </nav>
 
             <header className="mb-8">
               <div className="flex items-center gap-2 text-violet-600 text-xs font-semibold uppercase tracking-widest mb-2">
                 <BookOpen size={14} /> Documentation
               </div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">StudioOS Documentation</h1>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2 dark:text-gray-100">StudioOS Documentation</h1>
               <p className="text-sm text-gray-500">
                 Guides for founders, investors, partners, and mentors using the StudioOS platform.
               </p>
@@ -454,9 +454,9 @@ export default function DocsLayout() {
                   data-anchor={`${section.id}/${section.subsections[0].id}`}
                   className="scroll-mt-20"
                 />
-                <div className="flex items-center gap-2 mt-2 mb-4 pb-2 border-b border-gray-200">
+                <div className="flex items-center gap-2 mt-2 mb-4 pb-2 border-b border-gray-200 dark:border-gray-800">
                   <SectionIcon name={section.icon} size={18} className="text-violet-600" />
-                  <h2 className="text-2xl font-bold text-gray-900">{section.title}</h2>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{section.title}</h2>
                 </div>
                 {section.subsections.map(sub => (
                   <SubsectionView key={sub.id} section={section} sub={sub} />
@@ -464,7 +464,7 @@ export default function DocsLayout() {
               </div>
             ))}
 
-            <footer className="mt-16 pt-6 border-t border-gray-200 text-xs text-gray-500">
+            <footer className="mt-16 pt-6 border-t border-gray-200 text-xs text-gray-500 dark:border-gray-800">
               Need help? Open a ticket from the Tickets page in the sidebar, or email <a className="text-violet-700 hover:underline" href="mailto:support@axal.vc">support@axal.vc</a>.
             </footer>
           </div>
@@ -472,7 +472,7 @@ export default function DocsLayout() {
           {/* "On this page" right rail — auto-built from the active section's subsections. */}
           <aside className="hidden xl:block w-56 shrink-0 pl-4 pr-6 py-8 sticky top-0 self-start">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">On this page</div>
-            <ul className="space-y-1 border-l border-gray-200">
+            <ul className="space-y-1 border-l border-gray-200 dark:border-gray-800">
               {activeSection.subsections.map(sub => {
                 const anchor = `${activeSection.id}/${sub.id}`;
                 const active = anchor === activeAnchor;

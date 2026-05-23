@@ -105,11 +105,11 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
 
   if (completed) {
     return (
-      <div className="max-w-2xl mx-auto bg-white border border-gray-200 rounded-xl p-10 text-center">
+      <div className="max-w-2xl mx-auto bg-white border border-gray-200 rounded-xl p-10 text-center dark:bg-gray-900 dark:border-gray-800">
         <div className="mx-auto h-12 w-12 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center mb-4">
           <Check size={22} />
         </div>
-        <h2 className="text-xl font-semibold text-gray-900">You're all set</h2>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">You're all set</h2>
         <p className="text-sm text-gray-600 mt-2">Onboarding complete — redirecting you to your dashboard.</p>
       </div>
     );
@@ -130,8 +130,8 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-6 sm:p-8">
-        <h2 className="text-lg sm:text-xl font-semibold text-gray-900">{step.title}</h2>
+      <div className="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 dark:bg-gray-900 dark:border-gray-800">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100">{step.title}</h2>
         {step.description && (
           <p className="text-sm text-gray-600 mt-1">{step.description}</p>
         )}
@@ -173,13 +173,13 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
 export function TextField({ label, value, onChange, placeholder, type = 'text', hint }) {
   return (
     <label className="block">
-      <span className="block text-xs font-medium text-gray-700 mb-1">{label}</span>
+      <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">{label}</span>
       <input
         type={type}
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder || ''}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:border-gray-800"
       />
       {hint && <span className="block text-[11px] text-gray-500 mt-1">{hint}</span>}
     </label>
@@ -189,13 +189,13 @@ export function TextField({ label, value, onChange, placeholder, type = 'text', 
 export function TextArea({ label, value, onChange, placeholder, rows = 3, hint }) {
   return (
     <label className="block">
-      <span className="block text-xs font-medium text-gray-700 mb-1">{label}</span>
+      <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">{label}</span>
       <textarea
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder || ''}
         rows={rows}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:border-gray-800"
       />
       {hint && <span className="block text-[11px] text-gray-500 mt-1">{hint}</span>}
     </label>
@@ -205,7 +205,7 @@ export function TextArea({ label, value, onChange, placeholder, rows = 3, hint }
 export function ChoiceField({ label, options, value, onChange }) {
   return (
     <div>
-      <span className="block text-xs font-medium text-gray-700 mb-2">{label}</span>
+      <span className="block text-xs font-medium text-gray-700 mb-2 dark:text-gray-300">{label}</span>
       <div className="flex flex-wrap gap-2">
         {options.map((opt) => {
           const v = typeof opt === 'string' ? opt : opt.value;
@@ -238,7 +238,7 @@ export function MultiChoiceField({ label, options, value, onChange }) {
   };
   return (
     <div>
-      <span className="block text-xs font-medium text-gray-700 mb-2">{label}</span>
+      <span className="block text-xs font-medium text-gray-700 mb-2 dark:text-gray-300">{label}</span>
       <div className="flex flex-wrap gap-2">
         {options.map((opt) => {
           const v = typeof opt === 'string' ? opt : opt.value;

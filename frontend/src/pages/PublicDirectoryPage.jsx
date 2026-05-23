@@ -18,7 +18,7 @@ function Stars({ value }) {
       {[1, 2, 3, 4, 5].map((n) => (
         <Star key={n} size={14} fill={n <= Math.round(value) ? 'currentColor' : 'none'} strokeWidth={1.5} />
       ))}
-      <span className="ml-1 text-xs text-gray-700">{Number(value).toFixed(1)}</span>
+      <span className="ml-1 text-xs text-gray-700 dark:text-gray-300">{Number(value).toFixed(1)}</span>
     </span>
   );
 }
@@ -40,12 +40,12 @@ function PartnerCard({ p }) {
   return (
     <Link
       to={`/partners/${p.slug}`}
-      className="group block rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-violet-300"
+      className="group block rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-violet-300 dark:border-gray-800 dark:bg-gray-900"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="truncate text-base font-semibold text-gray-900 group-hover:text-violet-700">{p.name}</h3>
+            <h3 className="truncate text-base font-semibold text-gray-900 group-hover:text-violet-700 dark:text-gray-100">{p.name}</h3>
             {p.kyb_verified && (
               <span title="KYB Verified" className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
                 <ShieldCheck size={10} /> Verified
@@ -53,14 +53,14 @@ function PartnerCard({ p }) {
             )}
           </div>
           {p.company && <p className="text-xs text-gray-500">{p.company}</p>}
-          {p.headline && <p className="mt-1 text-sm text-gray-700 line-clamp-2">{p.headline}</p>}
+          {p.headline && <p className="mt-1 text-sm text-gray-700 line-clamp-2 dark:text-gray-300">{p.headline}</p>}
         </div>
         {p.featured && <FeaturedBadge tier={p.featured_tier} />}
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {(p.categories || []).slice(0, 4).map((c) => (
-          <span key={c} className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700">{c.replace(/_/g, ' ')}</span>
+          <span key={c} className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700 dark:text-gray-300">{c.replace(/_/g, ' ')}</span>
         ))}
       </div>
 
@@ -70,7 +70,7 @@ function PartnerCard({ p }) {
           {p.response_time_hours != null && (
             <span className="inline-flex items-center gap-1"><Clock size={12} />{p.response_time_hours}h</span>
           )}
-          {p.pricing_tier && <span className="font-mono text-gray-700">{p.pricing_tier}</span>}
+          {p.pricing_tier && <span className="font-mono text-gray-700 dark:text-gray-300">{p.pricing_tier}</span>}
         </div>
       </div>
 
@@ -124,7 +124,7 @@ export default function PublicDirectoryPage() {
 
       <section className="mx-auto max-w-6xl px-6 pt-32 pb-10">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Service Provider Directory</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Service Provider Directory</h1>
           <p className="mt-1 text-gray-600">Browse vetted partners — ranked by completed engagements, ratings, response time and KYB status.</p>
         </div>
 
@@ -137,10 +137,10 @@ export default function PublicDirectoryPage() {
               value={filters.q}
               onChange={(e) => setFilters({ ...filters, q: e.target.value })}
               onKeyDown={(e) => { if (e.key === 'Enter') apply(); }}
-              className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm shadow-sm focus:border-violet-500 focus:ring-violet-500"
+              className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm shadow-sm focus:border-violet-500 focus:ring-violet-500 dark:border-gray-700 dark:bg-gray-900"
             />
           </div>
-          <button onClick={() => setShowFilters((s) => !s)} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm hover:bg-gray-50">
+          <button onClick={() => setShowFilters((s) => !s)} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900">
             <Filter size={14} /> Filters
           </button>
           <button onClick={apply} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700">Search</button>
@@ -152,38 +152,38 @@ export default function PublicDirectoryPage() {
         </div>
 
         {showFilters && (
-          <div className="mb-6 grid grid-cols-1 gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mb-6 grid grid-cols-1 gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4 dark:border-gray-800 dark:bg-gray-900">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">Category</label>
+              <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Category</label>
               <select value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-                      className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                      className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700">
                 <option value="">All categories</option>
                 {CATEGORIES.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">Capacity</label>
+              <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Capacity</label>
               <select value={filters.capacity} onChange={(e) => setFilters({ ...filters, capacity: e.target.value })}
-                      className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                      className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700">
                 <option value="">Any</option>
                 {CAPACITY.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">Pricing tier</label>
+              <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Pricing tier</label>
               <select value={filters.pricing} onChange={(e) => setFilters({ ...filters, pricing: e.target.value })}
-                      className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                      className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700">
                 <option value="">Any</option>
                 {PRICING.map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">Max hourly rate (USD)</label>
+              <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Max hourly rate (USD)</label>
               <input type="number" min="0" value={filters.rate_max}
                      onChange={(e) => setFilters({ ...filters, rate_max: e.target.value })}
-                     className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+                     className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700" />
             </div>
-            <label className="col-span-full inline-flex items-center gap-2 text-sm text-gray-700">
+            <label className="col-span-full inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
               <input type="checkbox" checked={filters.verified_only}
                      onChange={(e) => setFilters({ ...filters, verified_only: e.target.checked })} />
               KYB-verified partners only
@@ -214,7 +214,7 @@ export default function PublicDirectoryPage() {
               </h2>
             </div>
             {standard.length === 0 && featured.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center">
+              <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center dark:border-gray-700 dark:bg-gray-900">
                 <p className="text-sm text-gray-500">No partners match your filters yet.</p>
               </div>
             ) : (

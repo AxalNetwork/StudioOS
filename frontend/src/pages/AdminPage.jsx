@@ -238,11 +238,11 @@ export default function AdminPage({ onImpersonate }) {
     <div>
       <div className="flex items-center gap-3 mb-1">
         <Shield size={24} className="text-violet-600" />
-        <h1 className="text-2xl font-bold text-gray-900">Admin Console</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Admin Console</h1>
       </div>
       <p className="text-gray-600 mb-6">Manage users, roles, and partner profiles</p>
 
-      <div className="flex gap-2 mb-6 border-b border-gray-200" data-testid="admin-page">
+      <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-800" data-testid="admin-page">
         <button data-testid="admin-tab-users" onClick={() => setTab('users')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'users' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
           <Users size={14} className="inline mr-1.5" /> Users
@@ -303,14 +303,14 @@ export default function AdminPage({ onImpersonate }) {
             ))}
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
             {filtered.length === 0 ? (
               <div className="p-8 text-center text-gray-500 text-sm">No users found</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-200 bg-gray-50">
+                    <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800">
                       <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Name</th>
                       <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Email</th>
                       <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Role</th>
@@ -326,7 +326,7 @@ export default function AdminPage({ onImpersonate }) {
                     {filtered.map(u => (
                       <tr key={u.id} onClick={() => setOpenUser(u)}
                         className="border-b border-gray-100 hover:bg-violet-50/40 cursor-pointer">
-                        <td className="px-4 py-3 text-gray-900 font-medium">{u.name}</td>
+                        <td className="px-4 py-3 text-gray-900 font-medium dark:text-gray-100">{u.name}</td>
                         <td className="px-4 py-3 text-gray-600">{u.email}</td>
                         <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                           {u.role === 'admin' ? (
@@ -440,10 +440,10 @@ export default function AdminPage({ onImpersonate }) {
       )}
 
       {tab === 'profiles' && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+          <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 dark:border-gray-800">
             <Briefcase size={16} className="text-gray-600" />
-            <h3 className="text-sm font-semibold text-gray-900">Partner Profiles</h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Partner Profiles</h3>
             <span className="text-xs text-gray-500 ml-auto">{profiles.length} profiles</span>
           </div>
 
@@ -453,7 +453,7 @@ export default function AdminPage({ onImpersonate }) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
+                  <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800">
                     <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">User</th>
                     <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Persona</th>
                     <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Legal Entity</th>
@@ -466,11 +466,11 @@ export default function AdminPage({ onImpersonate }) {
                   {profiles.map(p => (
                     <tr key={p.email} className="border-b border-gray-100 hover:bg-gray-50/50 cursor-pointer" onClick={() => setOpenProfile(p)}>
                       <td className="px-4 py-3">
-                        <div className="text-gray-900 font-medium">{p.user_name || '—'}</div>
+                        <div className="text-gray-900 font-medium dark:text-gray-100">{p.user_name || '—'}</div>
                         <div className="text-xs text-gray-500">{p.email}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-gray-700">{p.persona || <span className="text-gray-400">—</span>}</div>
+                        <div className="text-gray-700 dark:text-gray-300">{p.persona || <span className="text-gray-400">—</span>}</div>
                         {p.persona === 'Founder' && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {p.founder_track && (
@@ -493,8 +493,8 @@ export default function AdminPage({ onImpersonate }) {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-700">{p.legal_entity_name || <span className="text-gray-400">—</span>}</td>
-                      <td className="px-4 py-3 text-gray-700 text-xs">{p.agreement_type || <span className="text-gray-400">— not assigned —</span>}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{p.legal_entity_name || <span className="text-gray-400">—</span>}</td>
+                      <td className="px-4 py-3 text-gray-700 text-xs dark:text-gray-300">{p.agreement_type || <span className="text-gray-400">— not assigned —</span>}</td>
                       <td className="px-4 py-3 text-center">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_BADGES[p.admin_status] || 'bg-gray-100 text-gray-700'}`}>
                           {p.admin_status || 'pending'}
@@ -516,10 +516,10 @@ export default function AdminPage({ onImpersonate }) {
       )}
 
       {tab === 'kyc' && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 flex-wrap">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+          <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 flex-wrap dark:border-gray-800">
             <ShieldCheck size={16} className="text-gray-600" />
-            <h3 className="text-sm font-semibold text-gray-900">KYC / AML Queue</h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">KYC / AML Queue</h3>
             <div className="ml-auto flex gap-1">
               {['pending', 'approved', 'rejected', 'not_started'].map(s => (
                 <button key={s} onClick={() => setKycFilter(s)}
@@ -535,7 +535,7 @@ export default function AdminPage({ onImpersonate }) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
+                  <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800">
                     <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">User</th>
                     <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Role</th>
                     <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Provider</th>
@@ -547,7 +547,7 @@ export default function AdminPage({ onImpersonate }) {
                   {kycQueue.map(k => (
                     <tr key={k.id} className="border-b border-gray-100 hover:bg-gray-50/50">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900">{k.name}</div>
+                        <div className="font-medium text-gray-900 dark:text-gray-100">{k.name}</div>
                         <div className="text-xs text-gray-500">{k.email}</div>
                       </td>
                       <td className="px-4 py-3">
@@ -572,10 +572,10 @@ export default function AdminPage({ onImpersonate }) {
 
       {kycDetail && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setKycDetail(null)}>
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-3 sticky top-0 bg-white">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl dark:bg-gray-900" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-3 sticky top-0 bg-white dark:border-gray-800 dark:bg-gray-900">
               <ShieldCheck size={18} className="text-violet-600" />
-              <h3 className="font-semibold text-gray-900">KYC Review — {kycDetail.name}</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">KYC Review — {kycDetail.name}</h3>
               <button onClick={() => setKycDetail(null)} className="ml-auto text-gray-400 hover:text-gray-600"><X size={18} /></button>
             </div>
             <div className="px-6 py-5 space-y-4 text-sm">
@@ -589,7 +589,7 @@ export default function AdminPage({ onImpersonate }) {
               </div>
               {kycDetail.kyc_data && (
                 <div className="border-t border-gray-100 pt-4">
-                  <h4 className="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">Submitted Information</h4>
+                  <h4 className="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide dark:text-gray-300">Submitted Information</h4>
                   <div className="grid grid-cols-2 gap-3">
                     <KV label="Legal Name" value={`${kycDetail.kyc_data.legal_first_name || ''} ${kycDetail.kyc_data.legal_last_name || ''}`.trim()} />
                     <KV label="Date of Birth" value={kycDetail.kyc_data.date_of_birth} />
@@ -639,7 +639,7 @@ export default function AdminPage({ onImpersonate }) {
                   )}
                   {kycDetail.kyc_data.provider_result && (
                     <div className="mt-3 bg-gray-50 rounded-lg p-3 text-xs">
-                      <div className="font-semibold text-gray-700 mb-1">Automated Provider Result: <span className="font-mono">{kycDetail.kyc_data.provider_result.result}</span></div>
+                      <div className="font-semibold text-gray-700 mb-1 dark:text-gray-300">Automated Provider Result: <span className="font-mono">{kycDetail.kyc_data.provider_result.result}</span></div>
                       <pre className="text-gray-600 whitespace-pre-wrap text-[11px]">{JSON.stringify(kycDetail.kyc_data.provider_result.checks, null, 2)}</pre>
                     </div>
                   )}
@@ -654,7 +654,7 @@ export default function AdminPage({ onImpersonate }) {
                 <div className="border-t border-gray-100 pt-4 space-y-3">
                   <textarea value={kycRejectReason} onChange={e => setKycRejectReason(e.target.value)}
                     rows={2} placeholder="Rejection reason (required if rejecting; min 5 chars)"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 outline-none" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 outline-none dark:border-gray-700" />
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => rejectKyc(kycDetail.id)}
                       className="px-3 py-2 text-sm bg-red-50 text-red-700 hover:bg-red-100 rounded-lg font-medium flex items-center gap-1.5">
@@ -828,11 +828,11 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between">
+      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between dark:border-gray-800">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-lg font-bold text-gray-900">{u.name}</h3>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{u.name}</h3>
               <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>{u.role}</span>
               <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{u.is_active ? 'Active' : 'Inactive'}</span>
               {u.email_verified ? (
@@ -850,7 +850,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
           <div className={`mx-6 mt-3 px-3 py-2 rounded-lg text-xs ${toast.kind === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{toast.msg}</div>
         )}
 
-        <div className="px-6 pt-3 border-b border-gray-200 flex gap-1 overflow-x-auto">
+        <div className="px-6 pt-3 border-b border-gray-200 flex gap-1 overflow-x-auto dark:border-gray-800">
           {['profile', 'registration', 'onboarding', 'advisor', 'kyc', 'agreements', 'activity', 'notes'].map(t => {
             // Task #11 — onboarding tab now reads from the user's first
             // advisor conversation; the new 'advisor' tab reads from their
@@ -898,7 +898,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                   <div className="text-xs font-semibold text-violet-700 mb-2">
                     {data.founder ? 'Founder profile' : 'Partner profile'}
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-800">
+                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-800 dark:text-gray-200">
                     {data.founder && (
                       <>
                         {data.founder.domain_expertise && <Field label="Expertise" value={data.founder.domain_expertise} />}
@@ -913,7 +913,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                         {data.founder.bio && (
                           <div className="col-span-2">
                             <div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Bio</div>
-                            <div className="text-gray-800 whitespace-pre-wrap">{data.founder.bio}</div>
+                            <div className="text-gray-800 whitespace-pre-wrap dark:text-gray-200">{data.founder.bio}</div>
                           </div>
                         )}
                       </>
@@ -930,11 +930,11 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
               )}
               {integrations.length > 0 && (
                 <div className="col-span-2 mt-3">
-                  <div className="text-xs font-semibold text-gray-700 mb-2">Connected integrations</div>
+                  <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Connected integrations</div>
                   <div className="space-y-1.5">
                     {integrations.map(i => (
                       <div key={i.uid} className="flex items-center justify-between text-xs bg-gray-50 px-3 py-2 rounded-lg">
-                        <span className="font-medium text-gray-900">{i.display_name || i.provider_name}</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{i.display_name || i.provider_name}</span>
                         <span className="text-gray-500">{i.status} · {i.last_synced_at ? new Date(i.last_synced_at).toLocaleString() : 'never synced'}</span>
                       </div>
                     ))}
@@ -955,7 +955,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                   </div>
                   <div className="flex-1 pb-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-gray-900 capitalize">{ev.label}</span>
+                      <span className="font-semibold text-gray-900 capitalize dark:text-gray-100">{ev.label}</span>
                       <span className="text-gray-500 whitespace-nowrap">{ev.ts ? new Date(ev.ts).toLocaleString() : ''}</span>
                     </div>
                     {ev.detail && <div className="text-gray-600 mt-0.5">{ev.detail}</div>}
@@ -969,10 +969,10 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
             <div className="space-y-2">
               {(data.agreements || []).length === 0 && <div className="text-sm text-gray-500">No eSign agreements yet.</div>}
               {(data.agreements || []).map(ag => (
-                <div key={`${ag.envelope_id}-${ag.recipient_id || 'na'}`} className="border border-gray-200 rounded-lg p-3 text-xs">
+                <div key={`${ag.envelope_id}-${ag.recipient_id || 'na'}`} className="border border-gray-200 rounded-lg p-3 text-xs dark:border-gray-800">
                   <div className="flex items-center justify-between gap-2">
                     <div>
-                      <div className="font-semibold text-gray-900">{ag.document_title || ag.document_type || 'Agreement'}</div>
+                      <div className="font-semibold text-gray-900 dark:text-gray-100">{ag.document_title || ag.document_type || 'Agreement'}</div>
                       <div className="text-gray-500 mt-0.5">
                         {ag.role_in_envelope === 'creator' ? 'Sent by user' : 'Recipient'}
                         {ag.recipient_email ? ` · ${ag.recipient_email}` : ''}
@@ -1017,7 +1017,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <MessageSquare size={14} className="text-gray-600" />
-                  <h4 className="text-sm font-semibold text-gray-900">Onboarding Conversation</h4>
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Onboarding Conversation</h4>
                   {conv && (
                     <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-700">
                       {conv.persona} · {conv.state}
@@ -1033,21 +1033,21 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                   </div>
                 )}
                 {msgs.length === 0 ? (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-xs text-gray-500">
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-xs text-gray-500 dark:border-gray-800">
                     {emptyReason === 'in_progress' ? (
                       <>
-                        <div className="font-semibold text-gray-700 mb-1">Onboarding in progress</div>
+                        <div className="font-semibold text-gray-700 mb-1 dark:text-gray-300">Onboarding in progress</div>
                         This user has opened the Personal Advisor onboarding session but hasn’t answered any questions yet. The transcript will populate as soon as they respond to the first prompt.
                       </>
                     ) : (
                       <>
-                        <div className="font-semibold text-gray-700 mb-1">Never completed onboarding</div>
+                        <div className="font-semibold text-gray-700 mb-1 dark:text-gray-300">Never completed onboarding</div>
                         This user has not started the Personal Advisor onboarding chatbot. Conversations sync here once they answer their first question.
                       </>
                     )}
                   </div>
                 ) : (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-[60vh] overflow-y-auto space-y-2">
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-[60vh] overflow-y-auto space-y-2 dark:border-gray-800">
                     {msgs.map((m, i) => (
                       <ChatBubble key={i} m={m} />
                     ))}
@@ -1060,14 +1060,14 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
           {data && tab === 'advisor' && (
             <div className="flex gap-3 h-[65vh]">
               {/* LEFT RAIL — conversation list with search + date filters + CSV */}
-              <div className="w-64 shrink-0 border border-gray-200 rounded-lg bg-white flex flex-col">
-                <div className="p-2 border-b border-gray-200 space-y-2">
+              <div className="w-64 shrink-0 border border-gray-200 rounded-lg bg-white flex flex-col dark:border-gray-800 dark:bg-gray-900">
+                <div className="p-2 border-b border-gray-200 space-y-2 dark:border-gray-800">
                   <input
                     type="search"
                     value={advisorSearch}
                     onChange={(e) => setAdvisorSearch(e.target.value)}
                     placeholder="Search persona / state / model"
-                    className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded"
+                    className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded dark:border-gray-700"
                   />
                   <div className="flex gap-1">
                     <input
@@ -1075,14 +1075,14 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                       value={advisorSince}
                       onChange={(e) => setAdvisorSince(e.target.value)}
                       title="From"
-                      className="flex-1 text-[11px] px-1.5 py-1 border border-gray-300 rounded"
+                      className="flex-1 text-[11px] px-1.5 py-1 border border-gray-300 rounded dark:border-gray-700"
                     />
                     <input
                       type="date"
                       value={advisorUntil}
                       onChange={(e) => setAdvisorUntil(e.target.value)}
                       title="To"
-                      className="flex-1 text-[11px] px-1.5 py-1 border border-gray-300 rounded"
+                      className="flex-1 text-[11px] px-1.5 py-1 border border-gray-300 rounded dark:border-gray-700"
                     />
                   </div>
                   <button
@@ -1097,7 +1097,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                         flash('error', e.message || 'CSV export failed');
                       }
                     }}
-                    className="block w-full text-center text-[11px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded font-medium text-gray-700"
+                    className="block w-full text-center text-[11px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded font-medium text-gray-700 dark:text-gray-300"
                   >
                     Download CSV
                   </button>
@@ -1116,7 +1116,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                       className={`w-full text-left px-2.5 py-2 border-b border-gray-100 text-[11px] hover:bg-gray-50 ${selectedConvId === c.id ? 'bg-violet-50' : ''}`}
                     >
                       <div className="flex items-center justify-between gap-1">
-                        <span className="font-semibold text-gray-900 truncate">{c.persona || '—'}</span>
+                        <span className="font-semibold text-gray-900 truncate dark:text-gray-100">{c.persona || '—'}</span>
                         {(c.write_count ?? 0) > 0 && (
                           <span title={`${c.write_count} writes`} className="text-amber-500">✦</span>
                         )}
@@ -1132,7 +1132,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
               </div>
 
               {/* RIGHT PANE — selected conversation transcript */}
-              <div className="flex-1 min-w-0 border border-gray-200 rounded-lg bg-gray-50 flex flex-col">
+              <div className="flex-1 min-w-0 border border-gray-200 rounded-lg bg-gray-50 flex flex-col dark:border-gray-800">
                 {!selectedConvId && (
                   <div className="p-4 text-xs text-gray-500">Select a conversation from the list.</div>
                 )}
@@ -1144,14 +1144,14 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                   const msgs = convDetail.messages || [];
                   return (
                     <>
-                      <div className="p-3 border-b border-gray-200 bg-white text-xs">
+                      <div className="p-3 border-b border-gray-200 bg-white text-xs dark:border-gray-800 dark:bg-gray-900">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-gray-900">{c?.persona || '—'}</span>
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">{c?.persona || '—'}</span>
                           <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-700">{c?.state || '—'}</span>
                           <span className="text-gray-500">{convDetail.completion_pct ?? 0}% complete · {msgs.length} msg</span>
                         </div>
                         {convDetail.summary && (
-                          <div className="mt-1.5 text-[11px] text-gray-700 bg-violet-50 border border-violet-100 rounded px-2 py-1.5">
+                          <div className="mt-1.5 text-[11px] text-gray-700 bg-violet-50 border border-violet-100 rounded px-2 py-1.5 dark:text-gray-300">
                             <span className="font-semibold text-violet-800">Summary:</span> {convDetail.summary}
                           </div>
                         )}
@@ -1185,9 +1185,9 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
             <div className="space-y-2">
               {activity.length === 0 && <div className="text-sm text-gray-500">No activity recorded.</div>}
               {activity.map(a => (
-                <div key={a.id} className="text-xs border border-gray-200 rounded-lg p-2.5">
+                <div key={a.id} className="text-xs border border-gray-200 rounded-lg p-2.5 dark:border-gray-800">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-gray-900">{a.action}</span>
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">{a.action}</span>
                     <span className="text-gray-500">{a.created_at ? new Date(a.created_at).toLocaleString() : ''}</span>
                   </div>
                   {a.details && <div className="text-gray-600 mt-1">{a.details}</div>}
@@ -1195,10 +1195,10 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
               ))}
               {tickets.length > 0 && (
                 <>
-                  <div className="text-xs font-semibold text-gray-700 mt-4 mb-2">Recent tickets</div>
+                  <div className="text-xs font-semibold text-gray-700 mt-4 mb-2 dark:text-gray-300">Recent tickets</div>
                   {tickets.map(t => (
-                    <div key={t.id} className="text-xs border border-gray-200 rounded-lg p-2.5 flex items-center justify-between">
-                      <span className="font-medium text-gray-900">{t.title}</span>
+                    <div key={t.id} className="text-xs border border-gray-200 rounded-lg p-2.5 flex items-center justify-between dark:border-gray-800">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{t.title}</span>
                       <span className="text-gray-500">{t.status} · {t.priority}</span>
                     </div>
                   ))}
@@ -1209,9 +1209,9 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
 
           {data && tab === 'notes' && (
             <div className="space-y-3">
-              <label className="text-xs font-semibold text-gray-700">Admin notes (visible only to admins)</label>
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Admin notes (visible only to admins)</label>
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={8}
-                className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:border-gray-700"
                 placeholder="Internal notes about this user…" />
               <div className="flex gap-2">
                 <button onClick={saveNotes} disabled={saving}
@@ -1223,7 +1223,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
           )}
         </div>
 
-        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between dark:border-gray-800">
           <div className="flex gap-2">
             <button onClick={onImpersonate}
               className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium flex items-center gap-1">
@@ -1408,10 +1408,10 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+      <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
           <div>
-            <h3 className="text-lg font-bold text-gray-900">{profile.user_name || profile.email}</h3>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{profile.user_name || profile.email}</h3>
             <p className="text-xs text-gray-500">{profile.email}</p>
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={20} /></button>
@@ -1421,27 +1421,27 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <div className="text-xs text-gray-500 mb-0.5">Persona (AI extracted)</div>
-              <div className="text-gray-900 font-medium">{profile.persona || '—'}</div>
+              <div className="text-gray-900 font-medium dark:text-gray-100">{profile.persona || '—'}</div>
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-0.5">Entity Type</div>
-              <div className="text-gray-900 font-medium">{profile.entity_type || '—'}</div>
+              <div className="text-gray-900 font-medium dark:text-gray-100">{profile.entity_type || '—'}</div>
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-0.5">Legal Entity Name</div>
-              <div className="text-gray-900 font-medium">{profile.legal_entity_name || '—'}</div>
+              <div className="text-gray-900 font-medium dark:text-gray-100">{profile.legal_entity_name || '—'}</div>
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-0.5">EIN / Tax ID</div>
-              <div className="text-gray-900 font-medium">{profile.ein || '—'}</div>
+              <div className="text-gray-900 font-medium dark:text-gray-100">{profile.ein || '—'}</div>
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-0.5">Signatory</div>
-              <div className="text-gray-900 font-medium">{profile.signatory_name || '—'}</div>
+              <div className="text-gray-900 font-medium dark:text-gray-100">{profile.signatory_name || '—'}</div>
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-0.5">Title</div>
-              <div className="text-gray-900 font-medium">{profile.signatory_title || '—'}</div>
+              <div className="text-gray-900 font-medium dark:text-gray-100">{profile.signatory_title || '—'}</div>
             </div>
           </div>
 
@@ -1452,7 +1452,7 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
               : 'bg-gray-50 border-gray-200'
             }`}>
               <div className="flex items-center justify-between mb-2">
-                <div className="text-xs font-semibold text-gray-700">Founder Track</div>
+                <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">Founder Track</div>
                 {profile.founder_track && (
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${TRACK_BADGES[profile.founder_track] || 'bg-gray-100 text-gray-600'}`}>
                     {profile.founder_track}
@@ -1464,23 +1464,23 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div>
                     <div className="text-gray-500">Current Stage</div>
-                    <div className="text-gray-900 font-medium">{profile.current_stage || '—'}</div>
+                    <div className="text-gray-900 font-medium dark:text-gray-100">{profile.current_stage || '—'}</div>
                   </div>
                   <div>
                     <div className="text-gray-500">Partnership Goal</div>
-                    <div className="text-gray-900 font-medium">{profile.partnership_goal || '—'}</div>
+                    <div className="text-gray-900 font-medium dark:text-gray-100">{profile.partnership_goal || '—'}</div>
                   </div>
                   <div>
                     <div className="text-gray-500">Existing Jurisdiction</div>
-                    <div className="text-gray-900 font-medium">{profile.existing_jurisdiction || '—'}</div>
+                    <div className="text-gray-900 font-medium dark:text-gray-100">{profile.existing_jurisdiction || '—'}</div>
                   </div>
                   <div>
                     <div className="text-gray-500">Product Strategy</div>
-                    <div className="text-gray-900 font-medium">{profile.product_strategy || '—'}</div>
+                    <div className="text-gray-900 font-medium dark:text-gray-100">{profile.product_strategy || '—'}</div>
                   </div>
                   <div className="col-span-2">
                     <div className="text-gray-500">Existing Investors / Cap Table</div>
-                    <div className="text-gray-900 font-medium">{profile.existing_investors || '—'}</div>
+                    <div className="text-gray-900 font-medium dark:text-gray-100">{profile.existing_investors || '—'}</div>
                   </div>
                 </div>
               ) : (
@@ -1497,7 +1497,7 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
                       : 'Formation status not answered'}
                   </div>
                   {profile.existing_jurisdiction && (
-                    <div className="text-xs text-gray-600 mt-1">Preferred jurisdiction: <span className="font-medium text-gray-900">{profile.existing_jurisdiction}</span></div>
+                    <div className="text-xs text-gray-600 mt-1">Preferred jurisdiction: <span className="font-medium text-gray-900 dark:text-gray-100">{profile.existing_jurisdiction}</span></div>
                   )}
                   {profile.company_established === 0 && (
                     <p className="text-xs text-amber-700 mt-2">This founder has not yet incorporated. The Axal 30-Day Spin-Out Engine will handle formation as part of their Closing Binder.</p>
@@ -1517,7 +1517,7 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <MessageSquare size={14} className="text-gray-600" />
-              <h4 className="text-sm font-semibold text-gray-900">Onboarding Conversation</h4>
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Onboarding Conversation</h4>
               {profile.user_id && (
                 <span className={`ml-auto inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium ${
                   wsStatus === 'open' ? 'bg-emerald-100 text-emerald-700'
@@ -1529,7 +1529,7 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
                 </span>
               )}
             </div>
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-64 overflow-y-auto space-y-2">
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-64 overflow-y-auto space-y-2 dark:border-gray-800">
               {chatMessages.length === 0 ? (
                 <div className="text-xs text-gray-500">No transcript available.</div>
               ) : chatMessages.map((m, i) => (
@@ -1542,12 +1542,12 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
             </div>
           </div>
 
-          <div className="border-t border-gray-200 pt-4 space-y-3">
+          <div className="border-t border-gray-200 pt-4 space-y-3 dark:border-gray-800">
             <div>
-              <label className="text-xs text-gray-700 font-medium block mb-1">Propose Closing Binder / Agreement</label>
+              <label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Propose Closing Binder / Agreement</label>
               <div className="relative">
                 <select value={agreement} onChange={(e) => setAgreement(e.target.value)}
-                  className="w-full appearance-none bg-white border border-gray-300 rounded-lg px-3 pr-9 py-2 text-sm text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer">
+                  className="w-full appearance-none bg-white border border-gray-300 rounded-lg px-3 pr-9 py-2 text-sm text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
                   {AGREEMENT_OPTIONS.map((opt, i) => (
                     opt.group ? (
                       <optgroup key={opt.group} label={opt.group}>
@@ -1562,17 +1562,17 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
               </div>
             </div>
             <div>
-              <label className="text-xs text-gray-700 font-medium block mb-1">Admin Notes (internal)</label>
+              <label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Admin Notes (internal)</label>
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
                 placeholder="Any context for the legal engine or follow-up..."
-                className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none resize-none" />
+                className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none resize-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100" />
             </div>
             {/* Task #2 — DocuSign provider picker. Renders for Studio-tier
                 admins (or impersonating super-admins) when an active
                 DocuSign integration is connected; on non-Studio plans we
                 show an upsell row instead. */}
             {docusignAvailable ? (
-              <label className="flex items-start gap-2 text-xs text-gray-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 cursor-pointer">
+              <label className="flex items-start gap-2 text-xs text-gray-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 cursor-pointer dark:text-gray-300">
                 <input type="checkbox" checked={viaDocusign} onChange={(e) => setViaDocusign(e.target.checked)}
                   className="mt-0.5 accent-amber-600" />
                 <span>
@@ -1583,8 +1583,8 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
                 </span>
               </label>
             ) : (
-              <div className="flex items-start gap-2 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-600">
-                <span className="font-semibold text-gray-700">Send via DocuSign</span>
+              <div className="flex items-start gap-2 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-600 dark:border-gray-800">
+                <span className="font-semibold text-gray-700 dark:text-gray-300">Send via DocuSign</span>
                 <span className="ml-auto text-gray-500">
                   {docusignReason === 'checking' ? 'Checking…'
                     : docusignReason === 'not_connected' ? <>Not connected — <a href="/integrations" className="underline">connect DocuSign</a></>
@@ -1618,13 +1618,13 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between gap-2">
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between gap-2 dark:border-gray-800">
           <button onClick={() => submit('rejected')} disabled={saving}
             className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg disabled:opacity-50 transition-colors">
             Reject
           </button>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors dark:text-gray-300">Cancel</button>
             <button onClick={() => submit('verified')} disabled={saving}
               className="px-4 py-2 text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 rounded-lg disabled:opacity-50 transition-colors flex items-center gap-1.5">
               <Check size={14} /> {saving ? 'Saving...' : 'Verify & Assign Agreement'}
@@ -1640,7 +1640,7 @@ function KV({ label, value }) {
   return (
     <div>
       <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{label}</div>
-      <div className="text-sm text-gray-900 break-words">{value || '—'}</div>
+      <div className="text-sm text-gray-900 break-words dark:text-gray-100">{value || '—'}</div>
     </div>
   );
 }
@@ -1801,22 +1801,22 @@ export function ContractsPanel() {
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input value={q} onChange={e => setQ(e.target.value)}
               placeholder="Search title, recipient, project, template…"
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-300" />
+              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-300 dark:border-gray-800" />
           </div>
           <select value={docType} onChange={e => setDocType(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white dark:border-gray-800 dark:bg-gray-900">
             <option value="">All types</option>
             {docTypeOptions.map(t => <option key={t} value={t}>{NEW_DOC_TYPE_LABELS[t] || t}</option>)}
           </select>
           {/* Task #5 (Z) — party-role filter chip set. */}
           <select value={partyRole} onChange={e => setPartyRole(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white"
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white dark:border-gray-800 dark:bg-gray-900"
             title="Filter by which party the contract touches">
             {PARTY_ROLE_OPTIONS.map(([k, lbl]) => <option key={k} value={k}>{lbl}</option>)}
           </select>
           {/* Task #2 — provider filter chip. Lets admins separate
               DocuSign-routed envelopes from in-house ones at a glance. */}
-          <div className="inline-flex items-center rounded-lg border border-gray-200 bg-white overflow-hidden text-xs">
+          <div className="inline-flex items-center rounded-lg border border-gray-200 bg-white overflow-hidden text-xs dark:border-gray-800 dark:bg-gray-900">
             {[['', 'All'], ['native', 'Native'], ['docusign', 'DocuSign']].map(([k, lbl]) => (
               <button
                 key={k || 'all'}
@@ -1843,7 +1843,7 @@ export function ContractsPanel() {
       ) : sub === 'partner' ? (
         <PartnerDealsTable rows={partnerDeals} note={partnerDealsNote} dealTypeFilter={pdDealType} onDealTypeFilter={setPdDealType} />
       ) : items.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm">
+        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
           {sub === 'pending' && 'No contracts are currently awaiting signature. New sends will appear here within a few seconds.'}
           {sub === 'signed' && 'No signed contracts yet. Once a recipient completes signing, the contract will appear here with its signed-at timestamp.'}
           {sub === 'voided' && 'No voided contracts. When you void a sent contract its row appears here with the recorded reason.'}
@@ -1898,11 +1898,11 @@ function PairwiseNdasTable({ rows, statusFilter, onStatusFilter, intermediaryFil
   const filterBar = (
     <div className="flex items-center gap-2 mb-2">
       <select value={statusFilter} onChange={e => onStatusFilter(e.target.value)}
-        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white dark:border-gray-800 dark:bg-gray-900">
         {STATUS_OPTIONS.map(([k, lbl]) => <option key={k} value={k}>{lbl}</option>)}
       </select>
       <select value={intermediaryFilter} onChange={e => onIntermediaryFilter(e.target.value)}
-        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
+        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white dark:border-gray-800 dark:bg-gray-900"
         title="Filter by intermediary / relation type">
         {RELATION_OPTIONS.map(([k, lbl]) => <option key={k} value={k}>{lbl}</option>)}
       </select>
@@ -1912,7 +1912,7 @@ function PairwiseNdasTable({ rows, statusFilter, onStatusFilter, intermediaryFil
     return (
       <div>
         {filterBar}
-        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm">
+        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
           No pairwise NDAs on record yet. Investor intro requests create a pair here once the founder accepts.
         </div>
       </div>
@@ -1928,7 +1928,7 @@ function PairwiseNdasTable({ rows, statusFilter, onStatusFilter, intermediaryFil
   return (
     <div>
       {filterBar}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
       <table className="w-full text-sm">
         <thead className="bg-gray-50 text-xs text-gray-600">
           <tr>
@@ -1943,8 +1943,8 @@ function PairwiseNdasTable({ rows, statusFilter, onStatusFilter, intermediaryFil
         <tbody>
           {rows.map(r => (
             <tr key={r.id} className="border-t border-gray-100">
-              <td className="px-4 py-3"><div className="text-gray-900">{r.party_a_name || '—'}</div><div className="text-xs text-gray-500">{r.party_a_email || `user #${r.party_a_user_id}`}</div></td>
-              <td className="px-4 py-3"><div className="text-gray-900">{r.party_b_name || '—'}</div><div className="text-xs text-gray-500">{r.party_b_email || `user #${r.party_b_user_id}`}</div></td>
+              <td className="px-4 py-3"><div className="text-gray-900 dark:text-gray-100">{r.party_a_name || '—'}</div><div className="text-xs text-gray-500">{r.party_a_email || `user #${r.party_a_user_id}`}</div></td>
+              <td className="px-4 py-3"><div className="text-gray-900 dark:text-gray-100">{r.party_b_name || '—'}</div><div className="text-xs text-gray-500">{r.party_b_email || `user #${r.party_b_user_id}`}</div></td>
               <td className="px-4 py-3 text-center">
                 <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${STATUS_PILLS[r.status] || 'bg-gray-100 text-gray-600'}`}>{r.status}</span>
               </td>
@@ -1979,7 +1979,7 @@ function PartnerDealsTable({ rows, note, dealTypeFilter, onDealTypeFilter }) {
   const filterBar = (
     <div className="flex items-center gap-2 mb-2">
       <select value={dealTypeFilter} onChange={e => onDealTypeFilter(e.target.value)}
-        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white dark:border-gray-800 dark:bg-gray-900">
         {DEAL_TYPE_OPTIONS.map(([k, lbl]) => <option key={k} value={k}>{lbl}</option>)}
       </select>
     </div>
@@ -1988,7 +1988,7 @@ function PartnerDealsTable({ rows, note, dealTypeFilter, onDealTypeFilter }) {
     return (
       <div>
         {filterBar}
-        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm">
+        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
           No partner deals on record yet.
           {note && <div className="mt-2 text-[11px] text-gray-400">{note}</div>}
         </div>
@@ -1998,7 +1998,7 @@ function PartnerDealsTable({ rows, note, dealTypeFilter, onDealTypeFilter }) {
   return (
     <div>
       {filterBar}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
       <table className="w-full text-sm">
         <thead className="bg-gray-50 text-xs text-gray-600">
           <tr>
@@ -2013,12 +2013,12 @@ function PartnerDealsTable({ rows, note, dealTypeFilter, onDealTypeFilter }) {
         <tbody>
           {rows.map(r => (
             <tr key={r.id} className="border-t border-gray-100">
-              <td className="px-4 py-3"><div className="text-gray-900">{r.partner_name || '—'}</div><div className="text-xs text-gray-500">{r.partner_email}</div></td>
-              <td className="px-4 py-3 text-gray-700">{r.deal_type}</td>
+              <td className="px-4 py-3"><div className="text-gray-900 dark:text-gray-100">{r.partner_name || '—'}</div><div className="text-xs text-gray-500">{r.partner_email}</div></td>
+              <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{r.deal_type}</td>
               <td className="px-4 py-3 text-center text-gray-600">{r.term_months ? `${r.term_months}mo` : '—'}</td>
               <td className="px-4 py-3 text-xs text-gray-600">{r.granted_tiers || '—'}</td>
-              <td className="px-4 py-3 text-center text-gray-700">{r.redemption_count ?? 0}</td>
-              <td className="px-4 py-3 text-center"><span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{r.status}</span></td>
+              <td className="px-4 py-3 text-center text-gray-700 dark:text-gray-300">{r.redemption_count ?? 0}</td>
+              <td className="px-4 py-3 text-center"><span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 dark:text-gray-300">{r.status}</span></td>
             </tr>
           ))}
         </tbody>
@@ -2109,9 +2109,9 @@ function NewEnvelopeWizard({ onClose, onSent }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <div className="flex items-center gap-2"><Send size={16} className="text-emerald-600" /><h3 className="font-semibold text-gray-900">New envelope (admin)</h3></div>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col dark:bg-gray-900">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
+          <div className="flex items-center gap-2"><Send size={16} className="text-emerald-600" /><h3 className="font-semibold text-gray-900 dark:text-gray-100">New envelope (admin)</h3></div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
         </div>
         <form onSubmit={submit} className="px-5 py-4 space-y-3 overflow-y-auto">
@@ -2123,9 +2123,9 @@ function NewEnvelopeWizard({ onClose, onSent }) {
           )}
           {progress && busy && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs p-2 rounded">Sending… {progress.done} / {progress.total}</div>}
           <label className="block">
-            <span className="text-xs font-semibold text-gray-700">Template</span>
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Template</span>
             <select value={docType} onChange={e => setDocType(e.target.value)} required
-              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white">
+              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white dark:border-gray-800 dark:bg-gray-900">
               {templates.length === 0 && (
                 <option value="">{templatesUnavailable ? 'Unavailable in this environment' : 'Loading…'}</option>
               )}
@@ -2134,7 +2134,7 @@ function NewEnvelopeWizard({ onClose, onSent }) {
           </label>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-semibold text-gray-700">Recipients ({recipients.length})</span>
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Recipients ({recipients.length})</span>
               <button type="button" onClick={addRecipient} className="text-xs text-emerald-700 hover:text-emerald-900 font-medium">+ Add recipient</button>
             </div>
             <div className="space-y-2">
@@ -2142,10 +2142,10 @@ function NewEnvelopeWizard({ onClose, onSent }) {
                 <div key={idx} className="flex gap-2 items-center">
                   <input type="email" required={idx === 0} value={r.email} onChange={e => updateRecipient(idx, { email: e.target.value })}
                     placeholder="recipient@example.com"
-                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg" />
+                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg dark:border-gray-800" />
                   <input value={r.name} onChange={e => updateRecipient(idx, { name: e.target.value })}
                     placeholder="Name (optional)"
-                    className="w-40 px-3 py-2 text-sm border border-gray-200 rounded-lg" />
+                    className="w-40 px-3 py-2 text-sm border border-gray-200 rounded-lg dark:border-gray-800" />
                   {recipients.length > 1 && (
                     <button type="button" onClick={() => removeRecipient(idx)} className="text-gray-400 hover:text-red-600" title="Remove"><X size={14} /></button>
                   )}
@@ -2155,27 +2155,27 @@ function NewEnvelopeWizard({ onClose, onSent }) {
             <p className="text-[10px] text-gray-500 mt-1">Each recipient receives their own envelope with the same template.</p>
           </div>
           <label className="block">
-            <span className="text-xs font-semibold text-gray-700">Merge fields (optional, JSON)</span>
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Merge fields (optional, JSON)</span>
             <textarea value={mergeFieldsRaw} onChange={e => setMergeFieldsRaw(e.target.value)} rows={3}
               placeholder='{"company_name":"Acme Inc","effective_date":"2026-05-10"}'
-              className="mt-1 w-full px-3 py-2 text-xs font-mono border border-gray-200 rounded-lg" />
+              className="mt-1 w-full px-3 py-2 text-xs font-mono border border-gray-200 rounded-lg dark:border-gray-800" />
             <span className="text-[10px] text-gray-500">Forwarded to the e-sign send route as <code>merge_fields</code> for template substitution.</span>
           </label>
           <label className="block">
-            <span className="text-xs font-semibold text-gray-700">Linked deal_id (optional)</span>
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Linked deal_id (optional)</span>
             <input type="number" value={dealId} onChange={e => setDealId(e.target.value)}
-              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" />
+              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg dark:border-gray-800" />
           </label>
           <label className="block">
-            <span className="text-xs font-semibold text-gray-700">Provider</span>
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Provider</span>
             <select value={provider} onChange={e => setProvider(e.target.value)}
-              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white">
+              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white dark:border-gray-800 dark:bg-gray-900">
               <option value="native">Native (in-app signing)</option>
               <option value="docusign">DocuSign (Studio tier)</option>
             </select>
           </label>
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg">Cancel</button>
+            <button type="button" onClick={onClose} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg dark:bg-gray-900 dark:border-gray-800">Cancel</button>
             <button type="submit" disabled={busy} className="px-3 py-2 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-lg flex items-center gap-1.5">
               {busy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Send {recipients.filter(r => r.email).length || 0} envelope(s)
             </button>
@@ -2191,7 +2191,7 @@ function KpiTile({ label, value, accent }) {
                   : accent === 'emerald' ? 'text-emerald-700'
                   : 'text-gray-900';
   return (
-    <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+    <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 dark:bg-gray-900 dark:border-gray-800">
       <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{label}</div>
       <div className={`text-2xl font-bold mt-0.5 ${accentCls}`}>{value}</div>
     </div>
@@ -2201,18 +2201,18 @@ function KpiTile({ label, value, accent }) {
 function ContractRow({ c, onOpen }) {
   return (
     <button onClick={onOpen}
-      className="w-full text-left bg-white border border-gray-200 rounded-xl px-4 py-3 hover:border-violet-300 hover:shadow-sm transition-all">
+      className="w-full text-left bg-white border border-gray-200 rounded-xl px-4 py-3 hover:border-violet-300 hover:shadow-sm transition-all dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-gray-900 truncate">{c.title}</div>
+          <div className="font-semibold text-gray-900 truncate dark:text-gray-100">{c.title}</div>
           <div className="text-xs text-gray-600 mt-0.5">
-            Recipient · <span className="text-gray-800">{c.recipient_email || '—'}</span>
-            {c.project_name && <> · Project · <span className="text-gray-800">{c.project_name}</span></>}
+            Recipient · <span className="text-gray-800 dark:text-gray-200">{c.recipient_email || '—'}</span>
+            {c.project_name && <> · Project · <span className="text-gray-800 dark:text-gray-200">{c.project_name}</span></>}
           </div>
           <div className="flex items-center gap-4 text-[11px] text-gray-500 mt-1.5">
             <span>Created: {fmtDate(c.created_at) || '—'}</span>
             <span>Signed: {fmtDate(c.signed_at) || '—'}</span>
-            {c.days_to_sign != null && <span>Days to sign: <span className="text-gray-700 font-medium">{c.days_to_sign}</span></span>}
+            {c.days_to_sign != null && <span>Days to sign: <span className="text-gray-700 font-medium dark:text-gray-300">{c.days_to_sign}</span></span>}
           </div>
           {/* Task #45 — surface the recorded void reason directly on the row
               so admins scanning the Voided sub-tab don't have to open the
@@ -2252,7 +2252,7 @@ function ContractRow({ c, onOpen }) {
 function TemplatesGrid({ templates }) {
   const [openTpl, setOpenTpl] = useState(null);
   if (!templates || templates.length === 0) {
-    return <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm">No templates available.</div>;
+    return <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">No templates available.</div>;
   }
   return (
     <>
@@ -2263,10 +2263,10 @@ function TemplatesGrid({ templates }) {
             type="button"
             onClick={() => setOpenTpl(t)}
             data-testid={`template-card-${t.key}`}
-            className="bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-violet-400 hover:shadow-sm transition focus:outline-none focus:ring-2 focus:ring-violet-400">
+            className="bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-violet-400 hover:shadow-sm transition focus:outline-none focus:ring-2 focus:ring-violet-400 dark:bg-gray-900 dark:border-gray-800">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className="font-semibold text-gray-900 truncate">{t.title}</div>
+                <div className="font-semibold text-gray-900 truncate dark:text-gray-100">{t.title}</div>
                 <div className="text-[11px] text-gray-500 mt-0.5">{t.layer_label}</div>
               </div>
               <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-1 rounded-full whitespace-nowrap">{t.usage_count} uses</span>
@@ -2327,12 +2327,12 @@ function TemplateUsageModal({ docType, fallback, onClose }) {
     <div
       className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
       onClick={() => { if (!openContract) onClose(); }}>
-      <div onClick={e => e.stopPropagation()} className="relative bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[88vh] overflow-hidden flex flex-col">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+      <div onClick={e => e.stopPropagation()} className="relative bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[88vh] overflow-hidden flex flex-col dark:bg-gray-900">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3 dark:border-gray-800">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <FileText size={16} className="text-violet-600" />
-              <h3 className="font-semibold text-gray-900 truncate">{tpl.title}</h3>
+              <h3 className="font-semibold text-gray-900 truncate dark:text-gray-100">{tpl.title}</h3>
               <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full">
                 {stats ? `${stats.total} use${stats.total === 1 ? '' : 's'}` : '…'}
               </span>
@@ -2370,13 +2370,13 @@ function TemplateUsageModal({ docType, fallback, onClose }) {
               )}
             </div>
             {loading ? (
-              <div className="bg-white border border-gray-200 rounded-xl p-6 text-center text-gray-500 text-sm">Loading…</div>
+              <div className="bg-white border border-gray-200 rounded-xl p-6 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">Loading…</div>
             ) : items.length === 0 ? (
-              <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 text-sm">
+              <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
                 This template hasn't been used yet. Send your first envelope from the Profiles tab.
               </div>
             ) : (
-              <div className="overflow-x-auto border border-gray-200 rounded-xl">
+              <div className="overflow-x-auto border border-gray-200 rounded-xl dark:border-gray-800">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 text-gray-600">
                     <tr>
@@ -2393,7 +2393,7 @@ function TemplateUsageModal({ docType, fallback, onClose }) {
                     {items.map(c => (
                       <tr key={c.uid} className="hover:bg-violet-50/40 cursor-pointer" onClick={() => setOpenContract(c)}>
                         <td className="px-3 py-2">
-                          <div className="font-medium text-gray-900 truncate max-w-[200px]" title={c.recipient_email || '—'}>
+                          <div className="font-medium text-gray-900 truncate max-w-[200px] dark:text-gray-100" title={c.recipient_email || '—'}>
                             {c.recipient_email || c.signed_by || '—'}
                           </div>
                           {c.title && c.title !== c.recipient_email && (
@@ -2529,12 +2529,12 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} className="relative bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[88vh] overflow-hidden flex flex-col">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+      <div onClick={e => e.stopPropagation()} className="relative bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[88vh] overflow-hidden flex flex-col dark:bg-gray-900">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3 dark:border-gray-800">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <FileText size={16} className="text-violet-600" />
-              <h3 className="font-semibold text-gray-900 truncate">{doc?.title || 'Contract'}</h3>
+              <h3 className="font-semibold text-gray-900 truncate dark:text-gray-100">{doc?.title || 'Contract'}</h3>
               {doc && <StatusPill status={doc.status} />}
             </div>
             <div className="text-xs text-gray-500">
@@ -2576,8 +2576,8 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
                 {/* Security #8: body is no longer inlined. Use the
                     Download button in the footer (which streams via the
                     short-lived signed URL) to view the file. */}
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-[11px] text-gray-500">
-                  Body lives in object storage. Use <span className="font-semibold text-gray-700">Download</span> below to retrieve it via a short-lived link.
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-[11px] text-gray-500 dark:border-gray-800">
+                  Body lives in object storage. Use <span className="font-semibold text-gray-700 dark:text-gray-300">Download</span> below to retrieve it via a short-lived link.
                   {doc.file_size != null && <span className="block mt-1 text-gray-400">{(doc.file_size / 1024).toFixed(1)} KB · sha256 admin-only</span>}
                 </div>
               </div>
@@ -2586,7 +2586,7 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
         </div>
 
         {doc && (
-          <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 flex flex-wrap gap-2 justify-end">
+          <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 flex flex-wrap gap-2 justify-end dark:border-gray-800">
             {/* Task #3 — pairwise NDAs and partner deals are union rows
                 with no signed-PDF artefact and no single recipient/
                 signing token. The backend returns deterministic 4xx for
@@ -2594,10 +2594,10 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
                 buttons here to avoid a confusing toast-on-click. */}
             {(!doc.source || doc.source === 'documents' || doc.source === 'esign') && (
               <>
-                <button onClick={doDownload} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5">
+                <button onClick={doDownload} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-800">
                   <Download size={13} /> Download
                 </button>
-                <button onClick={doShareLink} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5" title="Generates a 10-minute signed link">
+                <button onClick={doShareLink} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-800" title="Generates a 10-minute signed link">
                   <Send size={13} /> Share link
                 </button>
               </>
@@ -2625,7 +2625,7 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
                 the button even though they collapse to `sent` in the
                 unified status field). */}
             {doc.can_resend && (
-              <button onClick={doResend} disabled={busy} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5">
+              <button onClick={doResend} disabled={busy} className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:border-violet-300 flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-800">
                 <Send size={13} /> Resend
               </button>
             )}
@@ -2639,10 +2639,10 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
         )}
         {showVoidReason && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 dark:bg-gray-900">
               <div className="flex items-center gap-2 mb-3">
                 <Ban size={16} className="text-red-600" />
-                <h4 className="font-semibold text-gray-900">Void contract</h4>
+                <h4 className="font-semibold text-gray-900 dark:text-gray-100">Void contract</h4>
               </div>
               <p className="text-xs text-gray-600 mb-3">
                 Voiding is irreversible — the recipient's signing link will stop working.
@@ -2653,10 +2653,10 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
               </p>
               <textarea value={voidReason} onChange={e => setVoidReason(e.target.value)}
                 rows={3} placeholder="e.g. Recipient never returned signature; new envelope sent under amended terms."
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" />
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg dark:border-gray-800" />
               <div className="flex justify-end gap-2 mt-3">
                 <button onClick={() => { setShowVoidReason(false); setVoidReason(''); setErr(''); }}
-                  className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg">Cancel</button>
+                  className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg dark:bg-gray-900 dark:border-gray-800">Cancel</button>
                 <button onClick={submitVoid} disabled={busy || voidReason.trim().length < 5}
                   className="px-3 py-2 text-xs font-medium bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white rounded-lg flex items-center gap-1.5">
                   {busy ? <Loader2 size={13} className="animate-spin" /> : <Ban size={13} />} Void contract
@@ -2766,10 +2766,10 @@ function DirectoryPanel() {
   const featuredCount = rows.filter(r => r.directory_featured).length;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 flex-wrap">
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+      <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 flex-wrap dark:border-gray-800">
         <Sparkles size={16} className="text-gray-600" />
-        <h3 className="text-sm font-semibold text-gray-900">Service Provider Directory</h3>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Service Provider Directory</h3>
         <span className="text-xs text-gray-500">
           {approvedCount} approved · {featuredCount} featured · {rows.length} total
         </span>
@@ -2781,11 +2781,11 @@ function DirectoryPanel() {
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') load(q); }}
               placeholder="Search name / company / email"
-              className="pl-7 pr-2 py-1 text-xs border border-gray-300 rounded-md w-60"
+              className="pl-7 pr-2 py-1 text-xs border border-gray-300 rounded-md w-60 dark:border-gray-700"
             />
           </div>
           <button onClick={() => load(q)}
-            className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 inline-flex items-center gap-1">
+            className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 inline-flex items-center gap-1 dark:text-gray-300">
             <RefreshCw size={11} /> Refresh
           </button>
         </div>
@@ -2805,7 +2805,7 @@ function DirectoryPanel() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
+              <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800">
                 <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Partner</th>
                 <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Specialization</th>
                 <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Status</th>
@@ -2822,10 +2822,10 @@ function DirectoryPanel() {
                 return (
                   <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50/50">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{p.name}</div>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">{p.name}</div>
                       <div className="text-xs text-gray-500">{p.company || '—'} · {p.email}</div>
                     </td>
-                    <td className="px-4 py-3 text-gray-700 text-xs">{p.specialization || <span className="text-gray-400">—</span>}</td>
+                    <td className="px-4 py-3 text-gray-700 text-xs dark:text-gray-300">{p.specialization || <span className="text-gray-400">—</span>}</td>
                     <td className="px-4 py-3 text-center">
                       <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${p.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
                         {p.status}
@@ -2949,10 +2949,10 @@ function WellbeingExpertsPanel() {
   });
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 flex-wrap">
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+      <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 flex-wrap dark:border-gray-800">
         <Heart size={16} className="text-rose-500" />
-        <h3 className="text-sm font-semibold text-gray-900">Wellbeing Experts</h3>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Wellbeing Experts</h3>
         <span className="text-xs text-gray-500">
           {verifiedCount} verified · {hiddenCount} hidden · {rows.length} total
         </span>
@@ -2960,7 +2960,7 @@ function WellbeingExpertsPanel() {
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="text-xs border border-gray-300 rounded-md px-2 py-1 bg-white"
+            className="text-xs border border-gray-300 rounded-md px-2 py-1 bg-white dark:border-gray-700 dark:bg-gray-900"
             data-testid="admin-wellbeing-filter"
           >
             <option value="all">All</option>
@@ -2974,11 +2974,11 @@ function WellbeingExpertsPanel() {
               type="search" value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search name / headline"
-              className="pl-7 pr-2 py-1 text-xs border border-gray-300 rounded-md w-56"
+              className="pl-7 pr-2 py-1 text-xs border border-gray-300 rounded-md w-56 dark:border-gray-700"
             />
           </div>
           <button onClick={load}
-            className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 inline-flex items-center gap-1">
+            className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 inline-flex items-center gap-1 dark:text-gray-300">
             <RefreshCw size={11} /> Refresh
           </button>
         </div>
@@ -2997,7 +2997,7 @@ function WellbeingExpertsPanel() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
+              <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800">
                 <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Expert</th>
                 <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Categories</th>
                 <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Completion</th>
@@ -3014,17 +3014,17 @@ function WellbeingExpertsPanel() {
                 return (
                   <tr key={e.uid} className="border-b border-gray-100 hover:bg-gray-50/50" data-testid={`admin-wellbeing-row-${e.uid}`}>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{e.name}</div>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">{e.name}</div>
                       <div className="text-xs text-gray-500">{e.headline || <span className="text-gray-400">—</span>}</div>
                     </td>
-                    <td className="px-4 py-3 text-gray-700 text-xs">
+                    <td className="px-4 py-3 text-gray-700 text-xs dark:text-gray-300">
                       {cats.length ? cats.slice(0, 3).join(', ') : <span className="text-gray-400">—</span>}
                       {cats.length > 3 && <span className="text-gray-400"> +{cats.length - 3}</span>}
                     </td>
-                    <td className="px-4 py-3 text-center text-xs text-gray-700">
+                    <td className="px-4 py-3 text-center text-xs text-gray-700 dark:text-gray-300">
                       {Math.round(e.profile_completion_pct || 0)}%
                     </td>
-                    <td className="px-4 py-3 text-center text-xs text-gray-700">
+                    <td className="px-4 py-3 text-center text-xs text-gray-700 dark:text-gray-300">
                       {e.rating_count
                         ? <>{(e.rating_avg || 0).toFixed(1)} <span className="text-gray-400">({e.rating_count})</span></>
                         : <span className="text-gray-400">—</span>}
@@ -3367,16 +3367,16 @@ function PersonasPanel() {
   });
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 flex-wrap">
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+      <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 flex-wrap dark:border-gray-800">
         <Sparkles size={16} className="text-gray-600" />
-        <h3 className="text-sm font-semibold text-gray-900">User Personas</h3>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">User Personas</h3>
         <div className="ml-auto flex items-center gap-2">
           {/* T21 — Enter in the search input now triggers a Refresh. */}
           <form onSubmit={(e) => { e.preventDefault(); load(); }} className="flex items-center gap-2">
             <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search name or email"
-              className="text-xs px-2.5 py-1.5 border border-gray-200 rounded-md w-56 focus:outline-none focus:border-violet-400" />
-            <button type="submit" className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 flex items-center gap-1">
+              className="text-xs px-2.5 py-1.5 border border-gray-200 rounded-md w-56 focus:outline-none focus:border-violet-400 dark:border-gray-800" />
+            <button type="submit" className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-700 flex items-center gap-1 dark:text-gray-300">
               <RefreshCw size={12} /> Refresh
             </button>
           </form>
@@ -3392,7 +3392,7 @@ function PersonasPanel() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
+              <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800">
                 <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">User</th>
                 <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Role</th>
                 <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Current Persona</th>
@@ -3404,13 +3404,13 @@ function PersonasPanel() {
               {filtered.map((r) => (
                 <tr key={r.user_id} className="border-b border-gray-100 hover:bg-gray-50/50">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">{r.name || '—'}</div>
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{r.name || '—'}</div>
                     <div className="text-xs text-gray-500">{r.email}</div>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_BADGES[r.role] || 'bg-gray-100 text-gray-700'}`}>{r.role}</span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-700">
+                  <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300">
                     {r.persona_id
                       ? (PERSONA_TAXONOMY.find((p) => p.id === r.persona_id)?.label || r.persona_id)
                       : <span className="text-gray-400 italic">— not set —</span>}
@@ -3425,7 +3425,7 @@ function PersonasPanel() {
                   <td className="px-4 py-3 text-right">
                     <select disabled={savingId === r.user_id} defaultValue=""
                       onChange={(e) => retag(r.user_id, e.target.value)}
-                      className="text-xs px-2 py-1.5 border border-gray-200 rounded-md bg-white">
+                      className="text-xs px-2 py-1.5 border border-gray-200 rounded-md bg-white dark:border-gray-800 dark:bg-gray-900">
                       <option value="">{savingId === r.user_id ? 'Saving…' : 'Re-tag as…'}</option>
                       {PERSONA_TAXONOMY.map((p) => (
                         <option key={p.id} value={p.id}>{p.label}</option>

@@ -57,7 +57,7 @@ function Pill({ children, className = '' }) {
 
 function Section({ title, children, action }) {
   return (
-    <div className="bg-white rounded-lg border border-slate-200 shadow-sm">
+    <div className="bg-white rounded-lg border border-slate-200 shadow-sm dark:bg-gray-900">
       <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
         {action}
@@ -71,7 +71,7 @@ function Modal({ open, onClose, title, children }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
           <h3 className="text-base font-semibold text-slate-900">{title}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
@@ -166,7 +166,7 @@ function WatchlistTab({ canSeeAll }) {
       {data && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {Object.entries(data.counts).map(([k, v]) => (
-            <div key={k} className="bg-white rounded-lg border border-slate-200 p-3">
+            <div key={k} className="bg-white rounded-lg border border-slate-200 p-3 dark:bg-gray-900">
               <div className="text-xs text-slate-500 capitalize">{k.replace('_', ' ')}</div>
               <div className="text-2xl font-semibold text-slate-900">{v}</div>
             </div>
@@ -174,7 +174,7 @@ function WatchlistTab({ canSeeAll }) {
         </div>
       )}
 
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden dark:bg-gray-900">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
@@ -398,7 +398,7 @@ function JournalTab({ canSeeAll }) {
       {data && (
         <div className="grid grid-cols-3 gap-3">
           {Object.entries(data.counts_by_decision).map(([k, v]) => (
-            <div key={k} className="bg-white rounded-lg border border-slate-200 p-3">
+            <div key={k} className="bg-white rounded-lg border border-slate-200 p-3 dark:bg-gray-900">
               <div className="text-xs text-slate-500 capitalize">{k}</div>
               <div className="text-2xl font-semibold text-slate-900">{v}</div>
             </div>
@@ -408,7 +408,7 @@ function JournalTab({ canSeeAll }) {
 
       <div className="space-y-3">
         {(data?.items || []).map((e) => (
-          <div key={e.uid} className="bg-white rounded-lg border border-slate-200 p-4">
+          <div key={e.uid} className="bg-white rounded-lg border border-slate-200 p-4 dark:bg-gray-900">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -453,7 +453,7 @@ function JournalTab({ canSeeAll }) {
           </div>
         ))}
         {data && data.items.length === 0 && (
-          <div className="text-center text-slate-500 text-sm p-8 bg-white rounded-lg border border-slate-200">
+          <div className="text-center text-slate-500 text-sm p-8 bg-white rounded-lg border border-slate-200 dark:bg-gray-900">
             No journal entries yet. Write your thesis BEFORE the vote so future-you can grade past calls.
           </div>
         )}
@@ -631,7 +631,7 @@ function AntiPortfolioTab({ canSeeAll }) {
       {data && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <div className="bg-white rounded-lg border border-slate-200 p-4 dark:bg-gray-900">
               <div className="text-xs text-slate-500">Total passes</div>
               <div className="text-2xl font-semibold text-slate-900">{data.total_passes}</div>
             </div>
@@ -664,7 +664,7 @@ function AntiPortfolioTab({ canSeeAll }) {
               const v = VERDICT_STYLES[r.verdict] || VERDICT_STYLES.open;
               const Icon = v.icon;
               return (
-                <div key={r.uid} className="bg-white rounded-lg border border-slate-200 p-4">
+                <div key={r.uid} className="bg-white rounded-lg border border-slate-200 p-4 dark:bg-gray-900">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -690,7 +690,7 @@ function AntiPortfolioTab({ canSeeAll }) {
               );
             })}
             {data.rows.length === 0 && (
-              <div className="text-center text-slate-500 text-sm p-8 bg-white rounded-lg border border-slate-200">
+              <div className="text-center text-slate-500 text-sm p-8 bg-white rounded-lg border border-slate-200 dark:bg-gray-900">
                 No passed deals yet. Once you record a pass decision in the journal (or mark a watchlist item passed-on), it shows up here.
               </div>
             )}

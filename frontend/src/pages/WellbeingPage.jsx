@@ -126,7 +126,7 @@ function DailyPulseCard({ alreadyToday, initialValues, initialTags, onSubmitted 
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6">
+    <div className="rounded-xl border border-slate-200 bg-white p-6 dark:bg-gray-900">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <h3 className="text-lg font-semibold text-slate-900">Today's check-in</h3>
@@ -221,7 +221,7 @@ function DailyPulseCard({ alreadyToday, initialValues, initialTags, onSubmitted 
 function DailyChart({ pulses }) {
   if (!pulses?.length) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="rounded-xl border border-slate-200 bg-white p-5 dark:bg-gray-900">
         <h3 className="text-sm font-semibold text-slate-900">Last 30 days</h3>
         <p className="mt-2 text-sm text-slate-500">No check-ins yet. Your first will appear here.</p>
       </div>
@@ -234,7 +234,7 @@ function DailyChart({ pulses }) {
     return { day: p.day, avg };
   });
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="rounded-xl border border-slate-200 bg-white p-5 dark:bg-gray-900">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-900">Last 30 days</h3>
         <span className="text-xs text-slate-500">{pulses.length} check-in{pulses.length === 1 ? '' : 's'}</span>
@@ -280,7 +280,7 @@ function ExpertCard({ expert, onBook, onView, categoryLabels }) {
   const langs = (expert.languages || []).map((l) => l.toUpperCase()).join(' · ');
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 flex flex-col">
+    <div className="rounded-xl border border-slate-200 bg-white p-5 flex flex-col dark:bg-gray-900">
       <div className="flex items-start gap-3">
         {expert.photo_url ? (
           <img src={expert.photo_url} alt={expert.name} className="w-14 h-14 rounded-full bg-slate-100 object-cover" />
@@ -418,7 +418,7 @@ function BookingModal({ expert, onClose }) {
     <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl max-h-[85vh] overflow-y-auto"
+        className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl max-h-[85vh] overflow-y-auto dark:bg-gray-900"
       >
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -729,7 +729,7 @@ function ResourceList({ resources }) {
               {items.map((r) => (
                 <a
                   key={r.id} href={r.url || '#'} target="_blank" rel="noopener noreferrer"
-                  className="block rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-300 hover:shadow-sm transition"
+                  className="block rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-300 hover:shadow-sm transition dark:bg-gray-900"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-medium text-slate-900 leading-tight">{r.name}</div>
@@ -774,7 +774,7 @@ function AdminAggregate() {
   const labels = { stress: 'Stress', sleep: 'Sleep', support: 'Support', decisions: 'Decisions', energy: 'Energy' };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6">
+    <div className="rounded-xl border border-slate-200 bg-white p-6 dark:bg-gray-900">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-slate-500" />
@@ -881,7 +881,7 @@ export default function WellbeingPage() {
           <Heart className="w-6 h-6 text-rose-500" /> Founder Wellbeing
         </h1>
         <PageExplainer pageKey="wellbeing" />
-        <div className="mt-4 rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+        <div className="mt-4 rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 dark:bg-gray-900">
           Wellbeing data is private to founders and admin operators. Investors do not have access.
         </div>
       </div>

@@ -259,7 +259,7 @@ export default function CalendarPage() {
       </header>
 
       {/* Google sync panel */}
-      <section className="border border-slate-200 rounded-lg bg-white p-4">
+      <section className="border border-slate-200 rounded-lg bg-white p-4 dark:bg-gray-900">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-semibold text-slate-900 flex items-center gap-2">
@@ -307,7 +307,7 @@ export default function CalendarPage() {
       </section>
 
       {/* Outlook / Microsoft 365 sync panel */}
-      <section className="border border-slate-200 rounded-lg bg-white p-4">
+      <section className="border border-slate-200 rounded-lg bg-white p-4 dark:bg-gray-900">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-semibold text-slate-900 flex items-center gap-2">
@@ -393,7 +393,7 @@ export default function CalendarPage() {
             <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">{day}</h3>
             <ul className="space-y-2">
               {items.map((e) => (
-                <li key={e.id} className="border border-slate-200 rounded-lg p-3 bg-white hover:shadow-sm transition">
+                <li key={e.id} className="border border-slate-200 rounded-lg p-3 bg-white hover:shadow-sm transition dark:bg-gray-900">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -477,7 +477,7 @@ function AddToExternalButton({ ev, google, microsoft }) {
 function ModalShell({ title, children, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h3 className="font-semibold text-slate-900">{title}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>

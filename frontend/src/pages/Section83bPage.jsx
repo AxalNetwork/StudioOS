@@ -89,17 +89,17 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 dark:bg-gray-900">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h3 className="text-lg font-bold text-gray-900">New 83(b) tracker</h3>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">New 83(b) tracker</h3>
             <p className="text-xs text-gray-500 mt-1">We'll compute the 30-day deadline and send a reminder.</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
         </div>
         <div className="space-y-3">
           <label className="block">
-            <div className="text-xs font-semibold text-gray-700 mb-1">Project</div>
+            <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Project</div>
             <select value={projectId} onChange={(e) => setProjectId(e.target.value)}
               className="w-full border rounded-md px-3 py-2 text-sm">
               <option value="">Select…</option>
@@ -107,12 +107,12 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
             </select>
           </label>
           <label className="block">
-            <div className="text-xs font-semibold text-gray-700 mb-1">Taxpayer name (on the election)</div>
+            <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Taxpayer name (on the election)</div>
             <input value={taxpayer} onChange={(e) => setTaxpayer(e.target.value)}
               className="w-full border rounded-md px-3 py-2 text-sm" placeholder="Jane Q. Doe" />
           </label>
           <label className="block">
-            <div className="text-xs font-semibold text-gray-700 mb-1">Grant date</div>
+            <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Grant date</div>
             <input type="date" value={grantDate} onChange={(e) => setGrantDate(e.target.value)}
               className="w-full border rounded-md px-3 py-2 text-sm" />
             <div className="text-[11px] text-gray-500 mt-1">Deadline = grant date + 30 calendar days.</div>
@@ -173,11 +173,11 @@ function TrackerCard({ tracker, onChange }) {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-base font-semibold text-gray-900 truncate">{tracker.taxpayer_name}</h3>
+            <h3 className="text-base font-semibold text-gray-900 truncate dark:text-gray-100">{tracker.taxpayer_name}</h3>
             <CountdownPill days={tracker.days_left} status={tracker.status} />
           </div>
           <div className="text-xs text-gray-500 mt-1 flex items-center gap-3 flex-wrap">
@@ -194,11 +194,11 @@ function TrackerCard({ tracker, onChange }) {
 
       <div>
         <button onClick={() => setShowSteps((s) => !s)}
-          className="text-xs font-semibold text-gray-700 hover:text-gray-900 inline-flex items-center gap-1">
+          className="text-xs font-semibold text-gray-700 hover:text-gray-900 inline-flex items-center gap-1 dark:text-gray-300">
           <ListChecks size={14} /> {showSteps ? 'Hide' : 'Show'} IRS mailing checklist
         </button>
         {showSteps && (
-          <ol className="mt-2 list-decimal pl-5 text-xs text-gray-700 space-y-1">
+          <ol className="mt-2 list-decimal pl-5 text-xs text-gray-700 space-y-1 dark:text-gray-300">
             {tracker.irs_mailing_steps.map((s, i) => <li key={i}>{s}</li>)}
           </ol>
         )}
@@ -220,7 +220,7 @@ function TrackerCard({ tracker, onChange }) {
           accept="image/*,application/pdf"
           onChange={(e) => upload(e.target.files?.[0])} />
         <label htmlFor={fileInputId}
-          className="px-3 py-1.5 text-xs font-semibold rounded-md border bg-white hover:bg-gray-50 cursor-pointer inline-flex items-center gap-1">
+          className="px-3 py-1.5 text-xs font-semibold rounded-md border bg-white hover:bg-gray-50 cursor-pointer inline-flex items-center gap-1 dark:bg-gray-900">
           <Upload size={12} /> {tracker.receipt_doc_id ? 'Replace receipt' : 'Upload PS Form 3800 receipt'}
         </label>
         {!tracker.mailed_at && (
@@ -292,7 +292,7 @@ export default function Section83bPage() {
             className="text-xs text-gray-500 hover:text-gray-800 inline-flex items-center gap-1 mb-1">
             <ArrowLeft size={12} /> Back to Incorporate
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">83(b) Election Tracker</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">83(b) Election Tracker</h1>
         <PageExplainer pageKey="section_83b" />
           <p className="text-sm text-gray-600 mt-1">
             30-day countdown, IRS mailing checklist, and certified-mail receipt upload.
@@ -305,19 +305,19 @@ export default function Section83bPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <div className="bg-white rounded-lg border p-3">
+        <div className="bg-white rounded-lg border p-3 dark:bg-gray-900">
           <div className="text-xs text-gray-500">Open</div>
-          <div className="text-2xl font-bold text-gray-900">{summary.open}</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.open}</div>
         </div>
-        <div className="bg-white rounded-lg border p-3">
+        <div className="bg-white rounded-lg border p-3 dark:bg-gray-900">
           <div className="text-xs text-gray-500">≤ 7 days</div>
           <div className="text-2xl font-bold text-amber-700">{summary.urgent}</div>
         </div>
-        <div className="bg-white rounded-lg border p-3">
+        <div className="bg-white rounded-lg border p-3 dark:bg-gray-900">
           <div className="text-xs text-gray-500">Overdue</div>
           <div className="text-2xl font-bold text-red-700">{summary.overdue}</div>
         </div>
-        <div className="bg-white rounded-lg border p-3">
+        <div className="bg-white rounded-lg border p-3 dark:bg-gray-900">
           <div className="text-xs text-gray-500">Mailed / confirmed</div>
           <div className="text-2xl font-bold text-emerald-700">{summary.mailed}</div>
         </div>
@@ -332,9 +332,9 @@ export default function Section83bPage() {
         </div>
       )}
       {!loading && trackers.length === 0 && (
-        <div className="bg-white rounded-xl border-2 border-dashed border-gray-200 p-10 text-center">
+        <div className="bg-white rounded-xl border-2 border-dashed border-gray-200 p-10 text-center dark:bg-gray-900 dark:border-gray-800">
           <Calendar size={28} className="mx-auto text-gray-400 mb-2" />
-          <h3 className="text-base font-semibold text-gray-900">No 83(b) trackers yet</h3>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">No 83(b) trackers yet</h3>
           <p className="text-sm text-gray-600 mt-1 max-w-md mx-auto">
             Create a tracker the day stock is granted to a founder. We'll generate the election,
             compute the 30-day deadline, and ping you before it closes.

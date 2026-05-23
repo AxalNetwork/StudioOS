@@ -120,13 +120,13 @@ export default function OnboardingPersonaPage() {
     if (q.type === 'number') {
       return (
         <input type="number" value={val} onChange={(e) => set(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-violet-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-violet-500 dark:border-gray-700"
           placeholder="Enter a number" />
       );
     }
     return (
       <input type="text" value={val} onChange={(e) => set(e.target.value)}
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-violet-500"
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-violet-500 dark:border-gray-700"
         placeholder="Type your answer" />
     );
   };
@@ -137,7 +137,7 @@ export default function OnboardingPersonaPage() {
     <div className="max-w-2xl mx-auto py-8 px-4">
       <div className="flex items-center gap-2 mb-2">
         <Sparkles size={22} className="text-violet-600" />
-        <h1 className="text-2xl font-bold text-gray-900">Tell us who you are</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Tell us who you are</h1>
       </div>
       <p className="text-sm text-gray-600 mb-6">
         Two minutes. We'll tailor StudioOS to your role and only ask the questions that matter for you.
@@ -146,12 +146,12 @@ export default function OnboardingPersonaPage() {
       {error && <div className="mb-4 text-sm bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2">{error}</div>}
 
       {stage === 'intro' && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-          <label className="block text-sm font-medium text-gray-700">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 dark:bg-gray-900 dark:border-gray-800">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             In one or two sentences, what brings you to Axal?
           </label>
           <textarea value={firstMessage} onChange={(e) => setFirstMessage(e.target.value)} rows={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-violet-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-violet-500 dark:border-gray-700"
             placeholder="e.g. I run a $50M family office and we're looking to allocate to AI-native venture studios." />
           <div className="flex justify-end">
             <button onClick={classify} disabled={busy || !firstMessage.trim()}
@@ -164,11 +164,11 @@ export default function OnboardingPersonaPage() {
       )}
 
       {stage === 'confirm' && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 dark:bg-gray-900 dark:border-gray-800">
           {classifyResult?.persona_id && !classifyResult?.needs_disambiguation ? (
             <div>
               <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Suggested persona</div>
-              <div className="text-lg font-semibold text-gray-900">{personaById[classifyResult.persona_id]?.label}</div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">{personaById[classifyResult.persona_id]?.label}</div>
               <p className="text-sm text-gray-600 mt-1">{personaById[classifyResult.persona_id]?.short_description}</p>
               {classifyResult.rationale && <p className="text-xs text-gray-500 mt-2 italic">{classifyResult.rationale}</p>}
               <div className="flex gap-2 mt-4">
@@ -184,12 +184,12 @@ export default function OnboardingPersonaPage() {
             </div>
           ) : (
             <div>
-              <div className="text-sm font-medium text-gray-900 mb-3">Pick the persona that best describes you</div>
+              <div className="text-sm font-medium text-gray-900 mb-3 dark:text-gray-100">Pick the persona that best describes you</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {taxonomy.map((p) => (
                   <button key={p.id} onClick={() => startQuestions(p.id)}
-                    className="text-left border border-gray-200 hover:border-violet-400 rounded-lg p-3 transition-colors">
-                    <div className="text-sm font-semibold text-gray-900">{p.label}</div>
+                    className="text-left border border-gray-200 hover:border-violet-400 rounded-lg p-3 transition-colors dark:border-gray-800">
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{p.label}</div>
                     <div className="text-xs text-gray-600 mt-0.5 line-clamp-2">{p.short_description}</div>
                   </button>
                 ))}
@@ -200,19 +200,19 @@ export default function OnboardingPersonaPage() {
       )}
 
       {stage === 'answers' && questionBank[questionIdx] && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 dark:bg-gray-900 dark:border-gray-800">
           <div className="flex items-center justify-between">
             <div className="text-xs uppercase tracking-wide text-gray-500">
               {personaById[chosenPersona]?.label}
             </div>
             <div className="text-xs text-gray-500">{questionIdx + 1} / {questionBank.length}</div>
           </div>
-          <label className="block text-sm font-medium text-gray-800">{questionBank[questionIdx].prompt}</label>
+          <label className="block text-sm font-medium text-gray-800 dark:text-gray-200">{questionBank[questionIdx].prompt}</label>
           {renderQuestionInput(questionBank[questionIdx])}
 
           {questionIdx === questionBank.length - 1 && offerSecondary && (
             <div className="border-t border-gray-100 pt-3">
-              <label className="flex items-start gap-2 text-sm text-gray-700">
+              <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
                 <input type="checkbox" className="mt-1" checked={secondaryPersona === 'operator_advisor'}
                   onChange={(e) => setSecondaryPersona(e.target.checked ? 'operator_advisor' : null)} />
                 <span>I also want to be listed as an <span className="font-medium">Operator / Advisor</span> for other studio ventures.</span>

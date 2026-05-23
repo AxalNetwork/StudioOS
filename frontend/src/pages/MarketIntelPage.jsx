@@ -115,14 +115,14 @@ export default function MarketIntelPage() {
       <div className="mb-6 bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl p-4">
         <div className="flex items-start gap-3">
           <Lightbulb size={18} className="text-violet-600 shrink-0 mt-0.5" />
-          <div className="text-xs text-gray-700 leading-relaxed">
-            <div className="font-semibold text-gray-900 mb-1">Why this matters</div>
+          <div className="text-xs text-gray-700 leading-relaxed dark:text-gray-300">
+            <div className="font-semibold text-gray-900 mb-1 dark:text-gray-100">Why this matters</div>
             <p>
               Market Intelligence turns noisy public and private signals into a short list of where to deploy capital next.
-              <span className="font-medium text-gray-900"> Private rounds</span> show direct competitors&apos; funding signals.
-              <span className="font-medium text-gray-900"> Public comps</span> are exit benchmarks for your sector.
-              <span className="font-medium text-gray-900"> High-conviction plays</span> are the bets we&apos;d take with concentrated capital this quarter, and
-              <span className="font-medium text-gray-900"> Studio benchmarks</span> tell you whether our pipeline is healthier than the market.
+              <span className="font-medium text-gray-900 dark:text-gray-100"> Private rounds</span> show direct competitors&apos; funding signals.
+              <span className="font-medium text-gray-900 dark:text-gray-100"> Public comps</span> are exit benchmarks for your sector.
+              <span className="font-medium text-gray-900 dark:text-gray-100"> High-conviction plays</span> are the bets we&apos;d take with concentrated capital this quarter, and
+              <span className="font-medium text-gray-900 dark:text-gray-100"> Studio benchmarks</span> tell you whether our pipeline is healthier than the market.
             </p>
           </div>
         </div>
@@ -135,7 +135,7 @@ export default function MarketIntelPage() {
             data-testid="mi-tab-dropdown"
             value={tab}
             onChange={e => setTab(e.target.value)}
-            className="w-full appearance-none bg-white border border-violet-300 rounded-xl px-4 py-3 pr-10 text-sm font-medium text-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-400 transition-colors shadow-sm cursor-pointer"
+            className="w-full appearance-none bg-white border border-violet-300 rounded-xl px-4 py-3 pr-10 text-sm font-medium text-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-400 transition-colors shadow-sm cursor-pointer dark:bg-gray-900"
           >
             {tabs.map(t => (
               <option key={t.key} value={t.key} data-testid={`mi-tab-${t.key}`}>
@@ -151,9 +151,9 @@ export default function MarketIntelPage() {
         <div className="space-y-6">
           <TabExplainer text="Where the market is heading right now: hiring surges, technographic signals, and sentiment per sector. Aggressive sectors get higher multiples and more competition; cautious sectors are where contrarian bets pay off." />
           {headlines.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5 dark:text-gray-100">
                   Live Headlines
                   <InfoTip text="Real-time public-source headlines. We track them so you don't have to refresh five tabs." />
                 </h3>
@@ -162,7 +162,7 @@ export default function MarketIntelPage() {
               <ul className="divide-y divide-gray-100">
                 {headlines.map((h, i) => (
                   <li key={i} className="py-2 text-xs">
-                    <a href={h.link} target="_blank" rel="noopener noreferrer" className="text-gray-900 hover:text-violet-600 font-medium block">
+                    <a href={h.link} target="_blank" rel="noopener noreferrer" className="text-gray-900 hover:text-violet-600 font-medium block dark:text-gray-100">
                       {h.title}
                     </a>
                     <div className="text-gray-500 mt-0.5">
@@ -176,9 +176,9 @@ export default function MarketIntelPage() {
           )}
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {pulse.map((s, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-xl p-5">
+              <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                  <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5 dark:text-gray-100">
                     {s.sector}
                     <InfoTip text="Sector pulse: technographic signal + hiring surge + spin-out opportunity. The multiple is the public-comp valuation premium." />
                   </h3>
@@ -192,15 +192,15 @@ export default function MarketIntelPage() {
                 <div className="space-y-2 text-xs">
                   <div>
                     <span className="text-gray-600">Tech Signal:</span>
-                    <p className="text-gray-700 mt-0.5">{s.technographic_signal}</p>
+                    <p className="text-gray-700 mt-0.5 dark:text-gray-300">{s.technographic_signal}</p>
                   </div>
                   <div>
                     <span className="text-gray-600">Hiring:</span>
-                    <p className="text-gray-700 mt-0.5">{s.hiring_surge}</p>
+                    <p className="text-gray-700 mt-0.5 dark:text-gray-300">{s.hiring_surge}</p>
                   </div>
-                  <div className="pt-2 border-t border-gray-200">
+                  <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
                     <span className="text-violet-600 font-medium">Spin-out Opportunity:</span>
-                    <p className="text-gray-800 mt-0.5">{s.gap_opportunity}</p>
+                    <p className="text-gray-800 mt-0.5 dark:text-gray-200">{s.gap_opportunity}</p>
                   </div>
                   <div className="pt-1 text-[10px] text-gray-400">Updated {fmtTime(pulseUpdatedAt)}</div>
                 </div>
@@ -214,31 +214,31 @@ export default function MarketIntelPage() {
         <div>
           <TabExplainer text="Public-market lens on the venture environment. P/E ratios, IPO windows, and YoY growth set the ceiling on what your portfolio can exit at — and tell you when LPs are open to risk." />
           <div className="grid md:grid-cols-2 gap-4 mb-8">
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1.5">
+            <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1.5 dark:text-gray-100">
                 Exit Environment
                 <InfoTip text="Are IPO and M&A windows open? When closed, distributions slow and LPs stop recycling capital." />
               </h3>
-              <p className="text-sm text-gray-700">{macro.exit_environment}</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300">{macro.exit_environment}</p>
             </div>
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1.5">
+            <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1.5 dark:text-gray-100">
                 Interest Rate Impact
                 <InfoTip text="Higher rates compress growth multiples. Watch this when pricing late-stage rounds." />
               </h3>
-              <p className="text-sm text-gray-700">{macro.interest_rate_impact}</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300">{macro.interest_rate_impact}</p>
             </div>
           </div>
 
           {macro.live_quotes && macro.live_quotes.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6">
-              <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-gray-900">Live Tech Quotes</h3>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6 dark:bg-gray-900 dark:border-gray-800">
+              <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Live Tech Quotes</h3>
                 <span className="text-[10px] text-gray-500">Updated {fmtTime(macro.quotes_updated_at)}</span>
               </div>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200">
+                  <tr className="border-b border-gray-200 dark:border-gray-800">
                     <th className="text-left px-4 py-2 text-gray-600 font-medium">Symbol</th>
                     <th className="text-left px-4 py-2 text-gray-600 font-medium">Name</th>
                     <th className="text-right px-4 py-2 text-gray-600 font-medium">Price</th>
@@ -248,9 +248,9 @@ export default function MarketIntelPage() {
                 <tbody>
                   {macro.live_quotes.map((q) => (
                     <tr key={q.symbol} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-2 text-gray-900 font-mono font-medium">{q.symbol}</td>
-                      <td className="px-4 py-2 text-gray-700">{q.name}</td>
-                      <td className="px-4 py-2 text-right text-gray-900">${q.price}</td>
+                      <td className="px-4 py-2 text-gray-900 font-mono font-medium dark:text-gray-100">{q.symbol}</td>
+                      <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{q.name}</td>
+                      <td className="px-4 py-2 text-right text-gray-900 dark:text-gray-100">${q.price}</td>
                       <td className={`px-4 py-2 text-right font-medium ${q.pct_change > 0 ? 'text-emerald-600' : q.pct_change < 0 ? 'text-red-600' : 'text-gray-600'}`}>
                         {q.pct_change > 0 ? '+' : ''}{q.pct_change}%
                       </td>
@@ -260,10 +260,10 @@ export default function MarketIntelPage() {
               </table>
             </div>
           )}
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200">
+                <tr className="border-b border-gray-200 dark:border-gray-800">
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Sector</th>
                   <th className="text-right px-4 py-3 text-gray-600 font-medium">Avg P/E</th>
                   <th className="text-right px-4 py-3 text-gray-600 font-medium">YoY Growth</th>
@@ -274,8 +274,8 @@ export default function MarketIntelPage() {
               <tbody>
                 {macro.sectors?.map((s, i) => (
                   <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-900 font-medium">{s.name}</td>
-                    <td className="px-4 py-3 text-right text-gray-700">{s.avg_pe}x</td>
+                    <td className="px-4 py-3 text-gray-900 font-medium dark:text-gray-100">{s.name}</td>
+                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">{s.avg_pe}x</td>
                     <td className="px-4 py-3 text-right">
                       <span className={s.yoy_growth > 20 ? 'text-emerald-600' : s.yoy_growth > 10 ? 'text-blue-600' : 'text-gray-600'}>
                         {s.yoy_growth}%
@@ -311,10 +311,10 @@ export default function MarketIntelPage() {
           {enriched.length > 0 && (
             <FocusProjectCompetitorsBlock projects={enriched} />
           )}
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200">
+              <tr className="border-b border-gray-200 dark:border-gray-800">
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">Company</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">Sector</th>
                 <th className="text-right px-4 py-3 text-gray-600 font-medium">Amount</th>
@@ -325,12 +325,12 @@ export default function MarketIntelPage() {
             <tbody>
               {rounds.map((r, i) => (
                 <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-900 font-medium">{r.company}</td>
-                  <td className="px-4 py-3 text-gray-700">{r.sector}</td>
+                  <td className="px-4 py-3 text-gray-900 font-medium dark:text-gray-100">{r.company}</td>
+                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{r.sector}</td>
                   <td className="px-4 py-3 text-right text-emerald-600 font-medium">{r.amount}</td>
-                  <td className="px-4 py-3 text-right text-gray-700">{r.valuation}</td>
+                  <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">{r.valuation}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full">{r.stage}</span>
+                    <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full dark:text-gray-300">{r.stage}</span>
                   </td>
                 </tr>
               ))}
@@ -344,10 +344,10 @@ export default function MarketIntelPage() {
         <div className="space-y-4">
           <TabExplainer text="Where we'd put concentrated bets right now. Each play is paired with a recommended spin-out the studio could ship to capture the gap." />
           {conviction.map((play, i) => (
-            <div key={i} className="bg-white border border-gray-200 rounded-xl p-5">
+            <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <h3 className="text-sm font-semibold text-gray-900">{play.sector}</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{play.sector}</h3>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                     play.play_type === 'Efficiency Play' ? 'bg-violet-100 text-violet-700' :
                     play.play_type === 'Replacement Play' ? 'bg-blue-100 text-blue-700' :
@@ -356,8 +356,8 @@ export default function MarketIntelPage() {
                 </div>
                 <span className="text-lg font-bold text-violet-600">{play.multiple}x</span>
               </div>
-              <p className="text-sm text-gray-700 mb-2">{play.reasoning}</p>
-              <div className="pt-2 border-t border-gray-200">
+              <p className="text-sm text-gray-700 mb-2 dark:text-gray-300">{play.reasoning}</p>
+              <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
                 <span className="text-xs text-gray-600">Recommended Spin-out: </span>
                 <span className="text-xs text-emerald-600 font-medium">{play.gap_opportunity}</span>
               </div>
@@ -529,14 +529,14 @@ function InvestorSignalsTab() {
       {showReprompt && (
         <div className="bg-violet-50 border border-violet-200 rounded-lg p-4 flex items-start gap-3">
           <Users size={18} className="text-violet-600 shrink-0 mt-0.5" />
-          <div className="flex-1 text-sm text-gray-700">
-            <div className="font-semibold text-gray-900 mb-1">Help shape this dashboard</div>
+          <div className="flex-1 text-sm text-gray-700 dark:text-gray-300">
+            <div className="font-semibold text-gray-900 mb-1 dark:text-gray-100">Help shape this dashboard</div>
             <p className="mb-2">You haven&apos;t finished the investor profiling chatbot yet. Spend 90 seconds answering 6 questions to be included in the next anonymized snapshot.</p>
             <div className="flex gap-2">
               <Link to="/onboarding/investor" className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-md bg-violet-600 text-white hover:bg-violet-700">
                 Open profiling chatbot
               </Link>
-              <button onClick={dismissReprompt} className="text-xs font-medium px-3 py-1.5 rounded-md text-gray-700 hover:bg-violet-100">
+              <button onClick={dismissReprompt} className="text-xs font-medium px-3 py-1.5 rounded-md text-gray-700 hover:bg-violet-100 dark:text-gray-300">
                 Don&apos;t remind me
               </button>
             </div>
@@ -545,7 +545,7 @@ function InvestorSignalsTab() {
       )}
 
       {!snap && (
-        <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-sm text-gray-500">
+        <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-sm text-gray-500 dark:bg-gray-900 dark:border-gray-800">
           No snapshot yet — the aggregator runs every 6 hours. Check back soon.
         </div>
       )}
@@ -583,9 +583,9 @@ function fmtUsd(n) {
 
 function SignalsKPI({ label, value, sub }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
       <div className="text-[10px] text-gray-600 uppercase tracking-wider mb-1">{label}</div>
-      <div className="text-2xl font-bold text-gray-900">{value ?? '—'}</div>
+      <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value ?? '—'}</div>
       {sub && <div className="text-[11px] text-gray-500 mt-1">{sub}</div>}
     </div>
   );
@@ -595,8 +595,8 @@ function SignalsBars({ title, cells }) {
   const visible = (cells || []).filter(c => c.n != null);
   const maxN = visible.reduce((m, c) => Math.max(m, c.n || 0), 1);
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
-      <div className="text-sm font-semibold text-gray-900 mb-3">{title}</div>
+    <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+      <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">{title}</div>
       {visible.length === 0 && (
         <div className="text-xs text-gray-500 italic">Insufficient data — no cell met the k=5 threshold yet.</div>
       )}
@@ -606,7 +606,7 @@ function SignalsBars({ title, cells }) {
           const widthPct = insufficient ? 0 : Math.round(((c.n || 0) / maxN) * 100);
           return (
             <div key={c.label} className="flex items-center gap-3">
-              <div className="w-32 text-xs text-gray-700 truncate" title={c.label}>{c.label}</div>
+              <div className="w-32 text-xs text-gray-700 truncate dark:text-gray-300" title={c.label}>{c.label}</div>
               <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
                 {!insufficient && (
                   <div className="h-full bg-violet-500" style={{ width: `${widthPct}%` }} />
@@ -627,15 +627,15 @@ function SectorStageTicketTable({ buckets }) {
   const visible = (buckets || []).filter(b => b.n != null);
   if (!buckets.length) {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="text-sm font-semibold text-gray-900 mb-3">Average ticket by sector × stage</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Average ticket by sector × stage</div>
         <div className="text-xs text-gray-500 italic">No data yet.</div>
       </div>
     );
   }
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 overflow-x-auto">
-      <div className="text-sm font-semibold text-gray-900 mb-3">Average ticket by sector × stage</div>
+    <div className="bg-white border border-gray-200 rounded-xl p-5 overflow-x-auto dark:bg-gray-900 dark:border-gray-800">
+      <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Average ticket by sector × stage</div>
       {visible.length === 0 && (
         <div className="text-xs text-gray-500 italic mb-2">Insufficient data — no sector × stage cell met the k=5 threshold yet.</div>
       )}
@@ -650,7 +650,7 @@ function SectorStageTicketTable({ buckets }) {
               <th className="text-right py-2 pr-3 font-medium">IQR (low)</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 text-gray-700">
+          <tbody className="divide-y divide-gray-100 text-gray-700 dark:text-gray-300">
             {visible.map((b, i) => (
               <tr key={i}>
                 <td className="py-2 pr-3">{b.sector}</td>
@@ -670,16 +670,16 @@ function SectorStageTicketTable({ buckets }) {
 function ThesisCloud({ keywords }) {
   if (!keywords || !keywords.length) {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="text-sm font-semibold text-gray-900 mb-3">Thesis cloud</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Thesis cloud</div>
         <div className="text-xs text-gray-500 italic">No keyword reached the k=5 threshold yet.</div>
       </div>
     );
   }
   const max = keywords[0].n;
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
-      <div className="text-sm font-semibold text-gray-900 mb-3">Thesis cloud</div>
+    <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+      <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Thesis cloud</div>
       <div className="flex flex-wrap gap-2 items-baseline">
         {keywords.map(k => {
           const scale = 0.85 + 0.9 * (k.n / max);
@@ -702,8 +702,8 @@ function ThesisCloud({ keywords }) {
 function TrendStrip({ trend }) {
   const max = trend.reduce((m, t) => Math.max(m, t.n || 0), 1);
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
-      <div className="text-sm font-semibold text-gray-900 mb-3">30-day participation trend</div>
+    <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+      <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">30-day participation trend</div>
       <div className="flex items-end gap-1 h-20">
         {trend.map((t, i) => {
           const h = Math.max(2, Math.round(((t.n || 0) / max) * 100));
@@ -728,7 +728,7 @@ function TrendStrip({ trend }) {
 function BenchmarkCard({ label, value, target }) {
   const empty = value == null || value === '' || value === 'null' || (typeof value === 'string' && value.includes('null'));
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
       <div className="text-[10px] text-gray-600 uppercase tracking-wider mb-1">{label}</div>
       <div className={empty ? 'text-base font-medium text-gray-400 italic' : 'text-2xl font-bold text-gray-900'}>
         {empty ? '— Calculating…' : value}
@@ -756,7 +756,7 @@ function InfoTip({ text }) {
 // Per-tab "Why this matters" mini-panel shown above tab content.
 function TabExplainer({ text }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-[11px] text-gray-600 flex items-start gap-2">
+    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-[11px] text-gray-600 flex items-start gap-2 dark:bg-gray-900 dark:border-gray-800">
       <Info size={13} className="text-violet-500 shrink-0 mt-0.5" />
       <span>{text}</span>
     </div>
@@ -779,10 +779,10 @@ function CompetitorEnrichmentBlock({ projects }) {
   })).sort((a, b) => b.fundingM - a.fundingM);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5 dark:text-gray-100">
             <Database size={14} className="text-violet-600" /> Portfolio funding (Crunchbase)
           </h3>
           <p className="text-[11px] text-gray-500 mt-0.5">Cached snapshots from your enriched projects. Use Project → Crunchbase to refresh.</p>
@@ -797,7 +797,7 @@ function CompetitorEnrichmentBlock({ projects }) {
             key={e.id}
             to={`/projects/${e.id}`}
             title={`${e.name}${e.sector ? ` — ${e.sector}` : ''}`}
-            className="group flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-200 hover:border-violet-400 hover:bg-violet-50/30 transition-colors"
+            className="group flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-200 hover:border-violet-400 hover:bg-violet-50/30 transition-colors dark:border-gray-800"
           >
             {e.image_url ? (
               <img src={e.image_url} alt="" className="w-10 h-10 rounded object-cover bg-gray-100" loading="lazy" />
@@ -806,7 +806,7 @@ function CompetitorEnrichmentBlock({ projects }) {
                 {(e.name || '?').slice(0, 2).toUpperCase()}
               </div>
             )}
-            <div className="text-[10px] text-gray-700 truncate w-full text-center group-hover:text-violet-700">{e.name}</div>
+            <div className="text-[10px] text-gray-700 truncate w-full text-center group-hover:text-violet-700 dark:text-gray-300">{e.name}</div>
           </Link>
         ))}
       </div>
@@ -878,10 +878,10 @@ function FocusProjectCompetitorsBlock({ projects }) {
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5 dark:text-gray-100">
             <Database size={14} className="text-violet-600" /> Focus project — possible competitors
           </h3>
           <p className="text-[11px] text-gray-500 mt-0.5">Live Crunchbase lookup for the selected enriched project.</p>
@@ -891,7 +891,7 @@ function FocusProjectCompetitorsBlock({ projects }) {
           <select
             value={focus?.id || ''}
             onChange={(e) => setFocusId(Number(e.target.value))}
-            className="text-xs bg-gray-50 border border-gray-300 rounded px-2 py-1 text-gray-900 focus:outline-none focus:border-violet-500"
+            className="text-xs bg-gray-50 border border-gray-300 rounded px-2 py-1 text-gray-900 focus:outline-none focus:border-violet-500 dark:border-gray-700 dark:text-gray-100"
           >
             {projects.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
@@ -924,7 +924,7 @@ function FocusProjectCompetitorsBlock({ projects }) {
               {comps.map((c) => (
                 <li key={c.uuid} className="flex items-center justify-between gap-2 text-xs">
                   <div className="min-w-0">
-                    <div className="font-medium text-gray-900 truncate">{c.name}</div>
+                    <div className="font-medium text-gray-900 truncate dark:text-gray-100">{c.name}</div>
                     {c.short_description && <div className="text-gray-600 truncate">{c.short_description}</div>}
                   </div>
                   {c.cb_url && (
@@ -1085,10 +1085,10 @@ function SectorCompassTab({ user }) {
                     <span className="text-violet-700 font-bold w-4">{i + 1}.</span>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-900">{p.sector}</span>
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">{p.sector}</span>
                         <span className="text-violet-600 font-bold">{Math.round(p.composite)}</span>
                       </div>
-                      <div className="text-gray-700">{compassReasoning(p)}</div>
+                      <div className="text-gray-700 dark:text-gray-300">{compassReasoning(p)}</div>
                     </div>
                   </li>
                 ))}
@@ -1097,9 +1097,9 @@ function SectorCompassTab({ user }) {
           )}
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {(data.sectors || []).map((s) => (
-              <div key={s.sector} className="bg-white border border-gray-200 rounded-xl p-5">
+              <div key={s.sector} className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-gray-900">{s.sector}</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{s.sector}</h3>
                   <span className="text-2xl font-bold text-violet-600">{Math.round(s.composite)}</span>
                 </div>
                 <MiniBar value={s.composite} />
@@ -1108,13 +1108,13 @@ function SectorCompassTab({ user }) {
                 </div>
                 {s.dimensions ? (
                   <>
-                    <p className="mt-3 text-xs text-gray-700 italic">{compassReasoning(s)}</p>
+                    <p className="mt-3 text-xs text-gray-700 italic dark:text-gray-300">{compassReasoning(s)}</p>
                     <ul className="mt-3 space-y-1.5 text-xs">
                       {Object.entries(s.dimensions).map(([k, v]) => (
                         <li key={k} className="flex items-center justify-between gap-2">
                           <span className="text-gray-600 capitalize w-20">{k}</span>
                           <div className="flex-1"><MiniBar value={v.value} /></div>
-                          <span className="text-gray-700 font-medium w-8 text-right">{Math.round(v.value)}</span>
+                          <span className="text-gray-700 font-medium w-8 text-right dark:text-gray-300">{Math.round(v.value)}</span>
                         </li>
                       ))}
                     </ul>
@@ -1160,8 +1160,8 @@ function SectorCitationsDrill({ sector, dimensionFilter }) {
       {rows.slice(0, 10).map((r, i) => (
         <li key={i} className="px-4 py-1.5 text-[11px] flex items-center gap-3">
           <span className="font-mono text-gray-500 w-32 truncate">{r.source_key}</span>
-          <span className="text-gray-700 flex-1 truncate">{r.metric_key}</span>
-          <span className="text-gray-700 font-medium w-12 text-right">{Number(r.metric_value).toFixed(1)}</span>
+          <span className="text-gray-700 flex-1 truncate dark:text-gray-300">{r.metric_key}</span>
+          <span className="text-gray-700 font-medium w-12 text-right dark:text-gray-300">{Number(r.metric_value).toFixed(1)}</span>
           <span className="text-gray-400 w-24 text-right">{new Date(r.ts).toLocaleDateString()}</span>
           {r.citation_url && (
             <a href={r.citation_url} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline inline-flex items-center gap-1">
@@ -1207,10 +1207,10 @@ function FounderLensTab({ user: _user }) {
                 <span className="text-emerald-700 font-bold w-4">{i + 1}.</span>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-gray-900">{p.sector}</span>
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">{p.sector}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${p.opportunity_gap > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700'}`}>gap {p.opportunity_gap > 0 ? '+' : ''}{p.opportunity_gap.toFixed(1)}</span>
                   </div>
-                  <div className="text-gray-700">{founderReason(p)}</div>
+                  <div className="text-gray-700 dark:text-gray-300">{founderReason(p)}</div>
                 </div>
               </li>
             ))}
@@ -1218,10 +1218,10 @@ function FounderLensTab({ user: _user }) {
         </div>
       )}
       {data && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
+              <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800">
                 <th className="text-left px-4 py-2 text-gray-600 font-medium">Sector</th>
                 <th className="text-right px-4 py-2 text-gray-600 font-medium">Composite</th>
                 <th className="text-right px-4 py-2 text-gray-600 font-medium">Demand</th>
@@ -1234,10 +1234,10 @@ function FounderLensTab({ user: _user }) {
               {(data.picks || []).map((p) => (
                 <React.Fragment key={p.sector}>
                   <tr className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => setOpenSector(openSector === p.sector ? null : p.sector)}>
-                    <td className="px-4 py-2 text-gray-900 font-medium">{p.sector}</td>
-                    <td className="px-4 py-2 text-right text-gray-700">{Math.round(p.composite)}</td>
-                    <td className="px-4 py-2 text-right text-gray-700">{Math.round(p.demand)}</td>
-                    <td className="px-4 py-2 text-right text-gray-700">{Math.round(p.supply)}</td>
+                    <td className="px-4 py-2 text-gray-900 font-medium dark:text-gray-100">{p.sector}</td>
+                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{Math.round(p.composite)}</td>
+                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{Math.round(p.demand)}</td>
+                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{Math.round(p.supply)}</td>
                     <td className={`px-4 py-2 text-right font-semibold ${p.opportunity_gap > 5 ? 'text-emerald-600' : p.opportunity_gap < -5 ? 'text-red-600' : 'text-gray-700'}`}>
                       {p.opportunity_gap > 0 ? '+' : ''}{p.opportunity_gap.toFixed(1)}
                     </td>
@@ -1295,7 +1295,7 @@ function InvestorLensTab({ user }) {
             <button
               type="button"
               onClick={() => openPaywall('institutional', 'Quarterly PDF reports are an Institutional benefit.')}
-              className="text-xs font-medium px-3 py-1.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 inline-flex items-center gap-1"
+              className="text-xs font-medium px-3 py-1.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 inline-flex items-center gap-1 dark:border-gray-700"
             >
               <Lock size={12} /> Quarterly PDF (Institutional)
             </button>
@@ -1312,9 +1312,9 @@ function InvestorLensTab({ user }) {
               <li key={s.sector} className="flex items-start gap-3 text-xs">
                 <span className="text-blue-700 font-bold w-4">{i + 1}.</span>
                 <div className="flex-1">
-                  <span className="font-semibold text-gray-900">{s.sector}</span>{' '}
+                  <span className="font-semibold text-gray-900 dark:text-gray-100">{s.sector}</span>{' '}
                   <span className="text-blue-600 font-bold">{s.score.toFixed(1)}</span>
-                  <div className="text-gray-700">Capital {Math.round(s.capital)} · Sentiment {Math.round(s.sentiment)} · Composite {Math.round(s.composite)}</div>
+                  <div className="text-gray-700 dark:text-gray-300">Capital {Math.round(s.capital)} · Sentiment {Math.round(s.sentiment)} · Composite {Math.round(s.composite)}</div>
                 </div>
               </li>
             ))}
@@ -1322,10 +1322,10 @@ function InvestorLensTab({ user }) {
         </div>
       )}
       {data && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
+              <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800">
                 <th className="text-left px-4 py-2 text-gray-600 font-medium">Sector</th>
                 <th className="text-right px-4 py-2 text-gray-600 font-medium">Capital</th>
                 <th className="text-right px-4 py-2 text-gray-600 font-medium">Sentiment</th>
@@ -1338,10 +1338,10 @@ function InvestorLensTab({ user }) {
               {(data.ranked || []).map((s) => (
                 <React.Fragment key={s.sector}>
                   <tr className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => setOpenSector(openSector === s.sector ? null : s.sector)}>
-                    <td className="px-4 py-2 text-gray-900 font-medium">{s.sector}</td>
-                    <td className="px-4 py-2 text-right text-gray-700">{Math.round(s.capital)}</td>
-                    <td className="px-4 py-2 text-right text-gray-700">{Math.round(s.sentiment)}</td>
-                    <td className="px-4 py-2 text-right text-gray-700">{Math.round(s.composite)}</td>
+                    <td className="px-4 py-2 text-gray-900 font-medium dark:text-gray-100">{s.sector}</td>
+                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{Math.round(s.capital)}</td>
+                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{Math.round(s.sentiment)}</td>
+                    <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{Math.round(s.composite)}</td>
                     <td className="px-4 py-2 text-right font-semibold text-violet-600">{s.score.toFixed(1)}</td>
                     <td className="px-4 py-2 text-right">
                       <ChevronDown size={14} className={`inline text-gray-400 transition-transform ${openSector === s.sector ? 'rotate-180' : ''}`} />
@@ -1407,10 +1407,10 @@ function GeographyLensTab({ user: _user }) {
           <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
             Per-region rollups not yet emitted — every region currently mirrors the 'global' composite. Cells flagged <span className="px-1 py-0.5 rounded bg-amber-200 text-amber-900 font-medium text-[9px]">global fallback</span>.
           </div>
-          <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+          <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto dark:bg-gray-900 dark:border-gray-800">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
+                <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800">
                   <th className="text-left px-3 py-2 text-gray-600 font-medium">Sector</th>
                   {GEO_REGIONS.map((r) => (
                     <th key={r.key} className="text-center px-3 py-2 text-gray-600 font-medium whitespace-nowrap">{r.label}</th>
@@ -1420,7 +1420,7 @@ function GeographyLensTab({ user: _user }) {
               <tbody>
                 {sectors.map((s) => (
                   <tr key={s.sector} className="border-b border-gray-100">
-                    <td className="px-3 py-2 text-gray-900 font-medium whitespace-nowrap">{s.sector}</td>
+                    <td className="px-3 py-2 text-gray-900 font-medium whitespace-nowrap dark:text-gray-100">{s.sector}</td>
                     {GEO_REGIONS.map((r) => (
                       <td key={r.key} className="px-2 py-1.5 text-center">
                         <div className={`inline-block px-2 py-1 rounded font-bold text-sm ${heatColor(s.composite)}`} title={`Global fallback: ${Math.round(s.composite)}`}>
@@ -1471,8 +1471,8 @@ function CitationsTab({ user: _user }) {
     <div className="space-y-4">
       <TabExplainer text="Every datapoint in the lenses traces back to a source row here. The source catalog tells you which providers are LIVE today (paid contracts wired) vs running on deterministic stubs." />
       {sources && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-xs font-semibold text-gray-900 mb-2">{sources.count} registered sources</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-xs font-semibold text-gray-900 mb-2 dark:text-gray-100">{sources.count} registered sources</div>
           <div className="flex flex-wrap gap-1.5">
             {sources.sources.map((s) => (
               <span key={s.key} className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${s.live ? 'bg-emerald-100 text-emerald-700' : s.paid ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>
@@ -1487,7 +1487,7 @@ function CitationsTab({ user: _user }) {
         <select
           value={sector}
           onChange={(e) => setSector(e.target.value)}
-          className="text-xs px-2 py-1 border border-gray-300 rounded-md bg-white"
+          className="text-xs px-2 py-1 border border-gray-300 rounded-md bg-white dark:border-gray-700 dark:bg-gray-900"
         >
           <option value="">All sectors</option>
           {SECTOR_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -1496,10 +1496,10 @@ function CitationsTab({ user: _user }) {
       {err && <MIError err={err} fallbackTier="growth" />}
       {!err && !data && <div className="text-sm text-gray-500">Loading citations…</div>}
       {data && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
+              <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800">
                 <th className="text-left px-3 py-2 text-gray-600 font-medium">Source</th>
                 <th className="text-left px-3 py-2 text-gray-600 font-medium">Sector</th>
                 <th className="text-left px-3 py-2 text-gray-600 font-medium">Metric</th>
@@ -1511,10 +1511,10 @@ function CitationsTab({ user: _user }) {
             <tbody>
               {(data.rows || []).map((r, i) => (
                 <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-1.5 text-gray-700 font-mono">{r.source_key}</td>
-                  <td className="px-3 py-1.5 text-gray-700">{r.sector}</td>
-                  <td className="px-3 py-1.5 text-gray-700">{r.metric_key}</td>
-                  <td className="px-3 py-1.5 text-right text-gray-700">{Number(r.metric_value).toFixed(2)}</td>
+                  <td className="px-3 py-1.5 text-gray-700 font-mono dark:text-gray-300">{r.source_key}</td>
+                  <td className="px-3 py-1.5 text-gray-700 dark:text-gray-300">{r.sector}</td>
+                  <td className="px-3 py-1.5 text-gray-700 dark:text-gray-300">{r.metric_key}</td>
+                  <td className="px-3 py-1.5 text-right text-gray-700 dark:text-gray-300">{Number(r.metric_value).toFixed(2)}</td>
                   <td className="px-3 py-1.5 text-gray-500">{new Date(r.ts).toLocaleString()}</td>
                   <td className="px-3 py-1.5">
                     {r.citation_url ? (
@@ -1596,7 +1596,7 @@ function WatchlistTab({ user: _user }) {
       <TabExplainer text="Pin sectors you want a weekly digest on. The cron-driven digest pipeline (the same one your other notifications use) will email you a recap of every composite move + new citations in your window." />
       {err && <MIError err={err} fallbackTier="growth" />}
       {/* Task #32 — pause sector digests without unpinning. */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
         {pause.paused_until ? (
           <div className="flex flex-wrap items-center gap-3">
             <div className="text-sm">
@@ -1624,7 +1624,7 @@ function WatchlistTab({ user: _user }) {
               <select
                 value={pausePreset}
                 onChange={(e) => setPausePreset(e.target.value)}
-                className="text-sm px-2 py-1.5 border border-gray-300 rounded-md bg-white"
+                className="text-sm px-2 py-1.5 border border-gray-300 rounded-md bg-white dark:border-gray-700 dark:bg-gray-900"
               >
                 <option value="1w">For 1 week</option>
                 <option value="1m">For 1 month</option>
@@ -1635,7 +1635,7 @@ function WatchlistTab({ user: _user }) {
               type="button"
               disabled={busy}
               onClick={applyPause}
-              className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
             >
               Pause digests
             </button>
@@ -1643,16 +1643,16 @@ function WatchlistTab({ user: _user }) {
           </div>
         )}
       </div>
-      <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-end gap-3">
+      <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-end gap-3 dark:bg-gray-900 dark:border-gray-800">
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">Sector</label>
-          <select value={sector} onChange={(e) => setSector(e.target.value)} className="text-sm px-2 py-1.5 border border-gray-300 rounded-md bg-white">
+          <select value={sector} onChange={(e) => setSector(e.target.value)} className="text-sm px-2 py-1.5 border border-gray-300 rounded-md bg-white dark:border-gray-700 dark:bg-gray-900">
             {SECTOR_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">Cadence</label>
-          <select value={cadence} onChange={(e) => setCadence(e.target.value)} className="text-sm px-2 py-1.5 border border-gray-300 rounded-md bg-white">
+          <select value={cadence} onChange={(e) => setCadence(e.target.value)} className="text-sm px-2 py-1.5 border border-gray-300 rounded-md bg-white dark:border-gray-700 dark:bg-gray-900">
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
           </select>
@@ -1670,11 +1670,11 @@ function WatchlistTab({ user: _user }) {
         <div className="text-sm text-gray-500 italic">No saved sectors yet — add one above to start receiving digests.</div>
       )}
       {rows && rows.length > 0 && (
-        <ul className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+        <ul className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100 dark:bg-gray-900 dark:border-gray-800">
           {rows.map((r) => (
             <li key={r.id} className="flex items-center justify-between px-4 py-3">
               <div>
-                <div className="text-sm font-medium text-gray-900">{r.sector}</div>
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{r.sector}</div>
                 <div className="text-[11px] text-gray-500">{r.geo} · {r.cadence} · added {new Date(r.created_at).toLocaleDateString()}</div>
               </div>
               <button

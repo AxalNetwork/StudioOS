@@ -93,18 +93,18 @@ export default function PublicInsight() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white dark:bg-gray-900">
       {/* Header */}
-      <header className="border-t-4 border-violet-600 bg-white">
+      <header className="border-t-4 border-violet-600 bg-white dark:bg-gray-900">
         <div className="max-w-3xl mx-auto px-6 py-12">
           <div className="text-violet-700 font-bold tracking-widest text-sm">AXAL · VC</div>
           <span className={`inline-block mt-2 text-xs px-3 py-0.5 rounded-full uppercase font-semibold ${audienceColors[p.audience] || 'bg-gray-100 text-gray-700'}`}>
             {p.audience}
           </span>
-          <h1 className="text-4xl font-bold mt-4 leading-tight text-gray-900">{p.title}</h1>
+          <h1 className="text-4xl font-bold mt-4 leading-tight text-gray-900 dark:text-gray-100">{p.title}</h1>
           {p.subtitle && <p className="text-lg text-gray-600 mt-2">{p.subtitle}</p>}
           <div className="text-xs text-gray-500 mt-6">
-            Section: <strong className="text-gray-700">{p.section}</strong> · Period: {data.period_label}
+            Section: <strong className="text-gray-700 dark:text-gray-300">{p.section}</strong> · Period: {data.period_label}
             {p.published_at && <> · Published {p.published_at}</>}
           </div>
         </div>
@@ -116,7 +116,7 @@ export default function PublicInsight() {
             Headline summary
           </h2>
           {bullets.length > 0 ? (
-            <ul className="space-y-2 text-gray-800">
+            <ul className="space-y-2 text-gray-800 dark:text-gray-200">
               {bullets.map((b, i) => (
                 <li key={i} className="leading-relaxed">{b.replace(/^-\s*/, '')}</li>
               ))}
@@ -149,7 +149,7 @@ export default function PublicInsight() {
                 <tbody>
                   {data.aggregates.slice(0, 60).map((r, i) => (
                     <tr key={i} className="border-t">
-                      <td className="px-3 py-1.5 font-mono text-gray-700">{r.dimension_key}</td>
+                      <td className="px-3 py-1.5 font-mono text-gray-700 dark:text-gray-300">{r.dimension_key}</td>
                       <td className="px-3 py-1.5 text-gray-600">{r.period_key}</td>
                       <td className="px-3 py-1.5 text-right">{r.n}</td>
                       <td className="px-3 py-1.5 text-right">{r.value === null ? '—' : Number(r.value).toFixed(2)}</td>

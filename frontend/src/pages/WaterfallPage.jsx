@@ -57,7 +57,7 @@ function SliderInput({ label, value, onChange, min, max, step, suffix, hint, acc
     amber: 'accent-amber-600',
   };
   return (
-    <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4 shadow-sm">
+    <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4 shadow-sm dark:bg-gray-900">
       <div className="flex items-center justify-between">
         <label className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">{label}</label>
         <div className="text-sm font-semibold text-slate-900 tabular-nums">{value}{suffix}</div>
@@ -232,7 +232,7 @@ export default function WaterfallPage() {
           <div className="flex items-center gap-2">
             <label className="text-xs text-slate-500 uppercase tracking-wider font-medium">Fund</label>
             <select
-              className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+              className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 dark:bg-gray-900"
               value={fundId || ''}
               onChange={(e) => setFundId(Number(e.target.value))}
               disabled={!funds.length}
@@ -259,7 +259,7 @@ export default function WaterfallPage() {
 
       {/* Inputs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
-        <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4 shadow-sm md:col-span-2">
+        <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4 shadow-sm md:col-span-2 dark:bg-gray-900">
           <div className="flex items-center justify-between">
             <label className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Exit value</label>
             <div className="text-sm text-slate-400">$M</div>
@@ -286,7 +286,7 @@ export default function WaterfallPage() {
         <SliderInput label="Hurdle rate" value={hurdlePct} onChange={setHurdlePct} min={0} max={20} step={0.5} suffix="%" accent="amber" />
         <SliderInput label="Years held" value={yearsHeld} onChange={setYearsHeld} min={1} max={15} step={0.5} suffix=" yrs" accent="blue" />
 
-        <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4 shadow-sm md:col-span-2">
+        <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4 shadow-sm md:col-span-2 dark:bg-gray-900">
           <label className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">GP catch-up</label>
           <label className="mt-3 flex items-center gap-3 cursor-pointer select-none">
             <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${gpCatchup ? 'bg-violet-600' : 'bg-slate-300'}`}>
@@ -308,7 +308,7 @@ export default function WaterfallPage() {
           <StatCard tone="amber" icon={TrendingUp} label="Total invested" value={fmt$(totals.total_invested)} hint={`Committed: ${fmt$(totals.total_committed)}`} />
         </div>
       ) : (
-        <div className="rounded-2xl bg-white ring-1 ring-dashed ring-slate-300 p-8 text-center mb-6">
+        <div className="rounded-2xl bg-white ring-1 ring-dashed ring-slate-300 p-8 text-center mb-6 dark:bg-gray-900">
           <Calculator className="w-8 h-8 text-slate-300 mx-auto" />
           <div className="mt-2 text-sm font-medium text-slate-700">No simulation yet</div>
           <p className="mt-1 text-xs text-slate-500">
@@ -321,7 +321,7 @@ export default function WaterfallPage() {
 
       {/* LP vs GP split bar */}
       {totals && (
-        <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4 shadow-sm mb-6">
+        <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4 shadow-sm mb-6 dark:bg-gray-900">
           <div className="text-[11px] uppercase tracking-wider text-slate-500 font-medium mb-2">LP / GP split of total proceeds</div>
           <StackedSplitBar toLps={totals.to_lps} toGp={totals.to_gp} />
         </div>
@@ -329,7 +329,7 @@ export default function WaterfallPage() {
 
       {/* Distribution + Per-LP */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm lg:col-span-2 overflow-hidden">
+        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm lg:col-span-2 overflow-hidden dark:bg-gray-900">
           <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-2">
             <ArrowDownToLine className="w-4 h-4 text-slate-400" />
             <div className="font-medium text-sm text-slate-900">Distribution waterfall</div>
@@ -377,7 +377,7 @@ export default function WaterfallPage() {
           )}
         </div>
 
-        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden">
+        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden dark:bg-gray-900">
           <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-2">
             <Calculator className="w-4 h-4 text-slate-400" />
             <div className="font-medium text-sm text-slate-900">Per-LP allocation</div>
@@ -407,7 +407,7 @@ export default function WaterfallPage() {
 
       {/* Save + Saved scenarios */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5">
+        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5 dark:bg-gray-900">
           <h3 className="font-medium text-sm text-slate-900 flex items-center gap-2 mb-3">
             <Bookmark className="w-4 h-4 text-violet-500" /> Save scenario
           </h3>
@@ -428,7 +428,7 @@ export default function WaterfallPage() {
           </div>
           <p className="mt-2 text-[11px] text-slate-400">Inputs and computed result are stored together for quick recall.</p>
         </div>
-        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5">
+        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5 dark:bg-gray-900">
           <h3 className="font-medium text-sm text-slate-900 mb-3 flex items-center gap-2">
             <Bookmark className="w-4 h-4 text-slate-400" /> Saved scenarios
             <span className="ml-auto text-xs font-normal text-slate-400">{scenarios.length}</span>

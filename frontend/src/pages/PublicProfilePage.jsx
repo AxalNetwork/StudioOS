@@ -21,13 +21,13 @@ function ArticlesTab({ userId }) {
   }, [userId]);
   if (!items || items.length === 0) return null;
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="mb-3 text-base font-semibold text-gray-900">Articles</h2>
+    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <h2 className="mb-3 text-base font-semibold text-gray-900 dark:text-gray-100">Articles</h2>
       <ul className="space-y-3">
         {items.map((a) => (
           <li key={a.id} className="border-b border-gray-100 pb-3 last:border-0">
             <Link to={`/articles/${a.slug}`} className="block group">
-              <p className="font-medium text-sm text-gray-900 group-hover:text-violet-700">{a.title}</p>
+              <p className="font-medium text-sm text-gray-900 group-hover:text-violet-700 dark:text-gray-100">{a.title}</p>
               {a.subtitle && <p className="mt-0.5 text-xs text-gray-600 line-clamp-2">{a.subtitle}</p>}
               <p className="mt-1 text-[11px] text-gray-400">
                 {a.sector ? `${a.sector.replace(/_/g, ' ')} · ` : ''}
@@ -104,8 +104,8 @@ function FounderBlock({ p }) {
   return (
     <>
       {p.projects && (
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
             <Briefcase size={16} className="text-emerald-600" /> Projects
           </h2>
           {p.projects.length === 0 ? (
@@ -115,7 +115,7 @@ function FounderBlock({ p }) {
               {p.projects.map((proj, i) => (
                 <li key={i} className="flex items-center justify-between border-b border-gray-100 pb-2 last:border-0">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{proj.name}</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{proj.name}</p>
                     {proj.sector && <p className="text-xs text-gray-500">{proj.sector}</p>}
                   </div>
                   <div className="flex items-center gap-2">
@@ -129,8 +129,8 @@ function FounderBlock({ p }) {
         </section>
       )}
       {p.traction && (
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
             <Target size={16} className="text-emerald-600" /> Traction
           </h2>
           <div className="grid grid-cols-3 gap-3">
@@ -148,8 +148,8 @@ function InvestorBlock({ p }) {
   return (
     <>
       {p.thesis && (
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
             <Target size={16} className="text-violet-600" /> Investment thesis
           </h2>
           <div className="grid grid-cols-2 gap-3">
@@ -170,8 +170,8 @@ function InvestorBlock({ p }) {
         </section>
       )}
       {p.portfolio_summary && (
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-3 text-base font-semibold text-gray-900">Portfolio</h2>
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-3 text-base font-semibold text-gray-900 dark:text-gray-100">Portfolio</h2>
           <p className="text-sm text-gray-600">{p.portfolio_summary.engagements ?? 0} capital engagement{p.portfolio_summary.engagements === 1 ? '' : 's'}.</p>
           <p className="mt-1 text-xs text-gray-400">Specific deals are private.</p>
         </section>
@@ -184,16 +184,16 @@ function PartnerBlock({ p }) {
   return (
     <>
       {p.services && (
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
               <Briefcase size={16} className="text-amber-600" /> Services
             </h2>
             {p.services.kyb_verified && (
               <Badge tone="emerald"><ShieldCheck size={12} /> KYB verified</Badge>
             )}
           </div>
-          {p.services.headline && <p className="mb-3 text-sm text-gray-800">{p.services.headline}</p>}
+          {p.services.headline && <p className="mb-3 text-sm text-gray-800 dark:text-gray-200">{p.services.headline}</p>}
           {p.services.specialization && <p className="mb-3 text-sm text-gray-600">{p.services.specialization}</p>}
           <div className="flex flex-wrap gap-2">
             {(p.services.categories || []).map((c) => <Badge key={c} tone="slate">{String(c).replace(/_/g, ' ')}</Badge>)}
@@ -211,8 +211,8 @@ function PartnerBlock({ p }) {
         </section>
       )}
       {p.pricing && (
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
             <DollarSign size={16} className="text-amber-600" /> Pricing
           </h2>
           <div className="grid grid-cols-2 gap-3">
@@ -226,12 +226,12 @@ function PartnerBlock({ p }) {
         </section>
       )}
       {p.reviews && (
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
             <Star size={16} className="text-amber-500" /> Reviews
           </h2>
           {p.reviews.count > 0 ? (
-            <p className="text-sm text-gray-700">
+            <p className="text-sm text-gray-700 dark:text-gray-300">
               <span className="font-semibold">{p.reviews.avg_rating?.toFixed(1)} / 5</span>
               <span className="text-gray-500"> · {p.reviews.count} review{p.reviews.count === 1 ? '' : 's'}</span>
             </p>
@@ -246,9 +246,9 @@ function PartnerBlock({ p }) {
 
 function Stat({ label, value, icon }) {
   return (
-    <div className="rounded-lg border border-gray-200 p-3">
+    <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
       <p className="text-[11px] uppercase text-gray-500">{label}</p>
-      <p className="mt-1 inline-flex items-center gap-1 text-sm text-gray-900">{icon}{value}</p>
+      <p className="mt-1 inline-flex items-center gap-1 text-sm text-gray-900 dark:text-gray-100">{icon}{value}</p>
     </div>
   );
 }
@@ -282,7 +282,7 @@ export default function PublicProfilePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
-      <header className="border-b border-gray-200 bg-white">
+      <header className="border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link to="/" className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
             <ArrowLeft size={16} /> Axal StudioOS
@@ -305,7 +305,7 @@ export default function PublicProfilePage() {
 
         {p && (
           <>
-            <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
               <div className="flex flex-wrap items-start gap-5">
                 {p.headshot_url ? (
                   <img src={p.headshot_url} alt="" className="h-20 w-20 shrink-0 rounded-full object-cover ring-2 ring-white shadow" />
@@ -316,14 +316,14 @@ export default function PublicProfilePage() {
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-2xl font-bold text-gray-900">{p.name || `@${p.handle}`}</h1>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{p.name || `@${p.handle}`}</h1>
                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${styles.bg} ${styles.text} ${styles.ring}`}>
                       <Sparkles size={12} /> {styles.label}
                     </span>
                     {p.user_id && <ProfileTrustBadge userId={p.user_id} size={role === 'founder' ? 'md' : 'sm'} />}
                   </div>
                   <p className="mt-0.5 font-mono text-xs text-gray-400">@{p.handle}</p>
-                  {p.bio && <p className="mt-3 whitespace-pre-line text-sm text-gray-700">{p.bio}</p>}
+                  {p.bio && <p className="mt-3 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{p.bio}</p>}
                   {Object.keys(p.socials || {}).length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-3">
                       {Object.entries(p.socials).map(([k, v]) => <SocialLink key={k} kind={k} href={v} />)}

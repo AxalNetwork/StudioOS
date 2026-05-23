@@ -6,7 +6,7 @@ function ModernSelect({ value, onChange, children, ...props }) {
   return (
     <div className="relative">
       <select value={value} onChange={onChange} {...props}
-        className="w-full bg-white text-gray-900 border border-gray-300 rounded-xl px-4 py-2.5 pr-10 text-sm appearance-none shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400 hover:shadow-md">
+        className="w-full bg-white text-gray-900 border border-gray-300 rounded-xl px-4 py-2.5 pr-10 text-sm appearance-none shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400 hover:shadow-md dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700">
         {children}
       </select>
       <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -77,8 +77,8 @@ function AdvisorTab({ projects }) {
   return (
     <div className="grid lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100">
             <Brain size={16} className="text-violet-600" /> Ask the AI Advisor
           </h3>
           <div className="flex gap-3 mb-3">
@@ -98,7 +98,7 @@ function AdvisorTab({ projects }) {
             <input value={question} onChange={e => setQuestion(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && ask()}
               placeholder="Ask anything about strategy, GTM, fundraising..."
-              className="flex-1 bg-gray-50 border border-gray-700 rounded-lg px-4 py-2 text-sm text-gray-900 placeholder-gray-500" />
+              className="flex-1 bg-gray-50 border border-gray-700 rounded-lg px-4 py-2 text-sm text-gray-900 placeholder-gray-500 dark:text-gray-100" />
             <button onClick={ask} disabled={loading || !question.trim()}
               className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg text-sm text-white font-medium flex items-center gap-2 transition-colors">
               <Send size={14} /> {loading ? 'Thinking...' : 'Ask'}
@@ -107,7 +107,7 @@ function AdvisorTab({ projects }) {
         </div>
 
         {response && (
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
             <div className="flex items-center gap-2 mb-3">
               <Brain size={14} className="text-violet-600" />
               <span className="text-xs text-gray-600">{response.ai_generated ? 'AI-Powered' : 'Template'} Response</span>
@@ -118,16 +118,16 @@ function AdvisorTab({ projects }) {
         )}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5 h-fit">
-        <h3 className="text-sm font-semibold text-gray-900 mb-3">Query History</h3>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 h-fit dark:bg-gray-900 dark:border-gray-800">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Query History</h3>
         {history.length === 0 ? (
           <p className="text-xs text-gray-500">No queries yet. Ask a question to get started.</p>
         ) : (
           <div className="space-y-3">
             {history.slice(0, 8).map((h, i) => (
-              <div key={i} className="border-b border-gray-200 pb-2">
+              <div key={i} className="border-b border-gray-200 pb-2 dark:border-gray-800">
                 <div className="text-xs text-gray-600 mb-1">{h.category}</div>
-                <div className="text-xs text-gray-900 font-medium truncate">{h.q}</div>
+                <div className="text-xs text-gray-900 font-medium truncate dark:text-gray-100">{h.q}</div>
                 <div className="text-[10px] text-gray-500 mt-0.5">{h.ts.toLocaleTimeString()}</div>
               </div>
             ))}
@@ -160,8 +160,8 @@ function FinancialTab({ projects }) {
 
   return (
     <div className="grid lg:grid-cols-2 gap-6">
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Financial Parameters</h3>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4 dark:text-gray-100">Financial Parameters</h3>
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <label className="text-xs text-gray-600">Project</label>
@@ -184,7 +184,7 @@ function FinancialTab({ projects }) {
           ].map(([key, label, type]) => (
             <div key={key}>
               <label className="text-xs text-gray-600">{label}</label>
-              <input type={type} {...f(key)} className="w-full mt-1 bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900" />
+              <input type={type} {...f(key)} className="w-full mt-1 bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-gray-100" />
             </div>
           ))}
         </div>
@@ -209,11 +209,11 @@ function FinancialTab({ projects }) {
             </div>
 
             {plan.recommendations.length > 0 && (
-              <div className="bg-white border border-gray-200 rounded-xl p-5">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Recommendations</h3>
+              <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Recommendations</h3>
                 <ul className="space-y-2">
                   {plan.recommendations.map((r, i) => (
-                    <li key={i} className="text-xs text-gray-700 flex items-start gap-2">
+                    <li key={i} className="text-xs text-gray-700 flex items-start gap-2 dark:text-gray-300">
                       <AlertTriangle size={12} className="text-yellow-400 mt-0.5 shrink-0" />
                       {r}
                     </li>
@@ -222,8 +222,8 @@ function FinancialTab({ projects }) {
               </div>
             )}
 
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">18-Month Projection</h3>
+            <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">18-Month Projection</h3>
               <div className="space-y-1 max-h-64 overflow-y-auto">
                 {plan.projections.map(p => (
                   <div key={p.month} className="flex items-center gap-2 text-xs">
@@ -270,8 +270,8 @@ function DiligenceTab({ projects }) {
 
   return (
     <div>
-      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-        <h3 className="text-sm font-semibold text-gray-900 mb-3">Automated Diligence Check</h3>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Automated Diligence Check</h3>
         <div className="flex gap-3">
           <div className="flex-1">
             <ModernSelect value={projectId} onChange={e => setProjectId(e.target.value)}>
@@ -288,10 +288,10 @@ function DiligenceTab({ projects }) {
 
       {report && (
         <div className="space-y-4">
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">{report.project_name}</h3>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{report.project_name}</h3>
                 <p className="text-xs text-gray-600">{report.recommendation}</p>
               </div>
               <span className={`text-sm px-3 py-1 rounded-full font-medium ${
@@ -320,14 +320,14 @@ function DiligenceTab({ projects }) {
             const items = report.checks.filter(c => c.category === cat);
             if (items.length === 0) return null;
             return (
-              <div key={cat} className="bg-white border border-gray-200 rounded-xl p-5">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">{cat} Checks</h4>
+              <div key={cat} className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">{cat} Checks</h4>
                 <div className="space-y-2">
                   {items.map((c, i) => (
                     <div key={i} className="flex items-start gap-3 px-3 py-2 bg-gray-50 rounded-lg">
                       {statusIcon(c.status)}
                       <div className="flex-1">
-                        <div className="text-xs text-gray-900 font-medium">{c.item}</div>
+                        <div className="text-xs text-gray-900 font-medium dark:text-gray-100">{c.item}</div>
                         <div className="text-[11px] text-gray-600">{c.detail}</div>
                       </div>
                     </div>

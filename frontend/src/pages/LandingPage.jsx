@@ -161,7 +161,7 @@ function useCountUp(target, durationMs = 600) {
 function StatCard({ value, label, suffix }) {
   const n = useCountUp(value);
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center dark:border-gray-800">
       <div className="text-2xl md:text-3xl font-bold text-violet-600 tabular-nums">
         {n.toLocaleString()}<span className="text-lg">{suffix || ''}</span>
       </div>
@@ -212,11 +212,11 @@ function LatestArticles() {
   }, []);
   if (!items || items.length === 0) return null;
   return (
-    <section className="py-20 px-6 bg-white">
+    <section className="py-20 px-6 bg-white dark:bg-gray-900">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-end justify-between mb-8">
           <div>
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900">Latest from the network</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100">Latest from the network</h2>
             <p className="mt-2 text-sm text-gray-600">Long-form writing from Axal founders, investors, partners, and the studio.</p>
           </div>
           <Link to="/articles" className="hidden sm:inline-flex items-center gap-1 text-sm text-violet-700 hover:text-violet-800 font-medium">
@@ -228,7 +228,7 @@ function LatestArticles() {
             <Link
               key={a.id}
               to={`/articles/${a.slug}`}
-              className="group block rounded-xl border border-gray-200 bg-white overflow-hidden hover:border-violet-400 transition"
+              className="group block rounded-xl border border-gray-200 bg-white overflow-hidden hover:border-violet-400 transition dark:border-gray-800 dark:bg-gray-900"
             >
               {a.cover_url ? (
                 <img src={a.cover_url} alt="" className="w-full aspect-[16/9] object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
@@ -240,7 +240,7 @@ function LatestArticles() {
                   {a.sector && <span>{a.sector.replace(/_/g, ' ')}</span>}
                   {a.read_minutes ? <><span>·</span><span>{a.read_minutes} min</span></> : null}
                 </div>
-                <h3 className="font-semibold text-base text-gray-900 group-hover:text-violet-700 line-clamp-2">{a.title}</h3>
+                <h3 className="font-semibold text-base text-gray-900 group-hover:text-violet-700 line-clamp-2 dark:text-gray-100">{a.title}</h3>
                 {a.subtitle && <p className="mt-1 text-sm text-gray-600 line-clamp-2">{a.subtitle}</p>}
                 <p className="mt-3 text-xs text-gray-500">by {a.author || '—'}</p>
               </div>
@@ -259,7 +259,7 @@ function LatestArticles() {
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-gray-900">
+    <div className="min-h-screen bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100">
       <PublicNav />
 
       {/* HERO */}
@@ -271,7 +271,7 @@ export default function LandingPage() {
             </div>
             <h1
               style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              className="text-5xl md:text-7xl font-bold leading-tight mb-6 text-gray-900"
+              className="text-5xl md:text-7xl font-bold leading-tight mb-6 text-gray-900 dark:text-gray-100"
             >
               Where venture builders meet{' '}
               <span className="text-violet-600">capital</span>
@@ -284,7 +284,7 @@ export default function LandingPage() {
 
             <div className="flex flex-wrap items-center justify-center gap-2 mb-10">
               {THESIS_PILLS.map((p) => (
-                <span key={p} className="text-xs px-3 py-1 rounded-full bg-gray-100 border border-gray-200 text-gray-700">
+                <span key={p} className="text-xs px-3 py-1 rounded-full bg-gray-100 border border-gray-200 text-gray-700 dark:border-gray-800 dark:text-gray-300">
                   {p}
                 </span>
               ))}
@@ -305,7 +305,7 @@ export default function LandingPage() {
               </Link>
               <Link
                 to="/register?lane=founder"
-                className="flex items-center gap-2 bg-white hover:bg-violet-50 border border-violet-300 text-violet-700 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium"
+                className="flex items-center gap-2 bg-white hover:bg-violet-50 border border-violet-300 text-violet-700 transition-colors px-7 py-3.5 rounded-xl text-sm font-medium dark:bg-gray-900"
               >
                 Apply as Founder <ChevronRight size={16} />
               </Link>
@@ -320,7 +320,7 @@ export default function LandingPage() {
       <section id="network" className="py-20 px-6 bg-gray-50">
         <div className="max-w-7xl mx-auto">
           <div className="max-w-3xl mx-auto text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-gray-100">
               Six layers, one operating system.
             </h2>
             <p className="text-gray-600 leading-relaxed">
@@ -334,12 +334,12 @@ export default function LandingPage() {
               return (
                 <div
                   key={layer.id}
-                  className="bg-white border border-gray-200 rounded-2xl p-6 hover:border-violet-300 hover:shadow-lg transition-all"
+                  className="bg-white border border-gray-200 rounded-2xl p-6 hover:border-violet-300 hover:shadow-lg transition-all dark:bg-gray-900 dark:border-gray-800"
                 >
                   <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center mb-5">
                     <Icon size={22} className="text-violet-600" />
                   </div>
-                  <h3 className="text-base font-semibold mb-2 text-gray-900">{layer.name}</h3>
+                  <h3 className="text-base font-semibold mb-2 text-gray-900 dark:text-gray-100">{layer.name}</h3>
                   <p className="text-sm text-gray-600 leading-relaxed">{layer.blurb}</p>
                 </div>
               );
@@ -360,10 +360,10 @@ export default function LandingPage() {
                 <span className="inline-block text-[11px] uppercase tracking-wider font-semibold text-violet-700 bg-violet-100 px-2.5 py-1 rounded">
                   Niche product
                 </span>
-                <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mt-4 mb-4">
+                <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mt-4 mb-4 dark:text-gray-100">
                   Spin-Out Lab — 30-day venture sprint.
                 </h2>
-                <p className="text-base text-gray-700 leading-relaxed">
+                <p className="text-base text-gray-700 leading-relaxed dark:text-gray-300">
                   For founders with an idea and no incorporated company yet. Four weeks. Four
                   milestones. Ends with a Delaware C-Corp (or alt), cap table, 83(b), pitch deck,
                   and venture-readiness score.
@@ -376,7 +376,7 @@ export default function LandingPage() {
                 <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-2">
                   What you get
                 </h3>
-                <p className="text-sm text-gray-700 leading-relaxed">
+                <p className="text-sm text-gray-700 leading-relaxed dark:text-gray-300">
                   A high-touch spin-out program with advisor support, warm intros,
                   mentor matching, and the tooling founders need to move fast.{' '}
                   <Link
@@ -392,7 +392,7 @@ export default function LandingPage() {
                 <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-2">
                   What we look for
                 </h3>
-                <p className="text-sm text-gray-700 leading-relaxed">
+                <p className="text-sm text-gray-700 leading-relaxed dark:text-gray-300">
                   Strong founder-market fit, deep domain insight, customer access,
                   full-time commitment, and clear reasons to say yes or no.{' '}
                   <Link
@@ -445,7 +445,7 @@ export default function LandingPage() {
                       {w.n}
                     </div>
                     <div>
-                      <div className="text-sm font-semibold text-gray-900">
+                      <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                         Week {w.n} — {w.title}
                       </div>
                       <div className="text-xs text-gray-600 mt-0.5">{w.desc}</div>
@@ -468,7 +468,7 @@ export default function LandingPage() {
       <section id="lanes" className="py-20 px-6 bg-gray-50">
         <div className="max-w-7xl mx-auto">
           <div className="max-w-2xl mx-auto text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-gray-100">
               Five lanes into the network.
             </h2>
             <p className="text-gray-600">
@@ -484,11 +484,11 @@ export default function LandingPage() {
                     <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center">
                       <Icon size={18} className="text-violet-700" />
                     </div>
-                    <h3 className="text-base font-semibold text-gray-900">{lane.title}</h3>
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{lane.title}</h3>
                   </div>
                   <ul className="space-y-2 mb-6 flex-1">
                     {lane.bullets.map((b, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700 leading-relaxed">
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700 leading-relaxed dark:text-gray-300">
                         <span className="w-1.5 h-1.5 rounded-full bg-violet-500 mt-1.5 shrink-0" />
                         <span>{b}</span>
                       </li>
@@ -514,20 +514,20 @@ export default function LandingPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-violet-100 border border-violet-200 rounded-full text-[11px] text-violet-700 mb-4">
               <span className="w-1.5 h-1.5 rounded-full bg-violet-600 animate-pulse" /> Live in Production
             </div>
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">How the network works.</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-gray-100">How the network works.</h2>
             <p className="text-gray-600 max-w-xl mx-auto">
               Three steps. Join, get verified, unlock progressively.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-4">
             {HOW_IT_WORKS.map((step, i) => (
-              <div key={i} className="relative bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg hover:border-violet-300 transition-all">
+              <div key={i} className="relative bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg hover:border-violet-300 transition-all dark:bg-gray-900 dark:border-gray-800">
                 <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500 to-violet-600 rounded-t-2xl" />
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs text-gray-500 font-medium">{step.week}</div>
                   <step.icon size={16} className="text-violet-500" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2 text-gray-900">{step.title}</h3>
+                <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{step.title}</h3>
                 <p className="text-sm text-gray-600 leading-relaxed">{step.desc}</p>
               </div>
             ))}
@@ -539,7 +539,7 @@ export default function LandingPage() {
       <section id="platform" className="py-20 px-6 bg-gray-50">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">The Platform Underneath</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-gray-100">The Platform Underneath</h2>
             <p className="text-gray-600 max-w-xl mx-auto">
               Integrated engines powering the entire venture lifecycle. Spin-Out Lab is one of them.
             </p>
@@ -549,13 +549,13 @@ export default function LandingPage() {
               <Link
                 key={i}
                 to={f.to}
-                className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all group"
+                className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl p-5 hover:border-violet-300 hover:shadow-lg transition-all group dark:bg-gray-900 dark:border-gray-800"
               >
                 <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
                   <f.icon size={18} className="text-violet-600" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-sm font-semibold mb-1 text-gray-900 flex items-center gap-1.5">
+                  <h3 className="text-sm font-semibold mb-1 text-gray-900 flex items-center gap-1.5 dark:text-gray-100">
                     {f.title}
                     <ChevronRight size={12} className="text-gray-400 group-hover:text-violet-600 group-hover:translate-x-0.5 transition-all" />
                   </h3>

@@ -44,7 +44,7 @@ export default function InstallPrompt() {
   // Native install (Chrome/Edge/Android)
   if (state.canInstall) {
     return (
-      <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-sm z-40 bg-white border border-slate-200 rounded-lg shadow-lg p-4 flex items-start gap-3">
+      <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-sm z-40 bg-white border border-slate-200 rounded-lg shadow-lg p-4 flex items-start gap-3 dark:bg-gray-900">
         <div className="bg-purple-100 text-purple-700 rounded-md p-2 flex-shrink-0">
           <Smartphone className="w-5 h-5" />
         </div>
@@ -75,7 +75,7 @@ export default function InstallPrompt() {
   // iOS Safari: must educate the user (no beforeinstallprompt support)
   if (iosHint) {
     return (
-      <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-sm z-40 bg-white border border-slate-200 rounded-lg shadow-lg p-4 flex items-start gap-3">
+      <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-sm z-40 bg-white border border-slate-200 rounded-lg shadow-lg p-4 flex items-start gap-3 dark:bg-gray-900">
         <div className="bg-purple-100 text-purple-700 rounded-md p-2 flex-shrink-0">
           <Smartphone className="w-5 h-5" />
         </div>

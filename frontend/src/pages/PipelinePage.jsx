@@ -193,7 +193,7 @@ export default function PipelinePage() {
         <div className="flex items-center gap-3">
           <Layers className="text-violet-600" size={24} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Pipeline Board</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Pipeline Board</h1>
             <p className="text-sm text-gray-600">Parallel MVP development with AI-driven decision gates.{canEdit ? ' Drag cards between columns to advance.' : ''}</p>
           </div>
         </div>
@@ -276,7 +276,7 @@ function DealCard({ deal, onOpen, onSpinout, draggable, onDragStart, onDragEnd, 
         <div className="absolute top-1 right-1 text-violet-500" title="Saving…"><Loader2 className="animate-spin" size={10} /></div>
       )}
       <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="font-semibold text-sm text-gray-900 truncate flex-1">{deal.name}</div>
+        <div className="font-semibold text-sm text-gray-900 truncate flex-1 dark:text-gray-100">{deal.name}</div>
         {traction != null && <ScorePill score={traction} small />}
       </div>
       {deal.sector && <div className="text-[10px] text-gray-500 mb-2">{deal.sector}</div>}
@@ -289,7 +289,7 @@ function DealCard({ deal, onOpen, onSpinout, draggable, onDragStart, onDragEnd, 
       {deal.latest_metrics?.key_metrics && Object.keys(deal.latest_metrics.key_metrics).length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
           {Object.entries(deal.latest_metrics.key_metrics).slice(0, 3).map(([k, v]) => (
-            <span key={k} className="text-[10px] bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded">{k}: {String(v)}</span>
+            <span key={k} className="text-[10px] bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded dark:text-gray-300">{k}: {String(v)}</span>
           ))}
         </div>
       )}
@@ -413,7 +413,7 @@ function DealVoteWidget({ dealId, liveTally }) {
             value={comment}
             onChange={e => setComment(e.target.value)}
             placeholder="Optional comment (sent with next vote)"
-            className="w-full text-[10px] bg-white border border-gray-300 rounded px-2 py-1 focus:border-violet-400 focus:outline-none"
+            className="w-full text-[10px] bg-white border border-gray-300 rounded px-2 py-1 focus:border-violet-400 focus:outline-none dark:bg-gray-900 dark:border-gray-700"
           />
           <label className="flex items-center gap-1 text-[10px] text-gray-600 cursor-pointer">
             <input type="checkbox" checked={anonymous} onChange={e => setAnonymous(e.target.checked)} />
@@ -475,8 +475,8 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 flex justify-end" onClick={onClose}>
-      <div className="bg-white w-full max-w-3xl h-full overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
+      <div className="bg-white w-full max-w-3xl h-full overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10 dark:border-gray-800 dark:bg-gray-900">
           <h2 className="text-lg font-semibold truncate">{data?.project?.name || 'Loading…'}</h2>
           <div className="flex items-center gap-2">
             {canEdit && <button onClick={triggerReview} disabled={busy} className="flex items-center gap-1 text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-1.5 rounded">
@@ -490,7 +490,7 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
           <div className="p-6">
             {err && <div className="bg-red-50 border border-red-200 text-red-700 rounded p-2 text-xs mb-3">{err}</div>}
 
-            <div className="flex gap-1 mb-4 border-b border-gray-200">
+            <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-800">
               {[{id:'overview',label:'Overview',icon:Activity},{id:'tasks',label:`MVP Tasks (${data.tasks.length})`,icon:Target},{id:'metrics',label:`Metrics (${data.metrics.length})`,icon:TrendingUp},{id:'gates',label:`Gates (${data.gates.length})`,icon:Sparkles}].map(t => {
                 const Icon = t.icon;
                 return (
@@ -521,13 +521,13 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
                   </div>
                 )}
                 {data.project.problem_statement && (
-                  <div><div className="text-xs font-semibold text-gray-700 mb-1">Problem</div><p className="text-xs text-gray-700">{data.project.problem_statement}</p></div>
+                  <div><div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Problem</div><p className="text-xs text-gray-700 dark:text-gray-300">{data.project.problem_statement}</p></div>
                 )}
                 {data.project.solution && (
-                  <div><div className="text-xs font-semibold text-gray-700 mb-1">Solution</div><p className="text-xs text-gray-700">{data.project.solution}</p></div>
+                  <div><div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Solution</div><p className="text-xs text-gray-700 dark:text-gray-300">{data.project.solution}</p></div>
                 )}
                 <div>
-                  <div className="text-xs font-semibold text-gray-700 mb-2">Stage Timeline</div>
+                  <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Stage Timeline</div>
                   <div className="space-y-1">
                     {data.stages.map(s => (
                       <div key={s.id} className="flex items-center justify-between text-xs py-1 border-b border-gray-100 last:border-0">
@@ -563,10 +563,10 @@ function TasksTab({ data, canEdit, dealId, reload }) {
   return (
     <div>
       {canEdit && (adding ? (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3 space-y-2">
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3 space-y-2 dark:border-gray-800">
           <input placeholder="Task title" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className={inputCls} />
           <textarea rows={2} placeholder="Description (optional)" value={form.description} onChange={e => setForm({...form, description: e.target.value})} className={inputCls} />
-          <div className="flex gap-2"><button onClick={addTask} className="bg-violet-600 hover:bg-violet-700 text-white text-xs px-3 py-1.5 rounded">Add</button><button onClick={() => setAdding(false)} className="text-xs text-gray-700 px-2 py-1.5">Cancel</button></div>
+          <div className="flex gap-2"><button onClick={addTask} className="bg-violet-600 hover:bg-violet-700 text-white text-xs px-3 py-1.5 rounded">Add</button><button onClick={() => setAdding(false)} className="text-xs text-gray-700 px-2 py-1.5 dark:text-gray-300">Cancel</button></div>
         </div>
       ) : (
         <button onClick={() => setAdding(true)} className="mb-3 text-xs flex items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded"><Plus size={12} /> Add Task</button>
@@ -574,17 +574,17 @@ function TasksTab({ data, canEdit, dealId, reload }) {
       <div className="grid grid-cols-3 gap-3">
         {Object.entries(cols).map(([s, list]) => (
           <div key={s}>
-            <div className="text-xs font-semibold text-gray-700 mb-2 uppercase">{s.replace('_', ' ')} ({list.length})</div>
+            <div className="text-xs font-semibold text-gray-700 mb-2 uppercase dark:text-gray-300">{s.replace('_', ' ')} ({list.length})</div>
             <div className="space-y-2">
               {list.map(t => (
-                <div key={t.id} className="bg-white border border-gray-200 rounded p-2 text-xs">
+                <div key={t.id} className="bg-white border border-gray-200 rounded p-2 text-xs dark:bg-gray-900 dark:border-gray-800">
                   <div className="flex items-start gap-1">
                     {t.ai_generated && <Sparkles size={10} className="text-violet-500 flex-shrink-0 mt-0.5" />}
-                    <div className="font-medium text-gray-900 flex-1">{t.title}</div>
+                    <div className="font-medium text-gray-900 flex-1 dark:text-gray-100">{t.title}</div>
                   </div>
                   {t.description && <p className="text-gray-600 mt-1">{t.description}</p>}
                   {canEdit && (
-                    <select value={t.status} onChange={e => updateStatus(t.id, e.target.value)} className="mt-2 text-[10px] bg-gray-50 border border-gray-200 rounded px-1 py-0.5 w-full">
+                    <select value={t.status} onChange={e => updateStatus(t.id, e.target.value)} className="mt-2 text-[10px] bg-gray-50 border border-gray-200 rounded px-1 py-0.5 w-full dark:border-gray-800">
                       <option value="todo">todo</option><option value="in_progress">in progress</option><option value="done">done</option>
                     </select>
                   )}
@@ -616,22 +616,22 @@ function MetricsTab({ data, canEdit, dealId, reload }) {
   return (
     <div>
       {canEdit && (adding ? (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3">
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3 dark:border-gray-800">
           <div className="grid grid-cols-2 gap-2">
             <Field label="Users / MAU"><input type="number" value={form.users} onChange={e => setForm({...form, users: e.target.value})} className={inputCls} /></Field>
             <Field label="Revenue / MRR ($)"><input type="number" value={form.revenue} onChange={e => setForm({...form, revenue: e.target.value})} className={inputCls} /></Field>
             <Field label="Engagement (0-100)"><input type="number" value={form.engagement} onChange={e => setForm({...form, engagement: e.target.value})} className={inputCls} /></Field>
             <Field label="Growth Rate (%)"><input type="number" value={form.growth} onChange={e => setForm({...form, growth: e.target.value})} className={inputCls} /></Field>
           </div>
-          <div className="flex gap-2 mt-2"><button onClick={submit} className="bg-violet-600 hover:bg-violet-700 text-white text-xs px-3 py-1.5 rounded">Capture Snapshot</button><button onClick={() => setAdding(false)} className="text-xs text-gray-700 px-2 py-1.5">Cancel</button></div>
+          <div className="flex gap-2 mt-2"><button onClick={submit} className="bg-violet-600 hover:bg-violet-700 text-white text-xs px-3 py-1.5 rounded">Capture Snapshot</button><button onClick={() => setAdding(false)} className="text-xs text-gray-700 px-2 py-1.5 dark:text-gray-300">Cancel</button></div>
         </div>
       ) : (
         <button onClick={() => setAdding(true)} className="mb-3 text-xs flex items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded"><Plus size={12} /> Record Metrics</button>
       ))}
 
       {series.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg p-3 mb-3">
-          <div className="text-xs font-semibold text-gray-700 mb-2">Traction Score History</div>
+        <div className="bg-white border border-gray-200 rounded-lg p-3 mb-3 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Traction Score History</div>
           <div className="flex items-end gap-1 h-24 bg-gray-50 rounded p-2">
             {series.map((s, i) => (
               <div key={i} className="flex-1 bg-violet-500 rounded-sm hover:bg-violet-700 transition-colors" style={{height: `${Math.max(2, ((s.traction_score || 0) / max) * 100)}%`}} title={`${new Date(s.snapshot_date).toLocaleDateString()}: ${s.traction_score}`} />
@@ -642,7 +642,7 @@ function MetricsTab({ data, canEdit, dealId, reload }) {
 
       <div className="space-y-2">
         {data.metrics.length === 0 ? <Empty text="No snapshots yet." /> : data.metrics.map(m => (
-          <div key={m.id} className="bg-white border border-gray-200 rounded p-2 text-xs">
+          <div key={m.id} className="bg-white border border-gray-200 rounded p-2 text-xs dark:bg-gray-900 dark:border-gray-800">
             <div className="flex items-center justify-between mb-1">
               <span className="text-gray-500">{new Date(m.snapshot_date).toLocaleString()}</span>
               <ScorePill score={m.traction_score} small />
@@ -662,7 +662,7 @@ function GatesTab({ data, canEdit, onDecide, busy }) {
   return (
     <div className="space-y-3">
       {data.gates.map(g => (
-        <div key={g.id} className="bg-white border border-gray-200 rounded-lg p-4">
+        <div key={g.id} className="bg-white border border-gray-200 rounded-lg p-4 dark:bg-gray-900 dark:border-gray-800">
           <div className="flex items-start justify-between mb-2">
             <div>
               <div className="text-xs text-gray-500">{new Date(g.created_at).toLocaleString()}</div>
@@ -677,7 +677,7 @@ function GatesTab({ data, canEdit, onDecide, busy }) {
               'bg-orange-100 text-orange-700'
             }`}>{g.status.toUpperCase()}</span>
           </div>
-          {g.ai_explanation && <p className="text-xs text-gray-700 italic bg-violet-50 border border-violet-100 rounded p-2 mb-3">{g.ai_explanation}</p>}
+          {g.ai_explanation && <p className="text-xs text-gray-700 italic bg-violet-50 border border-violet-100 rounded p-2 mb-3 dark:text-gray-300">{g.ai_explanation}</p>}
           {g.status === 'pending' && canEdit && (
             <div className="flex gap-2">
               <button onClick={() => onDecide(g.id, 'passed')} disabled={busy} className="flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded"><CheckCircle2 size={12} /> Spin-Out</button>
@@ -685,7 +685,7 @@ function GatesTab({ data, canEdit, onDecide, busy }) {
               <button onClick={() => onDecide(g.id, 'failed')} disabled={busy} className="flex items-center gap-1 text-xs bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-3 py-1.5 rounded"><AlertTriangle size={12} /> Kill</button>
             </div>
           )}
-          {g.final_decision && <div className="text-xs text-gray-700 mt-2">Final decision: <span className="font-bold uppercase">{g.final_decision}</span></div>}
+          {g.final_decision && <div className="text-xs text-gray-700 mt-2 dark:text-gray-300">Final decision: <span className="font-bold uppercase">{g.final_decision}</span></div>}
         </div>
       ))}
     </div>
@@ -704,8 +704,8 @@ function CreateModal({ onClose, onCreated }) {
   };
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between"><h2 className="text-lg font-semibold">New Pipeline Project</h2><button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button></div>
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800"><h2 className="text-lg font-semibold">New Pipeline Project</h2><button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button></div>
         <div className="p-6 space-y-3">
           <Field label="Name *"><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className={inputCls} /></Field>
           <Field label="Sector"><input value={form.sector} onChange={e => setForm({...form, sector: e.target.value})} className={inputCls} placeholder="fintech / saas / health / etc." /></Field>
@@ -714,7 +714,7 @@ function CreateModal({ onClose, onCreated }) {
           <Field label="Solution"><textarea rows={2} value={form.solution} onChange={e => setForm({...form, solution: e.target.value})} className={inputCls} /></Field>
           {err && <div className="text-xs text-red-600">{err}</div>}
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded-lg">Cancel</button>
+            <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded-lg dark:text-gray-300">Cancel</button>
             <button onClick={submit} disabled={busy} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
               {busy ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} Create
             </button>
@@ -726,8 +726,8 @@ function CreateModal({ onClose, onCreated }) {
 }
 
 const inputCls = 'w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none';
-function Field({ label, children }) { return <div><label className="text-xs text-gray-700 font-medium block mb-1">{label}</label>{children}</div>; }
-function KV({ k, v }) { return <div className="bg-gray-50 rounded-lg p-2"><div className="text-[10px] uppercase text-gray-500">{k}</div><div className="text-sm font-medium text-gray-900 truncate">{String(v)}</div></div>; }
+function Field({ label, children }) { return <div><label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">{label}</label>{children}</div>; }
+function KV({ k, v }) { return <div className="bg-gray-50 rounded-lg p-2"><div className="text-[10px] uppercase text-gray-500">{k}</div><div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{String(v)}</div></div>; }
 function Empty({ text }) { return <div className="text-xs text-gray-500 py-6 text-center">{text}</div>; }
 function Loading({ text }) { return <div className="flex items-center gap-2 text-sm text-gray-500 py-12 justify-center"><Loader2 className="animate-spin" size={16} /> {text}</div>; }
 function ScorePill({ score, small }) {

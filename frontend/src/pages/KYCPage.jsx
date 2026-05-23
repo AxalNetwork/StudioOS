@@ -126,11 +126,11 @@ export default function KYCPage() {
             <ShieldCheck size={20} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Identity Verification</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Identity Verification</h1>
             <p className="text-sm text-gray-600 mt-1">Not required for your account type.</p>
           </div>
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-700">
+        <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-700 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-300">
           Identity Verification (KYC / AML) is only required for investor accounts. Your {role} account does not need to complete this step.
           <div className="mt-4">
             <button onClick={() => navigate('/dashboard')} className="px-3 py-1.5 text-sm bg-violet-600 text-white rounded-md font-medium hover:bg-violet-700">
@@ -154,7 +154,7 @@ export default function KYCPage() {
           <ShieldCheck size={20} />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Identity Verification (KYC / AML)</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Identity Verification (KYC / AML)</h1>
         <PageExplainer pageKey="kyc" />
           <p className="text-sm text-gray-600 mt-1">Axal VC is required to verify the identity of every member before activating their account for capital, deal flow, or legal documents.</p>
         </div>
@@ -174,19 +174,19 @@ export default function KYCPage() {
       </div>
 
       {s === 'pending' && (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-700">
+        <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-700 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-300">
           Your submission is in queue. An Axal compliance reviewer typically approves within 1 business day. You will receive an email update at <strong>{authUser?.email || ''}</strong>.
         </div>
       )}
 
       {s === 'approved' && (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-700">
+        <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-700 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-300">
           You are fully verified. Submitted information is encrypted and only accessible to Axal compliance staff.
         </div>
       )}
 
       {canSubmit && (
-        <form onSubmit={submit} className="bg-white border border-gray-200 rounded-xl p-6 space-y-5">
+        <form onSubmit={submit} className="bg-white border border-gray-200 rounded-xl p-6 space-y-5 dark:bg-gray-900 dark:border-gray-800">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2 flex items-start gap-2">
               <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" /> <span>{error}</span>
@@ -194,7 +194,7 @@ export default function KYCPage() {
           )}
 
           <div>
-            <h2 className="text-sm font-semibold text-gray-900 mb-3">Legal Identity</h2>
+            <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Legal Identity</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Input label="Legal First Name" required value={form.legal_first_name} onChange={v => setForm(f => ({ ...f, legal_first_name: v }))} />
               <Input label="Legal Last Name" required value={form.legal_last_name} onChange={v => setForm(f => ({ ...f, legal_last_name: v }))} />
@@ -205,7 +205,7 @@ export default function KYCPage() {
           </div>
 
           <div>
-            <h2 className="text-sm font-semibold text-gray-900 mb-3">Residential Address</h2>
+            <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Residential Address</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <CountrySelect
                 label="Country"
@@ -222,12 +222,12 @@ export default function KYCPage() {
           </div>
 
           <div>
-            <h2 className="text-sm font-semibold text-gray-900 mb-3">Government ID</h2>
+            <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Government ID</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Select label="ID Type" required value={form.id_type} onChange={v => setForm(f => ({ ...f, id_type: v }))} options={ID_TYPES} />
               <Input label="ID Number" required value={form.id_number} onChange={v => setForm(f => ({ ...f, id_number: v }))} />
             </div>
-            <label className="mt-3 flex items-center gap-3 px-3 py-2 border border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 text-sm text-gray-700">
+            <label className="mt-3 flex items-center gap-3 px-3 py-2 border border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 text-sm text-gray-700 dark:border-gray-700 dark:text-gray-300">
               <Upload size={16} className="text-gray-500" />
               <span>{docName || 'Upload ID document (JPG, PNG, WEBP, or PDF — max 6MB)'}</span>
               <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={handleFile} />
@@ -235,11 +235,11 @@ export default function KYCPage() {
           </div>
 
           <div className="space-y-2 pt-2 border-t border-gray-100">
-            <label className="flex items-start gap-2 text-sm text-gray-700">
+            <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
               <input type="checkbox" className="mt-1" checked={form.pep_self_disclosed} onChange={e => setForm(f => ({ ...f, pep_self_disclosed: e.target.checked }))} />
               <span>I am, or am closely related to, a Politically Exposed Person (PEP).</span>
             </label>
-            <label className="flex items-start gap-2 text-sm text-gray-700">
+            <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
               <input type="checkbox" className="mt-1" checked={form.sanctions_acknowledged} onChange={e => setForm(f => ({ ...f, sanctions_acknowledged: e.target.checked }))} />
               <span>I confirm I am not on any sanctions list (OFAC, UN, EU, UK) and the information above is accurate. I authorize Axal to verify my identity with third-party providers (Persona / Sumsub).</span>
             </label>
@@ -262,9 +262,9 @@ export default function KYCPage() {
 function Input({ label, required, type = 'text', value, onChange, placeholder }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-gray-700">{label}{required && <span className="text-red-500"> *</span>}</span>
+      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{label}{required && <span className="text-red-500"> *</span>}</span>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} required={required} placeholder={placeholder}
-        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-300 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none" />
+        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-300 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none dark:border-gray-700 dark:text-gray-100" />
     </label>
   );
 }
@@ -272,12 +272,12 @@ function Input({ label, required, type = 'text', value, onChange, placeholder })
 function Select({ label, required, value, onChange, options }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-gray-700">{label}{required && <span className="text-red-500"> *</span>}</span>
+      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{label}{required && <span className="text-red-500"> *</span>}</span>
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
         required={required}
-        className="mt-1 w-full appearance-none border border-gray-300 rounded-xl px-4 py-3 pr-10 text-sm font-medium text-gray-900 bg-white shadow-sm outline-none transition focus:ring-2 focus:ring-violet-500 focus:border-violet-500 hover:border-gray-400"
+        className="mt-1 w-full appearance-none border border-gray-300 rounded-xl px-4 py-3 pr-10 text-sm font-medium text-gray-900 bg-white shadow-sm outline-none transition focus:ring-2 focus:ring-violet-500 focus:border-violet-500 hover:border-gray-400 dark:border-gray-700 dark:text-gray-100 dark:bg-gray-900"
         style={{
           backgroundImage:
             'linear-gradient(45deg, transparent 50%, #9ca3af 50%), linear-gradient(135deg, #9ca3af 50%, transparent 50%)',
@@ -336,7 +336,7 @@ function CountrySelect({ label, required, value, onChange }) {
 
   return (
     <div className="relative block" ref={containerRef}>
-      <span className="text-xs font-medium text-gray-700">
+      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
         {label}{required && <span className="text-red-500"> *</span>}
       </span>
 
@@ -359,9 +359,9 @@ function CountrySelect({ label, required, value, onChange }) {
       </div>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute z-50 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
           <div className="p-2 border-b border-gray-100">
-            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 dark:border-gray-800">
               <Search size={13} className="text-gray-400 flex-shrink-0" />
               <input
                 ref={searchRef}
@@ -369,7 +369,7 @@ function CountrySelect({ label, required, value, onChange }) {
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Search countries…"
-                className="flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder-gray-400"
+                className="flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder-gray-400 dark:text-gray-100"
                 onClick={e => e.stopPropagation()}
               />
               {query && (

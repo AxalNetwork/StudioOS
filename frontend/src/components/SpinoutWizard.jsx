@@ -86,8 +86,8 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10 dark:border-gray-800 dark:bg-gray-900">
           <div>
             <h2 className="text-lg font-bold flex items-center gap-2"><Rocket size={18} className="text-violet-600" /> Spin-Out Wizard</h2>
             <p className="text-xs text-gray-500">{deal.name}</p>
@@ -127,7 +127,7 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
                 <button onClick={init} disabled={busy} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-2">
                   {busy ? <Loader2 className="animate-spin" size={14} /> : <Rocket size={14} />} Initialize
                 </button>
-                <button onClick={iterate} disabled={busy} className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm px-4 py-2 rounded-lg">Continue / Iterate (skip spin-out)</button>
+                <button onClick={iterate} disabled={busy} className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm px-4 py-2 rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">Continue / Iterate (skip spin-out)</button>
               </div>
             </div>
           ) : (
@@ -138,7 +138,7 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
                   <p className="text-xs text-emerald-700">IP License generated and signed (doc #{sub.ip_license_doc_id}).</p>
                 ) : (
                   <>
-                    <p className="text-xs text-gray-700 mb-3">Generates the IP Assignment & License Agreement transferring the project's IP from Axal Holding to the new subsidiary.</p>
+                    <p className="text-xs text-gray-700 mb-3 dark:text-gray-300">Generates the IP Assignment & License Agreement transferring the project's IP from Axal Holding to the new subsidiary.</p>
                     <button onClick={stepIp} disabled={busy} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-3 py-2 rounded flex items-center gap-1">
                       {busy ? <Loader2 className="animate-spin" size={12} /> : <FileText size={12} />} Execute IP Transfer
                     </button>
@@ -166,7 +166,7 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
                       <input type="number" step="0.5" min="0" max="100" value={allocation[f.k] || 0}
                         onChange={e => setAllocation({...allocation, [f.k]: parseFloat(e.target.value) || 0})}
                         disabled={currentStep > 1}
-                        className="w-full bg-gray-50 border border-gray-300 rounded px-2 py-1 text-sm focus:border-violet-500 disabled:opacity-60" />
+                        className="w-full bg-gray-50 border border-gray-300 rounded px-2 py-1 text-sm focus:border-violet-500 disabled:opacity-60 dark:border-gray-700" />
                     </div>
                   ))}
                 </div>
@@ -181,14 +181,14 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
               {/* Step 3: Atlas */}
               <StepCard title="Stripe Atlas Incorporation" done={currentStep > 2} active={currentStep === 2}>
                 {sub.stripe_atlas_id ? (
-                  <div className="text-xs text-gray-700 space-y-1">
+                  <div className="text-xs text-gray-700 space-y-1 dark:text-gray-300">
                     <div>Atlas ID: <code className="bg-gray-100 px-1 rounded">{sub.stripe_atlas_id}</code></div>
                     <div>EIN: <code className="bg-gray-100 px-1 rounded">{sub.ein || 'Pending'}</code></div>
                     <div className="text-emerald-600">✓ Incorporated</div>
                   </div>
                 ) : (
                   <>
-                    <p className="text-xs text-gray-700 mb-3">Initiates Delaware C-Corp incorporation through Stripe Atlas. Returns Atlas ID and assigns EIN.</p>
+                    <p className="text-xs text-gray-700 mb-3 dark:text-gray-300">Initiates Delaware C-Corp incorporation through Stripe Atlas. Returns Atlas ID and assigns EIN.</p>
                     <button onClick={stepAtlas} disabled={busy || currentStep < 2} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-3 py-2 rounded flex items-center gap-1">
                       {busy ? <Loader2 className="animate-spin" size={12} /> : <Building2 size={12} />} Start Incorporation
                     </button>
@@ -205,7 +205,7 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
                   </div>
                 ) : (
                   <>
-                    <p className="text-xs text-gray-700 mb-3">Final step: enables independent scaling, removes from main pipeline, and provisions a post-spinout dashboard.</p>
+                    <p className="text-xs text-gray-700 mb-3 dark:text-gray-300">Final step: enables independent scaling, removes from main pipeline, and provisions a post-spinout dashboard.</p>
                     <button onClick={stepIndependent} disabled={busy || currentStep < 3} className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded flex items-center gap-1">
                       {busy ? <Loader2 className="animate-spin" size={12} /> : <Rocket size={12} />} Go Independent
                     </button>
@@ -215,8 +215,8 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
 
               {/* Audit trail */}
               {status?.events?.length > 0 && (
-                <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
-                  <div className="text-xs font-semibold text-gray-700 mb-2">Audit Trail</div>
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 dark:border-gray-800">
+                  <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Audit Trail</div>
                   <div className="space-y-1 max-h-32 overflow-y-auto">
                     {status.events.map(e => (
                       <div key={e.id} className="text-[10px] text-gray-600 flex items-center gap-2">

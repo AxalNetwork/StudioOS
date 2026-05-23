@@ -40,18 +40,18 @@ export default function LegalCapitalPage() {
         <div className="flex items-center gap-3">
           <Scale className="text-violet-600" size={24} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Legal & Capital Engine</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Legal & Capital Engine</h1>
             <p className="text-sm text-gray-600">Automated SAFE/IP docs, capital calls, diligence, and one-click subsidiary spin-out.</p>
           </div>
         </div>
         {deals.length > 0 && (
-          <select value={selectedDeal || ''} onChange={e => setSelectedDeal(parseInt(e.target.value))} className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <select value={selectedDeal || ''} onChange={e => setSelectedDeal(parseInt(e.target.value))} className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm dark:bg-gray-900 dark:border-gray-700">
             {deals.map(d => <option key={d.id} value={d.id}>{d.name}{d.pipeline_stage === 'spinout_ready' ? ' 🚀' : ''}</option>)}
           </select>
         )}
       </div>
 
-      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto dark:border-gray-800">
         {[
           {id: 'legal', label: 'Legal Engine', icon: FileText},
           {id: 'capital', label: 'Capital Engine', icon: Banknote},
@@ -101,8 +101,8 @@ function LegalTab({ dealId, canEdit }) {
     <div className="space-y-4">
       {err && <Alert text={err} />}
       {canEdit && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2"><Sparkles size={14} className="text-violet-600" /> Generate Document</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100"><Sparkles size={14} className="text-violet-600" /> Generate Document</div>
           <div className="flex flex-wrap gap-2">
             {DOC_TYPES.map(t => (
               <button key={t.id} onClick={() => generate(t.id)} disabled={!!generating}
@@ -114,8 +114,8 @@ function LegalTab({ dealId, canEdit }) {
         </div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-xl">
-        <div className="px-4 py-3 border-b border-gray-200 font-semibold text-sm">Documents ({docs.length})</div>
+      <div className="bg-white border border-gray-200 rounded-xl dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-4 py-3 border-b border-gray-200 font-semibold text-sm dark:border-gray-800">Documents ({docs.length})</div>
         {docs.length === 0 ? <Empty text="No documents yet. Generate one above." /> : (
           <div className="divide-y divide-gray-100">
             {docs.map(d => (
@@ -171,7 +171,7 @@ function CapitalTab({ dealId, canEdit }) {
           const totalCommitted = Object.values(responses).reduce((a, r) => a + (r.amount_cents || 0), 0);
           const pct = c.amount_cents ? Math.min(100, Math.round((totalCommitted / c.amount_cents) * 100)) : 0;
           return (
-            <div key={c.id} className="bg-white border border-gray-200 rounded-xl p-4">
+            <div key={c.id} className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <div className="font-bold text-lg">${(c.amount_cents / 100).toLocaleString()} {c.currency}</div>
@@ -179,7 +179,7 @@ function CapitalTab({ dealId, canEdit }) {
                 </div>
                 <CallStatusPill status={c.status} />
               </div>
-              <div className="text-xs text-gray-700 mb-2">Due: {new Date(c.due_date).toLocaleDateString()}</div>
+              <div className="text-xs text-gray-700 mb-2 dark:text-gray-300">Due: {new Date(c.due_date).toLocaleDateString()}</div>
               <div className="mb-2">
                 <div className="flex justify-between text-[10px] text-gray-500 mb-1"><span>Committed: ${(totalCommitted/100).toLocaleString()}</span><span>{pct}%</span></div>
                 <div className="bg-gray-100 rounded-full h-2 overflow-hidden"><div className="h-full bg-emerald-500" style={{width: `${pct}%`}} /></div>
@@ -227,7 +227,7 @@ function SpinoutTab({ dealId, canEdit, deal }) {
   if (loading) return <Loading />;
 
   if (sub) return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6">
+    <div className="bg-white border border-gray-200 rounded-xl p-6 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center gap-3 mb-4">
         <div className="bg-emerald-100 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center"><CheckCircle2 size={24} /></div>
         <div>
@@ -257,7 +257,7 @@ function SpinoutTab({ dealId, canEdit, deal }) {
         <div className="flex items-center gap-3 mb-3"><Rocket size={24} /><h2 className="text-xl font-bold">Subsidiary Spin-Out</h2></div>
         <p className="text-sm opacity-90 mb-3">Step-by-step wizard: IP transfer → AI-recommended equity → Stripe Atlas → Independent. Or use the one-click bundle below.</p>
         {canEdit && (
-          <button onClick={() => setShowWizard(true)} className="bg-white text-violet-700 hover:bg-violet-50 text-sm font-bold px-4 py-2 rounded-lg flex items-center gap-2">
+          <button onClick={() => setShowWizard(true)} className="bg-white text-violet-700 hover:bg-violet-50 text-sm font-bold px-4 py-2 rounded-lg flex items-center gap-2 dark:bg-gray-900">
             <Rocket size={14} /> Launch Spin-Out Wizard
           </button>
         )}
@@ -265,7 +265,7 @@ function SpinoutTab({ dealId, canEdit, deal }) {
       {showWizard && <SpinoutWizard deal={{ id: dealId, name: deal?.name || `Deal ${dealId}` }} onClose={() => { setShowWizard(false); load(); }} onComplete={load} />}
 
       {canEdit ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-3">
+        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-3 dark:bg-gray-900 dark:border-gray-800">
           <Field label="Subsidiary Name"><input value={form.subsidiary_name} onChange={e => setForm({...form, subsidiary_name: e.target.value})} placeholder={`${deal?.name || 'NewCo'}, Inc.`} className={inputCls} /></Field>
           <Field label="Jurisdiction">
             <select value={form.jurisdiction} onChange={e => setForm({...form, jurisdiction: e.target.value})} className={inputCls}>
@@ -274,7 +274,7 @@ function SpinoutTab({ dealId, canEdit, deal }) {
             </select>
           </Field>
           <Field label="Capital Call Amount (USD)"><input type="number" value={form.capital_call_amount} onChange={e => setForm({...form, capital_call_amount: e.target.value})} className={inputCls} /></Field>
-          <label className="flex items-center gap-2 text-xs text-gray-700"><input type="checkbox" checked={form.force} onChange={e => setForm({...form, force: e.target.checked})} /> Override decision-gate requirement</label>
+          <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300"><input type="checkbox" checked={form.force} onChange={e => setForm({...form, force: e.target.checked})} /> Override decision-gate requirement</label>
           <button onClick={launch} disabled={busy} className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-medium px-4 py-3 rounded-lg">
             {busy ? <Loader2 className="animate-spin" size={16} /> : <Rocket size={16} />} Launch Spin-Out
           </button>
@@ -316,8 +316,8 @@ function DiligenceTab({ dealId, canEdit }) {
     <div className="space-y-4">
       {err && <Alert text={err} />}
       {canEdit && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-2 flex-wrap">
-          <select value={type} onChange={e => setType(e.target.value)} className="bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-2 flex-wrap dark:bg-gray-900 dark:border-gray-800">
+          <select value={type} onChange={e => setType(e.target.value)} className="bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm dark:border-gray-700">
             {CHECKLIST_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
           </select>
           <button onClick={review} disabled={busy} className="text-sm bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg flex items-center gap-1">
@@ -328,7 +328,7 @@ function DiligenceTab({ dealId, canEdit }) {
       {items.length === 0 ? <Empty text="No diligence checklists yet. Run an AI review above." /> : (
         <div className="grid md:grid-cols-2 gap-3">
           {items.map(d => (
-            <div key={d.id} className="bg-white border border-gray-200 rounded-xl p-4">
+            <div key={d.id} className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <div className="text-xs uppercase text-gray-500">{d.checklist_type}</div>
@@ -337,7 +337,7 @@ function DiligenceTab({ dealId, canEdit }) {
                 <span className="text-[10px] text-gray-500">{new Date(d.created_at).toLocaleDateString()}</span>
               </div>
               <div className="bg-gray-100 rounded-full h-2 mb-3 overflow-hidden"><div className="h-full bg-violet-500" style={{width: `${d.ai_score}%`}} /></div>
-              {d.ai_summary && <p className="text-xs text-gray-700 italic bg-violet-50 border border-violet-100 rounded p-2 mb-3">{d.ai_summary}</p>}
+              {d.ai_summary && <p className="text-xs text-gray-700 italic bg-violet-50 border border-violet-100 rounded p-2 mb-3 dark:text-gray-300">{d.ai_summary}</p>}
               <div className="space-y-1">
                 {d.items.map((it, i) => (
                   <div key={i} className="text-xs flex items-center gap-2 py-1 border-b border-gray-100 last:border-0">
@@ -371,7 +371,7 @@ function LPPortalTab() {
       {calls.length === 0 ? <Empty text="No open capital calls for you." /> : (
         <div className="space-y-3">
           {calls.map(c => (
-            <div key={c.id} className="bg-white border border-gray-200 rounded-xl p-4">
+            <div key={c.id} className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <div className="font-bold text-lg">${(c.amount_cents / 100).toLocaleString()} {c.currency}</div>
@@ -379,7 +379,7 @@ function LPPortalTab() {
                 </div>
                 <CallStatusPill status={c.status} />
               </div>
-              <div className="text-xs text-gray-700 mb-3">Due: {new Date(c.due_date).toLocaleDateString()}</div>
+              <div className="text-xs text-gray-700 mb-3 dark:text-gray-300">Due: {new Date(c.due_date).toLocaleDateString()}</div>
               {c.my_response ? (
                 <div className="bg-emerald-50 border border-emerald-200 rounded p-2 text-xs">
                   Your response: <b>{c.my_response.decision}</b> — ${(c.my_response.amount_cents/100).toLocaleString()} on {new Date(c.my_response.at).toLocaleDateString()}
@@ -402,7 +402,7 @@ function DocViewerModal({ doc, onClose }) {
   return (
     <Modal onClose={onClose} title={`${DOC_TYPES.find(t => t.id === doc.type)?.label || doc.type}`} wide>
       <div className="text-[10px] text-gray-500 mb-2">v{doc.version} • {doc.status} • {new Date(doc.created_at).toLocaleString()}</div>
-      <pre className="bg-gray-50 border border-gray-200 rounded p-4 text-xs whitespace-pre-wrap font-mono max-h-[60vh] overflow-y-auto">{doc.body}</pre>
+      <pre className="bg-gray-50 border border-gray-200 rounded p-4 text-xs whitespace-pre-wrap font-mono max-h-[60vh] overflow-y-auto dark:border-gray-800">{doc.body}</pre>
     </Modal>
   );
 }
@@ -427,10 +427,10 @@ function CreateCallModal({ dealId, onClose, onCreated }) {
       <Field label="Amount (USD)"><input type="number" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} className={inputCls} /></Field>
       <Field label="Syndicate ID (optional)"><input type="number" value={form.syndicate_id} onChange={e => setForm({...form, syndicate_id: e.target.value})} className={inputCls} placeholder="If linked to a syndicate" /></Field>
       <Field label="Notes"><textarea rows={2} value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className={inputCls} /></Field>
-      <label className="flex items-center gap-2 text-xs text-gray-700"><input type="checkbox" checked={form.send} onChange={e => setForm({...form, send: e.target.checked})} /> Send immediately to LPs</label>
+      <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300"><input type="checkbox" checked={form.send} onChange={e => setForm({...form, send: e.target.checked})} /> Send immediately to LPs</label>
       {err && <div className="text-xs text-red-600">{err}</div>}
       <div className="flex justify-end gap-2 pt-2">
-        <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded">Cancel</button>
+        <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded dark:text-gray-300">Cancel</button>
         <button onClick={submit} disabled={busy} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded">
           {busy ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} Create
         </button>
@@ -458,7 +458,7 @@ function RespondModal({ call, onClose, onDone }) {
       <Field label="Amount ($)"><input type="number" value={amount} onChange={e => setAmount(e.target.value)} className={inputCls} /></Field>
       {err && <div className="text-xs text-red-600">{err}</div>}
       <div className="flex justify-end gap-2 pt-2">
-        <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded">Cancel</button>
+        <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded dark:text-gray-300">Cancel</button>
         <button onClick={submit} disabled={busy} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded">{busy ? '…' : 'Submit'}</button>
       </div>
     </Modal>
@@ -469,7 +469,7 @@ function Modal({ onClose, title, children, wide }) {
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div className={`bg-white rounded-2xl shadow-xl w-full max-h-[90vh] overflow-y-auto ${wide ? 'max-w-3xl' : 'max-w-md'}`} onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white"><h2 className="text-lg font-semibold">{title}</h2><button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button></div>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white dark:border-gray-800 dark:bg-gray-900"><h2 className="text-lg font-semibold">{title}</h2><button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button></div>
         <div className="p-6 space-y-3">{children}</div>
       </div>
     </div>
@@ -477,8 +477,8 @@ function Modal({ onClose, title, children, wide }) {
 }
 
 const inputCls = 'w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none';
-function Field({ label, children }) { return <div><label className="text-xs text-gray-700 font-medium block mb-1">{label}</label>{children}</div>; }
-function KV({ k, v }) { return <div className="bg-gray-50 rounded-lg p-2"><div className="text-[10px] uppercase text-gray-500">{k}</div><div className="text-sm font-medium text-gray-900 truncate">{String(v)}</div></div>; }
+function Field({ label, children }) { return <div><label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">{label}</label>{children}</div>; }
+function KV({ k, v }) { return <div className="bg-gray-50 rounded-lg p-2"><div className="text-[10px] uppercase text-gray-500">{k}</div><div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{String(v)}</div></div>; }
 function Empty({ text }) { return <div className="text-sm text-gray-500 py-12 text-center">{text}</div>; }
 function Loading() { return <div className="flex items-center gap-2 text-sm text-gray-500 py-20 justify-center"><Loader2 className="animate-spin" size={16} /> Loading…</div>; }
 function Alert({ text }) { return <div className="bg-red-50 border border-red-200 text-red-700 rounded p-3 text-xs flex items-center gap-2"><AlertTriangle size={14} /> {text}</div>; }

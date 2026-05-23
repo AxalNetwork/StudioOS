@@ -17,12 +17,12 @@ function StatusPill({ status }) {
 
 function MiniCard({ label, value, sub, icon: Icon, accent = 'violet' }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">{label}</span>
         {Icon && <Icon size={14} className={`text-${accent}-600`} />}
       </div>
-      <div className="text-2xl font-bold text-gray-900">{value}</div>
+      <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</div>
       {sub && <div className="text-[11px] text-gray-500 mt-1">{sub}</div>}
     </div>
   );
@@ -122,11 +122,11 @@ export default function InfrastructureTab() {
           <Play size={13} /> Drain queue now
         </button>
         <button onClick={load} disabled={busy}
-          className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5">
+          className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 text-gray-900 rounded-lg flex items-center gap-1.5 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
           <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Refresh
         </button>
         <button onClick={runCleanup} disabled={busy}
-          className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 rounded-lg flex items-center gap-1.5 ml-auto">
+          className="px-3 py-1.5 text-sm bg-white border border-gray-300 hover:bg-gray-50 rounded-lg flex items-center gap-1.5 ml-auto dark:bg-gray-900 dark:border-gray-700">
           <Trash2 size={13} /> Cleanup old jobs
         </button>
       </div>
@@ -141,8 +141,8 @@ export default function InfrastructureTab() {
       </div>
 
       {/* Throughput chart */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="text-sm font-semibold text-gray-900 mb-2">Jobs processed / minute (last 60m)</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Jobs processed / minute (last 60m)</div>
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={series}>
             <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
@@ -156,8 +156,8 @@ export default function InfrastructureTab() {
       </div>
 
       {/* Job-type breakdown */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="text-sm font-semibold text-gray-900 mb-3">Last 24h by job type</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Last 24h by job type</div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead className="text-gray-500 border-b border-gray-100">
@@ -167,7 +167,7 @@ export default function InfrastructureTab() {
                 <th className="text-right py-2 font-medium">Count</th>
               </tr>
             </thead>
-            <tbody className="text-gray-800">
+            <tbody className="text-gray-800 dark:text-gray-200">
               {(queue?.by_type || []).map((r, i) => (
                 <tr key={i} className="border-b border-gray-50">
                   <td className="py-1.5 font-mono">{r.job_type}</td>
@@ -184,11 +184,11 @@ export default function InfrastructureTab() {
       </div>
 
       {/* Recent jobs */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="text-sm font-semibold text-gray-900 mb-3">Recent jobs</div>
+      <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Recent jobs</div>
         <div className="overflow-x-auto max-h-[420px]">
           <table className="w-full text-xs">
-            <thead className="text-gray-500 border-b border-gray-100 sticky top-0 bg-white">
+            <thead className="text-gray-500 border-b border-gray-100 sticky top-0 bg-white dark:bg-gray-900">
               <tr>
                 <th className="text-left py-2 font-medium">ID</th>
                 <th className="text-left font-medium">Type</th>
@@ -198,7 +198,7 @@ export default function InfrastructureTab() {
                 <th className="text-left font-medium">Error</th>
               </tr>
             </thead>
-            <tbody className="text-gray-800">
+            <tbody className="text-gray-800 dark:text-gray-200">
               {(queue?.recent || []).map(j => (
                 <tr key={j.id} className="border-b border-gray-50">
                   <td className="py-1.5 font-mono text-gray-500">#{j.id}</td>
@@ -219,7 +219,7 @@ export default function InfrastructureTab() {
 
       {/* Dead letter */}
       {(dlq?.items || []).length > 0 && (
-        <div className="bg-white border border-red-200 rounded-xl p-5">
+        <div className="bg-white border border-red-200 rounded-xl p-5 dark:bg-gray-900">
           <div className="text-sm font-semibold text-red-900 mb-3 flex items-center gap-2">
             <AlertTriangle size={14} /> Dead-letter queue ({dlq.items.length})
           </div>
@@ -230,7 +230,7 @@ export default function InfrastructureTab() {
                   <span className="font-mono text-red-800">{d.job_type} (orig #{d.original_job_id})</span>
                   <span className="text-gray-500">{new Date(d.moved_at + 'Z').toLocaleString()}</span>
                 </div>
-                <div className="text-gray-700 mt-1">{d.last_error}</div>
+                <div className="text-gray-700 mt-1 dark:text-gray-300">{d.last_error}</div>
               </div>
             ))}
           </div>

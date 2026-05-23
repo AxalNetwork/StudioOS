@@ -89,11 +89,11 @@ export default function PartnerInsightsPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Demand Insights</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Demand Insights</h1>
           <p className="text-sm text-gray-500 mt-1">Where founder demand is concentrated and how it's trending. Updated live from the needs board.</p>
         </div>
         <div className="flex items-center gap-2">
-          <select value={windowDays} onChange={(e) => setWindowDays(Number(e.target.value))} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white">
+          <select value={windowDays} onChange={(e) => setWindowDays(Number(e.target.value))} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
             <option value={30}>Last 30 days</option>
             <option value={90}>Last 90 days</option>
             <option value={180}>Last 6 months</option>
@@ -102,7 +102,7 @@ export default function PartnerInsightsPage() {
           <button onClick={toggleSub} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border transition ${sub?.active ? 'bg-violet-50 text-violet-700 border-violet-300 hover:bg-violet-100' : 'bg-violet-600 text-white border-violet-600 hover:bg-violet-700'}`}>
             <Mail size={14} /> {sub?.active ? 'Subscribed' : 'Subscribe to weekly digest'}
           </button>
-          <button onClick={() => setPreviewOpen(true)} className="text-sm border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 flex items-center gap-1.5"><Eye size={14} /> Preview digest</button>
+          <button onClick={() => setPreviewOpen(true)} className="text-sm border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 flex items-center gap-1.5 dark:border-gray-700"><Eye size={14} /> Preview digest</button>
         </div>
       </div>
 
@@ -161,8 +161,8 @@ export default function PartnerInsightsPage() {
 
 function Section({ title, icon: Icon, children }) {
   return (
-    <section className="bg-white border border-gray-200 rounded-2xl p-5">
-      <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2"><Icon size={14} className="text-violet-600" /> {title}</h2>
+    <section className="bg-white border border-gray-200 rounded-2xl p-5 dark:bg-gray-900 dark:border-gray-800">
+      <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100"><Icon size={14} className="text-violet-600" /> {title}</h2>
       {children}
     </section>
   );
@@ -188,7 +188,7 @@ function Heatmap({ heat }) {
         <tbody>
           {heat.matrix.map((row) => (
             <tr key={row.category} className="border-t border-gray-100">
-              <td className="py-1.5 pr-3 text-gray-800 font-medium">{row.category.replace('_', ' ')}</td>
+              <td className="py-1.5 pr-3 text-gray-800 font-medium dark:text-gray-200">{row.category.replace('_', ' ')}</td>
               {row.row.map((cell) => {
                 const intensity = cell.count / max;
                 const bg = intensity === 0 ? '#f9fafb' : `rgba(124,58,237,${0.10 + intensity * 0.8})`;
@@ -203,7 +203,7 @@ function Heatmap({ heat }) {
                   </td>
                 );
               })}
-              <td className="py-1.5 pl-3 text-gray-700 text-right">{heat.totals_by_category?.[row.category] || 0}</td>
+              <td className="py-1.5 pl-3 text-gray-700 text-right dark:text-gray-300">{heat.totals_by_category?.[row.category] || 0}</td>
             </tr>
           ))}
         </tbody>
@@ -279,9 +279,9 @@ function PreviewModal({ onClose }) {
   }, []);
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
-          <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2"><Mail size={16} className="text-violet-600" /> Weekly digest preview</h3>
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100"><Mail size={16} className="text-violet-600" /> Weekly digest preview</h3>
           <button onClick={onClose}><X size={18} /></button>
         </div>
         <div className="p-5">

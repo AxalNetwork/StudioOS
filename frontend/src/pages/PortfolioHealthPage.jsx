@@ -66,8 +66,8 @@ function DetailDrawer({ projectUid, onClose }) {
   if (!projectUid) return null;
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-stretch justify-end" onClick={onClose}>
-      <div className="bg-white w-full max-w-xl h-full overflow-y-auto shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+      <div className="bg-white w-full max-w-xl h-full overflow-y-auto shadow-xl dark:bg-gray-900" onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between dark:bg-gray-900">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">{data?.project?.name || 'Project health'}</h2>
             <p className="text-xs text-slate-500">{data?.project?.sector || ''} · {data?.project?.stage || ''}</p>
@@ -174,7 +174,7 @@ function InvestorHoldingsCard() {
   }, []);
   if (!holdings || holdings.length === 0) return null;
   return (
-    <div className="mb-6 bg-white border border-slate-200 rounded-lg p-5">
+    <div className="mb-6 bg-white border border-slate-200 rounded-lg p-5 dark:bg-gray-900">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-base font-semibold text-slate-900">Portfolio holdings</h2>
         <span className="text-xs text-slate-500">{holdings.length} positions</span>
@@ -329,7 +329,7 @@ export default function PortfolioHealthPage() {
 
       {err && <div className="p-3 mb-3 bg-rose-50 border border-rose-200 rounded text-rose-700 text-sm">{err}</div>}
 
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden dark:bg-gray-900">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>

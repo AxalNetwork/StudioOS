@@ -44,11 +44,11 @@ export default function NeedsBoardPage({ user }) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Needs Board</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Needs Board</h1>
         <p className="text-sm text-gray-500 mt-1">Founders post needs and RFPs. Partners submit quotes. Accepted quotes become engagements.</p>
       </div>
 
-      <div className="border-b border-gray-200 flex gap-6 overflow-x-auto">
+      <div className="border-b border-gray-200 flex gap-6 overflow-x-auto dark:border-gray-800">
         {tabs.map((t) => {
           const Icon = t.icon;
           return (
@@ -107,14 +107,14 @@ function BrowseTab({ user }) {
       {/* T21 — wrapped in <form> so pressing Enter in the search input
           triggers Apply instead of being swallowed. */}
       <form onSubmit={(e) => { e.preventDefault(); load(); }}
-        className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center gap-2">
+        className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center gap-2 dark:bg-gray-900 dark:border-gray-800">
         <Filter size={14} className="text-gray-500" />
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
           <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Search title / description"
-            className="pl-8 border border-gray-300 rounded-md px-3 py-1.5 text-sm" />
+            className="pl-8 border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
         </div>
-        <select value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white">
+        <select value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
           <option value="">All categories</option>
           {CATEGORIES.map((c) => <option key={c} value={c}>{CAT_LABEL[c]}</option>)}
         </select>
@@ -136,16 +136,16 @@ function BrowseTab({ user }) {
 
 function NeedCard({ n, onClick }) {
   return (
-    <button type="button" onClick={onClick} className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-violet-300 hover:shadow-sm transition focus:outline-none focus:ring-2 focus:ring-violet-500">
+    <button type="button" onClick={onClick} className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-violet-300 hover:shadow-sm transition focus:outline-none focus:ring-2 focus:ring-violet-500 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-start justify-between gap-2">
         <div>
           <span className="text-[10px] bg-violet-50 text-violet-700 rounded-full px-2 py-0.5">{CAT_LABEL[n.category] || n.category}</span>
-          <div className="font-semibold text-gray-900 mt-1.5">{n.title}</div>
+          <div className="font-semibold text-gray-900 mt-1.5 dark:text-gray-100">{n.title}</div>
           {n.project_name && <div className="text-xs text-gray-500 mt-0.5">{n.project_name}</div>}
         </div>
         <span className={`text-[10px] px-2 py-0.5 rounded-full border ${STATUS_TONE[n.status] || STATUS_TONE.closed}`}>{n.status}</span>
       </div>
-      <p className="text-sm text-gray-700 mt-2 line-clamp-2">{n.description}</p>
+      <p className="text-sm text-gray-700 mt-2 line-clamp-2 dark:text-gray-300">{n.description}</p>
       <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
         <div className="flex items-center gap-3">
           {(n.budget_min || n.budget_max) && (
@@ -266,7 +266,7 @@ function NeedFormModal({ user, need, onClose, onSaved }) {
       <div className="space-y-3">
         {!isEdit && (
           <Field label="Project">
-            <select value={draft.project_id} onChange={(e) => setDraft({ ...draft, project_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white">
+            <select value={draft.project_id} onChange={(e) => setDraft({ ...draft, project_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
               <option value="">— select —</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -274,31 +274,31 @@ function NeedFormModal({ user, need, onClose, onSaved }) {
         )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Category">
-            <select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white">
+            <select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
               {CATEGORIES.map((c) => <option key={c} value={c}>{CAT_LABEL[c]}</option>)}
             </select>
           </Field>
           {isEdit && (
             <Field label="Status">
-              <select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white">
+              <select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
                 {['open', 'in_review', 'filled', 'closed'].map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </Field>
           )}
         </div>
-        <Field label="Title"><input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" /></Field>
-        <Field label="Description"><textarea rows={5} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" /></Field>
+        <Field label="Title"><input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" /></Field>
+        <Field label="Description"><textarea rows={5} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:border-gray-700" /></Field>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Budget min ($)"><input type="number" min="0" value={draft.budget_min} onChange={(e) => setDraft({ ...draft, budget_min: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" /></Field>
-          <Field label="Budget max ($)"><input type="number" min="0" value={draft.budget_max} onChange={(e) => setDraft({ ...draft, budget_max: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" /></Field>
-          <Field label="Timeline"><input value={draft.timeline} onChange={(e) => setDraft({ ...draft, timeline: e.target.value })} placeholder="e.g. 2 weeks, Q3" className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" /></Field>
+          <Field label="Budget min ($)"><input type="number" min="0" value={draft.budget_min} onChange={(e) => setDraft({ ...draft, budget_min: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" /></Field>
+          <Field label="Budget max ($)"><input type="number" min="0" value={draft.budget_max} onChange={(e) => setDraft({ ...draft, budget_max: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" /></Field>
+          <Field label="Timeline"><input value={draft.timeline} onChange={(e) => setDraft({ ...draft, timeline: e.target.value })} placeholder="e.g. 2 weeks, Q3" className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" /></Field>
         </div>
         {error && <div className="text-xs text-rose-600">{error}</div>}
       </div>
       <div className="flex items-center justify-between mt-5">
         {isEdit ? <button onClick={destroy} className="text-xs text-rose-600 hover:underline flex items-center gap-1"><Trash2 size={12} /> Delete</button> : <span />}
         <div className="flex gap-2">
-          <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+          <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-700">Cancel</button>
           <button onClick={save} disabled={!draft.title.trim() || !draft.description.trim()}
             className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg">{isEdit ? 'Save' : 'Post need'}</button>
         </div>
@@ -356,11 +356,11 @@ function NeedDetailModal({ needId, user, onClose, onEdit }) {
 
         <div>
           <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Brief</div>
-          <p className="text-sm text-gray-700 whitespace-pre-line">{need.description}</p>
+          <p className="text-sm text-gray-700 whitespace-pre-line dark:text-gray-300">{need.description}</p>
         </div>
 
         {/* RFP */}
-        <div className="border border-gray-200 rounded-xl p-4">
+        <div className="border border-gray-200 rounded-xl p-4 dark:border-gray-800">
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs uppercase tracking-wide text-gray-500 flex items-center gap-1.5"><FileText size={12} /> RFP — formal scope</div>
             {(isFounderOwner || isAdmin) && (
@@ -369,11 +369,11 @@ function NeedDetailModal({ needId, user, onClose, onEdit }) {
           </div>
           {need.rfp ? (
             <div className="space-y-2 text-sm">
-              <pre className="text-xs whitespace-pre-wrap text-gray-700 bg-gray-50 rounded-lg p-3 border border-gray-100">{need.rfp.scope_md}</pre>
+              <pre className="text-xs whitespace-pre-wrap text-gray-700 bg-gray-50 rounded-lg p-3 border border-gray-100 dark:text-gray-300">{need.rfp.scope_md}</pre>
               {need.rfp.deliverables_md && (
                 <div>
                   <div className="text-[10px] uppercase tracking-wide text-gray-500 mt-2 mb-1">Deliverables</div>
-                  <pre className="text-xs whitespace-pre-wrap text-gray-700 bg-gray-50 rounded-lg p-3 border border-gray-100">{need.rfp.deliverables_md}</pre>
+                  <pre className="text-xs whitespace-pre-wrap text-gray-700 bg-gray-50 rounded-lg p-3 border border-gray-100 dark:text-gray-300">{need.rfp.deliverables_md}</pre>
                 </div>
               )}
               {need.rfp.deadline_at && <div className="text-xs text-gray-500">Deadline: {new Date(need.rfp.deadline_at).toLocaleString()}</div>}
@@ -394,22 +394,22 @@ function NeedDetailModal({ needId, user, onClose, onEdit }) {
           ) : (
             <div className="space-y-2">
               {quotes.map((q) => (
-                <div key={q.id} className="border border-gray-200 rounded-lg p-3">
+                <div key={q.id} className="border border-gray-200 rounded-lg p-3 dark:border-gray-800">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-sm text-gray-900">{q.partner_name}</span>
+                        <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">{q.partner_name}</span>
                         {q.kyb_verified && <span title="KYB verified"><ShieldCheck size={12} className="text-violet-600" /></span>}
                         {q.partner_company && <span className="text-xs text-gray-500">— {q.partner_company}</span>}
                       </div>
                       <div className="text-xs text-gray-600 mt-1 flex items-center gap-3">
-                        <span className="font-semibold text-gray-900">${q.price.toLocaleString()}</span>
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">${q.price.toLocaleString()}</span>
                         {q.timeline_weeks !== null && q.timeline_weeks !== undefined && <span>· {q.timeline_weeks}w</span>}
                       </div>
                     </div>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full border ${QUOTE_TONE[q.status]}`}>{q.status}</span>
                   </div>
-                  <p className="text-sm text-gray-700 mt-2 whitespace-pre-line">{q.deliverables}</p>
+                  <p className="text-sm text-gray-700 mt-2 whitespace-pre-line dark:text-gray-300">{q.deliverables}</p>
                   {q.notes && <p className="text-xs text-gray-500 mt-1 italic">{q.notes}</p>}
                   <div className="mt-2 flex gap-2 justify-end">
                     {(isFounderOwner || isAdmin) && q.status === 'pending' && (
@@ -419,7 +419,7 @@ function NeedDetailModal({ needId, user, onClose, onEdit }) {
                       </>
                     )}
                     {isPartner && q.status === 'pending' && q.partner_id === user.partner_id && (
-                      <button onClick={() => act(() => api.withdrawQuote(q.id))} className="text-xs px-3 py-1 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">Withdraw</button>
+                      <button onClick={() => act(() => api.withdrawQuote(q.id))} className="text-xs px-3 py-1 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300">Withdraw</button>
                     )}
                   </div>
                 </div>
@@ -457,13 +457,13 @@ function RFPFormModal({ need, onClose, onSaved }) {
   return (
     <Modal title="Formal RFP" onClose={onClose} wide>
       <div className="space-y-3">
-        <Field label="Scope"><textarea rows={6} value={draft.scope_md} onChange={(e) => setDraft({ ...draft, scope_md: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="Describe what success looks like, in / out of scope, decision criteria…" /></Field>
-        <Field label="Deliverables (markdown)"><textarea rows={4} value={draft.deliverables_md} onChange={(e) => setDraft({ ...draft, deliverables_md: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="- Item 1&#10;- Item 2" /></Field>
-        <Field label="Deadline (optional)"><input type="datetime-local" value={draft.deadline_at} onChange={(e) => setDraft({ ...draft, deadline_at: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm" /></Field>
+        <Field label="Scope"><textarea rows={6} value={draft.scope_md} onChange={(e) => setDraft({ ...draft, scope_md: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:border-gray-700" placeholder="Describe what success looks like, in / out of scope, decision criteria…" /></Field>
+        <Field label="Deliverables (markdown)"><textarea rows={4} value={draft.deliverables_md} onChange={(e) => setDraft({ ...draft, deliverables_md: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:border-gray-700" placeholder="- Item 1&#10;- Item 2" /></Field>
+        <Field label="Deadline (optional)"><input type="datetime-local" value={draft.deadline_at} onChange={(e) => setDraft({ ...draft, deadline_at: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" /></Field>
         {error && <div className="text-xs text-rose-600">{error}</div>}
       </div>
       <div className="flex justify-end gap-2 mt-5">
-        <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+        <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-700">Cancel</button>
         <button onClick={save} disabled={!draft.scope_md.trim()} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg">Save RFP</button>
       </div>
     </Modal>
@@ -488,15 +488,15 @@ function QuoteFormModal({ needId, onClose, onSaved }) {
     <Modal title="Submit a quote" onClose={onClose}>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Price (USD)"><input type="number" min="0" step="0.01" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" /></Field>
-          <Field label="Timeline (weeks)"><input type="number" min="0" value={draft.timeline_weeks} onChange={(e) => setDraft({ ...draft, timeline_weeks: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" /></Field>
+          <Field label="Price (USD)"><input type="number" min="0" step="0.01" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" /></Field>
+          <Field label="Timeline (weeks)"><input type="number" min="0" value={draft.timeline_weeks} onChange={(e) => setDraft({ ...draft, timeline_weeks: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" /></Field>
         </div>
-        <Field label="Deliverables"><textarea rows={5} value={draft.deliverables} onChange={(e) => setDraft({ ...draft, deliverables: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="What will you ship? Milestones, scope guarantees…" /></Field>
-        <Field label="Notes (optional)"><textarea rows={3} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" /></Field>
+        <Field label="Deliverables"><textarea rows={5} value={draft.deliverables} onChange={(e) => setDraft({ ...draft, deliverables: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:border-gray-700" placeholder="What will you ship? Milestones, scope guarantees…" /></Field>
+        <Field label="Notes (optional)"><textarea rows={3} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:border-gray-700" /></Field>
         {error && <div className="text-xs text-rose-600">{error}</div>}
       </div>
       <div className="flex justify-end gap-2 mt-5">
-        <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+        <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-700">Cancel</button>
         <button onClick={save} disabled={!draft.price || !draft.deliverables.trim()} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg flex items-center gap-2"><Send size={13} /> Submit quote</button>
       </div>
     </Modal>
@@ -526,23 +526,23 @@ function MyQuotesTab() {
       {error && <ErrorBox message={error} />}
       {quotes.length === 0 && <Empty icon={FileText} text="You haven't submitted any quotes yet." />}
       {quotes.map((q) => (
-        <div key={q.id} className="bg-white border border-gray-200 rounded-xl p-4">
+        <div key={q.id} className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-gray-900">{q.need_title || `Need #${q.need_id}`}</div>
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{q.need_title || `Need #${q.need_id}`}</div>
               <div className="text-xs text-gray-500 mt-0.5">Submitted {new Date(q.created_at).toLocaleDateString()}</div>
             </div>
             <span className={`text-[10px] px-2 py-0.5 rounded-full border ${QUOTE_TONE[q.status]}`}>{q.status}</span>
           </div>
-          <div className="mt-2 flex items-center gap-3 text-xs text-gray-700">
+          <div className="mt-2 flex items-center gap-3 text-xs text-gray-700 dark:text-gray-300">
             <span className="font-semibold">${q.price.toLocaleString()}</span>
             {q.timeline_weeks !== null && q.timeline_weeks !== undefined && <span>· {q.timeline_weeks}w</span>}
             {q.need_status && <span className="text-gray-500">· need: {q.need_status}</span>}
           </div>
-          <p className="text-sm text-gray-700 mt-2 whitespace-pre-line line-clamp-3">{q.deliverables}</p>
+          <p className="text-sm text-gray-700 mt-2 whitespace-pre-line line-clamp-3 dark:text-gray-300">{q.deliverables}</p>
           {q.status === 'pending' && (
             <div className="mt-3 flex justify-end">
-              <button onClick={() => withdraw(q.id)} className="text-xs px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50">Withdraw</button>
+              <button onClick={() => withdraw(q.id)} className="text-xs px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50 dark:border-gray-700">Withdraw</button>
             </div>
           )}
         </div>
@@ -600,18 +600,18 @@ function EngagementsTab({ user }) {
       {error && <ErrorBox message={error} />}
       {rows.length === 0 && <Empty icon={Handshake} text="No engagements yet. Accept a quote or book a service offering." />}
       {rows.map((e) => (
-        <button key={e.id} onClick={() => setSelected(e.id)} className="w-full text-left bg-white border border-gray-200 hover:border-violet-300 rounded-xl p-4 flex items-start justify-between gap-3">
+        <button key={e.id} onClick={() => setSelected(e.id)} className="w-full text-left bg-white border border-gray-200 hover:border-violet-300 rounded-xl p-4 flex items-start justify-between gap-3 dark:bg-gray-900 dark:border-gray-800">
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-gray-900 truncate">{e.partner_name} ↔ {e.project_name}</div>
+            <div className="text-sm font-semibold text-gray-900 truncate dark:text-gray-100">{e.partner_name} ↔ {e.project_name}</div>
             <div className="text-xs text-gray-500 mt-0.5">
               Created {new Date(e.created_at).toLocaleDateString()}
               {e.service_offering_title && <> · from offering “{e.service_offering_title}”</>}
             </div>
-            <p className="text-sm text-gray-700 mt-2 whitespace-pre-line line-clamp-2">{e.deliverables}</p>
+            <p className="text-sm text-gray-700 mt-2 whitespace-pre-line line-clamp-2 dark:text-gray-300">{e.deliverables}</p>
           </div>
           <div className="text-right flex flex-col items-end gap-1 shrink-0">
             <span className={`text-xs px-2 py-0.5 rounded-full border ${ENG_TONE[e.status] || ENG_TONE.cancelled}`}>{ENG_LABEL[e.status] || e.status}</span>
-            <div className="text-sm font-semibold text-gray-900">${e.price.toLocaleString()}</div>
+            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">${e.price.toLocaleString()}</div>
             {e.stripe_invoice_url && <a href={e.stripe_invoice_url} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()} className="text-[11px] text-violet-700 hover:underline flex items-center gap-1"><Receipt size={11} /> Invoice {e.invoice_simulated ? '(sim)' : ''}</a>}
           </div>
         </button>
@@ -689,16 +689,16 @@ function EngagementDetailModal({ engagementId, user, isFounder, isPartner, onClo
 
         <div className="flex flex-wrap items-center gap-2">
           <span className={`text-xs px-2 py-0.5 rounded-full border ${ENG_TONE[eng.status] || ENG_TONE.cancelled}`}>{ENG_LABEL[eng.status] || eng.status}</span>
-          <span className="text-sm font-semibold text-gray-900">${eng.price.toLocaleString()} {eng.currency?.toUpperCase()}</span>
+          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">${eng.price.toLocaleString()} {eng.currency?.toUpperCase()}</span>
           {eng.sla_days != null && <span className="text-xs text-gray-500">SLA {eng.sla_days}d</span>}
           {eng.service_offering_title && <span className="text-xs text-gray-500">· From “{eng.service_offering_title}”</span>}
         </div>
 
         <Timeline eng={eng} />
 
-        <Field label="Deliverables"><p className="whitespace-pre-line text-gray-800">{eng.deliverables}</p></Field>
-        {eng.delivery_notes && <Field label="Delivery notes (from partner)"><p className="whitespace-pre-line text-gray-800">{eng.delivery_notes}</p></Field>}
-        {eng.cancel_reason && <Field label="Cancel reason"><p className="text-gray-800">{eng.cancel_reason}</p></Field>}
+        <Field label="Deliverables"><p className="whitespace-pre-line text-gray-800 dark:text-gray-200">{eng.deliverables}</p></Field>
+        {eng.delivery_notes && <Field label="Delivery notes (from partner)"><p className="whitespace-pre-line text-gray-800 dark:text-gray-200">{eng.delivery_notes}</p></Field>}
+        {eng.cancel_reason && <Field label="Cancel reason"><p className="text-gray-800 dark:text-gray-200">{eng.cancel_reason}</p></Field>}
 
         {/* State machine actions */}
         <div className="border-t pt-3 flex flex-wrap gap-2">
@@ -783,7 +783,7 @@ function Timeline({ eng }) {
 
 function ReviewSlot({ label, review }) {
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 dark:border-gray-800">
       <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">{label}</div>
       {review ? (
         <>
@@ -791,7 +791,7 @@ function ReviewSlot({ label, review }) {
             {[1, 2, 3, 4, 5].map((n) => <Star key={n} size={14} fill={n <= review.rating ? 'currentColor' : 'none'} />)}
             <span className="text-xs text-gray-600 ml-1">{review.rating}/5</span>
           </div>
-          {review.comment && <p className="text-sm text-gray-700 mt-1">{review.comment}</p>}
+          {review.comment && <p className="text-sm text-gray-700 mt-1 dark:text-gray-300">{review.comment}</p>}
         </>
       ) : <div className="text-xs text-gray-400 italic">Not yet submitted</div>}
     </div>
@@ -802,8 +802,8 @@ function ReviewForm({ role, busy, onSubmit }) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   return (
-    <div className="bg-white border border-violet-200 rounded-lg p-3 space-y-2">
-      <div className="text-xs text-gray-700 font-medium">Submit your {role} review</div>
+    <div className="bg-white border border-violet-200 rounded-lg p-3 space-y-2 dark:bg-gray-900">
+      <div className="text-xs text-gray-700 font-medium dark:text-gray-300">Submit your {role} review</div>
       <div className="flex items-center gap-1">
         {[1, 2, 3, 4, 5].map((n) => (
           <button key={n} onClick={() => setRating(n)} className="text-amber-500">
@@ -813,7 +813,7 @@ function ReviewForm({ role, busy, onSubmit }) {
         <span className="text-xs text-gray-600 ml-2">{rating}/5</span>
       </div>
       <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional comment"
-        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full" />
+        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
       <button disabled={busy} onClick={() => onSubmit({ rating, comment })}
         className="bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-md px-3 py-1.5 text-sm">
         Submit review
@@ -835,12 +835,12 @@ function DeliverButton({ busy, onSubmit }) {
   }
   return (
     <div className="w-full bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
-      <div className="text-xs text-gray-700">Add delivery notes (optional)</div>
+      <div className="text-xs text-gray-700 dark:text-gray-300">Add delivery notes (optional)</div>
       <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="border border-amber-200 rounded-md px-3 py-1.5 text-sm w-full" />
       <div className="flex gap-2">
         <button disabled={busy} onClick={() => { onSubmit(notes); setOpen(false); }}
           className="bg-amber-600 hover:bg-amber-700 text-white rounded-md px-3 py-1.5 text-sm">Confirm delivered</button>
-        <button onClick={() => setOpen(false)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm">Cancel</button>
+        <button onClick={() => setOpen(false)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700">Cancel</button>
       </div>
     </div>
   );
@@ -859,12 +859,12 @@ function CancelButton({ busy, onSubmit }) {
   }
   return (
     <div className="w-full bg-rose-50 border border-rose-200 rounded-lg p-3 space-y-2">
-      <div className="text-xs text-gray-700">Reason for cancellation (optional)</div>
+      <div className="text-xs text-gray-700 dark:text-gray-300">Reason for cancellation (optional)</div>
       <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} className="border border-rose-200 rounded-md px-3 py-1.5 text-sm w-full" />
       <div className="flex gap-2">
         <button disabled={busy} onClick={() => { onSubmit(reason); setOpen(false); }}
           className="bg-rose-600 hover:bg-rose-700 text-white rounded-md px-3 py-1.5 text-sm">Confirm cancel</button>
-        <button onClick={() => setOpen(false)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm">Keep open</button>
+        <button onClick={() => setOpen(false)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700">Keep open</button>
       </div>
     </div>
   );
@@ -878,8 +878,8 @@ function Modal({ title, onClose, children, wide }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div className={`bg-white rounded-2xl shadow-xl ${wide ? 'max-w-2xl' : 'max-w-md'} w-full max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
-          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
           <button onClick={onClose}><X size={18} /></button>
         </div>
         <div className="p-5">{children}</div>
@@ -903,7 +903,7 @@ function ErrorBox({ message }) {
 
 function Empty({ icon: Icon, text }) {
   return (
-    <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center text-gray-500 text-sm">
+    <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-700">
       <Icon size={28} className="mx-auto text-gray-300 mb-2" /> {text}
     </div>
   );

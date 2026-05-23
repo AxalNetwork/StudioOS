@@ -140,7 +140,7 @@ export default function DealsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Deal Flow Pipeline</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Deal Flow Pipeline</h1>
       <p className="text-gray-600 mb-6">Track deals from application to funding</p>
 
       <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
@@ -169,7 +169,7 @@ export default function DealsPage() {
         {loading ? (
           <div className="text-center text-gray-600 py-8">Loading deals...</div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-600">
+          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-600 dark:bg-gray-900 dark:border-gray-800">
             No deals found
           </div>
         ) : (
@@ -179,7 +179,7 @@ export default function DealsPage() {
 
             const isOpen = expanded === deal.id;
             return (
-              <div key={deal.id} className="bg-white border border-gray-200 rounded-xl">
+              <div key={deal.id} className="bg-white border border-gray-200 rounded-xl dark:bg-gray-900 dark:border-gray-800">
                 <div className="p-4 flex items-center gap-4">
                   {canSeeReferences && (
                     <button
@@ -192,7 +192,7 @@ export default function DealsPage() {
                   )}
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1">
-                      <span className="text-gray-900 font-medium">{deal.project_name || `Project #${deal.project_id}`}</span>
+                      <span className="text-gray-900 font-medium dark:text-gray-100">{deal.project_name || `Project #${deal.project_id}`}</span>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${statusColors[deal.status] || 'bg-gray-200 text-gray-700'}`}>
                         {deal.status?.toUpperCase()}
                       </span>

@@ -127,14 +127,14 @@ export default function ProjectDetail() {
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{project.name}</h1>
           <p className="text-sm text-gray-600">{project.description || project.sector}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <StatusBadge status={project.status} />
           <div className="flex gap-2 flex-wrap">
             {canEdit && (
-              <button onClick={() => setEditing(true)} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs text-gray-700">
+              <button onClick={() => setEditing(true)} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
                 <Pencil size={12} /> Edit
               </button>
             )}
@@ -167,7 +167,7 @@ export default function ProjectDetail() {
               </button>
             )}
             {canDelete && (
-              <button data-testid="project-delete-btn" onClick={handleDelete} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-red-200 hover:bg-red-50 rounded-lg text-xs text-red-600">
+              <button data-testid="project-delete-btn" onClick={handleDelete} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-red-200 hover:bg-red-50 rounded-lg text-xs text-red-600 dark:bg-gray-900">
                 <Trash2 size={12} /> Delete
               </button>
             )}
@@ -232,21 +232,21 @@ export default function ProjectDetail() {
       </div>
 
       {project.founder && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-2">Founder</h3>
-          <div className="text-sm text-gray-900">{project.founder.name}</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
+          <h3 className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Founder</h3>
+          <div className="text-sm text-gray-900 dark:text-gray-100">{project.founder.name}</div>
           <div className="text-xs text-gray-600">{project.founder.email} | {project.founder.domain_expertise} | {project.founder.experience_years}yr exp</div>
-          {project.founder.bio && <div className="text-xs text-gray-700 mt-1">{project.founder.bio}</div>}
+          {project.founder.bio && <div className="text-xs text-gray-700 mt-1 dark:text-gray-300">{project.founder.bio}</div>}
         </div>
       )}
 
       <div className="grid lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">4-Week Playbook</h3>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">4-Week Playbook</h3>
           <div className="text-sm font-medium text-violet-600 mb-2">{week.name}</div>
           <ul className="space-y-1">
             {week.tasks.map((t, i) => (
-              <li key={i} className="flex items-center gap-2 text-xs text-gray-700">
+              <li key={i} className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
                 <span className="w-1.5 h-1.5 bg-gray-400 rounded-full" />{t}
               </li>
             ))}
@@ -262,8 +262,8 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100">
             <Target size={14} className="text-violet-600" /> Latest Score
           </h3>
           {latestScore ? (
@@ -274,12 +274,12 @@ export default function ProjectDetail() {
               }`}>{latestScore.total_score}</div>
               <div className="text-xs text-gray-600 mt-1">{latestScore.tier.replace('_', ' ')}</div>
               <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
-                <div className="text-gray-600">Market: <span className="text-gray-900">{latestScore.market_total}</span>/25</div>
-                <div className="text-gray-600">Team: <span className="text-gray-900">{latestScore.team_total}</span>/20</div>
-                <div className="text-gray-600">Product: <span className="text-gray-900">{latestScore.product_total}</span>/15</div>
-                <div className="text-gray-600">Capital: <span className="text-gray-900">{latestScore.capital_total}</span>/15</div>
-                <div className="text-gray-600">Fit: <span className="text-gray-900">{latestScore.fit_total}</span>/15</div>
-                <div className="text-gray-600">Distrib: <span className="text-gray-900">{latestScore.distribution_total}</span>/10</div>
+                <div className="text-gray-600">Market: <span className="text-gray-900 dark:text-gray-100">{latestScore.market_total}</span>/25</div>
+                <div className="text-gray-600">Team: <span className="text-gray-900 dark:text-gray-100">{latestScore.team_total}</span>/20</div>
+                <div className="text-gray-600">Product: <span className="text-gray-900 dark:text-gray-100">{latestScore.product_total}</span>/15</div>
+                <div className="text-gray-600">Capital: <span className="text-gray-900 dark:text-gray-100">{latestScore.capital_total}</span>/15</div>
+                <div className="text-gray-600">Fit: <span className="text-gray-900 dark:text-gray-100">{latestScore.fit_total}</span>/15</div>
+                <div className="text-gray-600">Distrib: <span className="text-gray-900 dark:text-gray-100">{latestScore.distribution_total}</span>/10</div>
               </div>
             </div>
           ) : (
@@ -288,8 +288,8 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100">
           <FileText size={14} className="text-violet-600" /> Documents
         </h3>
         {docs.length === 0 ? (
@@ -299,7 +299,7 @@ export default function ProjectDetail() {
             {docs.map(d => (
               <div key={d.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg text-sm">
                 <div>
-                  <span className="text-gray-900">{d.title}</span>
+                  <span className="text-gray-900 dark:text-gray-100">{d.title}</span>
                   <span className="text-xs text-gray-600 ml-2">{d.doc_type}</span>
                 </div>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${
@@ -339,10 +339,10 @@ function CrunchbaseProfileCard({ project, snap, canEdit }) {
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
             <Database size={14} className="text-violet-600" /> Crunchbase profile
             {snap.cb_url && (
               <a href={snap.cb_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-1">
@@ -350,8 +350,8 @@ function CrunchbaseProfileCard({ project, snap, canEdit }) {
               </a>
             )}
           </h3>
-          <div className="text-sm text-gray-900 mt-1 font-medium">{snap.name}</div>
-          {snap.short_description && <div className="text-xs text-gray-700 mt-1">{snap.short_description}</div>}
+          <div className="text-sm text-gray-900 mt-1 font-medium dark:text-gray-100">{snap.name}</div>
+          {snap.short_description && <div className="text-xs text-gray-700 mt-1 dark:text-gray-300">{snap.short_description}</div>}
         </div>
         <div className="flex flex-col items-end gap-1">
           {snap.fetched_at && (
@@ -380,14 +380,14 @@ function CrunchbaseProfileCard({ project, snap, canEdit }) {
             <span key={`g-${c}`} className="text-[10px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700">{c}</span>
           ))}
           {(snap.categories || []).slice(0, 6).map(c => (
-            <span key={`c-${c}`} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{c}</span>
+            <span key={`c-${c}`} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 dark:text-gray-300">{c}</span>
           ))}
         </div>
       ) : null}
       {open && (
-        <div className="mt-4 pt-4 border-t border-gray-200">
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-800">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-semibold text-gray-700">Possible competitors (sector heuristic)</div>
+            <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">Possible competitors (sector heuristic)</div>
             <button onClick={() => setOpen(false)} className="text-[11px] text-gray-500 hover:text-gray-700">hide</button>
           </div>
           {err && <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">{err}</div>}
@@ -399,7 +399,7 @@ function CrunchbaseProfileCard({ project, snap, canEdit }) {
               {comps.map(c => (
                 <li key={c.uuid} className="flex items-center justify-between gap-2 text-xs">
                   <div className="min-w-0">
-                    <div className="font-medium text-gray-900 truncate">{c.name}</div>
+                    <div className="font-medium text-gray-900 truncate dark:text-gray-100">{c.name}</div>
                     {c.short_description && <div className="text-gray-600 truncate">{c.short_description}</div>}
                   </div>
                   {c.cb_url && (
@@ -421,7 +421,7 @@ function CbStat({ label, value }) {
   return (
     <div>
       <div className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</div>
-      <div className="text-xs text-gray-900 font-medium mt-0.5 truncate">{value || '—'}</div>
+      <div className="text-xs text-gray-900 font-medium mt-0.5 truncate dark:text-gray-100">{value || '—'}</div>
     </div>
   );
 }
@@ -476,10 +476,10 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
   return (
     <div className="fixed inset-0 z-50 flex" role="dialog" aria-label="Look up on Crunchbase">
       <div className="flex-1 bg-black/40" onClick={onClose} />
-      <div className="w-full max-w-xl bg-white shadow-xl flex flex-col h-full">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+      <div className="w-full max-w-xl bg-white shadow-xl flex flex-col h-full dark:bg-gray-900">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
           <div>
-            <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+            <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
               <Database size={16} className="text-violet-600" /> Look up on Crunchbase
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">Search and attach a Crunchbase company snapshot to this project.</p>
@@ -493,7 +493,7 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
               autoFocus type="text" value={q} onChange={(e) => setQ(e.target.value)}
               placeholder="Company name…"
               disabled={isRateLimited}
-              className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+              className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed dark:border-gray-700 dark:text-gray-100"
             />
           </div>
           {notConnected && (
@@ -545,7 +545,7 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <div className="text-sm font-medium text-gray-900 truncate">{r.name}</div>
+                          <div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{r.name}</div>
                           {r.cb_url && (
                             <a href={r.cb_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-0.5">
                               <ExternalLink size={10} />
@@ -588,9 +588,9 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
 
 function InfoCard({ label, value }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+    <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 dark:bg-gray-900 dark:border-gray-800">
       <div className="text-[10px] text-gray-600 uppercase tracking-wider">{label}</div>
-      <div className="text-sm text-gray-900 font-medium mt-0.5 capitalize">{value || '—'}</div>
+      <div className="text-sm text-gray-900 font-medium mt-0.5 capitalize dark:text-gray-100">{value || '—'}</div>
     </div>
   );
 }
@@ -640,13 +640,13 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
       onClick={handleClose}
     >
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-gray-900"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="Edit project"
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-          <h2 className="text-base font-semibold text-gray-900">Edit Project</h2>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Edit Project</h2>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
             <X size={18} />
           </button>
@@ -662,20 +662,20 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
                   value={form[f.key]}
                   onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
                   rows={3}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
+                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
                 />
               ) : (
                 <input
                   type="text"
                   value={form[f.key]}
                   onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none"
+                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
                 />
               )}
             </div>
           ))}
         </div>
-        <div className="flex gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl dark:border-gray-800">
           <button
             onClick={submit}
             disabled={saving}
@@ -686,7 +686,7 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
           <button
             onClick={handleClose}
             disabled={saving}
-            className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg text-sm text-gray-900 disabled:opacity-50"
+            className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg text-sm text-gray-900 disabled:opacity-50 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
           >
             Cancel
           </button>

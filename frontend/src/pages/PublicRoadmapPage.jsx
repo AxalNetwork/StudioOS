@@ -111,7 +111,7 @@ export default function PublicRoadmapPage() {
         </Link>
 
         <header className="text-center max-w-2xl mx-auto mb-10">
-          <h1 className="text-4xl font-bold text-gray-900 mb-3">Roadmap</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-3 dark:text-gray-100">Roadmap</h1>
           <p className="text-base text-gray-600">
             What we're building next.{' '}
             {loggedIn
@@ -129,22 +129,22 @@ export default function PublicRoadmapPage() {
             return (
               <section key={col} aria-labelledby={`col-${col}`} className="space-y-4">
                 <div>
-                  <h2 id={`col-${col}`} className="text-lg font-bold text-gray-900">{meta.title}</h2>
+                  <h2 id={`col-${col}`} className="text-lg font-bold text-gray-900 dark:text-gray-100">{meta.title}</h2>
                   <p className="text-xs text-gray-500">{meta.subtitle}</p>
                 </div>
                 {items.map((item) => {
                   const v = votes[item.id] || { count: 0, mine: false };
                   const aud = AUDIENCE_LABELS[item.audience] || AUDIENCE_LABELS.all;
                   return (
-                    <article key={item.id} className="rounded-xl border border-gray-200 bg-white p-4 flex gap-3" data-card>
+                    <article key={item.id} className="rounded-xl border border-gray-200 bg-white p-4 flex gap-3 dark:border-gray-800 dark:bg-gray-900" data-card>
                       <VoteButton item={item} vote={v} onToggle={toggle} loggedIn={loggedIn} busy={busy} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${aud.color}`}>{aud.label}</span>
                           <span className="text-xs text-gray-500">{item.status}</span>
                         </div>
-                        <h3 className="font-semibold text-gray-900 mb-1">{item.title}</h3>
-                        <p className="text-sm text-gray-700">{item.body}</p>
+                        <h3 className="font-semibold text-gray-900 mb-1 dark:text-gray-100">{item.title}</h3>
+                        <p className="text-sm text-gray-700 dark:text-gray-300">{item.body}</p>
                       </div>
                     </article>
                   );

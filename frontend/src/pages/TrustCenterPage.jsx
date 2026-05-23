@@ -111,9 +111,9 @@ function KybCard({ kyb, onChanged }) {
       </div>
       {!verified && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-          <input className="bg-white border border-slate-300 rounded px-3 py-2 text-sm" placeholder="Legal entity name" value={legalName} onChange={e => setLegalName(e.target.value)} />
-          <input className="bg-white border border-slate-300 rounded px-3 py-2 text-sm" placeholder="Business ID (EIN / VAT)" value={businessId} onChange={e => setBusinessId(e.target.value)} />
-          <input className="bg-white border border-slate-300 rounded px-3 py-2 text-sm" placeholder="Country (ISO-2)" value={country} onChange={e => setCountry(e.target.value)} maxLength={3} />
+          <input className="bg-white border border-slate-300 rounded px-3 py-2 text-sm dark:bg-gray-900" placeholder="Legal entity name" value={legalName} onChange={e => setLegalName(e.target.value)} />
+          <input className="bg-white border border-slate-300 rounded px-3 py-2 text-sm dark:bg-gray-900" placeholder="Business ID (EIN / VAT)" value={businessId} onChange={e => setBusinessId(e.target.value)} />
+          <input className="bg-white border border-slate-300 rounded px-3 py-2 text-sm dark:bg-gray-900" placeholder="Country (ISO-2)" value={country} onChange={e => setCountry(e.target.value)} maxLength={3} />
         </div>
       )}
       {!verified && (
@@ -168,7 +168,7 @@ function AccreditationCard({ accred, onChanged }) {
       {!accred?.verified && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-            <select value={basis} onChange={e => setBasis(e.target.value)} className="bg-white border border-slate-300 rounded px-3 py-2 text-sm text-slate-900">
+            <select value={basis} onChange={e => setBasis(e.target.value)} className="bg-white border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 dark:bg-gray-900">
               <option value="income">Income</option>
               <option value="net_worth">Net worth</option>
               <option value="entity">Entity</option>
@@ -226,14 +226,14 @@ function NdaCard({ items, onChanged }) {
       ))}
       {openRole && preview && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col shadow-xl">
+          <div className="bg-white border border-slate-200 rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col shadow-xl dark:bg-gray-900">
             <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
               <h3 className="text-slate-900 font-semibold">{preview.title}</h3>
               <button onClick={() => { setOpenRole(null); setPreview(null); }} className="text-slate-500 hover:text-slate-800 text-sm">Close</button>
             </div>
             <pre className="flex-1 overflow-auto px-5 py-4 text-xs text-slate-700 whitespace-pre-wrap font-mono">{preview.body}</pre>
             <div className="px-5 py-3 border-t border-slate-200 space-y-2">
-              <input className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-sm" placeholder="Type your full legal name to sign" value={name} onChange={e => setName(e.target.value)} />
+              <input className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-sm dark:bg-gray-900" placeholder="Type your full legal name to sign" value={name} onChange={e => setName(e.target.value)} />
               {err && <p className="text-red-600 text-xs">{err}</p>}
               <div className="flex justify-end gap-2">
                 <button onClick={() => { setOpenRole(null); setPreview(null); }} className="text-sm text-slate-700 px-3 py-1.5 rounded hover:bg-slate-100">Cancel</button>

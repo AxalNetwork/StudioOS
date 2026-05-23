@@ -181,9 +181,9 @@ export default function NotificationBell({ userId }) {
         )}
       </button>
       {open && (
-        <div className="fixed left-1/2 -translate-x-1/2 sm:absolute sm:left-auto sm:right-0 sm:translate-x-0 mt-2 w-[calc(100vw-1rem)] max-w-sm sm:w-96 max-h-[28rem] overflow-hidden bg-white border border-gray-200 rounded-xl shadow-xl z-50 flex flex-col">
+        <div className="fixed left-1/2 -translate-x-1/2 sm:absolute sm:left-auto sm:right-0 sm:translate-x-0 mt-2 w-[calc(100vw-1rem)] max-w-sm sm:w-96 max-h-[28rem] overflow-hidden bg-white border border-gray-200 rounded-xl shadow-xl z-50 flex flex-col dark:bg-gray-900 dark:border-gray-800">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <div className="text-sm font-semibold text-gray-900">Notifications</div>
+            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Notifications</div>
             <div className="flex items-center gap-2">
               <button onClick={markAll} title="Mark all read"
                 className="p-1.5 rounded hover:bg-gray-100 text-gray-500" disabled={!count}>
@@ -226,7 +226,7 @@ export default function NotificationBell({ userId }) {
                 <div className="flex items-start gap-2">
                   {!n.read_at && <span className="mt-1.5 w-2 h-2 rounded-full bg-violet-600 flex-shrink-0" />}
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">{n.title}</div>
+                    <div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{n.title}</div>
                     {n.body && <div className="text-xs text-gray-600 mt-0.5 line-clamp-2">{n.body}</div>}
                     <div className="text-[10px] text-gray-400 mt-1 uppercase tracking-wide">
                       {n.type} · {timeAgo(n.created_at)} ago

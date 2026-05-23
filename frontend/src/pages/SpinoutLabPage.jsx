@@ -15,23 +15,23 @@ const EXPLAINER_CARDS = [
     id: 'playbook',
     title: 'The 4-week playbook',
     body: (
-      <div className="space-y-4 text-sm text-gray-700 leading-relaxed">
+      <div className="space-y-4 text-sm text-gray-700 leading-relaxed dark:text-gray-300">
         <p>
-          <span className="font-semibold text-gray-900">Week 1 — Idea & Customer.</span> Define the
+          <span className="font-semibold text-gray-900 dark:text-gray-100">Week 1 — Idea & Customer.</span> Define the
           problem, ICP, market sizing seed, talk to ≥5 customers, log every interview. Unlocks{' '}
           <Link to="/projects" className="text-violet-700 hover:underline">Projects</Link>,{' '}
           <Link to="/customer-discovery" className="text-violet-700 hover:underline">Customer Discovery</Link>,{' '}
           <Link to="/market-intel" className="text-violet-700 hover:underline">Market Intelligence</Link>.
         </p>
         <p>
-          <span className="font-semibold text-gray-900">Week 2 — Solution & Roadmap.</span> Scope the
+          <span className="font-semibold text-gray-900 dark:text-gray-100">Week 2 — Solution & Roadmap.</span> Scope the
           MVP, set 90-day OKRs, draft brand v1, draft pitch deck v1. Unlocks{' '}
           <Link to="/build/roadmap" className="text-violet-700 hover:underline">Roadmap</Link>,{' '}
           <Link to="/build/brand" className="text-violet-700 hover:underline">Brand Builder</Link>,{' '}
           <Link to="/build/deck" className="text-violet-700 hover:underline">Pitch Deck Builder</Link>.
         </p>
         <p>
-          <span className="font-semibold text-gray-900">Week 3 — Validate & Team.</span> Run your
+          <span className="font-semibold text-gray-900 dark:text-gray-100">Week 3 — Validate & Team.</span> Run your
           first venture-readiness score, match with mentors, decide co-founder track. Unlocks{' '}
           <Link to="/scoring" className="text-violet-700 hover:underline">Scoring</Link>,{' '}
           <Link to="/mentors" className="text-violet-700 hover:underline">Mentors</Link>,{' '}
@@ -39,7 +39,7 @@ const EXPLAINER_CARDS = [
           <Link to="/cofounder" className="text-violet-700 hover:underline">Co-founder Match</Link>.
         </p>
         <p>
-          <span className="font-semibold text-gray-900">Week 4 — Incorporate & Capital.</span>{' '}
+          <span className="font-semibold text-gray-900 dark:text-gray-100">Week 4 — Incorporate & Capital.</span>{' '}
           Incorporate, vest, file 83(b), sign cofounder agreement, lock the ask. Unlocks{' '}
           <Link to="/incorporate" className="text-violet-700 hover:underline">Incorporate</Link>,{' '}
           <Link to="/build/captable" className="text-violet-700 hover:underline">Cap Table</Link>,{' '}
@@ -56,7 +56,7 @@ const EXPLAINER_CARDS = [
     id: 'what-you-get',
     title: 'What you get',
     body: (
-      <ul className="space-y-2 text-sm text-gray-700 leading-relaxed">
+      <ul className="space-y-2 text-sm text-gray-700 leading-relaxed dark:text-gray-300">
         <li>Personal Advisor on every page — Workers AI Llama 3.3 70B FP8.</li>
         <li>Three warm investor introductions in Week 4 for qualified founders (three-way NDA gated).</li>
         <li>Mentor track matched by expertise, availability, language, time zone, rating.</li>
@@ -72,7 +72,7 @@ const EXPLAINER_CARDS = [
     id: 'what-we-look-for',
     title: 'What we look for',
     body: (
-      <div className="grid md:grid-cols-2 gap-6 text-sm text-gray-700 leading-relaxed">
+      <div className="grid md:grid-cols-2 gap-6 text-sm text-gray-700 leading-relaxed dark:text-gray-300">
         <div>
           <h4 className="text-xs uppercase tracking-wider text-violet-700 font-semibold mb-2">
             Strong signals
@@ -108,7 +108,7 @@ const EXPLAINER_CARDS = [
     id: 'network',
     title: 'Network',
     body: (
-      <ul className="space-y-2 text-sm text-gray-700 leading-relaxed">
+      <ul className="space-y-2 text-sm text-gray-700 leading-relaxed dark:text-gray-300">
         <li>Operating partners — legal, GTM, design, recruiting, data, technical DD, finance.</li>
         <li>Investor signals from Axal's pipeline (anonymised until pairwise NDA signed).</li>
         <li>Mentor pool with expertise tags and availability calendars.</li>
@@ -121,7 +121,7 @@ const EXPLAINER_CARDS = [
     id: 'market-data',
     title: 'Market data',
     body: (
-      <ul className="space-y-2 text-sm text-gray-700 leading-relaxed">
+      <ul className="space-y-2 text-sm text-gray-700 leading-relaxed dark:text-gray-300">
         <li>Sector compass — best sub-sectors given your profile.</li>
         <li>Investor signals — live aggregate of investor thesis + deployment (k-anonymity ≥ 5).</li>
         <li>TALC positioning — where the market is on the technology-adoption lifecycle.</li>
@@ -138,8 +138,8 @@ const EXPLAINER_CARDS = [
     id: 'pricing',
     title: 'Pricing',
     body: (
-      <p className="text-sm text-gray-700 leading-relaxed">
-        <span className="font-semibold text-gray-900">Free during the 30-day sprint.</span> After
+      <p className="text-sm text-gray-700 leading-relaxed dark:text-gray-300">
+        <span className="font-semibold text-gray-900 dark:text-gray-100">Free during the 30-day sprint.</span> After
         graduation: standard Founder tiers (Free / Growth / Studio). Services partners are
         separately priced.
       </p>
@@ -149,25 +149,25 @@ const EXPLAINER_CARDS = [
     id: 'faq',
     title: 'FAQ',
     body: (
-      <ul className="space-y-3 text-sm text-gray-700 leading-relaxed">
+      <ul className="space-y-3 text-sm text-gray-700 leading-relaxed dark:text-gray-300">
         <li>
-          <span className="font-semibold text-gray-900">I already have a co-founder.</span> Week 3
+          <span className="font-semibold text-gray-900 dark:text-gray-100">I already have a co-founder.</span> Week 3
           is still useful for scoring and investor exposure.
         </li>
         <li>
-          <span className="font-semibold text-gray-900">I missed a milestone.</span> You stay at
+          <span className="font-semibold text-gray-900 dark:text-gray-100">I missed a milestone.</span> You stay at
           the current week until you complete it. Personal Advisor will list what's missing.
         </li>
         <li>
-          <span className="font-semibold text-gray-900">Do you take equity?</span> Only under a
+          <span className="font-semibold text-gray-900 dark:text-gray-100">Do you take equity?</span> Only under a
           separately negotiated partnership / spin-out agreement. Never automatically.
         </li>
         <li>
-          <span className="font-semibold text-gray-900">Can I bring an existing project?</span>{' '}
+          <span className="font-semibold text-gray-900 dark:text-gray-100">Can I bring an existing project?</span>{' '}
           Yes — fast-forward through weeks you've already completed.
         </li>
         <li>
-          <span className="font-semibold text-gray-900">What jurisdictions?</span> Delaware C-Corp
+          <span className="font-semibold text-gray-900 dark:text-gray-100">What jurisdictions?</span> Delaware C-Corp
           default; LLC, UK Ltd, French SAS, German GmbH supported with partner counsel.
         </li>
       </ul>
@@ -178,7 +178,7 @@ const EXPLAINER_CARDS = [
 function ExplainerCards() {
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+      <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
         <BookOpen size={16} className="text-violet-600" /> Explainers
       </h2>
       <p className="text-xs text-gray-500 -mt-1">
@@ -189,9 +189,9 @@ function ExplainerCards() {
           <details
             key={card.id}
             id={`explainer-${card.id}`}
-            className="group bg-white border border-gray-200 rounded-xl p-4 open:border-violet-300 open:bg-violet-50/30"
+            className="group bg-white border border-gray-200 rounded-xl p-4 open:border-violet-300 open:bg-violet-50/30 dark:bg-gray-900 dark:border-gray-800"
           >
-            <summary className="cursor-pointer text-sm font-semibold text-gray-900 list-none flex items-center justify-between">
+            <summary className="cursor-pointer text-sm font-semibold text-gray-900 list-none flex items-center justify-between dark:text-gray-100">
               {card.title}
               <span className="text-violet-600 text-xs group-open:rotate-180 transition-transform">
                 ▾
@@ -399,9 +399,9 @@ function Dashboard({ state, onComplete, completing, completeError }) {
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-violet-100 border border-violet-200 rounded-full text-[11px] text-violet-700 font-medium mb-3">
             <Rocket size={11} /> Spin-Out Lab
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">{WEEK_TITLES[week]}</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{WEEK_TITLES[week]}</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Day <span className="font-semibold text-gray-900">{dayNumber}</span> of 28 ·{' '}
+            Day <span className="font-semibold text-gray-900 dark:text-gray-100">{dayNumber}</span> of 28 ·{' '}
             <span className="text-gray-500">{state.days_remaining} day{state.days_remaining === 1 ? '' : 's'} left</span>
           </p>
         </div>
@@ -409,8 +409,8 @@ function Dashboard({ state, onComplete, completing, completeError }) {
 
       <ProgressBar week={week} />
 
-      <section className="bg-white border border-gray-200 rounded-2xl p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">This week's milestones</h2>
+      <section className="bg-white border border-gray-200 rounded-2xl p-6 dark:bg-gray-900 dark:border-gray-800">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 dark:text-gray-100">This week's milestones</h2>
         <ul className="space-y-2">
           {weekKeys.map((key) => {
             const done = completedKeys.has(key);
@@ -455,13 +455,13 @@ function Dashboard({ state, onComplete, completing, completeError }) {
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 dark:text-gray-100">
           <Sparkles size={16} className="text-violet-600" /> Unlocked this sprint
         </h2>
         <div className="grid sm:grid-cols-2 gap-3">
           {features.map((f) => (
-            <div key={f} className="bg-white border border-gray-200 rounded-xl p-4">
-              <div className="text-sm font-semibold text-gray-900">{FEATURE_EXPLAINERS[f].label}</div>
+            <div key={f} className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{FEATURE_EXPLAINERS[f].label}</div>
               <div className="text-xs text-gray-600 mt-1 leading-relaxed">{FEATURE_EXPLAINERS[f].blurb}</div>
             </div>
           ))}

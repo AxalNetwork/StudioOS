@@ -36,7 +36,7 @@ function Card({ icon: Icon, title, friction, body, cta, disabled, onClick }) {
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
           <Icon size={16} className="text-violet-600" />
-          <span className="font-semibold text-sm text-gray-900">{title}</span>
+          <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">{title}</span>
         </div>
         <FrictionBadge level={friction} />
       </div>
@@ -202,7 +202,7 @@ export default function RecoverPage() {
           <input type="email" value={email} autoComplete="email"
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@company.com"
-            className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm mb-3" />
+            className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm mb-3 dark:border-gray-700" />
           {!layers ? (
             <button onClick={startScan} disabled={busy || !email.trim()}
               className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white">
@@ -243,7 +243,7 @@ export default function RecoverPage() {
         <FlowBox onBack={() => setMode('intro')} title="Backup recovery code">
           <input type="text" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())}
             placeholder="XXXX-XXXX-XXXX" maxLength={14}
-            className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-base font-mono tracking-widest text-center mb-3" />
+            className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-base font-mono tracking-widest text-center mb-3 dark:border-gray-700" />
           <button onClick={submitBackup} disabled={busy || code.replace(/[-\s]/g, '').length !== 12}
             className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white">
             {busy ? 'Verifying…' : 'Recover account'}
@@ -263,7 +263,7 @@ export default function RecoverPage() {
               <input type="text" value={smsCode} inputMode="numeric" maxLength={6}
                 onChange={(e) => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 placeholder="000000"
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-2xl text-center tracking-[0.5em] font-mono mb-3" />
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-2xl text-center tracking-[0.5em] font-mono mb-3 dark:border-gray-700" />
               <button onClick={verifySms} disabled={busy || smsCode.length !== 6}
                 className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white">
                 {busy ? 'Verifying…' : 'Verify and sign in'}
@@ -302,7 +302,7 @@ export default function RecoverPage() {
           <textarea value={reason} onChange={(e) => setReason(e.target.value)}
             rows={4} maxLength={2000}
             placeholder="Briefly describe what happened (lost device, locked out, etc.) — admins read this when reviewing your ticket."
-            className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-sm mb-3" />
+            className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-sm mb-3 dark:border-gray-700" />
           <button onClick={escalateAdmin} disabled={busy || !email.trim()}
             className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white">
             {busy ? 'Submitting…' : 'Submit to Axal security'}
@@ -315,15 +315,15 @@ export default function RecoverPage() {
 
 function Shell({ children }) {
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-4">
+    <div className="min-h-screen bg-white flex items-center justify-center px-4 dark:bg-gray-900">
       <div className="w-full max-w-md">
         <Link to="/login" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-6">
           <ArrowLeft size={14} /> Back to sign in
         </Link>
-        <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
+        <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm dark:bg-gray-900 dark:border-gray-800">
           <div className="flex items-center gap-3 mb-5">
             <img src="/axal-mark.png" alt="Axal VC" className="h-9 w-9 rounded-lg object-contain" />
-            <span style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-lg font-bold text-gray-900">Axal VC</span>
+            <span style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-lg font-bold text-gray-900 dark:text-gray-100">Axal VC</span>
           </div>
           {children}
         </div>
@@ -338,7 +338,7 @@ function FlowBox({ children, onBack, title }) {
       <button onClick={onBack} className="text-xs text-gray-500 hover:text-gray-900 mb-3 flex items-center gap-1">
         <ArrowLeft size={12} /> Back to options
       </button>
-      <h3 className="text-sm font-semibold text-gray-900 mb-3">{title}</h3>
+      <h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">{title}</h3>
       {children}
     </div>
   );

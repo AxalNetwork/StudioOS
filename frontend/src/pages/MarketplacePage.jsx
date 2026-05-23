@@ -37,12 +37,12 @@ export default function MarketplacePage({ user }) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Service Provider Marketplace</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Service Provider Marketplace</h1>
         <PageExplainer pageKey="marketplace" />
         <p className="text-sm text-gray-500 mt-1">Vetted partners across legal, accounting, design, recruiting, fractional CFO, and GTM.</p>
       </div>
 
-      <div className="border-b border-gray-200 flex gap-6">
+      <div className="border-b border-gray-200 flex gap-6 dark:border-gray-800">
         {[
           { key: 'browse', label: 'Browse', icon: Search },
           { key: 'inbox', label: 'My inquiries', icon: Inbox },
@@ -101,29 +101,29 @@ function BrowseTab({ meta, user }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
         <div className="flex items-center gap-2 mb-3">
           <Filter size={14} className="text-gray-500" />
-          <span className="text-sm font-medium text-gray-900">Filters</span>
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Filters</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
           <div className="md:col-span-2 relative">
             <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
-            <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Search name, headline, bio…" className="pl-8 w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" />
+            <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Search name, headline, bio…" className="pl-8 w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
           </div>
-          <select value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white">
+          <select value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
             <option value="">All categories</option>
             {meta.categories.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>)}
           </select>
-          <select value={filters.capacity} onChange={(e) => setFilters({ ...filters, capacity: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white">
+          <select value={filters.capacity} onChange={(e) => setFilters({ ...filters, capacity: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
             <option value="">Any availability</option>
             {(meta.capacity_statuses || []).map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
-          <select value={filters.pricing} onChange={(e) => setFilters({ ...filters, pricing: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white">
+          <select value={filters.pricing} onChange={(e) => setFilters({ ...filters, pricing: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
             <option value="">Any price</option>
             {(meta.pricing_tiers || []).map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
-          <label className="flex items-center gap-2 text-sm text-gray-700 px-2">
+          <label className="flex items-center gap-2 text-sm text-gray-700 px-2 dark:text-gray-300">
             <input type="checkbox" checked={filters.verified_only} onChange={(e) => setFilters({ ...filters, verified_only: e.target.checked })} />
             Verified only
           </label>
@@ -137,7 +137,7 @@ function BrowseTab({ meta, user }) {
       {loading && <div className="text-sm text-gray-500">Loading providers…</div>}
 
       {!loading && providers.length === 0 && (
-        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center text-gray-500 text-sm">
+        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-700">
           <Briefcase size={28} className="mx-auto text-gray-300 mb-2" />
           No providers match your filters yet.
         </div>
@@ -145,11 +145,11 @@ function BrowseTab({ meta, user }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {providers.map((p) => (
-          <button key={p.id} onClick={() => setSelected(p)} className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-violet-300 hover:shadow-sm transition">
+          <button key={p.id} onClick={() => setSelected(p)} className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-violet-300 hover:shadow-sm transition dark:bg-gray-900 dark:border-gray-800">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-gray-900">{p.name}</span>
+                  <span className="font-semibold text-gray-900 dark:text-gray-100">{p.name}</span>
                   {p.kyb_verified && <span title="KYB verified" className="inline-flex"><ShieldCheck size={14} className="text-violet-600" /></span>}
                 </div>
                 {p.company && <div className="text-xs text-gray-500 mt-0.5">{p.company}</div>}
@@ -161,7 +161,7 @@ function BrowseTab({ meta, user }) {
                 <UserTrustBadge userId={p.user_id} viewerRole={user?.role} />
               </div>
             )}
-            {p.headline && <p className="text-sm text-gray-700 mt-2 line-clamp-2">{p.headline}</p>}
+            {p.headline && <p className="text-sm text-gray-700 mt-2 line-clamp-2 dark:text-gray-300">{p.headline}</p>}
             <div className="mt-3 flex flex-wrap gap-1">
               {(p.categories || []).slice(0, 4).map((c) => <span key={c} className="text-[10px] bg-violet-50 text-violet-700 rounded-full px-2 py-0.5">{CATEGORY_LABELS[c] || c}</span>)}
             </div>
@@ -204,11 +204,11 @@ function ProviderDetailModal({ provider, user, onClose, onInquire }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-5 border-b border-gray-200 sticky top-0 bg-white flex items-start justify-between">
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-5 border-b border-gray-200 sticky top-0 bg-white flex items-start justify-between dark:border-gray-800 dark:bg-gray-900">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-gray-900">{detail.name}</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{detail.name}</h2>
               {detail.kyb_verified && (
                 <span className="flex items-center gap-1 text-[11px] bg-violet-50 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5">
                   <ShieldCheck size={11} /> KYB Verified
@@ -216,7 +216,7 @@ function ProviderDetailModal({ provider, user, onClose, onInquire }) {
               )}
             </div>
             {detail.company && <div className="text-sm text-gray-500 mt-0.5">{detail.company}</div>}
-            {detail.headline && <p className="text-sm text-gray-800 mt-2 italic">{detail.headline}</p>}
+            {detail.headline && <p className="text-sm text-gray-800 mt-2 italic dark:text-gray-200">{detail.headline}</p>}
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button>
         </div>
@@ -243,7 +243,7 @@ function ProviderDetailModal({ provider, user, onClose, onInquire }) {
             <div>
               <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Sector focus</div>
               <div className="flex flex-wrap gap-1.5">
-                {detail.sectors.map((s) => <span key={s} className="text-xs bg-gray-100 text-gray-700 rounded-full px-2.5 py-0.5">{s}</span>)}
+                {detail.sectors.map((s) => <span key={s} className="text-xs bg-gray-100 text-gray-700 rounded-full px-2.5 py-0.5 dark:text-gray-300">{s}</span>)}
               </div>
             </div>
           )}
@@ -251,7 +251,7 @@ function ProviderDetailModal({ provider, user, onClose, onInquire }) {
           {detail.bio && (
             <div>
               <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">About</div>
-              <p className="text-sm text-gray-700 whitespace-pre-line">{detail.bio}</p>
+              <p className="text-sm text-gray-700 whitespace-pre-line dark:text-gray-300">{detail.bio}</p>
             </div>
           )}
 
@@ -279,15 +279,15 @@ function ProviderDetailModal({ provider, user, onClose, onInquire }) {
                   <div className="flex items-center gap-1 text-amber-500">
                     {Array.from({ length: r.rating }).map((_, i) => <Star key={i} size={11} className="fill-amber-500" />)}
                   </div>
-                  {r.comment && <p className="text-gray-700 mt-1">{r.comment}</p>}
+                  {r.comment && <p className="text-gray-700 mt-1 dark:text-gray-300">{r.comment}</p>}
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-200 sticky bottom-0 bg-white flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Close</button>
+        <div className="px-6 py-4 border-t border-gray-200 sticky bottom-0 bg-white flex justify-end gap-2 dark:border-gray-800 dark:bg-gray-900">
+          <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-700">Close</button>
           {user?.role !== 'partner' && (
             <button onClick={onInquire} disabled={detail.capacity_status === 'unavailable'} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg flex items-center gap-2">
               <MessageCircle size={14} /> Send inquiry
@@ -305,7 +305,7 @@ function Field({ label, value }) {
   return (
     <div className="bg-gray-50 border border-gray-100 rounded-lg p-2">
       <div className="text-[10px] uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="text-sm font-medium text-gray-900 mt-0.5">{value}</div>
+      <div className="text-sm font-medium text-gray-900 mt-0.5 dark:text-gray-100">{value}</div>
     </div>
   );
 }
@@ -322,8 +322,8 @@ function ReviewModal({ partnerId, onClose, onDone }) {
   }
   return (
     <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
           <h3 className="text-base font-semibold">Leave a review</h3>
           <button onClick={onClose}><X size={18} /></button>
         </div>
@@ -340,12 +340,12 @@ function ReviewModal({ partnerId, onClose, onDone }) {
           </div>
           <div>
             <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Comment (optional)</div>
-            <textarea rows={4} value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+            <textarea rows={4} value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:border-gray-700" />
           </div>
           {error && <div className="text-xs text-rose-600">{error}</div>}
         </div>
-        <div className="px-5 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+        <div className="px-5 py-4 border-t border-gray-200 flex justify-end gap-2 dark:border-gray-800">
+          <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-700">Cancel</button>
           <button onClick={save} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg flex items-center gap-2"><Save size={14} /> Submit</button>
         </div>
       </div>
@@ -366,15 +366,15 @@ function InquiryModal({ provider, onClose }) {
   }
   return (
     <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
           <h3 className="text-base font-semibold">Inquire — {provider.name}</h3>
           <button onClick={onClose}><X size={18} /></button>
         </div>
         {sent ? (
           <div className="p-6 text-center space-y-3">
             <div className="w-12 h-12 mx-auto rounded-full bg-emerald-50 flex items-center justify-center"><Check size={20} className="text-emerald-600" /></div>
-            <div className="text-sm font-semibold text-gray-900">Inquiry sent</div>
+            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Inquiry sent</div>
             <div className="text-xs text-gray-500">Track replies under "My inquiries".</div>
             <button onClick={onClose} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-lg">Done</button>
           </div>
@@ -383,16 +383,16 @@ function InquiryModal({ provider, onClose }) {
             <div className="p-5 space-y-3">
               <div>
                 <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Subject</div>
-                <input value={subject} onChange={(e) => setSubject(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" />
+                <input value={subject} onChange={(e) => setSubject(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
               </div>
               <div>
                 <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Message</div>
-                <textarea rows={6} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Briefly describe your need, timeline, and budget…" className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+                <textarea rows={6} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Briefly describe your need, timeline, and budget…" className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:border-gray-700" />
               </div>
               {error && <div className="text-xs text-rose-600">{error}</div>}
             </div>
-            <div className="px-5 py-4 border-t border-gray-200 flex justify-end gap-2">
-              <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+            <div className="px-5 py-4 border-t border-gray-200 flex justify-end gap-2 dark:border-gray-800">
+              <button onClick={onClose} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-700">Cancel</button>
               <button onClick={send} disabled={!subject.trim() || !message.trim()} className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg flex items-center gap-2"><Send size={14} /> Send</button>
             </div>
           </>
@@ -449,14 +449,14 @@ function InboxTab({ user }) {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden md:col-span-1">
-        <div className="px-4 py-3 border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">Threads ({inquiries.length})</div>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden md:col-span-1 dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-4 py-3 border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800">Threads ({inquiries.length})</div>
         <div className="divide-y divide-gray-100 max-h-[60vh] overflow-y-auto">
           {inquiries.length === 0 && <div className="p-6 text-center text-sm text-gray-400 italic">No inquiries yet</div>}
           {inquiries.map((i) => (
             <button key={i.id} onClick={() => open(i.id)} className={`w-full text-left p-3 hover:bg-gray-50 ${active === i.id ? 'bg-violet-50' : ''}`}>
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-900 truncate">{i.subject}</span>
+                <span className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{i.subject}</span>
                 {i.status === 'closed' && <span className="text-[10px] bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">closed</span>}
               </div>
               <div className="text-xs text-gray-500 mt-0.5">
@@ -468,14 +468,14 @@ function InboxTab({ user }) {
         </div>
       </div>
 
-      <div className="md:col-span-2 bg-white border border-gray-200 rounded-xl flex flex-col min-h-[60vh]">
+      <div className="md:col-span-2 bg-white border border-gray-200 rounded-xl flex flex-col min-h-[60vh] dark:bg-gray-900 dark:border-gray-800">
         {error && <div className="m-4 flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-3 py-2 text-xs"><AlertCircle size={14} className="mt-0.5" />{error}</div>}
         {!thread && <div className="flex-1 flex items-center justify-center text-sm text-gray-400 italic">Select a thread</div>}
         {thread && (
           <>
-            <div className="px-5 py-3 border-b border-gray-200 flex items-start justify-between">
+            <div className="px-5 py-3 border-b border-gray-200 flex items-start justify-between dark:border-gray-800">
               <div>
-                <div className="text-sm font-semibold text-gray-900">{thread.subject}</div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{thread.subject}</div>
                 <div className="text-xs text-gray-500 mt-0.5">{thread.partner_name} ↔ {thread.requester_name}</div>
               </div>
               {thread.status === 'open' && <button onClick={close} className="text-xs text-gray-500 hover:text-rose-600">Close inquiry</button>}
@@ -495,12 +495,12 @@ function InboxTab({ user }) {
               })}
             </div>
             {thread.status === 'open' ? (
-              <div className="border-t border-gray-200 p-3 flex gap-2">
-                <textarea rows={1} value={reply} onChange={(e) => setReply(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send(); }} placeholder="Reply… (⌘/Ctrl+Enter to send)" className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm resize-none" />
+              <div className="border-t border-gray-200 p-3 flex gap-2 dark:border-gray-800">
+                <textarea rows={1} value={reply} onChange={(e) => setReply(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send(); }} placeholder="Reply… (⌘/Ctrl+Enter to send)" className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm resize-none dark:border-gray-700" />
                 <button onClick={send} disabled={!reply.trim()} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-md text-sm flex items-center gap-1.5"><Send size={13} /> Send</button>
               </div>
             ) : (
-              <div className="border-t border-gray-200 p-4 text-xs text-gray-400 text-center italic">This inquiry is closed.</div>
+              <div className="border-t border-gray-200 p-4 text-xs text-gray-400 text-center italic dark:border-gray-800">This inquiry is closed.</div>
             )}
           </>
         )}
@@ -561,7 +561,7 @@ function ProfileTab({ meta }) {
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 max-w-3xl space-y-5">
+    <div className="bg-white border border-gray-200 rounded-xl p-6 max-w-3xl space-y-5 dark:bg-gray-900 dark:border-gray-800">
       {error && <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-3 py-2 text-sm"><AlertCircle size={14} className="mt-0.5" />{error}</div>}
       {saved && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm">Saved.</div>}
 
@@ -601,24 +601,24 @@ function ProfileTab({ meta }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div>
           <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Pricing tier</div>
-          <select value={draft.pricing_tier} onChange={(e) => setDraft({ ...draft, pricing_tier: e.target.value })} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white">
+          <select value={draft.pricing_tier} onChange={(e) => setDraft({ ...draft, pricing_tier: e.target.value })} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
             <option value="">—</option>
             {(meta.pricing_tiers || []).map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
         <div>
           <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Capacity</div>
-          <select value={draft.capacity_status} onChange={(e) => setDraft({ ...draft, capacity_status: e.target.value })} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white">
+          <select value={draft.capacity_status} onChange={(e) => setDraft({ ...draft, capacity_status: e.target.value })} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
             {(meta.capacity_statuses || []).map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <div>
           <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Rate min ($/hr)</div>
-          <input type="number" min="0" value={draft.hourly_rate_min} onChange={(e) => setDraft({ ...draft, hourly_rate_min: e.target.value })} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <input type="number" min="0" value={draft.hourly_rate_min} onChange={(e) => setDraft({ ...draft, hourly_rate_min: e.target.value })} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm dark:border-gray-700" />
         </div>
         <div>
           <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Rate max ($/hr)</div>
-          <input type="number" min="0" value={draft.hourly_rate_max} onChange={(e) => setDraft({ ...draft, hourly_rate_max: e.target.value })} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <input type="number" min="0" value={draft.hourly_rate_max} onChange={(e) => setDraft({ ...draft, hourly_rate_max: e.target.value })} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm dark:border-gray-700" />
         </div>
       </div>
 
@@ -636,9 +636,9 @@ function DraftField({ label, value, onChange, placeholder, textarea, type = 'tex
     <div>
       <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">{label}</div>
       {textarea ? (
-        <textarea rows={4} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+        <textarea rows={4} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:border-gray-700" />
       ) : (
-        <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" />
+        <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
       )}
     </div>
   );

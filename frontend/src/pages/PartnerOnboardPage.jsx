@@ -346,7 +346,7 @@ export default function PartnerOnboardPage() {
           )}>
             <AlertTriangle size={24} />
           </div>
-          <h1 className="text-lg font-semibold text-gray-900">{isExpired ? 'Invitation no longer valid' : 'Could not open invitation'}</h1>
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{isExpired ? 'Invitation no longer valid' : 'Could not open invitation'}</h1>
           <p className="text-sm text-gray-600">{errorState.message}</p>
           <p className="text-xs text-gray-500">If you think this is a mistake, please reply to the email that brought you here so we can issue a new link.</p>
         </div>
@@ -364,7 +364,7 @@ export default function PartnerOnboardPage() {
             <Handshake size={20} />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Partner Onboarding</h1>
+            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Partner Onboarding</h1>
             <p className="text-xs text-gray-500">From {adminName} · for <strong>{invitation.recipient_email}</strong></p>
           </div>
           <div className="ml-auto text-xs text-gray-500 flex items-center gap-1">
@@ -455,7 +455,7 @@ export default function PartnerOnboardPage() {
                 <button
                   type="button"
                   onClick={() => { setSelectedDeal(null); setSelectedIdx(null); }}
-                  className="px-4 py-2 text-sm rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"
+                  className="px-4 py-2 text-sm rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300"
                   disabled={finalizing}
                 >
                   Back to proposals
@@ -508,7 +508,7 @@ export default function PartnerOnboardPage() {
               <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
                 <CheckCircle2 size={28} />
               </div>
-              <h2 className="text-lg font-semibold text-gray-900">You're all set</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">You're all set</h2>
               <p className="text-sm text-gray-600 max-w-md mx-auto">
                 Your partnership is active. Sign in to access your Partner Portal — your referral code,
                 granted tiers, and deal terms are waiting there.
@@ -554,8 +554,8 @@ function FullPage({ children }) {
 
 function Card({ title, icon, children }) {
   return (
-    <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
-      <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-3">
+    <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4 dark:bg-gray-900">
+      <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-3 dark:text-gray-300">
         {icon} {title}
       </h2>
       {children}
@@ -624,7 +624,7 @@ function ChatComposer({ step, draft, setDraft, onSend, onSkip, disabled }) {
         }}
         placeholder={step.placeholder}
         disabled={disabled}
-        className="flex-1 px-3 py-2 text-sm rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 disabled:opacity-50"
+        className="flex-1 px-3 py-2 text-sm rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900"
       />
       <button type="button" onClick={onSkip} disabled={disabled}
         className="px-3 py-2 text-xs rounded-md text-gray-500 hover:text-gray-700 disabled:opacity-50">
@@ -646,7 +646,7 @@ function ProposalCard({ proposal, selected, busy, onSelect, disabled }) {
     )}>
       <div className="flex items-start justify-between gap-3 mb-2">
         <div>
-          <h3 className="font-semibold text-gray-900">{proposal.label}</h3>
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100">{proposal.label}</h3>
           <p className="text-xs text-gray-500 mt-0.5">{proposal.summary}</p>
         </div>
         <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-gray-100 text-gray-600 whitespace-nowrap">
@@ -682,7 +682,7 @@ function ProposalSummary({ proposal, compact }) {
         {Object.entries(terms).map(([k, v]) => (
           <div key={k} className="flex justify-between gap-2">
             <dt className="text-gray-500 capitalize">{k.replace(/_/g, ' ')}</dt>
-            <dd className="text-gray-800 font-medium text-right">{String(v)}</dd>
+            <dd className="text-gray-800 font-medium text-right dark:text-gray-200">{String(v)}</dd>
           </div>
         ))}
       </dl>
@@ -710,7 +710,7 @@ function ProposalSummary({ proposal, compact }) {
           <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">Investor: {proposal.granted_tier_investor}</span>
         )}
         {proposal.term_months && (
-          <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{proposal.term_months} mo term</span>
+          <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 dark:text-gray-300">{proposal.term_months} mo term</span>
         )}
       </div>
     </div>

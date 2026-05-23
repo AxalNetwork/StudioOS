@@ -109,16 +109,16 @@ export default function NetworkPage() {
       <div className="flex items-center gap-3 mb-6">
         <NetworkIcon className="text-violet-600" size={24} />
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Referral Network</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Referral Network</h1>
         <PageExplainer pageKey="network" />
           <p className="text-sm text-gray-600">Interactive graph of your referral subtree. Edges show relationships; node size reflects commissions earned.</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-3 bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="lg:col-span-3 bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
           <div ref={containerRef} style={{ width: '100%', height: '600px' }} />
-          <div className="px-4 py-2 border-t border-gray-200 flex flex-wrap items-center gap-4 text-[11px] text-gray-600">
+          <div className="px-4 py-2 border-t border-gray-200 flex flex-wrap items-center gap-4 text-[11px] text-gray-600 dark:border-gray-800">
             <Legend color="#fbbf24" label="You" />
             <Legend color="#7c3aed" label="Admin" />
             <Legend color="#3b82f6" label="Founder" />
@@ -127,10 +127,10 @@ export default function NetworkPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
           <div className="flex items-center gap-2 mb-4">
             <Trophy className="text-amber-500" size={18} />
-            <h2 className="text-sm font-semibold text-gray-900">Top Referrers</h2>
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Top Referrers</h2>
           </div>
           {(!graph.top_referrers || graph.top_referrers.length === 0) ? (
             <p className="text-xs text-gray-500">No referrers yet.</p>
@@ -143,7 +143,7 @@ export default function NetworkPage() {
                   }`}>{i + 1}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <div className="text-xs font-medium text-gray-900 truncate">{r.name}</div>
+                      <div className="text-xs font-medium text-gray-900 truncate dark:text-gray-100">{r.name}</div>
                       {/* Task #51 — trust badge on top-referrers list for
                           admin/investor/partner viewers; UserTrustBadge
                           silently no-ops for other roles. */}
@@ -159,10 +159,10 @@ export default function NetworkPage() {
             </ol>
           )}
 
-          <div className="mt-6 pt-4 border-t border-gray-200">
+          <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-800">
             <div className="text-[11px] text-gray-500">
-              <div>Total nodes: <span className="font-medium text-gray-700">{graph.nodes.length}</span></div>
-              <div>Total edges: <span className="font-medium text-gray-700">{graph.edges.length}</span></div>
+              <div>Total nodes: <span className="font-medium text-gray-700 dark:text-gray-300">{graph.nodes.length}</span></div>
+              <div>Total edges: <span className="font-medium text-gray-700 dark:text-gray-300">{graph.edges.length}</span></div>
             </div>
           </div>
         </div>

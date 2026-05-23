@@ -126,7 +126,7 @@ export default function OnboardingInvestorPage() {
             placeholder="e.g. Pre-seed founders building AI-native infrastructure for vertical SaaS markets. Bias toward technical founders with prior exit."
             rows={5}
           />
-          <label className="flex items-center gap-3 text-sm text-gray-700">
+          <label className="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
             <input
               type="checkbox"
               checked={values.contribute_to_signals !== false}

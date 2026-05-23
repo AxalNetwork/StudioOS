@@ -24,14 +24,14 @@ const ACCENT_CLASSES = {
 function StatCard({ icon: Icon, label, value, sub, accent = 'violet' }) {
   const accentCls = ACCENT_CLASSES[accent] || ACCENT_CLASSES.violet;
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</span>
         <div className={`h-8 w-8 rounded-lg ${accentCls} flex items-center justify-center`}>
           <Icon size={15} />
         </div>
       </div>
-      <div className="text-2xl font-bold text-gray-900">{value}</div>
+      <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</div>
       {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
     </div>
   );
@@ -124,7 +124,7 @@ export default function AiUsageTab() {
   return (
     <div className="space-y-6" data-testid="monitoring-ai-usage-panel">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
           <Sparkles size={18} className="text-violet-600" /> AI Router Usage
         </h2>
         <div className="flex items-center gap-2">
@@ -132,7 +132,7 @@ export default function AiUsageTab() {
             value={surface}
             onChange={e => setSurface(e.target.value)}
             data-testid="ai-usage-surface-filter"
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none"
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             aria-label="Filter by AI surface"
           >
             <option value="all">All surfaces</option>
@@ -143,7 +143,7 @@ export default function AiUsageTab() {
           <select
             value={days}
             onChange={e => setDays(parseInt(e.target.value, 10))}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none"
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           >
             <option value={1}>Last 24 hours</option>
             <option value={7}>Last 7 days</option>
@@ -174,8 +174,8 @@ export default function AiUsageTab() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-sm font-semibold text-gray-900 mb-3">Spend per day (USD)</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Spend per day (USD)</div>
           <div style={{ width: '100%', height: 200 }}>
             <ResponsiveContainer>
               <BarChart data={(data?.by_day || []).map(d => ({ day: d.day.slice(5), cost: Number(d.total_cost_usd) || 0 }))}>
@@ -188,8 +188,8 @@ export default function AiUsageTab() {
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-sm font-semibold text-gray-900 mb-3">Calls per day</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Calls per day</div>
           <div style={{ width: '100%', height: 200 }}>
             <ResponsiveContainer>
               <LineChart data={(data?.by_day || []).map(d => ({ day: d.day.slice(5), calls: Number(d.calls) || 0 }))}>
@@ -204,8 +204,8 @@ export default function AiUsageTab() {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 text-sm font-semibold text-gray-900">Per-task breakdown</div>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-4 py-3 border-b border-gray-200 text-sm font-semibold text-gray-900 dark:border-gray-800 dark:text-gray-100">Per-task breakdown</div>
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-600 uppercase tracking-wide">
             <tr>
@@ -220,7 +220,7 @@ export default function AiUsageTab() {
           <tbody>
             {filteredTasks.map(t => (
               <tr key={t.task} className="border-t border-gray-100">
-                <td className="px-4 py-2 font-mono text-gray-900">{t.task}</td>
+                <td className="px-4 py-2 font-mono text-gray-900 dark:text-gray-100">{t.task}</td>
                 <td className="px-4 py-2 text-right">{t.calls}</td>
                 <td className="px-4 py-2 text-right">{fmtUsd(t.total_cost_usd)}</td>
                 <td className="px-4 py-2 text-right">{Math.round(t.p50_latency_ms)} ms</td>
@@ -235,8 +235,8 @@ export default function AiUsageTab() {
         </table>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 text-sm font-semibold text-gray-900">Per-model breakdown</div>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-4 py-3 border-b border-gray-200 text-sm font-semibold text-gray-900 dark:border-gray-800 dark:text-gray-100">Per-model breakdown</div>
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-600 uppercase tracking-wide">
             <tr>
@@ -249,7 +249,7 @@ export default function AiUsageTab() {
           <tbody>
             {filteredModels.map(m => (
               <tr key={m.model} className="border-t border-gray-100">
-                <td className="px-4 py-2 font-mono text-gray-900">{m.model}</td>
+                <td className="px-4 py-2 font-mono text-gray-900 dark:text-gray-100">{m.model}</td>
                 <td className="px-4 py-2 text-right">{m.calls}</td>
                 <td className="px-4 py-2 text-right">{fmtUsd(m.total_cost_usd)}</td>
                 <td className="px-4 py-2 text-right">{m.fallback_count}</td>
@@ -263,8 +263,8 @@ export default function AiUsageTab() {
       </div>
 
       {data?.safety && data.safety.evaluated > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-sm font-semibold text-gray-900 mb-3">Guardrail safety (llama-guard)</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Guardrail safety (llama-guard)</div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard icon={Sparkles} label="Evaluated" value={data.safety.evaluated} sub="task=safety calls" />
             <StatCard icon={Sparkles} label="Safe" value={data.safety.safe_count} accent="emerald" />
@@ -274,8 +274,8 @@ export default function AiUsageTab() {
         </div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 text-sm font-semibold text-gray-900">Top 10 users by spend</div>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-4 py-3 border-b border-gray-200 text-sm font-semibold text-gray-900 dark:border-gray-800 dark:text-gray-100">Top 10 users by spend</div>
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-600 uppercase tracking-wide">
             <tr>
@@ -287,7 +287,7 @@ export default function AiUsageTab() {
           <tbody>
             {(data?.top_users || []).map((u, i) => (
               <tr key={`${u.user_id ?? 'anon'}-${i}`} className="border-t border-gray-100">
-                <td className="px-4 py-2 font-mono text-gray-900">{u.user_id == null ? 'system' : `user#${u.user_id}`}</td>
+                <td className="px-4 py-2 font-mono text-gray-900 dark:text-gray-100">{u.user_id == null ? 'system' : `user#${u.user_id}`}</td>
                 <td className="px-4 py-2 text-right">{u.calls}</td>
                 <td className="px-4 py-2 text-right">{fmtUsd(u.total_cost_usd)}</td>
               </tr>
@@ -300,8 +300,8 @@ export default function AiUsageTab() {
       </div>
 
       {(data?.refusals || []).length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-sm font-semibold text-gray-900 mb-2">Refusals</div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Refusals</div>
           <div className="flex flex-wrap gap-2">
             {(data?.refusals || []).map(r => (
               <span key={r.refusal} className="text-xs px-2 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">

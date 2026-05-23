@@ -56,7 +56,7 @@ export default function PartnersPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Partner Ecosystem</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Partner Ecosystem</h1>
         <PageExplainer pageKey="partners" />
           <p className="text-sm text-gray-600">Matchmaking, deal flow, and referral dashboard</p>
         </div>
@@ -66,49 +66,49 @@ export default function PartnersPage() {
       </div>
 
       {showForm && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
           <div className="grid md:grid-cols-2 gap-4">
             {['name', 'email', 'company', 'specialization'].map(field => (
               <div key={field}>
                 <label className="block text-xs text-gray-600 mb-1 capitalize">{field}</label>
                 <input type="text" value={form[field]} onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900" />
+                  className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:text-gray-100" />
               </div>
             ))}
           </div>
           <div className="flex gap-3 mt-4">
             <button onClick={submit} className="px-4 py-2 bg-violet-600 rounded-lg text-sm text-white">Add</button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-200 rounded-lg text-sm text-gray-900">Cancel</button>
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-200 rounded-lg text-sm text-gray-900 dark:text-gray-100">Cancel</button>
           </div>
         </div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100">
           <Search size={14} className="text-violet-600" /> Partner Matchmaking
         </h3>
         {/* T21 — Enter inside the input now submits the form. */}
         <form onSubmit={(e) => { e.preventDefault(); runMatch(); }} className="flex gap-3">
           <input type="text" placeholder="Sector (e.g. AI, Blockchain)..." value={matchSector}
             onChange={e => setMatchSector(e.target.value)}
-            className="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900" />
+            className="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:text-gray-100" />
           <button type="submit" className="px-4 py-2 bg-violet-600 rounded-lg text-sm text-white">Find Matches</button>
         </form>
         {matches && (
           <div className="mt-3 text-sm text-gray-600">
-            Found <span className="text-gray-900 font-medium">{matches.count}</span> matching partner(s)
+            Found <span className="text-gray-900 font-medium dark:text-gray-100">{matches.count}</span> matching partner(s)
             {matches.matches.map(m => (
               <div key={m.id} className="mt-2 px-3 py-2 bg-gray-100 rounded-lg">
-                <span className="text-gray-900">{m.name}</span> — {m.company} ({m.specialization})
+                <span className="text-gray-900 dark:text-gray-100">{m.name}</span> — {m.company} ({m.specialization})
               </div>
             ))}
           </div>
         )}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200">
-          <h3 className="font-semibold text-gray-900 text-sm">All Partners & Referral Dashboard</h3>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+          <h3 className="font-semibold text-gray-900 text-sm dark:text-gray-100">All Partners & Referral Dashboard</h3>
         </div>
         {loading ? (
           <div className="p-8 text-center text-gray-600 text-sm">Loading...</div>
@@ -121,10 +121,10 @@ export default function PartnersPage() {
             virtualRow={(p, _i, style, ariaAttributes) => (
               <div style={style} {...ariaAttributes}
                    onClick={() => setOpenPartner(p)}
-                   className="hover:bg-violet-50/40 cursor-pointer group border-b border-gray-200 text-sm"
+                   className="hover:bg-violet-50/40 cursor-pointer group border-b border-gray-200 text-sm dark:border-gray-800"
                    >
                 <div style={{ display: 'grid', gridTemplateColumns: PARTNER_GRID, alignItems: 'center', height: '100%' }}>
-                  <div className="px-5 py-3 text-gray-900 min-w-0">
+                  <div className="px-5 py-3 text-gray-900 min-w-0 dark:text-gray-100">
                     <div className="flex items-center gap-1.5">
                       <span className="font-medium truncate">{p.name}</span>
                       {/* Task #51 — trust badge inline on partner row for
@@ -142,7 +142,7 @@ export default function PartnersPage() {
                       {p.referral_code} <Copy size={10} />
                     </button>
                   </div>
-                  <div className="px-5 py-3 text-gray-900 font-medium">{p.referrals_count}</div>
+                  <div className="px-5 py-3 text-gray-900 font-medium dark:text-gray-100">{p.referrals_count}</div>
                 </div>
               </div>
             )}
@@ -150,7 +150,7 @@ export default function PartnersPage() {
             {(items) => (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
+                  <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase dark:border-gray-800">
                     <th className="text-left px-5 py-3">Partner</th>
                     <th className="text-left px-5 py-3 hidden md:table-cell">Company</th>
                     <th className="text-left px-5 py-3 hidden md:table-cell">Specialization</th>
@@ -162,7 +162,7 @@ export default function PartnersPage() {
                   {items.map(p => (
                     <tr key={p.id} onClick={() => setOpenPartner(p)}
                         className="hover:bg-violet-50/40 cursor-pointer group">
-                      <td className="px-5 py-3 text-gray-900">
+                      <td className="px-5 py-3 text-gray-900 dark:text-gray-100">
                         <div className="flex items-center gap-1.5">
                           <span className="font-medium">{p.name}</span>
                           {/* Task #51 — trust badge inline on partner row for
@@ -179,7 +179,7 @@ export default function PartnersPage() {
                           {p.referral_code} <Copy size={10} />
                         </button>
                       </td>
-                      <td className="px-5 py-3 text-gray-900 font-medium">{p.referrals_count}</td>
+                      <td className="px-5 py-3 text-gray-900 font-medium dark:text-gray-100">{p.referrals_count}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -205,14 +205,14 @@ export default function PartnersPage() {
       )}
       {openPartner && !openPartner.user_id && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setOpenPartner(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-lg p-6" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-gray-900">{openPartner.name}</h3>
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6 dark:bg-gray-900" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{openPartner.name}</h3>
             <p className="text-xs text-gray-500 mt-1">{openPartner.email || '—'}</p>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div><div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Company</div><div className="text-gray-900">{openPartner.company || '—'}</div></div>
-              <div><div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Specialization</div><div className="text-gray-900">{openPartner.specialization || '—'}</div></div>
-              <div><div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Referral code</div><div className="text-gray-900 font-mono text-xs">{openPartner.referral_code || '—'}</div></div>
-              <div><div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Referrals</div><div className="text-gray-900">{openPartner.referrals_count ?? 0}</div></div>
+              <div><div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Company</div><div className="text-gray-900 dark:text-gray-100">{openPartner.company || '—'}</div></div>
+              <div><div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Specialization</div><div className="text-gray-900 dark:text-gray-100">{openPartner.specialization || '—'}</div></div>
+              <div><div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Referral code</div><div className="text-gray-900 font-mono text-xs dark:text-gray-100">{openPartner.referral_code || '—'}</div></div>
+              <div><div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Referrals</div><div className="text-gray-900 dark:text-gray-100">{openPartner.referrals_count ?? 0}</div></div>
             </div>
             <div className="mt-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700">
               No user account is linked to this partner record yet. Once they register and an admin links the accounts, the full registration timeline, KYC, agreements, and activity history will appear here.

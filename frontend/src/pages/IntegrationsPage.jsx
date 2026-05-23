@@ -740,7 +740,7 @@ function ExternalProviderCard({
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">Connected</span>
             )}
             {!loading && !configured && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200" title="Server secrets are not configured on this deployment.">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200 dark:border-gray-800" title="Server secrets are not configured on this deployment.">
                 Not configured
               </span>
             )}

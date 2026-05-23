@@ -10,7 +10,7 @@ function ModernSelect({ value, onChange, children, ...props }) {
   return (
     <div className="relative">
       <select value={value} onChange={onChange} {...props}
-        className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400">
+        className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700">
         {children}
       </select>
       <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
@@ -85,7 +85,7 @@ export default function LegalPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Legal & Compliance Engine</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Legal & Compliance Engine</h1>
         <PageExplainer pageKey="legal_templates" />
           <p className="text-sm text-gray-600">VC legal stack — GP governance, fund formation, portfolio execution, and regulatory compliance</p>
         </div>
@@ -95,8 +95,8 @@ export default function LegalPage() {
       </div>
 
       {showGen && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-          <h2 className="font-semibold text-gray-900 text-sm mb-4">Generate Document from Template</h2>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
+          <h2 className="font-semibold text-gray-900 text-sm mb-4 dark:text-gray-100">Generate Document from Template</h2>
           <div className="grid md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs text-gray-600 mb-1 font-medium">Template</label>
@@ -114,7 +114,7 @@ export default function LegalPage() {
               <label className="block text-xs text-gray-600 mb-1">Title</label>
               <input type="text" value={genForm.title} onChange={e => setGenForm(f => ({ ...f, title: e.target.value }))}
                 placeholder="Document title (optional)"
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:border-violet-500 focus:outline-none" />
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:text-gray-100" />
             </div>
             <div>
               <label className="block text-xs text-gray-600 mb-1 font-medium">Project</label>
@@ -126,16 +126,16 @@ export default function LegalPage() {
           </div>
           <div className="flex gap-3 mt-4">
             <button onClick={generate} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm text-white font-medium transition-colors">Generate</button>
-            <button onClick={() => setShowGen(false)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors">Cancel</button>
+            <button onClick={() => setShowGen(false)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors dark:text-gray-300">Cancel</button>
           </div>
         </div>
       )}
 
       <div className="grid lg:grid-cols-3 gap-6 mb-6">
         <div className="lg:col-span-2">
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900">VC Legal Template Library</h3>
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">VC Legal Template Library</h3>
               <span className="text-xs text-gray-500">{templates.length} templates across 4 layers</span>
             </div>
 
@@ -174,7 +174,7 @@ export default function LegalPage() {
                     <div key={layer.key}>
                       <div className={`px-4 py-2 ${config.bg} flex items-center gap-2`}>
                         <LayerIcon size={13} className={config.color} />
-                        <span className="text-xs font-semibold text-gray-700">{layer.fullLabel}</span>
+                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{layer.fullLabel}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${config.badge}`}>{layerTemplates.length}</span>
                       </div>
                       {layerTemplates.map(t => (
@@ -202,8 +202,8 @@ export default function LegalPage() {
         </div>
 
         <div className="space-y-6">
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100">
               <Building size={14} className="text-blue-600" /> Legal Entities
             </h3>
             {entities.length === 0 ? (
@@ -213,7 +213,7 @@ export default function LegalPage() {
                 {entities.map(e => (
                   <div key={e.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg text-sm">
                     <div>
-                      <div className="text-gray-900">{e.name}</div>
+                      <div className="text-gray-900 dark:text-gray-100">{e.name}</div>
                       <div className="text-xs text-gray-500">{e.entity_type} | {e.jurisdiction}</div>
                     </div>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">{e.status}</span>
@@ -226,7 +226,7 @@ export default function LegalPage() {
           <div className="bg-gradient-to-br from-violet-50 to-blue-50 border border-violet-200 rounded-xl p-5">
             <div className="flex items-start gap-2 mb-3">
               <BookOpen size={16} className="text-violet-600 mt-0.5" />
-              <h3 className="text-sm font-semibold text-gray-900">Getting Started</h3>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Getting Started</h3>
             </div>
             <p className="text-xs text-gray-600 mb-3">
               If you're starting out with partners and no outside capital yet, focus on:
@@ -234,15 +234,15 @@ export default function LegalPage() {
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-xs">
                 <span className="w-5 h-5 rounded-full bg-violet-600 text-white flex items-center justify-center text-[10px] font-bold">1</span>
-                <span className="text-gray-700">Operating Agreement</span>
+                <span className="text-gray-700 dark:text-gray-300">Operating Agreement</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <span className="w-5 h-5 rounded-full bg-violet-600 text-white flex items-center justify-center text-[10px] font-bold">2</span>
-                <span className="text-gray-700">Carried Interest Agreement</span>
+                <span className="text-gray-700 dark:text-gray-300">Carried Interest Agreement</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <span className="w-5 h-5 rounded-full bg-violet-600 text-white flex items-center justify-center text-[10px] font-bold">3</span>
-                <span className="text-gray-700">IC Charter</span>
+                <span className="text-gray-700 dark:text-gray-300">IC Charter</span>
               </div>
             </div>
             <div className="mt-3 flex items-start gap-2 bg-white/60 rounded-lg p-2.5">
@@ -253,8 +253,8 @@ export default function LegalPage() {
             </div>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Layer Summary</h3>
+          <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Layer Summary</h3>
             <div className="space-y-3">
               {layers.map(layer => {
                 const config = LAYER_CONFIG[layer.key];
@@ -270,7 +270,7 @@ export default function LegalPage() {
                       <LayerIcon size={14} className={config.color} />
                     </div>
                     <div className="flex-1">
-                      <div className="text-xs font-medium text-gray-900">{layer.label}</div>
+                      <div className="text-xs font-medium text-gray-900 dark:text-gray-100">{layer.label}</div>
                       <div className="text-[10px] text-gray-500">{count} templates | {generated} generated</div>
                     </div>
                   </div>
@@ -281,16 +281,16 @@ export default function LegalPage() {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200">
-          <h3 className="font-semibold text-gray-900 text-sm">Generated Documents ({documents.length})</h3>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+          <h3 className="font-semibold text-gray-900 text-sm dark:text-gray-100">Generated Documents ({documents.length})</h3>
         </div>
         {documents.length === 0 ? (
           <div className="p-8 text-center text-gray-500 text-sm">No documents generated yet. Select a template above to get started.</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase">
+              <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase dark:border-gray-800">
                 <th className="text-left px-5 py-3">Title</th>
                 <th className="text-left px-5 py-3 hidden md:table-cell">Type</th>
                 <th className="text-left px-5 py-3 hidden lg:table-cell">Layer</th>
@@ -305,7 +305,7 @@ export default function LegalPage() {
                 const config = layerKey ? LAYER_CONFIG[layerKey] : null;
                 return (
                   <tr key={d.id} className="hover:bg-gray-50">
-                    <td className="px-5 py-3 text-gray-900">{d.title}</td>
+                    <td className="px-5 py-3 text-gray-900 dark:text-gray-100">{d.title}</td>
                     <td className="px-5 py-3 hidden md:table-cell text-gray-600 text-xs">{d.doc_type}</td>
                     <td className="px-5 py-3 hidden lg:table-cell">
                       {config && <span className={`text-[10px] px-2 py-0.5 rounded-full ${config.badge}`}>{tmpl.layer_label}</span>}
@@ -344,9 +344,9 @@ export default function LegalPage() {
 
       {viewDoc && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setViewDoc(null)}>
-          <div className="bg-white border border-gray-200 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-white border border-gray-200 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto dark:bg-gray-900 dark:border-gray-800" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">{viewDoc.title}</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">{viewDoc.title}</h3>
               <span className={`text-[10px] px-2 py-0.5 rounded-full ${
                 viewDoc.status === 'signed' ? 'bg-emerald-100 text-emerald-700' :
                 viewDoc.status === 'sent' ? 'bg-blue-100 text-blue-700' :
@@ -358,7 +358,7 @@ export default function LegalPage() {
                 URL; clicking it streams the file as `attachment` with
                 `Cache-Control: no-store`, so the body never persists in
                 page memory. */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700">
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700 dark:border-gray-800 dark:text-gray-300">
               <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Document body</div>
               {viewDoc.content_url ? (
                 <a
@@ -377,7 +377,7 @@ export default function LegalPage() {
                 </div>
               )}
             </div>
-            <button onClick={() => setViewDoc(null)} className="mt-4 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors">Close</button>
+            <button onClick={() => setViewDoc(null)} className="mt-4 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors dark:text-gray-300">Close</button>
           </div>
         </div>
       )}
@@ -408,10 +408,10 @@ function TemplatePreviewModal({ template, onClose, onGenerate }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white border border-gray-200 rounded-xl max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
+      <div className="bg-white border border-gray-200 rounded-xl max-w-2xl w-full max-h-[80vh] flex flex-col dark:bg-gray-900 dark:border-gray-800" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0 dark:border-gray-800">
           <div>
-            <h3 className="font-semibold text-gray-900">{template.title}</h3>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">{template.title}</h3>
             <span className={`text-[10px] px-2 py-0.5 rounded-full ${config?.badge}`}>
               {template.layer_label}
             </span>
@@ -427,13 +427,13 @@ function TemplatePreviewModal({ template, onClose, onGenerate }) {
           {loadingContent ? (
             <div className="text-center text-gray-500 text-sm py-8">Loading template...</div>
           ) : (
-            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">{content}</pre>
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 dark:border-gray-800">
+              <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed dark:text-gray-300">{content}</pre>
             </div>
           )}
         </div>
-        <div className="px-6 py-3 border-t border-gray-200 flex justify-end shrink-0">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors">Close</button>
+        <div className="px-6 py-3 border-t border-gray-200 flex justify-end shrink-0 dark:border-gray-800">
+          <button onClick={onClose} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors dark:text-gray-300">Close</button>
         </div>
       </div>
     </div>
@@ -447,7 +447,7 @@ function TemplateRow({ template, config, onPreview, onGenerate }) {
         <FileText size={14} className={config.color} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm text-gray-900 font-medium">{template.title}</div>
+        <div className="text-sm text-gray-900 font-medium dark:text-gray-100">{template.title}</div>
       </div>
       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
         <button onClick={onPreview} className="text-gray-500 hover:text-gray-700 p-1" title="Preview">

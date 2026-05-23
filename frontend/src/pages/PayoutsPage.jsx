@@ -66,8 +66,8 @@ export default function PayoutsPage() {
         <Stat label="Pending Payouts" value={`$${(payouts.filter(p => p.status !== 'completed').reduce((sum, p) => sum + Number(p.amount_cents || 0), 0) / 100).toFixed(2)}`} accent="blue" />
       </div>
 
-      <form onSubmit={submit} className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Request a Payout</h2>
+      <form onSubmit={submit} className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4 dark:bg-gray-900 dark:border-gray-800">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Request a Payout</h2>
         {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
         {success && <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">{success}</div>}
 
@@ -76,7 +76,7 @@ export default function PayoutsPage() {
             <label className="text-xs text-gray-600 block mb-1">Amount (USD)</label>
             <input type="number" step="0.01" min="10" max={(commissions.balance_cents / 100).toFixed(2)}
               value={amount} onChange={e => setAmount(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition" />
+              className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition dark:border-gray-700" />
           </div>
           <div>
             <label className="text-xs text-gray-600 block mb-1">Method</label>
@@ -84,7 +84,7 @@ export default function PayoutsPage() {
               <select
                 value={method}
                 onChange={e => setMethod(e.target.value)}
-                className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 pr-9 py-2 text-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer"
+                className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 pr-9 py-2 text-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer dark:border-gray-700"
               >
                 <option value="wire">Bank Wire</option>
                 <option value="stripe">Stripe Connect</option>
@@ -99,7 +99,7 @@ export default function PayoutsPage() {
             </label>
             <input type="text" value={details} onChange={e => setDetails(e.target.value)}
               placeholder={method === 'crypto' ? '0x…' : method === 'wire' ? 'IBAN / Routing+Account' : 'acct_…'}
-              className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition" />
+              className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition dark:border-gray-700" />
           </div>
         </div>
 
@@ -111,15 +111,15 @@ export default function PayoutsPage() {
         </p>
       </form>
 
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 font-semibold text-gray-900">Payout History</div>
+      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-6 py-4 border-b border-gray-200 font-semibold text-gray-900 dark:border-gray-800 dark:text-gray-100">Payout History</div>
         {payouts.length === 0 ? (
           <div className="p-8 text-center text-gray-500">No payouts yet.</div>
         ) : null}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 font-semibold text-gray-900">Commission Ledger</div>
+      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-6 py-4 border-b border-gray-200 font-semibold text-gray-900 dark:border-gray-800 dark:text-gray-100">Commission Ledger</div>
         {commissions.commissions.length === 0 ? (
           <div className="p-8 text-center text-gray-500">No commissions yet.</div>
         ) : null}

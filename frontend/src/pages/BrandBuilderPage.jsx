@@ -138,7 +138,7 @@ export default function BrandBuilderPage() {
   return (
     <div className="max-w-5xl mx-auto py-8 px-4">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
+        <h1 className="text-2xl font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
           <Sparkles className="text-violet-600" size={22} /> Brand & Landing Page
         </h1>
         <PageExplainer pageKey="brand_builder" />
@@ -148,35 +148,35 @@ export default function BrandBuilderPage() {
       </div>
 
       {/* Step 1 — pick project + describe */}
-      <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5">
-        <h2 className="text-sm font-semibold text-gray-900 mb-3">1. Tell us about your venture</h2>
+      <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
+        <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">1. Tell us about your venture</h2>
         <div className="grid sm:grid-cols-2 gap-3 mb-3">
           <label className="block">
-            <span className="block text-xs font-medium text-gray-700 mb-1">Project</span>
+            <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Project</span>
             <select
               value={projectId || ''}
               onChange={(e) => setProjectId(parseInt(e.target.value) || null)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
             >
               <option value="">Pick a project…</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </label>
           <label className="block">
-            <span className="block text-xs font-medium text-gray-700 mb-1">Sector</span>
+            <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Sector</span>
             <input
               value={sector} onChange={(e) => setSector(e.target.value)}
               placeholder="AI / Climate / Fintech…"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
             />
           </label>
         </div>
         <label className="block">
-          <span className="block text-xs font-medium text-gray-700 mb-1">One-paragraph description</span>
+          <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">One-paragraph description</span>
           <textarea
             value={description} onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
             placeholder="What are you building, for whom, and why now?"
           />
         </label>
@@ -197,8 +197,8 @@ export default function BrandBuilderPage() {
 
       {/* Step 2 — suggestions */}
       {suggestions.length > 0 && (
-        <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3">2. Pick a direction</h2>
+        <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">2. Pick a direction</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {suggestions.map((s, i) => {
               const active = draft.name === s.name;
@@ -212,7 +212,7 @@ export default function BrandBuilderPage() {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="font-semibold text-gray-900">{s.name}</div>
+                    <div className="font-semibold text-gray-900 dark:text-gray-100">{s.name}</div>
                     {active && <Check size={14} className="text-violet-600" />}
                   </div>
                   <div className="text-sm text-gray-600 mt-1">{s.tagline}</div>
@@ -226,11 +226,11 @@ export default function BrandBuilderPage() {
 
       {/* Step 3 — edit + publish */}
       {draft.name && (
-        <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3">3. Tune your landing page</h2>
+        <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">3. Tune your landing page</h2>
           <div className="grid sm:grid-cols-3 gap-4">
             <div className="sm:col-span-1">
-              <div className="aspect-square bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+              <div className="aspect-square bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center overflow-hidden dark:border-gray-800">
                 {logoBusy ? (
                   <Loader2 className="animate-spin text-violet-500" />
                 ) : draft.logo_url ? (
@@ -264,7 +264,7 @@ export default function BrandBuilderPage() {
                 <input
                   type="color" value={draft.theme_color}
                   onChange={(e) => setDraft({ ...draft, theme_color: e.target.value })}
-                  className="h-8 w-12 border border-gray-200 rounded cursor-pointer"
+                  className="h-8 w-12 border border-gray-200 rounded cursor-pointer dark:border-gray-800"
                 />
               </div>
             </div>
@@ -272,22 +272,22 @@ export default function BrandBuilderPage() {
               <input
                 value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                 placeholder="Brand name"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold dark:border-gray-800"
               />
               <input
                 value={draft.headline} onChange={(e) => setDraft({ ...draft, headline: e.target.value })}
                 placeholder="Headline"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
               />
               <textarea
                 value={draft.subheadline} onChange={(e) => setDraft({ ...draft, subheadline: e.target.value })}
                 rows={2} placeholder="Subheadline"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
               />
               <input
                 value={draft.cta_text} onChange={(e) => setDraft({ ...draft, cta_text: e.target.value })}
                 placeholder="CTA button text"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
               />
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <button
@@ -317,13 +317,13 @@ export default function BrandBuilderPage() {
 
       {/* Step 4 — share */}
       {landing && landing.published && (
-        <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3">4. Share your page</h2>
+        <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">4. Share your page</h2>
           <div className="flex flex-wrap items-center gap-2">
-            <code className="bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 text-sm break-all">{landingUrl}</code>
+            <code className="bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 text-sm break-all dark:border-gray-800">{landingUrl}</code>
             <button
               onClick={() => navigator.clipboard.writeText(landingUrl)}
-              className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-violet-700"
+              className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-violet-700 dark:text-gray-300"
             >
               <Copy size={14} /> Copy
             </button>
@@ -342,12 +342,12 @@ export default function BrandBuilderPage() {
 
       {/* Waitlist preview */}
       {signups.length > 0 && (
-        <section className="bg-white border border-gray-200 rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3">Waitlist signups</h2>
+        <section className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Waitlist signups</h2>
           <ul className="divide-y divide-gray-100">
             {signups.slice(0, 25).map((s) => (
               <li key={s.id} className="py-2 flex items-center justify-between text-sm">
-                <span className="text-gray-900">{s.email}</span>
+                <span className="text-gray-900 dark:text-gray-100">{s.email}</span>
                 <span className="text-xs text-gray-500">{(s.created_at || '').slice(0, 19).replace('T', ' ')}</span>
               </li>
             ))}

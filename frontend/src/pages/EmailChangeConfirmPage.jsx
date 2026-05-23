@@ -30,17 +30,17 @@ export default function EmailChangeConfirmPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-      <div className="bg-white border border-gray-200 rounded-2xl max-w-md w-full p-6 text-center">
+      <div className="bg-white border border-gray-200 rounded-2xl max-w-md w-full p-6 text-center dark:bg-gray-900 dark:border-gray-800">
         {state.status === 'loading' && (
           <>
             <Loader2 size={36} className="text-violet-500 animate-spin mx-auto mb-3" />
-            <h1 className="text-lg font-semibold text-gray-900">Confirming your new email…</h1>
+            <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Confirming your new email…</h1>
           </>
         )}
         {state.status === 'success' && (
           <>
             <CheckCircle2 size={42} className="text-emerald-500 mx-auto mb-3" />
-            <h1 className="text-lg font-semibold text-gray-900 mb-1">Email confirmed</h1>
+            <h1 className="text-lg font-semibold text-gray-900 mb-1 dark:text-gray-100">Email confirmed</h1>
             <p className="text-sm text-gray-600 mb-4">{state.message}</p>
             {state.revokeUntil && (
               <p className="text-xs text-gray-500 mb-4">
@@ -57,7 +57,7 @@ export default function EmailChangeConfirmPage() {
         {state.status === 'error' && (
           <>
             <AlertTriangle size={42} className="text-red-500 mx-auto mb-3" />
-            <h1 className="text-lg font-semibold text-gray-900 mb-1">Could not confirm</h1>
+            <h1 className="text-lg font-semibold text-gray-900 mb-1 dark:text-gray-100">Could not confirm</h1>
             <p className="text-sm text-gray-600 mb-4">{state.message}</p>
             <Link to="/login" className="text-sm text-violet-700 hover:underline">Back to sign in</Link>
           </>

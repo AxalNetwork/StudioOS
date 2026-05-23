@@ -232,11 +232,11 @@ export default function SpinoutLabSidebar({ onNavigate }) {
 
   return (
     <nav className="flex-1 py-3 overflow-y-auto" aria-label="Spin-Out Lab navigation">
-      <div className="px-5 pb-3 mb-2 border-b border-gray-200">
+      <div className="px-5 pb-3 mb-2 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-700">
           <Rocket size={11} /> Spin-Out Lab
         </div>
-        <div className="mt-2 text-xs font-semibold text-gray-900">Week {week} of 4</div>
+        <div className="mt-2 text-xs font-semibold text-gray-900 dark:text-gray-100">Week {week} of 4</div>
         {daysRemaining != null && (
           <div className="text-[11px] text-gray-500 mb-2">
             {daysRemaining} day{daysRemaining === 1 ? '' : 's'} left
