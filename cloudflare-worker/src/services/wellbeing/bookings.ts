@@ -239,14 +239,11 @@ export async function mirrorBookingToCalendar(env: Env, bookingId: number): Prom
       attendees: JSON.parse(attendees),
       notes: b.booker_note || null,
     };
-    if (b.user_id) {
-      try { await onAxalSessionCreated(env, b.user_id, event as any); }
-      catch (e: any) { console.warn('[wellbeing] founder cal sync failed:', String(e?.message || e)); }
-    }
-    if (b.expert_user_id) {
-      try { await onAxalSessionCreated(env, b.expert_user_id, event as any); }
-      catch (e: any) { console.warn('[wellbeing] expert cal sync failed:', String(e?.message || e)); }
-    }
+    // onAxalSessionCreated resolves the relevant user calendars from the
+    // event attendees itself, so a single call covers both founder and
+    // expert sides without re-deriving per-user_id here.
+    try { await onAxalSessionCreated(env, event as any); }
+    catch (e: any) { console.warn('[wellbeing] cal sync failed:', String(e?.message || e)); }
   } catch (e: any) {
     console.warn('[wellbeing] mirrorBookingToCalendar failed:', String(e?.message || e));
   }
