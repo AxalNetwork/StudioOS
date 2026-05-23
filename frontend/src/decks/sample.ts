@@ -271,6 +271,99 @@ const SEQUOIA_OVERLAY: DeckData = {
   contact: 'founders@demoCo.example',
 };
 
+// Kawasaki 10/20/30 overlay. Provides the structured shapes the
+// rebuilt 10-slide investor template renders (problem_stat object,
+// revenue_flow nodes, magic_capabilities, funnel, positioning map,
+// revenue_series, milestones, use_of_funds donut). Kept template-
+// local for the same reason as YC_SEED_OVERLAY / SEQUOIA_OVERLAY:
+// these arrays under string-typed keys (`milestones`, `use_of_funds`)
+// would crash the simpler templates.
+const KAWASAKI_OVERLAY: DeckData = {
+  company: 'Demo Co.',
+  domain: 'demoCo.example',
+  category: 'Workflow infrastructure',
+
+  problem_headline: 'Teams stitch six tools to ship one workflow.',
+  problem_support: 'Every cycle ends in a fire drill. The cost is enormous, hidden, and ignored.',
+  problem_stat: { value: '$1.2T', label: 'wasted globally each year on duplicated work and reconciliation.' },
+
+  solution_headline: 'One workflow. Done.',
+  solution_support: 'A single source of truth that replaces the patchwork — and pays for itself in the first month.',
+  solution_pillar_words: ['One', 'Workflow', 'Done'],
+
+  bm_headline: 'Subscription. Per seat. Annual contracts.',
+  revenue_flow: [
+    { from: 'Customer',     to: 'Subscription', label: 'pays' },
+    { from: 'Subscription', to: 'Revenue',      label: 'monthly' },
+  ],
+  bm_unit: { acv: '$48K', gross_margin: '82%', payback: '6 mo' },
+
+  magic_headline: "A reasoning engine the incumbents can't copy.",
+  magic_support: "Every customer's daily work trains the next decision. Compounding moat by construction.",
+  magic_capabilities: ['Capture', 'Reason', 'Act'],
+
+  funnel: [
+    { stage: 'Visitors',  v: 12000 },
+    { stage: 'Signups',   v: 2100 },
+    { stage: 'Activated', v: 860 },
+    { stage: 'Paying',    v: 220 },
+  ],
+
+  axis_x: 'Reach',
+  axis_y: 'Depth',
+  competitors: [
+    { name: 'Legacy A',   x: 78, y: 28 },
+    { name: 'Legacy B',   x: 58, y: 36 },
+    { name: 'Point Tool', x: 24, y: 70 },
+    { name: 'Us',         x: 80, y: 84 },
+  ],
+
+  founders: [
+    { name: 'Alex Rivera', role: 'CEO · Co-founder', bio: 'Built infra at Stripe used by 4M+ businesses.', initials: 'AR' },
+    { name: 'Sam Chen',    role: 'CTO · Co-founder', bio: 'Principal engineer at Linear. 50K+ teams in production.', initials: 'SC' },
+  ],
+  team_timeline: [
+    { year: '2014', event: 'Met on open-source infrastructure' },
+    { year: '2020', event: 'Shipped a category-defining product' },
+    { year: '2025', event: 'Founded this company' },
+  ],
+
+  revenue_series: [
+    { label: '2024', v: 0.2 },
+    { label: '2025', v: 1.4 },
+    { label: '2026', v: 6.2 },
+    { label: '2027', v: 18 },
+    { label: '2028', v: 42 },
+  ],
+  milestones: [
+    { date: '2025', label: 'First $1M ARR' },
+    { date: '2026', label: '$10M ARR · category-leading NRR' },
+    { date: '2027', label: '$50M ARR · expansion line live' },
+    { date: '2028', label: 'Series B · category leader' },
+  ],
+
+  mrr_usd: 34_000,
+  paying_customers: 64,
+  growth_mom_pct: 41,
+  nrr_pct: 122,
+  user_series: [
+    { label: 'Jan', v: 120 }, { label: 'Feb', v: 240 }, { label: 'Mar', v: 410 },
+    { label: 'Apr', v: 680 }, { label: 'May', v: 1050 }, { label: 'Jun', v: 1640 },
+  ],
+
+  ask_amount_usd: 3_500_000,
+  runway_months: 24,
+  use_of_funds: [
+    { label: 'Engineering',        pct: 45 },
+    { label: 'GTM',                pct: 30 },
+    { label: 'Operations + Infra', pct: 15 },
+    { label: 'Reserve',            pct: 10 },
+  ],
+  closing_line:
+    'In five years, every operating team in this category runs through one workflow. We intend to be it.',
+  contact: 'founders@demoCo.example',
+};
+
 // Returns the sample preview data for a given template key. Most
 // templates get the base SAMPLE_PREVIEW_DATA verbatim; richer
 // narrative templates (YC Seed, Sequoia Classic) get an overlay that
@@ -282,6 +375,9 @@ export function previewDataFor(templateKey: string): DeckData {
   }
   if (templateKey === 'sequoia_classic') {
     return { ...SAMPLE_PREVIEW_DATA, ...SEQUOIA_OVERLAY };
+  }
+  if (templateKey === 'kawasaki_10_20_30') {
+    return { ...SAMPLE_PREVIEW_DATA, ...KAWASAKI_OVERLAY };
   }
   return SAMPLE_PREVIEW_DATA;
 }

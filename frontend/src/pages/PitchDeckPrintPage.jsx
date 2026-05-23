@@ -18,7 +18,7 @@ import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 // (live React template + window.print()) viewer path. All other
 // templates — including yc_seed — continue to render via the legacy
 // purple-card path + @react-pdf/renderer export below.
-const ADVANCED_TEMPLATES = new Set(['sequoia_classic']);
+const ADVANCED_TEMPLATES = new Set(['sequoia_classic', 'kawasaki_10_20_30']);
 
 // Slide16x9 fixed dimensions — every template renders at 1920×1080
 // inside transform: scale() so the viewer fits the browser width.
@@ -143,6 +143,44 @@ function normalizeBullets(key, value) {
         const y = parseFloat(parts[2] || '50');
         return { name, x: Number.isFinite(x) ? x : 50, y: Number.isFinite(y) ? y : 50 };
       });
+    case 'solution_pillar_words':
+    case 'magic_capabilities':
+      // Plain words; pass through as a string array (template renders
+      // them directly). Defensive uppercase strip stays a no-op.
+      return value.map((s) => String(s));
+    case 'revenue_flow':
+      // "Customer → Subscription : pays" / "Customer | Subscription | pays".
+      // Split on arrow/pipe *or* a free-standing colon so the label
+      // suffix is extracted instead of sticking to `to`.
+      return value.map((s) => {
+        const parts = String(s).split(/\s*(?:\u2192|->|\|)\s*|\s+:\s+/);
+        return { from: parts[0] || '', to: parts[1] || String(s), label: parts[2] || '' };
+      });
+    case 'funnel':
+      // "Visitors: 12000" / "Signups — 2100".
+      return value.map((s) => {
+        const m = String(s).match(/^\s*([^:=\u2014\u2013\-,]+)\s*[:=\u2014\u2013\-,]\s*([\d.,kmKMbB]+)/);
+        return m
+          ? { stage: m[1].trim(), v: toNumber(m[2]) ?? 0 }
+          : { stage: String(s), v: 0 };
+      });
+    case 'revenue_series':
+    case 'user_series':
+      // "2024:0.2" / "Jan — 120". Template reads {label, v}.
+      return value.map((s) => {
+        const m = String(s).match(/^\s*([^:=\u2014\u2013\-,]+)\s*[:=\u2014\u2013\-,]\s*([\d.,kmKMbB]+)/);
+        return m
+          ? { label: m[1].trim(), v: toNumber(m[2]) ?? 0 }
+          : { label: String(s), v: 0 };
+      });
+    case 'milestones':
+      // "2025: First $1M ARR" / "Q2 — Closed 10 logos".
+      return value.map((s) => {
+        const m = String(s).match(/^\s*([^:\u2014\u2013\-]+?)\s*[:\u2014\u2013\-]\s*(.+)$/);
+        return m
+          ? { date: m[1].trim(), label: m[2].trim() }
+          : { date: '', label: String(s) };
+      });
     case 'product_modules':
       // "Capture: Web, API, Mobile" → {name, nodes:[…]}
       return value.map((s) => {
@@ -190,6 +228,34 @@ function buildTemplateData(deck) {
   // Top-level fall-backs from the deck record so the Slide6/Slide11
   // header chrome always has a company name to render.
   if (!out.company && deck?.title) out.company = String(deck.title).replace(/\s*[—\-]\s*Pitch.*$/i, '');
+
+  // Kawasaki-specific shape coercions. methods.ts emits `problem_stat`
+  // as a paragraph and `bm_unit` as a metric_grid; the template reads
+  // `problem_stat.{value,label}` and `bm_unit.{acv,gross_margin,
+  // payback}`. Do the shape conversion here so neither side has to
+  // know about the other's storage format.
+  if (typeof out.problem_stat === 'string') {
+    const raw = out.problem_stat;
+    // "$1.2T | wasted globally each year on …" — first segment is the
+    // big number, rest is the support line.
+    const parts = raw.split(/\s*[|\u2014\u2013]\s*|\s+-\s+/);
+    out.problem_stat = { value: parts[0] || raw, label: parts.slice(1).join(' ').trim() };
+  }
+  if (Array.isArray(out.bm_unit)) {
+    const cells = out.bm_unit;
+    const lookup = (...slugs) => {
+      for (const c of cells) {
+        const slug = String(c?.label || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+        if (slugs.includes(slug) && c?.value != null && c.value !== '') return String(c.value);
+      }
+      return '';
+    };
+    out.bm_unit = {
+      acv: lookup('acv', 'avg_contract_usd', 'average_contract_value'),
+      gross_margin: lookup('gross_margin', 'gross_margin_pct', 'margin'),
+      payback: lookup('payback', 'payback_months', 'payback_period'),
+    };
+  }
   return out;
 }
 

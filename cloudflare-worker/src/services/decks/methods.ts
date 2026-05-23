@@ -408,26 +408,112 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     ],
   },
   {
+    // Kawasaki 10/20/30 — investor-grade 10-slide deck, one question
+    // per slide, single accent, generous whitespace. Field keys here
+    // MUST match the data paths read by
+    // frontend/src/decks/templates/kawasaki_10_20_30.tsx — the print
+    // viewer flattens slides[].fields[] into one dict keyed by
+    // field.key and passes it straight to the template.
     id: 'kawasaki_10_20_30', key: 'kawasaki_10_20_30',
     label: 'Kawasaki 10/20/30 (10)',
     prompt_hint: '10 slides, 20 minutes, 30-point font. Maximum clarity.',
     best_for: 'Investor meetings where you need to be ruthlessly concise.',
     slide_count: 10,
     category: 'fundraising',
-    fields_from_project: ['name', 'problem_statement', 'solution', 'tam', 'users_count', 'revenue', 'funding_needed'],
-    fields_from_financials: ['runway_months', 'avg_monthly_burn'],
+    fields_from_project: ['name', 'problem_statement', 'solution', 'business_model', 'tam', 'users_count', 'revenue', 'funding_needed', 'use_of_funds', 'sector', 'contact_email'],
+    fields_from_financials: ['mrr_usd', 'runway_months', 'avg_monthly_burn', 'gross_margin_pct', 'mom_growth_pct', 'nrr_pct', 'payback_months', 'avg_contract_usd'],
     fields_from_captable: ['founders'],
-    ai_fill_hint: 'Kawasaki rules: each slide one idea, max 6 lines, large fonts. No appendices.',
+    ai_fill_hint: 'Kawasaki rules: each slide answers ONE question, max 6 lines, large fonts. One accent colour. No appendices. Headlines must read from the back of a room.',
     slides: [
-      titleSlide('title', 'Title'),
-      problemSlide,
-      { ...solutionSlide, id: 'value_prop', title: 'Value proposition' },
-      { ...solutionSlide, id: 'magic', title: 'Underlying magic' },
-      businessModelSlide,
-      { ...gtmSlide, id: 'gtm', title: 'Go-to-market plan' },
-      competitionSlide, teamSlide,
-      { ...financialsSlide, id: 'projections', title: 'Projections' },
-      { ...askSlide, id: 'status_ask', title: 'Status & ask' },
+      {
+        id: 'problem', title: 'What is broken?',
+        fields: [
+          f.title('problem_headline', ['project.problem_statement', 'ai.problem_headline'], 'Problem in one line'),
+          f.para('problem_support', 'Support line', ['ai.problem_support'], 'Cost of inaction in one sentence.'),
+          // "value | label" — flattener parses both halves.
+          f.para('problem_stat', 'Big stat (value | label)', ['ai.problem_stat']),
+        ],
+      },
+      {
+        id: 'solution', title: 'What is the fix?',
+        fields: [
+          f.title('solution_headline', ['project.solution', 'ai.solution_headline'], 'Solution in 5 words'),
+          f.para('solution_support', 'Support line', ['ai.solution_support']),
+          f.bullets('solution_pillar_words', 'Pillar words (3 lines)', ['ai.solution_pillar_words']),
+        ],
+      },
+      {
+        id: 'business_model', title: 'How do we earn?',
+        fields: [
+          f.title('bm_headline', ['project.business_model', 'ai.bm_headline'], 'Pricing in one line'),
+          // "Customer → Subscription : pays" per line; flattener parses.
+          f.bullets('revenue_flow', 'Revenue flow (From → To : label)', ['ai.revenue_flow']),
+          f.metrics('bm_unit', 'Unit economics (ACV / Gross margin / Payback)', [
+            'project.avg_contract_usd', 'financials.gross_margin_pct', 'financials.payback_months',
+          ]),
+        ],
+      },
+      {
+        id: 'magic', title: 'Why us, not them?',
+        fields: [
+          f.title('magic_headline', ['ai.magic_headline'], 'The non-obvious moat'),
+          f.para('magic_support', 'Support line', ['ai.magic_support']),
+          f.bullets('magic_capabilities', 'Core capabilities (3 lines)', ['ai.magic_capabilities']),
+        ],
+      },
+      {
+        id: 'gtm', title: 'How do we reach them?',
+        fields: [
+          // "Visitors: 12000" per line; flattener parses to {stage,v}.
+          f.bullets('funnel', 'Funnel (Stage: count)', ['ai.gtm_funnel']),
+        ],
+      },
+      {
+        id: 'competition', title: 'Who else is here?',
+        fields: [
+          f.subtitle('axis_x', ['ai.axis_x'], 'X-axis label'),
+          f.subtitle('axis_y', ['ai.axis_y'], 'Y-axis label'),
+          // "Name | x | y" 0–100; "Us"/"We" rendered as the focal pin.
+          f.bullets('competitors', 'Competitors (Name | x | y, 0–100)', ['ai.competitors']),
+        ],
+      },
+      {
+        id: 'team', title: 'Who is shipping this?',
+        fields: [
+          f.bullets('founders', 'Founders (2 lines)', ['captable.founders', 'ai.founders']),
+          f.bullets('team_timeline', 'Journey (3 lines, "2014 — event")', ['ai.team_timeline']),
+        ],
+      },
+      {
+        id: 'projections', title: 'Where are we going?',
+        fields: [
+          // "2024:0.2" pairs (USD M); flattener parses to {label,v}.
+          f.bullets('revenue_series', 'Revenue series (year:value M)', ['financials.revenue_series', 'ai.revenue_series']),
+          f.bullets('milestones', 'Milestones (4 lines, "2025: First $1M ARR")', ['ai.milestones']),
+        ],
+      },
+      {
+        id: 'status', title: 'What evidence exists?',
+        fields: [
+          f.para('mrr_usd', 'MRR (USD)', ['financials.mrr_usd', 'financials.mrr', 'project.revenue']),
+          f.para('paying_customers', 'Paying customers', ['project.users_count']),
+          f.para('growth_mom_pct', 'MoM growth (%)', ['financials.mom_growth_pct', 'ai.growth_mom_pct']),
+          f.para('nrr_pct', 'NRR (%)', ['financials.nrr_pct', 'ai.nrr_pct']),
+          // "Jan:120" per line; flattener parses to {label,v}.
+          f.bullets('user_series', 'Users by month (Jan:120, …)', ['financials.user_series', 'ai.user_series']),
+        ],
+      },
+      {
+        id: 'ask', title: 'Why invest now?',
+        fields: [
+          f.para('ask_amount_usd', 'Ask (USD)', ['project.funding_needed']),
+          f.para('runway_months', 'Runway (months)', ['financials.runway_months']),
+          // "Engineering: 45" per line; flattener parses to {label,pct}.
+          f.bullets('use_of_funds', 'Use of funds (4 lines, "Label: 45")', ['project.use_of_funds', 'ai.use_of_funds']),
+          f.para('closing_line', 'Closing line', ['ai.closing_line']),
+          f.para('contact', 'Contact', ['project.contact_email', 'ai.closing_contact']),
+        ],
+      },
     ],
   },
   {
