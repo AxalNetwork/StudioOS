@@ -13,6 +13,7 @@ export const Slide16x9: React.FC<React.PropsWithChildren<{
   bg?: string; ink?: string; font?: string; className?: string;
 }>> = ({ bg = '#FFFFFF', ink = '#0F172A', font = 'Inter, system-ui, sans-serif', className = '', children }) => (
   <div
+    data-slide-frame=""
     className={`relative ${className}`}
     style={{
       width: 1920, height: 1080, background: bg, color: ink,

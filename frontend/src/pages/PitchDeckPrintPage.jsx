@@ -350,6 +350,59 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
 
+  // Task #11 — keyboard navigation. Works in both fullscreen and the
+  // normal scroll-through view (same scroll-snap layout). Slides are
+  // enumerated via the `data-slide-frame` hook added to Slide16x9 and
+  // the legacy fallback frame, so the same listener drives every
+  // template. Skips when the user is typing into the CTA modal or
+  // when a browser shortcut modifier is held.
+  useEffect(() => {
+    const NAV_NEXT = new Set(['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Spacebar', 'j']);
+    const NAV_PREV = new Set(['ArrowLeft', 'ArrowUp', 'PageUp', 'k']);
+    const onKey = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const ae = document.activeElement;
+      if (ae) {
+        const tag = ae.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || ae.isContentEditable) return;
+      }
+      const root = stageRef.current;
+      if (!root) return;
+      const isNext = NAV_NEXT.has(e.key);
+      const isPrev = NAV_PREV.has(e.key);
+      const isHome = e.key === 'Home';
+      const isEnd = e.key === 'End';
+      const isFsToggle = e.key === 'f' || e.key === 'F';
+      if (!isNext && !isPrev && !isHome && !isEnd && !isFsToggle) return;
+      if (isFsToggle) {
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+      }
+      const frames = Array.from(root.querySelectorAll('[data-slide-frame]'));
+      if (frames.length === 0) return;
+      e.preventDefault();
+      // Sticky chrome occupies ~56px when not fullscreen; treat the
+      // slide whose top is closest to that line as the current one.
+      const anchor = document.fullscreenElement ? 0 : 60;
+      let curIdx = 0;
+      let best = Infinity;
+      frames.forEach((el, i) => {
+        const d = Math.abs(el.getBoundingClientRect().top - anchor);
+        if (d < best) { best = d; curIdx = i; }
+      });
+      let target = curIdx;
+      if (isNext) target = Math.min(frames.length - 1, curIdx + 1);
+      else if (isPrev) target = Math.max(0, curIdx - 1);
+      else if (isHome) target = 0;
+      else if (isEnd) target = frames.length - 1;
+      if (target === curIdx && !isHome && !isEnd) return;
+      frames[target].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggleFullscreen]);
+
   const templateData = useMemo(() => (isAdvanced && deck ? buildTemplateData(deck) : null), [isAdvanced, deck]);
 
   const exportPdf = async () => {
@@ -463,7 +516,7 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
       {Header}
       <div className="max-w-5xl mx-auto py-8 px-4 space-y-6">
         {(deck.slides || []).map((s, i) => (
-          <div key={i} className="bg-gradient-to-br from-violet-600 to-violet-800 text-white rounded-xl shadow-md p-12 aspect-video flex flex-col overflow-hidden">
+          <div key={i} data-slide-frame="" className="bg-gradient-to-br from-violet-600 to-violet-800 text-white rounded-xl shadow-md p-12 aspect-video flex flex-col overflow-hidden">
             <div className="text-xs uppercase tracking-widest text-violet-200">{s.subtitle || `Slide ${i + 1}`}</div>
             <h2 className="text-3xl font-semibold mt-2">{s.title}</h2>
             {s.body && (
