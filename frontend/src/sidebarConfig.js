@@ -20,7 +20,7 @@ import {
   Ticket, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, Shield, Code, ShieldCheck, Share2, Wallet,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug,
-  MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone,
+  MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon,
 } from 'lucide-react';
 
@@ -114,6 +114,12 @@ export const SIDEBAR_GROUPS = {
     { key: 'portals', label: 'Portals', items: [
       { to: '/founder', icon: Rocket, label: 'Founder Portal' },
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
+    ]},
+    { key: 'broadcasting', label: 'Broadcasting', items: [
+      { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },
+      { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },
+      { to: '/admin/news', icon: FileText, label: 'News Queue' },
+      { to: '/admin/articles', icon: FileText, label: 'Articles Queue' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
