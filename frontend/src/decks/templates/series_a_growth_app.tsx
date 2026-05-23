@@ -2036,9 +2036,31 @@ export default SeriesAGrowthDeckApp;
 // ─────────────────────────────────────────────────────────────────
 import { Slide16x9, type DeckProps as RegistryDeckProps } from '../DeckBase';
 
+// Shape-aware merge — slides call `.map` on `metrics`, `unit_econ`,
+// `hiring_plan`, `team`, etc. and dereference nested objects like
+// `revenue.series`. Drop any incoming field whose runtime type does
+// not match the sample (array-vs-non-array, object-vs-non-object)
+// so a legacy string-shaped payload from Axal cannot crash the
+// adapter inside `ThumbnailBoundary`.
+function mergeShape(sample: SeriesAData, input: Record<string, any>): SeriesAData {
+  const out: any = { ...sample };
+  for (const k of Object.keys(input)) {
+    const sv = (sample as any)[k];
+    const iv = input[k];
+    if (iv == null) continue;
+    if (typeof iv === 'string' && iv.trim() === '') continue;
+    if (Array.isArray(iv) && iv.length === 0) continue;
+    if (Array.isArray(sv) && !Array.isArray(iv)) continue;
+    if (sv != null && typeof sv === 'object' && !Array.isArray(sv) &&
+        (typeof iv !== 'object' || Array.isArray(iv))) continue;
+    out[k] = iv;
+  }
+  return out;
+}
+
 export const Deck_series_a_growth_app: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
   const seed: SeriesAData = (data && Object.keys(data).length > 0)
-    ? { ...SAMPLE_DATA, ...(data as Partial<SeriesAData>) }
+    ? mergeShape(SAMPLE_DATA, data as Record<string, any>)
     : SAMPLE_DATA;
   return (
     <>

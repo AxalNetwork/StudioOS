@@ -1580,9 +1580,33 @@ export default MinimalSeedDeckApp;
 // (prev/next + dot pagination + motion) stays available via the
 // `MinimalSeedDeckApp` default export for any caller that wants it
 // directly.
+// Shape-aware merge — the slides call `.map` on `team`, `milestones`,
+// `roadmap`, `use_of_funds` and read `.value` / `.label` off
+// `problem_stat`. If Axal's `buildTemplateData` (or any legacy
+// caller) passes a string where the slide expects an array, the
+// adapter would otherwise crash inside the ThumbnailBoundary. Drop
+// any incoming field whose runtime type doesn't match the sample
+// (array-vs-non-array, object-vs-non-object) — the sample default
+// then wins for that field only.
+function mergeShape(sample: MinimalSeedData, input: Record<string, any>): MinimalSeedData {
+  const out: any = { ...sample };
+  for (const k of Object.keys(input)) {
+    const sv = (sample as any)[k];
+    const iv = input[k];
+    if (iv == null) continue;
+    if (typeof iv === 'string' && iv.trim() === '') continue;
+    if (Array.isArray(iv) && iv.length === 0) continue;
+    if (Array.isArray(sv) && !Array.isArray(iv)) continue;
+    if (sv != null && typeof sv === 'object' && !Array.isArray(sv) &&
+        (typeof iv !== 'object' || Array.isArray(iv))) continue;
+    out[k] = iv;
+  }
+  return out;
+}
+
 export const Deck_minimal_seed_app: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
   const seed: MinimalSeedData = (data && Object.keys(data).length > 0)
-    ? { ...SAMPLE_DATA, ...(data as Partial<MinimalSeedData>) }
+    ? mergeShape(SAMPLE_DATA, data as Record<string, any>)
     : SAMPLE_DATA;
   return (
     <>
