@@ -1,11 +1,14 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import PublicNav from '../components/PublicNav';
+import PublicFooter from '../components/PublicFooter';
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-white">
-      <div className="max-w-4xl mx-auto px-6 py-12">
+    <div className="min-h-screen bg-white flex flex-col pt-16">
+      <PublicNav />
+      <main className="flex-1 max-w-4xl mx-auto px-6 py-12 w-full">
         <Link to="/" className="flex items-center gap-2 text-violet-600 hover:text-violet-700 mb-8">
           <ArrowLeft size={16} /> Back to Axal Ventures
         </Link>
@@ -79,7 +82,8 @@ export default function PrivacyPage() {
             <p><strong>Privacy Officer</strong><br />Axal Management, LLC<br /><strong>Email:</strong> privacy@axal.vc</p>
           </section>
         </div>
-      </div>
+      </main>
+      <PublicFooter />
     </div>
   );
 }
