@@ -371,88 +371,37 @@ export default function LandingPage() {
                 </p>
               </div>
 
-              {/* What you get — 6 bullets, ≤16 words each, deep-linked. */}
+              {/* Trimmed copy — landing page now teases What you get / What we
+                  look for in one sentence each; full list lives on /spinout-lab. */}
               <div>
-                <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-3">
+                <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-2">
                   What you get
                 </h3>
-                <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-gray-700 leading-relaxed">
-                  {[
-                    'Personal Advisor on every screen — never a blank one.',
-                    'Three warm investor introductions in Week 4 for qualified founders.',
-                    'Sector-matched mentor track with availability calendars.',
-                    'Services partners (legal, design, recruiting) at Axal-network rates.',
-                    'Sector, investor, sentiment, TALC and capital-velocity intelligence.',
-                    'Document automation — incorporation, 83(b), cofounder agreement, SAFE.',
-                  ].map((b) => (
-                    <li key={b} className="flex items-start gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500 mt-1.5 shrink-0" />
-                      <span>{b}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  to="/spinout-lab#what-you-get"
-                  className="inline-flex items-center gap-1 mt-3 text-xs font-medium text-violet-700 hover:text-violet-900"
-                >
-                  See full list on the Lab page <ArrowRight size={12} />
-                </Link>
+                <p className="text-sm text-gray-700 leading-relaxed">
+                  A high-touch spin-out program with advisor support, warm intros,
+                  mentor matching, and the tooling founders need to move fast.{' '}
+                  <Link
+                    to="/spinout-lab#what-you-get"
+                    className="inline-flex items-center gap-1 text-violet-700 hover:text-violet-900 font-medium"
+                  >
+                    See full list <ArrowRight size={12} />
+                  </Link>
+                </p>
               </div>
 
-              {/* What we look for — 6 strong signals + 4 filters, two columns. */}
               <div>
-                <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-3">
+                <h3 className="text-sm uppercase tracking-wider text-violet-700 font-semibold mb-2">
                   What we look for
                 </h3>
-                <div className="grid sm:grid-cols-2 gap-6 text-sm text-gray-700 leading-relaxed">
-                  <div>
-                    <div className="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-2">
-                      Strong signals
-                    </div>
-                    <ul className="space-y-1.5">
-                      {[
-                        'Domain expertise — years in the sector',
-                        'Customer access — warm intros from day 1',
-                        'Full-time commitment, not nights-and-weekends',
-                        'Lived insight — a non-obvious view',
-                        'Coachability — adjusts to evidence',
-                        'Founder ↔ market fit for this specific problem',
-                      ].map((s) => (
-                        <li key={s} className="flex items-start gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-violet-500 mt-1.5 shrink-0" />
-                          <span>{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-2">
-                      Filters
-                    </div>
-                    <ul className="space-y-1.5">
-                      {[
-                        'Sector: AI · Blockchain · Quantum · Digital Infra · Frontier Software',
-                        'Geography we can support',
-                        'Founder ≥ 18',
-                        'No sanctions / PEP / bad-actor disqualifications',
-                      ].map((f) => (
-                        <li key={f} className="flex items-start gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-violet-500 mt-1.5 shrink-0" />
-                          <span>{f}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-4">
-                  We say no for clear reasons. Common ones listed on{' '}
+                <p className="text-sm text-gray-700 leading-relaxed">
+                  Strong founder-market fit, deep domain insight, customer access,
+                  full-time commitment, and clear reasons to say yes or no.{' '}
                   <Link
                     to="/spinout-lab#what-we-look-for"
-                    className="text-violet-700 hover:text-violet-900 underline-offset-2 hover:underline"
+                    className="inline-flex items-center gap-1 text-violet-700 hover:text-violet-900 font-medium"
                   >
-                    /spinout-lab
+                    See full criteria <ArrowRight size={12} />
                   </Link>
-                  .
                 </p>
               </div>
 
