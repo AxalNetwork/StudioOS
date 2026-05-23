@@ -11,6 +11,50 @@
 > building it.
 
 
+## Task #3 — Series B Diligence Pack: 32-slide board-grade upgrade
+
+Replaced the 1-slide `series_b_diligence` placeholder with a 32-slide
+(22 main + 10 appendix) self-contained variant in the Snowflake /
+Datadog / Atlassian visual register — board / IC quality, Recharts +
+framer-motion + SVG. Sections: Opportunity, Product, Traction, GTM,
+Defensibility, Organization, Investment, plus appendix
+(financials, cohorts, segmentation, funnel, pricing, architecture,
+security, risks, governance, three-year plan). Mirrors the Series A
+pattern from Task #2 (registry slot stable, drift count unchanged).
+
+- **`frontend/src/decks/templates/series_b_diligence_app.tsx`** — new
+  file (~2700 lines). Local `SlideFrame` chrome, 22 main slide
+  components + 10 appendix components, internal `SLIDES` array used
+  by both the standalone `SeriesBDiligenceDeckApp` and the registry
+  adapter. Source SAMPLE_DATA was truncated mid-object in the
+  attachment; closed cleanly — slide internals already guard with
+  `g.X?.length ? g.X : [...]` fallbacks so each slide renders the
+  baked-in defaults when a field is missing.
+- **Registry adapter** appended to the same file:
+  `Deck_series_b_diligence_app` maps every `SLIDES[i]` through
+  `<Slide16x9>` from `../DeckBase` so PitchDeckPrintPage's
+  `[data-slide-frame]` selector + per-slide `pageBreakAfter` fire
+  for keyboard nav AND `window.print()` PDF export.
+- **`mergeShape()`** — shape-safe deep merge preserves SAMPLE_DATA
+  defaults when autofill ships partial data (arrays only override
+  when non-empty, objects merge field-by-field). Identical pattern
+  to `series_a_growth_app.tsx`.
+- **`frontend/src/decks/templates/series_b_diligence.tsx`** — collapsed
+  to a one-line re-export so the drift regex `Deck_<key>` from
+  `./<key>` stays green and `method_id=series_b_diligence` is stable
+  for already-persisted decks (no migration needed).
+- **`frontend/src/decks/sample.ts`** — added `series_b_diligence`
+  branch in `previewDataFor()` so the picker thumbnail + preview
+  pull the richer SAMPLE_DATA shape (`platform_layers`,
+  `retention_cohort`, `financial_statements`, `three_year_plan`, …)
+  instead of the legacy string-shape `SAMPLE_PREVIEW_DATA`.
+- **`frontend/src/decks/templates/index.ts`** — metadata bumped to
+  `slide_count: 32` + description "22 main + 10 appendix ·
+  board-grade" (was 26). Registry still 12 entries;
+  `scripts/check-deck-templates.mjs` green.
+- Share-link CTA routing (Task #6) unchanged — `category: 'fundraising'`
+  → auto-generated deal-pack + e-sign flow at deck end.
+
 ## Task #21 — Minimal Seed deck: Linear/Stripe/Figma-aesthetic upgrade
 
 Replaced the bare 6-slide Minimal Seed template (the ~40-line "big

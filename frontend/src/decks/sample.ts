@@ -1,6 +1,7 @@
 import type { DeckData } from './DeckBase';
 import { SAMPLE_DATA as MINIMAL_SEED_SAMPLE } from './templates/minimal_seed';
 import { SAMPLE_DATA as SERIES_A_APP_SAMPLE } from './templates/series_a_growth_app';
+import { SAMPLE_DATA as SERIES_B_APP_SAMPLE } from './templates/series_b_diligence_app';
 
 // Base preview sample used by the existing 11 templates. Keeps the
 // historical *string* shapes for `milestones`, `roadmap`, and
@@ -393,6 +394,13 @@ export function previewDataFor(templateKey: string): DeckData {
   // `hiring_plan`, etc. that SAMPLE_PREVIEW_DATA does not carry.
   if (templateKey === 'series_a_growth') {
     return SERIES_A_APP_SAMPLE as unknown as DeckData;
+  }
+  // Series B Diligence (now backed by the 32-slide self-contained
+  // `series_b_diligence_app` variant) reads structured fields like
+  // `platform_layers`, `retention_cohort`, `financial_statements`,
+  // `three_year_plan`, etc. that SAMPLE_PREVIEW_DATA does not carry.
+  if (templateKey === 'series_b_diligence') {
+    return SERIES_B_APP_SAMPLE as unknown as DeckData;
   }
   return SAMPLE_PREVIEW_DATA;
 }
