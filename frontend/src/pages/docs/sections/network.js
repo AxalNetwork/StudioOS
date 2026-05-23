@@ -74,6 +74,79 @@ export default {
       ],
     },
     {
+      id: 'articles',
+      title: 'Articles (write, submit, read)',
+      overview:
+        "Trusted members — founders, investors, partners, mentors — can write industry insights and how-tos for the public news feed. Drafts auto-save as you type, submissions go through a quick review by the studio team, and you get notified at every step.",
+      howto: [
+        'Open the Articles page from the sidebar.',
+        'Click "New draft", give it a title and subtitle, pick a sector, and write in the markdown editor with live preview.',
+        'Drag-and-drop a cover image (jpg, png, or webp, up to 5 MB).',
+        'When you\'re ready, click "Submit for review" — the studio team gets notified and you\'ll see comments or an approval inside the same view.',
+        'Read published articles on the public news feed at axal.vc/news.',
+      ],
+      tips: [
+        'Drafts save as you type — close the tab any time and your work will be waiting.',
+        'You can submit up to three articles per week; quality lands faster than volume.',
+        'Articles by trusted authors (KYC + signed partner deals + a clean 90 days) get prioritised in the queue.',
+      ],
+      pitfalls: [
+        'Including personal details (emails, phone numbers, tax IDs) in an article will block submission until they are removed — the privacy check is strict.',
+        'Once published, articles cache on the public site for up to 60 days; small typo fixes are immediate, but reorganising headings can take time to propagate.',
+      ],
+      related: [
+        { label: 'Public Directory', href: '#network/directory' },
+      ],
+    },
+    {
+      id: 'relationships',
+      title: 'Relationships',
+      overview:
+        "Relationships is your private rolodex inside the platform — the people you've met through the studio, the introductions you've made and received, and the notes you keep on each contact. It complements the Network Effects leaderboard with a working view of who you actually know.",
+      howto: [
+        'Open Relationships from the sidebar.',
+        'Browse contacts by name, role, or last interaction.',
+        'Add private notes on any contact — only you see them.',
+        'Use the "Request intro" action to ask a mutual contact for a warm introduction.',
+      ],
+      tips: [
+        'Tag contacts you intend to follow up with — the page lets you filter by tag.',
+        'A short note after every meeting compounds quickly; future-you will thank present-you.',
+      ],
+      pitfalls: [
+        'Private notes are not part of your data export today; treat them as platform-local memory.',
+        'Asking for an intro without context lands at the bottom of the mutual\'s queue — a one-liner reason raises the response rate dramatically.',
+      ],
+      related: [
+        { label: 'Network Effects', href: '#network/effects' },
+        { label: 'Matches', href: '#network/matches' },
+      ],
+    },
+    {
+      id: 'matches',
+      title: 'Matches (co-founders & mentors)',
+      overview:
+        "Matches is one page that surfaces the platform's suggestions across co-founders, mentors, and partner introductions. The algorithm uses your persona, sector, time commitment, and recent activity — you stay in control of who you reach out to.",
+      howto: [
+        'Open Matches from the Network sidebar.',
+        'Browse the three tabs — Co-founders, Mentors, and Partners — each shows ranked suggestions.',
+        'Like, pass, or open a profile from the card.',
+        'A chat unlocks when both sides like each other (co-founders) or when a mentor accepts (mentors).',
+      ],
+      tips: [
+        'Update your profile and persona regularly — matches improve with every change.',
+        'Pass on a suggestion to remove it from future rankings; it won\'t resurface.',
+      ],
+      pitfalls: [
+        'Reaching out outside the platform skips the chemistry signal both sides see — keep first contact in-app for better matches later.',
+        'A long list of "likes" with no follow-through looks the same to the algorithm as a low signal — act on what you like.',
+      ],
+      related: [
+        { label: 'Co-founder Match', href: '#validate-grow/cofounder-match' },
+        { label: 'Mentors & booking sessions', href: '#validate-grow/mentors' },
+      ],
+    },
+    {
       id: 'refer-earn',
       title: 'Refer & Earn',
       overview:

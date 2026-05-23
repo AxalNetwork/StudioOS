@@ -76,6 +76,30 @@ export default {
       ],
     },
     {
+      id: 'co-marketing',
+      title: 'Co-marketing requests',
+      overview:
+        "Co-marketing requests let founders and partners formally propose joint announcements — case studies, blog posts, webinars, or social pushes — with scope, deadline, and amplification plan agreed up front. Both sides see the same request and status in one place.",
+      howto: [
+        'Open the partner card from the Marketplace or the partner directory.',
+        'Click "Propose co-marketing" and describe the format, scope, deadline, and what each side will amplify.',
+        'The partner reviews and either accepts, edits, or rejects with a reason.',
+        'Once accepted, both sides track delivery and publication date in the same engagement view.',
+      ],
+      tips: [
+        'A short proposal with a clear ask outperforms a long one — partners triage many requests.',
+        'Capture the agreed publish date in the engagement so both sides can amplify on launch.',
+      ],
+      pitfalls: [
+        'Sending a co-marketing request without a draft outline forces the partner to do the framing work — attach one if you can.',
+        'Skipping the amplification plan often means the piece ships without the audience reach both sides expected.',
+      ],
+      related: [
+        { label: 'Partners & Co-marketing', href: '#network/partners' },
+        { label: 'Marketplace', href: '#network/marketplace' },
+      ],
+    },
+    {
       id: 'counters',
       title: 'Partner & admin counters',
       overview:

@@ -124,6 +124,30 @@ export default {
       ],
     },
     {
+      id: 'deck-share-viewer',
+      title: 'Sharing your pitch deck via a link',
+      overview:
+        "Generate a single-link share URL for your deck — no sign-in required for the recipient. The viewer renders the deck in a clean, distraction-free reading mode with keyboard navigation and fullscreen support, and you can revoke the link at any time.",
+      howto: [
+        'Open Pitch Deck on your project and click "Share".',
+        'Copy the generated link and send it to the investor or reviewer.',
+        'They open the link in any browser — no account needed.',
+        'Revoke the link from the same dialog when you no longer want it active.',
+      ],
+      tips: [
+        'In the viewer, arrow keys, Space, j/k, Page Up/Page Down, Home and End all navigate slides.',
+        'Press "f" to enter fullscreen; keyboard shortcuts keep working in fullscreen on every browser.',
+        'Revoking a link is instant — the next attempt to open it shows a clear "link no longer valid" message.',
+      ],
+      pitfalls: [
+        'Sharing the link before exporting hides any live edits you make later from anyone holding the link — use a stable version, not a work-in-progress.',
+        'Generating multiple links for the same deck and forgetting which is which makes revocation messy — keep the dialog open and label your shares.',
+      ],
+      related: [
+        { label: 'Pitch Deck', href: '#build/pitch-deck' },
+      ],
+    },
+    {
       id: 'financial-model',
       title: 'Financial Model Builder',
       overview:

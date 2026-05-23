@@ -146,6 +146,54 @@ export default {
       ],
     },
     {
+      id: 'help-and-shortcuts',
+      title: 'Help widget & keyboard shortcuts',
+      overview:
+        "Every page has a help button at the bottom-right (the life-ring icon) — click it any time you need a hand or want to reach the team. Power users can press Ctrl/Cmd-K from anywhere to open a search bar that jumps to pages, recent activity, and documentation in one place.",
+      howto: [
+        'Press Ctrl/Cmd-K to open the command palette from any page.',
+        'Start typing — results group by pages, recent activity, doc anchors, and quick actions.',
+        'Press Enter to jump to the highlighted result; Esc closes the palette.',
+        'Click the life-ring icon at the bottom-right to open the help widget for contact and shortcut tips.',
+      ],
+      tips: [
+        'The palette remembers your recent activity for five minutes, so the latest thing you touched is usually one or two keystrokes away.',
+        'Press "?" anywhere outside an input field to open the help widget without reaching for the mouse.',
+      ],
+      pitfalls: [
+        'The palette searches documentation by title and content — niche features are easier to find by their docs anchor than by guessing the page name.',
+        'Quiet hours and notification preferences are managed in Settings, not from the help widget — the widget is for contact and shortcuts.',
+      ],
+      related: [
+        { label: 'Notifications', href: '#account/notifications' },
+        { label: 'Contact support', href: '#troubleshooting/contact-support' },
+      ],
+    },
+    {
+      id: 'public-roadmap',
+      title: 'Public roadmap, pricing & demo',
+      overview:
+        "Anyone — including visitors who haven't signed up yet — can browse what the studio is working on, compare subscription tiers, and book a demo. These pages live on the public site and link straight into sign-up when a visitor is ready.",
+      howto: [
+        'Open /roadmap to see the shipped, in-progress, and planned features grouped by theme.',
+        'Open /pricing to compare Free, Growth, and Studio tiers side-by-side.',
+        'Open /demo to book a walkthrough with the studio team.',
+        'Share any of these links externally — they require no account.',
+      ],
+      tips: [
+        'The roadmap is the same source the team uses internally; if a feature is missing, request it from the demo form and we will consider it.',
+        'Pricing changes show on this page first; bookmark it if you want to track tier-by-tier inclusions over time.',
+      ],
+      pitfalls: [
+        'Deep-links into in-app features still require sign-in — bookmark the relevant /docs anchor instead if you want a public-friendly reference.',
+        'Demo bookings land on the studio calendar in UTC — make sure you check your local time before confirming.',
+      ],
+      related: [
+        { label: 'Subscription tiers (founders)', href: '#account/tiers' },
+        { label: 'Investor billing & tiers', href: '#account/investor-billing' },
+      ],
+    },
+    {
       id: 'personal-advisor',
       title: 'Personal Advisor',
       overview:

@@ -1,17 +1,17 @@
 export default {
   id: 'changelog',
-  title: 'Changelog',
+  title: "What's new",
   icon: 'History',
   subsections: [
     {
       id: 'release-notes',
-      title: 'Release notes',
+      title: "What's new",
       overview:
-        "A running log of every notable change shipped to StudioOS — features, fixes, security updates, and operator-facing notes. Entries are appended newest-first and reference the originating task or commit so you can trace anything back to the underlying work.",
-      markdownUrl: '/CHANGELOG.md',
+        "A plain-English summary of recent changes to StudioOS, written for everyone using the platform. New items are added at the top. The detailed engineering log (with task IDs and code references) lives on GitHub.",
+      markdownUrl: '/CHANGELOG-user.md',
       tips: [
-        'Use Ctrl/Cmd-F to search the page for a feature name or date if you remember roughly when something shipped.',
-        'Each entry links to the relevant section of the app — click through to see the feature in its current form.',
+        'Use Ctrl/Cmd-F to search the page for a feature name or month.',
+        'Looking for technical detail? Each release has a matching entry in the GitHub changelog linked at the top of the page.',
       ],
     },
   ],

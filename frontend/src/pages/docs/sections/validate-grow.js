@@ -170,6 +170,30 @@ export default {
       ],
     },
     {
+      id: 'expert-profiles',
+      title: 'Expert profiles',
+      overview:
+        "Every mentor and operating expert has a public profile page showing their background, areas of expertise, languages, time zone, and open booking slots. Profiles are the entry point for booking sessions and for partner introductions.",
+      howto: [
+        'Open Mentors from the Network sidebar and click any name to land on the expert\'s profile.',
+        'Read the bio, expertise tags, and recent engagement signals (sessions completed, average rating).',
+        'Pick an open slot from the calendar on the right to book directly.',
+        'Use the "Share profile" link to send the page to a co-founder for a second opinion before booking.',
+      ],
+      tips: [
+        'Profiles with multiple languages list them in the header — useful for non-English founders.',
+        'Booking from the profile page automatically pre-fills the introductory context from your own profile.',
+      ],
+      pitfalls: [
+        'Expertise tags are self-reported — read the bio for nuance before booking, especially on niche topics.',
+        'A blank availability calendar usually means the expert is fully booked this week — check back later or open Office Hours instead.',
+      ],
+      related: [
+        { label: 'Mentors & booking sessions', href: '#validate-grow/mentors' },
+        { label: 'Office Hours', href: '#validate-grow/office-hours' },
+      ],
+    },
+    {
       id: 'wellbeing',
       title: 'Founder wellbeing',
       overview:

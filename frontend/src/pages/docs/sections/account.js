@@ -177,6 +177,30 @@ export default {
       ],
     },
     {
+      id: 'auth-recovery',
+      title: 'Account recovery (lost device)',
+      overview:
+        "If you lose access to your authenticator app, you have two recovery paths: the ten single-use recovery codes you saved when you set up two-factor, or a trusted contact you nominated in advance who can vouch for you to the studio team.",
+      howto: [
+        'On the sign-in page, click "Lost your device?".',
+        'Pick "Use a recovery code" and paste one of the ten codes you saved.',
+        'If you have no codes, pick "Ask a trusted contact" — the studio team will reach out to your nominated contact for verification.',
+        'Once verified, you\'re prompted to set up a fresh authenticator on your new device.',
+      ],
+      tips: [
+        'Nominate a trusted contact ahead of time in Settings → Security; recovery is far faster when the contact is already on file.',
+        'After recovery, regenerate a fresh set of codes and re-save them somewhere offline.',
+      ],
+      pitfalls: [
+        'Storing recovery codes only in the same password manager as your authenticator defeats the purpose — keep one copy offline.',
+        'Recovery has a cooling-off period and a step-up review for sensitive actions — expect a short delay before things like withdrawals are re-enabled.',
+      ],
+      related: [
+        { label: 'Security (2FA, sessions)', href: '#account/security' },
+        { label: 'Contact support', href: '#troubleshooting/contact-support' },
+      ],
+    },
+    {
       id: 'appearance',
       title: 'Appearance (theme & density)',
       overview:

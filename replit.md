@@ -1,7 +1,10 @@
 # Axal StudioOS
 API-first Venture Studio OS — manages startup lifecycle from intake to portfolio.
 
-> **Changelog lives in `CHANGELOG.md`** (symlinked into `frontend/public/` for the in-app Docs → Release notes page). Append there, newest-first. Do not date task entries in this file.
+> **Two changelogs, keep them in sync.**
+> - `CHANGELOG.md` (also symlinked at `frontend/public/CHANGELOG.md`) — the technical/engineering log. Task IDs, file paths, code refs welcome. Newest-first.
+> - `frontend/public/CHANGELOG-user.md` — the in-app Docs → "What's new" page. Plain-English, no task IDs, no file paths, no code. Write it for the people using the platform.
+> Any user-facing change needs a line in BOTH. Do not date task entries in the technical file.
 
 ## Run & Operate
 - **Dev**: `npm run dev` (frontend) + `python backend/main.py` (FastAPI, dev-only).

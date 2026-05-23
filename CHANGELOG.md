@@ -1,5 +1,15 @@
 # Changelog
 
+> **Engineering changelog.** This file is the technical log read by
+> contributors and on GitHub — task IDs, file paths, code refs are
+> expected here.
+>
+> **User-facing changes also need a plain-English line in
+> `frontend/public/CHANGELOG-user.md`** (the file the in-app Docs
+> "What's new" page reads). Keep that one short, jargon-free, and
+> written for the people using the platform, not the engineers
+> building it.
+
 
 ## Task #15 — Keyboard arrows in fullscreen for one-time link decks
 

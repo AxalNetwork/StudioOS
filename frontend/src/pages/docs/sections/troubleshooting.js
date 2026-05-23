@@ -122,6 +122,30 @@ export default {
       ],
     },
     {
+      id: 'customer-chat',
+      title: 'Reaching the team via in-app chat',
+      overview:
+        "Paid-tier members can reach the studio team via an in-app chat thread without leaving the platform. Look for the chat button at the bottom-right of the screen. Replies come back to the same thread, in-app and (optionally) by email.",
+      howto: [
+        'Click the chat button at the bottom-right of any page.',
+        'Type your question — attach a screenshot if it helps explain.',
+        'A studio team member replies in the same thread, usually within business hours.',
+        'You\'ll get an in-app notification (and email, depending on your settings) when there\'s a reply.',
+      ],
+      tips: [
+        'Mention the page URL where the issue happens — it cuts triage time in half.',
+        'Use chat for quick questions; for anything formal (refunds, security, contracts), file a ticket from the Tickets page instead so it lives in the audit trail.',
+      ],
+      pitfalls: [
+        'Eligibility depends on your plan — Free founders and angel-tier investors see the help widget but the chat itself unlocks on the paid plans.',
+        'Chat history is visible to the studio team; never send passwords, recovery codes, or other secrets through it.',
+      ],
+      related: [
+        { label: 'Help widget & keyboard shortcuts', href: '#getting-started/help-and-shortcuts' },
+        { label: 'Contact support', href: '#troubleshooting/contact-support' },
+      ],
+    },
+    {
       id: 'contact-support',
       title: 'Contact support',
       overview:

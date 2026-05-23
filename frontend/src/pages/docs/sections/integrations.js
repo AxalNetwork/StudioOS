@@ -124,6 +124,54 @@ export default {
       ],
     },
     {
+      id: 'google-signin',
+      title: 'Continue with Google (sign-in)',
+      overview:
+        "You can sign in to StudioOS with your Google account in one click. The Google identity stays linked to your Axal account across visits, and the same Google account can never be linked to two different Axal accounts — so you can\'t accidentally lock yourself out by signing in with the wrong one.",
+      howto: [
+        'On the sign-in page, click "Continue with Google".',
+        'Pick the Google account you want to use — Google\'s account chooser always appears so you can switch accounts if needed.',
+        'Approve the basic profile and email scopes.',
+        'You land back in StudioOS, signed in.',
+      ],
+      tips: [
+        'Once you\'ve used Google sign-in once, the same account works every time — no second setup step.',
+        'You can also manage which Google account is linked from Settings → Account.',
+      ],
+      pitfalls: [
+        'If the Google account you pick is already linked to a different Axal user, the sign-in fails with a clear message — disconnect there first, then try again.',
+        'Signing in with a personal Google when your work uses Google Workspace silently creates two separate sessions; pick the one you\'ll use day-to-day.',
+      ],
+      related: [
+        { label: 'Calendar (Google / Microsoft)', href: '#integrations/calendar' },
+        { label: 'Security (2FA, sessions)', href: '#account/security' },
+      ],
+    },
+    {
+      id: 'hubspot-pat',
+      title: 'HubSpot via Private App token',
+      overview:
+        "If your HubSpot portal doesn\'t allow public marketplace apps (common in enterprise setups), you can connect HubSpot using a Private App access token instead. The connection behaves the same as the OAuth path — deals sync, contacts sync — but you provide the credentials.",
+      howto: [
+        'In HubSpot, create a Private App under Settings → Integrations → Private Apps with the CRM scopes you want to sync.',
+        'Copy the generated access token.',
+        'In StudioOS, open Settings → Integrations, click "Connect" on HubSpot, and paste the token into the Private App field.',
+        'Submit — StudioOS validates the token against HubSpot and the connection goes live.',
+      ],
+      tips: [
+        'Private App tokens don\'t expire — but rotate them on a schedule for hygiene.',
+        'Limit the scopes to what you actually need; you can always rotate the token with broader scopes later.',
+      ],
+      pitfalls: [
+        'A token with missing scopes connects successfully but later sync steps fail silently — pick the right scopes the first time.',
+        'Revoking the token in HubSpot disconnects the integration immediately — your in-flight syncs will fail.',
+      ],
+      related: [
+        { label: 'CRM (HubSpot, Salesforce)', href: '#integrations/crm' },
+        { label: 'An integration shows as disconnected', href: '#troubleshooting/integration-disconnected' },
+      ],
+    },
+    {
       id: 'identity',
       title: 'Identity providers (LinkedIn, Google, Microsoft)',
       overview:
