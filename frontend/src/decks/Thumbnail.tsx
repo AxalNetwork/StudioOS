@@ -64,6 +64,16 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ template }) => {
   // Sensible default so first paint isn't a microscopic dot before the
   // ResizeObserver fires.
   const [scale, setScale] = useState(0.18);
+  // Lazy-mount the heavy template Component only once the card has come
+  // close to the viewport. Several templates (sequoia_classic, yc_seed,
+  // kawasaki_10_20_30) render hundreds of nodes / SVGs / charts each;
+  // mounting all 12 up-front is the dominant cost on picker open.
+  // Once mounted we keep the Comp around so scrolling back doesn't
+  // thrash. `IntersectionObserver` is available in every browser we
+  // support — guard for SSR / tests where it might be absent.
+  const [mounted, setMounted] = useState(
+    typeof IntersectionObserver === 'undefined',
+  );
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -77,6 +87,28 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ template }) => {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (mounted) return;
+    const el = wrapRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            setMounted(true);
+            io.disconnect();
+            break;
+          }
+        }
+      },
+      // Mount slightly before the card scrolls in so the user rarely
+      // sees the placeholder.
+      { rootMargin: '200px 0px', threshold: 0.01 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [mounted]);
 
   return (
     <ThumbnailBoundary templateKey={template.key}>
@@ -92,21 +124,28 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ template }) => {
           background: '#FFFFFF',
           pointerEvents: 'none',
           position: 'relative',
-        }}
+          // Let the browser skip painting/layout for off-screen cards
+          // entirely. The intrinsic size keeps the scroll height stable
+          // so the grid doesn't jump while cards are rendered-on-demand.
+          contentVisibility: 'auto',
+          containIntrinsicSize: '180px 320px',
+        } as React.CSSProperties}
       >
-        <div
-          style={{
-            width: INNER_W,
-            height: INNER_H,
-            transform: `scale(${scale})`,
-            transformOrigin: 'top left',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-          }}
-        >
-          <Comp data={previewDataFor(template.key)} editable={false} />
-        </div>
+        {mounted && (
+          <div
+            style={{
+              width: INNER_W,
+              height: INNER_H,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+            }}
+          >
+            <Comp data={previewDataFor(template.key)} editable={false} />
+          </div>
+        )}
       </div>
     </ThumbnailBoundary>
   );
