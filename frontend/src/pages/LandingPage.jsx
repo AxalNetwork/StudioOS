@@ -10,6 +10,7 @@ import {
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
 import { NETWORK_LAYERS } from '../brand/gvpn';
+import useForcedLightTheme from '../hooks/useForcedLightTheme';
 
 const THESIS_PILLS = ['AI', 'Blockchain', 'Quantum', 'Digital Infrastructure', 'Frontier Software'];
 
@@ -258,8 +259,9 @@ function LatestArticles() {
 }
 
 export default function LandingPage() {
+  useForcedLightTheme();
   return (
-    <div className="min-h-screen bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+    <div className="min-h-screen bg-white text-gray-900">
       <PublicNav />
 
       {/* HERO */}

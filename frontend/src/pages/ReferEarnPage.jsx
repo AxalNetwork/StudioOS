@@ -585,7 +585,7 @@ export default function ReferEarnPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imported, inviteByEmail]);
 
-  if (loading) return <div className="p-6 text-sm text-gray-500">Loading…</div>;
+  if (loading) return <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Loading…</div>;
   if (error) return <div className="p-6 text-sm text-red-600">{error}</div>;
 
   return (
@@ -595,7 +595,7 @@ export default function ReferEarnPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Refer & Earn</h1>
         <PageExplainer pageKey="refer_earn" />
-          <p className="text-sm text-gray-600">Invite founders, partners, and LPs. Earn commissions when they reach milestones.</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Invite founders, partners, and LPs. Earn commissions when they reach milestones.</p>
         </div>
       </div>
 
@@ -606,10 +606,10 @@ export default function ReferEarnPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl p-6 dark:bg-gray-900 dark:border-gray-800">
+        <div className="lg:col-span-2 bg-white border border-gray-200 dark:border-gray-700 rounded-xl p-6 dark:bg-gray-900 dark:border-gray-800">
           <h2 className="text-sm font-semibold text-gray-900 mb-4 dark:text-gray-100">Your Referral Link</h2>
 
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3 flex items-center gap-3 dark:border-gray-800">
+          <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 mb-3 flex items-center gap-3 dark:border-gray-800">
             <code className="text-xs text-violet-700 font-mono flex-1 truncate">{link}</code>
             <button onClick={() => copy(link)}
               className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5">
@@ -617,12 +617,12 @@ export default function ReferEarnPage() {
             </button>
           </div>
 
-          <div className="text-xs text-gray-600 mb-2">Referral code</div>
+          <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">Referral code</div>
           <div className="bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-lg p-4 text-center mb-4">
             <div className="text-2xl font-mono font-bold text-violet-700 tracking-wider">{code}</div>
             {data?.legacy_code && (
               <div
-                className="text-[11px] text-gray-500 mt-2"
+                className="text-[11px] text-gray-500 dark:text-gray-400 mt-2"
                 title="Both codes resolve to your account. Old links you've already shared keep working."
               >
                 Previous code also works:{' '}
@@ -660,7 +660,7 @@ export default function ReferEarnPage() {
             />
           )}
 
-          <div className="mt-4 text-xs text-gray-500">
+          <div className="mt-4 text-xs text-gray-500 dark:text-gray-400">
             Anyone who registers with your code becomes attributed to you. Commissions accrue automatically when they hit milestones (KYC approval, deal funding, LP onboarding, etc.).
             <br />
             <Link to="/network" className="inline-flex items-center gap-1 text-violet-600 hover:underline mt-2">
@@ -669,10 +669,10 @@ export default function ReferEarnPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-6 flex flex-col items-center dark:bg-gray-900 dark:border-gray-800">
+        <div className="bg-white border border-gray-200 dark:border-gray-700 rounded-xl p-6 flex flex-col items-center dark:bg-gray-900 dark:border-gray-800">
           <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">QR Code</h2>
           <canvas ref={qrRef} className="rounded" />
-          <p className="text-xs text-gray-500 text-center mt-3">Scan to register with your code pre-filled.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-3">Scan to register with your code pre-filled.</p>
         </div>
       </div>
 
@@ -686,11 +686,11 @@ export default function ReferEarnPage() {
       {/* Task #4 — Sent Invitations panel. Lives between Wallet and Import
           Contacts so users see the conversion-funnel BEFORE deciding who
           to invite next. Reminder action lives per-row. */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6 dark:bg-gray-900 dark:border-gray-800">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
+      <div className="bg-white border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden mb-6 dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between dark:border-gray-800">
           <div>
             <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sent Invitations</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               {invitesLoading
                 ? 'Loading…'
                 : `${inviteStats.total} invite${inviteStats.total === 1 ? '' : 's'} · ${inviteStats.opened} opened · ${inviteStats.joined} joined · ${inviteStats.reminders} reminder${inviteStats.reminders === 1 ? '' : 's'} sent`}
@@ -707,9 +707,9 @@ export default function ReferEarnPage() {
         {/* Task #11 — Summary chips + status filter. Hidden on the empty
             state since there's nothing to summarise or filter yet. */}
         {!invitesLoading && inviteStats.total > 0 && (
-          <div className="px-6 py-3 border-b border-gray-100 bg-gray-50/60 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="px-6 py-3 border-b border-gray-100 bg-gray-50 dark:bg-gray-900/60 flex flex-wrap items-center gap-x-3 gap-y-2">
             <div className="flex flex-wrap items-center gap-2 text-[11px]">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-700 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-300">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-gray-200 dark:border-gray-700 text-gray-700 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-300">
                 <span className="font-semibold text-gray-900 dark:text-gray-100">{inviteStats.total}</span> invites
               </span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800">
@@ -734,7 +734,7 @@ export default function ReferEarnPage() {
               </span>
             </div>
             <div className="ml-auto flex items-center gap-1 text-[11px]">
-              <span className="text-gray-500 mr-1">Filter:</span>
+              <span className="text-gray-500 dark:text-gray-400 mr-1">Filter:</span>
               {[
                 { k: 'all',    label: 'All',     n: inviteStats.total },
                 { k: 'sent',   label: 'Sent',    n: inviteStats.sent },
@@ -751,7 +751,7 @@ export default function ReferEarnPage() {
                     'px-2 py-0.5 rounded-md border transition-colors ' +
                     (inviteFilter === opt.k
                       ? 'bg-violet-600 text-white border-violet-600'
-                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed disabled:hover:bg-white')
+                      : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed disabled:hover:bg-white dark:bg-gray-900')
                   }
                 >
                   {opt.label}{opt.n > 0 ? ` · ${opt.n}` : ''}
@@ -771,19 +771,19 @@ export default function ReferEarnPage() {
           </div>
         )}
         {invites.length === 0 ? (
-          <div className="p-8 text-center text-xs text-gray-500">
+          <div className="p-8 text-center text-xs text-gray-500 dark:text-gray-400">
             No invites sent yet. Use Import Contacts below to send your first batch.
           </div>
         ) : filteredInvites.length === 0 ? (
-          <div className="p-8 text-center text-xs text-gray-500">
+          <div className="p-8 text-center text-xs text-gray-500 dark:text-gray-400">
             No invites match the current filter.{' '}
             <button onClick={() => setInviteFilter('all')} className="text-violet-600 hover:underline">Show all</button>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr className="text-left text-xs text-gray-600">
+              <thead className="bg-gray-50 dark:bg-gray-900">
+                <tr className="text-left text-xs text-gray-600 dark:text-gray-400">
                   <th className="px-6 py-3 font-medium">Recipient</th>
                   <th className="px-6 py-3 font-medium">Status</th>
                   <th className="px-6 py-3 font-medium">Sent</th>
@@ -811,7 +811,7 @@ export default function ReferEarnPage() {
                     <tr key={inv.id}>
                       <td className="px-6 py-3">
                         <div className="text-gray-900 dark:text-gray-100">{inv.recipient_name || inv.joined_user_name || '—'}</div>
-                        <div className="text-[11px] text-gray-500">{inv.recipient_email}</div>
+                        <div className="text-[11px] text-gray-500 dark:text-gray-400">{inv.recipient_email}</div>
                       </td>
                       <td className="px-6 py-3">
                         {joined ? (
@@ -827,15 +827,15 @@ export default function ReferEarnPage() {
                             Opened
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 dark:text-gray-300">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
                             Sent
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-3 text-xs text-gray-500">
+                      <td className="px-6 py-3 text-xs text-gray-500 dark:text-gray-400">
                         {inv.sent_at ? new Date(inv.sent_at + (inv.sent_at.endsWith('Z') ? '' : 'Z')).toLocaleDateString() : '—'}
                       </td>
-                      <td className="px-6 py-3 text-xs text-gray-600">
+                      <td className="px-6 py-3 text-xs text-gray-600 dark:text-gray-400">
                         {(inv.reminder_count || 0) === 0
                           ? <span className="text-gray-400">—</span>
                           : (
@@ -856,7 +856,7 @@ export default function ReferEarnPage() {
                                 : cooldownLeft > 0 ? `Cooldown — try again in ${Math.ceil(cooldownLeft / (24 * 3600 * 1000))} day(s)`
                                 : 'Send a reminder email'
                             }
-                            className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-md border border-violet-200 text-violet-700 hover:bg-violet-50 disabled:border-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
+                            className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-md border border-violet-200 text-violet-700 hover:bg-violet-50 disabled:border-gray-200 dark:border-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed"
                           >
                             {remindBusy === inv.id
                               ? <Loader2 size={11} className="animate-spin" />
@@ -875,11 +875,11 @@ export default function ReferEarnPage() {
       </div>
 
       {/* Import contacts */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6 dark:bg-gray-900 dark:border-gray-800">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
+      <div className="bg-white border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden mb-6 dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between dark:border-gray-800">
           <div>
             <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Import Contacts</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Upload a CSV with <code className="bg-gray-100 px-1 rounded">name,email</code> columns to generate personalized invite links.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Upload a CSV with <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">name,email</code> columns to generate personalized invite links.</p>
           </div>
           <div className="flex items-center gap-2">
             <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleCsvUpload} />
@@ -899,7 +899,7 @@ export default function ReferEarnPage() {
             {imported.length > 0 && (
               <button
                 onClick={() => { setImported([]); setShowImport(false); }}
-                className="text-xs text-gray-500 hover:text-gray-700 px-2"
+                className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300 px-2"
                 title="Clear imported list"
               >
                 <X size={14} />
@@ -944,8 +944,8 @@ export default function ReferEarnPage() {
             )}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr className="text-left text-xs text-gray-600">
+                <thead className="bg-gray-50 dark:bg-gray-900">
+                  <tr className="text-left text-xs text-gray-600 dark:text-gray-400">
                     <th className="px-6 py-3 font-medium w-10">
                       <input
                         type="checkbox"
@@ -984,7 +984,7 @@ export default function ReferEarnPage() {
                         />
                       </td>
                       <td className="px-6 py-3 text-gray-900 dark:text-gray-100">{c.name || '—'}</td>
-                      <td className="px-6 py-3 text-gray-600">
+                      <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
                         {c.email}
                         {ann && (
                           <span className={`ml-2 inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
@@ -1009,8 +1009,8 @@ export default function ReferEarnPage() {
                 </tbody>
               </table>
             </div>
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between flex-wrap gap-3 dark:border-gray-800">
-              <div className="text-xs text-gray-600">
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-3 dark:border-gray-800">
+              <div className="text-xs text-gray-600 dark:text-gray-400">
                 {selected.size} of {imported.length} selected
                 <span className="text-gray-400"> · sent from your account, branded as Axal Network</span>
               </div>
@@ -1025,23 +1025,23 @@ export default function ReferEarnPage() {
             </div>
           </>
         ) : (
-          <div className="p-6 text-center text-xs text-gray-500">
-            No contacts imported yet. Your CSV should have a header row including at least <code className="bg-gray-100 px-1 rounded">email</code> (and optionally <code className="bg-gray-100 px-1 rounded">name</code>).
+          <div className="p-6 text-center text-xs text-gray-500 dark:text-gray-400">
+            No contacts imported yet. Your CSV should have a header row including at least <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">email</code> (and optionally <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">name</code>).
           </div>
         )}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+      <div className="bg-white border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 dark:border-gray-800">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Your Referrals</h2>
         </div>
         {referrals.length === 0 ? (
-          <div className="p-8 text-center text-sm text-gray-500">No referrals yet. Share your link to start earning.</div>
+          <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">No referrals yet. Share your link to start earning.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr className="text-left text-xs text-gray-600">
+              <thead className="bg-gray-50 dark:bg-gray-900">
+                <tr className="text-left text-xs text-gray-600 dark:text-gray-400">
                   <th className="px-6 py-3 font-medium">Name</th>
                   <th className="px-6 py-3 font-medium">Email</th>
                   <th className="px-6 py-3 font-medium">KYC</th>
@@ -1053,10 +1053,10 @@ export default function ReferEarnPage() {
                 {referrals.map(r => (
                   <tr key={r.id}>
                     <td className="px-6 py-3 text-gray-900 dark:text-gray-100">{r.referred_name}</td>
-                    <td className="px-6 py-3 text-gray-600">{r.referred_email}</td>
+                    <td className="px-6 py-3 text-gray-600 dark:text-gray-400">{r.referred_email}</td>
                     <td className="px-6 py-3"><Pill status={r.kyc_status || 'not_started'} /></td>
                     <td className="px-6 py-3"><Pill status={r.status} /></td>
-                    <td className="px-6 py-3 text-gray-500 text-xs">{new Date(r.created_at).toLocaleDateString()}</td>
+                    <td className="px-6 py-3 text-gray-500 dark:text-gray-400 text-xs">{new Date(r.created_at).toLocaleDateString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1090,7 +1090,7 @@ function LinkedInImportModal({ status, tab, setTab, busy, flash, onClose, onConn
       className={`px-4 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
         tab === id
           ? 'border-[#0A66C2] text-[#0A66C2]'
-          : 'border-transparent text-gray-500 hover:text-gray-700'
+          : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300'
       }`}
     >
       {label}
@@ -1104,22 +1104,22 @@ function LinkedInImportModal({ status, tab, setTab, busy, flash, onClose, onConn
         role="dialog"
         aria-labelledby="linkedin-modal-title"
       >
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-br from-[#eef5fb] to-white dark:border-gray-800">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gradient-to-br from-[#eef5fb] to-white dark:border-gray-800">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-[#0A66C2] text-white flex items-center justify-center">
               <LinkedinIcon size={20} />
             </div>
             <div>
               <h2 id="linkedin-modal-title" className="text-base font-semibold text-gray-900 dark:text-gray-100">Import from LinkedIn</h2>
-              <p className="text-xs text-gray-600">Verify your identity and import your connections export.</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">Verify your identity and import your connections export.</p>
             </div>
           </div>
-          <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-700">
+          <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-700 dark:text-gray-300">
             <X size={18} />
           </button>
         </div>
 
-        <div className="px-6 pt-3 border-b border-gray-200 flex gap-1 dark:border-gray-800">
+        <div className="px-6 pt-3 border-b border-gray-200 dark:border-gray-700 flex gap-1 dark:border-gray-800">
           {tabBtn('signin', '1. Sign in with LinkedIn')}
           {tabBtn('csv', '2. Upload Connections.csv')}
         </div>
@@ -1164,7 +1164,7 @@ function LinkedInImportModal({ status, tab, setTab, busy, flash, onClose, onConn
                   <button
                     onClick={onDisconnect}
                     disabled={busy}
-                    className="text-xs text-gray-500 hover:text-gray-700 px-2 disabled:opacity-50"
+                    className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300 px-2 disabled:opacity-50"
                   >
                     {busy ? 'Disconnecting…' : 'Disconnect'}
                   </button>
@@ -1175,7 +1175,7 @@ function LinkedInImportModal({ status, tab, setTab, busy, flash, onClose, onConn
                 <p className="text-sm text-gray-700 dark:text-gray-300">
                   Sign in with LinkedIn so we can verify your identity. We only read your <strong>name</strong> and <strong>email</strong> from LinkedIn — and we never store an access token.
                 </p>
-                <ul className="text-xs text-gray-600 space-y-1.5 list-disc pl-4">
+                <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1.5 list-disc pl-4">
                   <li>Your LinkedIn password is never shared with us.</li>
                   <li>LinkedIn does not expose your connections via API. Use the CSV tab to import them — the file is parsed in your browser and never uploaded.</li>
                 </ul>
@@ -1201,19 +1201,19 @@ function LinkedInImportModal({ status, tab, setTab, busy, flash, onClose, onConn
               <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1.5 dark:text-gray-300">
                 <FileDown size={12} /> How to export your LinkedIn connections
               </div>
-              <ol className="text-xs text-gray-600 space-y-1.5 list-decimal pl-4">
+              <ol className="text-xs text-gray-600 dark:text-gray-400 space-y-1.5 list-decimal pl-4">
                 <li>Open <a href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noopener noreferrer" className="text-[#0A66C2] hover:underline">linkedin.com → Settings → Get a copy of your data</a>.</li>
                 <li>Pick <em>Want something in particular?</em> → check <strong>Connections</strong> → request archive.</li>
-                <li>LinkedIn emails you a ZIP within ~10 minutes. Open it and find <code className="bg-gray-100 px-1 rounded">Connections.csv</code>.</li>
+                <li>LinkedIn emails you a ZIP within ~10 minutes. Open it and find <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">Connections.csv</code>.</li>
                 <li>Upload that file below.</li>
               </ol>
-              <p className="text-[11px] text-gray-500 mt-2">
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
                 Note: LinkedIn only includes a connection's email if they opted in to share it. Connections without an email are skipped.
               </p>
             </div>
             <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100">
               <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onCsvUpload} />
-              <span className="text-[11px] text-gray-500">Max file size: 2 MB · First 100 rows imported.</span>
+              <span className="text-[11px] text-gray-500 dark:text-gray-400">Max file size: 2 MB · First 100 rows imported.</span>
               <button
                 onClick={() => fileRef.current?.click()}
                 className="bg-[#0A66C2] hover:bg-[#0856a8] text-white text-xs font-medium px-4 py-2 rounded-lg flex items-center gap-1.5"
@@ -1243,11 +1243,11 @@ function ShareButton({ href, icon: Icon, label, color }) {
 
 function TemplateEditor({ templates, setTemplates, onSave, onReset }) {
   const set = (k, v) => setTemplates(t => ({ ...t, [k]: v }));
-  const inputCls = "w-full text-xs border border-gray-200 rounded-md px-3 py-2 focus:ring-2 focus:ring-violet-100 focus:border-violet-300 outline-none font-mono";
+  const inputCls = "w-full text-xs border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 focus:ring-2 focus:ring-violet-100 focus:border-violet-300 outline-none font-mono";
   return (
-    <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4 dark:border-gray-800">
+    <div className="mt-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4 dark:border-gray-800">
       <div className="text-xs font-semibold text-gray-700 mb-3 dark:text-gray-300">Edit invite messages</div>
-      <p className="text-[11px] text-gray-500 mb-3">
+      <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-3">
         Use <code className="bg-white px-1 rounded dark:bg-gray-900">{'{{link}}'}</code> and <code className="bg-white px-1 rounded dark:bg-gray-900">{'{{code}}'}</code> as placeholders.
       </p>
       <div className="grid gap-3">
@@ -1271,7 +1271,7 @@ function TemplateEditor({ templates, setTemplates, onSave, onReset }) {
         </Field>
       </div>
       <div className="flex items-center justify-end gap-2 mt-3">
-        <button onClick={onReset} className="text-[11px] text-gray-500 hover:text-gray-700 px-3 py-1.5">Reset to defaults</button>
+        <button onClick={onReset} className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300 px-3 py-1.5">Reset to defaults</button>
         <button onClick={onSave} className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5">
           <Save size={12} /> Save
         </button>
@@ -1283,7 +1283,7 @@ function TemplateEditor({ templates, setTemplates, onSave, onReset }) {
 function Field({ label, children }) {
   return (
     <label className="block">
-      <div className="text-[11px] font-medium text-gray-600 mb-1">{label}</div>
+      <div className="text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-1">{label}</div>
       {children}
     </label>
   );
@@ -1291,11 +1291,11 @@ function Field({ label, children }) {
 
 function StatCard({ icon: Icon, label, value, highlight }) {
   return (
-    <div className={`border rounded-xl p-4 ${highlight ? 'bg-gradient-to-br from-violet-50 to-indigo-50 border-violet-200' : 'bg-white border-gray-200'}`}>
-      <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
+    <div className={`border rounded-xl p-4 ${highlight ? 'bg-gradient-to-br from-violet-50 to-indigo-50 border-violet-200' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700'}`}>
+      <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 mb-2">
         <Icon size={14} /> {label}
       </div>
-      <div className={`text-2xl font-bold ${highlight ? 'text-violet-700' : 'text-gray-900'}`}>{value}</div>
+      <div className={`text-2xl font-bold ${highlight ? 'text-violet-700' : 'text-gray-900 dark:text-gray-100'}`}>{value}</div>
     </div>
   );
 }
@@ -1306,9 +1306,9 @@ function Pill({ status }) {
     approved: 'bg-emerald-100 text-emerald-700',
     converted: 'bg-violet-100 text-violet-700',
     rejected: 'bg-red-100 text-red-700',
-    not_started: 'bg-gray-100 text-gray-600',
+    not_started: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400',
   };
-  return <span className={`text-[11px] px-2 py-1 rounded ${colors[status] || 'bg-gray-100 text-gray-600'}`}>{status.replace('_', ' ')}</span>;
+  return <span className={`text-[11px] px-2 py-1 rounded ${colors[status] || 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>{status.replace('_', ' ')}</span>;
 }
 
 // ---------------------------------------------------------------------------

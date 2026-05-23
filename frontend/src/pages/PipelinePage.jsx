@@ -5,7 +5,7 @@ import SpinoutWizard from '../components/SpinoutWizard';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 const STAGES = [
-  { id: 'idea', label: 'Idea', color: 'bg-gray-100 text-gray-700', border: 'border-gray-300' },
+  { id: 'idea', label: 'Idea', color: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300', border: 'border-gray-300 dark:border-gray-600' },
   { id: 'mvp_dev', label: 'MVP Dev', color: 'bg-blue-100 text-blue-700', border: 'border-blue-300' },
   { id: 'traction_review', label: 'Traction Review', color: 'bg-amber-100 text-amber-700', border: 'border-amber-300' },
   { id: 'decision_gate', label: 'Decision Gate', color: 'bg-violet-100 text-violet-700', border: 'border-violet-300' },
@@ -194,7 +194,7 @@ export default function PipelinePage() {
           <Layers className="text-violet-600" size={24} />
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Pipeline Board</h1>
-            <p className="text-sm text-gray-600">Parallel MVP development with AI-driven decision gates.{canEdit ? ' Drag cards between columns to advance.' : ''}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Parallel MVP development with AI-driven decision gates.{canEdit ? ' Drag cards between columns to advance.' : ''}</p>
           </div>
         </div>
         {canEdit && (
@@ -220,13 +220,13 @@ export default function PipelinePage() {
                 <div key={stage.id} className="w-full sm:w-72 sm:flex-shrink-0">
                   <div className={`px-3 py-2 rounded-t-lg ${stage.color} font-semibold text-sm flex items-center justify-between border ${stage.border} border-b-0`}>
                     <span>{stage.label}</span>
-                    <span className="bg-white/70 text-xs px-2 py-0.5 rounded-full">{grouped[stage.id].length}</span>
+                    <span className="bg-white dark:bg-gray-900/70 text-xs px-2 py-0.5 rounded-full">{grouped[stage.id].length}</span>
                   </div>
                   <div
                     onDragOver={onColDragOver(stage.id)}
                     onDragLeave={onColDragLeave(stage.id)}
                     onDrop={onColDrop(stage.id)}
-                    className={`bg-gray-50 border ${stage.border} border-t-0 rounded-b-lg min-h-[400px] p-2 space-y-2 transition-colors ${isOver ? 'bg-violet-50 ring-2 ring-violet-400 ring-inset' : ''}`}
+                    className={`bg-gray-50 dark:bg-gray-900 border ${stage.border} border-t-0 rounded-b-lg min-h-[400px] p-2 space-y-2 transition-colors ${isOver ? 'bg-violet-50 ring-2 ring-violet-400 ring-inset' : ''}`}
                   >
                     {grouped[stage.id].length === 0 ? (
                       <div className="text-xs text-gray-400 text-center py-8">{isOver ? 'Drop to move here' : 'Empty'}</div>
@@ -270,7 +270,7 @@ function DealCard({ deal, onOpen, onSpinout, draggable, onDragStart, onDragEnd, 
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`bg-white border border-gray-200 rounded-lg p-3 hover:border-violet-400 hover:shadow-sm transition-all relative ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${isDragging ? 'opacity-40' : ''} ${isPending ? 'ring-1 ring-violet-300' : ''}`}
+      className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:border-violet-400 hover:shadow-sm transition-all relative ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${isDragging ? 'opacity-40' : ''} ${isPending ? 'ring-1 ring-violet-300' : ''}`}
     >
       {isPending && (
         <div className="absolute top-1 right-1 text-violet-500" title="Saving…"><Loader2 className="animate-spin" size={10} /></div>
@@ -279,17 +279,17 @@ function DealCard({ deal, onOpen, onSpinout, draggable, onDragStart, onDragEnd, 
         <div className="font-semibold text-sm text-gray-900 truncate flex-1 dark:text-gray-100">{deal.name}</div>
         {traction != null && <ScorePill score={traction} small />}
       </div>
-      {deal.sector && <div className="text-[10px] text-gray-500 mb-2">{deal.sector}</div>}
+      {deal.sector && <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-2">{deal.sector}</div>}
       {tot > 0 && (
         <div className="mb-2">
-          <div className="flex justify-between text-[10px] text-gray-500 mb-1"><span>Tasks {deal.task_counts.done}/{tot}</span><span>{pct}%</span></div>
-          <div className="bg-gray-100 rounded-full h-1 overflow-hidden"><div className="h-full bg-violet-500" style={{width: `${pct}%`}} /></div>
+          <div className="flex justify-between text-[10px] text-gray-500 dark:text-gray-400 mb-1"><span>Tasks {deal.task_counts.done}/{tot}</span><span>{pct}%</span></div>
+          <div className="bg-gray-100 dark:bg-gray-800 rounded-full h-1 overflow-hidden"><div className="h-full bg-violet-500" style={{width: `${pct}%`}} /></div>
         </div>
       )}
       {deal.latest_metrics?.key_metrics && Object.keys(deal.latest_metrics.key_metrics).length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
           {Object.entries(deal.latest_metrics.key_metrics).slice(0, 3).map(([k, v]) => (
-            <span key={k} className="text-[10px] bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded dark:text-gray-300">{k}: {String(v)}</span>
+            <span key={k} className="text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-700 px-1.5 py-0.5 rounded dark:text-gray-300">{k}: {String(v)}</span>
           ))}
         </div>
       )}
@@ -357,7 +357,7 @@ function DealVoteWidget({ dealId, liveTally }) {
 
   return (
     <div className="mt-2 pt-2 border-t border-gray-100" onClick={stop}>
-      <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1.5">
+      <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 mb-1.5">
         <span className="flex items-center gap-1">
           <UsersIcon size={10} /> {tally.total_voters} {tally.total_voters === 1 ? 'voter' : 'voters'}
           {tally.total_weight > 0 && <span className="text-gray-400">· {tally.total_weight}w</span>}
@@ -365,7 +365,7 @@ function DealVoteWidget({ dealId, liveTally }) {
         <span className="font-semibold text-emerald-600">{tally.strong_buy_pct}% buy</span>
       </div>
       {tally.total_weight > 0 && (
-        <div className="flex h-1 rounded-full overflow-hidden bg-gray-100 mb-1.5">
+        <div className="flex h-1 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800 mb-1.5">
           {VOTE_OPTIONS.map(o => {
             const w = tally.by_type[o.id]?.weight || 0;
             const pct = (w / tally.total_weight) * 100;
@@ -386,7 +386,7 @@ function DealVoteWidget({ dealId, liveTally }) {
           const ring = { emerald: 'ring-emerald-400', green: 'ring-green-400', amber: 'ring-amber-400', rose: 'ring-rose-400' }[o.color];
           const bg = isMine
             ? { emerald: 'bg-emerald-100 text-emerald-800', green: 'bg-green-100 text-green-800', amber: 'bg-amber-100 text-amber-800', rose: 'bg-rose-100 text-rose-800' }[o.color]
-            : 'bg-gray-50 text-gray-600 hover:bg-gray-100';
+            : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 dark:bg-gray-800';
           return (
             <button
               key={o.id}
@@ -413,9 +413,9 @@ function DealVoteWidget({ dealId, liveTally }) {
             value={comment}
             onChange={e => setComment(e.target.value)}
             placeholder="Optional comment (sent with next vote)"
-            className="w-full text-[10px] bg-white border border-gray-300 rounded px-2 py-1 focus:border-violet-400 focus:outline-none dark:bg-gray-900 dark:border-gray-700"
+            className="w-full text-[10px] bg-white border border-gray-300 dark:border-gray-600 rounded px-2 py-1 focus:border-violet-400 focus:outline-none dark:bg-gray-900 dark:border-gray-700"
           />
-          <label className="flex items-center gap-1 text-[10px] text-gray-600 cursor-pointer">
+          <label className="flex items-center gap-1 text-[10px] text-gray-600 dark:text-gray-400 cursor-pointer">
             <input type="checkbox" checked={anonymous} onChange={e => setAnonymous(e.target.checked)} />
             <EyeOff size={9} /> Vote anonymously
           </label>
@@ -476,13 +476,13 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 flex justify-end" onClick={onClose}>
       <div className="bg-white w-full max-w-3xl h-full overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10 dark:border-gray-800 dark:bg-gray-900">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white z-10 dark:border-gray-800 dark:bg-gray-900">
           <h2 className="text-lg font-semibold truncate">{data?.project?.name || 'Loading…'}</h2>
           <div className="flex items-center gap-2">
             {canEdit && <button onClick={triggerReview} disabled={busy} className="flex items-center gap-1 text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-1.5 rounded">
               {busy ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />} Trigger AI Review
             </button>}
-            <button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button>
+            <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100"><X size={18} /></button>
           </div>
         </div>
 
@@ -490,12 +490,12 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
           <div className="p-6">
             {err && <div className="bg-red-50 border border-red-200 text-red-700 rounded p-2 text-xs mb-3">{err}</div>}
 
-            <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-800">
+            <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-700 dark:border-gray-800">
               {[{id:'overview',label:'Overview',icon:Activity},{id:'tasks',label:`MVP Tasks (${data.tasks.length})`,icon:Target},{id:'metrics',label:`Metrics (${data.metrics.length})`,icon:TrendingUp},{id:'gates',label:`Gates (${data.gates.length})`,icon:Sparkles}].map(t => {
                 const Icon = t.icon;
                 return (
                   <button key={t.id} onClick={() => setTab(t.id)}
-                    className={`flex items-center gap-1 px-3 py-2 text-xs font-medium border-b-2 -mb-px ${tab === t.id ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+                    className={`flex items-center gap-1 px-3 py-2 text-xs font-medium border-b-2 -mb-px ${tab === t.id ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100'}`}>
                     <Icon size={12} /> {t.label}
                   </button>
                 );
@@ -531,8 +531,8 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
                   <div className="space-y-1">
                     {data.stages.map(s => (
                       <div key={s.id} className="flex items-center justify-between text-xs py-1 border-b border-gray-100 last:border-0">
-                        <span className={`px-2 py-0.5 rounded text-[10px] ${STAGES.find(st => st.id === s.stage_name)?.color || 'bg-gray-100 text-gray-700'}`}>{s.stage_name}</span>
-                        <span className="text-gray-500">{s.status === 'active' ? '🟢 active' : new Date(s.end_date || s.start_date).toLocaleDateString()}</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] ${STAGES.find(st => st.id === s.stage_name)?.color || 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>{s.stage_name}</span>
+                        <span className="text-gray-500 dark:text-gray-400">{s.status === 'active' ? '🟢 active' : new Date(s.end_date || s.start_date).toLocaleDateString()}</span>
                       </div>
                     ))}
                   </div>
@@ -563,7 +563,7 @@ function TasksTab({ data, canEdit, dealId, reload }) {
   return (
     <div>
       {canEdit && (adding ? (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3 space-y-2 dark:border-gray-800">
+        <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 mb-3 space-y-2 dark:border-gray-800">
           <input placeholder="Task title" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className={inputCls} />
           <textarea rows={2} placeholder="Description (optional)" value={form.description} onChange={e => setForm({...form, description: e.target.value})} className={inputCls} />
           <div className="flex gap-2"><button onClick={addTask} className="bg-violet-600 hover:bg-violet-700 text-white text-xs px-3 py-1.5 rounded">Add</button><button onClick={() => setAdding(false)} className="text-xs text-gray-700 px-2 py-1.5 dark:text-gray-300">Cancel</button></div>
@@ -577,14 +577,14 @@ function TasksTab({ data, canEdit, dealId, reload }) {
             <div className="text-xs font-semibold text-gray-700 mb-2 uppercase dark:text-gray-300">{s.replace('_', ' ')} ({list.length})</div>
             <div className="space-y-2">
               {list.map(t => (
-                <div key={t.id} className="bg-white border border-gray-200 rounded p-2 text-xs dark:bg-gray-900 dark:border-gray-800">
+                <div key={t.id} className="bg-white border border-gray-200 dark:border-gray-700 rounded p-2 text-xs dark:bg-gray-900 dark:border-gray-800">
                   <div className="flex items-start gap-1">
                     {t.ai_generated && <Sparkles size={10} className="text-violet-500 flex-shrink-0 mt-0.5" />}
                     <div className="font-medium text-gray-900 flex-1 dark:text-gray-100">{t.title}</div>
                   </div>
-                  {t.description && <p className="text-gray-600 mt-1">{t.description}</p>}
+                  {t.description && <p className="text-gray-600 dark:text-gray-400 mt-1">{t.description}</p>}
                   {canEdit && (
-                    <select value={t.status} onChange={e => updateStatus(t.id, e.target.value)} className="mt-2 text-[10px] bg-gray-50 border border-gray-200 rounded px-1 py-0.5 w-full dark:border-gray-800">
+                    <select value={t.status} onChange={e => updateStatus(t.id, e.target.value)} className="mt-2 text-[10px] bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 w-full dark:border-gray-800">
                       <option value="todo">todo</option><option value="in_progress">in progress</option><option value="done">done</option>
                     </select>
                   )}
@@ -616,7 +616,7 @@ function MetricsTab({ data, canEdit, dealId, reload }) {
   return (
     <div>
       {canEdit && (adding ? (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3 dark:border-gray-800">
+        <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 mb-3 dark:border-gray-800">
           <div className="grid grid-cols-2 gap-2">
             <Field label="Users / MAU"><input type="number" value={form.users} onChange={e => setForm({...form, users: e.target.value})} className={inputCls} /></Field>
             <Field label="Revenue / MRR ($)"><input type="number" value={form.revenue} onChange={e => setForm({...form, revenue: e.target.value})} className={inputCls} /></Field>
@@ -630,9 +630,9 @@ function MetricsTab({ data, canEdit, dealId, reload }) {
       ))}
 
       {series.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg p-3 mb-3 dark:bg-gray-900 dark:border-gray-800">
+        <div className="bg-white border border-gray-200 dark:border-gray-700 rounded-lg p-3 mb-3 dark:bg-gray-900 dark:border-gray-800">
           <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Traction Score History</div>
-          <div className="flex items-end gap-1 h-24 bg-gray-50 rounded p-2">
+          <div className="flex items-end gap-1 h-24 bg-gray-50 dark:bg-gray-900 rounded p-2">
             {series.map((s, i) => (
               <div key={i} className="flex-1 bg-violet-500 rounded-sm hover:bg-violet-700 transition-colors" style={{height: `${Math.max(2, ((s.traction_score || 0) / max) * 100)}%`}} title={`${new Date(s.snapshot_date).toLocaleDateString()}: ${s.traction_score}`} />
             ))}
@@ -642,13 +642,13 @@ function MetricsTab({ data, canEdit, dealId, reload }) {
 
       <div className="space-y-2">
         {data.metrics.length === 0 ? <Empty text="No snapshots yet." /> : data.metrics.map(m => (
-          <div key={m.id} className="bg-white border border-gray-200 rounded p-2 text-xs dark:bg-gray-900 dark:border-gray-800">
+          <div key={m.id} className="bg-white border border-gray-200 dark:border-gray-700 rounded p-2 text-xs dark:bg-gray-900 dark:border-gray-800">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-gray-500">{new Date(m.snapshot_date).toLocaleString()}</span>
+              <span className="text-gray-500 dark:text-gray-400">{new Date(m.snapshot_date).toLocaleString()}</span>
               <ScorePill score={m.traction_score} small />
             </div>
             <div className="flex flex-wrap gap-1">
-              {Object.entries(m.key_metrics).map(([k, v]) => <span key={k} className="bg-gray-100 px-1.5 py-0.5 rounded">{k}: {String(v)}</span>)}
+              {Object.entries(m.key_metrics).map(([k, v]) => <span key={k} className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{k}: {String(v)}</span>)}
             </div>
           </div>
         ))}
@@ -662,10 +662,10 @@ function GatesTab({ data, canEdit, onDecide, busy }) {
   return (
     <div className="space-y-3">
       {data.gates.map(g => (
-        <div key={g.id} className="bg-white border border-gray-200 rounded-lg p-4 dark:bg-gray-900 dark:border-gray-800">
+        <div key={g.id} className="bg-white border border-gray-200 dark:border-gray-700 rounded-lg p-4 dark:bg-gray-900 dark:border-gray-800">
           <div className="flex items-start justify-between mb-2">
             <div>
-              <div className="text-xs text-gray-500">{new Date(g.created_at).toLocaleString()}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">{new Date(g.created_at).toLocaleString()}</div>
               <div className="font-semibold text-sm flex items-center gap-2 mt-1">
                 <Sparkles size={14} className="text-violet-500" /> AI: <span className="uppercase text-violet-700">{(g.ai_recommendation || '').replace('_', ' ')}</span>
               </div>
@@ -705,7 +705,7 @@ function CreateModal({ onClose, onCreated }) {
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800"><h2 className="text-lg font-semibold">New Pipeline Project</h2><button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button></div>
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between dark:border-gray-800"><h2 className="text-lg font-semibold">New Pipeline Project</h2><button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100"><X size={18} /></button></div>
         <div className="p-6 space-y-3">
           <Field label="Name *"><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className={inputCls} /></Field>
           <Field label="Sector"><input value={form.sector} onChange={e => setForm({...form, sector: e.target.value})} className={inputCls} placeholder="fintech / saas / health / etc." /></Field>
@@ -714,7 +714,7 @@ function CreateModal({ onClose, onCreated }) {
           <Field label="Solution"><textarea rows={2} value={form.solution} onChange={e => setForm({...form, solution: e.target.value})} className={inputCls} /></Field>
           {err && <div className="text-xs text-red-600">{err}</div>}
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded-lg dark:text-gray-300">Cancel</button>
+            <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:bg-gray-800 px-4 py-2 rounded-lg dark:text-gray-300">Cancel</button>
             <button onClick={submit} disabled={busy} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
               {busy ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} Create
             </button>
@@ -725,12 +725,12 @@ function CreateModal({ onClose, onCreated }) {
   );
 }
 
-const inputCls = 'w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none';
+const inputCls = 'w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none';
 function Field({ label, children }) { return <div><label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">{label}</label>{children}</div>; }
-function KV({ k, v }) { return <div className="bg-gray-50 rounded-lg p-2"><div className="text-[10px] uppercase text-gray-500">{k}</div><div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{String(v)}</div></div>; }
-function Empty({ text }) { return <div className="text-xs text-gray-500 py-6 text-center">{text}</div>; }
-function Loading({ text }) { return <div className="flex items-center gap-2 text-sm text-gray-500 py-12 justify-center"><Loader2 className="animate-spin" size={16} /> {text}</div>; }
+function KV({ k, v }) { return <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-2"><div className="text-[10px] uppercase text-gray-500 dark:text-gray-400">{k}</div><div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{String(v)}</div></div>; }
+function Empty({ text }) { return <div className="text-xs text-gray-500 dark:text-gray-400 py-6 text-center">{text}</div>; }
+function Loading({ text }) { return <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-12 justify-center"><Loader2 className="animate-spin" size={16} /> {text}</div>; }
 function ScorePill({ score, small }) {
-  const c = score >= 70 ? 'bg-emerald-100 text-emerald-700' : score >= 40 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600';
+  const c = score >= 70 ? 'bg-emerald-100 text-emerald-700' : score >= 40 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400';
   return <span className={`${small ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'} font-bold rounded ${c}`}>{Math.round(score)}</span>;
 }

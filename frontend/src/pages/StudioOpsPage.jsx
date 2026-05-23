@@ -42,11 +42,11 @@ export default function StudioOpsPage() {
           <Briefcase className="text-violet-600" size={24} />
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Studio Ops</h1>
-            <p className="text-sm text-gray-600">Strategic oversight, finance, HR, legal & compliance workflows.</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Strategic oversight, finance, HR, legal & compliance workflows.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={reload} className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-sm text-gray-700 px-3 py-2 rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
+          <button onClick={reload} className="flex items-center gap-2 bg-white border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm text-gray-700 px-3 py-2 rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
             <RefreshCw size={14} /> Refresh
           </button>
           <button onClick={() => setShowQuickActions(true)}
@@ -65,19 +65,19 @@ export default function StudioOpsPage() {
         </div>
       )}
 
-      <div className="border-b border-gray-200 mb-6 flex gap-1 flex-wrap dark:border-gray-800">
+      <div className="border-b border-gray-200 dark:border-gray-700 mb-6 flex gap-1 flex-wrap dark:border-gray-800">
         {[
           { id: 'kanban', label: 'Kanban Board' },
           { id: 'strategic', label: 'Strategic Oversight' },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-              tab === t.id ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'
+              tab === t.id ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100'
             }`}>{t.label}</button>
         ))}
       </div>
 
-      {loading && <div className="flex items-center gap-2 text-sm text-gray-500 py-12 justify-center"><Loader2 className="animate-spin" size={16} /> Loading…</div>}
+      {loading && <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-12 justify-center"><Loader2 className="animate-spin" size={16} /> Loading…</div>}
 
       {!loading && tab === 'kanban' && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
@@ -88,10 +88,10 @@ export default function StudioOpsPage() {
               <div key={type} className={`${meta.bg} ${meta.border} border rounded-xl p-3 min-h-[300px]`}>
                 <div className={`flex items-center justify-between mb-3 ${meta.text}`}>
                   <div className="flex items-center gap-2"><Icon size={16} /><span className="font-semibold text-sm">{meta.label}</span></div>
-                  <span className="text-xs bg-white/70 px-2 py-0.5 rounded-full">{items.length}</span>
+                  <span className="text-xs bg-white dark:bg-gray-900/70 px-2 py-0.5 rounded-full">{items.length}</span>
                 </div>
                 <div className="space-y-2">
-                  {items.length === 0 && <div className="text-xs text-gray-500 italic text-center py-4">No workflows</div>}
+                  {items.length === 0 && <div className="text-xs text-gray-500 dark:text-gray-400 italic text-center py-4">No workflows</div>}
                   {items.map(wf => <WorkflowCard key={wf.id} wf={wf} onOpen={() => setOpenWfId(wf.id)} />)}
                 </div>
               </div>
@@ -110,10 +110,10 @@ export default function StudioOpsPage() {
 
 function Stat({ label, value, icon: Icon }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3 dark:bg-gray-900 dark:border-gray-800">
+    <div className="bg-white border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex items-center gap-3 dark:bg-gray-900 dark:border-gray-800">
       <div className="w-10 h-10 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center"><Icon size={18} /></div>
       <div>
-        <div className="text-xs text-gray-500">{label}</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
         <div className="text-xl font-bold text-gray-900 dark:text-gray-100">{value ?? 0}</div>
       </div>
     </div>
@@ -128,13 +128,13 @@ function WorkflowCard({ wf, onOpen }) {
     <div onClick={onOpen} className="bg-white rounded-lg p-3 cursor-pointer hover:shadow-md transition-shadow border border-white dark:bg-gray-900">
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="font-medium text-sm text-gray-900 line-clamp-2 dark:text-gray-100">{wf.title}</div>
-        <span className={`text-[10px] px-1.5 py-0.5 rounded ${wf.status === 'active' ? 'bg-emerald-100 text-emerald-700' : wf.status === 'completed' ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-500'}`}>{wf.status}</span>
+        <span className={`text-[10px] px-1.5 py-0.5 rounded ${wf.status === 'active' ? 'bg-emerald-100 text-emerald-700' : wf.status === 'completed' ? 'bg-gray-200 text-gray-600 dark:text-gray-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>{wf.status}</span>
       </div>
-      <div className="flex items-center gap-2 text-[11px] text-gray-500 mb-2">
+      <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400 mb-2">
         <span>{tc.done || 0}/{total} done</span>
         {wf.project_id && <span>• Project #{wf.project_id}</span>}
       </div>
-      <div className="bg-gray-100 rounded-full h-1.5 overflow-hidden">
+      <div className="bg-gray-100 dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
         <div className="h-full bg-violet-500" style={{ width: `${pct}%` }} />
       </div>
     </div>
@@ -170,19 +170,19 @@ function WorkflowDrawer({ id, onClose, onChanged }) {
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 flex justify-end" onClick={onClose}>
       <div className="bg-white w-full max-w-2xl h-full overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10 dark:border-gray-800 dark:bg-gray-900">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white z-10 dark:border-gray-800 dark:bg-gray-900">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{wf?.title || 'Loading…'}</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button>
+          <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100"><X size={18} /></button>
         </div>
 
         {loading || !wf ? (
-          <div className="p-8 text-center text-sm text-gray-500"><Loader2 className="animate-spin inline" size={16} /></div>
+          <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400"><Loader2 className="animate-spin inline" size={16} /></div>
         ) : (
           <div className="p-6 space-y-5">
             <div className="text-sm text-gray-700 dark:text-gray-300">{wf.description}</div>
             <div className="flex flex-wrap gap-2 text-xs">
-              <span className="bg-gray-100 px-2 py-1 rounded">{wf.type}</span>
-              <span className="bg-gray-100 px-2 py-1 rounded">{wf.status}</span>
+              <span className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{wf.type}</span>
+              <span className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{wf.status}</span>
               {wf.project && <span className="bg-violet-100 text-violet-700 px-2 py-1 rounded">Project: {wf.project.name}</span>}
             </div>
 
@@ -190,13 +190,13 @@ function WorkflowDrawer({ id, onClose, onChanged }) {
               <h3 className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Tasks ({wf.tasks?.length || 0})</h3>
               <div className="space-y-2">
                 {(wf.tasks || []).map(t => (
-                  <div key={t.id} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg">
+                  <div key={t.id} className="flex items-center justify-between gap-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
                     <div className="flex-1 min-w-0">
-                      <div className={`text-sm ${t.status === 'done' ? 'line-through text-gray-500' : 'text-gray-900'}`}>{t.title}</div>
-                      {t.description && <div className="text-xs text-gray-600 mt-0.5">{t.description}</div>}
+                      <div className={`text-sm ${t.status === 'done' ? 'line-through text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-gray-100'}`}>{t.title}</div>
+                      {t.description && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{t.description}</div>}
                     </div>
                     <select value={t.status} onChange={e => updateTask(t.id, { status: e.target.value })}
-                      className="text-xs bg-white border border-gray-300 rounded px-2 py-1 dark:bg-gray-900 dark:border-gray-700">
+                      className="text-xs bg-white border border-gray-300 dark:border-gray-600 rounded px-2 py-1 dark:bg-gray-900 dark:border-gray-700">
                       {TASK_STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
                     </select>
                   </div>
@@ -204,14 +204,14 @@ function WorkflowDrawer({ id, onClose, onChanged }) {
               </div>
             </div>
 
-            <div className="border-t border-gray-200 pt-5 dark:border-gray-800">
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-5 dark:border-gray-800">
               <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2 dark:text-gray-100"><Brain size={14} className="text-violet-500" /> AI Assistant</h3>
               <div className="flex flex-wrap gap-2 mb-3">
                 <button onClick={() => aiAssist('checklist')} disabled={aiBusy} className="text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-1.5 rounded">Generate Checklist</button>
                 <button onClick={() => aiAssist('summary')} disabled={aiBusy} className="text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-1.5 rounded">Summarize</button>
                 <button onClick={() => aiAssist('task_description')} disabled={aiBusy} className="text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-1.5 rounded">Suggest Task</button>
               </div>
-              {aiBusy && <div className="text-xs text-gray-500 flex items-center gap-1"><Loader2 className="animate-spin" size={12} /> Thinking…</div>}
+              {aiBusy && <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1"><Loader2 className="animate-spin" size={12} /> Thinking…</div>}
               {aiResult && (
                 <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 text-xs text-gray-800 whitespace-pre-wrap leading-relaxed dark:text-gray-200">{aiResult}</div>
               )}
@@ -241,16 +241,16 @@ function StrategicReview() {
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 dark:bg-gray-900 dark:border-gray-800">
+    <div className="bg-white border border-gray-200 dark:border-gray-700 rounded-xl p-6 dark:bg-gray-900 dark:border-gray-800">
       <h2 className="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2 dark:text-gray-100"><Sparkles size={16} className="text-violet-500" /> Strategic Review</h2>
-      <p className="text-xs text-gray-600 mb-4">AI-powered metrics summary + continue / iterate / spin-out / kill recommendation.</p>
+      <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">AI-powered metrics summary + continue / iterate / spin-out / kill recommendation.</p>
 
       <div className="flex gap-2 mb-4">
         <div className="relative flex-1">
           <select
             value={projectId}
             onChange={e => setProjectId(e.target.value)}
-            className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 pr-9 py-2 text-sm text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer dark:border-gray-700 dark:text-gray-100"
+            className="w-full appearance-none bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 pr-9 py-2 text-sm text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer dark:border-gray-700 dark:text-gray-100"
           >
             <option value="">Select a project…</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name} ({p.status})</option>)}
@@ -278,8 +278,8 @@ function StrategicReview() {
             <div className="text-[10px] uppercase tracking-wide text-violet-600 font-semibold mb-1">Recommendation (rule-based)</div>
             <div className="text-2xl font-bold text-violet-900">{review.rule_recommendation}</div>
           </div>
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 dark:border-gray-800">
-            <div className="text-[10px] uppercase tracking-wide text-gray-600 font-semibold mb-2 flex items-center gap-1"><Brain size={11} /> AI Analysis</div>
+          <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4 dark:border-gray-800">
+            <div className="text-[10px] uppercase tracking-wide text-gray-600 dark:text-gray-400 font-semibold mb-2 flex items-center gap-1"><Brain size={11} /> AI Analysis</div>
             <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed dark:text-gray-200">{review.ai_summary}</div>
             <div className="text-[10px] text-gray-400 mt-2">Model: {review.model}</div>
           </div>
@@ -291,8 +291,8 @@ function StrategicReview() {
 
 function KV({ k, v }) {
   return (
-    <div className="bg-gray-50 rounded-lg p-2">
-      <div className="text-[10px] uppercase text-gray-500">{k}</div>
+    <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-2">
+      <div className="text-[10px] uppercase text-gray-500 dark:text-gray-400">{k}</div>
       <div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{String(v)}</div>
     </div>
   );
@@ -325,22 +325,22 @@ function QuickActionsModal({ onClose, onCreated }) {
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full dark:bg-gray-900" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between dark:border-gray-800">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Quick Action — Run Template</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button>
+          <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100"><X size={18} /></button>
         </div>
         <div className="p-6 space-y-4">
           <div>
             <label className="text-xs text-gray-700 font-medium block mb-2 dark:text-gray-300">Template</label>
-            <div className="space-y-1 max-h-72 overflow-y-auto border border-gray-200 rounded-lg p-2 dark:border-gray-800">
+            <div className="space-y-1 max-h-72 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2 dark:border-gray-800">
               {templates.map(t => (
-                <label key={t.key} className={`flex items-start gap-2 p-2 rounded cursor-pointer ${tplKey === t.key ? 'bg-violet-50' : 'hover:bg-gray-50'}`}>
+                <label key={t.key} className={`flex items-start gap-2 p-2 rounded cursor-pointer ${tplKey === t.key ? 'bg-violet-50' : 'hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-900'}`}>
                   <input type="radio" checked={tplKey === t.key} onChange={() => setTplKey(t.key)} className="mt-1" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{t.title} <span className="text-[10px] text-gray-500 ml-1">{t.type}</span></div>
-                    <div className="text-xs text-gray-600">{t.description}</div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{t.title} <span className="text-[10px] text-gray-500 dark:text-gray-400 ml-1">{t.type}</span></div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">{t.description}</div>
                   </div>
-                  <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded">{t.task_count} tasks</span>
+                  <span className="text-[10px] bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{t.task_count} tasks</span>
                 </label>
               ))}
             </div>
@@ -348,15 +348,15 @@ function QuickActionsModal({ onClose, onCreated }) {
           <div>
             <label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Link to Project (optional)</label>
             <select value={projectId} onChange={e => setProjectId(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none dark:border-gray-700">
+              className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none dark:border-gray-700">
               <option value="">— None —</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           {err && <div className="text-xs text-red-600">{err}</div>}
         </div>
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-2 dark:border-gray-800">
-          <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded-lg dark:text-gray-300">Cancel</button>
+        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2 dark:border-gray-800">
+          <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:bg-gray-800 px-4 py-2 rounded-lg dark:text-gray-300">Cancel</button>
           <button onClick={submit} disabled={busy || !tplKey} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
             {busy ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />}
             Create Workflow

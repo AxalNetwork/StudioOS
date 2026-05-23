@@ -4,10 +4,12 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Shield, Smartphone, Copy, Check, Mail, RefreshCw, Send, Sparkles, ChevronDown, ChevronRight, HelpCircle } from 'lucide-react';
 import QRCode from 'qrcode';
 import { api } from '../lib/api';
+import useForcedLightTheme from '../hooks/useForcedLightTheme';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
 export default function RegisterPage() {
+  useForcedLightTheme();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ email: '', name: '' });
   const [totpData, setTotpData] = useState(null);

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Shield, LogIn } from 'lucide-react';
 import { api } from '../lib/api';
+import useForcedLightTheme from '../hooks/useForcedLightTheme';
 
 // Single-page sign-in: email + authenticator code + Cloudflare Turnstile.
 // SMS is intentionally NOT offered as a primary sign-in factor — it lives
@@ -30,6 +31,7 @@ const GOOGLE_ERROR_COPY = {
 };
 
 export default function LoginPage() {
+  useForcedLightTheme();
   const [email, setEmail] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');

@@ -43,7 +43,7 @@ function SortHeader({ label, field, sort, setSort }) {
     <button
       type="button"
       onClick={() => setSort({ field, dir: active && sort.dir === 'asc' ? 'desc' : 'asc' })}
-      className={`inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide ${active ? 'text-purple-700' : 'text-slate-500 hover:text-slate-700'}`}
+      className={`inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide ${active ? 'text-purple-700' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:text-slate-300'}`}
     >
       {label}
       {active && <ChevronDown className={`w-3 h-3 ${sort.dir === 'asc' ? 'rotate-180' : ''}`} />}
@@ -67,20 +67,20 @@ function DetailDrawer({ projectUid, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-stretch justify-end" onClick={onClose}>
       <div className="bg-white w-full max-w-xl h-full overflow-y-auto shadow-xl dark:bg-gray-900" onClick={e => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between dark:bg-gray-900">
+        <div className="sticky top-0 bg-white border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between dark:bg-gray-900">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">{data?.project?.name || 'Project health'}</h2>
-            <p className="text-xs text-slate-500">{data?.project?.sector || ''} · {data?.project?.stage || ''}</p>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{data?.project?.name || 'Project health'}</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{data?.project?.sector || ''} · {data?.project?.stage || ''}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">×</button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-400 text-2xl leading-none">×</button>
         </div>
         {err && <div className="m-6 p-4 bg-rose-50 border border-rose-200 rounded text-rose-700 text-sm">{err}</div>}
-        {!data && !err && <div className="p-6 text-slate-500 text-sm">Loading…</div>}
+        {!data && !err && <div className="p-6 text-slate-500 dark:text-slate-400 text-sm">Loading…</div>}
         {data && data.latest && (
           <div className="p-6 space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-4xl font-bold text-slate-900">{data.latest.score.toFixed(0)}<span className="text-base text-slate-400">/100</span></div>
+                <div className="text-4xl font-bold text-slate-900 dark:text-slate-100">{data.latest.score.toFixed(0)}<span className="text-base text-slate-400">/100</span></div>
                 <div className="mt-1"><BadgePill badge={data.latest.badge} /></div>
               </div>
               <button
@@ -90,7 +90,7 @@ function DetailDrawer({ projectUid, onClose }) {
                     setData({ ...data, latest: r, history: [r, ...(data.history || []).filter(h => h.uid !== r.uid)] });
                   } catch (e) { setErr(e.message); }
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 rounded hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded hover:bg-slate-50 dark:bg-slate-900"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 Recompute
@@ -112,7 +112,7 @@ function DetailDrawer({ projectUid, onClose }) {
             )}
 
             <div>
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Signals</h3>
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Signals</h3>
               <div className="grid grid-cols-2 gap-3">
                 <SignalCard label="Runway" value={fmtMonths(data.latest.runway_months)} component={data.latest.components?.runway} />
                 <SignalCard label="Growth velocity" value={fmtPct(data.latest.growth_velocity)} component={data.latest.components?.growth} />
@@ -122,13 +122,13 @@ function DetailDrawer({ projectUid, onClose }) {
             </div>
 
             <div>
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Score history (last {data.history.length} snapshots)</h3>
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Score history (last {data.history.length} snapshots)</h3>
               <div className="space-y-1">
                 {data.history.slice(0, 14).map(h => (
                   <div key={h.uid} className="flex items-center justify-between text-sm py-1.5 border-b border-slate-100">
-                    <span className="text-slate-600">{h.snapshot_date}</span>
+                    <span className="text-slate-600 dark:text-slate-400">{h.snapshot_date}</span>
                     <span className="flex items-center gap-2">
-                      <span className="font-mono text-slate-900">{h.score.toFixed(0)}</span>
+                      <span className="font-mono text-slate-900 dark:text-slate-100">{h.score.toFixed(0)}</span>
                       <BadgePill badge={h.badge} />
                     </span>
                   </div>
@@ -138,7 +138,7 @@ function DetailDrawer({ projectUid, onClose }) {
           </div>
         )}
         {data && !data.latest && (
-          <div className="p-6 text-slate-500 text-sm">No health snapshot for this project yet. Run a recompute to generate one.</div>
+          <div className="p-6 text-slate-500 dark:text-slate-400 text-sm">No health snapshot for this project yet. Run a recompute to generate one.</div>
         )}
       </div>
     </div>
@@ -151,12 +151,12 @@ function SignalCard({ label, value, component }) {
     : `${(component.score * 100).toFixed(0)}/100 sub-score`;
   const w = component?.weight ? `${(component.weight * 100).toFixed(0)}%` : '';
   return (
-    <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-      <div className="flex items-center justify-between text-xs text-slate-500">
+    <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded">
+      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
         <span>{label}</span>
         {w && <span className="text-slate-400">{w}</span>}
       </div>
-      <div className="mt-1 text-xl font-semibold text-slate-900">{value}</div>
+      <div className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">{value}</div>
       <div className="text-xs text-slate-400 mt-0.5">{sub}</div>
     </div>
   );
@@ -174,14 +174,14 @@ function InvestorHoldingsCard() {
   }, []);
   if (!holdings || holdings.length === 0) return null;
   return (
-    <div className="mb-6 bg-white border border-slate-200 rounded-lg p-5 dark:bg-gray-900">
+    <div className="mb-6 bg-white border border-slate-200 dark:border-slate-700 rounded-lg p-5 dark:bg-gray-900">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-base font-semibold text-slate-900">Portfolio holdings</h2>
-        <span className="text-xs text-slate-500">{holdings.length} positions</span>
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Portfolio holdings</h2>
+        <span className="text-xs text-slate-500 dark:text-slate-400">{holdings.length} positions</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="text-xs uppercase text-slate-500 border-b border-slate-200">
+          <thead className="text-xs uppercase text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
             <tr>
               <th className="py-2 pr-3 text-left">Company</th>
               <th className="py-2 pr-3 text-left">Ticker</th>
@@ -194,12 +194,12 @@ function InvestorHoldingsCard() {
           <tbody>
             {holdings.map(h => (
               <tr key={h.id} className="border-b border-slate-100">
-                <td className="py-2 pr-3 text-slate-800">{h.company_name || h.company}</td>
-                <td className="py-2 pr-3 text-slate-600">{h.ticker || '—'}</td>
-                <td className="py-2 pr-3 text-slate-600">{h.investment_date || '—'}</td>
-                <td className="py-2 pr-3 text-slate-600">{h.instrument || '—'}</td>
-                <td className="py-2 pr-3 text-right text-slate-800">{h.amount != null ? `$${Number(h.amount).toLocaleString()}` : '—'}</td>
-                <td className="py-2 pr-3 text-right text-slate-800">{h.current_valuation != null ? `$${Number(h.current_valuation).toLocaleString()}` : '—'}</td>
+                <td className="py-2 pr-3 text-slate-800 dark:text-slate-200">{h.company_name || h.company}</td>
+                <td className="py-2 pr-3 text-slate-600 dark:text-slate-400">{h.ticker || '—'}</td>
+                <td className="py-2 pr-3 text-slate-600 dark:text-slate-400">{h.investment_date || '—'}</td>
+                <td className="py-2 pr-3 text-slate-600 dark:text-slate-400">{h.instrument || '—'}</td>
+                <td className="py-2 pr-3 text-right text-slate-800 dark:text-slate-200">{h.amount != null ? `$${Number(h.amount).toLocaleString()}` : '—'}</td>
+                <td className="py-2 pr-3 text-right text-slate-800 dark:text-slate-200">{h.current_valuation != null ? `$${Number(h.current_valuation).toLocaleString()}` : '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -269,12 +269,12 @@ export default function PortfolioHealthPage() {
       <InvestorHoldingsCard />
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <Heart className="w-6 h-6 text-purple-600" />
             Portfolio health
           </h1>
         <PageExplainer pageKey="portfolio_health" />
-          <p className="text-sm text-slate-600 mt-1">
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             Daily score per company from runway, growth, churn, and founder sentiment.
             {data?.as_of && <span className="ml-2 text-slate-400">As of {data.as_of}</span>}
           </p>
@@ -310,14 +310,14 @@ export default function PortfolioHealthPage() {
         <select
           value={filter.badge}
           onChange={(e) => setFilter({ ...filter, badge: e.target.value })}
-          className="text-sm border border-slate-300 rounded px-2 py-1"
+          className="text-sm border border-slate-300 dark:border-slate-600 rounded px-2 py-1"
         >
           <option value="">All statuses</option>
           <option value="green">Healthy</option>
           <option value="yellow">Watch</option>
           <option value="red">Critical</option>
         </select>
-        <label className="text-sm text-slate-600 inline-flex items-center gap-1.5">
+        <label className="text-sm text-slate-600 dark:text-slate-400 inline-flex items-center gap-1.5">
           <input
             type="checkbox"
             checked={filter.interventionOnly}
@@ -329,9 +329,9 @@ export default function PortfolioHealthPage() {
 
       {err && <div className="p-3 mb-3 bg-rose-50 border border-rose-200 rounded text-rose-700 text-sm">{err}</div>}
 
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden dark:bg-gray-900">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
+      <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden dark:bg-gray-900">
+        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+          <thead className="bg-slate-50 dark:bg-slate-900">
             <tr>
               <th className="px-4 py-2 text-left"><SortHeader label="Company" field="name" sort={sort} setSort={setSort} /></th>
               <th className="px-4 py-2 text-left"><SortHeader label="Status" field="badge" sort={sort} setSort={setSort} /></th>
@@ -339,7 +339,7 @@ export default function PortfolioHealthPage() {
               <th className="px-4 py-2 text-right"><SortHeader label="Runway" field="runway" sort={sort} setSort={setSort} /></th>
               <th className="px-4 py-2 text-right"><SortHeader label="Growth" field="growth" sort={sort} setSort={setSort} /></th>
               <th className="px-4 py-2 text-right"><SortHeader label="Churn Δ" field="churn" sort={sort} setSort={setSort} /></th>
-              <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Top reason</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Top reason</th>
               <th className="px-4 py-2"></th>
             </tr>
           </thead>
@@ -351,15 +351,15 @@ export default function PortfolioHealthPage() {
             {sorted.map(it => (
               <tr key={it.uid} className={it.intervention ? 'bg-rose-50/30' : ''}>
                 <td className="px-4 py-3">
-                  <div className="font-medium text-slate-900">{it.project?.name || `Project #${it.project_id}`}</div>
-                  <div className="text-xs text-slate-500">{it.project?.sector || ''} · {it.project?.stage || ''}</div>
+                  <div className="font-medium text-slate-900 dark:text-slate-100">{it.project?.name || `Project #${it.project_id}`}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">{it.project?.sector || ''} · {it.project?.stage || ''}</div>
                 </td>
                 <td className="px-4 py-3"><BadgePill badge={it.badge} /></td>
                 <td className="px-4 py-3 text-right font-mono text-sm">{it.score.toFixed(0)}</td>
-                <td className="px-4 py-3 text-right text-sm text-slate-600">{fmtMonths(it.runway_months)}</td>
-                <td className="px-4 py-3 text-right text-sm text-slate-600">{fmtPct(it.growth_velocity)}</td>
-                <td className="px-4 py-3 text-right text-sm text-slate-600">{fmtDelta(it.churn_delta)}</td>
-                <td className="px-4 py-3 text-xs text-slate-500 max-w-xs truncate">{it.reasons?.[0] || ''}</td>
+                <td className="px-4 py-3 text-right text-sm text-slate-600 dark:text-slate-400">{fmtMonths(it.runway_months)}</td>
+                <td className="px-4 py-3 text-right text-sm text-slate-600 dark:text-slate-400">{fmtPct(it.growth_velocity)}</td>
+                <td className="px-4 py-3 text-right text-sm text-slate-600 dark:text-slate-400">{fmtDelta(it.churn_delta)}</td>
+                <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 max-w-xs truncate">{it.reasons?.[0] || ''}</td>
                 <td className="px-4 py-3 text-right">
                   <button
                     onClick={() => setParams({ project: it.project?.uid || '' })}
