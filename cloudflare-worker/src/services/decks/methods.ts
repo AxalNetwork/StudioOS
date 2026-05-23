@@ -449,7 +449,8 @@ export const DECK_METHODS: DeckMethodSpec[] = [
           // "Customer → Subscription : pays" per line; flattener parses.
           f.bullets('revenue_flow', 'Revenue flow (From → To : label)', ['ai.revenue_flow']),
           f.metrics('bm_unit', 'Unit economics (ACV / Gross margin / Payback)', [
-            'project.avg_contract_usd', 'financials.gross_margin_pct', 'financials.payback_months',
+            'financials.avg_contract_usd', 'project.avg_contract_usd',
+            'financials.gross_margin_pct', 'financials.payback_months',
           ]),
         ],
       },
