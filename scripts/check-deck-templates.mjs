@@ -23,7 +23,7 @@ const ROOT = join(__dirname, '..');
 const INDEX_PATH = join(ROOT, 'frontend/src/decks/templates/index.ts');
 const TEMPLATES_DIR = join(ROOT, 'frontend/src/decks/templates');
 
-const EXPECTED = 13;
+const EXPECTED = 14;
 const REQUIRED_FIELDS = ['key', 'label', 'description', 'slide_count', 'required_tier', 'Component'];
 
 function fail(msg) {

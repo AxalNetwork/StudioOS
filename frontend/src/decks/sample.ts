@@ -1,4 +1,6 @@
 import type { DeckData } from './DeckBase';
+import { SAMPLE_DATA as MINIMAL_SEED_SAMPLE } from './templates/minimal_seed';
+import { SAMPLE_DATA as SERIES_A_APP_SAMPLE } from './templates/series_a_growth_app';
 
 // Base preview sample used by the existing 11 templates. Keeps the
 // historical *string* shapes for `milestones`, `roadmap`, and
@@ -378,6 +380,21 @@ export function previewDataFor(templateKey: string): DeckData {
   }
   if (templateKey === 'kawasaki_10_20_30') {
     return { ...SAMPLE_PREVIEW_DATA, ...KAWASAKI_OVERLAY };
+  }
+  // The Minimal Seed templates (both the print-oriented `minimal_seed`
+  // and the live-viewer `minimal_seed_app` registry adapter) expect a
+  // richer typed shape — `team` as an array of founders, `problem_stat`
+  // as a nested object, `use_of_funds` as an array of pct rows. Feeding
+  // them SAMPLE_PREVIEW_DATA (whose `team` is a string and
+  // `use_of_funds` is a string) crashes the thumbnail / preview render.
+  if (templateKey === 'minimal_seed' || templateKey === 'minimal_seed_app') {
+    return MINIMAL_SEED_SAMPLE as unknown as DeckData;
+  }
+  // Series A Growth standalone variant has the same shape mismatch —
+  // its slides reference `metrics.mrr`, `unit_econ`, `hiring_plan`,
+  // etc. that SAMPLE_PREVIEW_DATA does not carry.
+  if (templateKey === 'series_a_growth_app') {
+    return SERIES_A_APP_SAMPLE as unknown as DeckData;
   }
   return SAMPLE_PREVIEW_DATA;
 }

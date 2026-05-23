@@ -2018,3 +2018,35 @@ export const SAMPLE_DATA: SeriesAData = {
 };
 
 export default SeriesAGrowthDeckApp;
+
+// ─────────────────────────────────────────────────────────────────
+// Registry adapter — `Deck_series_a_growth_app`
+//
+// Renders all 15 slides inside `<Slide16x9>` frames (each carries
+// `data-slide-frame=""` + 1920×1080 + `pageBreakAfter: always`), so
+// `PitchDeckPrintPage` keyboard nav, fullscreen viewer, and
+// `window.print()` PDF export work the same way they do for every
+// other template in the registry. The single-screen viewer (prev/
+// next + dot pagination + motion) stays available via the
+// `SeriesAGrowthDeckApp` default export for callers that want it.
+//
+// Incoming Axal `data` (built by `PitchDeckPrintPage.buildTemplateData`)
+// is shallow-merged over `SAMPLE_DATA` so partial payloads keep the
+// sample's nested defaults populated.
+// ─────────────────────────────────────────────────────────────────
+import { Slide16x9, type DeckProps as RegistryDeckProps } from '../DeckBase';
+
+export const Deck_series_a_growth_app: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
+  const seed: SeriesAData = (data && Object.keys(data).length > 0)
+    ? { ...SAMPLE_DATA, ...(data as Partial<SeriesAData>) }
+    : SAMPLE_DATA;
+  return (
+    <>
+      {SLIDES.map((Slide, i) => (
+        <Slide16x9 key={i} bg="#EEF2F7" ink="#0F172A">
+          <Slide data={seed} editable={editable} onEdit={onEdit} />
+        </Slide16x9>
+      ))}
+    </>
+  );
+};

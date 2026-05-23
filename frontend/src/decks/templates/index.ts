@@ -6,6 +6,7 @@ import { Deck_kawasaki_10_20_30 } from './kawasaki_10_20_30';
 import { Deck_minimal_seed } from './minimal_seed';
 import { Deck_minimal_seed_app } from './minimal_seed_app';
 import { Deck_series_a_growth } from './series_a_growth';
+import { Deck_series_a_growth_app } from './series_a_growth_app';
 import { Deck_series_b_diligence } from './series_b_diligence';
 import { Deck_demo_day } from './demo_day';
 import { Deck_sales_commercial } from './sales_commercial';
@@ -40,6 +41,7 @@ export const TEMPLATES: Record<string, TemplateMeta> = {
   minimal_seed:       { key: 'minimal_seed',       label: 'Minimal Seed — 6 slides',       description: '6 slides · stripped to essentials',                slide_count: 6,  required_tier: 'free',   category: 'fundraising', Component: Deck_minimal_seed },
   minimal_seed_app:   { key: 'minimal_seed_app',   label: 'Minimal Seed — Live Viewer',    description: '6 slides · single-screen viewer with prev/next',   slide_count: 6,  required_tier: 'free',   category: 'fundraising', Component: Deck_minimal_seed_app },
   series_a_growth:    { key: 'series_a_growth',    label: 'Series A — Growth & GTM',       description: '15 slides · metrics + GTM',                        slide_count: 15, required_tier: 'growth', category: 'fundraising', Component: Deck_series_a_growth },
+  series_a_growth_app:{ key: 'series_a_growth_app',label: 'Series A — Growth (Live Viewer)',description: '15 slides · single-screen viewer with prev/next',  slide_count: 15, required_tier: 'growth', category: 'fundraising', Component: Deck_series_a_growth_app },
   series_b_diligence: { key: 'series_b_diligence', label: 'Series B — Diligence Pack',     description: '26 slides incl. appendix · data-heavy',            slide_count: 26, required_tier: 'studio', category: 'fundraising', Component: Deck_series_b_diligence },
   demo_day:           { key: 'demo_day',           label: 'Demo Day — Product-first',      description: '11 slides · screenshot-heavy',                     slide_count: 11, required_tier: 'growth', category: 'fundraising', Component: Deck_demo_day },
   sales_commercial:   { key: 'sales_commercial',   label: 'Sales — Customer-facing',       description: '15 slides · sales conversation',                   slide_count: 15, required_tier: 'growth', category: 'commercial',  Component: Deck_sales_commercial },
@@ -54,10 +56,10 @@ export const TEMPLATE_KEYS = Object.keys(TEMPLATES);
 export const TEMPLATE_LIST: TemplateMeta[] = Object.values(TEMPLATES);
 
 if (typeof process === 'undefined' || process.env?.NODE_ENV !== 'production') {
-  if (TEMPLATE_LIST.length !== 13) {
+  if (TEMPLATE_LIST.length !== 14) {
      
     console.warn(
-      `[decks/templates] Expected 13 templates, found ${TEMPLATE_LIST.length}. ` +
+      `[decks/templates] Expected 14 templates, found ${TEMPLATE_LIST.length}. ` +
       `Check frontend/src/decks/templates/index.ts.`,
     );
   }

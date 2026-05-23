@@ -1051,7 +1051,7 @@ function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, bu
         <div className="flex items-center justify-between px-5 py-3 border-b dark:border-slate-800">
           <div>
             <h2 className="font-semibold">Pick a deck template</h2>
-            <p className="text-xs text-gray-500 dark:text-slate-400">12 methods — your data auto-fills, AI fills the gaps.</p>
+            <p className="text-xs text-gray-500 dark:text-slate-400">{(templates?.list?.length ?? 0)} methods — your data auto-fills, AI fills the gaps.</p>
           </div>
           <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-800 dark:hover:text-slate-200">
             <X className="w-5 h-5" />

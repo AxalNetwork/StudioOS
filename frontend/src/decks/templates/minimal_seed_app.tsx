@@ -6,7 +6,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import type { DeckProps as RegistryDeckProps } from '../DeckBase';
+import { Slide16x9, type DeckProps as RegistryDeckProps } from '../DeckBase';
 
 // ─────────────────────────────────────────────────────────────────
 // Types
@@ -1572,9 +1572,25 @@ export default MinimalSeedDeckApp;
 // `PitchDeckPrintPage.jsx`.
 // ─────────────────────────────────────────────────────────────────
 
-export const Deck_minimal_seed_app: React.FC<RegistryDeckProps> = ({ data, editable }) => {
-  const seed = (data && Object.keys(data).length > 0)
-    ? (data as unknown as MinimalSeedData)
+// Multi-slide adapter — renders all 6 slides inside `<Slide16x9>`
+// frames (each 1920×1080 with `data-slide-frame=""` + `pageBreakAfter`)
+// so `PitchDeckPrintPage`'s keyboard nav, fullscreen viewer, and
+// `window.print()` PDF export work the same way they do for every
+// other template in the registry. The single-screen viewer experience
+// (prev/next + dot pagination + motion) stays available via the
+// `MinimalSeedDeckApp` default export for any caller that wants it
+// directly.
+export const Deck_minimal_seed_app: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
+  const seed: MinimalSeedData = (data && Object.keys(data).length > 0)
+    ? { ...SAMPLE_DATA, ...(data as Partial<MinimalSeedData>) }
     : SAMPLE_DATA;
-  return <MinimalSeedDeckApp initialData={seed} editable={!!editable} />;
+  return (
+    <>
+      {SLIDES.map((Slide, i) => (
+        <Slide16x9 key={i} bg="#FFFFFF" ink="#0F172A">
+          <Slide data={seed} editable={editable} onEdit={onEdit} />
+        </Slide16x9>
+      ))}
+    </>
+  );
 };
