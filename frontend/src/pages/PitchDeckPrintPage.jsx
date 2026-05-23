@@ -29,10 +29,16 @@ const INNER_H = 1080;
 // editor does — /apply-method stamps every slide with method_id.
 function detectMethodId(deck) {
   if (!deck) return null;
-  if (typeof deck.method_id === 'string' && deck.method_id) return deck.method_id;
+  // Prefer the explicit method_id set by /apply-method, but fall back
+  // through every place the platform stores the template key so a deck
+  // saved via an older path (template_key column / slide-level
+  // template / nested method object) still picks the right renderer.
+  const direct = deck.method_id || deck.template_key || deck.template || deck.method?.id || deck.method?.key;
+  if (typeof direct === 'string' && direct) return direct;
   const slides = Array.isArray(deck.slides) ? deck.slides : [];
   for (const s of slides) {
-    if (s && typeof s.method_id === 'string' && s.method_id) return s.method_id;
+    const k = s?.method_id || s?.template_key || s?.template;
+    if (typeof k === 'string' && k) return k;
   }
   return null;
 }
@@ -294,11 +300,16 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
         <style>{`
           @page { size: 1920px 1080px; margin: 0; }
           @media print {
-            html, body { background: #FFFFFF !important; }
+            html, body { background: #FFFFFF !important; margin: 0 !important; padding: 0 !important; }
             .deck-print-chrome { display: none !important; }
-            .deck-print-stage { background: #FFFFFF !important; padding: 0 !important; }
-            .deck-print-scaler { transform: none !important; width: 1920px !important; }
-            .deck-print-frame { width: 1920px !important; height: 1080px !important; }
+            .deck-print-stage { background: #FFFFFF !important; padding: 0 !important; width: 1920px !important; }
+            .deck-print-scaler { width: 1920px !important; margin: 0 !important; }
+            /* Critical: the inner wrapper carries the live scale
+               transform via inline style. Override it for print so
+               every Slide16x9 lands at its native 1920×1080 on the
+               printed page instead of the shrunken on-screen preview. */
+            .deck-print-inner { transform: none !important; width: 1920px !important; }
+            .deck-print-frames { gap: 0 !important; }
           }
         `}</style>
         <div className="deck-print-chrome sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
@@ -387,6 +398,7 @@ function PrintStage({ Template, data }) {
         }}
       >
         <div
+          className="deck-print-inner"
           style={{
             width: INNER_W,
             transform: `scale(${scale})`,
