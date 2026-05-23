@@ -201,24 +201,43 @@ deckShareActions.post('/share/:token/signup', async (c) => {
   const ctx = await loadDeckContext(c.env, tok.deckId);
   if (!ctx) return c.json({ error: 'deck_not_found' }, 404);
 
-  // Find or create the user. If the email already belongs to a verified
-  // account we DON'T overwrite their role — they're already in the
-  // network, this is a re-engagement event.
-  let userId: number;
-  let isNew = false;
+  // SECURITY — refuse to auto-log-in an existing account from a share
+  // link. The share token proves access to the deck, not ownership of
+  // the email address. If a viewer enters an email that already maps to
+  // a user row we return `requires_login: true` and the modal sends
+  // them to /login (or a magic-link flow) without minting a session.
+  // This closes the account-takeover vector flagged in code review.
   const existing = await c.env.DB.prepare(
-    'SELECT id, email_verified FROM users WHERE email = ?'
+    'SELECT id FROM users WHERE email = ?'
   ).bind(email).first<any>();
   if (existing?.id) {
-    userId = Number(existing.id);
-  } else {
+    return c.json({
+      ok: false,
+      requires_login: true,
+      email,
+      message: 'An account already exists for this email. Please sign in to continue.',
+    }, 409);
+  }
+
+  let userId: number;
+  let isNew = true;
+  {
     const ins = await c.env.DB.prepare(
       `INSERT INTO users (email, name, role, email_verified)
        VALUES (?, ?, ?, 0)`
     ).bind(email, name, role).run();
     userId = Number((ins as any)?.meta?.last_row_id || 0);
-    isNew = true;
-    if (!userId) return c.json({ error: 'signup_failed' }, 500);
+    if (!userId) {
+      // Lost an INSERT race against a concurrent signup with same email.
+      const race = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<any>();
+      if (race?.id) {
+        return c.json({
+          ok: false, requires_login: true, email,
+          message: 'An account already exists for this email. Please sign in to continue.',
+        }, 409);
+      }
+      return c.json({ error: 'signup_failed' }, 500);
+    }
     try {
       await c.env.DB.prepare(
         `INSERT INTO activity_logs (action, details, actor, user_id)
