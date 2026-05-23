@@ -116,7 +116,7 @@ export default function ProjectsPage() {
     <div data-testid="projects-page">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Projects</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Projects</h1>
         <PageExplainer pageKey="projects" />
           <p className="text-sm text-gray-600">Venture pipeline & 4-week playbook tracking</p>
         </div>

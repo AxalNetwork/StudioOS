@@ -101,7 +101,7 @@ export default function MarketIntelPage() {
     <div data-testid="market-intel-page" data-active-tab={tab}>
       <div className="flex items-end justify-between mb-4 flex-wrap gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Market Intelligence</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Market Intelligence</h1>
         <PageExplainer pageKey="market_intel" />
           <p className="text-sm text-gray-600">Signal-to-Action pipeline for competitive advantage</p>
         </div>

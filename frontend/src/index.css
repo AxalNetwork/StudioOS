@@ -241,6 +241,67 @@ select::-ms-expand { display: none; }
   border-width: 0;
 }
 
+/* ---------------------------------------------------------------------------
+   Task #17 — Dark-mode auto-skin for hardcoded Tailwind utilities.
+
+   Many pages still use bare `bg-white`, `text-gray-{700..900}`, and
+   `border-gray-{100..300}` without explicit `dark:` variants. Rather
+   than mechanically edit every file, we scope a low-specificity
+   override under `[data-app-main]` (the protected app shell wrapper
+   in App.jsx) so:
+     • Light mode is byte-identical (rules only fire under `.dark`).
+     • Public marketing pages (PublicLayout/GVPN palette) are NOT
+       affected because they do not render under `[data-app-main]`.
+     • Components that already declared `dark:` variants keep working
+       because explicit utility classes still win the cascade order.
+
+   Per-page exceptions can opt out by adding `data-keep-light` on a
+   wrapper — the `:not()` chain below skips any element inside such
+   a wrapper.
+   ------------------------------------------------------------------------ */
+/* Selectors are wrapped in `:where(...)` so they contribute ZERO
+   specificity. This guarantees that any explicit `dark:` Tailwind
+   utility (e.g. `dark:text-white`) — which carries one class worth
+   of specificity — always wins over the auto-skin. Opt out by
+   nesting the subtree under `[data-keep-light]` (the auto-skin
+   selector requires `:not([data-keep-light] *)`, so anything inside
+   is exempt). */
+:where(.dark [data-app-main] .bg-white:not([data-keep-light] *):not([data-keep-light])) {
+  background-color: var(--app-surface);
+}
+:where(.dark [data-app-main] .bg-gray-50:not([data-keep-light] *):not([data-keep-light])) {
+  background-color: var(--app-surface-2);
+}
+:where(.dark [data-app-main] .bg-gray-100:not([data-keep-light] *):not([data-keep-light])) {
+  background-color: #1f2937;
+}
+:where(.dark [data-app-main] .text-gray-900:not([data-keep-light] *):not([data-keep-light])),
+:where(.dark [data-app-main] .text-gray-800:not([data-keep-light] *):not([data-keep-light])) {
+  color: var(--app-text);
+}
+:where(.dark [data-app-main] .text-gray-700:not([data-keep-light] *):not([data-keep-light])),
+:where(.dark [data-app-main] .text-gray-600:not([data-keep-light] *):not([data-keep-light])) {
+  color: #cbd5e1;
+}
+:where(.dark [data-app-main] .text-gray-500:not([data-keep-light] *):not([data-keep-light])),
+:where(.dark [data-app-main] .text-gray-400:not([data-keep-light] *):not([data-keep-light])) {
+  color: #94a3b8;
+}
+:where(.dark [data-app-main] .border-gray-200:not([data-keep-light] *):not([data-keep-light])),
+:where(.dark [data-app-main] .border-gray-100:not([data-keep-light] *):not([data-keep-light])),
+:where(.dark [data-app-main] .border-gray-300:not([data-keep-light] *):not([data-keep-light])) {
+  border-color: var(--app-border);
+}
+:where(.dark [data-app-main] .divide-gray-100, .dark [data-app-main] .divide-gray-200) > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--app-border);
+}
+:where(.dark [data-app-main] .hover\:bg-gray-50:hover:not([data-keep-light] *):not([data-keep-light])) {
+  background-color: #1f2937;
+}
+:where(.dark [data-app-main] .hover\:bg-gray-100:hover:not([data-keep-light] *):not([data-keep-light])) {
+  background-color: #374151;
+}
+
 /* Mobile responsive helpers — Task #3 (IC).
    `data-table-cards` opt-in collapses a <table>-like grid into a card
    stack below 768px. Pages that adopt it wrap rows with

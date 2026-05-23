@@ -24,7 +24,7 @@ export default function AdvisoryPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">AI Advisory Suite</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">AI Advisory Suite</h1>
       <p className="text-sm text-gray-600 mb-6">Strategy, financial planning, and automated diligence</p>
 
       <div className="flex gap-1 mb-6">
