@@ -6,6 +6,7 @@ import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import PersonalAssistant from './components/PersonalAssistant';
 import SpinoutLabListener from './components/SpinoutLabListener';
 import SafeMount from './components/SafeMount';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
@@ -999,6 +1000,7 @@ function AppInner() {
 
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
+<RouteErrorBoundary>
 <Routes>
       <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/dashboard'} replace /> : <LandingPage />} />
       <Route path="/spinout-lab" element={<SpinoutLabPage />} />
@@ -1155,6 +1157,7 @@ function AppInner() {
       <Route path="/academy/:slug" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
       <Route path="/academy" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
     </Routes>
+</RouteErrorBoundary>
 </Suspense>
   );
 }
