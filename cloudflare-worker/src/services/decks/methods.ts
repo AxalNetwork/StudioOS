@@ -272,25 +272,129 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     ],
   },
   {
+    // Sequoia Classic — narrative-driven 12-slide deck.
+    // Field keys here MUST match the data paths read by
+    // frontend/src/decks/templates/sequoia_classic.tsx — the print
+    // viewer flattens slides[].fields[] into one dict keyed by
+    // field.key and passes it straight to the template.
     id: 'sequoia_classic', key: 'sequoia_classic',
     label: 'Sequoia Classic (12)',
-    prompt_hint: 'The Sequoia 12-slide template. Story arc + market deep dive.',
+    prompt_hint: 'Narrative-driven 12-slide investor deck. Future → Shift → Broken → Insight → Opportunity → Solution → Product → Why We Win → Traction → Flywheel → Team → Vision.',
     best_for: 'Seed / Series A with a clear narrative + sizable market.',
     slide_count: 12,
     category: 'fundraising',
-    fields_from_project: ['name', 'tagline', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'funding_needed', 'use_of_funds'],
-    fields_from_financials: ['runway_months', 'ltv', 'ltv_cac_ratio', 'avg_monthly_burn', 'breakeven_month'],
+    fields_from_project: ['name', 'tagline', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'funding_needed', 'use_of_funds', 'sector', 'contact_email'],
+    fields_from_financials: ['mrr', 'mrr_usd', 'runway_months', 'ltv', 'ltv_cac_ratio', 'avg_monthly_burn', 'breakeven_month', 'mom_growth_pct', 'nrr_pct'],
     fields_from_captable: ['founders', 'holders'],
-    ai_fill_hint: 'Sequoia narrative arc: company purpose → problem → solution → why now → market → competition → product → business model → team → financials → ask.',
+    ai_fill_hint: 'Sequoia narrative arc — each slide one big idea. Future: a single declarative line about the world in 10 years. Shift: three forces converging. Broken: today\u2019s done-by-hand reality. Insight: the non-obvious truth competitors miss. Opportunity: TAM/SAM/SOM with CAGR. Solution: company, one-liner, before vs after. Product: three pillars. Why We Win: positioning + moats. Traction: MRR, customers, MoM, NRR. Flywheel: compounding loop. Team: founders + journey. Vision: headline, roadmap, ask, runway.',
     slides: [
-      titleSlide('purpose', 'Company purpose'),
-      problemSlide, solutionSlide,
-      { ...marketSlide, id: 'why_now', title: 'Why now' },
-      { ...marketSlide, id: 'market', title: 'Market size' },
-      competitionSlide, productDeepSlide, businessModelSlide,
-      teamSlide, financialsSlide,
-      { ...tractionSlide, id: 'vision', title: 'Vision' },
-      askSlide,
+      {
+        id: 'future', title: 'The Future',
+        fields: [
+          f.subtitle('future_year', ['ai.future_year'], 'Year'),
+          f.title('future_headline', ['ai.future_headline'], 'The future world in one line'),
+          f.para('future_subline', 'Subline', ['ai.future_subline'], 'A single declarative line that sets the horizon.'),
+        ],
+      },
+      {
+        id: 'shift', title: 'The Shift',
+        fields: [
+          f.title('shift_title', ['ai.shift_title'], 'The forces converging now'),
+          f.para('shift_body', 'Body', ['project.why_now', 'ai.shift_body']),
+          f.bullets('shift_curves', 'Forces (one per line)', ['ai.shift_curve_labels']),
+        ],
+      },
+      {
+        id: 'broken', title: 'The Broken Reality',
+        fields: [
+          f.title('broken_title', ['ai.broken_title'], 'Today, this work is done by hand.'),
+          f.bullets('broken_pillars', 'What\u2019s broken (3 pillars)', ['project.problem_statement', 'ai.broken_pillars']),
+        ],
+      },
+      {
+        id: 'insight', title: 'The Insight',
+        fields: [
+          f.subtitle('insight_label', ['ai.insight_label'], 'WHAT EVERYONE ELSE MISSES'),
+          f.title('insight_headline', ['ai.insight_headline'], 'The non-obvious truth'),
+          f.para('insight_body', 'Body', ['ai.insight_body']),
+          f.bullets('insight_proofs', 'Proofs (3 lines)', ['ai.insight_proofs']),
+        ],
+      },
+      {
+        id: 'opportunity', title: 'The Opportunity',
+        fields: [
+          f.title('opportunity_headline', ['ai.opportunity_headline'], 'A category measured in tens of billions.'),
+          f.para('tam_usd', 'TAM (USD)', ['project.tam']),
+          f.para('sam_usd', 'SAM (USD)', ['project.sam']),
+          f.para('som_usd', 'SOM (USD)', ['project.som']),
+          f.para('market_cagr_pct', 'CAGR (%)', ['project.market_cagr_pct', 'ai.market_cagr_pct']),
+        ],
+      },
+      {
+        id: 'solution', title: 'The Solution',
+        fields: [
+          f.title('company', ['project.name'], 'Company'),
+          f.para('solution_one_liner', 'One-liner', ['project.solution', 'ai.solution_one_liner']),
+          f.subtitle('category', ['project.sector', 'ai.category'], 'Category'),
+          f.bullets('before_state', 'Before (4 lines)', ['ai.before_state']),
+          f.bullets('after_state', 'After (4 lines)', ['ai.after_state']),
+        ],
+      },
+      {
+        id: 'product', title: 'The Product',
+        fields: [
+          f.title('product_headline', ['ai.product_headline'], 'Three layers. One platform.'),
+          f.bullets('product_pillars', 'Pillars (3 lines)', ['ai.product_pillars']),
+        ],
+      },
+      {
+        id: 'why_we_win', title: 'Why We Win',
+        fields: [
+          f.title('why_we_win_headline', ['ai.why_we_win_headline'], 'The moats compound.'),
+          f.bullets('moats', 'Moats (3 lines)', ['ai.moats']),
+          f.subtitle('axis_x', ['ai.axis_x'], 'X-axis label'),
+          f.subtitle('axis_y', ['ai.axis_y'], 'Y-axis label'),
+        ],
+      },
+      {
+        id: 'traction', title: 'Traction',
+        fields: [
+          f.title('traction_headline', ['ai.traction_headline'], 'The numbers'),
+          f.para('mrr_usd', 'MRR (USD)', ['financials.mrr_usd', 'financials.mrr', 'project.revenue']),
+          f.para('paying_customers', 'Paying customers', ['project.users_count']),
+          f.para('growth_mom_pct', 'MoM growth (%)', ['financials.mom_growth_pct', 'ai.growth_mom_pct']),
+          f.para('nrr_pct', 'NRR (%)', ['financials.nrr_pct', 'ai.nrr_pct']),
+          f.bullets('customer_logos', 'Logos (6 lines)', ['ai.customer_logos']),
+        ],
+      },
+      {
+        id: 'flywheel', title: 'The Flywheel',
+        fields: [
+          f.title('flywheel_headline', ['ai.flywheel_headline'], 'Each turn makes the next one easier.'),
+          f.bullets('flywheel_nodes', 'Nodes (5 lines)', ['ai.flywheel_nodes']),
+        ],
+      },
+      {
+        id: 'team', title: 'The Team',
+        fields: [
+          f.title('team_headline', ['ai.team_headline'], 'Operators with scar tissue.'),
+          f.bullets('founders', 'Founders (2 lines)', ['captable.founders', 'ai.founders']),
+          f.bullets('team_timeline', 'Journey (3 lines)', ['ai.team_timeline']),
+        ],
+      },
+      {
+        id: 'vision', title: 'The Vision',
+        fields: [
+          f.title('vision_headline', ['project.derived.ask_line', 'ai.vision_headline'], 'Raising $— to build the company that defines this decade.'),
+          f.para('vision_body', 'Body', ['ai.vision_body']),
+          f.bullets('roadmap', 'Roadmap (4 lines)', ['ai.roadmap_quarters']),
+          f.para('ask_amount_usd', 'Ask (USD)', ['project.funding_needed']),
+          f.para('runway_months', 'Runway (months)', ['financials.runway_months']),
+          f.bullets('use_of_funds', 'Use of funds (4 lines)', ['project.use_of_funds', 'ai.use_of_funds']),
+          f.para('contact', 'Contact', ['project.contact_email', 'ai.closing_contact']),
+          f.para('closing_line', 'Closing line', ['ai.closing_line']),
+        ],
+      },
     ],
   },
   {

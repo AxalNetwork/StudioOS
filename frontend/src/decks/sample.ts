@@ -126,13 +126,162 @@ const YC_SEED_OVERLAY: DeckData = {
     'If we win, the next generation of venture studios stop wrestling tools and start shipping outcomes.',
 };
 
+// Sequoia Classic narrative deck overlay. Provides the rich data
+// shape (curves, pillars, founders, flywheel nodes, market rings)
+// the 12-slide investor template renders. Kept template-local for
+// the same reason as YC_SEED_OVERLAY: arrays under string-typed keys
+// (`use_of_funds`, `roadmap`) would crash the simpler templates.
+const SEQUOIA_OVERLAY: DeckData = {
+  company: 'Demo Co.',
+  category: 'Frontier infrastructure',
+
+  future_year: '2035',
+  future_headline: 'Every team will operate with a single source of truth.',
+  future_subline: 'The work itself becomes the system of record — observable, audited, alive.',
+
+  shift_title: 'Three forces converging now.',
+  shift_body:
+    'What was impossible last decade is now economical. What was acceptable last decade is now intolerable. The inflection is no longer ahead of us — it is here.',
+  shift_curves: [
+    { label: 'Compute per dollar', from: 12, to: 84, color: '#8C1F28' },
+    { label: 'Tolerance for friction', from: 70, to: 14, color: '#B45D3E' },
+    { label: 'Capital available', from: 28, to: 60, color: '#0D0D0D' },
+  ],
+
+  broken_title: 'Today, this work is done by hand.',
+  broken_pillars: [
+    { title: 'Fragmented stacks', body: 'Teams stitch six or more tools to ship a single workflow.', cost: '40% time lost' },
+    { title: 'Spreadsheet truth', body: 'The most important records still live in inboxes and tabs.', cost: 'Trust eroded' },
+    { title: 'Manual reconciliation', body: 'Every cycle ends in a fire drill across systems.', cost: '2× errors' },
+  ],
+
+  insight_label: 'WHAT EVERYONE ELSE MISSES',
+  insight_headline: 'The work itself is the data. The data itself becomes the moat.',
+  insight_body:
+    'Every other approach treats the workflow and the database as separate concerns. We collapse them into one — turning ordinary daily activity into a compounding strategic asset.',
+  insight_proofs: [
+    'Pilot customers each generated 10× more structured records than competing tools.',
+    'Every record we capture becomes training data for the next decision.',
+    'The lock-in is not the product — it is the customer\u2019s own history.',
+  ],
+
+  tam_usd: 42_000_000_000,
+  sam_usd: 9_400_000_000,
+  som_usd: 1_200_000_000,
+  market_cagr_pct: 28,
+  market_curve: [
+    { year: '2022', v: 22 }, { year: '2024', v: 38 }, { year: '2026', v: 64 },
+    { year: '2028', v: 105 }, { year: '2030', v: 168 },
+  ],
+
+  solution_one_liner:
+    'A single workflow that replaces the patchwork — and produces the audit trail the platform itself needs.',
+  before_state: ['Six tools', 'Manual sync', 'Reconciled by hand', 'Filed late'],
+  after_state: ['One workflow', 'Auto-synced', 'Audited live', 'Done in seconds'],
+
+  product_pillars: [
+    { title: 'One source of truth', body: 'Every record reconciled in real time.' },
+    { title: 'Reasoning layer', body: 'Decisions explainable, audit-trailed.' },
+    { title: 'Open by design', body: 'Plugs into the systems teams already use.' },
+  ],
+  product_modules: [
+    { name: 'Capture', nodes: ['Web', 'API', 'Mobile'] },
+    { name: 'Reason', nodes: ['Workflow', 'Policy', 'LLM'] },
+    { name: 'Act', nodes: ['Integrations', 'Records', 'Audit'] },
+  ],
+
+  axis_x: 'Reach',
+  axis_y: 'Depth',
+  competitors: [
+    { name: 'Legacy A', x: 78, y: 28 },
+    { name: 'Legacy B', x: 58, y: 36 },
+    { name: 'Point Tool', x: 24, y: 70 },
+    { name: 'Us', x: 80, y: 84 },
+  ],
+  moats: [
+    { title: 'Data', body: 'Every customer makes the next prediction sharper.' },
+    { title: 'Distribution', body: 'Partner channels into the ICP, not around it.' },
+    { title: 'Switching cost', body: 'Embedded in the daily workflow of the team.' },
+  ],
+
+  mrr_usd: 34_000,
+  paying_customers: 64,
+  growth_mom_pct: 41,
+  nrr_pct: 122,
+  revenue_curve: [
+    { month: 'Jan', v: 4 }, { month: 'Feb', v: 7 }, { month: 'Mar', v: 11 },
+    { month: 'Apr', v: 16 }, { month: 'May', v: 24 }, { month: 'Jun', v: 34 },
+  ],
+  user_curve: [
+    { month: 'Jan', v: 120 }, { month: 'Feb', v: 240 }, { month: 'Mar', v: 410 },
+    { month: 'Apr', v: 680 }, { month: 'May', v: 1050 }, { month: 'Jun', v: 1640 },
+  ],
+  retention_curve: [
+    { m: 'M0', v: 100 }, { m: 'M1', v: 92 }, { m: 'M3', v: 86 },
+    { m: 'M6', v: 81 }, { m: 'M9', v: 78 }, { m: 'M12', v: 76 },
+  ],
+  customer_logos: [
+    { name: 'Acme Co.' }, { name: 'Nimbus' }, { name: 'Lattice' },
+    { name: 'Northwind' }, { name: 'Atlas Labs' }, { name: 'Verdant' },
+  ],
+
+  flywheel_nodes: [
+    { label: 'Customers', body: 'use product' },
+    { label: 'Product', body: 'learns from use' },
+    { label: 'Data', body: 'compounds' },
+    { label: 'Network', body: 'expands reach' },
+    { label: 'Revenue', body: 'funds invention' },
+  ],
+
+  founders: [
+    { name: 'Alex Rivera', role: 'CEO · Co-founder', bio: 'Prior: led product at Stripe. Shipped infrastructure used by 4M+ businesses.', initials: 'AR' },
+    { name: 'Sam Chen', role: 'CTO · Co-founder', bio: 'Prior: principal engineer at Linear. Designed core systems shipping to 50K+ teams.', initials: 'SC' },
+  ],
+  team_timeline: [
+    { year: '2014', event: 'Met building open-source infrastructure' },
+    { year: '2020', event: 'Shipped a category-defining product together' },
+    { year: '2025', event: 'Founded this company' },
+  ],
+
+  opportunity_headline: 'A category measured in tens of billions.',
+  product_headline: 'Three layers. One platform.',
+  why_we_win_headline: 'The moats compound.',
+  traction_headline: 'The numbers',
+  flywheel_headline: 'Each turn makes the next one easier.',
+  team_headline: 'Operators with scar tissue.',
+  vision_headline: 'Raising $3.5M to build the company that defines this decade.',
+  vision_body:
+    'In five years, every operating team in this category will route their work through one platform. We intend to be that platform — and to do it with discipline, not theatre.',
+  roadmap: [
+    { quarter: 'Now', goal: 'Live · 60+ paying logos' },
+    { quarter: '+6 mo', goal: '$1M ARR · 10× pipeline' },
+    { quarter: '+12 mo', goal: 'Second workflow live' },
+    { quarter: '+24 mo', goal: 'Category leader' },
+  ],
+  use_of_funds: [
+    { label: 'Engineering', pct: 45 },
+    { label: 'GTM', pct: 30 },
+    { label: 'Operations + Infra', pct: 15 },
+    { label: 'Reserve', pct: 10 },
+  ],
+  ask_amount_usd: 3_500_000,
+  runway_months: 24,
+  closing_line:
+    'If we get this right, the next generation of teams stops fighting their tools and starts shipping outcomes.',
+  contact: 'founders@demoCo.example',
+};
+
 // Returns the sample preview data for a given template key. Most
-// templates get the base SAMPLE_PREVIEW_DATA verbatim; the YC Seed
-// redesign gets a richer overlay that replaces a handful of string
-// fields with the array shapes the new layout expects.
+// templates get the base SAMPLE_PREVIEW_DATA verbatim; richer
+// narrative templates (YC Seed, Sequoia Classic) get an overlay that
+// replaces a handful of string fields with the structured shapes the
+// new layouts expect.
 export function previewDataFor(templateKey: string): DeckData {
   if (templateKey === 'yc_seed') {
     return { ...SAMPLE_PREVIEW_DATA, ...YC_SEED_OVERLAY };
+  }
+  if (templateKey === 'sequoia_classic') {
+    return { ...SAMPLE_PREVIEW_DATA, ...SEQUOIA_OVERLAY };
   }
   return SAMPLE_PREVIEW_DATA;
 }

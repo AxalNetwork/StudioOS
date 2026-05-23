@@ -24,7 +24,7 @@ export interface TemplateMeta {
 
 export const TEMPLATES: Record<string, TemplateMeta> = {
   yc_seed:            { key: 'yc_seed',            label: 'Y Combinator — Seed',           description: '10 slides · YC seed style',                        slide_count: 10, required_tier: 'free',   Component: Deck_yc_seed },
-  sequoia_classic:    { key: 'sequoia_classic',    label: 'Sequoia Classic — Narrative',   description: '13 slides · narrative-driven',                     slide_count: 13, required_tier: 'free',   Component: Deck_sequoia_classic },
+  sequoia_classic:    { key: 'sequoia_classic',    label: 'Sequoia Classic — Narrative',   description: '12 slides · narrative-driven',                     slide_count: 12, required_tier: 'free',   Component: Deck_sequoia_classic },
   kawasaki_10_20_30:  { key: 'kawasaki_10_20_30',  label: 'Kawasaki — 10 / 20 / 30',       description: '10 slides · big type only',                        slide_count: 10, required_tier: 'free',   Component: Deck_kawasaki_10_20_30 },
   minimal_seed:       { key: 'minimal_seed',       label: 'Minimal Seed — 6 slides',       description: '6 slides · stripped to essentials',                slide_count: 6,  required_tier: 'free',   Component: Deck_minimal_seed },
   series_a_growth:    { key: 'series_a_growth',    label: 'Series A — Growth & GTM',       description: '15 slides · metrics + GTM',                        slide_count: 15, required_tier: 'growth', Component: Deck_series_a_growth },

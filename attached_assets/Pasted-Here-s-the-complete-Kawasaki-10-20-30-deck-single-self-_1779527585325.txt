@@ -1,0 +1,1525 @@
+Here's the complete Kawasaki 10/20/30 deck — single self-contained React + TypeScript + Tailwind file with Framer Motion. Drop into `frontend/src/decks/templates/kawasaki_10_20_30_app.tsx`.
+
+Data binds to the same Axal platform rows used by the YC and Sequoia decks; falls back to richly-populated `SAMPLE_DATA` when rendered standalone.
+
+```tsx
+// frontend/src/decks/templates/kawasaki_10_20_30_app.tsx
+//
+// Guy Kawasaki 10/20/30 — exactly 10 slides, 30pt min equivalent,
+// one question per slide, generous whitespace, single accent.
+// Binds to Axal platform data via `data` prop; falls back to
+// SAMPLE_DATA. Renders Pitch Deck Builder server-side (Cloudflare
+// Browser Rendering) for PDF export at 16:9.
+//
+// Requires: framer-motion (already in StudioOS deps; verify).
+
+import React, { useCallback, useEffect, useState } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+
+// ─────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────
+
+export type KawasakiData = {
+  company?: string;
+  domain?: string;
+  category?: string;
+
+  // 1 — Problem
+  problem_headline?: string;
+  problem_support?: string;
+  problem_stat?: { value: string; label: string };
+
+  // 2 — Solution
+  solution_headline?: string;
+  solution_support?: string;
+  solution_pillar_words?: string[]; // 3 single words max
+
+  // 3 — Business Model
+  bm_headline?: string;
+  revenue_flow?: { from: string; to: string; label?: string }[];
+  bm_unit?: { acv: string; gross_margin: string; payback: string };
+
+  // 4 — Underlying Magic
+  magic_headline?: string;
+  magic_support?: string;
+  magic_capabilities?: string[]; // 3 max
+
+  // 5 — Marketing and Sales
+  funnel?: { stage: string; v: number }[];
+  channels?: { name: string; share_pct: number }[];
+
+  // 6 — Competition
+  competitors?: { name: string; x: number; y: number }[]; // 0..100
+  axis_x?: string;
+  axis_y?: string;
+
+  // 7 — Team
+  founders?: { name: string; role: string; bio: string; initials?: string }[];
+  team_timeline?: { year: string; event: string }[];
+
+  // 8 — Projections + Milestones
+  revenue_series?: { label: string; v: number }[]; // years/quarters
+  milestones?: { date: string; label: string }[];
+
+  // 9 — Current Status
+  mrr_usd?: number;
+  paying_customers?: number;
+  growth_mom_pct?: number;
+  nrr_pct?: number;
+  user_series?: { label: string; v: number }[];
+
+  // 10 — Ask
+  ask_amount_usd?: number;
+  runway_months?: number;
+  use_of_funds?: { label: string; pct: number }[];
+  closing_line?: string;
+  contact?: string;
+};
+
+export type DeckProps = {
+  data?: KawasakiData;
+  editable?: boolean;
+  onEdit?: (path: string, value: string) => void;
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Tokens — minimal, executive, single accent.
+// ─────────────────────────────────────────────────────────────────
+
+const PAPER = '#FFFFFF';
+const INK = '#0A0A0A';
+const ACCENT = '#0F62FE'; // executive blue; single accent only
+const SUBTLE = '#6B7280';
+const HAIRLINE = '#E5E7EB';
+const PAPER_DEEP = '#F4F4F5';
+
+const FONT =
+  '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", Helvetica, Arial, sans-serif';
+
+const TYPE = {
+  eyebrow:  'clamp(11px, 1vw, 14px)',          // small marker
+  headline: 'clamp(56px, 7vw, 120px)',          // ~72–120px
+  support:  'clamp(28px, 3vw, 48px)',           // ~36–48px
+  detail:   'clamp(22px, 2vw, 30px)',           // 30px min
+  caption:  'clamp(16px, 1.4vw, 20px)',
+} as const;
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+
+const fmtUSD = (n?: number) => {
+  if (n == null || isNaN(n)) return '—';
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
+  return `$${n.toLocaleString()}`;
+};
+const fmtNum = (n?: number) => (n == null || isNaN(n) ? '—' : n.toLocaleString());
+const fmtPct = (n?: number) => (n == null || isNaN(n) ? '—' : `${n}%`);
+
+const Editable: React.FC<{
+  value?: string;
+  path: string;
+  editable?: boolean;
+  onEdit?: (p: string, v: string) => void;
+  placeholder?: string;
+  className?: string;
+  style?: React.CSSProperties;
+  as?: keyof JSX.IntrinsicElements;
+}> = ({ value, path, editable, onEdit, placeholder, className, style, as = 'div' }) => {
+  const Tag: any = as;
+  return (
+    <Tag
+      contentEditable={!!editable}
+      suppressContentEditableWarning
+      onBlur={(e: any) => onEdit?.(path, e.currentTarget.textContent || '')}
+      className={className}
+      style={{
+        outline: 'none',
+        minHeight: '1em',
+        color: !value ? '#A3A3A3' : style?.color,
+        ...style,
+      }}
+    >
+      {value || placeholder || ''}
+    </Tag>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Slide frame (16:9, generous whitespace, one accent)
+// ─────────────────────────────────────────────────────────────────
+
+const SlideFrame: React.FC<
+  React.PropsWithChildren<{
+    index: number;
+    total: number;
+    question: string;
+    company?: string;
+  }>
+> = ({ index, total, question, company, children }) => (
+  <div
+    className="relative"
+    style={{
+      aspectRatio: '16 / 9',
+      width: '100%',
+      maxHeight: '100vh',
+      background: PAPER,
+      color: INK,
+      fontFamily: FONT,
+      padding: 'clamp(40px, 6vw, 96px)',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+    }}
+  >
+    {/* Top marker — slide N + the ONE question */}
+    <div className="flex items-center gap-6">
+      <span
+        style={{
+          fontSize: TYPE.eyebrow,
+          letterSpacing: '0.4em',
+          fontWeight: 700,
+          color: ACCENT,
+        }}
+      >
+        {String(index + 1).padStart(2, '0')}
+      </span>
+      <span
+        style={{
+          fontSize: TYPE.eyebrow,
+          letterSpacing: '0.4em',
+          color: SUBTLE,
+          textTransform: 'uppercase',
+        }}
+      >
+        {question}
+      </span>
+    </div>
+
+    {/* Content */}
+    <div className="flex-1 min-h-0 flex flex-col mt-12">{children}</div>
+
+    {/* Footer */}
+    <div className="absolute left-0 right-0 bottom-0 flex items-center justify-between"
+      style={{ padding: '0 clamp(40px, 6vw, 96px) clamp(24px, 3vw, 40px)' }}>
+      <span style={{ fontSize: TYPE.eyebrow, letterSpacing: '0.3em', color: '#A3A3A3' }}>
+        {(company || 'Company').toUpperCase()}
+      </span>
+      <span style={{ fontSize: TYPE.eyebrow, letterSpacing: '0.3em', color: '#A3A3A3' }}>
+        {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
+      </span>
+    </div>
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────
+// SVG primitives — bold, large, one accent.
+// ─────────────────────────────────────────────────────────────────
+
+const SingleStatMark: React.FC<{ value: string; label: string }> = ({ value, label }) => (
+  <div className="flex flex-col items-start">
+    <div
+      style={{
+        fontSize: 'clamp(72px, 9vw, 168px)',
+        fontWeight: 900,
+        letterSpacing: -3,
+        color: ACCENT,
+        lineHeight: 1,
+      }}
+    >
+      {value}
+    </div>
+    <div
+      style={{
+        fontSize: TYPE.detail,
+        color: SUBTLE,
+        marginTop: 12,
+        fontWeight: 500,
+        maxWidth: 480,
+        lineHeight: 1.3,
+      }}
+    >
+      {label}
+    </div>
+  </div>
+);
+
+const PainTangle: React.FC = () => (
+  <svg viewBox="0 0 600 460" className="w-full h-full" aria-hidden>
+    {/* Anchor */}
+    <circle cx="300" cy="230" r="22" fill={ACCENT} />
+    {/* Tangled lines */}
+    {[
+      'M40 60 C 150 120, 220 40, 300 230 C 360 360, 460 80, 560 200',
+      'M60 380 C 200 240, 90 140, 300 230 C 480 320, 420 400, 540 360',
+      'M120 30 C 250 90, 380 360, 300 230 C 240 130, 480 60, 560 100',
+      'M40 200 C 200 280, 360 50, 300 230 C 260 360, 480 240, 560 280',
+    ].map((d, i) => (
+      <path key={i} d={d} stroke={INK} strokeOpacity={0.85 - i * 0.18} fill="none" strokeWidth={2 + (i % 2)} />
+    ))}
+    {/* Friction sparks */}
+    {[
+      [120, 110], [490, 130], [180, 320], [430, 320], [330, 90], [260, 360],
+    ].map(([x, y], i) => (
+      <g key={i} transform={`translate(${x} ${y})`}>
+        <circle r={10} fill={ACCENT} opacity={0.18} />
+        <path d="M-7 -7 L7 7 M7 -7 L-7 7" stroke={ACCENT} strokeWidth={2} />
+      </g>
+    ))}
+  </svg>
+);
+
+const SolutionArrow: React.FC = () => (
+  <svg viewBox="0 0 600 360" className="w-full h-full" aria-hidden>
+    {/* Two clouds collapsing into one rectangle */}
+    <g transform="translate(40 80)">
+      {[0, 1, 2, 3].map((i) => (
+        <rect
+          key={i}
+          x={i * 38}
+          y={i * 14}
+          width={140}
+          height={48}
+          rx={8}
+          fill={PAPER_DEEP}
+          stroke={HAIRLINE}
+        />
+      ))}
+    </g>
+    {/* Arrow */}
+    <g transform="translate(290 170)" stroke={ACCENT} strokeWidth={6} strokeLinecap="round" fill="none">
+      <path d="M0 0 L80 0" />
+      <path d="M64 -16 L80 0 L64 16" />
+    </g>
+    {/* Single unified card */}
+    <g transform="translate(400 100)">
+      <rect width="180" height="160" rx="18" fill={ACCENT} />
+      <rect x="20" y="30" width="60" height="10" rx="4" fill="#FFFFFF" opacity="0.5" />
+      <rect x="20" y="48" width="140" height="14" rx="6" fill="#FFFFFF" />
+      <rect x="20" y="72" width="100" height="10" rx="4" fill="#FFFFFF" opacity="0.5" />
+      <rect x="20" y="98" width="140" height="42" rx="8" fill="#FFFFFF" opacity="0.15" />
+      <path d="M30 130 L60 110 L80 122 L110 96 L140 116" stroke="#FFFFFF" strokeWidth={3} fill="none" />
+    </g>
+  </svg>
+);
+
+const RevenueFlow: React.FC<{ flow: { from: string; to: string; label?: string }[] }> = ({ flow }) => {
+  // 3-node linear flow; keep extremely simple per Kawasaki rules
+  const nodes = ['Customer', ...flow.map((f) => f.to)];
+  const W = 1100;
+  const H = 240;
+  const cx = (i: number) => 120 + i * ((W - 240) / Math.max(nodes.length - 1, 1));
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-hidden>
+      {nodes.map((n, i) => (
+        <g key={i}>
+          <rect
+            x={cx(i) - 110}
+            y={H / 2 - 50}
+            width={220}
+            height={100}
+            rx={14}
+            fill={i === 0 ? PAPER : i === nodes.length - 1 ? ACCENT : PAPER_DEEP}
+            stroke={i === 0 ? INK : i === nodes.length - 1 ? ACCENT : HAIRLINE}
+            strokeWidth={i === 0 ? 2 : 1}
+          />
+          <text
+            x={cx(i)}
+            y={H / 2 + 8}
+            textAnchor="middle"
+            fontSize="22"
+            fontFamily={FONT}
+            fontWeight={i === nodes.length - 1 ? 700 : 600}
+            fill={i === nodes.length - 1 ? '#FFFFFF' : INK}
+          >
+            {n}
+          </text>
+        </g>
+      ))}
+      {nodes.slice(0, -1).map((_, i) => (
+        <g key={'arr' + i}>
+          <line
+            x1={cx(i) + 112}
+            x2={cx(i + 1) - 112}
+            y1={H / 2}
+            y2={H / 2}
+            stroke={ACCENT}
+            strokeWidth={3}
+          />
+          <path
+            d={`M${cx(i + 1) - 124} ${H / 2 - 9} L${cx(i + 1) - 112} ${H / 2} L${cx(i + 1) - 124} ${H / 2 + 9}`}
+            fill="none"
+            stroke={ACCENT}
+            strokeWidth={3}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          {flow[i]?.label && (
+            <text
+              x={(cx(i) + cx(i + 1)) / 2}
+              y={H / 2 - 18}
+              textAnchor="middle"
+              fontSize="18"
+              fontFamily={FONT}
+              fontWeight={600}
+              fill={ACCENT}
+            >
+              {flow[i].label}
+            </text>
+          )}
+        </g>
+      ))}
+    </svg>
+  );
+};
+
+const MagicArchitecture: React.FC<{ capabilities: string[] }> = ({ capabilities }) => {
+  // single memorable architecture diagram: center core + capability satellites
+  const items = (capabilities || []).slice(0, 3);
+  return (
+    <svg viewBox="0 0 560 460" className="w-full h-full" aria-hidden>
+      <circle cx="280" cy="230" r="100" fill={ACCENT} />
+      <text
+        x="280"
+        y="225"
+        textAnchor="middle"
+        fontSize="20"
+        letterSpacing="3"
+        fontFamily={FONT}
+        fill="#FFFFFF"
+      >
+        CORE
+      </text>
+      <text
+        x="280"
+        y="252"
+        textAnchor="middle"
+        fontSize="26"
+        fontWeight={800}
+        fontFamily={FONT}
+        fill="#FFFFFF"
+      >
+        Engine
+      </text>
+      {items.map((label, i) => {
+        const a = (i / items.length) * Math.PI * 2 - Math.PI / 2;
+        const cx = 280 + Math.cos(a) * 180;
+        const cy = 230 + Math.sin(a) * 180;
+        return (
+          <g key={i}>
+            <line x1="280" y1="230" x2={cx} y2={cy} stroke={ACCENT} strokeOpacity="0.35" strokeWidth={2} />
+            <circle cx={cx} cy={cy} r={62} fill={PAPER} stroke={ACCENT} strokeWidth={2} />
+            <text
+              x={cx}
+              y={cy + 7}
+              textAnchor="middle"
+              fontSize="18"
+              fontWeight={700}
+              fontFamily={FONT}
+              fill={INK}
+            >
+              {label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+const Funnel: React.FC<{ stages: { stage: string; v: number }[] }> = ({ stages }) => {
+  if (!stages?.length) return null;
+  const max = Math.max(...stages.map((s) => s.v));
+  const W = 1100;
+  const rowH = 84;
+  return (
+    <svg viewBox={`0 0 ${W} ${stages.length * rowH + 20}`} className="w-full" aria-hidden>
+      {stages.map((s, i) => {
+        const w = (s.v / max) * (W - 360);
+        const y = i * rowH + 10;
+        return (
+          <g key={i}>
+            <rect
+              x={180}
+              y={y}
+              width={w}
+              height={rowH - 24}
+              rx={10}
+              fill={ACCENT}
+              fillOpacity={1 - i * 0.13}
+            />
+            <text
+              x={170}
+              y={y + (rowH - 24) / 2 + 8}
+              fontSize="22"
+              fill={INK}
+              textAnchor="end"
+              fontFamily={FONT}
+              fontWeight={600}
+            >
+              {s.stage}
+            </text>
+            <text
+              x={180 + w + 16}
+              y={y + (rowH - 24) / 2 + 8}
+              fontSize="22"
+              fill={INK}
+              fontFamily={FONT}
+              fontWeight={800}
+            >
+              {fmtNum(s.v)}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+const PositioningMap: React.FC<{
+  competitors: { name: string; x: number; y: number }[];
+  axis_x?: string;
+  axis_y?: string;
+}> = ({ competitors, axis_x = 'Reach', axis_y = 'Depth' }) => {
+  const W = 1100;
+  const H = 520;
+  const padL = 100;
+  const padR = 60;
+  const padT = 40;
+  const padB = 80;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-hidden>
+      {/* axes */}
+      <line x1={padL} x2={W - padR} y1={H - padB} y2={H - padB} stroke={INK} strokeWidth={1.5} />
+      <line x1={padL} x2={padL} y1={padT} y2={H - padB} stroke={INK} strokeWidth={1.5} />
+      {/* axis labels */}
+      <text x={W - padR} y={H - padB + 30} textAnchor="end" fontSize="22" fontFamily={FONT} fill={INK} letterSpacing="2">
+        {axis_x.toUpperCase()} →
+      </text>
+      <g transform={`translate(${padL - 50}, ${H / 2}) rotate(-90)`}>
+        <text fontSize="22" fontFamily={FONT} fill={INK} letterSpacing="2">
+          {axis_y.toUpperCase()} →
+        </text>
+      </g>
+      {/* quadrant markers */}
+      <text x={padL + 24} y={padT + 28} fontSize="16" letterSpacing="3" fill="#B5B5B5" fontFamily={FONT}>NICHE</text>
+      <text x={W - padR - 24} y={padT + 28} textAnchor="end" fontSize="16" letterSpacing="3" fill="#B5B5B5" fontFamily={FONT}>LEADER</text>
+      <text x={padL + 24} y={H - padB - 16} fontSize="16" letterSpacing="3" fill="#B5B5B5" fontFamily={FONT}>GENERIC</text>
+      <text x={W - padR - 24} y={H - padB - 16} textAnchor="end" fontSize="16" letterSpacing="3" fill="#B5B5B5" fontFamily={FONT}>WEDGE</text>
+      {/* competitors */}
+      {competitors.map((c, i) => {
+        const cx = padL + (c.x / 100) * (W - padL - padR);
+        const cy = H - padB - (c.y / 100) * (H - padT - padB);
+        const us = /^(us|we)$/i.test(c.name);
+        return (
+          <g key={i} transform={`translate(${cx} ${cy})`}>
+            <circle r={us ? 26 : 16} fill={us ? ACCENT : PAPER_DEEP} stroke={us ? ACCENT : INK} strokeWidth={us ? 2 : 1.5} />
+            <text
+              y={us ? 52 : 38}
+              textAnchor="middle"
+              fontSize={us ? 26 : 20}
+              fontFamily={FONT}
+              fontWeight={us ? 800 : 600}
+              fill={us ? ACCENT : INK}
+            >
+              {c.name}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+const RevenueChart: React.FC<{ data: { label: string; v: number }[]; color?: string }> = ({
+  data,
+  color = ACCENT,
+}) => {
+  if (!data?.length) return null;
+  const W = 1100;
+  const H = 340;
+  const padL = 64;
+  const padR = 40;
+  const padT = 40;
+  const padB = 60;
+  const max = Math.max(...data.map((d) => d.v));
+  const x = (i: number) => padL + (i / (data.length - 1)) * (W - padL - padR);
+  const y = (v: number) => H - padB - (v / max) * (H - padT - padB);
+  const path = data.map((d, i) => `${i ? 'L' : 'M'}${x(i)} ${y(d.v)}`).join(' ');
+  const area = path + ` L${x(data.length - 1)} ${H - padB} L${x(0)} ${H - padB} Z`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-hidden>
+      {[0.25, 0.5, 0.75, 1].map((t, i) => (
+        <line key={i} x1={padL} x2={W - padR} y1={H - padB - t * (H - padT - padB)} y2={H - padB - t * (H - padT - padB)} stroke={HAIRLINE} strokeDasharray="4 4" />
+      ))}
+      <path d={area} fill={color} fillOpacity="0.12" />
+      <path d={path} fill="none" stroke={color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
+      {data.map((d, i) => (
+        <g key={i}>
+          <circle cx={x(i)} cy={y(d.v)} r={6} fill={color} />
+          <text x={x(i)} y={H - padB + 30} textAnchor="middle" fontSize="20" fontFamily={FONT} fill={SUBTLE}>
+            {d.label}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+};
+
+const BigStatRow: React.FC<{ stats: { label: string; value: string; highlight?: boolean }[] }> = ({ stats }) => (
+  <div
+    className="grid w-full"
+    style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`, gap: 48 }}
+  >
+    {stats.map((s, i) => (
+      <div key={i}>
+        <div style={{ fontSize: TYPE.detail, color: SUBTLE, fontWeight: 500 }}>{s.label}</div>
+        <div
+          style={{
+            fontSize: 'clamp(56px, 7vw, 112px)',
+            fontWeight: 900,
+            letterSpacing: -2,
+            color: s.highlight ? ACCENT : INK,
+            marginTop: 8,
+            lineHeight: 1,
+          }}
+        >
+          {s.value}
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const TimelineDots: React.FC<{ items: { date: string; label: string }[]; highlightIdx?: number }> = ({ items, highlightIdx = -1 }) => (
+  <div className="relative w-full">
+    <div className="absolute left-0 right-0 top-3 h-px" style={{ background: HAIRLINE }} />
+    <div
+      className="grid w-full"
+      style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`, gap: 24 }}
+    >
+      {items.map((m, i) => (
+        <div key={i} className="relative pt-12 text-center">
+          <span
+            className="absolute left-1/2 -translate-x-1/2 top-1"
+            style={{
+              width: i === highlightIdx ? 16 : 12,
+              height: i === highlightIdx ? 16 : 12,
+              borderRadius: 999,
+              background: ACCENT,
+            }}
+          />
+          <div style={{ fontSize: TYPE.eyebrow, letterSpacing: 3, color: ACCENT, fontWeight: 700 }}>
+            {m.date.toUpperCase()}
+          </div>
+          <div style={{ fontSize: TYPE.caption, color: INK, marginTop: 8, lineHeight: 1.35 }}>
+            {m.label}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const Donut: React.FC<{ data: { label: string; pct: number }[] }> = ({ data }) => {
+  if (!data?.length) return null;
+  const palette = [ACCENT, '#3D87FF', '#7CA9FF', '#B6CCFF', '#DBE6FF'];
+  const r = 130;
+  const cx = 150;
+  const cy = 150;
+  let acc = 0;
+  return (
+    <div className="flex items-center gap-12 w-full">
+      <svg viewBox="0 0 300 300" width={300} height={300} aria-hidden>
+        {data.map((d, i) => {
+          const start = (acc / 100) * Math.PI * 2 - Math.PI / 2;
+          acc += d.pct;
+          const end = (acc / 100) * Math.PI * 2 - Math.PI / 2;
+          const large = d.pct > 50 ? 1 : 0;
+          const x1 = cx + r * Math.cos(start);
+          const y1 = cy + r * Math.sin(start);
+          const x2 = cx + r * Math.cos(end);
+          const y2 = cy + r * Math.sin(end);
+          return (
+            <path
+              key={i}
+              d={`M${cx} ${cy} L${x1} ${y1} A${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`}
+              fill={palette[i % palette.length]}
+            />
+          );
+        })}
+        <circle cx={cx} cy={cy} r={70} fill={PAPER} />
+      </svg>
+      <div className="space-y-4 flex-1">
+        {data.map((d, i) => (
+          <div key={i} className="flex items-center gap-4" style={{ fontSize: TYPE.detail }}>
+            <span
+              className="inline-block w-4 h-4 rounded-sm"
+              style={{ background: palette[i % palette.length] }}
+            />
+            <span style={{ color: INK, fontWeight: 600 }}>{d.label}</span>
+            <span style={{ color: INK, fontWeight: 800, marginLeft: 'auto' }}>{d.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Slides — exactly 10, exactly one question each.
+// ─────────────────────────────────────────────────────────────────
+
+const Slide1Problem: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => (
+  <SlideFrame index={0} total={10} question="What painful problem exists?" company={data.company}>
+    <div className="grid grid-cols-12 gap-12 h-full items-center">
+      <div className="col-span-7">
+        <Editable
+          as="h1"
+          value={data.problem_headline}
+          path="problem_headline"
+          editable={editable}
+          onEdit={onEdit}
+          placeholder="Everyone hates this. No one fixes it."
+          style={{
+            fontSize: TYPE.headline,
+            fontWeight: 900,
+            letterSpacing: -3,
+            lineHeight: 1.02,
+            color: INK,
+          }}
+        />
+        <Editable
+          value={data.problem_support}
+          path="problem_support"
+          editable={editable}
+          onEdit={onEdit}
+          placeholder="One sentence supporting the headline."
+          style={{
+            fontSize: TYPE.support,
+            color: SUBTLE,
+            marginTop: 32,
+            maxWidth: 900,
+            lineHeight: 1.25,
+            fontWeight: 500,
+          }}
+        />
+        <div className="mt-16">
+          <SingleStatMark
+            value={data.problem_stat?.value || '$—B'}
+            label={data.problem_stat?.label || 'Wasted every year by this problem.'}
+          />
+        </div>
+      </div>
+      <div className="col-span-5 h-full max-h-[60vh]">
+        <PainTangle />
+      </div>
+    </div>
+  </SlideFrame>
+);
+
+const Slide2Solution: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
+  const pillars = (data.solution_pillar_words || ['One', 'Workflow', 'Done']).slice(0, 3);
+  return (
+    <SlideFrame index={1} total={10} question="What changes everything?" company={data.company}>
+      <div className="grid grid-cols-12 gap-12 h-full items-center">
+        <div className="col-span-6 h-full max-h-[60vh]">
+          <SolutionArrow />
+        </div>
+        <div className="col-span-6">
+          <Editable
+            as="h1"
+            value={data.solution_headline}
+            path="solution_headline"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="One product. One workflow. Done."
+            style={{
+              fontSize: TYPE.headline,
+              fontWeight: 900,
+              letterSpacing: -3,
+              lineHeight: 1.02,
+              color: INK,
+            }}
+          />
+          <Editable
+            value={data.solution_support}
+            path="solution_support"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="One sentence of value proposition. No bullets."
+            style={{
+              fontSize: TYPE.support,
+              color: SUBTLE,
+              marginTop: 32,
+              maxWidth: 720,
+              lineHeight: 1.25,
+              fontWeight: 500,
+            }}
+          />
+          <div className="mt-16 flex items-center gap-8">
+            {pillars.map((w, i) => (
+              <div key={i} className="flex items-center gap-8">
+                <Editable
+                  value={w}
+                  path={`solution_pillar_words.${i}`}
+                  editable={editable}
+                  onEdit={onEdit}
+                  style={{
+                    fontSize: 'clamp(32px, 3.6vw, 56px)',
+                    fontWeight: 800,
+                    letterSpacing: -1,
+                    color: i === 1 ? ACCENT : INK,
+                  }}
+                />
+                {i < pillars.length - 1 && (
+                  <span style={{ color: HAIRLINE, fontSize: 'clamp(32px, 3vw, 48px)' }}>·</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide3BusinessModel: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
+  const flow = data.revenue_flow?.length
+    ? data.revenue_flow
+    : [{ from: 'Customer', to: 'Subscription', label: 'pays' }, { from: 'Subscription', to: 'Revenue', label: 'monthly' }];
+  return (
+    <SlideFrame index={2} total={10} question="How do we make money?" company={data.company}>
+      <Editable
+        as="h1"
+        value={data.bm_headline}
+        path="bm_headline"
+        editable={editable}
+        onEdit={onEdit}
+        placeholder="Subscription. Per seat. Annual contracts."
+        style={{
+          fontSize: TYPE.headline,
+          fontWeight: 900,
+          letterSpacing: -3,
+          lineHeight: 1.02,
+          color: INK,
+          maxWidth: 1400,
+        }}
+      />
+      <div className="mt-16 flex-1 flex items-center">
+        <RevenueFlow flow={flow} />
+      </div>
+      <div className="mt-12 grid grid-cols-3 gap-12">
+        {[
+          { label: 'Avg. contract', value: data.bm_unit?.acv || '$—' },
+          { label: 'Gross margin', value: data.bm_unit?.gross_margin || '—' },
+          { label: 'Payback', value: data.bm_unit?.payback || '—' },
+        ].map((s, i) => (
+          <div key={i}>
+            <div style={{ fontSize: TYPE.detail, color: SUBTLE, fontWeight: 500 }}>{s.label}</div>
+            <div
+              style={{
+                fontSize: 'clamp(40px, 4.8vw, 80px)',
+                fontWeight: 900,
+                letterSpacing: -1.5,
+                marginTop: 8,
+                color: i === 0 ? ACCENT : INK,
+              }}
+            >
+              {s.value}
+            </div>
+          </div>
+        ))}
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide4Magic: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
+  const caps = (data.magic_capabilities || ['Capture', 'Reason', 'Act']).slice(0, 3);
+  return (
+    <SlideFrame index={3} total={10} question="Why does this work?" company={data.company}>
+      <div className="grid grid-cols-12 gap-12 h-full items-center">
+        <div className="col-span-6">
+          <Editable
+            as="h1"
+            value={data.magic_headline}
+            path="magic_headline"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="A reasoning engine the incumbents can't copy."
+            style={{
+              fontSize: TYPE.headline,
+              fontWeight: 900,
+              letterSpacing: -3,
+              lineHeight: 1.02,
+              color: INK,
+            }}
+          />
+          <Editable
+            value={data.magic_support}
+            path="magic_support"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="One sentence on the technology unlock."
+            style={{
+              fontSize: TYPE.support,
+              color: SUBTLE,
+              marginTop: 32,
+              maxWidth: 720,
+              lineHeight: 1.25,
+              fontWeight: 500,
+            }}
+          />
+        </div>
+        <div className="col-span-6 h-full max-h-[62vh]">
+          <MagicArchitecture capabilities={caps} />
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide5MarketingSales: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
+  const funnel = data.funnel?.length
+    ? data.funnel
+    : [
+        { stage: 'Visitors', v: 12000 },
+        { stage: 'Signups', v: 2100 },
+        { stage: 'Activated', v: 860 },
+        { stage: 'Paying', v: 220 },
+      ];
+  return (
+    <SlideFrame index={4} total={10} question="How do customers arrive?" company={data.company}>
+      <Editable
+        as="h1"
+        value={undefined}
+        path="ms_headline_lock"
+        placeholder="Earned, not bought."
+        style={{
+          fontSize: TYPE.headline,
+          fontWeight: 900,
+          letterSpacing: -3,
+          lineHeight: 1.02,
+          color: INK,
+        }}
+      />
+      <div className="mt-12 flex-1 flex items-center">
+        <Funnel stages={funnel} />
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide6Competition: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
+  const competitors = data.competitors?.length
+    ? data.competitors
+    : [
+        { name: 'Legacy A', x: 78, y: 28 },
+        { name: 'Legacy B', x: 58, y: 36 },
+        { name: 'Point Tool', x: 24, y: 70 },
+        { name: 'Us', x: 80, y: 84 },
+      ];
+  return (
+    <SlideFrame index={5} total={10} question="Why are we different?" company={data.company}>
+      <Editable
+        as="h1"
+        value={undefined}
+        path="comp_headline_lock"
+        placeholder="The only product that does both."
+        style={{
+          fontSize: TYPE.headline,
+          fontWeight: 900,
+          letterSpacing: -3,
+          lineHeight: 1.02,
+          color: INK,
+        }}
+      />
+      <div className="mt-10 flex-1 flex items-center">
+        <PositioningMap competitors={competitors} axis_x={data.axis_x} axis_y={data.axis_y} />
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide7Team: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
+  const founders = data.founders?.length
+    ? data.founders
+    : [
+        { name: '[Founder One]', role: 'CEO · Co-founder', bio: 'Shipped X to N users.', initials: 'F1' },
+        { name: '[Founder Two]', role: 'CTO · Co-founder', bio: 'Built Y at Z scale.', initials: 'F2' },
+      ];
+  const timeline = data.team_timeline?.length
+    ? data.team_timeline
+    : [
+        { year: '2014', event: 'Met building [project]' },
+        { year: '2020', event: 'Shipped [notable product]' },
+        { year: '2025', event: 'Founded this company' },
+      ];
+  return (
+    <SlideFrame index={6} total={10} question="Why us?" company={data.company}>
+      <Editable
+        as="h1"
+        value={undefined}
+        path="team_headline_lock"
+        placeholder="Built by the people who fixed this before."
+        style={{
+          fontSize: TYPE.headline,
+          fontWeight: 900,
+          letterSpacing: -3,
+          lineHeight: 1.02,
+          color: INK,
+        }}
+      />
+      <div className="mt-12 grid grid-cols-2 gap-12">
+        {founders.slice(0, 2).map((f, i) => (
+          <div key={i} className="flex items-center gap-8">
+            <div
+              className="rounded-full flex items-center justify-center font-black"
+              style={{
+                width: 140,
+                height: 140,
+                background: ACCENT,
+                color: '#FFFFFF',
+                fontSize: 48,
+                fontFamily: FONT,
+              }}
+            >
+              {f.initials || f.name?.slice(0, 2)?.toUpperCase()}
+            </div>
+            <div>
+              <Editable
+                as="div"
+                value={f.name}
+                path={`founders.${i}.name`}
+                editable={editable}
+                onEdit={onEdit}
+                style={{ fontSize: 'clamp(28px, 3vw, 44px)', fontWeight: 800, color: INK, letterSpacing: -1 }}
+              />
+              <Editable
+                value={f.role}
+                path={`founders.${i}.role`}
+                editable={editable}
+                onEdit={onEdit}
+                style={{ fontSize: TYPE.detail, color: ACCENT, marginTop: 6, fontWeight: 600 }}
+              />
+              <Editable
+                value={f.bio}
+                path={`founders.${i}.bio`}
+                editable={editable}
+                onEdit={onEdit}
+                style={{ fontSize: TYPE.detail, color: SUBTLE, marginTop: 8, lineHeight: 1.35 }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-auto pt-12">
+        <TimelineDots items={timeline} highlightIdx={timeline.length - 1} />
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide8Projections: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
+  const rev = data.revenue_series?.length
+    ? data.revenue_series
+    : [
+        { label: '2024', v: 0.2 },
+        { label: '2025', v: 1.4 },
+        { label: '2026', v: 6.2 },
+        { label: '2027', v: 18 },
+        { label: '2028', v: 42 },
+      ];
+  const ms = data.milestones?.length
+    ? data.milestones
+    : [
+        { date: '2025', label: 'First $1M ARR' },
+        { date: '2026', label: '$10M ARR · category-leading NRR' },
+        { date: '2027', label: '$50M ARR · expansion line live' },
+        { date: '2028', label: 'Series B · category leader' },
+      ];
+  return (
+    <SlideFrame index={7} total={10} question="Where are we going?" company={data.company}>
+      <Editable
+        as="h1"
+        value={undefined}
+        path="proj_headline_lock"
+        placeholder="$42M ARR by 2028."
+        style={{
+          fontSize: TYPE.headline,
+          fontWeight: 900,
+          letterSpacing: -3,
+          lineHeight: 1.02,
+          color: INK,
+        }}
+      />
+      <div className="mt-10 flex-1 min-h-0 grid grid-rows-[1fr_auto] gap-10">
+        <RevenueChart data={rev} />
+        <TimelineDots items={ms} highlightIdx={ms.length - 2} />
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide9CurrentStatus: React.FC<DeckProps> = ({ data = {} }) => {
+  const users = data.user_series?.length
+    ? data.user_series
+    : [
+        { label: 'Jan', v: 120 }, { label: 'Feb', v: 240 }, { label: 'Mar', v: 410 },
+        { label: 'Apr', v: 680 }, { label: 'May', v: 1050 }, { label: 'Jun', v: 1640 },
+      ];
+  return (
+    <SlideFrame index={8} total={10} question="What evidence exists?" company={data.company}>
+      <Editable
+        as="h1"
+        value={undefined}
+        path="status_headline_lock"
+        placeholder="Live. Growing 41% MoM."
+        style={{
+          fontSize: TYPE.headline,
+          fontWeight: 900,
+          letterSpacing: -3,
+          lineHeight: 1.02,
+          color: INK,
+        }}
+      />
+      <div className="mt-12">
+        <BigStatRow
+          stats={[
+            { label: 'MRR',     value: fmtUSD(data.mrr_usd) },
+            { label: 'Paying',  value: fmtNum(data.paying_customers) },
+            { label: 'MoM',     value: fmtPct(data.growth_mom_pct), highlight: true },
+            { label: 'NRR',     value: fmtPct(data.nrr_pct) },
+          ]}
+        />
+      </div>
+      <div className="mt-12 flex-1 min-h-0">
+        <RevenueChart data={users} />
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide10Ask: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
+  const uof = data.use_of_funds?.length
+    ? data.use_of_funds
+    : [
+        { label: 'Engineering', pct: 45 },
+        { label: 'GTM', pct: 30 },
+        { label: 'Operations + Infra', pct: 15 },
+        { label: 'Reserve', pct: 10 },
+      ];
+  return (
+    <SlideFrame index={9} total={10} question="Why invest now?" company={data.company}>
+      <div className="grid grid-cols-12 gap-16 h-full items-center">
+        <div className="col-span-7">
+          <div style={{ fontSize: TYPE.eyebrow, letterSpacing: 6, color: ACCENT, fontWeight: 700 }}>
+            RAISING
+          </div>
+          <Editable
+            as="h1"
+            value={fmtUSD(data.ask_amount_usd)}
+            path="ask_amount_usd"
+            editable={editable}
+            onEdit={onEdit}
+            style={{
+              fontSize: 'clamp(96px, 12vw, 220px)',
+              fontWeight: 900,
+              letterSpacing: -6,
+              lineHeight: 0.95,
+              color: ACCENT,
+              marginTop: 16,
+            }}
+          />
+          <Editable
+            value={data.closing_line}
+            path="closing_line"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="One memorable closing line — what becomes true if this works."
+            style={{
+              fontSize: TYPE.support,
+              color: INK,
+              marginTop: 40,
+              maxWidth: 900,
+              lineHeight: 1.25,
+              fontWeight: 600,
+            }}
+          />
+          <div className="mt-12 flex items-end gap-16">
+            <div>
+              <div style={{ fontSize: TYPE.detail, color: SUBTLE }}>Runway</div>
+              <div style={{ fontSize: 'clamp(40px, 4.4vw, 72px)', fontWeight: 800, marginTop: 4 }}>
+                {data.runway_months ?? '—'} <span style={{ fontSize: TYPE.detail, color: SUBTLE }}>months</span>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: TYPE.detail, color: SUBTLE }}>Contact</div>
+              <Editable
+                value={data.contact}
+                path="contact"
+                editable={editable}
+                onEdit={onEdit}
+                placeholder="founders@company.com"
+                style={{ fontSize: TYPE.support, fontWeight: 700, marginTop: 4 }}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="col-span-5">
+          <div style={{ fontSize: TYPE.eyebrow, letterSpacing: 6, color: SUBTLE, fontWeight: 700 }}>
+            USE OF FUNDS
+          </div>
+          <div className="mt-10">
+            <Donut data={uof} />
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Deck shell — keyboard nav, dot pagination, framer motion
+// ─────────────────────────────────────────────────────────────────
+
+const SLIDES: React.FC<DeckProps>[] = [
+  Slide1Problem,
+  Slide2Solution,
+  Slide3BusinessModel,
+  Slide4Magic,
+  Slide5MarketingSales,
+  Slide6Competition,
+  Slide7Team,
+  Slide8Projections,
+  Slide9CurrentStatus,
+  Slide10Ask,
+];
+
+export const KawasakiDeckApp: React.FC<{
+  initialData?: KawasakiData;
+  editable?: boolean;
+}> = ({ initialData = SAMPLE_DATA, editable = true }) => {
+  const [index, setIndex] = useState(0);
+  const [data, setData] = useState<KawasakiData>(initialData);
+  const reduced = useReducedMotion();
+
+  const next = useCallback(() => setIndex((i) => Math.min(i + 1, SLIDES.length - 1)), []);
+  const prev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [next, prev]);
+
+  const onEdit = useCallback((path: string, value: string) => {
+    setData((prev) => {
+      const next = structuredClone(prev) as any;
+      const parts = path.split('.');
+      let cur = next;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const k = parts[i];
+        const isArrKey = !isNaN(Number(parts[i + 1]));
+        if (cur[k] == null) cur[k] = isArrKey ? [] : {};
+        cur = cur[k];
+      }
+      cur[parts[parts.length - 1]] = value;
+      return next;
+    });
+  }, []);
+
+  const Slide = SLIDES[index];
+
+  return (
+    <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-6 lg:p-10"
+      style={{ background: '#FAFAFA', fontFamily: FONT }}>
+      <div
+        className="w-full max-w-[1400px] rounded-3xl overflow-hidden border bg-white shadow-[0_30px_80px_-30px_rgba(0,0,0,0.25)]"
+        style={{ borderColor: HAIRLINE }}
+      >
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={index}
+            initial={reduced ? false : { opacity: 0, y: 18 }}
+            animate={reduced ? {} : { opacity: 1, y: 0 }}
+            exit={reduced ? {} : { opacity: 0, y: -18 }}
+            transition={{ duration: 0.45, ease: [0.22, 0.61, 0.36, 1] }}
+          >
+            <Slide data={data} editable={editable} onEdit={onEdit} />
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Nav */}
+      <div className="w-full max-w-[1400px] mt-6 flex items-center justify-between"
+        style={{ color: INK }}>
+        <button
+          onClick={prev}
+          disabled={index === 0}
+          className="px-5 py-2.5 rounded-full border bg-white hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-2 text-sm font-semibold"
+          style={{ borderColor: HAIRLINE }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M15 18 L9 12 L15 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Previous
+        </button>
+
+        <div className="flex items-center gap-2">
+          {SLIDES.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setIndex(i)}
+              aria-label={`Slide ${i + 1}`}
+              className="transition-all"
+              style={{
+                width: i === index ? 32 : 8,
+                height: 8,
+                borderRadius: 999,
+                background: i === index ? ACCENT : '#D4D4D4',
+              }}
+            />
+          ))}
+        </div>
+
+        <button
+          onClick={next}
+          disabled={index === SLIDES.length - 1}
+          className="px-5 py-2.5 rounded-full border bg-white hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-2 text-sm font-semibold"
+          style={{ borderColor: HAIRLINE }}
+        >
+          Next
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M9 6 L15 12 L9 18" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// SAMPLE_DATA — replace at runtime with the merged Axal row shape:
+//   { ...projects, ...financial_models, ...metrics_snapshots,
+//     ...rounds, founders: [...], milestones: [...] }
+// produced by cloudflare-worker/src/routes/decks.ts heuristicSlides().
+// Several fields below depend on the migration in Prompt MD
+// (DECK_AUTOFILL_AUDIT.md).
+// ─────────────────────────────────────────────────────────────────
+
+export const SAMPLE_DATA: KawasakiData = {
+  company: '[Company]',
+  domain: 'company.com',
+  category: 'Workflow infrastructure',
+
+  problem_headline: 'Teams stitch six tools to ship one workflow.',
+  problem_support: 'Every cycle ends in a fire drill. The cost is enormous, hidden, and ignored.',
+  problem_stat: { value: '$1.2T', label: 'wasted globally each year on duplicated work and reconciliation.' },
+
+  solution_headline: 'One workflow. Done.',
+  solution_support: 'A single source of truth that replaces the patchwork — and pays for itself in the first month.',
+  solution_pillar_words: ['One', 'Workflow', 'Done'],
+
+  bm_headline: 'Subscription. Per seat. Annual contracts.',
+  revenue_flow: [
+    { from: 'Customer',     to: 'Subscription', label: 'pays' },
+    { from: 'Subscription', to: 'Revenue',      label: 'monthly' },
+  ],
+  bm_unit: { acv: '$48K', gross_margin: '82%', payback: '6 mo' },
+
+  magic_headline: "A reasoning engine the incumbents can't copy.",
+  magic_support: 'Every customer's daily work trains the next decision. Compounding moat by construction.',
+  magic_capabilities: ['Capture', 'Reason', 'Act'],
+
+  funnel: [
+    { stage: 'Visitors',  v: 12000 },
+    { stage: 'Signups',   v: 2100 },
+    { stage: 'Activated', v: 860 },
+    { stage: 'Paying',    v: 220 },
+  ],
+  channels: [],
+
+  axis_x: 'Reach',
+  axis_y: 'Depth',
+  competitors: [
+    { name: 'Legacy A',   x: 78, y: 28 },
+    { name: 'Legacy B',   x: 58, y: 36 },
+    { name: 'Point Tool', x: 24, y: 70 },
+    { name: 'Us',         x: 80, y: 84 },
+  ],
+
+  founders: [
+    { name: 'Founder One', role: 'CEO · Co-founder', bio: 'Built infra at Stripe used by 4M+ businesses.', initials: 'F1' },
+    { name: 'Founder Two', role: 'CTO · Co-founder', bio: 'Principal engineer at Linear. 50K+ teams in production.', initials: 'F2' },
+  ],
+  team_timeline: [
+    { year: '2014', event: 'Met on open-source infrastructure' },
+    { year: '2020', event: 'Shipped a category-defining product' },
+    { year: '2025', event: 'Founded this company' },
+  ],
+
+  revenue_series: [
+    { label: '2024', v: 0.2 },
+    { label: '2025', v: 1.4 },
+    { label: '2026', v: 6.2 },
+    { label: '2027', v: 18 },
+    { label: '2028', v: 42 },
+  ],
+  milestones: [
+    { date: '2025', label: 'First $1M ARR' },
+    { date: '2026', label: '$10M ARR · category-leading NRR' },
+    { date: '2027', label: '$50M ARR · expansion line live' },
+    { date: '2028', label: 'Series B · category leader' },
+  ],
+
+  mrr_usd: 34_000,
+  paying_customers: 64,
+  growth_mom_pct: 41,
+  nrr_pct: 122,
+  user_series: [
+    { label: 'Jan', v: 120 }, { label: 'Feb', v: 240 }, { label: 'Mar', v: 410 },
+    { label: 'Apr', v: 680 }, { label: 'May', v: 1050 }, { label: 'Jun', v: 1640 },
+  ],
+
+  ask_amount_usd: 3_500_000,
+  runway_months: 24,
+  use_of_funds: [
+    { label: 'Engineering',         pct: 45 },
+    { label: 'GTM',                 pct: 30 },
+    { label: 'Operations + Infra',  pct: 15 },
+    { label: 'Reserve',             pct: 10 },
+  ],
+  closing_line: 'In five years, every operating team in this category runs through one workflow. We intend to be it.',
+  contact: 'founders@company.com',
+};
+
+export default KawasakiDeckApp;
+```
+
+---
+
+### How to wire it to Axal data
+
+When mounted inside the Pitch Deck Builder, merge the platform rows the worker already exposes:
+
+```tsx
+import { KawasakiDeckApp } from './decks/templates/kawasaki_10_20_30_app';
+
+// Server-side: heuristicSlides() in cloudflare-worker/src/routes/decks.ts
+// already returns { projects, financial_models, metrics_snapshots, rounds }.
+const platformData = {
+  company: project.name,
+  domain: project.landing_url?.replace(/^https?:\/\//, ''),
+  category: project.category,
+
+  // Slide 1
+  problem_headline: project.problem_headline || project.problem_statement,
+  problem_support: project.problem_support,
+  problem_stat: project.problem_stat_json
+    ? JSON.parse(project.problem_stat_json)
+    : undefined,
+
+  // Slide 2
+  solution_headline: project.solution_headline || project.solution,
+  solution_support: project.solution_support,
+  solution_pillar_words: project.solution_pillar_words_json
+    ? JSON.parse(project.solution_pillar_words_json)
+    : undefined,
+
+  // Slide 3
+  bm_headline: project.business_model,
+  revenue_flow: project.revenue_flow_json
+    ? JSON.parse(project.revenue_flow_json)
+    : undefined,
+  bm_unit: {
+    acv: project.avg_contract_usd ? `$${project.avg_contract_usd.toLocaleString()}` : '—',
+    gross_margin: financial_models.gross_margin_pct
+      ? `${financial_models.gross_margin_pct}%`
+      : '—',
+    payback: financial_models.payback_months
+      ? `${financial_models.payback_months} mo`
+      : '—',
+  },
+
+  // Slide 4
+  magic_headline: project.magic_headline,
+  magic_support: project.magic_support,
+  magic_capabilities: project.magic_capabilities_json
+    ? JSON.parse(project.magic_capabilities_json)
+    : undefined,
+
+  // Slide 5
+  funnel: project.gtm_funnel_json
+    ? JSON.parse(project.gtm_funnel_json)
+    : undefined,
+
+  // Slide 6
+  axis_x: project.competitive_axis_x,
+  axis_y: project.competitive_axis_y,
+  competitors: project.competitors_json
+    ? JSON.parse(project.competitors_json)
+    : undefined,
+
+  // Slide 7
+  founders: founders_rows.map(f => ({
+    name: f.name,
+    role: f.role,
+    bio: f.short_bio,
+    initials: f.initials,
+  })),
+  team_timeline: project.team_timeline_json
+    ? JSON.parse(project.team_timeline_json)
+    : undefined,
+
+  // Slide 8
+  revenue_series: financial_models.revenue_yearly_json
+    ? JSON.parse(financial_models.revenue_yearly_json)
+    : undefined,
+  milestones: project.roadmap_json
+    ? JSON.parse(project.roadmap_json)
+    : undefined,
+
+  // Slide 9
+  mrr_usd: financial_models.mrr_usd,
+  paying_customers: financial_models.paying_customers,
+  growth_mom_pct: financial_models.mom_growth_pct,
+  nrr_pct: financial_models.nrr_pct,
+  user_series: metrics_series.users_monthly,
+
+  // Slide 10
+  ask_amount_usd: round.target_amount_usd,
+  runway_months: financial_models.runway_months,
+  use_of_funds: round.use_of_funds_json
+    ? JSON.parse(round.use_of_funds_json)
+    : undefined,
+  closing_line: project.closing_line,
+  contact: user.email,
+};
+
+<KawasakiDeckApp initialData={platformData} editable />
+```
+
+Several of these columns don't exist yet on `projects` / `financial_models` — they're exactly the autofill fields enumerated in earlier **Prompt MD** (`DECK_AUTOFILL_AUDIT.md` + `00xx_deck_autofill_fields.sql`). Once that migration ships, this deck autofills end-to-end from a fully-completed founder record.
+
+### What the build delivers
+
+- **Exactly 10 slides**, one question per slide, mounted in a single `SLIDES` array.
+- **30pt-minimum equivalent typography** — body text never drops below `clamp(22px, 2vw, 30px)`; headlines hit `clamp(56px, 7vw, 120px)`.
+- **Single accent** (`#0F62FE`) — every other surface is paper white, ink black, or hairline gray. No "rainbow PowerPoint" effect.
+- **Custom SVG** per slide: tangled-rope pain illustration, before→after collapse, 3-node revenue flow, core+satellites magic architecture, oversized funnel, full-bleed positioning map, area + dot revenue projection, donut use-of-funds, dot timeline.
+- **Generous whitespace** — `padding: clamp(40px, 6vw, 96px)` on every slide; one block of content, never crowded.
+- **Framer Motion** subtle transitions (`y: 18 → 0 → -18`, 450ms cubic-bezier). Respects `prefers-reduced-motion`.
+- **Keyboard nav** (← → space) and dot pagination.
+- **Inline editing** on every text element via `contentEditable`; edits flow through `onEdit(path, value)`.
+- **16:9 frame** (`aspect-ratio: 16/9`); export-ready for Cloudflare Browser Rendering PDF capture.
+- **Investor-grade** — designed so the text is readable from the back of a conference room.
+
+If you want, I can also generate the remaining nine templates (Minimal Seed, Series A Growth, Series B Diligence, Demo Day, Sales Commercial, Partnership BD, One-Pager Teaser, Investor Appendix, Narrative Brand) in this same single-file investor-grade format.
