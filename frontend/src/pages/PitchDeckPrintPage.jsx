@@ -11,7 +11,9 @@ import ShareDeckCTA from '../components/ShareDeckCTA';
 // template + window.print()) path to cover ALL 12 registered templates so
 // the share viewer matches the in-app editor preview for every deck. Only
 // decks with no recognisable method_id at all still fall back to the
-// generic purple-card stack.
+// generic purple-card stack. The YC Seed redesign verification (this task)
+// is now subsumed by that broader coverage — yc_seed flows through the
+// same Template-loaded advanced path as the rest.
 // Task #53 — heartbeat read-seconds to the worker every 30s so the
 // founder's Engagement panel can show "12 min read".
 
