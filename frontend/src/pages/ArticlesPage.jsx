@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, PenSquare, Loader2, Search, Star, ChevronLeft, ChevronRight } from 'lucide-react';
+import { FileText, Loader2, Search, Star, ChevronLeft, ChevronRight } from 'lucide-react';
 import { articles as api } from '../lib/api';
 import { reportError } from '../lib/log';
+import PublicNav from '../components/PublicNav';
+import PublicFooter from '../components/PublicFooter';
 
 const ROLE_FILTERS = [
   { id: '', label: 'All authors' },
@@ -134,23 +136,16 @@ export default function ArticlesPage() {
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
+      <PublicNav />
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-        <div className="max-w-6xl mx-auto px-6 py-8 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <FileText className="w-7 h-7 text-violet-600" /> Articles
-            </h1>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-              Long-form writing from the Axal network — founders, investors, partners, mentors, and the studio.
-            </p>
-          </div>
-          <Link
-            to="/articles/draft"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 text-sm font-medium"
-          >
-            <PenSquare className="w-4 h-4" /> Write an article
-          </Link>
+        <div className="max-w-6xl mx-auto px-6 py-8">
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <FileText className="w-7 h-7 text-violet-600" /> Articles
+          </h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            Long-form writing from the Axal network — founders, investors, partners, mentors, and the studio.
+          </p>
         </div>
         <div className="max-w-6xl mx-auto px-6 pb-4 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -240,6 +235,7 @@ export default function ArticlesPage() {
           )}
         </section>
       </main>
+      <PublicFooter />
     </div>
   );
 }
