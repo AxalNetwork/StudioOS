@@ -91,6 +91,8 @@ const RelationshipsPage = lazy(() => import('./pages/RelationshipsPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
 const SpinOutsPage = lazy(() => import('./pages/SpinOutsPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
+const ContactPage = lazy(() => import('./pages/ContactPage'));
+const TeamPage = lazy(() => import('./pages/TeamPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
 const RiskDisclosuresPage = lazy(() => import('./pages/RiskDisclosuresPage'));
 // Task #4 (ID) — Public marketing surfaces.
@@ -1140,6 +1142,8 @@ function AppInner() {
       <Route path="/u/:handle" element={<PublicProfilePage />} />
 
       <Route path="/terms" element={<TermsPage />} />
+      <Route path="/contact" element={<ContactPage />} />
+      <Route path="/team" element={<TeamPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/risk-disclosures" element={<RiskDisclosuresPage />} />
       {/* Task #4 (ID) — Public marketing surfaces. No auth. */}

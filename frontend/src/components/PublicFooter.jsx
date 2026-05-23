@@ -119,8 +119,8 @@ export default function PublicFooter() {
           <div>
             <h3 className="font-semibold text-gray-900 mb-4">Company</h3>
             <ul className="space-y-2">
-              <li><a href="mailto:hello@axal.vc" className="text-sm text-gray-600 hover:text-gray-900">Contact</a></li>
-              <li><a href="mailto:support@axal.vc" className="text-sm text-gray-600 hover:text-gray-900">Support</a></li>
+              <li><Link to="/team" className="text-sm text-gray-600 hover:text-gray-900">Team</Link></li>
+              <li><Link to="/contact" className="text-sm text-gray-600 hover:text-gray-900">Contact</Link></li>
               <li><Link to="/terms" className="text-sm text-gray-600 hover:text-gray-900">Terms</Link></li>
               <li><Link to="/privacy" className="text-sm text-gray-600 hover:text-gray-900">Privacy</Link></li>
               <li><Link to="/risk-disclosures" className="text-sm text-gray-600 hover:text-gray-900">Risk Disclosures</Link></li>

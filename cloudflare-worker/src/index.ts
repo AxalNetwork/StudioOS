@@ -48,6 +48,7 @@ import adminNews from './routes/admin_news';
 import articlesRoutes from './routes/articles';
 import adminArticles from './routes/admin_articles';
 import teamPublic from './routes/team_public';
+import contactRoutes from './routes/contact';
 import partnerOnboarding from './routes/partner_onboarding';
 import partnerPortal from './routes/partner_portal';
 // Task #10 (AC-1) — Personal advisor backend + write-router.
@@ -600,6 +601,9 @@ app.route('/api/public', publicRoutes);
 // marketing build (axalnetwork.github.io) curls /api/public/team into
 // _data/team.json before rendering /team on axal.vc.
 app.route('/api/public', teamPublic);
+// Public contact form → GitHub Issues. No auth; honeypot + email validation
+// + global per-IP rate cap; returns 503 when GITHUB_ISSUES_TOKEN is unset.
+app.route('/api', contactRoutes);
 // Task #2 — Public + author-facing /api/news. Public GETs are CORS-open
 // to axal.vc and edge-cached 60d; author writes self-gate on trust>=70.
 app.route('/api/news', newsRoutes);

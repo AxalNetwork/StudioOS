@@ -124,6 +124,7 @@ export interface Env {
   GITHUB_ACCESS_TOKEN?: string;
   GITHUB_REPO_OWNER?: string;
   GITHUB_REPO_NAME?: string;
+  GITHUB_ISSUES_TOKEN?: string;
   PERSONA_API_KEY?: string;
   SUMSUB_API_KEY?: string;
   // LinkedIn — used by routes/linkedin.ts (Refer & Earn → "Sign in with
