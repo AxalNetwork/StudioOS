@@ -1,0 +1,2104 @@
+Here's the complete narrative-driven Sequoia-style deck as a single self-contained React + TypeScript + Tailwind file. Framer Motion handles transitions. Drop into `frontend/src/decks/templates/sequoia_classic_app.tsx`.
+
+Data binds to the same Axal platform rows (projects · financial_models · metrics_snapshots · rounds) so the deck autofills from the founder's record.
+
+```tsx
+// frontend/src/decks/templates/sequoia_classic_app.tsx
+//
+// Sequoia-style narrative deck — 12 slides, full-screen 16:9,
+// editorial design, motion transitions, SVG-only graphics.
+// Binds to Axal platform data via `data` prop; falls back to
+// SAMPLE_DATA when the deck renders standalone.
+//
+// npm i framer-motion  (already in StudioOS deps; verify)
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+
+// ─────────────────────────────────────────────────────────────────
+// Types  (extend / merge with the YC deck DeckData if shared)
+// ─────────────────────────────────────────────────────────────────
+
+export type SequoiaData = {
+  company?: string;
+  domain?: string;
+  category?: string;
+  sector?: string;
+
+  // Slide 1 — The Future
+  future_year?: string;
+  future_headline?: string;
+  future_subline?: string;
+
+  // Slide 2 — The Shift
+  shift_title?: string;
+  shift_body?: string;
+  shift_curves?: { label: string; from: number; to: number; color?: string }[];
+
+  // Slide 3 — Broken Reality
+  broken_title?: string;
+  broken_pillars?: { title: string; body: string; cost?: string }[];
+
+  // Slide 4 — Insight
+  insight_label?: string;
+  insight_headline?: string;
+  insight_body?: string;
+  insight_proofs?: string[];
+
+  // Slide 5 — Opportunity
+  tam_usd?: number;
+  sam_usd?: number;
+  som_usd?: number;
+  market_cagr_pct?: number;
+  market_curve?: { year: string; v: number }[];
+
+  // Slide 6 — Solution
+  solution_one_liner?: string;
+  before_state?: string[];
+  after_state?: string[];
+
+  // Slide 7 — Product
+  product_pillars?: { title: string; body: string }[];
+  product_modules?: { name: string; nodes: string[] }[];
+
+  // Slide 8 — Why We Win
+  competitors?: { name: string; x: number; y: number }[]; // 0..100 on each axis
+  axis_x?: string;
+  axis_y?: string;
+  moats?: { title: string; body: string }[];
+
+  // Slide 9 — Traction
+  mrr_usd?: number;
+  paying_customers?: number;
+  growth_mom_pct?: number;
+  nrr_pct?: number;
+  retention_curve?: { m: string; v: number }[];
+  revenue_curve?: { month: string; v: number }[];
+  user_curve?: { month: string; v: number }[];
+  customer_logos?: { name: string; initials?: string }[];
+
+  // Slide 10 — Flywheel
+  flywheel_nodes?: { label: string; body?: string }[];
+
+  // Slide 11 — Team
+  founders?: { name: string; role: string; bio: string; initials?: string }[];
+  team_timeline?: { year: string; event: string }[];
+
+  // Slide 12 — Vision
+  vision_headline?: string;
+  vision_body?: string;
+  roadmap?: { quarter: string; goal: string }[];
+  use_of_funds?: { label: string; pct: number }[];
+  ask_amount_usd?: number;
+  runway_months?: number;
+  closing_line?: string;
+  contact?: string;
+};
+
+export type SequoiaDeckProps = {
+  data?: SequoiaData;
+  editable?: boolean;
+  onEdit?: (path: string, value: string) => void;
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Design tokens
+// ─────────────────────────────────────────────────────────────────
+
+const CRIMSON = '#8C1F28';     // Sequoia red
+const INK = '#0D0D0D';
+const PAPER = '#FBFAF7';        // warm off-white
+const PAPER_DEEP = '#F4F1EA';
+const SUBTLE = '#737373';
+const HAIRLINE = '#D8D2C6';
+const ACCENT = '#A65A28';       // burnt sienna
+
+const FONT_SERIF =
+  '"Source Serif Pro", "Crimson Pro", Georgia, "Times New Roman", serif';
+const FONT_SANS =
+  '-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Display", Helvetica, sans-serif';
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+
+const fmtUSD = (n?: number) => {
+  if (n == null || isNaN(n)) return '—';
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
+  return `$${n.toLocaleString()}`;
+};
+const fmtNum = (n?: number) => (n == null || isNaN(n) ? '—' : n.toLocaleString());
+const fmtPct = (n?: number) => (n == null || isNaN(n) ? '—' : `${n}%`);
+
+const Editable: React.FC<{
+  value?: string;
+  path: string;
+  editable?: boolean;
+  onEdit?: (p: string, v: string) => void;
+  placeholder?: string;
+  className?: string;
+  style?: React.CSSProperties;
+  as?: keyof JSX.IntrinsicElements;
+}> = ({ value, path, editable, onEdit, placeholder, className, style, as = 'div' }) => {
+  const Tag: any = as;
+  return (
+    <Tag
+      contentEditable={!!editable}
+      suppressContentEditableWarning
+      onBlur={(e: any) => onEdit?.(path, e.currentTarget.textContent || '')}
+      className={className}
+      style={{
+        outline: 'none',
+        minHeight: '1em',
+        color: !value ? '#A89F8F' : style?.color,
+        ...style,
+      }}
+    >
+      {value || placeholder || ''}
+    </Tag>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Shared editorial primitives
+// ─────────────────────────────────────────────────────────────────
+
+const Eyebrow: React.FC<{ index: number; total: number; label: string }> = ({
+  index,
+  total,
+  label,
+}) => (
+  <div className="flex items-center gap-4" style={{ fontFamily: FONT_SANS }}>
+    <span className="font-bold tracking-[0.3em] text-xs" style={{ color: CRIMSON }}>
+      {String(index + 1).padStart(2, '0')}
+    </span>
+    <span className="block w-12 h-px" style={{ background: CRIMSON }} />
+    <span className="uppercase tracking-[0.3em] text-xs" style={{ color: SUBTLE }}>
+      {label}
+    </span>
+    <span className="ml-auto uppercase tracking-[0.3em] text-xs" style={{ color: '#B8B0A2' }}>
+      {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
+    </span>
+  </div>
+);
+
+const SlideFrame: React.FC<
+  React.PropsWithChildren<{
+    index: number;
+    total: number;
+    label: string;
+    company?: string;
+    bg?: string;
+    ink?: string;
+  }>
+> = ({ index, total, label, company, bg = PAPER, ink = INK, children }) => (
+  <div
+    className="relative"
+    style={{
+      aspectRatio: '16 / 9',
+      width: '100%',
+      maxHeight: '100vh',
+      background: bg,
+      color: ink,
+      fontFamily: FONT_SERIF,
+      padding: 'clamp(28px, 4vw, 80px)',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+    }}
+  >
+    <Eyebrow index={index} total={total} label={label} />
+    <div className="flex-1 min-h-0 flex flex-col mt-6">{children}</div>
+    <div
+      className="absolute left-0 right-0 bottom-0 flex items-center justify-between px-[clamp(28px,4vw,80px)] pb-6"
+      style={{ fontFamily: FONT_SANS }}
+    >
+      <span className="text-[11px] uppercase tracking-[0.3em]" style={{ color: '#B8B0A2' }}>
+        {company || 'Company'}
+      </span>
+      <span className="text-[11px] uppercase tracking-[0.3em]" style={{ color: '#B8B0A2' }}>
+        Confidential · Investor Material
+      </span>
+    </div>
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────
+// SVG illustrations
+// ─────────────────────────────────────────────────────────────────
+
+const CinematicHorizon: React.FC = () => (
+  <svg viewBox="0 0 1000 600" className="w-full h-full" aria-hidden>
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#F0E7D8" />
+        <stop offset="60%" stopColor="#E8DBC4" />
+        <stop offset="100%" stopColor="#D9C6A6" />
+      </linearGradient>
+      <radialGradient id="sun" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stopColor="#FFFFFF" />
+        <stop offset="100%" stopColor={CRIMSON} stopOpacity="0" />
+      </radialGradient>
+    </defs>
+    <rect width="1000" height="600" fill="url(#sky)" />
+    {/* Sun */}
+    <circle cx="500" cy="380" r="180" fill="url(#sun)" />
+    <circle cx="500" cy="380" r="80" fill="#FFFFFF" opacity="0.85" />
+    {/* Horizon lines */}
+    {[420, 440, 460, 480, 500, 520, 540, 560].map((y, i) => (
+      <line
+        key={y}
+        x1="0"
+        y1={y}
+        x2="1000"
+        y2={y}
+        stroke={CRIMSON}
+        strokeOpacity={(0.45 - i * 0.05).toFixed(2) as any}
+        strokeWidth={0.6}
+      />
+    ))}
+    {/* Mountains silhouette */}
+    <path
+      d="M0 470 L120 410 L210 450 L320 380 L430 430 L540 360 L660 410 L780 350 L900 400 L1000 380 L1000 600 L0 600 Z"
+      fill={INK}
+      fillOpacity="0.92"
+    />
+    {/* Stars */}
+    {[
+      [120, 80], [220, 50], [340, 95], [460, 60], [610, 80],
+      [720, 45], [830, 85], [910, 55],
+    ].map(([cx, cy], i) => (
+      <circle key={i} cx={cx as number} cy={cy as number} r={1.6 + (i % 3) * 0.5} fill={CRIMSON} opacity={0.7} />
+    ))}
+  </svg>
+);
+
+const ShiftCurve: React.FC<{ curves: { label: string; from: number; to: number; color?: string }[] }> = ({ curves }) => {
+  const W = 900;
+  const H = 360;
+  const pad = 60;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-hidden>
+      <line x1={pad} x2={W - pad} y1={H - pad} y2={H - pad} stroke={HAIRLINE} />
+      <line x1={pad} x2={pad} y1={pad} y2={H - pad} stroke={HAIRLINE} />
+      <text x={pad - 16} y={pad + 8} fontSize="10" fontFamily={FONT_SANS} fill={SUBTLE} textAnchor="end">
+        ∞
+      </text>
+      <text x={W - pad + 8} y={H - pad + 4} fontSize="10" fontFamily={FONT_SANS} fill={SUBTLE}>
+        time
+      </text>
+      {curves.map((c, i) => {
+        const baseY = H - pad - (i * 60 + 40);
+        // S-curve path approximation
+        const path = `M${pad} ${baseY + c.from * 1.2} C${(W * 0.35)} ${baseY + c.from * 1.2}, ${W * 0.55} ${baseY - c.to * 1.4}, ${W - pad} ${baseY - c.to * 1.4}`;
+        const color = c.color || (i === 0 ? CRIMSON : i === 1 ? ACCENT : INK);
+        return (
+          <g key={c.label}>
+            <path d={path} stroke={color} strokeWidth="3" fill="none" strokeLinecap="round" />
+            <text
+              x={W - pad + 12}
+              y={baseY - c.to * 1.4 + 4}
+              fontSize="13"
+              fontFamily={FONT_SANS}
+              fontWeight={600}
+              fill={color}
+            >
+              {c.label}
+            </text>
+          </g>
+        );
+      })}
+      {/* Inflection callout */}
+      <line x1={W * 0.55} x2={W * 0.55} y1={pad} y2={H - pad} stroke={CRIMSON} strokeDasharray="4 4" strokeOpacity="0.6" />
+      <text
+        x={W * 0.55}
+        y={pad - 8}
+        fontSize="11"
+        fontFamily={FONT_SANS}
+        fill={CRIMSON}
+        textAnchor="middle"
+        fontWeight={700}
+      >
+        Inflection
+      </text>
+    </svg>
+  );
+};
+
+const TornFabric: React.FC = () => (
+  // visual of fragmented current reality
+  <svg viewBox="0 0 600 400" className="w-full h-full" aria-hidden>
+    <defs>
+      <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+        <path d="M 40 0 L 0 0 0 40" fill="none" stroke={HAIRLINE} strokeWidth="1" />
+      </pattern>
+    </defs>
+    <rect width="600" height="400" fill="url(#grid)" />
+    {/* Fractured polygons */}
+    <polygon points="60,80 220,40 200,180 80,200" fill={PAPER_DEEP} stroke={SUBTLE} />
+    <polygon points="260,70 420,90 380,250 240,210" fill={PAPER_DEEP} stroke={SUBTLE} />
+    <polygon points="460,60 560,140 540,280 420,260" fill={PAPER_DEEP} stroke={SUBTLE} />
+    <polygon points="100,240 220,260 260,340 100,360" fill={PAPER_DEEP} stroke={SUBTLE} />
+    <polygon points="300,280 480,300 460,360 300,360" fill={PAPER_DEEP} stroke={SUBTLE} />
+    {/* Friction marks */}
+    {[[170, 130], [340, 160], [490, 180], [180, 300], [400, 330]].map(([x, y], i) => (
+      <g key={i} transform={`translate(${x} ${y})`}>
+        <circle r="14" fill="none" stroke={CRIMSON} strokeWidth="1.4" />
+        <path d="M-6 -6 L6 6 M6 -6 L-6 6" stroke={CRIMSON} strokeWidth="1.6" />
+      </g>
+    ))}
+  </svg>
+);
+
+const InsightCompass: React.FC = () => (
+  <svg viewBox="0 0 500 500" className="w-full h-full" aria-hidden>
+    <circle cx="250" cy="250" r="200" fill="none" stroke={HAIRLINE} />
+    <circle cx="250" cy="250" r="140" fill="none" stroke={HAIRLINE} />
+    <circle cx="250" cy="250" r="80" fill="none" stroke={HAIRLINE} />
+    {/* tick marks */}
+    {[...Array(24)].map((_, i) => {
+      const a = (i / 24) * Math.PI * 2;
+      const x1 = 250 + Math.cos(a) * 200;
+      const y1 = 250 + Math.sin(a) * 200;
+      const x2 = 250 + Math.cos(a) * (i % 6 === 0 ? 180 : 192);
+      const y2 = 250 + Math.sin(a) * (i % 6 === 0 ? 180 : 192);
+      return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={SUBTLE} strokeWidth={i % 6 === 0 ? 1.5 : 0.6} />;
+    })}
+    {/* needle */}
+    <polygon points="250,80 240,250 250,260 260,250" fill={CRIMSON} />
+    <polygon points="250,420 240,250 250,240 260,250" fill={INK} />
+    <circle cx="250" cy="250" r="14" fill={PAPER} stroke={CRIMSON} strokeWidth="3" />
+    <circle cx="250" cy="250" r="4" fill={CRIMSON} />
+  </svg>
+);
+
+const MarketRings: React.FC<{ tam?: number; sam?: number; som?: number }> = ({ tam, sam, som }) => {
+  const maxR = 240;
+  const tamR = maxR;
+  const samR = sam && tam ? maxR * Math.sqrt(sam / tam) : maxR * 0.66;
+  const somR = som && tam ? maxR * Math.sqrt(som / tam) : maxR * 0.33;
+  return (
+    <svg viewBox="0 0 640 540" className="w-full" aria-hidden>
+      <circle cx="320" cy="280" r={tamR} fill="none" stroke={CRIMSON} strokeOpacity="0.35" />
+      <circle cx="320" cy="280" r={samR} fill="none" stroke={CRIMSON} strokeOpacity="0.6" />
+      <circle cx="320" cy="280" r={somR} fill={CRIMSON} fillOpacity="0.9" />
+      <text x="320" y="44" textAnchor="middle" fontSize="11" fontFamily={FONT_SANS} letterSpacing="3" fill={SUBTLE}>
+        TOTAL
+      </text>
+      <text x="320" y="68" textAnchor="middle" fontSize="22" fontFamily={FONT_SERIF} fontWeight={700} fill={INK}>
+        {fmtUSD(tam)}
+      </text>
+      <text x="320" y={280 - samR - 14} textAnchor="middle" fontSize="10" fontFamily={FONT_SANS} letterSpacing="3" fill={SUBTLE}>
+        SERVICEABLE
+      </text>
+      <text x="320" y={280 - samR + 8} textAnchor="middle" fontSize="16" fontFamily={FONT_SERIF} fontWeight={700} fill={INK}>
+        {fmtUSD(sam)}
+      </text>
+      <text x="320" y="282" textAnchor="middle" fontSize="11" fontFamily={FONT_SANS} letterSpacing="3" fill="#FFFFFF">
+        OBTAINABLE
+      </text>
+      <text x="320" y="304" textAnchor="middle" fontSize="16" fontFamily={FONT_SERIF} fontWeight={700} fill="#FFFFFF">
+        {fmtUSD(som)}
+      </text>
+    </svg>
+  );
+};
+
+const MarketCurve: React.FC<{ data: { year: string; v: number }[] }> = ({ data }) => {
+  const W = 460;
+  const H = 220;
+  const pad = 36;
+  const max = Math.max(...data.map((d) => d.v));
+  const x = (i: number) => pad + (i / (data.length - 1)) * (W - pad * 2);
+  const y = (v: number) => H - pad - (v / max) * (H - pad * 2);
+  const path = data.map((d, i) => `${i ? 'L' : 'M'}${x(i)} ${y(d.v)}`).join(' ');
+  const area = path + ` L${x(data.length - 1)} ${H - pad} L${x(0)} ${H - pad} Z`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-hidden>
+      <path d={area} fill={CRIMSON} fillOpacity="0.12" />
+      <path d={path} fill="none" stroke={CRIMSON} strokeWidth="2.5" />
+      {data.map((d, i) => (
+        <g key={i}>
+          <text x={x(i)} y={H - pad + 16} textAnchor="middle" fontSize="10" fontFamily={FONT_SANS} fill={SUBTLE}>
+            {d.year}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+};
+
+const ArchitectureMap: React.FC<{ modules?: { name: string; nodes: string[] }[] }> = ({
+  modules = [
+    { name: 'Capture', nodes: ['Web', 'API', 'Mobile'] },
+    { name: 'Reason', nodes: ['Workflow', 'Policy', 'LLM'] },
+    { name: 'Act', nodes: ['Integrations', 'Records', 'Audit'] },
+  ],
+}) => {
+  const W = 720;
+  const H = 320;
+  const colWidth = W / modules.length;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-hidden>
+      {modules.map((m, ci) => {
+        const cx = colWidth * ci + colWidth / 2;
+        return (
+          <g key={ci}>
+            <rect
+              x={cx - colWidth * 0.4}
+              y={20}
+              width={colWidth * 0.8}
+              height={H - 40}
+              rx={10}
+              fill={PAPER_DEEP}
+              stroke={HAIRLINE}
+            />
+            <text
+              x={cx}
+              y={50}
+              textAnchor="middle"
+              fontSize="14"
+              fontFamily={FONT_SANS}
+              fontWeight={700}
+              fill={CRIMSON}
+              letterSpacing="2"
+            >
+              {m.name.toUpperCase()}
+            </text>
+            {m.nodes.map((n, ni) => (
+              <g key={ni} transform={`translate(${cx} ${90 + ni * 56})`}>
+                <rect x="-72" y="-18" width="144" height="36" rx="6" fill={PAPER} stroke={CRIMSON} strokeOpacity="0.3" />
+                <text x="0" y="4" textAnchor="middle" fontSize="13" fontFamily={FONT_SANS} fill={INK}>
+                  {n}
+                </text>
+              </g>
+            ))}
+            {ci < modules.length - 1 && (
+              <path
+                d={`M${colWidth * (ci + 1) - colWidth * 0.1} ${H / 2} L${colWidth * (ci + 1) + colWidth * 0.1} ${H / 2}`}
+                stroke={CRIMSON}
+                strokeWidth="1.6"
+                markerEnd="url(#arrowS)"
+              />
+            )}
+          </g>
+        );
+      })}
+      <defs>
+        <marker id="arrowS" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill={CRIMSON} />
+        </marker>
+      </defs>
+    </svg>
+  );
+};
+
+const PositioningMap: React.FC<{
+  competitors?: { name: string; x: number; y: number }[];
+  axis_x?: string;
+  axis_y?: string;
+}> = ({ competitors = [], axis_x = 'Reach', axis_y = 'Depth' }) => {
+  const W = 520;
+  const H = 420;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-hidden>
+      {/* axes */}
+      <line x1="60" x2={W - 30} y1={H - 50} y2={H - 50} stroke={HAIRLINE} />
+      <line x1="60" x2="60" y1="30" y2={H - 50} stroke={HAIRLINE} />
+      <text x={W - 30} y={H - 30} textAnchor="end" fontSize="11" fontFamily={FONT_SANS} fill={SUBTLE} letterSpacing="2">
+        {axis_x.toUpperCase()} →
+      </text>
+      <g transform={`translate(40, ${H / 2}) rotate(-90)`}>
+        <text fontSize="11" fontFamily={FONT_SANS} fill={SUBTLE} letterSpacing="2">
+          {axis_y.toUpperCase()} →
+        </text>
+      </g>
+      {/* quadrant labels */}
+      {[
+        ['Niche', 100, 70],
+        ['Leader', W - 130, 70],
+        ['Generic', 100, H - 70],
+        ['Wedge', W - 130, H - 70],
+      ].map(([label, x, y], i) => (
+        <text key={i} x={x as number} y={y as number} fontSize="10" fontFamily={FONT_SANS} fill="#B8B0A2" letterSpacing="2">
+          {String(label).toUpperCase()}
+        </text>
+      ))}
+      {/* competitors */}
+      {competitors.map((c, i) => {
+        const cx = 60 + (c.x / 100) * (W - 90);
+        const cy = H - 50 - (c.y / 100) * (H - 80);
+        const us = c.name.toLowerCase() === 'us' || c.name.toLowerCase() === 'we';
+        return (
+          <g key={i} transform={`translate(${cx} ${cy})`}>
+            <circle r={us ? 16 : 10} fill={us ? CRIMSON : PAPER_DEEP} stroke={us ? CRIMSON : SUBTLE} />
+            <text
+              y={us ? 38 : 28}
+              textAnchor="middle"
+              fontSize={us ? 14 : 11}
+              fontFamily={FONT_SERIF}
+              fontWeight={us ? 700 : 500}
+              fill={us ? CRIMSON : INK}
+            >
+              {c.name}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+const RevenueArea: React.FC<{ data: { month: string; v: number }[]; color?: string }> = ({
+  data,
+  color = CRIMSON,
+}) => {
+  const W = 460;
+  const H = 220;
+  const pad = 36;
+  if (!data?.length) return null;
+  const max = Math.max(...data.map((d) => d.v));
+  const x = (i: number) => pad + (i / (data.length - 1)) * (W - pad * 2);
+  const y = (v: number) => H - pad - (v / max) * (H - pad * 2);
+  const path = data.map((d, i) => `${i ? 'L' : 'M'}${x(i)} ${y(d.v)}`).join(' ');
+  const area = path + ` L${x(data.length - 1)} ${H - pad} L${x(0)} ${H - pad} Z`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-hidden>
+      <path d={area} fill={color} fillOpacity="0.12" />
+      <path d={path} fill="none" stroke={color} strokeWidth="2.5" />
+      {data.map((d, i) => (
+        <text
+          key={i}
+          x={x(i)}
+          y={H - pad + 16}
+          fontSize="10"
+          textAnchor="middle"
+          fontFamily={FONT_SANS}
+          fill={SUBTLE}
+        >
+          {d.month}
+        </text>
+      ))}
+    </svg>
+  );
+};
+
+const RetentionCurve: React.FC<{ data: { m: string; v: number }[] }> = ({ data }) => {
+  const W = 460;
+  const H = 220;
+  const pad = 40;
+  if (!data?.length) return null;
+  const x = (i: number) => pad + (i / (data.length - 1)) * (W - pad * 2);
+  const y = (v: number) => H - pad - (v / 100) * (H - pad * 2);
+  const path = data.map((d, i) => `${i ? 'L' : 'M'}${x(i)} ${y(d.v)}`).join(' ');
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-hidden>
+      {[0, 25, 50, 75, 100].map((t) => (
+        <g key={t}>
+          <line x1={pad} x2={W - pad} y1={y(t)} y2={y(t)} stroke={HAIRLINE} strokeDasharray="2 3" />
+          <text x={pad - 8} y={y(t) + 4} fontSize="10" fontFamily={FONT_SANS} fill={SUBTLE} textAnchor="end">
+            {t}%
+          </text>
+        </g>
+      ))}
+      <path d={path} fill="none" stroke={CRIMSON} strokeWidth="2.5" />
+      {data.map((d, i) => (
+        <g key={i}>
+          <circle cx={x(i)} cy={y(d.v)} r={3.2} fill={CRIMSON} />
+          <text
+            x={x(i)}
+            y={H - pad + 16}
+            fontSize="10"
+            textAnchor="middle"
+            fontFamily={FONT_SANS}
+            fill={SUBTLE}
+          >
+            {d.m}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+};
+
+const LogoBadge: React.FC<{ name: string; initials?: string }> = ({ name, initials }) => {
+  const text = initials || name.split(' ').map((p) => p[0]).slice(0, 2).join('');
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-3 rounded-lg"
+      style={{ background: PAPER, border: `1px solid ${HAIRLINE}` }}
+    >
+      <div
+        className="w-9 h-9 rounded-md flex items-center justify-center text-sm font-bold"
+        style={{ background: CRIMSON, color: '#FFFFFF', fontFamily: FONT_SANS }}
+      >
+        {text.toUpperCase()}
+      </div>
+      <span style={{ fontFamily: FONT_SANS, fontSize: 14, fontWeight: 600, color: INK }}>{name}</span>
+    </div>
+  );
+};
+
+const Flywheel: React.FC<{ nodes: { label: string; body?: string }[] }> = ({ nodes }) => {
+  const R = 180;
+  const cx = 250;
+  const cy = 240;
+  return (
+    <svg viewBox="0 0 500 500" className="w-full h-full" aria-hidden>
+      <circle cx={cx} cy={cy} r={R} fill="none" stroke={HAIRLINE} />
+      <circle cx={cx} cy={cy} r={R + 30} fill="none" stroke={CRIMSON} strokeOpacity="0.15" />
+      {/* arc arrows between nodes */}
+      {nodes.map((n, i) => {
+        const a = (i / nodes.length) * Math.PI * 2 - Math.PI / 2;
+        const x = cx + Math.cos(a) * R;
+        const y = cy + Math.sin(a) * R;
+        return (
+          <g key={i}>
+            <circle cx={x} cy={y} r={48} fill={PAPER_DEEP} stroke={CRIMSON} />
+            <text
+              x={x}
+              y={y - 4}
+              textAnchor="middle"
+              fontSize="12"
+              fontFamily={FONT_SANS}
+              fontWeight={700}
+              fill={CRIMSON}
+            >
+              {n.label}
+            </text>
+            {n.body && (
+              <text
+                x={x}
+                y={y + 14}
+                textAnchor="middle"
+                fontSize="10"
+                fontFamily={FONT_SANS}
+                fill={INK}
+              >
+                {n.body}
+              </text>
+            )}
+          </g>
+        );
+      })}
+      {/* Center */}
+      <circle cx={cx} cy={cy} r={60} fill={CRIMSON} />
+      <text
+        x={cx}
+        y={cy - 4}
+        textAnchor="middle"
+        fontSize="11"
+        letterSpacing="3"
+        fontFamily={FONT_SANS}
+        fill="#FFFFFF"
+      >
+        FLYWHEEL
+      </text>
+      <text
+        x={cx}
+        y={cy + 14}
+        textAnchor="middle"
+        fontSize="14"
+        fontFamily={FONT_SERIF}
+        fontWeight={700}
+        fill="#FFFFFF"
+      >
+        compounds
+      </text>
+      {/* curved arrows around the ring */}
+      {nodes.map((_, i) => {
+        const a1 = (i / nodes.length) * Math.PI * 2 - Math.PI / 2 + 0.18;
+        const a2 = ((i + 1) / nodes.length) * Math.PI * 2 - Math.PI / 2 - 0.18;
+        const x1 = cx + Math.cos(a1) * (R - 6);
+        const y1 = cy + Math.sin(a1) * (R - 6);
+        const x2 = cx + Math.cos(a2) * (R - 6);
+        const y2 = cy + Math.sin(a2) * (R - 6);
+        return (
+          <path
+            key={'arc' + i}
+            d={`M${x1} ${y1} A${R - 6} ${R - 6} 0 0 1 ${x2} ${y2}`}
+            stroke={CRIMSON}
+            strokeWidth="1.6"
+            fill="none"
+            markerEnd="url(#arrowF)"
+          />
+        );
+      })}
+      <defs>
+        <marker id="arrowF" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill={CRIMSON} />
+        </marker>
+      </defs>
+    </svg>
+  );
+};
+
+const Donut: React.FC<{ data: { label: string; pct: number }[] }> = ({ data }) => {
+  if (!data?.length) return null;
+  const palette = [CRIMSON, ACCENT, '#C46B45', '#D9A06B', '#E8C99B'];
+  const r = 92;
+  const cx = 110;
+  const cy = 110;
+  let acc = 0;
+  return (
+    <div className="flex items-center gap-8">
+      <svg viewBox="0 0 220 220" width={220} height={220} aria-hidden>
+        {data.map((d, i) => {
+          const start = (acc / 100) * Math.PI * 2 - Math.PI / 2;
+          acc += d.pct;
+          const end = (acc / 100) * Math.PI * 2 - Math.PI / 2;
+          const large = d.pct > 50 ? 1 : 0;
+          const x1 = cx + r * Math.cos(start);
+          const y1 = cy + r * Math.sin(start);
+          const x2 = cx + r * Math.cos(end);
+          const y2 = cy + r * Math.sin(end);
+          return (
+            <path
+              key={i}
+              d={`M${cx} ${cy} L${x1} ${y1} A${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`}
+              fill={palette[i % palette.length]}
+            />
+          );
+        })}
+        <circle cx={cx} cy={cy} r={50} fill={PAPER} />
+      </svg>
+      <div className="space-y-2" style={{ fontFamily: FONT_SANS }}>
+        {data.map((d, i) => (
+          <div key={i} className="flex items-center gap-3 text-sm">
+            <span
+              className="inline-block w-3 h-3 rounded-sm"
+              style={{ background: palette[i % palette.length] }}
+            />
+            <span style={{ color: INK, fontWeight: 500 }}>{d.label}</span>
+            <span style={{ color: INK, fontWeight: 700, marginLeft: 12 }}>{d.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const TimelineDots: React.FC<{ items: { date: string; label: string; quarter?: string }[]; orange?: string }> = ({
+  items,
+}) => (
+  <div className="relative">
+    <div className="absolute left-0 right-0 top-3 h-px" style={{ background: HAIRLINE }} />
+    <div className="grid" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`, gap: 16 }}>
+      {items.map((m, i) => (
+        <div key={i} className="relative pt-8 text-center">
+          <span className="absolute left-1/2 -translate-x-1/2 top-1 w-3 h-3 rounded-full" style={{ background: CRIMSON }} />
+          <div style={{ fontFamily: FONT_SANS, fontSize: 11, letterSpacing: 2, color: CRIMSON, fontWeight: 700 }}>
+            {(m.date || m.quarter || '').toUpperCase()}
+          </div>
+          <div style={{ fontFamily: FONT_SERIF, fontSize: 14, color: INK, marginTop: 6 }}>
+            {m.label}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────
+// Slides
+// ─────────────────────────────────────────────────────────────────
+
+const Slide1: React.FC<SequoiaDeckProps> = ({ data = {}, editable, onEdit }) => (
+  <SlideFrame index={0} total={12} label="The Future" company={data.company}>
+    <div className="grid grid-cols-12 gap-10 h-full">
+      <div className="col-span-6 flex flex-col justify-end pb-10">
+        <Editable
+          value={data.future_year}
+          path="future_year"
+          editable={editable}
+          onEdit={onEdit}
+          placeholder="2035"
+          style={{
+            fontFamily: FONT_SANS,
+            fontSize: 'clamp(13px, 1.1vw, 16px)',
+            letterSpacing: 8,
+            color: CRIMSON,
+            fontWeight: 700,
+          }}
+        />
+        <Editable
+          as="h1"
+          value={data.future_headline}
+          path="future_headline"
+          editable={editable}
+          onEdit={onEdit}
+          placeholder="The future world that will exist in ten years."
+          style={{
+            fontFamily: FONT_SERIF,
+            fontSize: 'clamp(36px, 4.4vw, 80px)',
+            lineHeight: 1.05,
+            fontWeight: 700,
+            letterSpacing: -1,
+            color: INK,
+            marginTop: 16,
+          }}
+        />
+        <Editable
+          value={data.future_subline}
+          path="future_subline"
+          editable={editable}
+          onEdit={onEdit}
+          placeholder="A single, declarative line that sets the horizon."
+          style={{
+            fontFamily: FONT_SERIF,
+            fontStyle: 'italic',
+            fontSize: 'clamp(15px, 1.4vw, 22px)',
+            color: SUBTLE,
+            marginTop: 18,
+            maxWidth: 560,
+            lineHeight: 1.4,
+          }}
+        />
+      </div>
+      <div className="col-span-6 flex items-center justify-center">
+        <CinematicHorizon />
+      </div>
+    </div>
+  </SlideFrame>
+);
+
+const Slide2: React.FC<SequoiaDeckProps> = ({ data = {}, editable, onEdit }) => {
+  const curves = data.shift_curves?.length
+    ? data.shift_curves
+    : [
+        { label: 'Compute / $', from: 10, to: 80, color: CRIMSON },
+        { label: 'Cost of friction', from: 60, to: 14, color: ACCENT },
+        { label: 'Available capital', from: 20, to: 55, color: INK },
+      ];
+  return (
+    <SlideFrame index={1} total={12} label="The Shift" company={data.company}>
+      <div className="grid grid-cols-12 gap-10 h-full">
+        <div className="col-span-5">
+          <Editable
+            as="h2"
+            value={data.shift_title}
+            path="shift_title"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="Three forces converging now."
+            style={{
+              fontFamily: FONT_SERIF,
+              fontSize: 'clamp(28px, 3.4vw, 56px)',
+              lineHeight: 1.1,
+              fontWeight: 700,
+              letterSpacing: -1,
+              color: INK,
+            }}
+          />
+          <Editable
+            value={data.shift_body}
+            path="shift_body"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="What was impossible last decade is now economical. What was acceptable last decade is now intolerable. The inflection point is here."
+            style={{
+              fontFamily: FONT_SERIF,
+              fontSize: 'clamp(15px, 1.2vw, 19px)',
+              lineHeight: 1.55,
+              color: '#3a3a3a',
+              marginTop: 24,
+              maxWidth: 480,
+            }}
+          />
+          <div className="mt-10 space-y-4" style={{ fontFamily: FONT_SANS }}>
+            {curves.slice(0, 3).map((c, i) => (
+              <div key={i} className="flex items-center gap-3 text-sm">
+                <span className="inline-block w-8 h-px" style={{ background: c.color || CRIMSON }} />
+                <span style={{ color: INK, fontWeight: 600 }}>{c.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="col-span-7 flex items-center">
+          <ShiftCurve curves={curves} />
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide3: React.FC<SequoiaDeckProps> = ({ data = {}, editable, onEdit }) => {
+  const pillars = data.broken_pillars?.length
+    ? data.broken_pillars
+    : [
+        { title: 'Fragmented stacks', body: 'Teams stitch six or more tools to ship a single workflow.', cost: '40% time lost' },
+        { title: 'Spreadsheet truth', body: 'The most important records still live in inboxes.', cost: 'Trust eroded' },
+        { title: 'Manual reconciliation', body: 'Every cycle ends in a fire drill.', cost: '2× errors' },
+      ];
+  return (
+    <SlideFrame index={2} total={12} label="The Broken Reality" company={data.company}>
+      <div className="grid grid-cols-12 gap-10 h-full">
+        <div className="col-span-6 flex items-center">
+          <TornFabric />
+        </div>
+        <div className="col-span-6 flex flex-col justify-center">
+          <Editable
+            as="h2"
+            value={data.broken_title}
+            path="broken_title"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="Today, this work is done by hand."
+            style={{
+              fontFamily: FONT_SERIF,
+              fontSize: 'clamp(28px, 3.4vw, 56px)',
+              lineHeight: 1.1,
+              fontWeight: 700,
+              letterSpacing: -1,
+              color: INK,
+            }}
+          />
+          <div className="mt-8 space-y-6">
+            {pillars.slice(0, 3).map((p, i) => (
+              <div key={i} className="flex gap-5">
+                <div
+                  className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center"
+                  style={{ border: `1.5px solid ${CRIMSON}`, color: CRIMSON, fontFamily: FONT_SERIF, fontWeight: 700 }}
+                >
+                  {String(i + 1).padStart(2, '0')}
+                </div>
+                <div>
+                  <Editable
+                    as="div"
+                    value={p.title}
+                    path={`broken_pillars.${i}.title`}
+                    editable={editable}
+                    onEdit={onEdit}
+                    style={{ fontFamily: FONT_SERIF, fontSize: 20, fontWeight: 700, color: INK }}
+                  />
+                  <Editable
+                    value={p.body}
+                    path={`broken_pillars.${i}.body`}
+                    editable={editable}
+                    onEdit={onEdit}
+                    style={{ fontFamily: FONT_SERIF, fontSize: 15, color: '#525252', marginTop: 4, lineHeight: 1.5 }}
+                  />
+                  <Editable
+                    value={p.cost}
+                    path={`broken_pillars.${i}.cost`}
+                    editable={editable}
+                    onEdit={onEdit}
+                    style={{
+                      fontFamily: FONT_SANS,
+                      fontSize: 11,
+                      letterSpacing: 3,
+                      color: CRIMSON,
+                      fontWeight: 700,
+                      marginTop: 6,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide4: React.FC<SequoiaDeckProps> = ({ data = {}, editable, onEdit }) => {
+  const proofs = data.insight_proofs?.length
+    ? data.insight_proofs
+    : [
+        'The pattern is hiding in plain sight.',
+        'Every incumbent assumes it cannot change.',
+        'We have evidence it already has.',
+      ];
+  return (
+    <SlideFrame index={3} total={12} label="The Insight" company={data.company} bg={PAPER_DEEP}>
+      <div className="grid grid-cols-12 gap-10 h-full">
+        <div className="col-span-7 flex flex-col justify-center">
+          <Editable
+            value={data.insight_label}
+            path="insight_label"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="WHAT EVERYONE ELSE MISSES"
+            style={{
+              fontFamily: FONT_SANS,
+              fontSize: 12,
+              letterSpacing: 6,
+              color: CRIMSON,
+              fontWeight: 700,
+            }}
+          />
+          <Editable
+            as="h2"
+            value={data.insight_headline}
+            path="insight_headline"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="The work itself is the data. The data itself becomes the moat."
+            style={{
+              fontFamily: FONT_SERIF,
+              fontSize: 'clamp(30px, 3.8vw, 64px)',
+              lineHeight: 1.08,
+              fontWeight: 700,
+              letterSpacing: -1.2,
+              color: INK,
+              marginTop: 18,
+              fontStyle: 'italic',
+            }}
+          />
+          <Editable
+            value={data.insight_body}
+            path="insight_body"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="A short paragraph that articulates a non-obvious truth — one investors will recognize only after they hear it."
+            style={{
+              fontFamily: FONT_SERIF,
+              fontSize: 'clamp(15px, 1.2vw, 19px)',
+              lineHeight: 1.5,
+              color: '#3a3a3a',
+              marginTop: 24,
+              maxWidth: 600,
+            }}
+          />
+          <div className="mt-8 space-y-3">
+            {proofs.slice(0, 3).map((p, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <span className="mt-2 inline-block w-6 h-px" style={{ background: CRIMSON }} />
+                <Editable
+                  value={p}
+                  path={`insight_proofs.${i}`}
+                  editable={editable}
+                  onEdit={onEdit}
+                  style={{ fontFamily: FONT_SERIF, fontSize: 16, color: INK, lineHeight: 1.5 }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="col-span-5 flex items-center justify-center">
+          <InsightCompass />
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide5: React.FC<SequoiaDeckProps> = ({ data = {}, editable, onEdit }) => {
+  const curve = data.market_curve?.length
+    ? data.market_curve
+    : [
+        { year: '2022', v: 22 }, { year: '2024', v: 38 }, { year: '2026', v: 64 },
+        { year: '2028', v: 105 }, { year: '2030', v: 168 },
+      ];
+  return (
+    <SlideFrame index={4} total={12} label="The Opportunity" company={data.company}>
+      <div className="grid grid-cols-12 gap-10 h-full">
+        <div className="col-span-7 flex items-center">
+          <MarketRings tam={data.tam_usd} sam={data.sam_usd} som={data.som_usd} />
+        </div>
+        <div className="col-span-5 flex flex-col justify-center">
+          <h2
+            style={{
+              fontFamily: FONT_SERIF,
+              fontSize: 'clamp(28px, 3.2vw, 52px)',
+              lineHeight: 1.1,
+              fontWeight: 700,
+              letterSpacing: -1,
+            }}
+          >
+            A category measured in
+            <span style={{ color: CRIMSON }}> tens of billions.</span>
+          </h2>
+          <div className="mt-8 grid grid-cols-3 gap-3" style={{ fontFamily: FONT_SANS }}>
+            <div>
+              <div style={{ fontSize: 10, letterSpacing: 3, color: SUBTLE }}>TAM</div>
+              <div style={{ fontFamily: FONT_SERIF, fontSize: 22, fontWeight: 700, marginTop: 4 }}>
+                {fmtUSD(data.tam_usd)}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, letterSpacing: 3, color: SUBTLE }}>SAM</div>
+              <div style={{ fontFamily: FONT_SERIF, fontSize: 22, fontWeight: 700, marginTop: 4 }}>
+                {fmtUSD(data.sam_usd)}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, letterSpacing: 3, color: SUBTLE }}>SOM</div>
+              <div style={{ fontFamily: FONT_SERIF, fontSize: 22, fontWeight: 700, color: CRIMSON, marginTop: 4 }}>
+                {fmtUSD(data.som_usd)}
+              </div>
+            </div>
+          </div>
+          <div className="mt-8">
+            <div style={{ fontFamily: FONT_SANS, fontSize: 10, letterSpacing: 3, color: SUBTLE }}>CAGR</div>
+            <div style={{ fontFamily: FONT_SERIF, fontSize: 36, fontWeight: 700, color: CRIMSON, marginTop: 4 }}>
+              {fmtPct(data.market_cagr_pct)}
+            </div>
+            <div className="mt-3">
+              <MarketCurve data={curve} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide6: React.FC<SequoiaDeckProps> = ({ data = {}, editable, onEdit }) => {
+  const before = data.before_state?.length
+    ? data.before_state
+    : ['Six tools', 'Manual sync', 'Reconciled by hand', 'Filed late'];
+  const after = data.after_state?.length
+    ? data.after_state
+    : ['One workflow', 'Auto-synced', 'Audited live', 'Done in seconds'];
+  return (
+    <SlideFrame index={5} total={12} label="The Solution" company={data.company} bg={PAPER}>
+      <div className="grid grid-cols-12 gap-10 h-full">
+        <div className="col-span-5 flex flex-col justify-center">
+          <Editable
+            as="h2"
+            value={data.company}
+            path="company"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="[Company]"
+            style={{
+              fontFamily: FONT_SERIF,
+              fontSize: 'clamp(30px, 3.6vw, 64px)',
+              lineHeight: 1.05,
+              fontWeight: 700,
+              letterSpacing: -1.5,
+              color: INK,
+            }}
+          />
+          <Editable
+            value={data.solution_one_liner}
+            path="solution_one_liner"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="One sentence that compresses the entire product into a single, memorable promise."
+            style={{
+              fontFamily: FONT_SERIF,
+              fontStyle: 'italic',
+              fontSize: 'clamp(17px, 1.5vw, 24px)',
+              lineHeight: 1.4,
+              color: SUBTLE,
+              marginTop: 18,
+              maxWidth: 540,
+            }}
+          />
+          <div className="mt-8" style={{ fontFamily: FONT_SANS }}>
+            <div className="text-[11px] tracking-[0.3em] text-neutral-500">CATEGORY</div>
+            <Editable
+              value={data.category}
+              path="category"
+              editable={editable}
+              onEdit={onEdit}
+              placeholder="[Category]"
+              style={{ fontFamily: FONT_SERIF, fontSize: 22, fontWeight: 600, marginTop: 6 }}
+            />
+          </div>
+        </div>
+        <div className="col-span-7 grid grid-cols-2 gap-6">
+          <div className="p-6 rounded-2xl" style={{ background: PAPER_DEEP, border: `1px solid ${HAIRLINE}` }}>
+            <div style={{ fontFamily: FONT_SANS, fontSize: 10, letterSpacing: 4, color: SUBTLE }}>BEFORE</div>
+            <ul className="mt-4 space-y-3" style={{ fontFamily: FONT_SERIF }}>
+              {before.map((b, i) => (
+                <li key={i} className="flex items-center gap-3">
+                  <span className="inline-block w-1 h-1 rounded-full" style={{ background: SUBTLE }} />
+                  <Editable
+                    value={b}
+                    path={`before_state.${i}`}
+                    editable={editable}
+                    onEdit={onEdit}
+                    style={{ fontSize: 17, color: SUBTLE, textDecoration: 'line-through', textDecorationColor: '#C6BFB1' }}
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div
+            className="p-6 rounded-2xl"
+            style={{ background: '#FFFFFF', border: `1.5px solid ${CRIMSON}`, boxShadow: '0 18px 40px -22px rgba(140,31,40,0.4)' }}
+          >
+            <div style={{ fontFamily: FONT_SANS, fontSize: 10, letterSpacing: 4, color: CRIMSON, fontWeight: 700 }}>
+              AFTER
+            </div>
+            <ul className="mt-4 space-y-3" style={{ fontFamily: FONT_SERIF }}>
+              {after.map((b, i) => (
+                <li key={i} className="flex items-center gap-3">
+                  <span className="inline-block w-2 h-2 rounded-full" style={{ background: CRIMSON }} />
+                  <Editable
+                    value={b}
+                    path={`after_state.${i}`}
+                    editable={editable}
+                    onEdit={onEdit}
+                    style={{ fontSize: 17, color: INK, fontWeight: 600 }}
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide7: React.FC<SequoiaDeckProps> = ({ data = {}, editable, onEdit }) => {
+  const pillars = data.product_pillars?.length
+    ? data.product_pillars
+    : [
+        { title: 'One source of truth', body: 'Every record reconciled in real time.' },
+        { title: 'Reasoning layer', body: 'Decisions explainable, audit-trailed.' },
+        { title: 'Open by design', body: 'Plugs into the systems teams already use.' },
+      ];
+  return (
+    <SlideFrame index={6} total={12} label="The Product" company={data.company} bg={PAPER}>
+      <div className="grid grid-cols-12 gap-8 h-full">
+        <div className="col-span-7 flex items-center">
+          <ArchitectureMap modules={data.product_modules} />
+        </div>
+        <div className="col-span-5 flex flex-col justify-center">
+          <h2
+            style={{
+              fontFamily: FONT_SERIF,
+              fontSize: 'clamp(26px, 3vw, 48px)',
+              lineHeight: 1.1,
+              fontWeight: 700,
+              letterSpacing: -1,
+            }}
+          >
+            Three layers. One platform.
+          </h2>
+          <div className="mt-8 space-y-5">
+            {pillars.slice(0, 3).map((p, i) => (
+              <div key={i} className="border-l-2 pl-4" style={{ borderColor: CRIMSON }}>
+                <Editable
+                  as="div"
+                  value={p.title}
+                  path={`product_pillars.${i}.title`}
+                  editable={editable}
+                  onEdit={onEdit}
+                  style={{ fontFamily: FONT_SERIF, fontSize: 18, fontWeight: 700, color: INK }}
+                />
+                <Editable
+                  value={p.body}
+                  path={`product_pillars.${i}.body`}
+                  editable={editable}
+                  onEdit={onEdit}
+                  style={{ fontFamily: FONT_SERIF, fontSize: 14, color: '#525252', marginTop: 4, lineHeight: 1.5 }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide8: React.FC<SequoiaDeckProps> = ({ data = {}, editable, onEdit }) => {
+  const competitors = data.competitors?.length
+    ? data.competitors
+    : [
+        { name: 'Legacy A', x: 80, y: 25 },
+        { name: 'Legacy B', x: 60, y: 35 },
+        { name: 'Point Tool', x: 25, y: 70 },
+        { name: 'Us', x: 78, y: 85 },
+      ];
+  const moats = data.moats?.length
+    ? data.moats
+    : [
+        { title: 'Data', body: 'Every customer makes the model smarter.' },
+        { title: 'Distribution', body: 'Partner channels into the ICP, not around it.' },
+        { title: 'Switching cost', body: 'Embedded in the daily workflow of the team.' },
+      ];
+  return (
+    <SlideFrame index={7} total={12} label="Why We Win" company={data.company}>
+      <div className="grid grid-cols-12 gap-10 h-full">
+        <div className="col-span-7 flex items-center">
+          <PositioningMap competitors={competitors} axis_x={data.axis_x} axis_y={data.axis_y} />
+        </div>
+        <div className="col-span-5 flex flex-col justify-center">
+          <h2
+            style={{
+              fontFamily: FONT_SERIF,
+              fontSize: 'clamp(26px, 3vw, 48px)',
+              lineHeight: 1.1,
+              fontWeight: 700,
+              letterSpacing: -1,
+            }}
+          >
+            The moats compound.
+          </h2>
+          <div className="mt-8 grid grid-cols-1 gap-5">
+            {moats.slice(0, 3).map((m, i) => (
+              <div key={i}>
+                <div className="flex items-center gap-3">
+                  <span
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-full"
+                    style={{ background: CRIMSON, color: '#FFFFFF', fontFamily: FONT_SANS, fontSize: 12, fontWeight: 700 }}
+                  >
+                    {i + 1}
+                  </span>
+                  <Editable
+                    value={m.title}
+                    path={`moats.${i}.title`}
+                    editable={editable}
+                    onEdit={onEdit}
+                    style={{ fontFamily: FONT_SERIF, fontSize: 18, fontWeight: 700, color: INK }}
+                  />
+                </div>
+                <Editable
+                  value={m.body}
+                  path={`moats.${i}.body`}
+                  editable={editable}
+                  onEdit={onEdit}
+                  style={{ fontFamily: FONT_SERIF, fontSize: 14, color: '#525252', marginTop: 6, lineHeight: 1.55, paddingLeft: 44 }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide9: React.FC<SequoiaDeckProps> = ({ data = {}, editable, onEdit }) => {
+  const rev = data.revenue_curve?.length
+    ? data.revenue_curve
+    : [
+        { month: 'Jan', v: 4 }, { month: 'Feb', v: 7 }, { month: 'Mar', v: 11 },
+        { month: 'Apr', v: 16 }, { month: 'May', v: 24 }, { month: 'Jun', v: 34 },
+      ];
+  const users = data.user_curve?.length
+    ? data.user_curve
+    : [
+        { month: 'Jan', v: 120 }, { month: 'Feb', v: 240 }, { month: 'Mar', v: 410 },
+        { month: 'Apr', v: 680 }, { month: 'May', v: 1050 }, { month: 'Jun', v: 1640 },
+      ];
+  const retention = data.retention_curve?.length
+    ? data.retention_curve
+    : [
+        { m: 'M0', v: 100 }, { m: 'M1', v: 92 }, { m: 'M3', v: 86 },
+        { m: 'M6', v: 81 }, { m: 'M9', v: 78 }, { m: 'M12', v: 76 },
+      ];
+  const logos = data.customer_logos?.length
+    ? data.customer_logos
+    : [
+        { name: 'Acme Co.' }, { name: 'Nimbus' }, { name: 'Lattice' },
+        { name: 'Northwind' }, { name: 'Atlas Labs' }, { name: 'Verdant' },
+      ];
+  return (
+    <SlideFrame index={8} total={12} label="Traction" company={data.company}>
+      <div className="grid grid-cols-12 gap-8 h-full">
+        <div className="col-span-8 flex flex-col gap-6">
+          <div className="grid grid-cols-4 gap-4" style={{ fontFamily: FONT_SANS }}>
+            <Stat label="MRR" value={fmtUSD(data.mrr_usd)} />
+            <Stat label="Paying customers" value={fmtNum(data.paying_customers)} />
+            <Stat label="MoM growth" value={fmtPct(data.growth_mom_pct)} highlight />
+            <Stat label="NRR" value={fmtPct(data.nrr_pct)} />
+          </div>
+          <div className="grid grid-cols-2 gap-6 flex-1 min-h-0">
+            <Card title="Revenue (k USD)">
+              <RevenueArea data={rev} />
+            </Card>
+            <Card title="Active users">
+              <RevenueArea data={users} color={INK} />
+            </Card>
+          </div>
+          <Card title="Retention by cohort">
+            <RetentionCurve data={retention} />
+          </Card>
+        </div>
+        <div className="col-span-4 flex flex-col">
+          <div style={{ fontFamily: FONT_SANS, fontSize: 10, letterSpacing: 4, color: SUBTLE }}>SELECTED CUSTOMERS</div>
+          <div className="mt-3 grid grid-cols-1 gap-3 flex-1">
+            {logos.slice(0, 6).map((l, i) => (
+              <LogoBadge key={i} name={l.name} initials={l.initials} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Stat: React.FC<{ label: string; value: string; highlight?: boolean }> = ({ label, value, highlight }) => (
+  <div className={`p-4 rounded-xl`} style={{ background: PAPER_DEEP, border: `1px solid ${HAIRLINE}` }}>
+    <div style={{ fontSize: 10, letterSpacing: 3, color: SUBTLE }}>{label.toUpperCase()}</div>
+    <div
+      style={{
+        fontFamily: FONT_SERIF,
+        fontSize: 28,
+        fontWeight: 700,
+        marginTop: 6,
+        color: highlight ? CRIMSON : INK,
+      }}
+    >
+      {value}
+    </div>
+  </div>
+);
+
+const Card: React.FC<React.PropsWithChildren<{ title: string }>> = ({ title, children }) => (
+  <div className="p-5 rounded-2xl" style={{ background: PAPER, border: `1px solid ${HAIRLINE}` }}>
+    <div style={{ fontFamily: FONT_SANS, fontSize: 10, letterSpacing: 4, color: SUBTLE }}>{title.toUpperCase()}</div>
+    <div className="mt-3">{children}</div>
+  </div>
+);
+
+const Slide10: React.FC<SequoiaDeckProps> = ({ data = {} }) => {
+  const nodes = data.flywheel_nodes?.length
+    ? data.flywheel_nodes
+    : [
+        { label: 'Customers', body: 'use product' },
+        { label: 'Product', body: 'learns from use' },
+        { label: 'Data', body: 'compounds' },
+        { label: 'Network', body: 'expands reach' },
+        { label: 'Revenue', body: 'funds invention' },
+      ];
+  return (
+    <SlideFrame index={9} total={12} label="The Flywheel" company={data.company} bg={PAPER_DEEP}>
+      <div className="grid grid-cols-12 gap-10 h-full">
+        <div className="col-span-5 flex flex-col justify-center">
+          <h2
+            style={{
+              fontFamily: FONT_SERIF,
+              fontSize: 'clamp(26px, 3vw, 50px)',
+              lineHeight: 1.1,
+              fontWeight: 700,
+              letterSpacing: -1,
+            }}
+          >
+            Each turn makes the next one easier.
+          </h2>
+          <p
+            style={{
+              fontFamily: FONT_SERIF,
+              fontSize: 17,
+              color: '#3a3a3a',
+              marginTop: 18,
+              lineHeight: 1.5,
+              maxWidth: 480,
+            }}
+          >
+            Every customer generates the data that improves the product, which expands the network,
+            which acquires the next customer at lower cost.
+          </p>
+          <div className="mt-8 grid grid-cols-2 gap-3" style={{ fontFamily: FONT_SANS }}>
+            {nodes.slice(0, 5).map((n, i) => (
+              <div key={i} className="flex items-center gap-3 text-sm">
+                <span className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold"
+                  style={{ background: CRIMSON, color: '#FFFFFF' }}>
+                  {i + 1}
+                </span>
+                <span style={{ color: INK }}>{n.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="col-span-7 flex items-center justify-center">
+          <Flywheel nodes={nodes} />
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide11: React.FC<SequoiaDeckProps> = ({ data = {}, editable, onEdit }) => {
+  const founders = data.founders?.length
+    ? data.founders
+    : [
+        { name: '[Founder One]', role: 'CEO · Co-founder', bio: 'Prior: [notable role]. Built [notable product] used by [scale].', initials: 'F1' },
+        { name: '[Founder Two]', role: 'CTO · Co-founder', bio: 'Prior: [notable role]. Led [notable system] at [scale].', initials: 'F2' },
+      ];
+  const timeline = data.team_timeline?.length
+    ? data.team_timeline
+    : [
+        { year: '2014', event: 'Met building [project]' },
+        { year: '2020', event: 'Shipped [notable product]' },
+        { year: '2025', event: 'Founded this company' },
+      ];
+  return (
+    <SlideFrame index={10} total={12} label="The Team" company={data.company}>
+      <div className="grid grid-cols-12 gap-10 h-full">
+        <div className="col-span-7 flex flex-col">
+          <h2
+            style={{
+              fontFamily: FONT_SERIF,
+              fontSize: 'clamp(28px, 3.4vw, 56px)',
+              lineHeight: 1.1,
+              fontWeight: 700,
+              letterSpacing: -1,
+            }}
+          >
+            Operators with scar tissue.
+          </h2>
+          <div className="mt-8 grid grid-cols-2 gap-6 flex-1">
+            {founders.slice(0, 2).map((f, i) => (
+              <div key={i} className="p-5 rounded-2xl" style={{ background: PAPER, border: `1px solid ${HAIRLINE}` }}>
+                <div className="flex items-center gap-4">
+                  <div
+                    className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-extrabold"
+                    style={{ background: CRIMSON, color: '#FFFFFF', fontFamily: FONT_SANS }}
+                  >
+                    {f.initials || f.name?.slice(0, 2)?.toUpperCase()}
+                  </div>
+                  <div>
+                    <Editable
+                      as="div"
+                      value={f.name}
+                      path={`founders.${i}.name`}
+                      editable={editable}
+                      onEdit={onEdit}
+                      style={{ fontFamily: FONT_SERIF, fontSize: 18, fontWeight: 700, color: INK }}
+                    />
+                    <Editable
+                      value={f.role}
+                      path={`founders.${i}.role`}
+                      editable={editable}
+                      onEdit={onEdit}
+                      style={{ fontFamily: FONT_SANS, fontSize: 12, color: CRIMSON, marginTop: 2, letterSpacing: 1 }}
+                    />
+                  </div>
+                </div>
+                <Editable
+                  value={f.bio}
+                  path={`founders.${i}.bio`}
+                  editable={editable}
+                  onEdit={onEdit}
+                  style={{ fontFamily: FONT_SERIF, fontSize: 14, color: '#525252', marginTop: 14, lineHeight: 1.55 }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="col-span-5">
+          <div style={{ fontFamily: FONT_SANS, fontSize: 10, letterSpacing: 4, color: SUBTLE }}>JOURNEY</div>
+          <div className="mt-6 space-y-6 relative pl-6">
+            <div className="absolute left-2 top-2 bottom-2 w-px" style={{ background: HAIRLINE }} />
+            {timeline.slice(0, 5).map((t, i) => (
+              <div key={i} className="relative">
+                <span
+                  className="absolute -left-[19px] top-2 w-3 h-3 rounded-full"
+                  style={{ background: CRIMSON, boxShadow: `0 0 0 4px ${PAPER}` }}
+                />
+                <div style={{ fontFamily: FONT_SANS, fontSize: 11, letterSpacing: 3, color: CRIMSON, fontWeight: 700 }}>
+                  {t.year}
+                </div>
+                <Editable
+                  value={t.event}
+                  path={`team_timeline.${i}.event`}
+                  editable={editable}
+                  onEdit={onEdit}
+                  style={{ fontFamily: FONT_SERIF, fontSize: 16, color: INK, marginTop: 4 }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+const Slide12: React.FC<SequoiaDeckProps> = ({ data = {}, editable, onEdit }) => {
+  const roadmap = data.roadmap?.length
+    ? data.roadmap
+    : [
+        { quarter: 'Now', goal: 'Live in production · 60+ paying logos' },
+        { quarter: '+6 mo', goal: '$1M ARR' },
+        { quarter: '+12 mo', goal: 'Adjacent workflow live' },
+        { quarter: '+24 mo', goal: 'Category leader' },
+      ];
+  const uof = data.use_of_funds?.length
+    ? data.use_of_funds
+    : [
+        { label: 'Engineering', pct: 45 },
+        { label: 'GTM', pct: 30 },
+        { label: 'Operations + Infra', pct: 15 },
+        { label: 'Reserve', pct: 10 },
+      ];
+  return (
+    <SlideFrame index={11} total={12} label="The Vision" company={data.company} bg={INK} ink={PAPER}>
+      <div className="grid grid-cols-12 gap-10 h-full">
+        <div className="col-span-7 flex flex-col justify-center">
+          <Editable
+            as="h2"
+            value={data.vision_headline}
+            path="vision_headline"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="Raising $— to build the company that defines this decade."
+            style={{
+              fontFamily: FONT_SERIF,
+              fontSize: 'clamp(32px, 4vw, 72px)',
+              lineHeight: 1.05,
+              fontWeight: 700,
+              letterSpacing: -1.5,
+              color: PAPER,
+            }}
+          />
+          <Editable
+            value={data.vision_body}
+            path="vision_body"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="Two sentences describing the world that exists once this company succeeds — concrete, specific, ambitious."
+            style={{
+              fontFamily: FONT_SERIF,
+              fontStyle: 'italic',
+              fontSize: 'clamp(16px, 1.4vw, 22px)',
+              lineHeight: 1.45,
+              color: '#D4CFC2',
+              marginTop: 24,
+              maxWidth: 680,
+            }}
+          />
+          <div className="mt-10">
+            <div style={{ fontFamily: FONT_SANS, fontSize: 10, letterSpacing: 4, color: '#A89F8F' }}>ROADMAP</div>
+            <div className="mt-6">
+              <div className="relative">
+                <div className="absolute left-0 right-0 top-3 h-px" style={{ background: '#3a3a3a' }} />
+                <div className="grid grid-cols-4 gap-4">
+                  {roadmap.slice(0, 4).map((r, i) => (
+                    <div key={i} className="relative pt-8">
+                      <span
+                        className="absolute left-1/2 -translate-x-1/2 top-1 w-3 h-3 rounded-full"
+                        style={{ background: CRIMSON }}
+                      />
+                      <div style={{ fontFamily: FONT_SANS, fontSize: 11, letterSpacing: 3, color: CRIMSON, fontWeight: 700, textAlign: 'center' }}>
+                        {r.quarter.toUpperCase()}
+                      </div>
+                      <Editable
+                        value={r.goal}
+                        path={`roadmap.${i}.goal`}
+                        editable={editable}
+                        onEdit={onEdit}
+                        style={{ fontFamily: FONT_SERIF, fontSize: 14, color: PAPER, marginTop: 6, textAlign: 'center', lineHeight: 1.4 }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-8 grid grid-cols-3 gap-4" style={{ fontFamily: FONT_SANS }}>
+            <div className="p-4 rounded-xl" style={{ background: CRIMSON }}>
+              <div className="text-[10px] tracking-[0.3em] text-[#F5C9CC]">RAISING</div>
+              <div style={{ fontFamily: FONT_SERIF, fontSize: 30, fontWeight: 700, marginTop: 4, color: '#FFFFFF' }}>
+                {fmtUSD(data.ask_amount_usd)}
+              </div>
+            </div>
+            <div className="p-4 rounded-xl" style={{ background: '#1a1a1a', border: `1px solid #2b2b2b` }}>
+              <div className="text-[10px] tracking-[0.3em] text-[#A89F8F]">RUNWAY</div>
+              <div style={{ fontFamily: FONT_SERIF, fontSize: 30, fontWeight: 700, marginTop: 4 }}>
+                {data.runway_months ?? '—'} <span style={{ fontSize: 14, color: '#A89F8F' }}>mo</span>
+              </div>
+            </div>
+            <div className="p-4 rounded-xl" style={{ background: '#1a1a1a', border: `1px solid #2b2b2b` }}>
+              <div className="text-[10px] tracking-[0.3em] text-[#A89F8F]">CONTACT</div>
+              <Editable
+                value={data.contact}
+                path="contact"
+                editable={editable}
+                onEdit={onEdit}
+                placeholder="founders@company.com"
+                style={{ fontFamily: FONT_SERIF, fontSize: 16, marginTop: 4 }}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="col-span-5 flex flex-col justify-between">
+          <div>
+            <div style={{ fontFamily: FONT_SANS, fontSize: 10, letterSpacing: 4, color: '#A89F8F' }}>USE OF FUNDS</div>
+            <div className="mt-6">
+              <Donut data={uof} />
+            </div>
+          </div>
+          <Editable
+            value={data.closing_line}
+            path="closing_line"
+            editable={editable}
+            onEdit={onEdit}
+            placeholder="The decade that follows depends on whether this company exists."
+            style={{
+              fontFamily: FONT_SERIF,
+              fontStyle: 'italic',
+              fontSize: 'clamp(18px, 1.6vw, 26px)',
+              lineHeight: 1.3,
+              color: PAPER,
+              borderTop: `1px solid #2b2b2b`,
+              paddingTop: 22,
+              marginTop: 32,
+            }}
+          />
+        </div>
+      </div>
+    </SlideFrame>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Deck shell with motion transitions
+// ─────────────────────────────────────────────────────────────────
+
+const SLIDES: React.FC<SequoiaDeckProps>[] = [
+  Slide1, Slide2, Slide3, Slide4, Slide5, Slide6,
+  Slide7, Slide8, Slide9, Slide10, Slide11, Slide12,
+];
+
+export const SequoiaDeckApp: React.FC<{
+  initialData?: SequoiaData;
+  editable?: boolean;
+}> = ({ initialData = SAMPLE_DATA, editable = true }) => {
+  const [index, setIndex] = useState(0);
+  const [data, setData] = useState<SequoiaData>(initialData);
+  const reduced = useReducedMotion();
+
+  const next = useCallback(() => setIndex((i) => Math.min(i + 1, SLIDES.length - 1)), []);
+  const prev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') {
+        e.preventDefault();
+        next();
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        prev();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [next, prev]);
+
+  const onEdit = useCallback((path: string, value: string) => {
+    setData((prev) => {
+      const next = structuredClone(prev) as any;
+      const parts = path.split('.');
+      let cur = next;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const k = parts[i];
+        const isArrKey = !isNaN(Number(parts[i + 1]));
+        if (cur[k] == null) cur[k] = isArrKey ? [] : {};
+        cur = cur[k];
+      }
+      cur[parts[parts.length - 1]] = value;
+      return next;
+    });
+  }, []);
+
+  const Slide = SLIDES[index];
+
+  return (
+    <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-6 lg:p-10"
+      style={{ background: '#EEEAE0', fontFamily: FONT_SERIF }}>
+      <div className="w-full max-w-[1400px] rounded-[28px] overflow-hidden shadow-[0_30px_80px_-30px_rgba(0,0,0,0.35)] border"
+        style={{ borderColor: '#D8D2C6', background: PAPER }}>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={index}
+            initial={reduced ? false : { opacity: 0, y: 28 }}
+            animate={reduced ? {} : { opacity: 1, y: 0 }}
+            exit={reduced ? {} : { opacity: 0, y: -28 }}
+            transition={{ duration: 0.5, ease: [0.22, 0.61, 0.36, 1] }}
+          >
+            <Slide data={data} editable={editable} onEdit={onEdit} />
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Nav */}
+      <div className="w-full max-w-[1400px] mt-5 flex items-center justify-between"
+        style={{ fontFamily: FONT_SANS, color: INK }}>
+        <button
+          onClick={prev}
+          disabled={index === 0}
+          className="px-5 py-2.5 rounded-full border bg-white hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-2 text-sm font-medium"
+          style={{ borderColor: HAIRLINE }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M15 18 L9 12 L15 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Previous
+        </button>
+
+        <div className="flex items-center gap-2">
+          {SLIDES.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setIndex(i)}
+              aria-label={`Slide ${i + 1}`}
+              className="transition-all"
+              style={{
+                width: i === index ? 30 : 6,
+                height: 6,
+                borderRadius: 999,
+                background: i === index ? CRIMSON : '#C9C2B4',
+              }}
+            />
+          ))}
+        </div>
+
+        <button
+          onClick={next}
+          disabled={index === SLIDES.length - 1}
+          className="px-5 py-2.5 rounded-full border bg-white hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-2 text-sm font-medium"
+          style={{ borderColor: HAIRLINE }}
+        >
+          Next
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M9 6 L15 12 L9 18" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// SAMPLE_DATA — used standalone; on Axal replace with the merged
+// shape produced by cloudflare-worker/src/routes/decks.ts
+// heuristicSlides(): { ...project, ...financial_models,
+// ...metrics_snapshots, ...rounds, founders: [...], retention: [...] }
+// ─────────────────────────────────────────────────────────────────
+
+export const SAMPLE_DATA: SequoiaData = {
+  company: '[Company]',
+  domain: 'company.com',
+  category: 'Frontier infrastructure',
+  sector: 'AI infra',
+
+  future_year: '2035',
+  future_headline: 'Every team will operate with a single source of truth.',
+  future_subline: 'The work itself becomes the system of record — observable, audited, alive.',
+
+  shift_title: 'Three forces converging now.',
+  shift_body:
+    'What was impossible last decade is now economical. What was acceptable last decade is now intolerable. The inflection is no longer ahead of us — it is here.',
+  shift_curves: [
+    { label: 'Compute per dollar', from: 12, to: 84, color: CRIMSON },
+    { label: 'Tolerance for friction', from: 70, to: 14, color: ACCENT },
+    { label: 'Capital available', from: 28, to: 60, color: INK },
+  ],
+
+  broken_title: 'Today, this work is done by hand.',
+  broken_pillars: [
+    { title: 'Fragmented stacks', body: 'Teams stitch six or more tools to ship a single workflow.', cost: '40% time lost' },
+    { title: 'Spreadsheet truth', body: 'The most important records still live in inboxes and tabs.', cost: 'Trust eroded' },
+    { title: 'Manual reconciliation', body: 'Every cycle ends in a fire drill across systems.', cost: '2× errors' },
+  ],
+
+  insight_label: 'WHAT EVERYONE ELSE MISSES',
+  insight_headline:
+    'The work itself is the data. The data itself becomes the moat.',
+  insight_body:
+    'Every other approach treats the workflow and the database as separate concerns. We collapse them into one — turning ordinary daily activity into a compounding strategic asset.',
+  insight_proofs: [
+    'Our pilot customers each generated 10× more structured records than competing tools.',
+    'Every record we capture becomes training data for the next decision.',
+    'The lock-in is not the product — it is the customer’s own history.',
+  ],
+
+  tam_usd: 42_000_000_000,
+  sam_usd: 9_400_000_000,
+  som_usd: 1_200_000_000,
+  market_cagr_pct: 28,
+  market_curve: [
+    { year: '2022', v: 22 }, { year: '2024', v: 38 }, { year: '2026', v: 64 },
+    { year: '2028', v: 105 }, { year: '2030', v: 168 },
+  ],
+
+  solution_one_liner:
+    'A single workflow that replaces the patchwork — and produces the audit trail that the platform itself needs.',
+  before_state: ['Six tools', 'Manual sync', 'Reconciled by hand', 'Filed late'],
+  after_state: ['One workflow', 'Auto-synced', 'Audited live', 'Done in seconds'],
+
+  product_pillars: [
+    { title: 'One source of truth', body: 'Every record reconciled in real time.' },
+    { title: 'Reasoning layer', body: 'Decisions explainable, audit-trailed.' },
+    { title: 'Open by design', body: 'Plugs into the systems teams already use.' },
+  ],
+
+  axis_x: 'Reach',
+  axis_y: 'Depth',
+  competitors: [
+    { name: 'Legacy A', x: 78, y: 28 },
+    { name: 'Legacy B', x: 58, y: 36 },
+    { name: 'Point Tool', x: 24, y: 70 },
+    { name: 'Us', x: 80, y: 84 },
+  ],
+  moats: [
+    { title: 'Data', body: 'Every customer makes the next prediction sharper.' },
+    { title: 'Distribution', body: 'Partner channels into the ICP, not around it.' },
+    { title: 'Switching cost', body: 'Embedded in the daily workflow of the team.' },
+  ],
+
+  mrr_usd: 34_000,
+  paying_customers: 64,
+  growth_mom_pct: 41,
+  nrr_pct: 122,
+  revenue_curve: [
+    { month: 'Jan', v: 4 }, { month: 'Feb', v: 7 }, { month: 'Mar', v: 11 },
+    { month: 'Apr', v: 16 }, { month: 'May', v: 24 }, { month: 'Jun', v: 34 },
+  ],
+  user_curve: [
+    { month: 'Jan', v: 120 }, { month: 'Feb', v: 240 }, { month: 'Mar', v: 410 },
+    { month: 'Apr', v: 680 }, { month: 'May', v: 1050 }, { month: 'Jun', v: 1640 },
+  ],
+  retention_curve: [
+    { m: 'M0', v: 100 }, { m: 'M1', v: 92 }, { m: 'M3', v: 86 },
+    { m: 'M6', v: 81 }, { m: 'M9', v: 78 }, { m: 'M12', v: 76 },
+  ],
+  customer_logos: [
+    { name: 'Acme Co.' }, { name: 'Nimbus' }, { name: 'Lattice' },
+    { name: 'Northwind' }, { name: 'Atlas Labs' }, { name: 'Verdant' },
+  ],
+
+  flywheel_nodes: [
+    { label: 'Customers', body: 'use product' },
+    { label: 'Product', body: 'learns from use' },
+    { label: 'Data', body: 'compounds' },
+    { label: 'Network', body: 'expands reach' },
+    { label: 'Revenue', body: 'funds invention' },
+  ],
+
+  founders: [
+    {
+      name: 'Founder One',
+      role: 'CEO · Co-founder',
+      bio: 'Prior: led product at Stripe. Shipped infrastructure used by 4M+ businesses. Forbes 30u30.',
+      initials: 'F1',
+    },
+    {
+      name: 'Founder Two',
+      role: 'CTO · Co-founder',
+      bio: 'Prior: principal engineer at Linear. Designed core systems shipping to 50K+ teams. ICPC world finalist.',
+      initials: 'F2',
+    },
+  ],
+  team_timeline: [
+    { year: '2014', event: 'Met building open-source infrastructure' },
+    { year: '2020', event: 'Shipped a category-defining product together' },
+    { year: '2025', event: 'Founded this company' },
+  ],
+
+  vision_headline:
+    'Raising $3.5M to build the company that defines this decade.',
+  vision_body:
+    'In five years, every operating team in this category will route their work through one platform. We intend to be that platform — and to do it with discipline, not theatre.',
+  roadmap: [
+    { quarter: 'Now', goal: 'Live · 60+ paying logos' },
+    { quarter: '+6 mo', goal: '$1M ARR · 10× pipeline' },
+    { quarter: '+12 mo', goal: 'Second workflow live' },
+    { quarter: '+24 mo', goal: 'Category leader' },
+  ],
+  use_of_funds: [
+    { label: 'Engineering', pct: 45 },
+    { label: 'GTM', pct: 30 },
+    { label: 'Operations + Infra', pct: 15 },
+    { label: 'Reserve', pct: 10 },
+  ],
+  ask_amount_usd: 3_500_000,
+  runway_months: 24,
+  closing_line:
+    'If we get this right, the next generation of teams stops fighting their tools and starts shipping outcomes.',
+  contact: 'founders@company.com',
+};
+
+export default SequoiaDeckApp;
+```
+
+---
+
+### How it maps to Axal data
+
+When mounted inside the Pitch Deck Builder, the worker route (`cloudflare-worker/src/routes/decks.ts`) already builds the merged platform-row shape via `heuristicSlides()`. Pass that object as `initialData`:
+
+```tsx
+import { SequoiaDeckApp } from './decks/templates/sequoia_classic_app';
+
+const data = {
+  // pulled server-side from the existing query
+  company: project.name,
+  domain: project.landing_url?.replace(/^https?:\/\//, ''),
+  category: project.category,
+  sector: project.sector,
+
+  future_headline: project.future_headline,        // see Prompt MD: add column
+  future_year: project.future_year,                // see Prompt MD
+  shift_title: project.shift_title,                // see Prompt MD
+  shift_body: project.shift_body,                  // see Prompt MD
+  broken_pillars: JSON.parse(project.broken_pillars_json || '[]'),
+
+  insight_headline: project.insight_headline,      // see Prompt MD
+  insight_body: project.insight_body,              // see Prompt MD
+  insight_proofs: JSON.parse(project.insight_proofs_json || '[]'),
+
+  tam_usd: project.tam_usd,
+  sam_usd: project.sam_usd,
+  som_usd: project.som_usd,
+  market_cagr_pct: project.market_cagr_pct,
+  market_curve: JSON.parse(project.market_curve_json || '[]'),
+
+  solution_one_liner: project.solution,
+  before_state: JSON.parse(project.before_state_json || '[]'),
+  after_state: JSON.parse(project.after_state_json || '[]'),
+
+  product_pillars: JSON.parse(project.product_pillars_json || '[]'),
+  product_modules: JSON.parse(project.product_modules_json || '[]'),
+
+  competitors: JSON.parse(project.competitors_json || '[]'),
+  axis_x: project.competitive_axis_x,
+  axis_y: project.competitive_axis_y,
+  moats: JSON.parse(project.moats_json || '[]'),
+
+  mrr_usd: financial_models.mrr_usd,
+  paying_customers: financial_models.paying_customers,
+  growth_mom_pct: financial_models.mom_growth_pct,
+  nrr_pct: financial_models.nrr_pct,
+  revenue_curve: metrics_series.mrr_monthly,
+  user_curve: metrics_series.dau_monthly,
+  retention_curve: metrics_series.retention_cohort,
+  customer_logos: JSON.parse(project.customer_logos_json || '[]'),
+
+  flywheel_nodes: JSON.parse(project.flywheel_nodes_json || '[]'),
+
+  founders: founders_rows,             // joined to projects.founder_id
+  team_timeline: JSON.parse(project.team_timeline_json || '[]'),
+
+  vision_headline: project.vision_headline,
+  vision_body: project.vision_body,
+  roadmap: JSON.parse(project.roadmap_json || '[]'),
+  use_of_funds: JSON.parse(round.use_of_funds_json || '[]'),
+  ask_amount_usd: round.target_amount_usd,
+  runway_months: financial_models.runway_months,
+  closing_line: project.closing_line,
+  contact: user.email,
+};
+
+<SequoiaDeckApp initialData={data} editable />
+```
+
+Several of these columns don't exist yet — that's exactly the autofill migration covered in earlier **Prompt MD** (`DECK_AUTOFILL_AUDIT.md` + `00xx_deck_autofill_fields.sql`). Once that lands, every field above is real.
+
+### What's in the build
+
+- **12 slides**, each a separate component, narrative arc Sequoia/Apple/Stripe-grade.
+- **Framer Motion** entry/exit on slide change (`y: 28 → 0 → -28`, 500ms cubic-bezier). Respects `prefers-reduced-motion`.
+- **Keyboard nav** (←, →, space).
+- **Editorial typography** — Source Serif Pro paired with Inter sans for eyebrows, stats, and labels.
+- **All SVG illustrations** authored in code: cinematic horizon, S-curve shift chart, fractured-fabric broken-reality, compass insight, layered TAM/SAM/SOM rings, area + retention curves, architecture diagram, positioning map, customer-logo badges, flywheel, donut, journey timeline.
+- **Custom palette** — Sequoia crimson `#8C1F28`, warm paper `#FBFAF7`, burnt sienna accent, ink `#0D0D0D`, with a final inverted-on-black vision slide.
+- **Inline editing** via `contentEditable` on every text element; state stored in `data`, edits flow through `onEdit(path, value)`.
+- **Responsive** 16:9 frame; scales fluidly.
+
+Want me to keep going with the remaining ten templates in this same single-file investor-grade format (Kawasaki, Minimal Seed, Series A Growth, Series B Diligence, Demo Day, Sales, Partnership BD, One-Pager Teaser, Investor Appendix, Narrative Brand)?
