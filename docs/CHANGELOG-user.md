@@ -10,6 +10,15 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ## May 2026
 
+- The **Series B — Diligence Pack** pitch-deck template was rebuilt
+  from the ground up. It's now a full 32-slide board-grade deck (22
+  main slides plus a 10-page appendix) covering opportunity, product,
+  traction, GTM, defensibility, organization, and the investment ask —
+  with appendix pages for financials, cohorts, segmentation, funnel,
+  pricing, architecture, security, risks, governance, and a three-year
+  operating plan. It autofills from your project data and ships with
+  polished sample content so it always renders cleanly, exports to PDF,
+  and works in one-time share links.
 - The **Minimal Seed** pitch-deck template got a complete visual
   upgrade — six slides, one investor question each, in a clean
   Linear/Stripe-style aesthetic with built-in product mockup, charts,
