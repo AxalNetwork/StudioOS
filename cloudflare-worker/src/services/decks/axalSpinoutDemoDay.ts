@@ -232,6 +232,7 @@ type ScoreRow = {
 type FinancialRow = { inputs_json: string | null; computed_json?: string | null };
 type HolderRow = {
   name: string | null; ownership_pct: number | null;
+  shares: number | null;
   security_type: string | null; kind: string | null;
 };
 type OKRRow = {
@@ -341,10 +342,10 @@ export async function fillAxalSpinoutDemoDay(
       WHERE project_id = ? ORDER BY id DESC LIMIT 1
     `).bind(projectId).first<FinancialRow>().catch(() => null),
     DB.prepare(`
-      SELECT name, ownership_pct, security_type, kind
+      SELECT name, ownership_pct, shares, security_type, kind
       FROM cap_table_holders
       WHERE project_id = ? OR (project_id IS NULL AND user_id = ?)
-      ORDER BY ownership_pct DESC NULLS LAST LIMIT 12
+      ORDER BY COALESCE(ownership_pct, 0) DESC, COALESCE(shares, 0) DESC LIMIT 12
     `).bind(projectId, userId).all<HolderRow>().catch(() => ({ results: [] as HolderRow[] })),
     DB.prepare(`
       SELECT interviewee_name, interviewee_role, notes, pains_json, hypotheses_json
@@ -492,36 +493,56 @@ export async function fillAxalSpinoutDemoDay(
   );
 
   // ------ founders + cap-table holders --------------------------------
+  // Spec requires ownership % to be derived from `shares` when an
+  // explicit `ownership_pct` is missing — the base schema (migration
+  // 020) makes `ownership_pct` optional but always carries `shares`.
+  // We compute a total shares sum across the whole pulled set and use
+  // it as the denominator so derived pcts agree with what the cap-
+  // table UI shows. Explicit `ownership_pct` always wins; derivation
+  // is the fallback.
+  const totalShares = holdersList.reduce(
+    (s, h) => s + (isFinite(Number(h.shares)) ? Math.max(0, Number(h.shares)) : 0),
+    0,
+  );
+  const effectivePct = (h: HolderRow): number | null => {
+    if (h.ownership_pct != null && isFinite(Number(h.ownership_pct))) {
+      return Number(h.ownership_pct);
+    }
+    const sh = Number(h.shares);
+    if (totalShares > 0 && isFinite(sh) && sh > 0) {
+      return (sh / totalShares) * 100;
+    }
+    return null;
+  };
+  const holdersWithPct = holdersList.map((h) => ({ row: h, pct: effectivePct(h) }));
+
   // "Founder" rows = explicit kind=founder OR common-stock holders OR
-  // anyone holding ≥5% who isn't tagged as an investor/ESOP. Everyone
-  // else surfaces on the cap_table slide.
-  const founders = holdersList
-    .filter((h) => {
-      const k = (h.kind || '').toLowerCase();
+  // anyone holding ≥5% who isn't tagged as an investor/ESOP.
+  const founders = holdersWithPct
+    .filter(({ row, pct }) => {
+      const k = (row.kind || '').toLowerCase();
       if (k === 'investor' || k === 'esop') return false;
-      const st = (h.security_type || '').toLowerCase();
-      return k === 'founder' || st.includes('common') || (h.ownership_pct ?? 0) >= 5;
+      const st = (row.security_type || '').toLowerCase();
+      return k === 'founder' || st.includes('common') || (pct ?? 0) >= 5;
     })
     .slice(0, 4)
-    .map((h) => ({
-      name: orDash(h.name),
-      role: h.ownership_pct != null
-        ? `Founder · ${Math.round(h.ownership_pct * 10) / 10}%`
+    .map(({ row, pct }) => ({
+      name: orDash(row.name),
+      role: pct != null
+        ? `Founder · ${Math.round(pct * 10) / 10}%`
         : 'Founder',
       bio: undefined as string | undefined,
     }))
     .filter((f) => f.name !== DASH);
 
-  const allHolders = holdersList
-    .filter((h) => h.name && (h.ownership_pct ?? 0) > 0)
+  const allHolders = holdersWithPct
+    .filter(({ row, pct }) => row.name && (pct ?? 0) > 0)
     .slice(0, 10)
-    .map((h) => ({
-      name: orDash(h.name),
-      role: (h.security_type || '').trim() || DASH,
-      ownership_pct: h.ownership_pct != null
-        ? `${Math.round(h.ownership_pct * 10) / 10}%`
-        : DASH,
-      kind: (h.kind || '').trim() || DASH,
+    .map(({ row, pct }) => ({
+      name: orDash(row.name),
+      role: (row.security_type || '').trim() || DASH,
+      ownership_pct: pct != null ? `${Math.round(pct * 10) / 10}%` : DASH,
+      kind: (row.kind || '').trim() || DASH,
     }));
 
   // ------ assemble all 14 sections ------------------------------------
@@ -683,7 +704,38 @@ export async function fillAxalSpinoutDemoDay(
  * merges onto SAMPLE_DATA via `mergeShape()`.
  */
 export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<Record<string, unknown>> {
-  const enc = (obj: unknown): string => JSON.stringify(obj).slice(0, 3900);
+  // Per-section JSON size cap. The paragraph-field write path elsewhere
+  // in the worker caps values at ~4 KiB; we previously naively did
+  // `JSON.stringify(obj).slice(0, 3900)` which can chop a JSON payload
+  // mid-object and break hydrate()'s JSON.parse. Instead we encode once,
+  // and if oversized, walk the section recursively trimming the longest
+  // string fields / array tails until the encoded payload fits. The
+  // result is always valid JSON.
+  const MAX_BYTES = 3900;
+  const trimDeep = (val: unknown): unknown => {
+    if (typeof val === 'string') {
+      return val.length > 400 ? val.slice(0, 397) + '…' : val;
+    }
+    if (Array.isArray(val)) {
+      // cap arrays at 8 entries and trim every entry recursively
+      return val.slice(0, 8).map(trimDeep);
+    }
+    if (val && typeof val === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(val)) out[k] = trimDeep(v);
+      return out;
+    }
+    return val;
+  };
+  const enc = (obj: unknown): string => {
+    const first = JSON.stringify(obj);
+    if (first.length <= MAX_BYTES) return first;
+    const second = JSON.stringify(trimDeep(obj));
+    if (second.length <= MAX_BYTES) return second;
+    // Last-resort: keep the shape but blank out the payload so hydrate
+    // merges nothing rather than crashing on a truncated parse.
+    return JSON.stringify({});
+  };
   const para = (key: string, value: string) => ({ kind: 'paragraph', key, value });
 
   const SPEC = [
