@@ -1072,6 +1072,9 @@ export const api = {
   // rail. 409 `no_method_id` means the deck was created before the new
   // fielded editor; client should direct the user to /apply-method first.
   deckAutofill: (id) => request(`/decks/${id}/autofill`, { method: 'POST', body: '{}' }),
+  // Task #2 — server-side export, format ∈ {pdf, pptx}. PNG cover was
+  // removed end-to-end (PDF + PPTX are both driven by Cloudflare Browser
+  // Rendering against the live SPA print template).
   deckExport: (id, format) =>
     fetch(`${BASE}/decks/${id}/export`, {
       method: 'POST',
@@ -1083,6 +1086,11 @@ export const api = {
       },
       body: JSON.stringify({ format }),
     }),
+  // Task #2 — public, HMAC-token-gated deck payload consumed by the
+  // headless Browser-Rendering session driving server-side exports.
+  // No auth cookies/JWT are sent because the session has none; the
+  // token signs {deck_id, exp} and is short-lived (3–5 min).
+  deckPrintExportRead: (token) => request(`/decks/print-export/${encodeURIComponent(token)}`),
   deckGetBrand: () => request('/decks/brand'),
   deckSetWatermark: (url) => request('/decks/brand/watermark', { method: 'PUT', body: JSON.stringify({ watermark_url: url }) }),
 

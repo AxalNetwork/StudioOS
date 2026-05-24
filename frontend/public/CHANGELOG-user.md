@@ -8,6 +8,17 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Pitch-deck PDF and PowerPoint exports now actually work
+
+Downloading a pitch deck as PDF or PowerPoint now produces a file that
+looks exactly like what you see in the editor — same layout, same
+colors, same images — instead of failing with an error or giving you a
+plain text outline. The PowerPoint version captures each slide as a
+full-bleed image with the slide's text content tucked into the speaker
+notes, so it opens cleanly in Keynote, Google Slides, or PowerPoint
+itself. The old "PNG (cover)" option has been retired — PDF and
+PowerPoint cover what people actually asked for.
+
 ## Easier: a one-click jump from the Lab to your Demo Day deck
 
 The Spin-Out Lab dashboard now shows a "Generate your Demo Day deck"

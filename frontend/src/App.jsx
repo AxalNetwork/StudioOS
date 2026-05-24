@@ -1050,6 +1050,11 @@ function AppInner() {
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       {/* Task #53 — canonical share URL per spec is /share/deck/<token>. */}
       <Route path="/share/deck/:token" element={<PitchDeckPrintPage shareMode />} />
+      {/* Task #2 — public, HMAC-token-gated print target consumed only by
+          the Cloudflare Browser Rendering session that drives server-side
+          PDF / PPTX exports. Not auth-guarded; the token is signed and
+          short-lived. */}
+      <Route path="/deck/print-export/:token" element={<PitchDeckPrintPage exportMode />} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/trash" element={guard(['admin'], <AdminTrashPage />)} />
       <Route path="/admin/refer-earn" element={guard(['admin'], <AdminReferEarnPayouts />)} />

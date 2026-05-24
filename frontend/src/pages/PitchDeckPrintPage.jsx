@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { ChevronLeft, ChevronRight, Download, Loader2, Maximize2, Minimize2, Printer, X } from 'lucide-react';
 import { api } from '../lib/api';
@@ -257,8 +257,19 @@ function buildTemplateData(deck) {
   return out;
 }
 
-export default function PitchDeckPrintPage({ shareMode = false }) {
+export default function PitchDeckPrintPage({ shareMode = false, exportMode = false }) {
   const { id, token } = useParams();
+  // Task #2 — when the headless Browser-Rendering session loads us, the
+  // worker passes ?print_mode=pdf (stack every slide top-to-bottom for
+  // Chrome's page-per-slide PDF output) or ?print_mode=single&slide=N
+  // (render ONE slide for a 1920×1080 screenshot fan-out). The query
+  // params are only read in exportMode; share + authenticated viewers
+  // ignore them.
+  const [searchParams] = useSearchParams();
+  const printMode = exportMode ? (searchParams.get('print_mode') || 'pdf') : null;
+  const singleSlideIdx = exportMode && printMode === 'single'
+    ? Math.max(0, parseInt(searchParams.get('slide') || '0', 10) || 0)
+    : null;
   const [deck, setDeck] = useState(null);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -286,7 +297,14 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
   useEffect(() => {
     (async () => {
       try {
-        const d = shareMode ? await api.deckShareRead(token) : await api.deckGet(parseInt(id));
+        let d;
+        if (exportMode) {
+          d = await api.deckPrintExportRead(token);
+        } else if (shareMode) {
+          d = await api.deckShareRead(token);
+        } else {
+          d = await api.deckGet(parseInt(id));
+        }
         setDeck(d);
         if (shareMode && d?.view_id) {
           viewIdRef.current = d.view_id;
@@ -294,7 +312,7 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
         }
       } catch (e) { setError(e?.message || 'Failed to load'); }
     })();
-  }, [id, token, shareMode]);
+  }, [id, token, shareMode, exportMode]);
 
   const methodId = useMemo(() => detectMethodId(deck), [deck]);
 
@@ -530,6 +548,91 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
   if (!deck) return <div className="p-8 text-gray-500">Loading…</div>;
   if (methodId && !registryReady) return <div className="p-8 text-gray-500">Loading template…</div>;
 
+  // Task #2 — headless export branch. No chrome, no CTA, no scaling
+  // wrappers: render each slide at the native 1920×1080 size the
+  // templates were designed for so Browser Rendering captures pixel-
+  // perfect output. PDF mode stacks every slide; single mode renders
+  // just one. We render INSIDE a flexbox track so the template's
+  // own [data-slide-frame] markers stay top-to-bottom.
+  if (exportMode) {
+    const fixedStageStyle = {
+      width: INNER_W,
+      background: '#ffffff',
+      margin: 0,
+      padding: 0,
+    };
+    const trackStyle = {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 0,
+      width: INNER_W,
+    };
+    return (
+      <div style={{ background: '#ffffff', margin: 0, padding: 0 }}>
+        <style>{`
+          html, body, #root { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }
+          /* Each slide is exactly 1920×1080 inside the template; keep
+             page breaks aligned so the headless PDF emits one page per
+             slide and no chrome ever appears. */
+          @page { size: 1920px 1080px; margin: 0; }
+          [data-slide-frame] { page-break-after: always; break-after: page; }
+          [data-slide-frame]:last-child { page-break-after: auto; break-after: auto; }
+        `}</style>
+        <div style={fixedStageStyle} data-export-stage>
+          <div style={trackStyle}>
+            {isAdvanced ? (
+              singleSlideIdx != null ? (
+                <SingleSlideStage Template={Template} data={templateData} slideIdx={singleSlideIdx} />
+              ) : (
+                <Template data={templateData || {}} editable={false} />
+              )
+            ) : (
+              // Legacy fallback (no method_id) — render each slide at
+              // 1920×1080 with the same purple-card design used in the
+              // interactive viewer.
+              (singleSlideIdx != null
+                ? (deck.slides || []).slice(singleSlideIdx, singleSlideIdx + 1)
+                : (deck.slides || [])
+              ).map((s, i) => (
+                <div
+                  key={i}
+                  data-slide-frame=""
+                  style={{
+                    width: INNER_W,
+                    height: INNER_H,
+                    background: 'linear-gradient(135deg, #7c3aed, #4c1d95)',
+                    color: '#fff',
+                    padding: 96,
+                    boxSizing: 'border-box',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  <div style={{ fontSize: 24, letterSpacing: 6, textTransform: 'uppercase', color: '#ddd6fe' }}>
+                    {s.subtitle || `Slide ${(singleSlideIdx ?? 0) + i + 1}`}
+                  </div>
+                  <h2 style={{ fontSize: 72, fontWeight: 600, marginTop: 16 }}>{s.title}</h2>
+                  {s.body && (
+                    <div style={{ fontSize: 28, marginTop: 24, color: '#ede9fe' }}>
+                      <ReactMarkdown>{s.body}</ReactMarkdown>
+                    </div>
+                  )}
+                  {(s.bullets || []).length > 0 && (
+                    <ul style={{ marginTop: 24, fontSize: 28, listStyle: 'none', padding: 0 }}>
+                      {s.bullets.map((b, j) => (
+                        <li key={j} style={{ marginBottom: 12 }}>• {b}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // CTA card (share mode only — never on the authenticated /deck/:id/print).
   const ctaCategory = templateMeta?.category || null;
   const cta = (shareMode && ctaCategory && deck) ? (
@@ -706,6 +809,50 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
           </div>
         ))}
         {cta}
+      </div>
+    </div>
+  );
+}
+
+// Task #2 — single-slide stage for the per-slide PNG fan-out path.
+// Templates emit their entire slide stack as one fragment of
+// [data-slide-frame] children, so to isolate slide N we render the
+// whole stack inside a 1920×1080 overflow:hidden viewport and shift
+// the track up by N*1080 with a CSS transform. After mount we measure
+// the actual frame heights (some templates emit non-1080 frames) and
+// snap the offset to the exact pixel position of the requested slide
+// so the screenshot lands flush at the top of the viewport.
+function SingleSlideStage({ Template, data, slideIdx }) {
+  const trackRef = useRef(null);
+  const [offsetY, setOffsetY] = useState(slideIdx * INNER_H);
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const frames = el.querySelectorAll('[data-slide-frame]');
+      if (!frames.length) return;
+      const target = frames[Math.min(slideIdx, frames.length - 1)];
+      if (target) {
+        const top = target.getBoundingClientRect().top - el.getBoundingClientRect().top;
+        setOffsetY(top);
+      }
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [slideIdx, data]);
+  return (
+    <div style={{ width: INNER_W, height: INNER_H, overflow: 'hidden', position: 'relative', background: '#ffffff' }}>
+      <div
+        ref={trackRef}
+        style={{
+          width: INNER_W,
+          transform: `translateY(${-offsetY}px)`,
+          willChange: 'transform',
+        }}
+      >
+        <Template data={data || {}} editable={false} />
       </div>
     </div>
   );

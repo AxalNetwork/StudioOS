@@ -21,7 +21,8 @@ import { fillAxalSpinoutDemoDay, buildAxalSpinoutDemoDaySlides } from '../servic
 import { recommendMethod, listOverrides, setOverride, deleteOverride } from '../services/decks/recommend';
 import { getDeckBrand, setStudioWatermark, ensureMethodAllowed } from '../services/decks/branding';
 import { renderDeckHTML, type RenderableDeck } from '../services/decks/render';
-import { renderDeckPPTX } from '../services/decks/pptx';
+import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx';
+import { stripTrailingSlashes } from '../util/url';
 
 const decks = new Hono<{ Bindings: Env }>();
 
@@ -130,6 +131,49 @@ async function ensureProjectAutofillColumns(env: Env): Promise<void> {
 // per-impression so the founder can see "5 views, 12 min read" without
 // learning the visitor's IP or UA verbatim. SHA-256(secret || value)
 // keyed by JWT_SECRET so the hashes aren't a precomputed-rainbow target.
+// ---------------------------------------------------------------------
+// Task #2 — short-lived HMAC token for headless export. Browser
+// Rendering can't carry the user's cookies/JWT, so we sign a
+// scoped {deck_id, exp} payload and expose a public, token-gated
+// /api/decks/print-export/:token endpoint that returns the deck JSON.
+// The SPA route /deck/print-export/:token consumes the same token to
+// drive an unauthenticated render of the live React templates.
+// ---------------------------------------------------------------------
+// b64url + b64urlDecode are defined later in this file (function-hoisted);
+// reused here so we don't duplicate the implementation.
+async function deckPrintHmacKey(env: Env): Promise<CryptoKey> {
+  const secret = (env as any).JWT_SECRET || 'dev-secret-do-not-use';
+  return crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'],
+  );
+}
+export async function signDeckPrintToken(env: Env, deckId: number, ttlSec = 180): Promise<string> {
+  const exp = Math.floor(Date.now() / 1000) + ttlSec;
+  const payload = `deck-print|${deckId}|${exp}`;
+  const key = await deckPrintHmacKey(env);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  return `${b64url(new TextEncoder().encode(payload))}.${b64url(sig)}`;
+}
+export async function verifyDeckPrintToken(env: Env, token: string): Promise<{ deckId: number } | null> {
+  try {
+    const [pB64, sB64] = (token || '').split('.');
+    if (!pB64 || !sB64) return null;
+    const payloadBytes = b64urlDecode(pB64);
+    const sigBytes = b64urlDecode(sB64);
+    const key = await deckPrintHmacKey(env);
+    const ok = await crypto.subtle.verify('HMAC', key, sigBytes, payloadBytes);
+    if (!ok) return null;
+    const payload = new TextDecoder().decode(payloadBytes);
+    const [tag, idStr, expStr] = payload.split('|');
+    if (tag !== 'deck-print' || !idStr || !expStr) return null;
+    if (Math.floor(Date.now() / 1000) > Number(expStr)) return null;
+    const deckId = parseInt(idStr, 10);
+    if (!Number.isFinite(deckId) || deckId <= 0) return null;
+    return { deckId };
+  } catch { return null; }
+}
+
 async function hashViewerField(env: Env, value: string | null): Promise<string | null> {
   if (!value) return null;
   const secret = (env as any).JWT_SECRET || 'fallback-dev-only';
@@ -486,6 +530,34 @@ async function getDeckRow(env: Env, id: number): Promise<any> {
   if (!row) throw new Error('NotFound');
   return row;
 }
+
+// ---------------------------------------------------------------------
+// Task #2 — public, HMAC-token-gated deck payload for headless export.
+// Drives the SPA route /deck/print-export/:token from inside a
+// Cloudflare Browser Rendering session (which carries no auth cookies).
+// Returns the same JSON shape as deckGet() so the print page's existing
+// template-loading code path works unchanged.
+// ---------------------------------------------------------------------
+decks.get('/print-export/:token', async (c) => {
+  const token = c.req.param('token');
+  const v = await verifyDeckPrintToken(c.env, token);
+  if (!v) return c.json({ error: 'invalid_or_expired_token' }, 403);
+  await ensureSchema(c.env);
+  const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(v.deckId).first<any>();
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  const methodId = extractDeckMethodId(row);
+  let projectName: string | null = null;
+  try {
+    const pr = await c.env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(Number(row.project_id)).first<any>();
+    if (pr?.name) projectName = String(pr.name).slice(0, 200);
+  } catch {}
+  return c.json({
+    ...rowToDeck(row),
+    method_id: methodId,
+    project_id: Number(row.project_id) || null,
+    project_name: projectName,
+  });
+});
 
 decks.get('/share/:token', async (c) => {
   const token = c.req.param('token');
@@ -1085,7 +1157,20 @@ decks.post('/:id/autofill', async (c) => {
   });
 });
 
-/** POST /api/decks/:id/export — { format: 'pdf' | 'pptx' | 'png' } → file bytes. */
+/**
+ * POST /api/decks/:id/export — { format: 'pdf' | 'pptx' } → file bytes.
+ *
+ * Task #2 rewrite:
+ *  - PDF: Browser Rendering navigates to the live React SPA print
+ *    template at /deck/print-export/:hmacToken with print_mode=pdf so
+ *    every slide renders at native 1920×1080. Matches the in-app
+ *    preview investors see.
+ *  - PPTX: For each slide, screenshot the same SPA URL with slide=N
+ *    (single-slide mode), then embed each PNG full-bleed in the .pptx
+ *    via renderDeckPPTXWithImages(). Falls back to the text-only
+ *    renderer when BROWSER is unavailable so dev still gets a download.
+ *  - PNG cover removed end-to-end (UI + handler + validator).
+ */
 decks.post('/:id/export', async (c) => {
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
@@ -1096,17 +1181,13 @@ decks.post('/:id/export', async (c) => {
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
   const format = String(body?.format || 'pdf').toLowerCase();
-  if (!['pdf', 'pptx', 'png'].includes(format)) {
-    return c.json({ error: 'format must be pdf | pptx | png' }, 400);
+  if (!['pdf', 'pptx'].includes(format)) {
+    return c.json({ error: 'format must be pdf | pptx' }, 400);
   }
   let slides: any[] = [];
   try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
-  // Adapt either the new fielded shape or the legacy {title, body, bullets,
-  // image_url} shape to RenderableSlide.
-  // Task #16 — re-sanitize every persisted slide before handing it to
-  // the headless browser. Defense-in-depth: even if a legacy row pre-
-  // dates sanitizeImageUrl, the export path will not let a private-IP
-  // <img src=…> reach Browser Rendering.
+  // Re-sanitize persisted slides (defence-in-depth against legacy rows
+  // pre-dating sanitizeImageUrl) before they reach Browser Rendering.
   slides = sanitizeSlides(slides);
   const renderable: RenderableDeck = {
     title: row.title || 'Pitch deck',
@@ -1115,7 +1196,6 @@ decks.post('/:id/export', async (c) => {
       if (Array.isArray(s.fields)) {
         return { title: s.title, subtitle: s.subtitle, appendix: !!s.appendix, fields: s.fields };
       }
-      // Legacy shape → synthesise fields.
       const fields: any[] = [];
       if (s.title) fields.push({ key: 'title', label: 'Title', kind: 'title', value: s.title });
       if (s.subtitle) fields.push({ key: 'sub', label: 'Subtitle', kind: 'subtitle', value: s.subtitle });
@@ -1130,43 +1210,57 @@ decks.post('/:id/export', async (c) => {
   const brand = await getDeckBrand(c.env, user as any);
   const fname = (row.title || 'pitch-deck').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 80);
 
-  if (format === 'pptx') {
-    const bytes = renderDeckPPTX(renderable, brand);
-    return new Response(bytes, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'Content-Disposition': `attachment; filename="${fname}.pptx"`,
-        'Cache-Control': 'no-store',
-      },
-    });
-  }
-
-  // pdf + png both go via Cloudflare Browser Rendering.
-  const html = renderDeckHTML(renderable, brand);
   const browser = (c.env as any).BROWSER;
-  if (!browser?.fetch) {
-    // Browser binding missing (dev) — return HTML so the client can do
-    // its existing client-side PDF flow as a fallback.
-    return c.json({
-      error: 'browser_binding_unavailable',
-      fallback: 'client_render',
-      html,
-    }, 503);
-  }
+  const browserAvailable = !!browser?.fetch;
+
+  // Public base URL the headless browser will hit. The worker serves
+  // the SPA assets at /deck/print-export/:token on both axal.vc and
+  // app.axal.vc — pick the configured canonical host.
+  const publicBase = stripTrailingSlashes(
+    (c.env as any).PUBLIC_BASE_URL || (c.env as any).APP_URL || 'https://axal.vc'
+  );
+
   if (format === 'pdf') {
-    const r = await browser.fetch('https://browser.rendering/pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        html, viewport: { width: 1280, height: 720 },
-        pdfOptions: { printBackground: true, format: 'Letter', landscape: true },
-      }),
-    });
+    if (!browserAvailable) {
+      // Dev / unprovisioned env — let the client fall back to its
+      // existing html2canvas + jsPDF pipeline.
+      return c.json({
+        error: 'browser_binding_unavailable',
+        message: 'Server-side PDF export requires Cloudflare Browser Rendering. Use the client print fallback.',
+        fallback: 'client_render',
+      }, 503);
+    }
+    const token = await signDeckPrintToken(c.env, id, 180);
+    const url = `${publicBase}/deck/print-export/${token}?print_mode=pdf`;
+    let r: Response;
+    try {
+      r = await browser.fetch('https://browser/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url,
+          viewport: { width: 1920, height: 1080, deviceScaleFactor: 1 },
+          gotoOptions: { waitUntil: 'networkidle0', timeout: 45000 },
+          addStyleTag: [{
+            content: '@page { size: 1920px 1080px; margin: 0; } html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }',
+          }],
+          printOptions: {
+            printBackground: true,
+            preferCSSPageSize: true,
+            width: '1920px',
+            height: '1080px',
+            margin: { top: '0', right: '0', bottom: '0', left: '0' },
+          },
+        }),
+      });
+    } catch (e) {
+      console.error('[decks/export] pdf browser fetch threw:', (e as Error).message);
+      return c.json({ error: 'pdf_render_failed', message: (e as Error).message }, 502);
+    }
     if (!r.ok) {
       const text = await r.text().catch(() => '');
       console.error('[decks/export] pdf render failed:', r.status, text.slice(0, 200));
-      return c.json({ error: 'pdf_render_failed', status: r.status }, 502);
+      return c.json({ error: 'pdf_render_failed', status: r.status, detail: text.slice(0, 240) }, 502);
     }
     const bytes = await r.arrayBuffer();
     return new Response(bytes, {
@@ -1178,28 +1272,61 @@ decks.post('/:id/export', async (c) => {
       },
     });
   }
-  // png — first slide thumbnail.
-  const firstHtml = renderDeckHTML({ ...renderable, slides: renderable.slides.slice(0, 1) }, brand);
-  const r = await browser.fetch('https://browser.rendering/screenshot', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      html: firstHtml,
-      viewport: { width: 1280, height: 720 },
-      screenshotOptions: { type: 'png', omitBackground: false },
-    }),
-  });
-  if (!r.ok) {
-    const text = await r.text().catch(() => '');
-    console.error('[decks/export] png render failed:', r.status, text.slice(0, 200));
-    return c.json({ error: 'png_render_failed', status: r.status }, 502);
+
+  // -------------------- PPTX --------------------
+  if (!browserAvailable) {
+    // No headless browser — fall back to the legacy text-only writer
+    // so a download still works in dev. Production always has the
+    // BROWSER binding.
+    const bytes = renderDeckPPTX(renderable, brand);
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'Content-Disposition': `attachment; filename="${fname}.pptx"`,
+        'Cache-Control': 'no-store',
+        'X-Deck-Export-Mode': 'text-only-fallback',
+      },
+    });
   }
-  const bytes = await r.arrayBuffer();
+
+  // Browser Rendering available — capture one full-bleed PNG per slide
+  // by navigating the SPA print template with slide=N. 5-minute TTL
+  // comfortably covers the longest deck (60-slide cap).
+  const token = await signDeckPrintToken(c.env, id, 300);
+  const slideCount = renderable.slides.length;
+  const images: Uint8Array[] = [];
+  for (let i = 0; i < slideCount; i++) {
+    const slideUrl = `${publicBase}/deck/print-export/${token}?print_mode=single&slide=${i}`;
+    let r: Response;
+    try {
+      r = await browser.fetch('https://browser/screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: slideUrl,
+          viewport: { width: 1920, height: 1080, deviceScaleFactor: 1 },
+          gotoOptions: { waitUntil: 'networkidle0', timeout: 45000 },
+          screenshotOptions: { type: 'png', omitBackground: false, fullPage: false },
+        }),
+      });
+    } catch (e) {
+      console.error('[decks/export] pptx screenshot threw slide', i, (e as Error).message);
+      return c.json({ error: 'pptx_render_failed', slide: i, message: (e as Error).message }, 502);
+    }
+    if (!r.ok) {
+      const text = await r.text().catch(() => '');
+      console.error('[decks/export] pptx screenshot failed slide', i, r.status, text.slice(0, 200));
+      return c.json({ error: 'pptx_render_failed', slide: i, status: r.status, detail: text.slice(0, 240) }, 502);
+    }
+    images.push(new Uint8Array(await r.arrayBuffer()));
+  }
+  const bytes = renderDeckPPTXWithImages(renderable, brand, images);
   return new Response(bytes, {
     status: 200,
     headers: {
-      'Content-Type': 'image/png',
-      'Content-Disposition': `attachment; filename="${fname}-thumb.png"`,
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'Content-Disposition': `attachment; filename="${fname}.pptx"`,
       'Cache-Control': 'no-store',
     },
   });

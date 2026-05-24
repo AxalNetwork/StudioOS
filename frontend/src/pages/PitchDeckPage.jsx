@@ -5,7 +5,7 @@ import { reportError } from '../lib/log';
 import {
   Sparkles, Loader2, Plus, Trash2, Share2, Download,
   History, RotateCcw, ChevronLeft, ChevronRight, Lock, Wand2,
-  LayoutGrid, FileImage, FileText, FileCode2, Settings, X, Check,
+  LayoutGrid, FileText, FileCode2, Settings, X, Check,
   GripVertical, Eye, Clock,
 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -310,7 +310,8 @@ export default function PitchDeckPage() {
         throw new Error(err.error || `Export failed (${r.status})`);
       }
       const blob = await r.blob();
-      const ext = format === 'pptx' ? 'pptx' : format === 'png' ? 'png' : 'pdf';
+      // Task #2 — PNG cover was removed; only pdf + pptx remain.
+      const ext = format === 'pptx' ? 'pptx' : 'pdf';
       const fname = (deck.title || 'pitch-deck').replace(/[^A-Za-z0-9_-]+/g, '-') + '.' + ext;
       downloadBlob(blob, fname);
       addToast(`Exported ${format.toUpperCase()}`, 'success');
@@ -592,9 +593,6 @@ export default function PitchDeckPage() {
                     </button>
                     <button onClick={() => onExport('pptx')} className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-2">
                       <FileCode2 className="w-4 h-4 text-orange-500" /> PowerPoint
-                    </button>
-                    <button onClick={() => onExport('png')} className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-2">
-                      <FileImage className="w-4 h-4 text-violet-500" /> PNG (cover)
                     </button>
                   </div>
                 )}

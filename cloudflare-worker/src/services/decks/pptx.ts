@@ -192,6 +192,282 @@ function buildSlideXml(slide: RenderableSlide, brand: DeckBrand, idx: number, to
 }
 
 // ---------------------------------------------------------------------
+// Image-mode helpers (Task #2 — embed Browser-Rendering captures full-bleed).
+// ---------------------------------------------------------------------
+
+// Plain-text speaker-notes payload extracted from a fielded slide so the
+// rendered image stays the source of truth visually but the underlying
+// text is still searchable / accessible.
+function slideToNotesText(slide: RenderableSlide): string {
+  const lines: string[] = [];
+  if (slide.title) lines.push(slide.title);
+  if (slide.subtitle) lines.push(slide.subtitle);
+  for (const f of slide.fields) {
+    if (!f) continue;
+    if (f.kind === 'title' || f.kind === 'subtitle' || f.kind === 'paragraph') {
+      const v = String(f.value || '').trim();
+      if (v) lines.push(v);
+    } else if (f.kind === 'quote' && f.value) {
+      lines.push(`"${String(f.value)}"`);
+    } else if (f.kind === 'bullets' && Array.isArray(f.value)) {
+      for (const b of f.value) {
+        const s = String(b || '').trim();
+        if (s) lines.push(`• ${s}`);
+      }
+    } else if (f.kind === 'metric_grid' && Array.isArray(f.value)) {
+      for (const c of f.value) {
+        lines.push(`${c?.label ?? ''}: ${c?.value ?? ''}`);
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
+function buildSlideImageXml(idx: number): string {
+  // 13.333" × 7.5" = 12192000 × 6858000 EMU. The picture covers the
+  // whole canvas (full-bleed). The image part is referenced via the
+  // slide's rels file under Id="rId2" (rId1 = layout).
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+    <p:pic>
+      <p:nvPicPr>
+        <p:cNvPr id="${idx + 2}" name="Slide ${idx + 1} image"/>
+        <p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>
+        <p:nvPr/>
+      </p:nvPicPr>
+      <p:blipFill>
+        <a:blip r:embed="rId2"/>
+        <a:stretch><a:fillRect/></a:stretch>
+      </p:blipFill>
+      <p:spPr>
+        <a:xfrm><a:off x="0" y="0"/><a:ext cx="12192000" cy="6858000"/></a:xfrm>
+        <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+      </p:spPr>
+    </p:pic>
+  </p:spTree></p:cSld>
+</p:sld>`;
+}
+
+function buildNotesSlideXml(idx: number, text: string): string {
+  const paras = (text || '').split('\n').map((line) =>
+    `<a:p>${tf(line, { size: 12, color: '111827' })}</a:p>`
+  ).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+        xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+        xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="${idx + 2}" name="Notes"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr>
+      <p:spPr><a:xfrm><a:off x="457200" y="457200"/><a:ext cx="5943600" cy="8229600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+      <p:txBody><a:bodyPr wrap="square"/><a:lstStyle/>${paras}</p:txBody>
+    </p:sp>
+  </p:spTree></p:cSld>
+</p:notes>`;
+}
+
+/**
+ * Task #2 — alternate PPTX renderer that embeds one full-bleed PNG per
+ * slide (captured by Cloudflare Browser Rendering against the SPA print
+ * template) and stores the slide's text in speaker notes. Falls through
+ * to the text-only `renderDeckPPTX` path when image capture is
+ * unavailable (no BROWSER binding, render error, etc.) so the export
+ * never silently fails.
+ */
+export function renderDeckPPTXWithImages(
+  deck: RenderableDeck,
+  brand: DeckBrand,
+  slideImages: Uint8Array[],
+): Uint8Array {
+  const enc = new TextEncoder();
+  const slideCount = deck.slides.length;
+  if (slideImages.length !== slideCount) {
+    throw new Error(`renderDeckPPTXWithImages: expected ${slideCount} images, got ${slideImages.length}`);
+  }
+  const entries: ZipEntry[] = [];
+
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
+  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
+  <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
+  <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
+  <Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
+  <Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"/>
+  ${deck.slides.map((_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/notesSlides/notesSlide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>`).join('')}
+</Types>`;
+  entries.push({ name: '[Content_Types].xml', data: enc.encode(contentTypes) });
+
+  entries.push({
+    name: '_rels/.rels',
+    data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
+</Relationships>`),
+  });
+
+  const slideIds = deck.slides.map((_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join('');
+  // rId(slides+2) → notesMaster.
+  const notesMasterRid = `rId${deck.slides.length + 2}`;
+  const presentation = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+                xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                saveSubsetFonts="1">
+  <p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>
+  <p:notesMasterIdLst><p:notesMasterId r:id="${notesMasterRid}"/></p:notesMasterIdLst>
+  <p:sldIdLst>${slideIds}</p:sldIdLst>
+  <p:sldSz cx="12192000" cy="6858000" type="screen16x9"/>
+  <p:notesSz cx="6858000" cy="9144000"/>
+</p:presentation>`;
+  entries.push({ name: 'ppt/presentation.xml', data: enc.encode(presentation) });
+
+  const presRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>
+  ${deck.slides.map((_, i) => `<Relationship Id="rId${i + 2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${i + 1}.xml"/>`).join('')}
+  <Relationship Id="${notesMasterRid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="notesMasters/notesMaster1.xml"/>
+</Relationships>`;
+  entries.push({ name: 'ppt/_rels/presentation.xml.rels', data: enc.encode(presRels) });
+
+  // Theme + master + layout — reuse the minimal definitions from the
+  // text-only renderer (kept inline so this file stays self-contained).
+  entries.push({
+    name: 'ppt/theme/theme1.xml',
+    data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme">
+  <a:themeElements>
+    <a:clrScheme name="Office"><a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>
+      <a:dk2><a:srgbClr val="1F2937"/></a:dk2><a:lt2><a:srgbClr val="F8FAFC"/></a:lt2>
+      <a:accent1><a:srgbClr val="7C3AED"/></a:accent1><a:accent2><a:srgbClr val="A78BFA"/></a:accent2>
+      <a:accent3><a:srgbClr val="C4B5FD"/></a:accent3><a:accent4><a:srgbClr val="EDE9FE"/></a:accent4>
+      <a:accent5><a:srgbClr val="6D28D9"/></a:accent5><a:accent6><a:srgbClr val="4C1D95"/></a:accent6>
+      <a:hlink><a:srgbClr val="2563EB"/></a:hlink><a:folHlink><a:srgbClr val="6D28D9"/></a:folHlink></a:clrScheme>
+    <a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>
+      <a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>
+    <a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst>
+      <a:lnStyleLst><a:ln/><a:ln/><a:ln/></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>
+      <a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme>
+  </a:themeElements>
+</a:theme>`),
+  });
+
+  entries.push({
+    name: 'ppt/slideMasters/slideMaster1.xml',
+    data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+             xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
+    <p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+    </p:spTree></p:cSld>
+  <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
+  <p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>
+</p:sldMaster>`),
+  });
+
+  entries.push({
+    name: 'ppt/slideMasters/_rels/slideMaster1.xml.rels',
+    data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>
+</Relationships>`),
+  });
+
+  entries.push({
+    name: 'ppt/slideLayouts/slideLayout1.xml',
+    data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+             xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+             type="blank" preserve="1">
+  <p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+  </p:spTree></p:cSld>
+</p:sldLayout>`),
+  });
+
+  entries.push({
+    name: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels',
+    data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>
+</Relationships>`),
+  });
+
+  // Minimal notesMaster so PowerPoint accepts the notesSlide parts.
+  entries.push({
+    name: 'ppt/notesMasters/notesMaster1.xml',
+    data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:notesMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+               xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+               xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
+    <p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+    </p:spTree></p:cSld>
+  <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
+</p:notesMaster>`),
+  });
+  entries.push({
+    name: 'ppt/notesMasters/_rels/notesMaster1.xml.rels',
+    data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>
+</Relationships>`),
+  });
+
+  // Slides — image-only + notes + media + per-slide rels.
+  deck.slides.forEach((slide, i) => {
+    const imgPath = `ppt/media/slide${i + 1}.png`;
+    entries.push({ name: imgPath, data: slideImages[i] });
+
+    entries.push({
+      name: `ppt/slides/slide${i + 1}.xml`,
+      data: enc.encode(buildSlideImageXml(i)),
+    });
+    entries.push({
+      name: `ppt/slides/_rels/slide${i + 1}.xml.rels`,
+      data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/slide${i + 1}.png"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide${i + 1}.xml"/>
+</Relationships>`),
+    });
+
+    entries.push({
+      name: `ppt/notesSlides/notesSlide${i + 1}.xml`,
+      data: enc.encode(buildNotesSlideXml(i, slideToNotesText(slide))),
+    });
+    entries.push({
+      name: `ppt/notesSlides/_rels/notesSlide${i + 1}.xml.rels`,
+      data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="../slides/slide${i + 1}.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="../notesMasters/notesMaster1.xml"/>
+</Relationships>`),
+    });
+  });
+
+  // Reference brand to keep the param meaningful even though image-mode
+  // delegates footer/watermark rendering to the SPA template.
+  void brand;
+  return buildZip(entries);
+}
+
+// ---------------------------------------------------------------------
 // Build full pptx package.
 // ---------------------------------------------------------------------
 export function renderDeckPPTX(deck: RenderableDeck, brand: DeckBrand): Uint8Array {
