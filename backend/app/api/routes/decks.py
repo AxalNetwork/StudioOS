@@ -412,7 +412,7 @@ _DECK_METHODS_DEV: List[Dict[str, Any]] = [
     {"id": "sequoia_classic", "key": "sequoia_classic", "label": "Sequoia Classic (12)",
      "prompt_hint": "The Sequoia 12-slide template. Story arc + market deep dive.",
      "best_for": "Seed / Series A with a clear narrative + sizable market.",
-     "slide_count": 12, "premium": False, "category": "fundraising"},
+     "slide_count": 12, "premium": False, "category": "narrative"},
     {"id": "kawasaki_10_20_30", "key": "kawasaki_10_20_30", "label": "Kawasaki 10/20/30 (10)",
      "prompt_hint": "10 slides, 20 minutes, 30-point font. Maximum clarity.",
      "best_for": "Investor meetings where you need to be ruthlessly concise.",
@@ -444,7 +444,7 @@ _DECK_METHODS_DEV: List[Dict[str, Any]] = [
     {"id": "one_pager_teaser", "key": "one_pager_teaser", "label": "One-pager teaser (1)",
      "prompt_hint": "Single-page summary for cold outreach.",
      "best_for": "First-touch teaser to send to investors or partners.",
-     "slide_count": 1, "premium": False, "category": "narrative"},
+     "slide_count": 1, "premium": False, "category": "commercial"},
     {"id": "investor_appendix", "key": "investor_appendix", "label": "Investor + 30pp Appendix",
      "prompt_hint": "Short investor deck plus a deep diligence appendix.",
      "best_for": "Sophisticated investors who want both a TL;DR and source data.",
@@ -453,6 +453,11 @@ _DECK_METHODS_DEV: List[Dict[str, Any]] = [
      "prompt_hint": "Story-led brand deck. Heavy on imagery + tone.",
      "best_for": "Mission-driven companies; brand-first founders.",
      "slide_count": 15, "premium": True, "category": "narrative"},
+    {"id": "axal_spinout_demoday", "key": "axal_spinout_demoday",
+     "label": "Axal VC 30-day Spin-Out Lab — Demo Day",
+     "prompt_hint": "14 slides · 4 variants (editorial / product-first / data-dense / manifesto) · binds to Lab data.",
+     "best_for": "Axal Spin-Out Lab founders presenting on Demo Day.",
+     "slide_count": 14, "premium": True, "category": "event"},
 ]
 _PREMIUM_METHOD_IDS_DEV = [m["id"] for m in _DECK_METHODS_DEV if m["premium"]]
 
