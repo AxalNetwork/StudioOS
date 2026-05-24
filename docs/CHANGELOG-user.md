@@ -10,6 +10,17 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ## May 2026
 
+- The **Sales — Customer-facing** pitch-deck template was rebuilt
+  from the ground up. It's now an 18-slide enterprise sales deck
+  designed to close customers, not investors — covering customer
+  context, the solution and how it works, quantified business value
+  and ROI, three role-specific use cases with hand-drawn product
+  screens, a competitive matrix, a realistic deployment plan, an
+  integration architecture, an enterprise security & compliance
+  page, transparent pricing, and a 90-day path to a signed pilot.
+  It autofills from your customer-opportunity data and ships with
+  polished sample content so it always renders cleanly and exports
+  to PDF.
 - The **Partnership / BD** pitch-deck template was rebuilt from the
   ground up. It's now a 12-slide executive-consulting deck in the
   voice of a top-tier strategy firm — executive summary, industry

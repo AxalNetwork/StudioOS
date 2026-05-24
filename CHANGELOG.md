@@ -11,6 +11,71 @@
 > building it.
 
 
+## Task #10 — Sales — Customer-facing: 18-slide enterprise-commercial upgrade
+
+Replaced the 15-slide simple `sales_commercial` template with an
+18-slide self-contained enterprise customer-facing deck across five
+sections (Customer Context · Solution · Value · Implementation ·
+Commercials). NOT an investor deck — outcome-first, ROI-anchored,
+security-credible, implementation-realistic. Hand-built SVG product
+screens (dashboard / workflow / analytics) and diagrams (forces,
+pains, KPI gaps, ROI build, competitive matrix, deployment phases,
+security controls, pricing tiers). Mirrors the in-place swap pattern
+from Task #2 (Series A), Task #3 (Series B), Task #5 (Demo Day), and
+Task #6 (Partnership/BD) — registry slot stable (`sales_commercial`),
+drift count unchanged at 12 templates.
+
+- **`frontend/src/decks/templates/sales_commercial_app.tsx`** — new
+  self-contained ~2280-line template with `SalesData` type,
+  `SAMPLE_DATA` mirroring the worker `heuristicSlides()` field names
+  documented inline at the bottom (`meta.*`, `executive.outcomes`,
+  `industry_trends.forces`, `challenges.pains`, `business_impact.kpis`,
+  `solution.capabilities`/`transformation`, `how_it_works.steps`,
+  `features.modules`, `use_cases[].screen`, `roi.components`,
+  `case_studies.studies`, `competitive.criteria`, `deployment.phases`,
+  `integration.layers`/`integrations`, `security.controls`/
+  `certifications`, `pricing.tiers`/`services`, `next_steps.pilot`/
+  `timeline`). Appends `Deck_sales_commercial_app: React.FC<RegistryDeckProps>`
+  adapter that `mergeShape`s incoming `data` over `SAMPLE_DATA`
+  (shape-safe: empty arrays don't nuke defaults), bridges the
+  template's array-path `Edit` signature to the registry's dot-string
+  `onEdit`, and wraps each of the 18 `<Sn…>` components in
+  `<Slide16x9>` so the print pipeline (`PitchDeckPrintPage.jsx`)
+  finds them via `[data-slide-frame]` and per-slide page breaks fire.
+- **`frontend/src/decks/templates/sales_commercial.tsx`** — collapsed
+  to a one-line re-export
+  (`export { Deck_sales_commercial_app as Deck_sales_commercial } from './sales_commercial_app';`)
+  so the registry key `sales_commercial` stays stable and the
+  `check-deck-templates.mjs` drift guard keeps finding the canonical
+  `Deck_<key>` import from `./<key>`.
+- **`frontend/src/decks/templates/index.ts`** — bumped to
+  `slide_count: 18` + description `'18 slides · customer-facing · SVG
+  product screens'`. Tier (`growth`) and category (`commercial`)
+  unchanged.
+- **`frontend/src/decks/sample.ts`** — added `sales_commercial` branch
+  in `previewDataFor()` returning `SALES_COMMERCIAL_APP_SAMPLE` so the
+  template-picker thumbnail receives the nested `meta.*` /
+  `executive.outcomes[]` / `use_cases[].screen` /
+  `competitive.criteria[].scores[]` shapes the slides expect instead
+  of the legacy `SAMPLE_PREVIEW_DATA` strings (which would crash the
+  thumbnail the same way the old `series_b_diligence` and
+  `partnership_bd` shapes did).
+
+Verified `node scripts/check-deck-templates.mjs` → `12 templates
+wired correctly`.
+
+Out of scope (kept per the task spec): backing schema migrations for
+the sales-specific tables (`customer_opportunities`,
+`customer_success_stories`, `pricing_plans`, `deployment_phases`,
+`security_controls`, `compliance_certs`, `competitive_matrix`) and
+the per-template `heuristicSlides()` branch that would read them.
+Like every prior `_app.tsx` upgrade (Series A/B, Demo Day,
+Partnership/BD), the deck renders against `SAMPLE_DATA` until those
+side tables land — `mergeShape()` preserves the defaults field-by-
+field for anything autofill doesn't provide. The inline mapping
+comment at the bottom of `sales_commercial_app.tsx` is the spec for
+the future worker branch.
+
 ## Task #6 — Partnership / BD: 12-slide executive-consulting upgrade
 
 Replaced the 11-slide simple `partnership_bd` template with a 12-slide
