@@ -1,0 +1,221 @@
+Objective
+  Build ONE pitch-deck template — fixed structure, hardcoded slides —
+  that represents what every founder produces during the Axal 30-day
+  Spin-Out Lab, ready to present to investors and Axal-network partners.
+
+  Template id           axal_spinout_demoday
+  Template label        Axal 30-day Spin-Out Lab — Demo Day
+  Audience              Axal-network investors + partners
+  Slide count           14 (fixed; do NOT make it adaptive)
+  File                  frontend/src/decks/templates/axal_spinout_demoday_app.tsx
+  Style                 Single self-contained React + TypeScript + Tailwind +
+                        Framer Motion app. Same shape as the other 7 templates
+                        in frontend/src/decks/templates/*. SVG-only graphics,
+                        16:9, keyboard nav, dot pagination, inline contentEditable
+                        editing, structuredClone state, default export the
+                        deck shell + a SAMPLE_DATA constant.
+
+Why 14
+  Four weeks of curriculum = four narrative acts. Each act ships 2–4
+  slides depending on what the Lab actually produces. Plus a cover, an
+  Axal-signal closing card, and an "appendix" pointer for the six Market
+  Intelligence dashboards. Total: 14. Do not parameterise.
+
+Slide inventory (in this exact order)
+
+  Cover
+    01  Cover — venture identity + cohort badge
+        Pulled from   projects.name, projects.description (tagline),
+                      projects.sector, projects.stage, plus a static
+                      "Axal Spin-Out Lab · cohort <Month YYYY>" eyebrow
+
+  Act I — Week 1 · Idea & Customer
+    02  Problem
+        Pulled from   projects.problem_statement (heroes the slide),
+                      discovery_interviews.pains_json (top 3 pains,
+                      aggregated across interviews, ordered by frequency)
+    03  Validation — five customers, in their own words
+        Pulled from   discovery_interviews rows (name, date, notes excerpt);
+                      requires ≥ 5 logged interviews. Render up to 5
+                      quote cards with date + interviewee role.
+    04  Market — TAM / SAM with citations
+        Pulled from   projects.tam, projects.sam, projects.som
+                      (som derived if missing); plus
+                      advisor_answers.raw_value WHERE question_id LIKE
+                      'founder.market.%' for citation URLs. SVG nested
+                      circles + a citations strip.
+
+  Act II — Week 2 · Solution & Roadmap
+    05  Solution — what we built, what it replaces
+        Pulled from   projects.solution + projects.why_now.
+                      Two-column "Before → After" if both exist; else
+                      a single solution statement.
+    06  90-day Roadmap — OKRs
+        Pulled from   roadmap_okrs (objective + key_results_json,
+                      grouped by quarter). Render as a 3-column board
+                      (Now / Next / Later) based on kanban_status.
+                      Requires ≥ 3 OKRs per Lab spec.
+    07  Brand — voice, palette, one-liner
+        Pulled from   projects.tagline, advisor_answers WHERE
+                      question_id LIKE 'founder.brand.%'.
+                      Render the one-liner big, plus a tiny palette
+                      strip if brand_palette_json is present.
+
+  Act III — Week 3 · Validate & Team
+    08  Venture Readiness — internal score
+        Pulled from   score_snapshots (latest, is_sandbox = 0). Show
+                      total_score / tier, plus the 6 sub-scores
+                      (market, team, product, capital, fit,
+                      distribution) as small bars. ai_notes drives
+                      the "What this tells us" paragraph.
+    09  Team — founders + cofounder + advisors
+        Pulled from   captable_holders WHERE kind IN ('founder','team'),
+                      plus advisor_answers WHERE question_id LIKE
+                      'founder.team.advisor%'. If cofounder track was
+                      "going solo", surface that decision honestly.
+    10  Mentor cadence + Axal network
+        Pulled from   spinout_lab_milestones WHERE milestone_key =
+                      'mentor_meeting_booked'. Render a short list of
+                      booked sessions + a static "Axal Network" strip
+                      listing the five operator-partner categories:
+                      Legal · Design · Recruiting · Technical DD · Finance.
+
+  Act IV — Week 4 · Incorporate & Capital
+    11  Incorporated + cap table
+        Pulled from   captable_holders (all rows), aggregated to %
+                      ownership. Static rail confirming: Delaware C-Corp
+                      default, 4-yr vesting / 1-yr cliff, 83(b) filed
+                      in window (drives from spinout_lab_milestones
+                      WHERE milestone_key = 'incorporation_completed').
+    12  Fundraise ask
+        Pulled from   projects.funding_needed, projects.use_of_funds,
+                      financial_models.inputs_json (runway_months,
+                      instrument). Render the ask big (e.g. "$1.5M"),
+                      use-of-funds as a stacked bar, and a 12-month
+                      milestones list from roadmap_okrs WHERE
+                      kanban_status = 'next'.
+
+  Closing
+    13  The Axal signal — what 30 days produced
+        Static structure + dynamic content:
+        Pulled from   spinout_lab_milestones (count by week × completed_at)
+                      + score_snapshots.tier. Render the 4-week timeline
+                      with each milestone checked off, plus the static
+                      Axal trust badges (three-way NDA, KYC investor-side,
+                      alumni community for life).
+    14  Contact + appendix pointer
+        Pulled from   users.email (primary founder), users.full_name.
+        Static rail   lists the six Market Intelligence dashboards
+                      available to interested investors on request:
+                      Sector compass · Investor signals · TALC positioning ·
+                      Demand & supply atlas · Founder ↔ investor fit ·
+                      Capital velocity. CTA: "Request access to the
+                      diligence dashboards →".
+
+Data binding — single source of truth
+  Mirror the field names the heuristicSlides() function in
+  cloudflare-worker/src/routes/decks.ts already returns, plus the rows
+  the Lab actually writes:
+
+  TABLE                      | FIELDS                                    | SLIDES
+  projects                   | name, description, sector, stage,
+                              problem_statement, solution, why_now,
+                              tam, sam, som, funding_needed,
+                              use_of_funds, tagline                       | 1, 2, 4, 5, 7, 12
+  discovery_interviews       | interviewee_name, interview_date, notes,
+                              pains_json, hypotheses_json                 | 2, 3
+  roadmap_okrs               | objective, key_results_json, quarter,
+                              kanban_status                               | 6, 12
+  score_snapshots            | total_score, tier, market_total,
+                              team_total, product_total, capital_total,
+                              fit_total, distribution_total, ai_notes     | 8
+  captable_holders           | name, shares, kind                         | 9, 11
+  financial_models           | inputs_json (runway_months, instrument)    | 12
+  spinout_lab_milestones     | week, milestone_key, completed_at          | 10, 11, 13
+  advisor_answers            | question_id, raw_value (filtered by qid
+                              prefix per slide)                            | 4, 7, 9
+  users                      | full_name, email (primary founder)         | 14
+
+  Empty fields → render "—" or an inline "Complete <X> in the Lab to
+  unlock this." nudge. NEVER fabricate numbers or quotes.
+
+Visual variants — founder preference
+  Expose a `variant` prop on the deck shell that accepts:
+    'editorial'      Source Serif Pro display, warm cream paper, generous
+                     whitespace, magazine-quality hierarchy
+    'product_first'  Inter sans, white paper, BrowserChrome-wrapped SVG
+                     mockups on every Act II slide, dashboard energy
+    'data_dense'     IBM Plex Sans + JetBrains Mono, white paper,
+                     Recharts on slides 4, 6, 8, 11, 12
+    'manifesto'      Playfair Display, ink-black paper, one big idea per
+                     slide, cinematic motion (550ms cubic-bezier)
+
+  Implement variants as a single token bundle (palette + font stack +
+  per-slide layout switch) — NOT four separate decks. Each slide reads
+  the variant from context and picks the right layout block.
+  Default variant: 'editorial'.
+
+Registry entry — Pitch Deck Builder library
+  Register the template so it appears in the existing Pitch Deck Builder
+  page (frontend/src/pages/PitchDeckPage.jsx).
+
+  Create (if missing) frontend/src/decks/templates/registry.ts:
+
+    export type DeckTemplate = {
+      id: string;
+      label: string;
+      description: string;
+      audience: string;
+      slide_count: number;
+      // dynamic import — keeps the builder bundle lean
+      load: () => Promise<{ default: React.ComponentType<any> }>;
+    };
+
+    export const DECK_TEMPLATES: DeckTemplate[] = [
+      {
+        id: 'axal_spinout_demoday',
+        label: 'Axal 30-day Spin-Out Lab — Demo Day',
+        description:
+          'The deck the Lab produces. Built from your project, interviews, OKRs, score, cap table, and ask.',
+        audience: 'Axal-network investors + partners',
+        slide_count: 14,
+        load: () => import('./axal_spinout_demoday_app'),
+      },
+      // (existing templates: demo_day, sequoia_classic, yc_seed,
+      //  series_a_growth, series_b_diligence, sales_commercial,
+      //  partnership_bd, narrative_brand, investor_appendix,
+      //  minimal_seed, kawasaki_10_20_30, one_pager_teaser — register
+      //  each of them here too with the same shape.)
+    ];
+
+  Update PitchDeckPage.jsx to render a template picker grid that reads
+  DECK_TEMPLATES, lets the founder choose one, and renders
+  <TemplateComponent variant={selectedVariant} initial={fillFromProject} />.
+
+  Wire the existing "Fill from project" button to POST to
+  /api/decks/generate?template=axal_spinout_demoday (extend the worker
+  route in cloudflare-worker/src/routes/decks.ts to accept a `template`
+  query parameter — when supplied, the autofill payload is shaped to
+  the template's expected `initial` prop instead of the legacy 10-slide
+  array). Keep the legacy 10-slide path as the default for
+  backwards compatibility.
+
+Acceptance
+  - File frontend/src/decks/templates/axal_spinout_demoday_app.tsx
+    exists, renders 14 slides at 16:9 with no layout regression in any
+    of the 4 variants.
+  - Slides 3, 6, 8, 9, 11 render the Lab data when present and an
+    honest "complete X in the Lab" nudge when empty.
+  - The Pitch Deck Builder picker shows the new template; selecting it
+    + clicking "Fill from project" populates the deck from D1 with
+    zero fabricated numbers.
+  - Keyboard nav (←/→/space/Home/End) works, dot pagination jumps.
+  - Variant switcher visible in the editor; preference persists per
+    user in localStorage under key
+    `axal:deck:axal_spinout_demoday:variant`.
+  - Drift smoke test (npm run test:drift) green — no orphan api.js
+    method.
+
+  Do NOT touch the adaptive demoday system in
+  cloudflare-worker/src/services/demoday/* — it is separate and lives
+  alongside this template.
