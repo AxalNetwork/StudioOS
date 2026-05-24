@@ -329,7 +329,10 @@ function sanitizeSlides(input: any[]): any[] {
 
 const ALLOWED_FIELD_KINDS = new Set(['title', 'subtitle', 'paragraph', 'bullets', 'image', 'metric_grid', 'quote']);
 function sanitizeFields(input: any[]): any[] {
-  return input.slice(0, 16).map((f: any) => {
+  // Cap raised from 16 → 32 so per-slide flat-field templates (e.g. the
+  // Axal axal_signal slide carries 19 fields after the JSON-blob removal)
+  // round-trip cleanly. 32 is still small enough to bound storage.
+  return input.slice(0, 32).map((f: any) => {
     const kind = ALLOWED_FIELD_KINDS.has(f?.kind) ? f.kind : 'paragraph';
     const key = String(f?.key || '').slice(0, 64) || 'field';
     const label = String(f?.label || '').slice(0, 80);
@@ -337,14 +340,19 @@ function sanitizeFields(input: any[]): any[] {
     let value: any;
     if (kind === 'bullets') {
       value = Array.isArray(f?.value)
-        ? f.value.map((b: any) => String(b).slice(0, 400)).filter(Boolean).slice(0, 8)
+        ? f.value.map((b: any) => String(b).slice(0, 400)).filter(Boolean).slice(0, 16)
         : [];
     } else if (kind === 'metric_grid') {
+      // `sub` preserved — Axal cap-table holders encode security+kind in it.
       value = Array.isArray(f?.value)
-        ? f.value.slice(0, 8).map((c: any) => ({
-            label: String(c?.label || '').slice(0, 60),
-            value: String(c?.value || '').slice(0, 80),
-          }))
+        ? f.value.slice(0, 16).map((c: any) => {
+            const out: any = {
+              label: String(c?.label || '').slice(0, 60),
+              value: String(c?.value || '').slice(0, 80),
+            };
+            if (c?.sub != null) out.sub = String(c.sub).slice(0, 120);
+            return out;
+          })
         : [];
     } else if (kind === 'image') {
       value = f?.value ? sanitizeImageUrl(String(f.value)) : null;

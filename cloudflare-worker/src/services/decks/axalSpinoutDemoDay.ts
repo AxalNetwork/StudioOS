@@ -741,11 +741,16 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
     return JSON.stringify(Array.isArray(obj) ? [] : {});
   };
 
-  const para = (key: string, value: string) => ({ kind: 'paragraph', key, value });
-  const bullets = (key: string, value: string[]) => ({ kind: 'bullets', key, value });
+  // trimDeep/encJson retained for the (rare) oversize defense — every
+  // emitted field is hard-capped at MAX_BYTES so a runaway Lab payload
+  // can't poison the slide write.
+  void trimDeep; void encJson;
+  const capStr = (s: string): string =>
+    s.length > MAX_BYTES ? s.slice(0, MAX_BYTES - 1) + '…' : s;
+  const para = (key: string, value: string) => ({ kind: 'paragraph', key, value: capStr(String(value ?? '')) });
+  const bullets = (key: string, value: string[]) => ({ kind: 'bullets', key, value: (value || []).map((x) => capStr(String(x ?? ''))) });
   const metrics = (key: string, value: Array<{ label: string; value: string; sub?: string }>) =>
     ({ kind: 'metric_grid', key, value });
-  const json = (key: string, value: unknown) => para(key, encJson(value));
 
   const m = data.meta;
   const c = data.cover;
@@ -763,6 +768,46 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
   const as = data.axal_signal;
   const ctc = data.contact;
 
+  // Pads variable-length arrays to a fixed slot count so every Axal
+  // deck — sample or hydrated — surfaces the same set of editable
+  // fields. Slot count picked to match the spec rendering: up to 3
+  // discovery quotes, 4 founders, 4 lab weeks.
+  const padTo3 = <T,>(a: T[], empty: T): [T, T, T] => [a[0] ?? empty, a[1] ?? empty, a[2] ?? empty];
+  const padTo4 = <T,>(a: T[], empty: T): [T, T, T, T] =>
+    [a[0] ?? empty, a[1] ?? empty, a[2] ?? empty, a[3] ?? empty];
+
+  const emptyQuote = { name: '', role: '', takeaway: '' };
+  const emptyFounder = { name: '', role: '', bio: '' };
+  const emptyWeek: SpinoutDemoDayData['axal_signal']['lab_weeks'][number] = {
+    week: 0, title: '', caption: '', status: 'upcoming', milestones: [],
+  };
+
+  const [q1, q2, q3] = padTo3(v.quotes, emptyQuote);
+  const [f1, f2, f3, f4] = padTo4(t.founders, emptyFounder);
+  const [w1, w2, w3, w4] = padTo4(as.lab_weeks, emptyWeek);
+
+  // Encode milestones as "[x] Label" / "[ ] Label" so they round-trip
+  // through a plain bullets field. The `key` field on each milestone
+  // is regenerated from the label slug on the hydrate side — keys
+  // exist only to give React a stable list id, never user-facing.
+  const milestonesAsBullets = (
+    ms: SpinoutDemoDayData['axal_signal']['lab_weeks'][number]['milestones'],
+  ): string[] => (ms || []).map((x) => `${x.done ? '[x]' : '[ ]'} ${x.label}`);
+
+  // Cap-table holders flatten to one metric_grid row per holder:
+  // label = name, value = ownership_pct, sub = "security · kind".
+  // The `kind` field carries one of: founder | investor | esop | ''.
+  const holdersAsGrid = (hs: SpinoutDemoDayData['cap_table']['holders']) =>
+    (hs || []).map((h) => ({
+      label: h.name,
+      value: h.ownership_pct,
+      sub: [h.role, h.kind].filter((x) => x && x !== DASH).join(' · '),
+    }));
+
+  // Use-of-funds round-trips through metric_grid: value is "45%"
+  // (already string-formatted) and adapter strips the trailing % on read.
+  const useOfFundsGrid = ask.use_of_funds.map((u) => ({ label: u.label, value: `${u.pct}%` }));
+
   const SLIDES: Array<{ spec_id: string; title: string; fields: Array<Record<string, unknown>> }> = [
     {
       spec_id: 'cover', title: 'Cover',
@@ -771,8 +816,18 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('cover_headline', c.headline),
         para('cover_sub', c.sub),
         para('cover_location', c.location),
-        // Deck-wide envelope lives on slide 0.
-        json('meta_json', m),
+        // Deck-wide envelope (project name, founder, week) flattened
+        // onto slide 0 so the editor surfaces every value as a real
+        // input — never a JSON blob.
+        para('meta_project_name', m.project_name),
+        para('meta_sector', m.sector),
+        para('meta_founder_name', m.founder_name),
+        para('meta_contact_email', m.contact_email),
+        para('meta_presented_on', m.presented_on),
+        para('meta_week', String(m.week)),
+        para('meta_days_remaining', String(m.days_remaining)),
+        para('meta_lab_active', m.lab_active ? 'true' : 'false'),
+        para('meta_is_sample', m.is_sample ? 'true' : 'false'),
       ],
     },
     {
@@ -791,7 +846,15 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('validation_headline', v.headline),
         para('validation_body', v.body),
         metrics('validation_metrics', v.metrics),
-        json('validation_quotes_json', v.quotes),
+        para('validation_quote1_name', q1.name),
+        para('validation_quote1_role', q1.role),
+        para('validation_quote1_takeaway', q1.takeaway),
+        para('validation_quote2_name', q2.name),
+        para('validation_quote2_role', q2.role),
+        para('validation_quote2_takeaway', q2.takeaway),
+        para('validation_quote3_name', q3.name),
+        para('validation_quote3_role', q3.role),
+        para('validation_quote3_takeaway', q3.takeaway),
       ],
     },
     {
@@ -832,11 +895,9 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('brand_headline', b.headline),
         para('brand_tagline', b.tagline),
         para('brand_vision', b.vision),
-        json('brand_status_json', {
-          brand_kit_ready: b.brand_kit_ready,
-          pitch_deck_ready: b.pitch_deck_ready,
-          incorporated: b.incorporated,
-        }),
+        para('brand_kit_ready', b.brand_kit_ready ? 'true' : 'false'),
+        para('brand_pitch_deck_ready', b.pitch_deck_ready ? 'true' : 'false'),
+        para('brand_incorporated', b.incorporated ? 'true' : 'false'),
       ],
     },
     {
@@ -857,7 +918,18 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('team_eyebrow', t.eyebrow),
         para('team_headline', t.headline),
         para('team_intro', t.team_intro),
-        json('team_founders_json', t.founders),
+        para('team_founder1_name', f1.name),
+        para('team_founder1_role', f1.role),
+        para('team_founder1_bio', f1.bio ?? ''),
+        para('team_founder2_name', f2.name),
+        para('team_founder2_role', f2.role),
+        para('team_founder2_bio', f2.bio ?? ''),
+        para('team_founder3_name', f3.name),
+        para('team_founder3_role', f3.role),
+        para('team_founder3_bio', f3.bio ?? ''),
+        para('team_founder4_name', f4.name),
+        para('team_founder4_role', f4.role),
+        para('team_founder4_bio', f4.bio ?? ''),
       ],
     },
     {
@@ -876,7 +948,7 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('ct_eyebrow', ct.eyebrow),
         para('ct_headline', ct.headline),
         para('ct_note', ct.note),
-        json('ct_holders_json', ct.holders),
+        metrics('ct_holders', holdersAsGrid(ct.holders)),
       ],
     },
     {
@@ -886,7 +958,7 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('ask_headline', ask.headline),
         para('ask_raise_amount', ask.raise_amount),
         para('ask_runway', ask.runway),
-        metrics('ask_use_of_funds', ask.use_of_funds.map((u) => ({ label: u.label, value: `${u.pct}%` }))),
+        metrics('ask_use_of_funds', useOfFundsGrid),
         bullets('ask_next_milestones', ask.next_milestones.filter((x) => x && x !== DASH)),
       ],
     },
@@ -896,7 +968,22 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('as_eyebrow', as.eyebrow),
         para('as_headline', as.headline),
         para('as_body', as.body),
-        json('as_lab_weeks_json', as.lab_weeks),
+        para('as_week1_title', w1.title),
+        para('as_week1_caption', w1.caption),
+        para('as_week1_status', w1.status),
+        bullets('as_week1_milestones', milestonesAsBullets(w1.milestones)),
+        para('as_week2_title', w2.title),
+        para('as_week2_caption', w2.caption),
+        para('as_week2_status', w2.status),
+        bullets('as_week2_milestones', milestonesAsBullets(w2.milestones)),
+        para('as_week3_title', w3.title),
+        para('as_week3_caption', w3.caption),
+        para('as_week3_status', w3.status),
+        bullets('as_week3_milestones', milestonesAsBullets(w3.milestones)),
+        para('as_week4_title', w4.title),
+        para('as_week4_caption', w4.caption),
+        para('as_week4_status', w4.status),
+        bullets('as_week4_milestones', milestonesAsBullets(w4.milestones)),
       ],
     },
     {

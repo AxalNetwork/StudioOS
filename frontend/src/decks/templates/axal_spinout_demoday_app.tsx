@@ -317,13 +317,19 @@ const parseJsonField = <T,>(v: unknown, fallback: T): T => {
   } catch { return fallback; }
 };
 
+// Slug helper for re-deriving stable React keys on the lab-week
+// milestone list when we round-trip them through plain bullet strings.
+const slug = (s: string): string =>
+  s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'item';
+
 function hydrate(raw: unknown): SpinoutDemoDayData {
   const base = SAMPLE_DATA;
   if (!raw || typeof raw !== 'object') return base;
   const d = raw as Record<string, unknown>;
 
   // Legacy support — if any axal_spinout_section_* key is present, fall
-  // back to the original JSON-encoded merge path.
+  // back to the original JSON-encoded merge path so decks created
+  // before the flat-field rewrite still render correctly.
   const hasLegacy = Object.keys(d).some((k) => k.startsWith('axal_spinout_section_'));
   if (hasLegacy) {
     let out: SpinoutDemoDayData = base;
@@ -343,20 +349,100 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
     return out;
   }
 
-  // Flat-field path (new).
-  const meta = parseJsonField<Partial<SpinoutDemoDayData['meta']>>(d.meta_json, {});
-
+  // Flat-field path — every value the editor surfaces is a real string,
+  // bullets array, or metric_grid row. No JSON blobs in the editor.
   const asUseOfFunds = (v: unknown): FundUse[] => {
     const grid = asMetricGrid(v);
     return grid.map((c) => {
-      const raw = String(c.value).replace('%', '').trim();
-      const pct = Number(raw);
+      const rawVal = String(c.value).replace('%', '').trim();
+      const pct = Number(rawVal);
       return { label: c.label, pct: isFinite(pct) ? pct : 0 };
-    }).filter((x) => x.pct > 0);
+    }).filter((x) => x.label && x.pct > 0);
   };
 
+  // {name, role, takeaway} × 3 — drop rows whose takeaway is empty.
+  const readQuotes = (): SpinoutDemoDayData['validation']['quotes'] => {
+    const rows = [1, 2, 3].map((i) => ({
+      name: asStr(d[`validation_quote${i}_name`], ''),
+      role: asStr(d[`validation_quote${i}_role`], ''),
+      takeaway: asStr(d[`validation_quote${i}_takeaway`], ''),
+    }));
+    return rows.filter((r) => r.takeaway);
+  };
+
+  // {name, role, bio?} × 4 — drop rows whose name is empty.
+  const readFounders = (): Founder[] => {
+    const rows = [1, 2, 3, 4].map((i) => {
+      const bio = asStr(d[`team_founder${i}_bio`], '');
+      return {
+        name: asStr(d[`team_founder${i}_name`], ''),
+        role: asStr(d[`team_founder${i}_role`], ''),
+        bio: bio ? bio : undefined,
+      };
+    });
+    return rows.filter((r) => r.name);
+  };
+
+  // metric_grid → Holder[] (label=name, value=ownership_pct,
+  // sub="security · kind"). Empty rows are silently dropped.
+  const readHolders = (): Holder[] => {
+    const grid = asMetricGrid(d.ct_holders);
+    return grid.map((c) => {
+      const parts = (c.sub ?? '').split('·').map((x) => x.trim()).filter(Boolean);
+      const role = parts[0] || DASH;
+      const kind = parts[1] || DASH;
+      return {
+        name: c.label, role, kind,
+        ownership_pct: c.value || DASH,
+      };
+    }).filter((h) => h.name);
+  };
+
+  // Parse "[x] Label" / "[ ] Label" bullets back into milestone rows.
+  const parseMilestones = (
+    v: unknown,
+  ): SpinoutDemoDayData['axal_signal']['lab_weeks'][number]['milestones'] => {
+    return asArr(v).map((line) => {
+      const m = /^\s*\[(\s|x|X)\]\s*(.+)$/.exec(line);
+      if (m) {
+        const done = m[1].toLowerCase() === 'x';
+        const label = m[2].trim();
+        return { key: slug(label), label, done };
+      }
+      return { key: slug(line), label: line.trim(), done: false };
+    }).filter((x) => x.label);
+  };
+
+  const readLabWeeks = (): LabWeek[] => {
+    const rows = [1, 2, 3, 4].map((i) => {
+      const title = asStr(d[`as_week${i}_title`], '');
+      const caption = asStr(d[`as_week${i}_caption`], '');
+      const status = asStr(d[`as_week${i}_status`], 'upcoming') as LabWeek['status'];
+      const milestones = parseMilestones(d[`as_week${i}_milestones`]);
+      return {
+        week: i, title, caption,
+        status: (status === 'complete' || status === 'in_progress' || status === 'upcoming') ? status : 'upcoming',
+        milestones,
+      };
+    });
+    return rows.filter((r) => r.title || r.milestones.length > 0);
+  };
+
+  // Meta — every value is a flat paragraph string.
+  const week = Number(asStr(d.meta_week, '0')) || base.meta.week;
+  const daysRemaining = Number(asStr(d.meta_days_remaining, '')) || base.meta.days_remaining;
+
   return {
-    meta: { ...base.meta, ...meta },
+    meta: {
+      project_name: asStr(d.meta_project_name, base.meta.project_name),
+      sector: asStr(d.meta_sector, base.meta.sector),
+      founder_name: asStr(d.meta_founder_name, base.meta.founder_name),
+      contact_email: asStr(d.meta_contact_email, base.meta.contact_email),
+      presented_on: asStr(d.meta_presented_on, base.meta.presented_on),
+      week, days_remaining: daysRemaining,
+      lab_active: asBool(d.meta_lab_active),
+      is_sample: asBool(d.meta_is_sample),
+    },
     cover: {
       eyebrow: asStr(d.cover_eyebrow, base.cover.eyebrow),
       headline: asStr(d.cover_headline, base.cover.headline),
@@ -377,7 +463,7 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
         const g = asMetricGrid(d.validation_metrics);
         return g.length > 0 ? g : base.validation.metrics;
       })(),
-      quotes: parseJsonField<SpinoutDemoDayData['validation']['quotes']>(d.validation_quotes_json, []),
+      quotes: readQuotes(),
     },
     market: {
       eyebrow: asStr(d.market_eyebrow, base.market.eyebrow),
@@ -401,18 +487,15 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
       next: asArr(d.roadmap_next),
       later: asArr(d.roadmap_later),
     },
-    brand: (() => {
-      const status = parseJsonField<{ brand_kit_ready?: boolean; pitch_deck_ready?: boolean; incorporated?: boolean }>(d.brand_status_json, {});
-      return {
-        eyebrow: asStr(d.brand_eyebrow, base.brand.eyebrow),
-        headline: asStr(d.brand_headline, base.brand.headline),
-        tagline: asStr(d.brand_tagline, base.brand.tagline),
-        vision: asStr(d.brand_vision, base.brand.vision),
-        brand_kit_ready: asBool(status.brand_kit_ready ?? d.brand_kit_ready),
-        pitch_deck_ready: asBool(status.pitch_deck_ready ?? d.brand_pitch_deck_ready),
-        incorporated: asBool(status.incorporated ?? d.brand_incorporated),
-      };
-    })(),
+    brand: {
+      eyebrow: asStr(d.brand_eyebrow, base.brand.eyebrow),
+      headline: asStr(d.brand_headline, base.brand.headline),
+      tagline: asStr(d.brand_tagline, base.brand.tagline),
+      vision: asStr(d.brand_vision, base.brand.vision),
+      brand_kit_ready: asBool(d.brand_kit_ready),
+      pitch_deck_ready: asBool(d.brand_pitch_deck_ready),
+      incorporated: asBool(d.brand_incorporated),
+    },
     venture_readiness: {
       eyebrow: asStr(d.vr_eyebrow, base.venture_readiness.eyebrow),
       headline: asStr(d.vr_headline, base.venture_readiness.headline),
@@ -425,7 +508,7 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
     team: {
       eyebrow: asStr(d.team_eyebrow, base.team.eyebrow),
       headline: asStr(d.team_headline, base.team.headline),
-      founders: parseJsonField<Founder[]>(d.team_founders_json, []),
+      founders: readFounders(),
       team_intro: asStr(d.team_intro, base.team.team_intro),
     },
     mentor_network: {
@@ -438,7 +521,7 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
     cap_table: {
       eyebrow: asStr(d.ct_eyebrow, base.cap_table.eyebrow),
       headline: asStr(d.ct_headline, base.cap_table.headline),
-      holders: parseJsonField<Holder[]>(d.ct_holders_json, []),
+      holders: readHolders(),
       note: asStr(d.ct_note, base.cap_table.note),
     },
     ask: {
@@ -456,7 +539,7 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
       eyebrow: asStr(d.as_eyebrow, base.axal_signal.eyebrow),
       headline: asStr(d.as_headline, base.axal_signal.headline),
       body: asStr(d.as_body, base.axal_signal.body),
-      lab_weeks: parseJsonField<LabWeek[]>(d.as_lab_weeks_json, []),
+      lab_weeks: readLabWeeks(),
     },
     contact: {
       eyebrow: asStr(d.contact_eyebrow, base.contact.eyebrow),
