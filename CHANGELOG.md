@@ -11,6 +11,34 @@
 > building it.
 
 
+## Feature — Task #15 — Axal 30-day Spin-Out Lab "Demo Day" deck (13th pitch-deck template)
+
+13th pitch-deck template, sized for Axal-network investors + partners
+reviewing Spin-Out Lab graduates. 14 fixed slides (cover, thesis,
+problem, insight, product, market, early signal, 30-day sprint,
+business model, GTM, landscape, team, ask, thank you) bound 1:1 to
+canonical Lab tables — no fabricated numbers. Four visual variants
+(`editorial`, `product_first`, `data_dense`, `manifesto`) switchable in
+the author surface; the user's choice is persisted to
+`localStorage['axal:deck:axal_spinout_demoday:variant']` and baked into
+share / print / export renderings.
+
+Files:
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx` — self-contained adapter (~1100 LOC) with SAMPLE_DATA, `mergeShape()` (object/non-object guard mirrored from `investor_appendix_app.tsx`), VariantSwitcher, and bespoke SVG artwork (SunRise hero, SparkArc week-progress, ProductFrame, MarketTriangle, scatter landscape).
+- `frontend/src/decks/templates/index.ts` — registers `axal_spinout_demoday` (free tier, `category: 'fundraising'`); bumps sanity check from 12 → 13.
+- `cloudflare-worker/src/services/decks/methods.ts` — adds `'axal_spinout_demoday'` to `DeckMethodId`; appends `DECK_METHODS` entry (informational slide list — autofill is special-cased in the route handler).
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts` — `fillAxalSpinoutDemoDay(env, userId, projectId)` builds `SpinoutDemoDayData` from `projects`, `users`, `spinout_lab_milestones`, `discovery_interviews`, `roadmap_okrs`, `score_snapshots`, `financial_models`, `cap_table_holders` in one parallel `Promise.all`. `buildAxalSpinoutDemoDaySlides()` shapes it into 14 slides where each slide carries one JSON-encoded paragraph field keyed `axal_spinout_section_<name>`; slide 0 also carries the `meta` section. All payloads fit comfortably under `sanitizeFields`' 4000-char paragraph cap.
+- `cloudflare-worker/src/routes/decks.ts` — branches both `/apply-method` (line 928) and `/:id/autofill` (line 1032) when `method_id === 'axal_spinout_demoday'`: calls `fillAxalSpinoutDemoDay()` → `buildAxalSpinoutDemoDaySlides()` → `sanitizeSlides()` → `insertVersion()` / UPDATE. Coverage_pct returned as 1.0 when project has name+sector, else 0.5 — kept honest so the picker's "filled" badge doesn't lie.
+
+Data flow: the adapter receives the flattened `data` dict from `PitchDeckPrintPage::buildTemplateData`, which yields `{ axal_spinout_section_cover: '<json>', axal_spinout_section_thesis: '<json>', … }`. `hydrate()` walks those keys, JSON-parses each, and merges onto SAMPLE_DATA via `mergeShape()`. Missing rows render as `'—'` placeholders with inline `<Nudge>` cues pointing the founder at the right Lab page to populate.
+
+Sample / authored / shared parity: SAMPLE_DATA's `meta.is_sample=true` triggers a "Sample data" badge on the cover; the worker autofill always writes `is_sample=false`. Variant choice is only visible behind `editable`, so investor / share renderings cannot accidentally flip variants.
+
+Pattern reuse: `mergeShape`'s `if (typeof incoming !== 'object' || Array.isArray(incoming)) return base;` guard is copied verbatim from `investor_appendix_app.tsx` lines 2877–2899 to keep primitive overrides from clobbering nested sub-trees. Lab milestone catalog is duplicated (small, stable) in `axalSpinoutDemoDay.ts::WEEK_CATALOG` rather than imported from the worker's `services/spinoutLabCatalog.ts` to keep the deck builder self-contained.
+
+No DB migration required — autofill consumes existing tables only.
+
+
 ## Fix — bump PWA service-worker cache version to evict stale share-link bundle
 
 - After fixes #1/#2 to `mergeShape` and `previewDataFor` landed, share links

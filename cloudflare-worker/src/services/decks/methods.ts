@@ -28,7 +28,13 @@ export type DeckMethodId =
   | 'partnership_bd'
   | 'one_pager_teaser'
   | 'investor_appendix'
-  | 'narrative_brand';
+  | 'narrative_brand'
+  // Task #15 — Axal 30-day Spin-Out Lab demo day deck. 14 fixed slides,
+  // 4 visual variants. Autofill is special-cased in routes/decks.ts
+  // (apply-method short-circuits to services/decks/axalSpinoutDemoDay.ts)
+  // because the data shape — interview lists, milestone weeks, lab
+  // progress — doesn't fit the generic field-source vocabulary.
+  | 'axal_spinout_demoday';
 
 export type DeckSlideField = {
   /** Field id (becomes the JSON key on the slide). */
@@ -762,6 +768,44 @@ export const DECK_METHODS: DeckMethodSpec[] = [
       tractionSlide,
       { ...tractionSlide, id: 'voices', title: 'Voices' },
       teamSlide, businessModelSlide, gtmSlide, roadmapSlide, askSlide, closingSlide,
+    ],
+  },
+  // Task #15 — Axal 30-day Spin-Out Lab demo day.
+  //
+  // The slide list below is informational only — the picker uses it for
+  // count + appendix flags, but routes/decks.ts `/apply-method`
+  // short-circuits for this method_id and writes per-section JSON-
+  // encoded paragraph fields via fillAxalSpinoutDemoDay(). The
+  // self-contained adapter (axal_spinout_demoday_app.tsx) reads those
+  // sections back from buildTemplateData and merges them onto its
+  // canonical SAMPLE_DATA shape via mergeShape().
+  {
+    id: 'axal_spinout_demoday', key: 'axal_spinout_demoday',
+    label: 'Axal 30-day Spin-Out Lab — Demo Day (14)',
+    prompt_hint: 'Demo Day deck for pre-incorporation founders graduating the 30-day Spin-Out Lab.',
+    best_for: 'Founders in or graduating the Axal Spin-Out Lab. Audience: Axal-network investors and partners.',
+    slide_count: 14,
+    premium: false,
+    category: 'event',
+    fields_from_project: ['name', 'sector', 'tagline', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'contact_email', 'vision'],
+    fields_from_financials: ['ltv', 'ltv_cac_ratio', 'runway_months', 'avg_monthly_burn'],
+    fields_from_captable: ['founders'],
+    ai_fill_hint: 'Honesty over polish. If a number is missing, leave the em-dash placeholder so the founder sees what to fill in.',
+    slides: [
+      { id: 'cover', title: 'Cover', fields: [f.title('cover_headline', [])] },
+      { id: 'thesis', title: 'Thesis', fields: [f.title('thesis_headline', [])] },
+      { id: 'problem', title: 'Problem', fields: [f.title('problem_headline', [])] },
+      { id: 'insight', title: 'Insight', fields: [f.title('insight_headline', [])] },
+      { id: 'product', title: 'Product', fields: [f.title('product_headline', [])] },
+      { id: 'market', title: 'Market', fields: [f.title('market_headline', [])] },
+      { id: 'traction', title: 'Early signal', fields: [f.title('traction_headline', [])] },
+      { id: 'lab_progress', title: '30-day sprint', fields: [f.title('lab_headline', [])] },
+      { id: 'model', title: 'Business model', fields: [f.title('model_headline', [])] },
+      { id: 'gtm', title: 'Go-to-market', fields: [f.title('gtm_headline', [])] },
+      { id: 'competition', title: 'Landscape', fields: [f.title('competition_headline', [])] },
+      { id: 'team', title: 'Team', fields: [f.title('team_headline', [])] },
+      { id: 'ask', title: 'Ask', fields: [f.title('ask_headline', [])] },
+      { id: 'closing', title: 'Thank you', fields: [f.title('closing_headline', [])] },
     ],
   },
 ];

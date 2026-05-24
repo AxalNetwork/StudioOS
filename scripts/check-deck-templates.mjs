@@ -3,15 +3,15 @@
  * Task #9 (LG) — Deck template registry drift guard.
  *
  * Statically asserts that `frontend/src/decks/templates/index.ts`:
- *   (1) Imports exactly 12 Deck_* components from sibling .tsx files.
- *   (2) Declares exactly 12 entries in the TEMPLATES record.
+ *   (1) Imports exactly 13 Deck_* components from sibling .tsx files.
+ *   (2) Declares exactly 13 entries in the TEMPLATES record.
  *   (3) Every entry has `key`, `label`, `description`, `slide_count`,
  *       `required_tier`, and `Component` fields populated.
  *   (4) Exports `TEMPLATE_LIST` so consumers can iterate without
  *       coupling to the record shape.
  *
  * Wired into `npm run test:drift`. Failing this guard means the picker
- * grid will render fewer than 12 thumbnails (or none at all).
+ * grid will render fewer than 13 thumbnails (or none at all).
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -23,7 +23,7 @@ const ROOT = join(__dirname, '..');
 const INDEX_PATH = join(ROOT, 'frontend/src/decks/templates/index.ts');
 const TEMPLATES_DIR = join(ROOT, 'frontend/src/decks/templates');
 
-const EXPECTED = 12;
+const EXPECTED = 13;
 const REQUIRED_FIELDS = ['key', 'label', 'description', 'slide_count', 'required_tier', 'Component'];
 
 function fail(msg) {

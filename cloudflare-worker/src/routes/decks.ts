@@ -13,6 +13,11 @@ import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
 } from '../services/decks/methods';
 import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
+// Task #15 — Axal 30-day Spin-Out Lab demo day deck. Custom autofill
+// path that bypasses the generic field-source vocabulary in autofill.ts
+// because the deck binds to Lab tables (interviews, milestones, OKRs)
+// that don't fit the project/financials/captable source shape.
+import { fillAxalSpinoutDemoDay, buildAxalSpinoutDemoDaySlides } from '../services/decks/axalSpinoutDemoDay';
 import { recommendMethod, listOverrides, setOverride, deleteOverride } from '../services/decks/recommend';
 import { getDeckBrand, setStudioWatermark, ensureMethodAllowed } from '../services/decks/branding';
 import { renderDeckHTML, type RenderableDeck } from '../services/decks/render';
@@ -907,6 +912,34 @@ decks.post('/apply-method', async (c) => {
   }
   await ensureSchema(c.env);
   await ensureProjectAutofillColumns(c.env);
+
+  // Task #15 — Axal Spin-Out Lab demo day uses a custom autofill path.
+  // The deck binds 1:1 to Lab tables (spinout_lab_milestones,
+  // discovery_interviews, roadmap_okrs, score_snapshots), which don't
+  // fit the generic field-source vocabulary in autofill.ts. We build a
+  // SpinoutDemoDayData record and persist it as 14 slides, each
+  // carrying one JSON-encoded paragraph field per top-level section.
+  // The frontend adapter (axal_spinout_demoday_app.tsx) reads those
+  // back via buildTemplateData and merges onto its canonical SAMPLE_DATA
+  // via mergeShape().
+  if (methodId === 'axal_spinout_demoday') {
+    const data = await fillAxalSpinoutDemoDay(c.env, Number(user.id), pid);
+    const wrapped = buildAxalSpinoutDemoDaySlides(data);
+    const safeWrapped = sanitizeSlides(wrapped);
+    const title = `${proj.name} — ${method.label}`;
+    const id = await insertVersion(c.env, pid, safeWrapped, title, Number(user.id) || null);
+    const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
+    // No generic coverage metric for the custom path — report 1 when
+    // the project has a name + sector, else 0. Keeps the picker's
+    // "filled" badge meaningful without lying.
+    const coverage = data.meta.project_name !== '—' && data.meta.sector !== '—' ? 1 : 0.5;
+    return c.json({
+      deck: rowToDeck(row),
+      method_id: methodId,
+      coverage_pct: coverage,
+    });
+  }
+
   // Run autofill, then convert to the editor slide JSON shape stored in
   // pitch_decks.slides. We also stash the method_id + spec_id on each
   // slide so the editor can re-render the right field controls.
@@ -987,6 +1020,28 @@ decks.post('/:id/autofill', async (c) => {
       error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD',
       method_id: methodId, required_tier: 'growth',
     }, 402);
+  }
+
+  // Task #15 — custom re-fill path for the Spin-Out Lab demo day deck
+  // (mirrors the apply-method branch above so /:id/autofill stays in
+  // sync when the founder pushes "Fill from project" after logging more
+  // interviews / completing more milestones).
+  if (methodId === 'axal_spinout_demoday') {
+    const data = await fillAxalSpinoutDemoDay(c.env, Number(user.id), Number(row.project_id));
+    const wrapped = buildAxalSpinoutDemoDaySlides(data);
+    const safeWrapped = sanitizeSlides(wrapped);
+    await c.env.DB.prepare(`UPDATE pitch_decks SET slides = ? WHERE id = ?`)
+      .bind(JSON.stringify(safeWrapped), id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
+    const coverage = data.meta.project_name !== '—' && data.meta.sector !== '—' ? 1 : 0.5;
+    return c.json({
+      deck: rowToDeck(fresh),
+      method_id: methodId,
+      coverage_pct: coverage,
+      slide_confidence: safeWrapped.map((s: any, i: number) => ({
+        index: i, spec_id: s.spec_id, title: s.title, coverage_pct: coverage,
+      })),
+    });
   }
 
   const filled = await autofillDeck(c.env, method, Number(row.project_id));

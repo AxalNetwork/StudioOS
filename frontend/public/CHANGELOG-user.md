@@ -8,6 +8,26 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## New: a Demo Day pitch deck made for Spin-Out Lab graduates
+
+There's a 13th template in the pitch-deck picker: **Axal 30-day Spin-Out
+Lab — Demo Day**. It's a 14-slide deck shaped specifically for founders
+graduating the Lab and presenting to Axal-network investors and
+partners. The deck reads directly from your Lab data — your discovery
+interviews, milestones, OKRs, score, cap table — so the numbers on
+screen are the numbers you actually logged. Where something's missing,
+the deck shows a small em-dash and a hint pointing you to the page
+where you can fill it in. No invented traction.
+
+You can flip between four looks for the same deck — editorial (warm
+serif), product-first (dark, bold), data-dense (compact and tabular),
+and manifesto (high-contrast, oversized type) — using the switcher in
+the top-right of the editor. Your choice sticks for that deck and is
+what investors see when you share the link.
+
+Free for everyone on the platform.
+
+
 ## Fixed: stale offline cache kept old broken bundle alive after share-link fix
 
 If you had StudioOS open in your browser before, the offline cache could
