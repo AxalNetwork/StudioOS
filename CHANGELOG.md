@@ -11,6 +11,77 @@
 > building it.
 
 
+## Task #12 — Investor + Appendix: 42-slide editorial upgrade
+
+Replaced the 23-slide placeholder `investor_appendix` template (12-slide
+stub + 10 plain "Appendix · X" pages with the giant `[Company]` cover)
+with a 42-slide institutional-grade variant from PR #53 — 12-slide core
+investor deck + 30 appendix pages across nine sections (A Market ·
+B Product · C Traction · D Customer insights · E Unit economics ·
+F Go-to-market · G Defensibility · H Team & operations · I Financials).
+Editorial crimson / navy / gold palette, Source Serif Pro headlines,
+hand-built SVG diagrams (TAM/SAM/SOM rings, cohort heatmap, moat
+pentagon, positioning matrix, funnel, capital-allocation bars) plus
+full Recharts library (ARR area, NRR line, channel-mix bars,
+composed P&L). Mirrors the in-place swap pattern from Task #2
+(Series A), Task #3 (Series B), Task #5 (Demo Day), Task #6
+(Partnership/BD), and Task #10 (Sales) — registry slot stable
+(`investor_appendix`), drift count unchanged at 12 templates.
+
+- **`frontend/src/decks/templates/investor_appendix_app.tsx`** — new
+  self-contained ~2985-line template dropped in verbatim from
+  `attached_assets/Pasted--investor-appendix-app-tsx-…`. Exports
+  `InvestorData` type + `SAMPLE_DATA` (`Loopline`, $25M Series A,
+  18-month ARR series, four-cohort retention grid, six-bucket org
+  plan, three-year P&L). Standalone `InvestorAppendixDeckApp` viewer
+  with framer-motion shell, dot nav, deck/appendix toggle, and `A`
+  hotkey to jump to the appendix divider. Inline mapping comment at
+  the bottom documents the future worker autofill binding
+  (`projects.*`, `financial_models.*`, `cohort_grids`,
+  `pipeline_snapshots`, `customer_success_stories`,
+  `competitive_matrix`, `financial_plans`, `hiring_plans`,
+  `capital_allocation_plans`, `partnerships`, `compliance_certs`).
+- **Registry adapter** appended to the same file:
+  `Deck_investor_appendix_app: React.FC<RegistryDeckProps>` runs
+  `mergeShape()` to deep-merge incoming `data` over `SAMPLE_DATA`
+  field-by-field (arrays only override when non-empty, objects merge
+  per-key) so partial autofill payloads don't nuke the defaults the
+  slide internals rely on. Bridges the template's array-path `onEdit`
+  signature to the registry's dot-string signature. Wraps each of the
+  42 slides — 12 `<SnXxx>` core slides + 9 `<AppendixDivider>` letter
+  pages + 30 `<A1…A30>` appendix slides — in `<Slide16x9>` so the
+  print pipeline (`PitchDeckPrintPage.jsx`) finds them via
+  `[data-slide-frame]` and per-slide page breaks fire during PDF
+  export.
+- **`frontend/src/decks/templates/investor_appendix.tsx`** — collapsed
+  from the 96-line stub to a one-line re-export
+  (`export { Deck_investor_appendix_app as Deck_investor_appendix } from './investor_appendix_app';`)
+  so the registry key `investor_appendix` stays stable, persisted
+  decks with `method_id=investor_appendix` continue to resolve, and
+  the `check-deck-templates.mjs` drift guard keeps finding the
+  canonical `Deck_<key>` import from `./<key>`.
+- **`frontend/src/decks/templates/index.ts`** — bumped to
+  `slide_count: 42` + description `'12 core + 30 appendix (A–I) ·
+  editorial · with charts'`. Tier (`studio`) and category
+  (`fundraising`) unchanged.
+
+PR #53 closed via the GitHub integration with the comment "Landed via
+internal task — closing this PR."
+
+Verified `node scripts/check-deck-templates.mjs` → `12 templates wired
+correctly`; `npx vite build` → clean build, new chunk
+`investor_appendix_app-*.js`.
+
+Out of scope (kept per the task spec): the worker
+`heuristicSlides()` branch + appendix-supporting migrations
+(`cohort_grids`, `pipeline_snapshots`, `financial_plans`,
+`hiring_plans`, `capital_allocation_plans`, `partnerships`,
+`case_studies`, `compliance_certs`) — the inline mapping comment at
+the bottom of `investor_appendix_app.tsx` is the spec for the future
+worker branch. Until those land the deck renders against `SAMPLE_DATA`
+field-by-field, which is exactly the merge behaviour above.
+
+
 ## Task #11 — Share-link fullscreen one-slide presentation + real direct-download PDF
 
 Fixed the two long-standing rough edges in the one-time deck share
