@@ -11,6 +11,25 @@
 > building it.
 
 
+## Fix — bump PWA service-worker cache version to evict stale share-link bundle
+
+- After fixes #1/#2 to `mergeShape` and `previewDataFor` landed, share links
+  on prod kept crashing on different decks (`moat.pillars`, `features.modules`)
+  because the prod SPA bundle hadn't been redeployed AND returning visitors'
+  service worker (`frontend/public/sw.js`) was holding cache-first hashed
+  assets from before the patch.
+- Bumped `VERSION` in `frontend/public/sw.js` from `v2-2026-05-13` to
+  `v3-2026-05-24` so the next prod deploy's `activate` step drops the
+  three old cache buckets (`studioos-precache-v2-…`, `-static-v2-…`,
+  `-api-v2-…`) and forces a fresh fetch of the new Vite-hashed JS.
+- Ran `npm run build` — clean. Pending: `npm run deploy` (Cloudflare Worker)
+  by user. Until that ships, the prod share-link crashes persist regardless
+  of code changes here.
+- Re-verified the underlying `mergeShape` guard against 14 malformed
+  `moat`/`features` shapes via code execution — every plausible bad shape
+  falls back to `SAMPLE_DATA`'s structural defaults; no crash path remains
+  in the source code.
+
 ## Fix — `mergeShape` type-mismatch crashed share-link viewer on app-template decks
 
 - Share-link route (`/share/deck/<token>`) for `narrative_brand` crashed

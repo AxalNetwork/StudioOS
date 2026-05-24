@@ -11,6 +11,25 @@
 > building it.
 
 
+## Fix — `mergeShape` type-mismatch crashed share-link viewer on app-template decks
+
+- Share-link route (`/share/deck/<token>`) for `narrative_brand` crashed
+  with `undefined is not an object (evaluating 'd.proof.stat_strip.map')`.
+- Root cause in all six self-contained registry adapters
+  (`narrative_brand_app`, `investor_appendix_app`, `partnership_bd_app`,
+  `series_b_diligence_app`, `demo_day_app`, `sales_commercial_app`):
+  when `mergeShape(SAMPLE_DATA, data)` received an `incoming` whose
+  value at a given key was a *primitive* but `base` had a typed object
+  (e.g. `data.proof = "The Proof"` from `PitchDeckPrintPage.buildTemplateData`'s
+  flat-field blob), the final fall-through `return (incoming as T) ?? base`
+  replaced the whole `proof` object with the string, so `merged.proof.stat_strip`
+  became `undefined` and the first `.map` deref threw.
+- Added a single-line type-mismatch guard inside the object branch of
+  each `mergeShape`: if `base` is an object but `incoming` isn't a plain
+  object, keep `base` (same defensive stance as the existing
+  empty-array branch). Identical patch applied to all six files so the
+  six adapter copies stay in lock-step. Build clean.
+
 ## Fix — `previewDataFor` fallback crashed `investor_appendix` + `narrative_brand` thumbnails
 
 - `frontend/src/decks/sample.ts::previewDataFor()` had no explicit branch

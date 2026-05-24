@@ -8,6 +8,14 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Fixed: stale offline cache kept old broken bundle alive after share-link fix
+
+If you had StudioOS open in your browser before, the offline cache could
+keep serving the older app code even after we shipped a fix for the
+share-link crashes. We've refreshed that cache version, so next time
+the production app is published, your browser will pick up the latest
+version automatically.
+
 ## Fixed: one-time share links crashing on the cinematic deck templates
 
 One-time share links for the Narrative — Brand-led deck (and other
