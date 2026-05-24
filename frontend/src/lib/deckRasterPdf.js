@@ -25,6 +25,13 @@ function slugify(s) {
     .slice(0, 80) || 'pitch-deck';
 }
 
+// YYYY-MM-DD in the viewer's local timezone — used in the export
+// filename per the Task #11 spec (`{deck-title}-{YYYY-MM-DD}.pdf`).
+function isoDate(d = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export async function downloadRasterDeckPdf(deck, { stageEl, onProgress } = {}) {
   if (!stageEl) throw new Error('stageEl required');
   const frames = Array.from(stageEl.querySelectorAll('[data-slide-frame]'));
@@ -105,7 +112,7 @@ export async function downloadRasterDeckPdf(deck, { stageEl, onProgress } = {}) 
     pdf.addImage(img, 'JPEG', 0, 0, SLIDE_W, SLIDE_H, undefined, 'FAST');
   }
 
-  const fname = `${slugify(deck?.title || 'pitch-deck')}-v${deck?.version || 1}.pdf`;
+  const fname = `${slugify(deck?.title || 'pitch-deck')}-${isoDate()}.pdf`;
   pdf.save(fname);
   onProgress?.({ current: frames.length, total: frames.length, done: true });
 }

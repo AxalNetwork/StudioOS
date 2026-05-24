@@ -61,15 +61,25 @@ Mechanics:
     native exit. Tab order untouched (`tabIndex={-1}`).
   - Auto-hiding fullscreen overlay (`.opacity-0` after 2.5s mouse-idle,
     re-shows on `mousemove`/`keydown`): bottom-left slide counter
-    `1 / N`, bottom-right `← → navigate · Esc to exit`.
+    `1 / N`, bottom-right `← → navigate · Shift+Space back · Esc to
+    exit`, plus circular prev/next chevrons vertically centred on the
+    left/right edges (disabled at deck ends so they never push
+    `currentIdx` out of bounds). `Shift+Space` is wired in the
+    keyboard handler as the presenter convention for previous-slide
+    (Space alone still pages forward).
   - `exportPdf()` now calls `downloadRasterDeckPdf` for the advanced
     path, exposes per-slide progress in the chrome ("Rendering slide
-    X of N…"), disables both chrome buttons while exporting, surfaces
-    failures via `window.alert()` (no `useToast` available on the
-    standalone share route — outside `ProtectedLayout`). Legacy
-    purple-card decks (no recognisable `method_id`) still use the
+    X of N…"), disables both chrome buttons while exporting, and on
+    failure raises an inline bottom-right toast (red banner with the
+    error message + a one-click "Use browser print as fallback"
+    action that triggers `window.print()`). The share route renders
+    outside `ProtectedLayout`, so there's no global `useToast` context
+    — the toast is local to `PitchDeckPrintPage`. Legacy purple-card
+    decks (no recognisable `method_id`) still use the
     `@react-pdf/renderer` primitive path because they don't carry the
     `data-slide-frame` contract at native 1920×1080.
+  - Filename: `{slugified-title}-{YYYY-MM-DD}.pdf` (local-tz date),
+    per spec.
 - **`PrintStage`** rewritten with two render modes selected by the new
   `isFullscreen` prop. Both modes share the same `.deck-print-stage` /
   `.deck-print-scaler` / `.deck-print-inner` / `.deck-print-frames`

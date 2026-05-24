@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { Download, Loader2, Maximize2, Minimize2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Loader2, Maximize2, Minimize2, Printer, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { downloadRasterDeckPdf } from '../lib/deckRasterPdf';
@@ -273,6 +273,11 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [slideCount, setSlideCount] = useState(0);
   const [overlayVisible, setOverlayVisible] = useState(true);
+  // Task #11 — inline error toast for PDF export failures. The
+  // share route renders outside ProtectedLayout so there's no
+  // useToast context; we render a lightweight banner that includes
+  // a "Use browser print as fallback" action.
+  const [exportError, setExportError] = useState(null);
   const overlayTimerRef = useRef(null);
   const viewIdRef = useRef(null);
   const startedAtRef = useRef(null);
@@ -410,6 +415,10 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
     const NAV_PREV = new Set(['ArrowLeft', 'ArrowUp', 'PageUp', 'k']);
     const onKey = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Task #11 — Shift+Space goes BACK (presenter convention).
+      // We branch on Space here before the alt-key bail so the Shift
+      // modifier doesn't get swallowed by the generic NAV_NEXT lookup.
+      const isSpace = e.key === ' ' || e.key === 'Spacebar';
       const ae = document.activeElement;
       if (ae) {
         const tag = ae.tagName;
@@ -417,8 +426,8 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
       }
       const root = stageRef.current;
       if (!root) return;
-      const isNext = NAV_NEXT.has(e.key);
-      const isPrev = NAV_PREV.has(e.key);
+      const isNext = NAV_NEXT.has(e.key) && !(isSpace && e.shiftKey);
+      const isPrev = NAV_PREV.has(e.key) || (isSpace && e.shiftKey);
       const isHome = e.key === 'Home';
       const isEnd = e.key === 'End';
       const isFsToggle = e.key === 'f' || e.key === 'F';
@@ -495,10 +504,11 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
         await downloadDeckPdf(deck);
       }
     } catch (e) {
-      // Surface a user-visible error so the click never silently fails.
-      // alert() is the only modal-free option on the standalone share
-      // route (no ProtectedLayout / toast container).
-      try { window.alert(`PDF export failed: ${e?.message || 'unknown error'}`); } catch { /* noop */ }
+      // Task #11 — surface an inline toast (the share route is
+      // outside ProtectedLayout so the global toast context isn't
+      // available). The toast offers a one-click fallback to the
+      // browser's print pipeline so users are never stuck.
+      setExportError(e?.message || 'unknown error');
       console.error('PitchDeckPrintPage: exportPdf failed', e);
     } finally {
       setExporting(false);
@@ -604,15 +614,62 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
         />
         {!isFullscreen && cta && <div className="deck-print-cta">{cta}</div>}
         {isFullscreen && slideCount > 0 && (
-          <div
-            className={`pointer-events-none fixed inset-x-0 bottom-0 z-20 flex items-end justify-between p-6 transition-opacity duration-300 ${overlayVisible ? 'opacity-100' : 'opacity-0'}`}
-          >
-            <div className="pointer-events-auto rounded-lg bg-black/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur tabular-nums">
-              {Math.min(currentIdx + 1, slideCount)} / {slideCount}
+          <>
+            {/* Task #11 — clickable prev/next chevrons. Vertically
+                centred on the left/right edges, auto-hide with the
+                rest of the overlay chrome. Disabled at deck ends so
+                they never push currentIdx out of bounds. */}
+            <button
+              type="button"
+              aria-label="Previous slide"
+              onClick={() => setCurrentIdx((i) => Math.max(0, i - 1))}
+              disabled={currentIdx <= 0}
+              className={`fixed left-4 top-1/2 -translate-y-1/2 z-20 grid place-items-center w-12 h-12 rounded-full bg-black/60 text-white backdrop-blur hover:bg-black/80 disabled:opacity-30 disabled:cursor-not-allowed transition-opacity duration-300 ${overlayVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            >
+              <ChevronLeft size={24} />
+            </button>
+            <button
+              type="button"
+              aria-label="Next slide"
+              onClick={() => setCurrentIdx((i) => Math.min(slideCount - 1, i + 1))}
+              disabled={currentIdx >= slideCount - 1}
+              className={`fixed right-4 top-1/2 -translate-y-1/2 z-20 grid place-items-center w-12 h-12 rounded-full bg-black/60 text-white backdrop-blur hover:bg-black/80 disabled:opacity-30 disabled:cursor-not-allowed transition-opacity duration-300 ${overlayVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            >
+              <ChevronRight size={24} />
+            </button>
+            <div
+              className={`pointer-events-none fixed inset-x-0 bottom-0 z-20 flex items-end justify-between p-6 transition-opacity duration-300 ${overlayVisible ? 'opacity-100' : 'opacity-0'}`}
+            >
+              <div className="pointer-events-auto rounded-lg bg-black/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur tabular-nums">
+                {Math.min(currentIdx + 1, slideCount)} / {slideCount}
+              </div>
+              <div className="pointer-events-auto rounded-lg bg-black/60 px-3 py-1.5 text-xs text-white backdrop-blur">
+                ← → navigate · Shift+Space back · Esc to exit
+              </div>
             </div>
-            <div className="pointer-events-auto rounded-lg bg-black/60 px-3 py-1.5 text-xs text-white backdrop-blur">
-              ← → navigate · Esc to exit
+          </>
+        )}
+        {exportError && (
+          <div className="fixed bottom-4 right-4 z-30 max-w-md rounded-lg border border-red-200 bg-white shadow-lg p-4 flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-red-700">PDF export failed</div>
+              <div className="mt-1 text-xs text-gray-600 break-words">{exportError}</div>
+              <button
+                type="button"
+                onClick={() => { setExportError(null); try { window.print(); } catch { /* noop */ } }}
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-violet-700 hover:text-violet-900"
+              >
+                <Printer size={12} /> Use browser print as fallback
+              </button>
             </div>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              onClick={() => setExportError(null)}
+              className="text-gray-400 hover:text-gray-700 shrink-0"
+            >
+              <X size={16} />
+            </button>
           </div>
         )}
       </div>
