@@ -1090,7 +1090,7 @@ function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, bu
           </button>
         </div>
         <div className="px-5 py-2 border-b dark:border-slate-800 flex gap-2 text-xs">
-          {['all', 'fundraising', 'commercial', 'event', 'narrative'].map((c) => (
+          {['all', 'fundraising', 'commercial', 'event'].map((c) => (
             <button
               key={c}
               onClick={() => setFilter(c)}
