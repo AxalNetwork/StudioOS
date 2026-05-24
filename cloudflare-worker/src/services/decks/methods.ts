@@ -781,7 +781,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
   // canonical SAMPLE_DATA shape via mergeShape().
   {
     id: 'axal_spinout_demoday', key: 'axal_spinout_demoday',
-    label: 'Axal VC 30-day Spin-Out Lab — Demo Day (14)',
+    label: 'Axal VC Spin-Out',
     prompt_hint: 'Demo Day deck for pre-incorporation founders graduating the 30-day Spin-Out Lab.',
     best_for: 'Founders in or graduating the Axal Spin-Out Lab. Audience: Axal-network investors and partners.',
     slide_count: 14,

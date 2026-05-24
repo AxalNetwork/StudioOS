@@ -52,7 +52,7 @@ export const TEMPLATES: Record<string, TemplateMeta> = {
   one_pager_teaser:   { key: 'one_pager_teaser',   label: 'One-Pager Teaser',              description: '1 page · cold outreach',                           slide_count: 1,  required_tier: 'free',   category: 'commercial',  Component: Deck_one_pager_teaser },
   investor_appendix:  { key: 'investor_appendix',  label: 'Investor + Appendix',           description: '12 core + 30 appendix (A–I) · editorial · with charts', slide_count: 42, required_tier: 'studio', category: 'fundraising', Component: Deck_investor_appendix },
   narrative_brand:    { key: 'narrative_brand',    label: 'Narrative — Brand-led',         description: '4 acts · 15 chapters + 4 dividers · cinematic · custom SVG artwork', slide_count: 19, required_tier: 'studio', category: 'commercial',  Component: Deck_narrative_brand },
-  axal_spinout_demoday: { key: 'axal_spinout_demoday', label: 'Axal VC 30-day Spin-Out Lab — Demo Day', description: '14 slides · 4 variants (editorial / product-first / data-dense / manifesto) · binds to Lab data', slide_count: 14, required_tier: 'growth', category: 'fundraising', Component: Deck_axal_spinout_demoday },
+  axal_spinout_demoday: { key: 'axal_spinout_demoday', label: 'Axal VC Spin-Out', description: '14 slides · 4 variants (editorial / product-first / data-dense / manifesto) · binds to Lab data', slide_count: 14, required_tier: 'growth', category: 'fundraising', Component: Deck_axal_spinout_demoday },
 };
 
 export const TEMPLATE_KEYS = Object.keys(TEMPLATES);
