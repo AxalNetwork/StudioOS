@@ -1056,7 +1056,7 @@ function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, bu
         label: m.label || tpl.label,
         description: m.prompt_hint || tpl.description,
         best_for: m.best_for || '',
-        category: m.category || 'general',
+        category: m.category || tpl.category || 'general',
         slide_count: m.slide_count ?? tpl.slide_count,
         premium,
         locked,

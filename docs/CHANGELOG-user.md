@@ -8,6 +8,52 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Easier: a one-click jump from the Lab to your Demo Day deck
+
+The Spin-Out Lab dashboard now shows a "Generate your Demo Day deck"
+button whenever your pitch deck milestone is still open, and stays
+visible all through Week 4 so it's there when you actually need it.
+Clicking it drops you straight into the pitch-deck builder with the
+new 14-slide Demo Day template already applied — no scrolling through
+the template picker. Once your deck exists, the button quietly
+relabels to "Open Demo Day deck" so you can come back and refresh it.
+
+## Pick which interview quotes show up on your Demo Day deck
+
+Each discovery interview now has a small star button. Star the
+interviews you most want to highlight, and the "Early signal" slide on
+your Demo Day deck will use those quotes instead of just the three most
+recent ones. Leave everything unstarred and the deck behaves exactly
+like before — newest three win.
+
+## New: a Demo Day pitch deck made for Spin-Out Lab graduates
+
+There's a 13th template in the pitch-deck picker: **Axal VC 30-day Spin-Out
+Lab — Demo Day**. It's a 14-slide deck shaped specifically for founders
+graduating the Lab and presenting to Axal-network investors and
+partners. The deck reads directly from your Lab data — your discovery
+interviews, milestones, OKRs, score, cap table — so the numbers on
+screen are the numbers you actually logged. Where something's missing,
+the deck shows a small em-dash and a hint pointing you to the page
+where you can fill it in. No invented traction.
+
+You can flip between four looks for the same deck — editorial (warm
+serif), product-first (dark, bold), data-dense (compact and tabular),
+and manifesto (high-contrast, oversized type) — using the switcher in
+the top-right of the editor. Your choice sticks for that deck and is
+what investors see when you share the link.
+
+Free for everyone on the platform.
+
+
+## Fixed: stale offline cache kept old broken bundle alive after share-link fix
+
+If you had StudioOS open in your browser before, the offline cache could
+keep serving the older app code even after we shipped a fix for the
+share-link crashes. We've refreshed that cache version, so next time
+the production app is published, your browser will pick up the latest
+version automatically.
+
 ## Fixed: one-time share links crashing on the cinematic deck templates
 
 One-time share links for the Narrative — Brand-led deck (and other
