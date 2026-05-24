@@ -10,6 +10,21 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ## May 2026
 
+- The **Partnership / BD** pitch-deck template was rebuilt from the
+  ground up. It's now a 12-slide executive-consulting deck in the
+  voice of a top-tier strategy firm — executive summary, industry
+  context, partner challenges, shared opportunity, solution overview,
+  platform architecture, quantified business benefits, an
+  18-month implementation roadmap, comparable case studies, a
+  revenue-share commercial structure, governance & risk, and a
+  90-day path to a signed pilot. Every diagram is hand-drawn (no
+  screenshots needed), it autofills from your partnership data, and
+  it ships with polished sample content so it always renders cleanly
+  and exports to PDF.
+- Fixed a preview crash on the new **Demo Day — Product-first** pitch
+  deck template — the market slide was throwing on an unknown accent
+  colour, which made the picker show "Failed to render demo_day"
+  instead of the actual preview. The deck now renders cleanly.
 - The **Demo Day — Product-first** pitch-deck template was rebuilt
   from the ground up. It's now 12 product-first slides with a warm
   YC-style orange accent and hand-drawn product mockups baked right
