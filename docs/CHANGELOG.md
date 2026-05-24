@@ -11,6 +11,46 @@
 > building it.
 
 
+## Task #5 — Demo Day: 12-slide product-first upgrade
+
+Replaced the 11-slide screenshot-stub `demo_day` template with a
+12-slide product-first self-contained variant. Hand-built SVG product
+mockups (dashboard / before-after workflow / split editor / kanban /
+analytics / mobile), warm Demo-Day orange (`#FF5A1F`) accent, no
+recharts. Mirrors the in-place swap pattern from Task #2 (Series A)
+and Task #3 (Series B) — registry slot stable (`demo_day`), drift
+count unchanged.
+
+- **`frontend/src/decks/templates/demo_day_app.tsx`** — new file
+  (~1828 lines). Local `SlideFrame` chrome, 12 slide components
+  (Cover / Problem / Solution / Walkthrough / 3× Feature deep-screen /
+  Love / Traction / Market / Team / Fundraise), standalone
+  `DemoDayDeckApp` viewer with framer-motion shell + dot nav, plus
+  `mergeShape()` helper and registry adapter `Deck_demo_day_app` that
+  wraps each slide in `<Slide16x9>` so the print pipeline finds them
+  via `[data-slide-frame]` and per-slide page breaks fire during
+  `window.print()`. Exports `DemoDayData` type + `SAMPLE_DATA`
+  (`Loopline`, $12M Series A ask, 12-month ARR series). Adapter
+  bridges demo_day's array-path `onEdit` signature to the registry's
+  dot-string signature.
+- **`frontend/src/decks/templates/demo_day.tsx`** — rewritten as a
+  single-line re-export: `export { Deck_demo_day_app as Deck_demo_day }
+  from './demo_day_app';`. Keeps `method_id=demo_day` stable and
+  satisfies `scripts/check-deck-templates.mjs` (it still finds
+  `Deck_demo_day` exported from `./demo_day`).
+- **`frontend/src/decks/templates/index.ts`** — `demo_day` entry
+  bumped from `slide_count: 11` / `'11 slides · screenshot-heavy'` to
+  `slide_count: 12` / `'12 slides · product-first · SVG mockups'`.
+- **`frontend/src/decks/sample.ts`** — added `DEMO_DAY_APP_SAMPLE`
+  import and a `templateKey === 'demo_day'` branch in
+  `previewDataFor()` so the thumbnail / preview surfaces use the new
+  nested shape (`company.{name,logo_mark}`, `cover.metric_strip`,
+  `features[]`, `traction.monthly_arr_series`,
+  `fundraise.use_of_funds`, etc.). Same pattern as Series A/B.
+- Verified: `node scripts/check-deck-templates.mjs` → 12 templates
+  wired correctly; `npx vite build` → clean build, new chunk
+  `demo_day_app-*.js` (247 KB / 59 KB gzip).
+
 ## Task #3 — Series B Diligence Pack: 32-slide board-grade upgrade
 
 Replaced the 1-slide `series_b_diligence` placeholder with a 32-slide

@@ -2,6 +2,7 @@ import type { DeckData } from './DeckBase';
 import { SAMPLE_DATA as MINIMAL_SEED_SAMPLE } from './templates/minimal_seed';
 import { SAMPLE_DATA as SERIES_A_APP_SAMPLE } from './templates/series_a_growth_app';
 import { SAMPLE_DATA as SERIES_B_APP_SAMPLE } from './templates/series_b_diligence_app';
+import { SAMPLE_DATA as DEMO_DAY_APP_SAMPLE } from './templates/demo_day_app';
 
 // Base preview sample used by the existing 11 templates. Keeps the
 // historical *string* shapes for `milestones`, `roadmap`, and
@@ -401,6 +402,14 @@ export function previewDataFor(templateKey: string): DeckData {
   // `three_year_plan`, etc. that SAMPLE_PREVIEW_DATA does not carry.
   if (templateKey === 'series_b_diligence') {
     return SERIES_B_APP_SAMPLE as unknown as DeckData;
+  }
+  // Demo Day (now backed by the 12-slide self-contained
+  // `demo_day_app` variant) reads nested structured fields like
+  // `company.{name,logo_mark}`, `cover.metric_strip`, `features[]`,
+  // `traction.monthly_arr_series`, `fundraise.use_of_funds`, etc.
+  // that SAMPLE_PREVIEW_DATA does not carry.
+  if (templateKey === 'demo_day') {
+    return DEMO_DAY_APP_SAMPLE as unknown as DeckData;
   }
   return SAMPLE_PREVIEW_DATA;
 }

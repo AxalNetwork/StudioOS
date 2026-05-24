@@ -10,6 +10,15 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ## May 2026
 
+- The **Demo Day — Product-first** pitch-deck template was rebuilt
+  from the ground up. It's now 12 product-first slides with a warm
+  YC-style orange accent and hand-drawn product mockups baked right
+  into the deck — dashboard, before-and-after workflow, split editor,
+  kanban board, analytics, and a mobile screen — so you can walk
+  investors through how the product actually works without screenshot
+  attachments. It autofills from your project data and ships with
+  polished sample content so it always renders cleanly and exports
+  to PDF.
 - The **Series B — Diligence Pack** pitch-deck template was rebuilt
   from the ground up. It's now a full 32-slide board-grade deck (22
   main slides plus a 10-page appendix) covering opportunity, product,
