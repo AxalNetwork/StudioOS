@@ -28,7 +28,7 @@ like before — newest three win.
 
 ## New: a Demo Day pitch deck made for Spin-Out Lab graduates
 
-There's a 13th template in the pitch-deck picker: **Axal 30-day Spin-Out
+There's a 13th template in the pitch-deck picker: **Axal VC 30-day Spin-Out
 Lab — Demo Day**. It's a 14-slide deck shaped specifically for founders
 graduating the Lab and presenting to Axal-network investors and
 partners. The deck reads directly from your Lab data — your discovery
