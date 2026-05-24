@@ -225,16 +225,21 @@ const Editable: React.FC<EditableProps> = ({ value, path, onEdit, className, sty
   </span>
 );
 
-const Pill: React.FC<{ children: React.ReactNode; tone?: 'accent' | 'electric' | 'emerald' | 'neutral' }> = ({
+type PillTone = 'accent' | 'electric' | 'emerald' | 'violet' | 'amber' | 'rose' | 'neutral';
+
+const Pill: React.FC<{ children: React.ReactNode; tone?: PillTone }> = ({
   children,
   tone = 'neutral',
 }) => {
-  const palette = {
+  const palette = ({
     accent: { bg: C.accentSoft, fg: C.accent },
     electric: { bg: C.electricSoft, fg: C.electric },
     emerald: { bg: C.emeraldSoft, fg: C.emerald },
+    violet: { bg: C.violetSoft, fg: C.violet },
+    amber: { bg: '#FEF3C7', fg: C.amber },
+    rose: { bg: '#FFE4E6', fg: C.rose },
     neutral: { bg: C.paperDim, fg: C.textSoft },
-  }[tone];
+  } as const)[tone] ?? { bg: C.paperDim, fg: C.textSoft };
   return (
     <span
       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] tracking-[0.18em] uppercase font-medium"
@@ -975,13 +980,17 @@ const FeatureSlide: React.FC<SlideProps<'features'> & { idx: number; screen: Rea
   // (mergeShape replaces arrays wholesale when incoming is non-empty),
   // so an under-populated payload would otherwise null-deref. Fall
   // back to an empty-shape stub that renders gracefully.
-  const f = data.features[idx] ?? {
-    name: `Feature 0${idx + 1}`,
-    headline: '—',
-    sub: '—',
-    bullets: [],
-    metric_label: '',
-    metric_value: '—',
+  // Defensive against both a missing index AND a partial object — autofill
+  // may write {name} only, in which case `bullets.map` / `name.toLowerCase`
+  // would otherwise throw at render time.
+  const raw = data.features[idx] ?? {};
+  const f = {
+    name: raw.name ?? `Feature 0${idx + 1}`,
+    headline: raw.headline ?? '—',
+    sub: raw.sub ?? '—',
+    bullets: Array.isArray(raw.bullets) ? raw.bullets : [],
+    metric_label: raw.metric_label ?? '',
+    metric_value: raw.metric_value ?? '—',
   };
   return (
     <SlideFrame step={step} total={total} section={`Feature 0${idx + 1}`}>
@@ -1051,9 +1060,9 @@ const Slide8Love: React.FC<SlideProps<'love'>> = ({ data, onEdit, step, total })
                   className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs"
                   style={{ background: C.paperDim, color: C.textSoft }}
                 >
-                  {t.author
+                  {(t.author ?? '—')
                     .split(' ')
-                    .map((w) => w[0])
+                    .map((w) => w[0] ?? '')
                     .slice(0, 2)
                     .join('')}
                 </div>

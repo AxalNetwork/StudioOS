@@ -10,6 +10,10 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ## May 2026
 
+- Fixed a preview crash on the new **Demo Day — Product-first** pitch
+  deck template — the market slide was throwing on an unknown accent
+  colour, which made the picker show "Failed to render demo_day"
+  instead of the actual preview. The deck now renders cleanly.
 - The **Demo Day — Product-first** pitch-deck template was rebuilt
   from the ground up. It's now 12 product-first slides with a warm
   YC-style orange accent and hand-drawn product mockups baked right

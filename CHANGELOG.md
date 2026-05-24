@@ -11,6 +11,23 @@
 > building it.
 
 
+## Task #5 — Demo Day: render fix (Pill violet tone)
+
+`Slide10Market` rendered `<Pill tone="violet">` but `Pill`'s palette
+only had `accent | electric | emerald | neutral`. `palette[tone]`
+returned `undefined`, then reading `.bg` threw at render time and
+`ThumbnailBoundary` surfaced "Failed to render demo_day" in the
+template picker preview.
+
+- **`frontend/src/decks/templates/demo_day_app.tsx`** — extended `PillTone`
+  with `violet | amber | rose` (the three remaining `C.*` accents) and
+  added a `?? neutral` fallback on the palette lookup so unknown tones
+  degrade gracefully instead of crashing. Also hardened two related
+  partial-payload paths flagged by code review: `FeatureSlide` now
+  normalizes per-field (not just per-index) so a feature object with
+  only `{name}` no longer null-derefs on `bullets.map` / `name.toLowerCase`;
+  `Slide8Love` avatar initials now coerce `t.author ?? '—'` before splitting.
+
 ## Task #5 — Demo Day: 12-slide product-first upgrade
 
 Replaced the 11-slide screenshot-stub `demo_day` template with a
