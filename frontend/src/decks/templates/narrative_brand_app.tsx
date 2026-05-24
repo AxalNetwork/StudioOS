@@ -1297,7 +1297,13 @@ function mergeShape<T>(base: T, incoming: any): T {
   if (Array.isArray(base)) {
     return (Array.isArray(incoming) && incoming.length > 0 ? incoming : base) as unknown as T;
   }
-  if (typeof base === 'object' && base !== null && typeof incoming === 'object' && !Array.isArray(incoming)) {
+  if (typeof base === 'object' && base !== null) {
+    // Type-mismatch guard: a typed object base must never be replaced
+    // by a non-object incoming (e.g. the editor's flat-field blob can
+    // produce `data.proof = "The Proof"` as a string, which used to
+    // clobber the entire nested object and crash slide internals with
+    // `undefined is not an object (evaluating 'd.proof.stat_strip.map')`).
+    if (typeof incoming !== 'object' || Array.isArray(incoming)) return base;
     const out: any = { ...(base as any) };
     for (const k of Object.keys(incoming)) {
       const bv = (base as any)[k];

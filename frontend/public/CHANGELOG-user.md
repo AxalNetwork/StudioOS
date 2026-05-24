@@ -8,6 +8,13 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Fixed: one-time share links crashing on the cinematic deck templates
+
+One-time share links for the Narrative — Brand-led deck (and other
+templates built on the same engine) were hitting an "unexpected error"
+page instead of rendering the slides. Share links now load reliably
+across every template.
+
 ## Fixed: Investor + Appendix and Narrative — Brand-led previews
 
 The picker and preview pane were showing a red "Failed to render" card
