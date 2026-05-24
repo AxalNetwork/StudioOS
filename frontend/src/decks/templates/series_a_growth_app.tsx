@@ -167,6 +167,15 @@ const fmtUSD = (n?: number) => {
 };
 const fmtNum = (n?: number) => (n == null || isNaN(n) ? '—' : n.toLocaleString());
 const fmtPct = (n?: number) => (n == null || isNaN(n) ? '—' : `${n}%`);
+// Defensive uppercaser for share-rendered data: founder-supplied items may
+// omit a stringy field (e.g. `name`, `label`, axis labels); never crash the
+// share-link tree — degrade to a neutral placeholder instead. Mirrors the
+// helper Task #7 introduced in `series_b_diligence_app.tsx`.
+const safeUpper = (v: unknown, fallback = '—'): string => {
+  if (v == null) return fallback;
+  const s = typeof v === 'string' ? v : String(v);
+  return s.length ? s.toUpperCase() : fallback;
+};
 
 const Editable: React.FC<{
   value?: string;
@@ -363,7 +372,7 @@ const KpiTile: React.FC<{
     <div className="flex items-start justify-between gap-3">
       <div>
         <div style={{ fontSize: 10, letterSpacing: 2, color: SUBTLE, fontFamily: FONT_MONO }}>
-          {label.toUpperCase()}
+          {safeUpper(label)}
         </div>
         <div
           style={{
@@ -534,9 +543,9 @@ const PlatformDiagram: React.FC<{ modules: { name: string; capabilities: string[
           <g key={ci}>
             <rect x={cx - colW * 0.42} y="30" width={colW * 0.84} height={H - 110} rx="14" fill="url(#pd-h)" stroke={ACCENT} strokeOpacity="0.45" />
             <text x={cx} y="56" textAnchor="middle" fontSize="13" fontFamily={FONT_MONO} letterSpacing="2.5" fill={ACCENT} fontWeight={700}>
-              {m.name.toUpperCase()}
+              {safeUpper(m.name)}
             </text>
-            {m.capabilities.slice(0, 4).map((c, i) => (
+            {(m.capabilities ?? []).slice(0, 4).map((c, i) => (
               <g key={i} transform={`translate(${cx} ${94 + i * 48})`}>
                 <rect x={-colW * 0.36} y={-16} width={colW * 0.72} height={36} rx={8} fill={PAPER} stroke={HAIRLINE} />
                 <text x="0" y="6" textAnchor="middle" fontSize="13" fontFamily={FONT} fill={INK}>{c}</text>
@@ -589,7 +598,7 @@ const FlywheelDiagram: React.FC<{ nodes: { label: string; body?: string }[] }> =
           <g key={i}>
             <circle cx={x} cy={y} r={48} fill={PAPER} stroke={ACCENT} strokeWidth={1.5} />
             <text x={x} y={y - 4} textAnchor="middle" fontSize="12" fontFamily={FONT_MONO} fontWeight={700} fill={ACCENT} letterSpacing="1.5">
-              {n.label.toUpperCase()}
+              {safeUpper(n.label)}
             </text>
             {n.body && (
               <text x={x} y={y + 14} textAnchor="middle" fontSize="10" fontFamily={FONT} fill={SUBTLE}>{n.body}</text>
@@ -649,9 +658,9 @@ const PositioningMap: React.FC<{
       {/* axes */}
       <line x1={padL} x2={W - padR} y1={H - padB} y2={H - padB} stroke={INK} strokeWidth={1.5} />
       <line x1={padL} x2={padL} y1={padT} y2={H - padB} stroke={INK} strokeWidth={1.5} />
-      <text x={W - padR} y={H - padB + 30} textAnchor="end" fontSize="12" letterSpacing="2" fontFamily={FONT_MONO} fill={SUBTLE}>{axis_x.toUpperCase()} →</text>
+      <text x={W - padR} y={H - padB + 30} textAnchor="end" fontSize="12" letterSpacing="2" fontFamily={FONT_MONO} fill={SUBTLE}>{safeUpper(axis_x)} →</text>
       <g transform={`translate(${padL - 40}, ${H / 2}) rotate(-90)`}>
-        <text fontSize="12" letterSpacing="2" fontFamily={FONT_MONO} fill={SUBTLE}>{axis_y.toUpperCase()} →</text>
+        <text fontSize="12" letterSpacing="2" fontFamily={FONT_MONO} fill={SUBTLE}>{safeUpper(axis_y)} →</text>
       </g>
       {/* gridlines */}
       {[0.5].map((p, i) => (
@@ -1163,7 +1172,7 @@ const Slide9Adoption: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) =>
             <div className="grid grid-cols-3 gap-2 mt-1">
               {logos.slice(0, 12).map((l, i) => (
                 <div key={i} className="flex items-center justify-center rounded-lg" style={{ height: 44, background: SURFACE, border: `1px solid ${HAIRLINE}`, fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700, color: INK, letterSpacing: 1 }}>
-                  {l.initials || l.name.toUpperCase().slice(0, 6)}
+                  {l.initials || safeUpper(l.name).slice(0, 6)}
                 </div>
               ))}
             </div>
