@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Trash2, MessageSquare, CheckCircle2, XCircle, HelpCircle, AlertCircle, Save, X, FolderPlus } from 'lucide-react';
+import { Plus, Trash2, MessageSquare, CheckCircle2, XCircle, HelpCircle, AlertCircle, Save, X, FolderPlus, Star } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
@@ -20,6 +20,7 @@ function emptyInterview() {
     notes: '',
     hypotheses: [{ hypothesis: '', status: 'inconclusive', evidence: '' }],
     pains: [],
+    featured: false,
   };
 }
 
@@ -133,6 +134,31 @@ export default function DiscoveryPage() {
     }
   }
 
+  // Task #18 — toggle the "star for Demo Day deck" flag straight from
+  // the card. We send the full interview payload because the PUT
+  // endpoint expects the standard create/update shape; the worker
+  // preserves any field we omit. Optimistic update so the star feels
+  // instant even if the round-trip is slow.
+  async function handleToggleFeatured(interview) {
+    const next = !interview.featured;
+    setInterviews((prev) => prev.map((it) => (it.id === interview.id ? { ...it, featured: next } : it)));
+    try {
+      await api.updateInterview(interview.id, {
+        interviewee_name: interview.interviewee_name,
+        interviewee_role: interview.interviewee_role || '',
+        interview_date: interview.interview_date,
+        notes: interview.notes || '',
+        hypotheses: interview.hypotheses || [],
+        pains: interview.pains || [],
+        featured: next,
+      });
+    } catch (e) {
+      // Revert optimistic update on failure.
+      setInterviews((prev) => prev.map((it) => (it.id === interview.id ? { ...it, featured: !next } : it)));
+      setError(e.message || 'Failed to update interview.');
+    }
+  }
+
   async function handleDelete(id) {
     if (!confirm('Delete this interview?')) return;
     try {
@@ -240,6 +266,15 @@ export default function DiscoveryPage() {
                 {i.notes && <p className="text-sm text-gray-600 mt-1 whitespace-pre-line line-clamp-3">{i.notes}</p>}
               </div>
               <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleToggleFeatured(i)}
+                  title={i.featured ? 'Starred for Demo Day deck — click to unstar' : 'Star this quote for the Demo Day deck'}
+                  aria-label={i.featured ? 'Unstar interview for Demo Day deck' : 'Star interview for Demo Day deck'}
+                  aria-pressed={!!i.featured}
+                  className={`p-1 rounded ${i.featured ? 'text-amber-500 hover:text-amber-600' : 'text-gray-300 hover:text-amber-500'}`}
+                >
+                  <Star size={16} fill={i.featured ? 'currentColor' : 'none'} />
+                </button>
                 <button onClick={() => setEditing(i)} className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 dark:border-gray-800">Edit</button>
                 <button onClick={() => handleDelete(i.id)} className="text-rose-500 hover:text-rose-700 p-1"><Trash2 size={14} /></button>
               </div>

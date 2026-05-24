@@ -18,6 +18,13 @@ new 14-slide Demo Day template already applied — no scrolling through
 the template picker. Once your deck exists, the button quietly
 relabels to "Open Demo Day deck" so you can come back and refresh it.
 
+## Pick which interview quotes show up on your Demo Day deck
+
+Each discovery interview now has a small star button. Star the
+interviews you most want to highlight, and the "Early signal" slide on
+your Demo Day deck will use those quotes instead of just the three most
+recent ones. Leave everything unstarred and the deck behaves exactly
+like before — newest three win.
 
 ## New: a Demo Day pitch deck made for Spin-Out Lab graduates
 

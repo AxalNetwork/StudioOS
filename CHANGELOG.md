@@ -33,6 +33,34 @@ Files: `frontend/src/pages/SpinoutLabPage.jsx`,
 `frontend/src/pages/PitchDeckPage.jsx`. No worker / migration / drift
 changes.
 
+## Feature — Task #18 — Founder-curated quotes on the Demo Day deck
+
+Founders can now pick which discovery interviews surface as quotes on
+the Demo Day deck's "Early signal" slide instead of always getting the
+three most-recent.
+
+- New `discovery_interviews.featured INTEGER NOT NULL DEFAULT 0` column
+  added by `cloudflare-worker/sql/migrations/072_discovery_interview_featured.sql`
+  (additive ALTER + partial index `idx_discovery_interviews_project_featured`).
+- `cloudflare-worker/src/services/discoveryInterviewSchema.ts` —
+  `ensureDiscoveryInterviewFeaturedColumn()` lazy bootstrap (mirrors
+  `ensurePartnerDirectoryColumns()`), called from every read/write path
+  in `routes/progress.ts` so the worker is self-healing on
+  environments where 072 hasn't landed yet.
+- `routes/progress.ts` — `INTERVIEW_SELECT` + `serializeInterview()` +
+  POST/PUT now round-trip `featured`. Update path treats `featured` as
+  optional and preserves the prior value when the field is omitted, so
+  the legacy modal save can't accidentally clear a star.
+- `services/decks/axalSpinoutDemoDay.ts` — the interview query orders
+  `COALESCE(featured, 0) DESC, id DESC`. Quote selection now keeps only
+  starred candidates when at least one exists, otherwise falls back to
+  the original recency-based top 3. Empty-takeaway / unnamed rows are
+  still filtered out so an empty star doesn't push real signal off the
+  slide.
+- `frontend/src/pages/DiscoveryPage.jsx` — star toggle on each
+  interview card (Lucide `Star`, filled amber when active). Toggling
+  uses an optimistic update and reverts on PUT failure. `aria-pressed`
+  + title/`aria-label` describe both states.
 
 ## Feature — Task #15 — Axal 30-day Spin-Out Lab "Demo Day" deck (13th pitch-deck template)
 

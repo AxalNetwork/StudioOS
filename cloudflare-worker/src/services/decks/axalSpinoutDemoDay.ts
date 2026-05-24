@@ -221,6 +221,7 @@ type UserRow = {
 type InterviewRow = {
   interviewee_name: string | null; interviewee_role: string | null;
   notes: string | null; pains_json: string | null; hypotheses_json: string | null;
+  featured: number | null;
 };
 type ScoreRow = {
   total_score: number | null; tier: string | null; is_sandbox: number | null;
@@ -348,9 +349,10 @@ export async function fillAxalSpinoutDemoDay(
       ORDER BY COALESCE(ownership_pct, 0) DESC, COALESCE(shares, 0) DESC LIMIT 12
     `).bind(projectId, userId).all<HolderRow>().catch(() => ({ results: [] as HolderRow[] })),
     DB.prepare(`
-      SELECT interviewee_name, interviewee_role, notes, pains_json, hypotheses_json
+      SELECT interviewee_name, interviewee_role, notes, pains_json, hypotheses_json,
+             COALESCE(featured, 0) AS featured
       FROM discovery_interviews WHERE project_id = ?
-      ORDER BY id DESC LIMIT 6
+      ORDER BY COALESCE(featured, 0) DESC, id DESC LIMIT 6
     `).bind(projectId).all<InterviewRow>().catch(() => ({ results: [] as InterviewRow[] })),
     DB.prepare(`SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?`)
       .bind(projectId).first<{ n: number }>().catch(() => ({ n: 0 })),
@@ -415,14 +417,23 @@ export async function fillAxalSpinoutDemoDay(
     }
   }
 
-  const interviewQuotes = interviewsList
+  // Task #18 — founder-curated quotes. The SQL above already orders
+  // featured rows first; when at least one interview is starred we keep
+  // only those (capped at 3), otherwise we fall back to the recency-based
+  // top 3 just like before. Empty-takeaway / unnamed rows are still
+  // filtered out so blank stars don't push real signal off the slide.
+  const candidateQuotes = interviewsList
     .map((it) => ({
       name: orDash(it.interviewee_name),
       role: it.interviewee_role || '',
       takeaway: interviewTakeaway(it),
+      featured: Number(it.featured ?? 0) === 1,
     }))
-    .filter((it) => it.takeaway && it.name !== DASH)
-    .slice(0, 3);
+    .filter((it) => it.takeaway && it.name !== DASH);
+  const starred = candidateQuotes.filter((q) => q.featured);
+  const interviewQuotes = (starred.length > 0 ? starred : candidateQuotes)
+    .slice(0, 3)
+    .map(({ name, role, takeaway }) => ({ name, role, takeaway }));
 
   // ------ roadmap: bucket OKRs by kanban_status, pull quarter ---------
   const okrByStatus = (status: string): string[] =>

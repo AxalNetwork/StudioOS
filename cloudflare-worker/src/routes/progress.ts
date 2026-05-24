@@ -36,6 +36,7 @@ import type { Env, User } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
+import { ensureDiscoveryInterviewFeaturedColumn } from '../services/discoveryInterviewSchema';
 
 const progress = new Hono<{ Bindings: Env }>();
 
@@ -124,6 +125,7 @@ type InterviewRow = {
   notes: string | null;
   hypotheses_json: string | null;
   pains_json: string | null;
+  featured: number | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -159,6 +161,7 @@ function serializeInterview(r: InterviewRow) {
     notes: r.notes ?? '',
     hypotheses: safeJsonParseArray(r.hypotheses_json),
     pains: safeJsonParseArray(r.pains_json),
+    featured: Number(r.featured ?? 0) === 1,
     created_at: r.created_at,
     updated_at: r.updated_at,
   };
@@ -166,8 +169,14 @@ function serializeInterview(r: InterviewRow) {
 
 const INTERVIEW_SELECT =
   `SELECT id, project_id, interviewee_name, interviewee_role, interview_date,
-          notes, hypotheses_json, pains_json, created_at, updated_at
+          notes, hypotheses_json, pains_json, featured, created_at, updated_at
      FROM discovery_interviews`;
+
+function asFeaturedFlag(raw: unknown): number {
+  if (raw === true || raw === 1 || raw === '1') return 1;
+  if (typeof raw === 'string' && raw.toLowerCase() === 'true') return 1;
+  return 0;
+}
 
 progress.get('/discovery/:projectId', async (c) => {
   const user = await requireAuth(c);
@@ -178,6 +187,7 @@ progress.get('/discovery/:projectId', async (c) => {
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
 
+  await ensureDiscoveryInterviewFeaturedColumn(c.env);
   const { results } = await c.env.DB.prepare(
     `${INTERVIEW_SELECT}
       WHERE project_id = ?
@@ -223,17 +233,19 @@ progress.post('/discovery/:projectId', async (c) => {
   const notes = asStringOrNull(body.notes) ?? '';
   const hypotheses = normalizeHypotheses(body.hypotheses);
   const pains = normalizePains(body.pains);
+  const featured = asFeaturedFlag(body.featured);
   const nowIso = new Date().toISOString();
 
+  await ensureDiscoveryInterviewFeaturedColumn(c.env);
   const res = await c.env.DB.prepare(
     `INSERT INTO discovery_interviews
        (project_id, interviewee_name, interviewee_role, interview_date,
-        notes, hypotheses_json, pains_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        notes, hypotheses_json, pains_json, featured, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     projectId, intervieweeName, intervieweeRole, interviewDate,
     notes, JSON.stringify(hypotheses), JSON.stringify(pains),
-    nowIso, nowIso,
+    featured, nowIso, nowIso,
   ).run();
 
   const newId = lastInsertId(res);
@@ -284,16 +296,23 @@ progress.put('/discovery/interview/:id', async (c) => {
   const notes = asStringOrNull(body.notes) ?? '';
   const hypotheses = normalizeHypotheses(body.hypotheses);
   const pains = normalizePains(body.pains);
+  // `featured` is optional on update — when omitted, preserve the existing
+  // flag so partial payloads (e.g. the modal save that pre-dated Task #18)
+  // don't accidentally clear a founder's star.
+  const featured = Object.prototype.hasOwnProperty.call(body, 'featured')
+    ? asFeaturedFlag(body.featured)
+    : Number(existing.featured ?? 0);
 
+  await ensureDiscoveryInterviewFeaturedColumn(c.env);
   await c.env.DB.prepare(
     `UPDATE discovery_interviews
         SET interviewee_name = ?, interviewee_role = ?, interview_date = ?,
-            notes = ?, hypotheses_json = ?, pains_json = ?, updated_at = ?
+            notes = ?, hypotheses_json = ?, pains_json = ?, featured = ?, updated_at = ?
       WHERE id = ?`,
   ).bind(
     intervieweeName, intervieweeRole, interviewDate,
     notes, JSON.stringify(hypotheses), JSON.stringify(pains),
-    new Date().toISOString(), id,
+    featured, new Date().toISOString(), id,
   ).run();
 
   const row = await c.env.DB.prepare(`${INTERVIEW_SELECT} WHERE id = ?`)
