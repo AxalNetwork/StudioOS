@@ -1,0 +1,1 @@
+import{Kt as e,Ut as t}from"./index-D6JY3n82.js";var n=e(t(),1);function r(){(0,n.useLayoutEffect)(()=>{let e=document.documentElement,t=e.classList.contains(`dark`),n=e.dataset.theme;return e.classList.remove(`dark`),e.dataset.theme=`light`,()=>{t&&e.classList.add(`dark`),n===void 0?delete e.dataset.theme:e.dataset.theme=n}},[])}export{r as t};
