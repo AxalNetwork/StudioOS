@@ -11,6 +11,29 @@
 > building it.
 
 
+## Feature — Task #17 — Spin-Out Lab → Demo Day deck CTA + deep-link auto-apply
+
+In-product hint that points Spin-Out Lab founders at the new Demo Day
+template (Task #15). `SpinoutLabPage.jsx` Dashboard renders a violet
+CTA banner above the milestones list whenever `week === 4` OR the
+`pitch_deck_v1` milestone is still unchecked; the banner copy /
+button-label flip between "Generate" and "Open / Refresh" once the
+milestone is done. The CTA links to
+`/build/deck?method_id=axal_spinout_demoday`.
+
+`PitchDeckPage.jsx` now reads `?method_id=` via `useSearchParams`. A
+new effect — gated by `autoAppliedRef` so back/forward doesn't re-fire
+— waits for both the methods catalog and the active project to load,
+validates the id against `methods[]`, strips the query param via
+`setSearchParams({}, { replace: true })`, then calls the existing
+`applyMethod(id)` path. Paywall / unknown-method behaviour is
+unchanged — same 402 toast as a manual click in the picker.
+
+Files: `frontend/src/pages/SpinoutLabPage.jsx`,
+`frontend/src/pages/PitchDeckPage.jsx`. No worker / migration / drift
+changes.
+
+
 ## Feature — Task #15 — Axal 30-day Spin-Out Lab "Demo Day" deck (13th pitch-deck template)
 
 13th pitch-deck template, sized for Axal-network investors + partners

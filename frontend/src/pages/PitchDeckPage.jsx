@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
 import { reportError } from '../lib/log';
 import {
@@ -58,6 +59,14 @@ export default function PitchDeckPage() {
   const [slideConfidence, setSlideConfidence] = useState([]);
   const [error, setError] = useState('');
 
+  // Task #17 — Spin-Out Lab CTA deep-link. A `?method_id=<id>` query
+  // param fires applyMethod(id) once after the picker's method catalog
+  // loads + the active project resolves. Guarded by a ref so the auto-
+  // apply only happens on the first matching render (otherwise the
+  // user would be force-reapplied every time they click a slide).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoAppliedRef = useRef(false);
+
   const saveTimer = useRef(null);
 
   // ---------------- bootstrap ----------------
@@ -101,6 +110,29 @@ export default function PitchDeckPage() {
       } catch (e) { setError(e.message || 'Failed to load decks'); reportError(e); }
     })();
   }, [projectId]);
+
+  // Task #17 — Auto-apply a template from the URL once everything is
+  // ready. Fires when (a) we know which methods exist, (b) the
+  // requested id is a valid one the user can apply, (c) a project is
+  // selected. We then strip the query param so a back/forward doesn't
+  // re-trigger. If the method is gated, applyMethod() surfaces the 402
+  // toast — same path as a manual click in the picker.
+  useEffect(() => {
+    if (autoAppliedRef.current) return;
+    if (!methods.length || !projectId) return;
+    const wanted = searchParams.get('method_id');
+    if (!wanted) return;
+    const found = methods.find((m) => m.id === wanted);
+    if (!found) return;
+    autoAppliedRef.current = true;
+    const next = new URLSearchParams(searchParams);
+    next.delete('method_id');
+    setSearchParams(next, { replace: true });
+    applyMethod(wanted);
+    // applyMethod is defined later in the component; we intentionally
+    // depend only on the trigger inputs to avoid re-firing on every
+    // render. eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [methods, projectId, searchParams]);
 
   const slides = useMemo(() => {
     try {

@@ -392,6 +392,14 @@ function Dashboard({ state, onComplete, completing, completeError }) {
     : 1;
   const features = (state.unlocked_features || []).filter((f) => FEATURE_EXPLAINERS[f]);
 
+  // Task #17 — Demo Day deck CTA. Surfaces in Week 4 OR whenever the
+  // `pitch_deck_v1` milestone is still unchecked. Deep-links to the
+  // Pitch Deck Builder with `?method_id=axal_spinout_demoday`, which
+  // auto-applies the template (and surfaces a paywall toast if the
+  // user's tier doesn't include the Growth deck).
+  const deckMilestoneDone = completedKeys.has('pitch_deck_v1');
+  const showDemoDayCta = week === 4 || !deckMilestoneDone;
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-10 space-y-8">
       <header className="flex items-start justify-between gap-4">
@@ -408,6 +416,34 @@ function Dashboard({ state, onComplete, completing, completeError }) {
       </header>
 
       <ProgressBar week={week} />
+
+      {showDemoDayCta && (
+        <section
+          aria-label="Demo Day deck call-to-action"
+          className="rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 to-fuchsia-50 p-5 dark:from-violet-950/40 dark:to-fuchsia-950/30 dark:border-violet-900"
+        >
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="min-w-0 flex-1">
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/70 dark:bg-gray-900/40 border border-violet-200 dark:border-violet-800 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
+                <Sparkles size={10} /> Demo Day
+              </div>
+              <h3 className="mt-2 text-base font-semibold text-gray-900 dark:text-gray-100">
+                {deckMilestoneDone ? 'Refresh your Demo Day deck' : 'Generate your Demo Day deck'}
+              </h3>
+              <p className="mt-1 text-sm text-gray-700 dark:text-gray-300 max-w-xl">
+                A 14-slide deck that reads directly from everything you've put into the Lab — discovery,
+                OKRs, score, cap table — in four visual variants. No copy-pasting required.
+              </p>
+            </div>
+            <Link
+              to="/build/deck?method_id=axal_spinout_demoday"
+              className="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-md shadow-sm"
+            >
+              {deckMilestoneDone ? 'Open Demo Day deck' : 'Generate Demo Day deck'} <ArrowRight size={14} />
+            </Link>
+          </div>
+        </section>
+      )}
 
       <section className="bg-white border border-gray-200 rounded-2xl p-6 dark:bg-gray-900 dark:border-gray-800">
         <h2 className="text-lg font-semibold text-gray-900 mb-4 dark:text-gray-100">This week's milestones</h2>

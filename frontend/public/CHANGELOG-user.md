@@ -8,6 +8,17 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Easier: a one-click jump from the Lab to your Demo Day deck
+
+The Spin-Out Lab dashboard now shows a "Generate your Demo Day deck"
+button whenever your pitch deck milestone is still open, and stays
+visible all through Week 4 so it's there when you actually need it.
+Clicking it drops you straight into the pitch-deck builder with the
+new 14-slide Demo Day template already applied — no scrolling through
+the template picker. Once your deck exists, the button quietly
+relabels to "Open Demo Day deck" so you can come back and refresh it.
+
+
 ## New: a Demo Day pitch deck made for Spin-Out Lab graduates
 
 There's a 13th template in the pitch-deck picker: **Axal 30-day Spin-Out
