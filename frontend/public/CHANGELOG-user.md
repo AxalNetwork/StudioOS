@@ -10,6 +10,12 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ## May 2026
 
+- The **Narrative — Brand-led** pitch-deck template was rebuilt as a
+  15-slide cinematic brand story told in four acts — The World, The
+  Belief, The Solution, and The Future. It uses editorial typography
+  (Playfair Display headlines on warm cream paper), an ember/gold/sky/
+  dusk palette, and custom hand-drawn artwork on every slide, ending
+  on a red-ember manifesto. No charts, no stock photos — just story.
 - The **Investor + Appendix** pitch-deck template was rebuilt from
   the ground up. It's now a full 42-slide institutional fundraising
   deck — a 12-slide core investor story plus a 30-page appendix

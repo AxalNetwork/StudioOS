@@ -11,6 +11,112 @@
 > building it.
 
 
+## Task #13 — Narrative — Brand-led: cinematic 4-act upgrade
+
+- **Replaces** the old 14-slide big-type `Deck_narrative_brand` stub with
+  the self-contained `narrative_brand_app.tsx` shipped on PR #53 — 19
+  frames across 4 acts (15 content chapters + 4 full-bleed act
+  dividers; I · The World, II · The Belief, III · The Solution,
+  IV · The Future), editorial typography (Playfair Display +
+  Source Serif Pro + JetBrains Mono), warm-cream paper with ember/gold/
+  sky/dusk palette, and custom SVG artwork on every content slide
+  (HorizonScene, FragmentedGlass, VoicesSilhouette, SunTrail,
+  ConstellationCommunity, OpenLandscape, WaveOfLight). No charts, no
+  stock photos.
+- `frontend/src/decks/templates/narrative_brand_app.tsx` — dropped in
+  verbatim from `attached_assets/Pasted--narrative-brand-app-tsx-Narrative-driven-brand-present_1779618630769.txt`,
+  then appended the standard registry adapter (`mergeShape` + array→
+  dot-string `onEdit` bridge + `<Slide16x9>` per-slide wrapper). Mirrors
+  the Task #1/#3/#5/#6/#10/#12 pattern so the print pipeline
+  (`PitchDeckPrintPage.jsx`) finds every slide via `[data-slide-frame]`.
+- `frontend/src/decks/templates/narrative_brand.tsx` — collapsed to a
+  one-line re-export of `Deck_narrative_brand_app` as
+  `Deck_narrative_brand`. Registry key `narrative_brand` unchanged, so
+  decks saved with `method_id='narrative_brand'` continue to resolve.
+- `frontend/src/decks/templates/index.ts` — bumped
+  `narrative_brand.slide_count` from `14` to `19` (the source file's
+  header docstring says "15 in 4 acts" but the actual deck shell pushes
+  the 4 act dividers as standalone slides — 15 content + 4 dividers =
+  19 frames). Adapter uses `const total = factories.length` so footer
+  step/total chrome stays in sync with whatever the array contains;
+  description now reads `'4 acts · 15 chapters + 4 dividers · cinematic
+  · custom SVG artwork'`. Tier (`studio`) and category (`commercial`)
+  unchanged.
+- PR #53 (`claude/add-missing-sidebar-options-tmCKz`) was already
+  CLOSED upstream; left a comment noting the work landed via this task,
+  same convention as Tasks #9 / #12.
+
+## Task #12 — Investor + Appendix: 42-slide editorial upgrade
+
+Replaced the 23-slide placeholder `investor_appendix` template (12-slide
+stub + 10 plain "Appendix · X" pages with the giant `[Company]` cover)
+with a 42-slide institutional-grade variant from PR #53 — 12-slide core
+investor deck + 30 appendix pages across nine sections (A Market ·
+B Product · C Traction · D Customer insights · E Unit economics ·
+F Go-to-market · G Defensibility · H Team & operations · I Financials).
+Editorial crimson / navy / gold palette, Source Serif Pro headlines,
+hand-built SVG diagrams (TAM/SAM/SOM rings, cohort heatmap, moat
+pentagon, positioning matrix, funnel, capital-allocation bars) plus
+full Recharts library (ARR area, NRR line, channel-mix bars,
+composed P&L). Mirrors the in-place swap pattern from Task #2
+(Series A), Task #3 (Series B), Task #5 (Demo Day), Task #6
+(Partnership/BD), and Task #10 (Sales) — registry slot stable
+(`investor_appendix`), drift count unchanged at 12 templates.
+
+- **`frontend/src/decks/templates/investor_appendix_app.tsx`** — new
+  self-contained ~2985-line template dropped in verbatim from
+  `attached_assets/Pasted--investor-appendix-app-tsx-…`. Exports
+  `InvestorData` type + `SAMPLE_DATA` (`Loopline`, $25M Series A,
+  18-month ARR series, four-cohort retention grid, six-bucket org
+  plan, three-year P&L). Standalone `InvestorAppendixDeckApp` viewer
+  with framer-motion shell, dot nav, deck/appendix toggle, and `A`
+  hotkey to jump to the appendix divider. Inline mapping comment at
+  the bottom documents the future worker autofill binding
+  (`projects.*`, `financial_models.*`, `cohort_grids`,
+  `pipeline_snapshots`, `customer_success_stories`,
+  `competitive_matrix`, `financial_plans`, `hiring_plans`,
+  `capital_allocation_plans`, `partnerships`, `compliance_certs`).
+- **Registry adapter** appended to the same file:
+  `Deck_investor_appendix_app: React.FC<RegistryDeckProps>` runs
+  `mergeShape()` to deep-merge incoming `data` over `SAMPLE_DATA`
+  field-by-field (arrays only override when non-empty, objects merge
+  per-key) so partial autofill payloads don't nuke the defaults the
+  slide internals rely on. Bridges the template's array-path `onEdit`
+  signature to the registry's dot-string signature. Wraps each of the
+  42 slides — 12 `<SnXxx>` core slides + 9 `<AppendixDivider>` letter
+  pages + 30 `<A1…A30>` appendix slides — in `<Slide16x9>` so the
+  print pipeline (`PitchDeckPrintPage.jsx`) finds them via
+  `[data-slide-frame]` and per-slide page breaks fire during PDF
+  export.
+- **`frontend/src/decks/templates/investor_appendix.tsx`** — collapsed
+  from the 96-line stub to a one-line re-export
+  (`export { Deck_investor_appendix_app as Deck_investor_appendix } from './investor_appendix_app';`)
+  so the registry key `investor_appendix` stays stable, persisted
+  decks with `method_id=investor_appendix` continue to resolve, and
+  the `check-deck-templates.mjs` drift guard keeps finding the
+  canonical `Deck_<key>` import from `./<key>`.
+- **`frontend/src/decks/templates/index.ts`** — bumped to
+  `slide_count: 42` + description `'12 core + 30 appendix (A–I) ·
+  editorial · with charts'`. Tier (`studio`) and category
+  (`fundraising`) unchanged.
+
+PR #53 closed via the GitHub integration with the comment "Landed via
+internal task — closing this PR."
+
+Verified `node scripts/check-deck-templates.mjs` → `12 templates wired
+correctly`; `npx vite build` → clean build, new chunk
+`investor_appendix_app-*.js`.
+
+Out of scope (kept per the task spec): the worker
+`heuristicSlides()` branch + appendix-supporting migrations
+(`cohort_grids`, `pipeline_snapshots`, `financial_plans`,
+`hiring_plans`, `capital_allocation_plans`, `partnerships`,
+`case_studies`, `compliance_certs`) — the inline mapping comment at
+the bottom of `investor_appendix_app.tsx` is the spec for the future
+worker branch. Until those land the deck renders against `SAMPLE_DATA`
+field-by-field, which is exactly the merge behaviour above.
+
+
 ## Task #11 — Share-link fullscreen one-slide presentation + real direct-download PDF
 
 Fixed the two long-standing rough edges in the one-time deck share

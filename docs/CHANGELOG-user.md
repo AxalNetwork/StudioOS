@@ -10,6 +10,25 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ## May 2026
 
+- The **Narrative — Brand-led** pitch-deck template was rebuilt as a
+  15-slide cinematic brand story told in four acts — The World, The
+  Belief, The Solution, and The Future. It uses editorial typography
+  (Playfair Display headlines on warm cream paper), an ember/gold/sky/
+  dusk palette, and custom hand-drawn artwork on every slide, ending
+  on a red-ember manifesto. No charts, no stock photos — just story.
+- The **Investor + Appendix** pitch-deck template was rebuilt from
+  the ground up. It's now a full 42-slide institutional fundraising
+  deck — a 12-slide core investor story plus a 30-page appendix
+  organised across nine sections (Market, Product, Traction, Customer
+  insights, Unit economics, Go-to-market, Defensibility, Team &
+  operations, Financials). It's set in a magazine-style editorial
+  palette with crimson, navy, and gold accents, hand-drawn diagrams,
+  and built-in charts for ARR, retention cohorts, channel mix, and
+  three-year financials. There's a footer toggle to jump between the
+  core deck and the appendix, and you can press `A` to jump straight
+  to the appendix. It autofills from your project data and ships with
+  polished sample content so it always renders cleanly and exports
+  to PDF.
 - **Pitch decks shared via one-time link** now present properly in
   fullscreen — one slide at a time, centred and letterboxed, with
   no peek of the next slide. Use the arrow keys, Space, or PageUp/

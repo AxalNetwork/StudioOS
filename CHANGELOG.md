@@ -11,6 +11,41 @@
 > building it.
 
 
+## Task #13 — Narrative — Brand-led: cinematic 4-act upgrade
+
+- **Replaces** the old 14-slide big-type `Deck_narrative_brand` stub with
+  the self-contained `narrative_brand_app.tsx` shipped on PR #53 — 19
+  frames across 4 acts (15 content chapters + 4 full-bleed act
+  dividers; I · The World, II · The Belief, III · The Solution,
+  IV · The Future), editorial typography (Playfair Display +
+  Source Serif Pro + JetBrains Mono), warm-cream paper with ember/gold/
+  sky/dusk palette, and custom SVG artwork on every content slide
+  (HorizonScene, FragmentedGlass, VoicesSilhouette, SunTrail,
+  ConstellationCommunity, OpenLandscape, WaveOfLight). No charts, no
+  stock photos.
+- `frontend/src/decks/templates/narrative_brand_app.tsx` — dropped in
+  verbatim from `attached_assets/Pasted--narrative-brand-app-tsx-Narrative-driven-brand-present_1779618630769.txt`,
+  then appended the standard registry adapter (`mergeShape` + array→
+  dot-string `onEdit` bridge + `<Slide16x9>` per-slide wrapper). Mirrors
+  the Task #1/#3/#5/#6/#10/#12 pattern so the print pipeline
+  (`PitchDeckPrintPage.jsx`) finds every slide via `[data-slide-frame]`.
+- `frontend/src/decks/templates/narrative_brand.tsx` — collapsed to a
+  one-line re-export of `Deck_narrative_brand_app` as
+  `Deck_narrative_brand`. Registry key `narrative_brand` unchanged, so
+  decks saved with `method_id='narrative_brand'` continue to resolve.
+- `frontend/src/decks/templates/index.ts` — bumped
+  `narrative_brand.slide_count` from `14` to `19` (the source file's
+  header docstring says "15 in 4 acts" but the actual deck shell pushes
+  the 4 act dividers as standalone slides — 15 content + 4 dividers =
+  19 frames). Adapter uses `const total = factories.length` so footer
+  step/total chrome stays in sync with whatever the array contains;
+  description now reads `'4 acts · 15 chapters + 4 dividers · cinematic
+  · custom SVG artwork'`. Tier (`studio`) and category (`commercial`)
+  unchanged.
+- PR #53 (`claude/add-missing-sidebar-options-tmCKz`) was already
+  CLOSED upstream; left a comment noting the work landed via this task,
+  same convention as Tasks #9 / #12.
+
 ## Task #12 — Investor + Appendix: 42-slide editorial upgrade
 
 Replaced the 23-slide placeholder `investor_appendix` template (12-slide
