@@ -1,44 +1,43 @@
 /**
  * axal_spinout_demoday_app.tsx — Task #15
  *
- * Axal 30-day Spin-Out Lab — Demo Day deck.
+ * Axal 30-day Spin-Out Lab — Demo Day deck (14 slides, 4 variants).
  *
- * Self-contained React + TS + Tailwind + Framer Motion adapter that
- * renders 14 fixed slides in one of four visual variants:
+ * Self-contained React + TS + Tailwind + Framer Motion adapter rendering
+ * 14 fixed slides in the spec-required order:
  *
- *   editorial      — warm cream + serif, magazine-style
- *   product_first  — dark ink + bold sans, product mock-ups front-and-centre
- *   data_dense     — cool greys + mono tabular, compact KPI panels
- *   manifesto      — high-contrast ember on near-black, gigantic type
+ *   Cover · Problem · Validation · Market · Solution · Roadmap ·
+ *   Brand · Venture Readiness · Team · Mentors & Network · Cap Table ·
+ *   Ask · Axal Signal · Contact
  *
- * Audience: Axal-network investors + partners reviewing Spin-Out Lab
- * graduates on demo day. The deck binds 1:1 to canonical Lab data
- * (projects, discovery_interviews, roadmap_okrs, score_snapshots,
- * captable_holders, financial_models, spinout_lab_milestones,
- * advisor_answers) — every number that appears on screen is sourced
- * from a real row, or honestly marked "—" via the <Nudge> placeholder.
- * No fabricated traction, no synthetic quotes.
+ * Four visual variants — `editorial`, `product_first`, `data_dense`,
+ * `manifesto` — switchable in the author surface; choice is persisted
+ * to `localStorage[axal:deck:axal_spinout_demoday:variant]` and baked
+ * into share / print / export renderings.
  *
- * Variant choice is a user preference, persisted to localStorage at
- * `axal:deck:axal_spinout_demoday:variant`. The switcher is only
- * visible when `editable` is true (i.e. in the author surface, not on
- * shared/printed/exported renderings — those bake in whichever variant
- * was last selected on the author side).
+ * Data flow: the worker's `/api/decks/apply-method` and `/:id/autofill`
+ * routes short-circuit for `method_id === 'axal_spinout_demoday'`,
+ * call `fillAxalSpinoutDemoDay()` in
+ * `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`, and
+ * write the result as 14 slides where each slide carries one
+ * JSON-encoded paragraph field keyed `axal_spinout_section_<name>`
+ * (slide 0 also carries `meta`). `buildTemplateData()` in
+ * `PitchDeckPrintPage.jsx` flattens these into the `data` prop this
+ * component receives. `hydrate()` walks the keys, JSON-parses each,
+ * and merges onto SAMPLE_DATA via `mergeShape()` — with the same
+ * type-mismatch guard at the object branch as
+ * `investor_appendix_app.tsx` lines 2877–2899 (a non-object/array
+ * incoming value never replaces a typed object base).
  *
- * Data flow: the worker's /api/decks/apply-method handler short-circuits
- * for `method_id === 'axal_spinout_demoday'`, calls
- * `fillAxalSpinoutDemoDay()` in `services/decks/axalSpinoutDemoDay.ts`,
- * and writes the result as per-section JSON-encoded paragraph fields.
- * `buildTemplateData()` in PitchDeckPrintPage flattens those into the
- * `data` prop this component receives; we JSON-parse and merge onto
- * SAMPLE_DATA via the same defensive `mergeShape()` pattern used in
- * `investor_appendix_app.tsx` (with the object/non-object guard).
+ * Honesty contract: when a Lab table is empty, the field is the
+ * literal '—' placeholder; the slide renders a visible `<Nudge>` cue
+ * pointing the founder back to the right Lab page rather than a
+ * fabricated number / quote.
  */
-
 import React, { useEffect, useMemo, useState } from 'react';
 import type { DeckProps } from '../DeckBase';
 
-/* ─────────────────────────── tokens ─────────────────────────── */
+/* ─────────────────────────── variant tokens ─────────────────────────── */
 
 const PALETTES = {
   editorial: {
@@ -66,56 +65,31 @@ const PALETTES = {
 export type VariantId = keyof typeof PALETTES;
 const VARIANTS: VariantId[] = ['editorial', 'product_first', 'data_dense', 'manifesto'];
 const VARIANT_LABEL: Record<VariantId, string> = {
-  editorial: 'Editorial',
-  product_first: 'Product-first',
-  data_dense: 'Data-dense',
-  manifesto: 'Manifesto',
+  editorial: 'Editorial', product_first: 'Product-first',
+  data_dense: 'Data-dense', manifesto: 'Manifesto',
 };
 
-const FONTS = {
-  editorial: {
-    display: '"Playfair Display","GT Sectra",Georgia,serif',
-    sans: '"Inter","Helvetica Neue",system-ui,sans-serif',
-    mono: '"JetBrains Mono",ui-monospace,Menlo,monospace',
-    body: '"Source Serif Pro",Georgia,serif',
-  },
-  product_first: {
-    display: '"Inter","Helvetica Neue",system-ui,sans-serif',
-    sans: '"Inter","Helvetica Neue",system-ui,sans-serif',
-    mono: '"JetBrains Mono",ui-monospace,Menlo,monospace',
-    body: '"Inter","Helvetica Neue",system-ui,sans-serif',
-  },
-  data_dense: {
-    display: '"Inter","Helvetica Neue",system-ui,sans-serif',
-    sans: '"Inter","Helvetica Neue",system-ui,sans-serif',
-    mono: '"JetBrains Mono",ui-monospace,Menlo,monospace',
-    body: '"Inter","Helvetica Neue",system-ui,sans-serif',
-  },
-  manifesto: {
-    display: '"Inter","Helvetica Neue",system-ui,sans-serif',
-    sans: '"Inter","Helvetica Neue",system-ui,sans-serif',
-    mono: '"JetBrains Mono",ui-monospace,Menlo,monospace',
-    body: '"Inter","Helvetica Neue",system-ui,sans-serif',
-  },
-} as const;
+const FONTS: Record<VariantId, { display: string; body: string; mono: string }> = {
+  editorial:     { display: '"Playfair Display","GT Sectra",Georgia,serif', body: '"Source Serif Pro",Georgia,serif',          mono: '"JetBrains Mono",ui-monospace,Menlo,monospace' },
+  product_first: { display: '"Inter","Helvetica Neue",system-ui,sans-serif', body: '"Inter","Helvetica Neue",system-ui,sans-serif', mono: '"JetBrains Mono",ui-monospace,Menlo,monospace' },
+  data_dense:    { display: '"Inter","Helvetica Neue",system-ui,sans-serif', body: '"Inter","Helvetica Neue",system-ui,sans-serif', mono: '"JetBrains Mono",ui-monospace,Menlo,monospace' },
+  manifesto:     { display: '"Inter","Helvetica Neue",system-ui,sans-serif', body: '"Inter","Helvetica Neue",system-ui,sans-serif', mono: '"JetBrains Mono",ui-monospace,Menlo,monospace' },
+};
 
 const VARIANT_KEY = 'axal:deck:axal_spinout_demoday:variant';
+const DASH = '—';
 
-/* ─────────────────────────── types ─────────────────────────── */
+/* ─────────────────────────── data types ─────────────────────────── */
 
 export type Metric = { label: string; value: string; sub?: string };
 export type Founder = { name: string; role: string; bio?: string };
-export type Milestone = { key: string; label: string; done: boolean; completed_at?: string };
-export type WeekBlock = {
-  week: number;
-  title: string;
-  caption: string;
-  status: 'complete' | 'in_progress' | 'upcoming';
-  milestones: Milestone[];
-};
-export type InterviewSummary = { name: string; role: string; takeaway: string };
-export type Player = { name: string; x: number; y: number; is_us?: boolean };
 export type FundUse = { label: string; pct: number };
+export type Holder = { name: string; role: string; ownership_pct: string; kind: string };
+export type LabWeek = {
+  week: number; title: string; caption: string;
+  status: 'complete' | 'in_progress' | 'upcoming';
+  milestones: { key: string; label: string; done: boolean }[];
+};
 
 export type SpinoutDemoDayData = {
   meta: {
@@ -126,64 +100,50 @@ export type SpinoutDemoDayData = {
     is_sample: boolean;
   };
   cover: { eyebrow: string; headline: string; sub: string; location: string };
-  thesis: { eyebrow: string; headline: string; body: string; pull_quote: string };
   problem: { eyebrow: string; headline: string; body: string; signals: string[] };
-  insight: { eyebrow: string; headline: string; body: string; evidence: Metric[] };
-  product: { eyebrow: string; headline: string; body: string; capabilities: string[] };
-  market: {
-    eyebrow: string; headline: string;
-    tam: string; sam: string; som: string;
-    why_now: string[];
-  };
-  traction: {
-    eyebrow: string; headline: string;
-    metrics: Metric[];
-    interviews_count: number;
-    interviews_recent: InterviewSummary[];
-  };
-  lab_progress: {
-    eyebrow: string; headline: string;
-    weeks: WeekBlock[];
-  };
-  business_model: {
+  validation: {
     eyebrow: string; headline: string; body: string;
-    unit_econ: Metric[];
+    metrics: Metric[]; quotes: { name: string; role: string; takeaway: string }[];
   };
-  gtm: {
+  market: { eyebrow: string; headline: string; tam: string; sam: string; som: string; why_now: string[] };
+  solution: { eyebrow: string; headline: string; body: string; capabilities: string[] };
+  roadmap: {
+    eyebrow: string; headline: string; quarter: string;
+    now: string[]; next: string[]; later: string[];
+  };
+  brand: {
+    eyebrow: string; headline: string; tagline: string; vision: string;
+    brand_kit_ready: boolean; pitch_deck_ready: boolean; incorporated: boolean;
+  };
+  venture_readiness: {
     eyebrow: string; headline: string;
-    channels: { name: string; line: string }[];
-    plan_90d: string[];
+    total_score: string; tier: string; is_sandbox: boolean;
+    breakdown: { label: string; value: string }[]; ai_notes: string;
   };
-  competition: {
-    eyebrow: string; headline: string;
-    x_label: string; y_label: string;
-    players: Player[];
-    wedge: string;
+  team: { eyebrow: string; headline: string; founders: Founder[]; team_intro: string };
+  mentor_network: {
+    eyebrow: string; headline: string; body: string;
+    mentors: string[]; network_signals: string[];
   };
-  team: {
-    eyebrow: string; headline: string;
-    founders: Founder[];
-    advisors: Founder[];
-    scoring: { total_score?: number; tier?: string; team_total?: number; market_total?: number };
-  };
+  cap_table: { eyebrow: string; headline: string; holders: Holder[]; note: string };
   ask: {
     eyebrow: string; headline: string;
     raise_amount: string; runway: string;
-    use_of_funds: FundUse[];
-    next_milestones: string[];
-    contact: string;
+    use_of_funds: FundUse[]; next_milestones: string[];
   };
-  closing: { eyebrow: string; headline: string; body: string; signoff: string; contact: string };
+  axal_signal: { eyebrow: string; headline: string; body: string; lab_weeks: LabWeek[] };
+  contact: {
+    eyebrow: string; headline: string; body: string;
+    contact_email: string; signoff: string;
+  };
 };
 
 /* ─────────────────────────── sample data ─────────────────────────── */
 
 export const SAMPLE_DATA: SpinoutDemoDayData = {
   meta: {
-    project_name: 'Your Company',
-    sector: 'Pre-incorporation',
-    founder_name: '—',
-    contact_email: '—',
+    project_name: 'Your Company', sector: 'Pre-incorporation',
+    founder_name: DASH, contact_email: DASH,
     presented_on: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
     week: 1, days_remaining: 28, lab_active: false, is_sample: true,
   },
@@ -193,1317 +153,771 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
     sub: 'A pre-incorporation thesis, sharpened across 30 days of Discovery, OKRs, Scoring and Cap-Table prep.',
     location: 'Axal Network · Demo Day',
   },
-  thesis: {
-    eyebrow: '01 · The bet',
-    headline: 'What we believe — and why now is the moment.',
-    body: 'The Spin-Out Lab is built for founders who have a credible insight but no entity yet. This deck is the artifact of that 30-day sprint.',
-    pull_quote: '"We chose to spend 30 days proving the thesis before we spent a dollar incorporating it."',
-  },
   problem: {
-    eyebrow: '02 · The problem',
-    headline: 'Why this is broken today.',
-    body: '—',
-    signals: ['—', '—', '—'],
+    eyebrow: '01 · Problem', headline: 'Why this is broken today.',
+    body: DASH, signals: [],
   },
-  insight: {
-    eyebrow: '03 · The insight',
-    headline: 'What we learned that the market missed.',
-    body: '—',
-    evidence: [
-      { label: 'Discovery interviews', value: '—', sub: 'logged in Lab' },
-      { label: 'Distinct pains', value: '—', sub: 'tagged across interviews' },
-      { label: 'Validated hypotheses', value: '—', sub: 'evidence-backed' },
-    ],
-  },
-  product: {
-    eyebrow: '04 · The product',
-    headline: 'A first cut of what we will ship.',
-    body: '—',
-    capabilities: ['—', '—', '—'],
+  validation: {
+    eyebrow: '02 · Validation', headline: 'Discovery — what we heard.',
+    body: DASH, metrics: [
+      { label: 'Interviews', value: DASH, sub: 'logged in Lab' },
+      { label: 'Distinct pains', value: DASH, sub: 'tagged' },
+      { label: 'Hypotheses validated', value: DASH, sub: 'evidence-backed' },
+    ], quotes: [],
   },
   market: {
-    eyebrow: '05 · The market',
-    headline: 'Sized for a real outcome.',
-    tam: '—', sam: '—', som: '—',
-    why_now: ['—', '—', '—'],
+    eyebrow: '03 · Market', headline: 'Sized for a real outcome.',
+    tam: DASH, sam: DASH, som: DASH, why_now: [],
   },
-  traction: {
-    eyebrow: '06 · Early signal',
-    headline: 'Who we talked to, what they said.',
-    metrics: [
-      { label: 'Interviews', value: '—' },
-      { label: 'Letters of intent', value: '—' },
-      { label: 'Score', value: '—', sub: 'Axal scoring' },
-    ],
-    interviews_count: 0,
-    interviews_recent: [],
+  solution: {
+    eyebrow: '04 · Solution', headline: 'A first cut of what we will ship.',
+    body: DASH, capabilities: [],
   },
-  lab_progress: {
-    eyebrow: '07 · 30-day sprint',
-    headline: 'How we used the Lab.',
-    weeks: [
-      {
-        week: 1, title: 'Discovery', caption: 'Talk to 8+ people. Tag pains. Form hypotheses.',
-        status: 'upcoming', milestones: [
-          { key: 'interview_5_logged', label: '5 interviews logged', done: false },
-          { key: 'pains_clustered', label: 'Pains clustered', done: false },
-          { key: 'hypothesis_drafted', label: 'Hypothesis drafted', done: false },
-        ],
-      },
-      {
-        week: 2, title: 'Shape', caption: 'OKRs. Roadmap. First scoring pass.',
-        status: 'upcoming', milestones: [
-          { key: 'okrs_drafted', label: 'OKRs drafted', done: false },
-          { key: 'roadmap_outlined', label: 'Roadmap outlined', done: false },
-          { key: 'score_baseline', label: 'Baseline score', done: false },
-        ],
-      },
-      {
-        week: 3, title: 'Validate', caption: 'Sharpen the model. Stress-test the cap table.',
-        status: 'upcoming', milestones: [
-          { key: 'financial_model_v1', label: 'Financial model v1', done: false },
-          { key: 'captable_seed', label: 'Cap table seeded', done: false },
-          { key: 'score_v2', label: 'Score v2', done: false },
-        ],
-      },
-      {
-        week: 4, title: 'Stand up', caption: 'Incorporate, brand, ship the deck.',
-        status: 'upcoming', milestones: [
-          { key: 'brand_kit', label: 'Brand kit', done: false },
-          { key: 'pitch_deck_v1', label: 'Pitch deck v1', done: false },
-          { key: 'incorporation_completed', label: 'Incorporated', done: false },
-        ],
-      },
-    ],
+  roadmap: {
+    eyebrow: '05 · Roadmap', headline: 'What we ship next.',
+    quarter: DASH, now: [], next: [], later: [],
   },
-  business_model: {
-    eyebrow: '08 · How we make money',
-    headline: 'A model that scales with the value we create.',
-    body: '—',
-    unit_econ: [
-      { label: 'ACV', value: '—' },
-      { label: 'Gross margin', value: '—' },
-      { label: 'Payback', value: '—' },
-    ],
+  brand: {
+    eyebrow: '06 · Brand', headline: 'How we show up.',
+    tagline: DASH, vision: DASH,
+    brand_kit_ready: false, pitch_deck_ready: false, incorporated: false,
   },
-  gtm: {
-    eyebrow: '09 · Go-to-market',
-    headline: 'First customers, then a wedge.',
-    channels: [
-      { name: '—', line: '—' },
-      { name: '—', line: '—' },
-      { name: '—', line: '—' },
-    ],
-    plan_90d: ['—', '—', '—'],
-  },
-  competition: {
-    eyebrow: '10 · Landscape',
-    headline: 'Where we sit, where we move.',
-    x_label: 'Generalist → Specialist',
-    y_label: 'Manual → AI-native',
-    players: [
-      { name: 'Incumbent A', x: 25, y: 30 },
-      { name: 'Incumbent B', x: 70, y: 25 },
-      { name: 'New entrant', x: 35, y: 70 },
-      { name: 'Us', x: 78, y: 82, is_us: true },
-    ],
-    wedge: '—',
+  venture_readiness: {
+    eyebrow: '07 · Venture readiness', headline: 'Axal score — to be run in Week 2.',
+    total_score: DASH, tier: DASH, is_sandbox: false,
+    breakdown: [], ai_notes: DASH,
   },
   team: {
-    eyebrow: '11 · Team',
-    headline: 'Why we are the founders to build this.',
-    founders: [], advisors: [],
-    scoring: {},
+    eyebrow: '08 · Team', headline: 'Why we are the founders to build this.',
+    founders: [], team_intro: '',
+  },
+  mentor_network: {
+    eyebrow: '09 · Mentors & network', headline: 'Who is around the table.',
+    body: '', mentors: [], network_signals: [],
+  },
+  cap_table: {
+    eyebrow: '10 · Cap table',
+    headline: 'Cap table — to be seeded in Week 3.',
+    holders: [], note: 'Pre-incorporation — entity stands up in Week 4.',
   },
   ask: {
-    eyebrow: '12 · Ask',
-    headline: 'What we are raising and what it buys.',
-    raise_amount: '—', runway: '—',
-    use_of_funds: [
-      { label: 'Engineering', pct: 50 },
-      { label: 'Go-to-market', pct: 30 },
-      { label: 'Operations', pct: 20 },
-    ],
-    next_milestones: ['—', '—', '—'],
-    contact: '—',
+    eyebrow: '11 · Ask', headline: 'What we are raising — and what it buys.',
+    raise_amount: DASH, runway: DASH, use_of_funds: [], next_milestones: [],
   },
-  closing: {
-    eyebrow: '14 · Thank you',
-    headline: 'Built in the Axal Spin-Out Lab.',
-    body: '30 days. 14 slides. One thesis, sharpened by the network.',
-    signoff: '— The founder',
-    contact: '—',
+  axal_signal: {
+    eyebrow: '12 · Axal signal', headline: 'Built across 30 days of Lab work.',
+    body: DASH, lab_weeks: [],
+  },
+  contact: {
+    eyebrow: '13 · Contact', headline: "Let's talk.",
+    body: DASH, contact_email: DASH, signoff: '— The founding team',
   },
 };
 
 /* ─────────────────────────── mergeShape ─────────────────────────── */
 
-// Defensive deep-merge mirroring the canonical pattern in
-// `investor_appendix_app.tsx` (see lines 2877–2899). The type-mismatch
-// guard at the object branch prevents a primitive in `incoming` (which
-// can happen if the editor accidentally writes a flat string at a
-// nested path) from clobbering an entire typed sub-tree.
-function mergeShape<T>(base: T, incoming: any): T {
-  if (incoming === undefined || incoming === null) return base;
+/**
+ * Recursively merge `incoming` over `base`, preserving the shape of `base`.
+ *
+ * The critical guard at the object branch — copied verbatim from
+ * `investor_appendix_app.tsx` lines 2877–2899 — is:
+ *
+ *     if (incoming == null) return base;
+ *     if (typeof incoming !== 'object' || Array.isArray(incoming)) return base;
+ *
+ * This stops a primitive (a string, a number) or an array from
+ * replacing a structured object when share-link payloads come in
+ * malformed. Three share-link crashes this month traced back to that
+ * exact missing guard. Do not remove.
+ */
+function mergeShape<T>(base: T, incoming: unknown): T {
+  if (incoming == null) return base;
   if (Array.isArray(base)) {
-    return (Array.isArray(incoming) && incoming.length > 0 ? incoming : base) as unknown as T;
+    if (!Array.isArray(incoming)) return base;
+    return incoming as unknown as T;
   }
   if (typeof base === 'object' && base !== null) {
     if (typeof incoming !== 'object' || Array.isArray(incoming)) return base;
-    const out: any = { ...(base as any) };
-    for (const k of Object.keys(incoming)) {
-      const bv = (base as any)[k];
-      const iv = (incoming as any)[k];
-      if (iv === undefined || iv === null || iv === '') continue;
-      if (bv !== undefined && bv !== null) out[k] = mergeShape(bv, iv);
-      else out[k] = iv;
+    const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+    const inc = incoming as Record<string, unknown>;
+    for (const k of Object.keys(inc)) {
+      out[k] = (k in out)
+        ? mergeShape((base as Record<string, unknown>)[k], inc[k])
+        : inc[k];
     }
-    return out;
+    return out as T;
   }
-  return (incoming as T) ?? base;
+  // primitives: incoming wins.
+  return incoming as T;
 }
 
-/** Parses the worker's per-section JSON-encoded paragraph fields. */
-function hydrate(flat: Record<string, any>): SpinoutDemoDayData {
-  let merged: SpinoutDemoDayData = structuredClone(SAMPLE_DATA);
-  if (!flat || typeof flat !== 'object') return merged;
-  for (const k of Object.keys(flat)) {
+/* ─────────────────────────── hydrate ─────────────────────────── */
+
+/**
+ * Walk every `axal_spinout_section_*` key in `data`, JSON-parse it, and
+ * merge onto SAMPLE_DATA. The worker writes one such key per top-level
+ * section; slide 0 additionally carries `meta`. Unknown / unparseable
+ * keys are silently skipped so a bad payload degrades gracefully.
+ */
+function hydrate(raw: unknown): SpinoutDemoDayData {
+  let out: SpinoutDemoDayData = SAMPLE_DATA;
+  if (!raw || typeof raw !== 'object') return out;
+  const dict = raw as Record<string, unknown>;
+  for (const k of Object.keys(dict)) {
     if (!k.startsWith('axal_spinout_section_')) continue;
-    const section = k.slice('axal_spinout_section_'.length) as keyof SpinoutDemoDayData;
-    const raw = flat[k];
-    let parsed: any = null;
-    if (typeof raw === 'string' && raw.trim().startsWith('{')) {
-      try { parsed = JSON.parse(raw); } catch { parsed = null; }
-    } else if (typeof raw === 'object' && raw !== null) {
-      parsed = raw;
+    const section = k.slice('axal_spinout_section_'.length);
+    if (!(section in out)) continue;
+    const v = dict[k];
+    let parsed: unknown = v;
+    if (typeof v === 'string') {
+      try { parsed = JSON.parse(v); } catch { continue; }
     }
-    if (parsed && (merged as any)[section] !== undefined) {
-      (merged as any)[section] = mergeShape((merged as any)[section], parsed);
-    }
+    const baseSlice = (out as Record<string, unknown>)[section];
+    const merged = mergeShape(baseSlice, parsed);
+    out = { ...out, [section]: merged } as SpinoutDemoDayData;
   }
-  return merged;
+  return out;
 }
 
-/* ─────────────────────────── primitives ─────────────────────────── */
+/* ─────────────────────────── variant context ─────────────────────────── */
 
-const Editable: React.FC<{
-  value: string;
-  editable?: boolean;
-  onEdit?: (path: string, v: string) => void;
-  path: string;
-  multiline?: boolean;
-  className?: string;
-  style?: React.CSSProperties;
-}> = ({ value, editable, onEdit, path, multiline, className, style }) => (
-  <span
-    contentEditable={!!editable}
-    suppressContentEditableWarning
-    onBlur={(e) => onEdit?.(path, (multiline ? e.currentTarget.innerText : e.currentTarget.textContent) || '')}
-    className={`outline-none ${editable ? 'focus:bg-yellow-100/30 rounded-sm' : ''} ${className ?? ''}`}
-    style={style}
-  >
-    {value}
-  </span>
-);
-
-const Nudge: React.FC<{ children: React.ReactNode; tone?: 'soft' | 'loud' }> = ({ children, tone = 'soft' }) => (
-  <span
-    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] tracking-[0.18em] uppercase font-medium"
-    style={{
-      background: tone === 'loud' ? 'rgba(184,67,30,0.12)' : 'rgba(0,0,0,0.04)',
-      color: tone === 'loud' ? '#B8431E' : '#7A7268',
-      fontFamily: FONTS.editorial.mono,
-    }}
-  >
-    {children}
-  </span>
-);
-
-const Eyebrow: React.FC<{ children: React.ReactNode; color: string; font: string }> = ({ children, color, font }) => (
-  <div className="flex items-center gap-3 mb-4">
-    <span className="h-px w-8" style={{ background: color }} />
-    <span className="text-[10px] tracking-[0.32em] uppercase font-medium" style={{ color, fontFamily: font }}>
-      {children}
-    </span>
-  </div>
-);
-
-type Tokens = typeof PALETTES['editorial'];
-type FontSet = typeof FONTS['editorial'];
-
-function tokensFor(v: VariantId): { c: Tokens; f: FontSet } {
-  return { c: PALETTES[v] as Tokens, f: FONTS[v] as FontSet };
-}
-
-/** Heading sizing curve per variant — manifesto goes biggest. */
-function displaySize(v: VariantId, base: number): number {
-  if (v === 'manifesto') return Math.round(base * 1.4);
-  if (v === 'data_dense') return Math.round(base * 0.78);
-  if (v === 'product_first') return Math.round(base * 0.92);
-  return base;
-}
-
-const Frame: React.FC<{
-  v: VariantId;
-  step: number;
-  total: number;
-  chapter: string;
-  bg?: string;
-  ink?: string;
-  children: React.ReactNode;
-}> = ({ v, step, total, chapter, bg, ink, children }) => {
-  const { c, f } = tokensFor(v);
-  const _bg = bg ?? c.bg;
-  const _ink = ink ?? c.ink;
-  const railColor = v === 'product_first' || v === 'manifesto' ? c.muted : c.muted;
-  return (
-    <div
-      className="relative w-full h-full overflow-hidden"
-      style={{ background: _bg, color: _ink, fontFamily: f.sans }}
-    >
-      <div
-        className="absolute inset-x-0 top-0 h-10 flex items-center justify-between px-12 text-[10px] tracking-[0.32em] uppercase"
-        style={{ color: railColor, fontFamily: f.mono }}
-      >
-        <span style={{ fontFamily: f.body, fontStyle: v === 'editorial' ? 'italic' : 'normal' }}>{chapter}</span>
-        <span>
-          {String(step).padStart(2, '0')} / {String(total).padStart(2, '0')}
-        </span>
-      </div>
-      <div className="absolute inset-x-0 top-10 bottom-8 px-12 py-6">{children}</div>
-      <div
-        className="absolute inset-x-12 bottom-3 flex items-center justify-between text-[10px] tracking-[0.24em] uppercase"
-        style={{ color: railColor, fontFamily: f.mono }}
-      >
-        <span>Axal · 30-Day Spin-Out Lab</span>
-        <span>{VARIANT_LABEL[v]}</span>
-      </div>
-    </div>
-  );
+type VariantCtx = {
+  variant: VariantId;
+  setVariant: (v: VariantId) => void;
+  pal: typeof PALETTES[VariantId];
+  fonts: typeof FONTS[VariantId];
+  editable: boolean;
+};
+const VariantContext = React.createContext<VariantCtx | null>(null);
+const useVariant = (): VariantCtx => {
+  const c = React.useContext(VariantContext);
+  if (!c) throw new Error('VariantContext missing');
+  return c;
 };
 
 /* ─────────────────────────── shared atoms ─────────────────────────── */
 
-const MetricCell: React.FC<{ m: Metric; v: VariantId; bordered?: boolean }> = ({ m, v, bordered }) => {
-  const { c, f } = tokensFor(v);
-  const isEmpty = !m.value || m.value === '—';
+const isUnfilled = (v: unknown): boolean =>
+  v == null || v === '' || v === DASH ||
+  (Array.isArray(v) && (v.length === 0 || v.every((x) => x === DASH || x === '' || x == null)));
+
+const Nudge: React.FC<{ children: React.ReactNode; href?: string }> = ({ children, href }) => {
+  const { pal } = useVariant();
   return (
     <div
-      className="flex flex-col gap-1 px-4 py-3"
+      role="note"
       style={{
-        background: bordered ? c.surface : 'transparent',
-        borderRadius: 6,
-        border: bordered ? `1px solid ${c.rule}` : 'none',
+        background: pal.accentSoft, color: pal.accent,
+        border: `1px dashed ${pal.accent}`, borderRadius: 8,
+        padding: '12px 16px', fontSize: 13, lineHeight: 1.5,
+        display: 'inline-flex', alignItems: 'center', gap: 8,
       }}
     >
-      <div className="text-[10px] tracking-[0.22em] uppercase" style={{ color: c.muted, fontFamily: f.mono }}>
-        {m.label}
-      </div>
-      <div
-        className="font-semibold leading-none"
-        style={{
-          fontFamily: f.display,
-          fontSize: v === 'data_dense' ? 28 : v === 'manifesto' ? 48 : 36,
-          color: isEmpty ? c.muted : c.ink,
-        }}
-      >
-        {m.value}
-      </div>
-      {m.sub && (
-        <div className="text-[11px]" style={{ color: c.muted, fontFamily: f.sans }}>
-          {m.sub}
-        </div>
-      )}
+      <span aria-hidden style={{ fontSize: 16 }}>↳</span>
+      <span>{children}{href ? <> — <a href={href} style={{ color: pal.accent, textDecoration: 'underline' }}>open in Lab</a></> : null}</span>
     </div>
   );
 };
 
-/* ─────────────────────────── SVG artwork ─────────────────────────── */
-
-const SunRise: React.FC<{ accent: string }> = ({ accent }) => (
-  <svg viewBox="0 0 1200 720" className="w-full h-full" preserveAspectRatio="xMidYMid slice">
-    <defs>
-      <linearGradient id="ax-sky" x1="0" x2="0" y1="0" y2="1">
-        <stop offset="0" stopColor="#1A1814" />
-        <stop offset="0.7" stopColor="#3A2418" />
-        <stop offset="1" stopColor={accent} />
-      </linearGradient>
-      <radialGradient id="ax-sun" cx="50%" cy="50%">
-        <stop offset="0" stopColor="#FFE7BB" />
-        <stop offset="1" stopColor={accent} stopOpacity="0" />
-      </radialGradient>
-    </defs>
-    <rect width="1200" height="720" fill="url(#ax-sky)" />
-    <circle cx="600" cy="500" r="280" fill="url(#ax-sun)" />
-    <circle cx="600" cy="500" r="80" fill="#FFD68C" />
-    <path d="M0,600 Q300,560 600,580 T1200,590 L1200,720 L0,720 Z" fill="#0A0908" fillOpacity="0.85" />
-    <path d="M0,660 Q400,640 800,655 T1200,665 L1200,720 L0,720 Z" fill="#0A0908" />
-  </svg>
-);
-
-const SparkArc: React.FC<{ pct: number; color: string; muted: string }> = ({ pct, color, muted }) => {
-  const p = Math.max(0, Math.min(100, pct));
-  const cx = 60, cy = 60, r = 50;
-  const ang = (p / 100) * Math.PI * 2 - Math.PI / 2;
-  const x = cx + r * Math.cos(ang);
-  const y = cy + r * Math.sin(ang);
-  const large = p > 50 ? 1 : 0;
+const Eyebrow: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { pal, fonts } = useVariant();
   return (
-    <svg viewBox="0 0 120 120" className="w-full h-full">
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={muted} strokeOpacity={0.2} strokeWidth={8} />
-      {p > 0 && (
-        <path
-          d={`M ${cx} ${cy - r} A ${r} ${r} 0 ${large} 1 ${x} ${y}`}
-          fill="none" stroke={color} strokeWidth={8} strokeLinecap="round"
-        />
-      )}
-    </svg>
+    <div style={{
+      color: pal.accent, fontFamily: fonts.mono,
+      fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase',
+      marginBottom: 16,
+    }}>{children}</div>
   );
 };
 
-const ProductFrame: React.FC<{ v: VariantId; label: string }> = ({ v, label }) => {
-  const { c, f } = tokensFor(v);
+const SlideHeading: React.FC<{ children: React.ReactNode; size?: 'xl' | '2xl' | '3xl' }>
+= ({ children, size = '2xl' }) => {
+  const { pal, fonts, variant } = useVariant();
+  const sizes = { xl: 36, '2xl': 48, '3xl': 64 };
   return (
-    <svg viewBox="0 0 540 360" className="w-full h-full">
-      <rect x="0" y="0" width="540" height="360" rx="12" fill={c.surface} stroke={c.rule} />
-      <rect x="0" y="0" width="540" height="28" rx="12" fill={c.chip} />
-      <circle cx="14" cy="14" r="4" fill="#FF5F57" />
-      <circle cx="28" cy="14" r="4" fill="#FEBC2E" />
-      <circle cx="42" cy="14" r="4" fill="#28C840" />
-      <rect x="24" y="56" width="120" height="280" rx="6" fill={c.bg} />
-      {[0, 1, 2, 3, 4].map((i) => (
-        <rect key={i} x="36" y={76 + i * 36} width={90 - (i % 2) * 18} height="10" rx="3" fill={c.rule} />
-      ))}
-      <rect x="160" y="56" width="356" height="76" rx="6" fill={c.bg} />
-      <rect x="172" y="74" width="180" height="14" rx="3" fill={c.ink} fillOpacity="0.7" />
-      <rect x="172" y="96" width="320" height="10" rx="3" fill={c.muted} fillOpacity="0.5" />
-      <rect x="172" y="112" width="240" height="10" rx="3" fill={c.muted} fillOpacity="0.4" />
-      <rect x="160" y="148" width="170" height="120" rx="6" fill={c.bg} />
-      <rect x="340" y="148" width="176" height="120" rx="6" fill={c.bg} />
-      <rect x="160" y="276" width="356" height="60" rx="6" fill={c.bg} />
-      <text x="172" y="178" fontFamily={f.mono} fontSize="9" fill={c.muted}>{label}</text>
-      <path d="M180,250 L208,222 L240,238 L272,210 L308,228 L330,200" stroke={c.accent} strokeWidth="2" fill="none" />
-    </svg>
+    <h2 style={{
+      color: pal.ink, fontFamily: fonts.display,
+      fontSize: variant === 'manifesto' ? sizes[size] * 1.25 : sizes[size],
+      lineHeight: 1.05, letterSpacing: variant === 'editorial' ? '-0.01em' : '-0.02em',
+      fontWeight: variant === 'editorial' ? 500 : 700,
+      margin: 0,
+    }}>{children}</h2>
   );
 };
 
-const MarketTriangle: React.FC<{ tam: string; sam: string; som: string; v: VariantId }> = ({ tam, sam, som, v }) => {
-  const { c, f } = tokensFor(v);
+const Body: React.FC<{ children: React.ReactNode; max?: number }> = ({ children, max = 720 }) => {
+  const { pal, fonts } = useVariant();
   return (
-    <svg viewBox="0 0 360 320" className="w-full h-full">
-      <polygon points="180,20 340,300 20,300" fill={c.accentSoft} stroke={c.accent} strokeWidth="1.5" />
-      <polygon points="180,90 270,255 90,255" fill={c.accent} fillOpacity="0.45" stroke={c.accent} strokeWidth="1.2" />
-      <polygon points="180,170 230,240 130,240" fill={c.accent} stroke={c.accent} strokeWidth="1.2" />
-      <text x="356" y="20" fontFamily={f.mono} fontSize="10" fill={c.muted} textAnchor="end">TAM · {tam}</text>
-      <text x="356" y="100" fontFamily={f.mono} fontSize="10" fill={c.muted} textAnchor="end">SAM · {sam}</text>
-      <text x="356" y="180" fontFamily={f.mono} fontSize="10" fill={c.muted} textAnchor="end">SOM · {som}</text>
-    </svg>
+    <p style={{
+      color: pal.inkSoft, fontFamily: fonts.body,
+      fontSize: 17, lineHeight: 1.55, maxWidth: max, margin: 0,
+    }}>{children}</p>
   );
 };
 
-/* ─────────────────────────── slides ─────────────────────────── */
-
-const TOTAL = 14;
-
-const S01Cover: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
-  const dark = v === 'product_first' || v === 'manifesto';
+const Chip: React.FC<{ children: React.ReactNode; tone?: 'default' | 'good' | 'warn' }> = ({ children, tone = 'default' }) => {
+  const { pal, fonts } = useVariant();
+  const bg = tone === 'good' ? pal.good : tone === 'warn' ? pal.warn : pal.chip;
+  const fg = tone === 'default' ? pal.inkSoft : '#fff';
   return (
-    <Frame v={v} step={1} total={TOTAL} chapter="Cover" bg={dark ? c.bg : c.bg}>
-      {(v === 'editorial' || v === 'manifesto') && (
-        <div className="absolute inset-0 -z-0 opacity-90">
-          <SunRise accent={c.accent} />
-          <div
-            className="absolute inset-0"
-            style={{ background: 'linear-gradient(180deg, rgba(10,9,8,0.0) 30%, rgba(10,9,8,0.85) 100%)' }}
-          />
-        </div>
-      )}
-      <div className="relative h-full flex flex-col justify-end pb-10" style={{ color: v === 'data_dense' ? c.ink : '#FFF8EC' }}>
-        <Eyebrow color={v === 'data_dense' ? c.accent : '#F7E2B5'} font={f.mono}>
-          <Editable value={d.cover.eyebrow} path="cover.eyebrow" editable={editable} onEdit={onEdit} />
-        </Eyebrow>
-        <h1
-          className="leading-[0.96] tracking-[-0.02em]"
-          style={{
-            fontFamily: f.display, fontWeight: 600,
-            fontSize: displaySize(v, 88), maxWidth: 980,
-            color: v === 'data_dense' ? c.ink : '#FFF',
-          }}
-        >
-          <Editable value={d.cover.headline} path="cover.headline" editable={editable} onEdit={onEdit} multiline />
-        </h1>
-        <div
-          className="mt-6 max-w-[760px]"
-          style={{ fontFamily: f.body, fontSize: 18, color: v === 'data_dense' ? c.inkSoft : '#D9D1BF' }}
-        >
-          <Editable value={d.cover.sub} path="cover.sub" editable={editable} onEdit={onEdit} multiline />
-        </div>
-        <div
-          className="mt-10 flex items-center gap-6 text-[11px] tracking-[0.24em] uppercase"
-          style={{ color: v === 'data_dense' ? c.muted : 'rgba(255,248,236,0.7)', fontFamily: f.mono }}
-        >
-          <span>{d.meta.project_name}</span>
-          <span>·</span>
-          <span>{d.cover.location}</span>
-          <span>·</span>
-          <span>{d.meta.presented_on}</span>
-        </div>
-        {d.meta.is_sample && (
-          <div className="mt-4">
-            <Nudge tone="loud">Sample data — apply this template to a project to populate</Nudge>
-          </div>
-        )}
-      </div>
-    </Frame>
+    <span style={{
+      background: bg, color: fg, fontFamily: fonts.mono,
+      fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase',
+      padding: '4px 10px', borderRadius: 999,
+    }}>{children}</span>
   );
 };
 
-const S02Thesis: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
-  return (
-    <Frame v={v} step={2} total={TOTAL} chapter="Thesis">
-      <div className="h-full grid grid-cols-12 gap-10">
-        <div className="col-span-7 flex flex-col justify-center">
-          <Eyebrow color={c.accent} font={f.mono}>
-            <Editable value={d.thesis.eyebrow} path="thesis.eyebrow" editable={editable} onEdit={onEdit} />
-          </Eyebrow>
-          <h2
-            className="leading-[1.02] tracking-[-0.02em] mb-6"
-            style={{ fontFamily: f.display, fontWeight: 600, fontSize: displaySize(v, 56), color: c.ink }}
-          >
-            <Editable value={d.thesis.headline} path="thesis.headline" editable={editable} onEdit={onEdit} multiline />
-          </h2>
-          <p style={{ fontFamily: f.body, fontSize: 17, lineHeight: 1.55, color: c.inkSoft, maxWidth: 620 }}>
-            <Editable value={d.thesis.body} path="thesis.body" editable={editable} onEdit={onEdit} multiline />
-          </p>
-        </div>
-        <div className="col-span-5 flex flex-col justify-center">
-          <div
-            className="p-6 border-l-2"
-            style={{ borderColor: c.accent, background: c.surface, borderRadius: 4 }}
-          >
-            <div
-              className="text-[10px] tracking-[0.32em] uppercase mb-3"
-              style={{ color: c.muted, fontFamily: f.mono }}
-            >
-              Founder voice
-            </div>
-            <blockquote
-              style={{
-                fontFamily: f.body,
-                fontStyle: v === 'editorial' ? 'italic' : 'normal',
-                fontSize: 20, lineHeight: 1.4, color: c.ink,
-              }}
-            >
-              <Editable value={d.thesis.pull_quote} path="thesis.pull_quote" editable={editable} onEdit={onEdit} multiline />
-            </blockquote>
-            <div className="mt-4 text-[12px]" style={{ color: c.muted, fontFamily: f.sans }}>
-              — {d.meta.founder_name || '—'}
-            </div>
-          </div>
-        </div>
-      </div>
-    </Frame>
-  );
-};
-
-const S03Problem: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
-  return (
-    <Frame v={v} step={3} total={TOTAL} chapter="Problem">
-      <div className="h-full flex flex-col justify-center max-w-[1040px]">
-        <Eyebrow color={c.accent} font={f.mono}>
-          <Editable value={d.problem.eyebrow} path="problem.eyebrow" editable={editable} onEdit={onEdit} />
-        </Eyebrow>
-        <h2
-          className="leading-[1.02] tracking-[-0.02em] mb-6"
-          style={{ fontFamily: f.display, fontWeight: 600, fontSize: displaySize(v, 64), color: c.ink }}
-        >
-          <Editable value={d.problem.headline} path="problem.headline" editable={editable} onEdit={onEdit} multiline />
-        </h2>
-        <div className="grid grid-cols-12 gap-8">
-          <div className="col-span-7">
-            <p style={{ fontFamily: f.body, fontSize: 17, lineHeight: 1.55, color: c.inkSoft }}>
-              {d.problem.body === '—' ? (
-                <Nudge>Add the problem statement on your project page</Nudge>
-              ) : (
-                <Editable value={d.problem.body} path="problem.body" editable={editable} onEdit={onEdit} multiline />
-              )}
-            </p>
-          </div>
-          <div className="col-span-5">
-            <div className="text-[10px] tracking-[0.32em] uppercase mb-3" style={{ color: c.muted, fontFamily: f.mono }}>
-              Signals from discovery
-            </div>
-            <ul className="space-y-3">
-              {d.problem.signals.map((s, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <span
-                    className="mt-2 inline-block"
-                    style={{ width: 14, height: 1, background: c.accent, flexShrink: 0 }}
-                  />
-                  <span style={{ fontFamily: f.sans, fontSize: 15, color: c.ink }}>
-                    {s === '—' ? <Nudge>Log discovery interviews to populate</Nudge> : (
-                      <Editable value={s} path={`problem.signals.${i}`} editable={editable} onEdit={onEdit} multiline />
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </Frame>
-  );
-};
-
-const S04Insight: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
-  return (
-    <Frame v={v} step={4} total={TOTAL} chapter="Insight">
-      <div className="h-full flex flex-col justify-center">
-        <Eyebrow color={c.accent} font={f.mono}>
-          <Editable value={d.insight.eyebrow} path="insight.eyebrow" editable={editable} onEdit={onEdit} />
-        </Eyebrow>
-        <h2
-          className="leading-[1.02] tracking-[-0.02em] mb-8 max-w-[1100px]"
-          style={{ fontFamily: f.display, fontWeight: 600, fontSize: displaySize(v, 60), color: c.ink }}
-        >
-          <Editable value={d.insight.headline} path="insight.headline" editable={editable} onEdit={onEdit} multiline />
-        </h2>
-        <div className="grid grid-cols-12 gap-8 items-start">
-          <div className="col-span-7">
-            <p style={{ fontFamily: f.body, fontSize: 18, lineHeight: 1.5, color: c.inkSoft, maxWidth: 640 }}>
-              {d.insight.body === '—' ? (
-                <Nudge>Capture the insight in your project description</Nudge>
-              ) : (
-                <Editable value={d.insight.body} path="insight.body" editable={editable} onEdit={onEdit} multiline />
-              )}
-            </p>
-          </div>
-          <div className="col-span-5 grid grid-cols-1 gap-3">
-            {d.insight.evidence.map((m, i) => (
-              <MetricCell key={i} m={m} v={v} bordered />
-            ))}
-          </div>
-        </div>
-      </div>
-    </Frame>
-  );
-};
-
-const S05Product: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
-  const productHeavy = v === 'product_first';
-  return (
-    <Frame v={v} step={5} total={TOTAL} chapter="Product">
-      <div className={`h-full grid grid-cols-12 gap-10 ${productHeavy ? 'items-stretch' : 'items-center'}`}>
-        <div className={productHeavy ? 'col-span-5' : 'col-span-6'}>
-          <Eyebrow color={c.accent} font={f.mono}>
-            <Editable value={d.product.eyebrow} path="product.eyebrow" editable={editable} onEdit={onEdit} />
-          </Eyebrow>
-          <h2
-            className="leading-[1.02] tracking-[-0.02em] mb-6"
-            style={{ fontFamily: f.display, fontWeight: 600, fontSize: displaySize(v, 56), color: c.ink }}
-          >
-            <Editable value={d.product.headline} path="product.headline" editable={editable} onEdit={onEdit} multiline />
-          </h2>
-          <p style={{ fontFamily: f.body, fontSize: 16, lineHeight: 1.55, color: c.inkSoft, marginBottom: 24 }}>
-            {d.product.body === '—' ? (
-              <Nudge>Add your solution description on the project page</Nudge>
-            ) : (
-              <Editable value={d.product.body} path="product.body" editable={editable} onEdit={onEdit} multiline />
-            )}
-          </p>
-          <ul className="space-y-2">
-            {d.product.capabilities.map((cap, i) => (
-              <li key={i} className="flex items-center gap-3">
-                <span
-                  className="inline-block w-6 text-center text-[11px] font-semibold"
-                  style={{ color: c.accent, fontFamily: f.mono }}
-                >
-                  {String(i + 1).padStart(2, '0')}
-                </span>
-                <span style={{ fontFamily: f.sans, fontSize: 15, color: c.ink }}>
-                  {cap === '—' ? <Nudge>Add product capabilities</Nudge> : (
-                    <Editable value={cap} path={`product.capabilities.${i}`} editable={editable} onEdit={onEdit} multiline />
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className={productHeavy ? 'col-span-7' : 'col-span-6'}>
-          <div className="w-full" style={{ aspectRatio: '3/2' }}>
-            <ProductFrame v={v} label={`${d.meta.project_name} · Today`} />
-          </div>
-          {productHeavy && (
-            <div className="mt-3 text-[10px] tracking-[0.24em] uppercase" style={{ color: c.muted, fontFamily: f.mono }}>
-              Illustrative interface — not a screenshot
-            </div>
-          )}
-        </div>
-      </div>
-    </Frame>
-  );
-};
-
-const S06Market: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
-  return (
-    <Frame v={v} step={6} total={TOTAL} chapter="Market">
-      <div className="h-full grid grid-cols-12 gap-10 items-center">
-        <div className="col-span-6">
-          <Eyebrow color={c.accent} font={f.mono}>
-            <Editable value={d.market.eyebrow} path="market.eyebrow" editable={editable} onEdit={onEdit} />
-          </Eyebrow>
-          <h2
-            className="leading-[1.02] tracking-[-0.02em] mb-6"
-            style={{ fontFamily: f.display, fontWeight: 600, fontSize: displaySize(v, 56), color: c.ink }}
-          >
-            <Editable value={d.market.headline} path="market.headline" editable={editable} onEdit={onEdit} multiline />
-          </h2>
-          <div className="text-[10px] tracking-[0.32em] uppercase mb-3" style={{ color: c.muted, fontFamily: f.mono }}>
-            Why now
-          </div>
-          <ul className="space-y-2">
-            {d.market.why_now.map((s, i) => (
-              <li key={i} style={{ fontFamily: f.body, fontSize: 16, color: c.inkSoft, lineHeight: 1.5 }}>
-                {s === '—' ? <Nudge>Fill in why_now on the project page</Nudge> : (
-                  <>
-                    <span style={{ color: c.accent, fontFamily: f.mono, fontSize: 11, marginRight: 8 }}>
-                      0{i + 1}
-                    </span>
-                    <Editable value={s} path={`market.why_now.${i}`} editable={editable} onEdit={onEdit} multiline />
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="col-span-6 flex justify-center">
-          <div style={{ width: 380, height: 340 }}>
-            <MarketTriangle tam={d.market.tam} sam={d.market.sam} som={d.market.som} v={v} />
-          </div>
-        </div>
-      </div>
-    </Frame>
-  );
-};
-
-const S07Traction: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
-  const hasInterviews = d.traction.interviews_recent.length > 0;
-  return (
-    <Frame v={v} step={7} total={TOTAL} chapter="Early signal">
-      <div className="h-full flex flex-col">
-        <Eyebrow color={c.accent} font={f.mono}>
-          <Editable value={d.traction.eyebrow} path="traction.eyebrow" editable={editable} onEdit={onEdit} />
-        </Eyebrow>
-        <h2
-          className="leading-[1.02] tracking-[-0.02em] mb-8"
-          style={{ fontFamily: f.display, fontWeight: 600, fontSize: displaySize(v, 52), color: c.ink }}
-        >
-          <Editable value={d.traction.headline} path="traction.headline" editable={editable} onEdit={onEdit} multiline />
-        </h2>
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          {d.traction.metrics.map((m, i) => (
-            <MetricCell key={i} m={m} v={v} bordered />
-          ))}
-        </div>
-        <div className="text-[10px] tracking-[0.32em] uppercase mb-3" style={{ color: c.muted, fontFamily: f.mono }}>
-          From discovery — {d.traction.interviews_count} interviews logged
-        </div>
-        {hasInterviews ? (
-          <div className="grid grid-cols-3 gap-4">
-            {d.traction.interviews_recent.slice(0, 3).map((it, i) => (
-              <div
-                key={i}
-                className="p-4 border-t-2"
-                style={{ borderColor: c.accent, background: c.surface, borderRadius: 4 }}
-              >
-                <blockquote
-                  style={{
-                    fontFamily: f.body,
-                    fontStyle: v === 'editorial' ? 'italic' : 'normal',
-                    fontSize: 14, lineHeight: 1.4, color: c.ink, minHeight: 80,
-                  }}
-                >
-                  "{it.takeaway}"
-                </blockquote>
-                <div className="mt-3 text-[11px]" style={{ color: c.muted, fontFamily: f.mono }}>
-                  — {it.name}{it.role ? `, ${it.role}` : ''}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div
-            className="p-6 text-center"
-            style={{ background: c.surface, border: `1px dashed ${c.rule}`, borderRadius: 6 }}
-          >
-            <Nudge>Log discovery interviews in the Spin-Out Lab to populate quotes</Nudge>
-          </div>
-        )}
-      </div>
-    </Frame>
-  );
-};
-
-const S08LabProgress: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
-  const pctFor = (w: WeekBlock) => {
-    const total = w.milestones.length || 1;
-    const done = w.milestones.filter((m) => m.done).length;
-    return Math.round((done / total) * 100);
+const MetricCard: React.FC<{ m: Metric }> = ({ m }) => {
+  const { pal, fonts, variant } = useVariant();
+  const valStyle: React.CSSProperties = {
+    color: m.value === DASH ? pal.muted : pal.ink,
+    fontFamily: variant === 'data_dense' ? fonts.mono : fonts.display,
+    fontSize: variant === 'data_dense' ? 32 : 40, fontWeight: 700, lineHeight: 1,
   };
   return (
-    <Frame v={v} step={8} total={TOTAL} chapter="30-day sprint">
-      <div className="h-full flex flex-col">
-        <div className="flex items-end justify-between mb-6">
-          <div>
-            <Eyebrow color={c.accent} font={f.mono}>
-              <Editable value={d.lab_progress.eyebrow} path="lab_progress.eyebrow" editable={editable} onEdit={onEdit} />
-            </Eyebrow>
-            <h2
-              className="leading-[1.02] tracking-[-0.02em]"
-              style={{ fontFamily: f.display, fontWeight: 600, fontSize: displaySize(v, 48), color: c.ink }}
-            >
-              <Editable value={d.lab_progress.headline} path="lab_progress.headline" editable={editable} onEdit={onEdit} multiline />
-            </h2>
-          </div>
-          <div className="text-right">
-            <div className="text-[10px] tracking-[0.32em] uppercase" style={{ color: c.muted, fontFamily: f.mono }}>
-              Lab status
-            </div>
-            <div className="font-semibold" style={{ fontSize: 18, color: c.ink, fontFamily: f.sans }}>
-              {d.meta.lab_active ? `Week ${d.meta.week} · ${d.meta.days_remaining} days left` : 'Completed'}
-            </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-4 gap-4 flex-1">
-          {d.lab_progress.weeks.map((w) => {
-            const pct = pctFor(w);
-            const isCurrent = w.status === 'in_progress';
-            return (
-              <div
-                key={w.week}
-                className="flex flex-col p-4"
-                style={{
-                  background: c.surface,
-                  border: `1px solid ${isCurrent ? c.accent : c.rule}`,
-                  borderRadius: 6,
-                }}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-[10px] tracking-[0.32em] uppercase" style={{ color: c.muted, fontFamily: f.mono }}>
-                    Week {w.week}
-                  </div>
-                  <div style={{ width: 28, height: 28 }}>
-                    <SparkArc pct={pct} color={pct === 100 ? c.good : c.accent} muted={c.muted} />
-                  </div>
-                </div>
-                <div className="font-semibold mb-1" style={{ fontFamily: f.display, fontSize: 22, color: c.ink }}>
-                  {w.title}
-                </div>
-                <div className="text-[12px] mb-3" style={{ color: c.muted, fontFamily: f.sans, lineHeight: 1.4 }}>
-                  {w.caption}
-                </div>
-                <ul className="space-y-1.5 mt-auto">
-                  {w.milestones.map((m) => (
-                    <li key={m.key} className="flex items-start gap-2 text-[12px]" style={{ fontFamily: f.sans }}>
-                      <span
-                        className="inline-block flex-shrink-0 mt-1"
-                        style={{
-                          width: 10, height: 10, borderRadius: 2,
-                          background: m.done ? c.good : 'transparent',
-                          border: `1.5px solid ${m.done ? c.good : c.rule}`,
-                        }}
-                      />
-                      <span style={{ color: m.done ? c.ink : c.muted, textDecoration: m.done ? 'none' : 'none' }}>
-                        {m.label}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </Frame>
+    <div style={{
+      background: pal.surface, border: `1px solid ${pal.rule}`,
+      borderRadius: 12, padding: '20px 22px', minWidth: 0,
+    }}>
+      <div style={{ color: pal.muted, fontFamily: fonts.mono, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{m.label}</div>
+      <div style={valStyle}>{m.value}</div>
+      {m.sub && <div style={{ color: pal.muted, fontFamily: fonts.body, fontSize: 12, marginTop: 4 }}>{m.sub}</div>}
+    </div>
   );
 };
 
-const S09BusinessModel: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
-  return (
-    <Frame v={v} step={9} total={TOTAL} chapter="Business model">
-      <div className="h-full grid grid-cols-12 gap-10 items-center">
-        <div className="col-span-6">
-          <Eyebrow color={c.accent} font={f.mono}>
-            <Editable value={d.business_model.eyebrow} path="business_model.eyebrow" editable={editable} onEdit={onEdit} />
-          </Eyebrow>
-          <h2
-            className="leading-[1.02] tracking-[-0.02em] mb-6"
-            style={{ fontFamily: f.display, fontWeight: 600, fontSize: displaySize(v, 52), color: c.ink }}
-          >
-            <Editable value={d.business_model.headline} path="business_model.headline" editable={editable} onEdit={onEdit} multiline />
-          </h2>
-          <p style={{ fontFamily: f.body, fontSize: 17, lineHeight: 1.55, color: c.inkSoft, maxWidth: 540 }}>
-            {d.business_model.body === '—' ? (
-              <Nudge>Describe your revenue model</Nudge>
-            ) : (
-              <Editable value={d.business_model.body} path="business_model.body" editable={editable} onEdit={onEdit} multiline />
-            )}
-          </p>
-        </div>
-        <div className="col-span-6 grid grid-cols-1 gap-3">
-          <div className="text-[10px] tracking-[0.32em] uppercase mb-1" style={{ color: c.muted, fontFamily: f.mono }}>
-            Unit economics
-          </div>
-          {d.business_model.unit_econ.map((m, i) => (
-            <MetricCell key={i} m={m} v={v} bordered />
-          ))}
-        </div>
-      </div>
-    </Frame>
-  );
-};
+/* ─────────────────────────── variant switcher ─────────────────────────── */
 
-const S10GTM: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
+const VariantSwitcher: React.FC = () => {
+  const { variant, setVariant, pal, fonts } = useVariant();
   return (
-    <Frame v={v} step={10} total={TOTAL} chapter="Go-to-market">
-      <div className="h-full flex flex-col">
-        <Eyebrow color={c.accent} font={f.mono}>
-          <Editable value={d.gtm.eyebrow} path="gtm.eyebrow" editable={editable} onEdit={onEdit} />
-        </Eyebrow>
-        <h2
-          className="leading-[1.02] tracking-[-0.02em] mb-8"
-          style={{ fontFamily: f.display, fontWeight: 600, fontSize: displaySize(v, 52), color: c.ink }}
-        >
-          <Editable value={d.gtm.headline} path="gtm.headline" editable={editable} onEdit={onEdit} multiline />
-        </h2>
-        <div className="grid grid-cols-12 gap-10 flex-1">
-          <div className="col-span-7">
-            <div className="text-[10px] tracking-[0.32em] uppercase mb-4" style={{ color: c.muted, fontFamily: f.mono }}>
-              Channels
-            </div>
-            <div className="space-y-4">
-              {d.gtm.channels.map((ch, i) => (
-                <div key={i} className="flex items-start gap-4 pb-4" style={{ borderBottom: `1px solid ${c.rule}` }}>
-                  <div
-                    className="flex-shrink-0 w-9 h-9 flex items-center justify-center text-[12px] font-semibold"
-                    style={{ background: c.accentSoft, color: c.accent, borderRadius: 4, fontFamily: f.mono }}
-                  >
-                    0{i + 1}
-                  </div>
-                  <div>
-                    <div className="font-semibold mb-1" style={{ fontFamily: f.sans, fontSize: 16, color: c.ink }}>
-                      {ch.name === '—' ? <Nudge>Add a channel</Nudge> : ch.name}
-                    </div>
-                    <div style={{ fontFamily: f.body, fontSize: 14, color: c.inkSoft, lineHeight: 1.5 }}>
-                      {ch.line === '—' ? '' : ch.line}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="col-span-5">
-            <div className="text-[10px] tracking-[0.32em] uppercase mb-4" style={{ color: c.muted, fontFamily: f.mono }}>
-              Next 90 days
-            </div>
-            <ol className="space-y-3">
-              {d.gtm.plan_90d.map((s, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <span
-                    className="flex-shrink-0 w-7 text-right font-semibold text-[14px]"
-                    style={{ color: c.accent, fontFamily: f.mono }}
-                  >
-                    Day {30 * (i + 1)}
-                  </span>
-                  <span style={{ fontFamily: f.sans, fontSize: 14, color: c.ink, lineHeight: 1.45 }}>
-                    {s === '—' ? <Nudge>Add a milestone</Nudge> : s}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </div>
-      </div>
-    </Frame>
-  );
-};
-
-const S11Competition: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
-  const W = 460, H = 340;
-  return (
-    <Frame v={v} step={11} total={TOTAL} chapter="Landscape">
-      <div className="h-full grid grid-cols-12 gap-10 items-center">
-        <div className="col-span-5">
-          <Eyebrow color={c.accent} font={f.mono}>
-            <Editable value={d.competition.eyebrow} path="competition.eyebrow" editable={editable} onEdit={onEdit} />
-          </Eyebrow>
-          <h2
-            className="leading-[1.02] tracking-[-0.02em] mb-6"
-            style={{ fontFamily: f.display, fontWeight: 600, fontSize: displaySize(v, 52), color: c.ink }}
-          >
-            <Editable value={d.competition.headline} path="competition.headline" editable={editable} onEdit={onEdit} multiline />
-          </h2>
-          <div className="text-[10px] tracking-[0.32em] uppercase mb-2" style={{ color: c.muted, fontFamily: f.mono }}>
-            Our wedge
-          </div>
-          <p style={{ fontFamily: f.body, fontSize: 16, lineHeight: 1.5, color: c.inkSoft }}>
-            {d.competition.wedge === '—' ? (
-              <Nudge>Name your wedge — the one thing only you can do</Nudge>
-            ) : (
-              <Editable value={d.competition.wedge} path="competition.wedge" editable={editable} onEdit={onEdit} multiline />
-            )}
-          </p>
-        </div>
-        <div className="col-span-7">
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
-            <rect x="40" y="20" width={W - 60} height={H - 60} fill={c.surface} stroke={c.rule} />
-            <line x1="40" y1={H / 2} x2={W - 20} y2={H / 2} stroke={c.rule} strokeDasharray="2 4" />
-            <line x1={W / 2} y1="20" x2={W / 2} y2={H - 40} stroke={c.rule} strokeDasharray="2 4" />
-            <text x={W - 20} y={H / 2 - 4} fontFamily={f.mono} fontSize="9" fill={c.muted} textAnchor="end">
-              {d.competition.x_label}
-            </text>
-            <text x={W / 2 + 6} y="26" fontFamily={f.mono} fontSize="9" fill={c.muted}>
-              {d.competition.y_label}
-            </text>
-            {d.competition.players.map((p, i) => {
-              const cx = 40 + ((W - 60) * p.x) / 100;
-              const cy = 20 + ((H - 60) * (100 - p.y)) / 100;
-              return (
-                <g key={i}>
-                  <circle
-                    cx={cx} cy={cy} r={p.is_us ? 14 : 9}
-                    fill={p.is_us ? c.accent : c.chip}
-                    stroke={p.is_us ? c.accent : c.muted} strokeWidth={p.is_us ? 0 : 1}
-                  />
-                  <text
-                    x={cx + (p.is_us ? 22 : 16)} y={cy + 4}
-                    fontFamily={f.sans} fontSize={p.is_us ? 13 : 11}
-                    fontWeight={p.is_us ? 700 : 500}
-                    fill={p.is_us ? c.accent : c.ink}
-                  >
-                    {p.name}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
-        </div>
-      </div>
-    </Frame>
-  );
-};
-
-const S12Team: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
-  const sc = d.team.scoring || {};
-  return (
-    <Frame v={v} step={12} total={TOTAL} chapter="Team">
-      <div className="h-full flex flex-col">
-        <Eyebrow color={c.accent} font={f.mono}>
-          <Editable value={d.team.eyebrow} path="team.eyebrow" editable={editable} onEdit={onEdit} />
-        </Eyebrow>
-        <h2
-          className="leading-[1.02] tracking-[-0.02em] mb-8"
-          style={{ fontFamily: f.display, fontWeight: 600, fontSize: displaySize(v, 52), color: c.ink }}
-        >
-          <Editable value={d.team.headline} path="team.headline" editable={editable} onEdit={onEdit} multiline />
-        </h2>
-        <div className="grid grid-cols-12 gap-10 flex-1">
-          <div className="col-span-8">
-            <div className="text-[10px] tracking-[0.32em] uppercase mb-3" style={{ color: c.muted, fontFamily: f.mono }}>
-              Founders
-            </div>
-            {d.team.founders.length === 0 ? (
-              <div
-                className="p-5"
-                style={{ background: c.surface, border: `1px dashed ${c.rule}`, borderRadius: 6 }}
-              >
-                <Nudge>Seed your cap table to populate founders</Nudge>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {d.team.founders.slice(0, 4).map((fdr, i) => (
-                  <div key={i} className="p-4" style={{ background: c.surface, border: `1px solid ${c.rule}`, borderRadius: 6 }}>
-                    <div
-                      className="w-12 h-12 mb-3 flex items-center justify-center font-semibold"
-                      style={{
-                        background: c.accent, color: '#FFF8EC', borderRadius: 999,
-                        fontFamily: f.display, fontSize: 18,
-                      }}
-                    >
-                      {(fdr.name || '?').slice(0, 1).toUpperCase()}
-                    </div>
-                    <div className="font-semibold" style={{ fontFamily: f.sans, fontSize: 16, color: c.ink }}>
-                      {fdr.name}
-                    </div>
-                    <div className="text-[12px] mb-2" style={{ color: c.muted, fontFamily: f.mono }}>
-                      {fdr.role}
-                    </div>
-                    {fdr.bio && (
-                      <div style={{ fontFamily: f.body, fontSize: 13, color: c.inkSoft, lineHeight: 1.5 }}>
-                        {fdr.bio}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="col-span-4 flex flex-col gap-3">
-            <div className="text-[10px] tracking-[0.32em] uppercase" style={{ color: c.muted, fontFamily: f.mono }}>
-              Axal scoring
-            </div>
-            <MetricCell
-              m={{ label: 'Total score', value: sc.total_score != null ? `${Math.round(sc.total_score)}/100` : '—', sub: sc.tier ?? '' }}
-              v={v} bordered
-            />
-            <MetricCell
-              m={{ label: 'Team', value: sc.team_total != null ? `${Math.round(sc.team_total)}` : '—' }}
-              v={v} bordered
-            />
-            <MetricCell
-              m={{ label: 'Market', value: sc.market_total != null ? `${Math.round(sc.market_total)}` : '—' }}
-              v={v} bordered
-            />
-          </div>
-        </div>
-      </div>
-    </Frame>
-  );
-};
-
-const S13Ask: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
-  const totalPct = d.ask.use_of_funds.reduce((a, b) => a + (b.pct || 0), 0) || 1;
-  return (
-    <Frame v={v} step={13} total={TOTAL} chapter="Ask">
-      <div className="h-full grid grid-cols-12 gap-10">
-        <div className="col-span-7 flex flex-col justify-center">
-          <Eyebrow color={c.accent} font={f.mono}>
-            <Editable value={d.ask.eyebrow} path="ask.eyebrow" editable={editable} onEdit={onEdit} />
-          </Eyebrow>
-          <h2
-            className="leading-[1.02] tracking-[-0.02em] mb-6"
-            style={{ fontFamily: f.display, fontWeight: 600, fontSize: displaySize(v, 56), color: c.ink }}
-          >
-            <Editable value={d.ask.headline} path="ask.headline" editable={editable} onEdit={onEdit} multiline />
-          </h2>
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <MetricCell m={{ label: 'Raising', value: d.ask.raise_amount, sub: 'pre-seed' }} v={v} bordered />
-            <MetricCell m={{ label: 'Runway', value: d.ask.runway, sub: 'months' }} v={v} bordered />
-          </div>
-          <div className="text-[10px] tracking-[0.32em] uppercase mb-3" style={{ color: c.muted, fontFamily: f.mono }}>
-            Use of funds
-          </div>
-          <div className="space-y-2 mb-2">
-            {d.ask.use_of_funds.map((u, i) => {
-              const w = Math.round(((u.pct || 0) / totalPct) * 100);
-              return (
-                <div key={i}>
-                  <div className="flex items-center justify-between mb-1 text-[12px]" style={{ fontFamily: f.sans, color: c.ink }}>
-                    <span>{u.label}</span>
-                    <span style={{ fontFamily: f.mono, color: c.muted }}>{u.pct}%</span>
-                  </div>
-                  <div className="h-2 w-full rounded" style={{ background: c.chip }}>
-                    <div className="h-full rounded" style={{ width: `${w}%`, background: c.accent }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        <div className="col-span-5 flex flex-col justify-center">
-          <div
-            className="p-6"
-            style={{ background: c.surface, border: `1px solid ${c.rule}`, borderRadius: 6 }}
-          >
-            <div className="text-[10px] tracking-[0.32em] uppercase mb-3" style={{ color: c.muted, fontFamily: f.mono }}>
-              What it buys — next 18 months
-            </div>
-            <ul className="space-y-3">
-              {d.ask.next_milestones.map((m, i) => (
-                <li key={i} className="flex items-start gap-3" style={{ fontFamily: f.body, fontSize: 15, color: c.ink, lineHeight: 1.45 }}>
-                  <span style={{ color: c.accent }}>→</span>
-                  <span>
-                    {m === '—' ? <Nudge>Add a milestone</Nudge> : (
-                      <Editable value={m} path={`ask.next_milestones.${i}`} editable={editable} onEdit={onEdit} multiline />
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-6 pt-4 border-t" style={{ borderColor: c.rule }}>
-              <div className="text-[10px] tracking-[0.32em] uppercase mb-1" style={{ color: c.muted, fontFamily: f.mono }}>
-                Contact
-              </div>
-              <div className="font-semibold" style={{ fontFamily: f.sans, fontSize: 16, color: c.ink }}>
-                {d.ask.contact}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Frame>
-  );
-};
-
-const S14Closing: React.FC<{ d: SpinoutDemoDayData; v: VariantId; editable?: boolean; onEdit?: any }> = ({
-  d, v, editable, onEdit,
-}) => {
-  const { c, f } = tokensFor(v);
-  const dark = v === 'manifesto' || v === 'product_first';
-  return (
-    <Frame v={v} step={14} total={TOTAL} chapter="Thank you" bg={dark ? c.bg : c.bg}>
-      {(v === 'editorial' || v === 'manifesto') && (
-        <div className="absolute inset-0 -z-0 opacity-80">
-          <SunRise accent={c.accent} />
-          <div
-            className="absolute inset-0"
-            style={{ background: 'linear-gradient(0deg, rgba(10,9,8,0.7) 0%, rgba(10,9,8,0.3) 100%)' }}
-          />
-        </div>
-      )}
-      <div className="relative h-full flex flex-col justify-center max-w-[1000px]" style={{ color: dark || v === 'editorial' ? '#FFF8EC' : c.ink }}>
-        <Eyebrow color={v === 'data_dense' ? c.accent : '#F7E2B5'} font={f.mono}>
-          <Editable value={d.closing.eyebrow} path="closing.eyebrow" editable={editable} onEdit={onEdit} />
-        </Eyebrow>
-        <h2
-          className="leading-[0.98] tracking-[-0.02em] mb-6"
+    <div style={{
+      position: 'absolute', top: 16, right: 16, zIndex: 10,
+      display: 'flex', alignItems: 'center', gap: 8,
+      background: pal.surface, border: `1px solid ${pal.rule}`,
+      borderRadius: 999, padding: '6px 8px',
+      fontFamily: fonts.mono, fontSize: 11, letterSpacing: '0.08em',
+    }}>
+      <span style={{ color: pal.muted, padding: '0 6px' }}>VARIANT</span>
+      {VARIANTS.map((v) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => setVariant(v)}
           style={{
-            fontFamily: f.display, fontWeight: 600,
-            fontSize: displaySize(v, 80),
-            color: v === 'data_dense' ? c.ink : '#FFF',
+            background: v === variant ? pal.accent : 'transparent',
+            color: v === variant ? '#fff' : pal.ink,
+            border: 'none', borderRadius: 999,
+            padding: '5px 10px', cursor: 'pointer',
+            fontFamily: 'inherit', fontSize: 'inherit', letterSpacing: 'inherit',
           }}
-        >
-          <Editable value={d.closing.headline} path="closing.headline" editable={editable} onEdit={onEdit} multiline />
-        </h2>
-        <p
-          style={{
-            fontFamily: f.body, fontSize: 19, lineHeight: 1.5,
-            color: v === 'data_dense' ? c.inkSoft : '#D9D1BF',
-            maxWidth: 720,
-          }}
-        >
-          <Editable value={d.closing.body} path="closing.body" editable={editable} onEdit={onEdit} multiline />
+          aria-pressed={v === variant}
+        >{VARIANT_LABEL[v]}</button>
+      ))}
+    </div>
+  );
+};
+
+/* ─────────────────────────── 14 slides ─────────────────────────── */
+
+const SlideShell: React.FC<{ children: React.ReactNode; pad?: number }> = ({ children, pad = 72 }) => {
+  const { pal } = useVariant();
+  return (
+    <div style={{
+      width: '100%', height: '100%', background: pal.bg,
+      padding: pad, boxSizing: 'border-box', overflow: 'hidden',
+      display: 'flex', flexDirection: 'column',
+    }}>{children}</div>
+  );
+};
+
+const Slide_Cover: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const { pal, fonts, variant } = useVariant();
+  const { cover, meta } = d;
+  return (
+    <SlideShell>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <Eyebrow>{cover.eyebrow}</Eyebrow>
+          {meta.is_sample && <Chip tone="warn">SAMPLE</Chip>}
+        </div>
+        <div style={{ color: pal.muted, fontFamily: fonts.mono, fontSize: 11, textAlign: 'right' }}>
+          <div>{meta.project_name}</div>
+          <div>{meta.sector}</div>
+        </div>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', maxWidth: 880 }}>
+        <h1 style={{
+          color: pal.ink, fontFamily: fonts.display,
+          fontSize: variant === 'manifesto' ? 96 : 72, lineHeight: 1.02,
+          letterSpacing: '-0.02em', fontWeight: variant === 'editorial' ? 500 : 700, margin: 0,
+        }}>{cover.headline}</h1>
+        <p style={{ color: pal.inkSoft, fontFamily: fonts.body, fontSize: 20, lineHeight: 1.5, maxWidth: 700, marginTop: 28 }}>
+          {cover.sub}
         </p>
-        <div className="mt-12 flex items-center gap-6 text-[11px] tracking-[0.24em] uppercase"
-          style={{ color: v === 'data_dense' ? c.muted : 'rgba(255,248,236,0.7)', fontFamily: f.mono }}
-        >
-          <span>{d.closing.signoff}</span>
-          <span>·</span>
-          <span>{d.closing.contact}</span>
-        </div>
       </div>
-    </Frame>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', color: pal.muted, fontFamily: fonts.mono, fontSize: 12 }}>
+        <span>{cover.location}</span>
+        <span>{meta.founder_name} · {meta.contact_email}</span>
+      </div>
+    </SlideShell>
   );
 };
 
-/* ─────────────────────────── deck shell ─────────────────────────── */
-
-const SLIDES = [
-  S01Cover, S02Thesis, S03Problem, S04Insight, S05Product, S06Market,
-  S07Traction, S08LabProgress, S09BusinessModel, S10GTM, S11Competition,
-  S12Team, S13Ask, S14Closing,
-];
-
-function readStoredVariant(): VariantId {
-  try {
-    const raw = typeof window !== 'undefined' ? window.localStorage?.getItem(VARIANT_KEY) : null;
-    if (raw && (VARIANTS as string[]).includes(raw)) return raw as VariantId;
-  } catch {}
-  return 'editorial';
-}
-
-const VariantSwitcher: React.FC<{ v: VariantId; setV: (id: VariantId) => void }> = ({ v, setV }) => (
-  <div
-    className="absolute top-2 right-2 z-50 flex gap-1 p-1 rounded-md"
-    style={{
-      background: 'rgba(255,255,255,0.9)',
-      backdropFilter: 'blur(8px)',
-      boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
-    }}
-  >
-    {VARIANTS.map((id) => (
-      <button
-        key={id}
-        type="button"
-        onClick={() => setV(id)}
-        className="px-2 py-1 text-[10px] tracking-[0.18em] uppercase font-medium rounded-sm transition-colors"
-        style={{
-          background: v === id ? '#1A1814' : 'transparent',
-          color: v === id ? '#FFF8EC' : '#3A352C',
-          fontFamily: FONTS.editorial.mono,
-        }}
-      >
-        {VARIANT_LABEL[id]}
-      </button>
-    ))}
-  </div>
-);
-
-export const Deck_axal_spinout_demoday: React.FC<DeckProps> = ({ data, editable, onEdit, currentSlide }) => {
-  const hydrated = useMemo(() => hydrate(data || {}), [data]);
-  const [variant, setVariant] = useState<VariantId>(() => readStoredVariant());
-  useEffect(() => {
-    try { window.localStorage?.setItem(VARIANT_KEY, variant); } catch {}
-  }, [variant]);
-
+const Slide_Problem: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const p = d.problem;
   return (
-    <div className="relative w-full">
-      {editable && <VariantSwitcher v={variant} setV={setVariant} />}
-      <div className="flex flex-col">
-        {SLIDES.map((Slide, i) => (
-          <div
-            key={i}
-            data-slide-frame=""
-            style={{
-              width: 1920, height: 1080, pageBreakAfter: 'always',
-              display: currentSlide != null && currentSlide !== i ? 'none' : 'block',
-            }}
-          >
-            <Slide d={hydrated} v={variant} editable={editable} onEdit={onEdit} />
+    <SlideShell>
+      <Eyebrow>{p.eyebrow}</Eyebrow>
+      <SlideHeading>{p.headline}</SlideHeading>
+      <div style={{ marginTop: 32, maxWidth: 760 }}>
+        {isUnfilled(p.body)
+          ? <Nudge>Add a problem statement on your project to unlock this slide.</Nudge>
+          : <Body>{p.body}</Body>}
+      </div>
+      <div style={{ marginTop: 'auto', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        {p.signals.length > 0
+          ? p.signals.slice(0, 3).map((s, i) => (
+            <div key={i} style={{ borderTop: `1px solid currentColor`, paddingTop: 12, opacity: 0.85 }}>
+              <Body max={260}>{s}</Body>
+            </div>
+          ))
+          : <div style={{ gridColumn: '1 / -1' }}><Nudge>Capture growth signals on your project to fill out the three columns.</Nudge></div>}
+      </div>
+    </SlideShell>
+  );
+};
+
+const Slide_Validation: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const v = d.validation;
+  return (
+    <SlideShell>
+      <Eyebrow>{v.eyebrow}</Eyebrow>
+      <SlideHeading>{v.headline}</SlideHeading>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 28 }}>
+        {v.metrics.map((m, i) => <MetricCard key={i} m={m} />)}
+      </div>
+      <div style={{ marginTop: 28, flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {v.quotes.length > 0 ? v.quotes.map((q, i) => (
+          <blockquote key={i} style={{ margin: 0, paddingLeft: 16, borderLeft: '3px solid currentColor', maxWidth: 820 }}>
+            <Body>"{q.takeaway}"</Body>
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>— {q.name}{q.role ? `, ${q.role}` : ''}</div>
+          </blockquote>
+        )) : <Nudge>Log 5 customer-discovery interviews in Week 1 to unlock real founder quotes here.</Nudge>}
+      </div>
+    </SlideShell>
+  );
+};
+
+const Slide_Market: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const m = d.market;
+  const ms: Metric[] = [
+    { label: 'TAM', value: m.tam, sub: 'Total addressable' },
+    { label: 'SAM', value: m.sam, sub: 'Serviceable' },
+    { label: 'SOM', value: m.som, sub: 'Obtainable' },
+  ];
+  const allMissing = m.tam === DASH && m.sam === DASH && m.som === DASH;
+  return (
+    <SlideShell>
+      <Eyebrow>{m.eyebrow}</Eyebrow>
+      <SlideHeading>{m.headline}</SlideHeading>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 32 }}>
+        {ms.map((x, i) => <MetricCard key={i} m={x} />)}
+      </div>
+      {allMissing && <div style={{ marginTop: 20 }}><Nudge>Set TAM / SAM / SOM on your project to size the market.</Nudge></div>}
+      <div style={{ marginTop: 28, flex: 1 }}>
+        <Eyebrow>Why now</Eyebrow>
+        {m.why_now.length > 0
+          ? <ul style={{ margin: 0, paddingLeft: 18 }}>{m.why_now.map((w, i) => <li key={i} style={{ marginBottom: 6 }}><Body>{w}</Body></li>)}</ul>
+          : <Nudge>Fill in `why_now` on your project to explain the timing.</Nudge>}
+      </div>
+    </SlideShell>
+  );
+};
+
+const Slide_Solution: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const s = d.solution;
+  return (
+    <SlideShell>
+      <Eyebrow>{s.eyebrow}</Eyebrow>
+      <SlideHeading>{s.headline}</SlideHeading>
+      <div style={{ marginTop: 32, maxWidth: 720 }}>
+        {isUnfilled(s.body) ? <Nudge>Fill in your project's `solution` field to describe what you're building.</Nudge> : <Body>{s.body}</Body>}
+      </div>
+      <div style={{ marginTop: 'auto', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+        {s.capabilities.length > 0
+          ? s.capabilities.slice(0, 4).map((c, i) => (
+            <div key={i} style={{ padding: '14px 16px', borderRadius: 10, border: '1px solid currentColor' }}>
+              <Body max={300}>{c}</Body>
+            </div>
+          ))
+          : <div style={{ gridColumn: '1 / -1' }}><Nudge>Add a `solution` description with bullet-style capabilities.</Nudge></div>}
+      </div>
+    </SlideShell>
+  );
+};
+
+const Slide_Roadmap: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const r = d.roadmap;
+  const cols = [
+    { label: 'Now', items: r.now },
+    { label: 'Next', items: r.next },
+    { label: 'Later', items: r.later },
+  ];
+  const allEmpty = r.now.length + r.next.length + r.later.length === 0;
+  return (
+    <SlideShell>
+      <Eyebrow>{r.eyebrow}{r.quarter !== DASH ? ` · ${r.quarter}` : ''}</Eyebrow>
+      <SlideHeading>{r.headline}</SlideHeading>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginTop: 32, flex: 1 }}>
+        {cols.map((c) => (
+          <div key={c.label}>
+            <Eyebrow>{c.label}</Eyebrow>
+            {c.items.length > 0
+              ? <ul style={{ margin: 0, paddingLeft: 16 }}>{c.items.map((o, i) => <li key={i} style={{ marginBottom: 8 }}><Body max={260}>{o}</Body></li>)}</ul>
+              : <div style={{ opacity: 0.5, fontSize: 12 }}>{DASH}</div>}
           </div>
         ))}
       </div>
-    </div>
+      {allEmpty && <div style={{ marginTop: 16 }}><Nudge>Add 3 OKRs in Week 2 to populate Now / Next / Later.</Nudge></div>}
+    </SlideShell>
   );
 };
 
+const Slide_Brand: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const b = d.brand;
+  return (
+    <SlideShell>
+      <Eyebrow>{b.eyebrow}</Eyebrow>
+      <SlideHeading>{b.headline}</SlideHeading>
+      <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 24, rowGap: 12 }}>
+        <div style={{ opacity: 0.6, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Tagline</div>
+        <div><Body>{b.tagline}</Body></div>
+        <div style={{ opacity: 0.6, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Vision</div>
+        <div><Body>{b.vision}</Body></div>
+      </div>
+      <div style={{ marginTop: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Chip tone={b.brand_kit_ready ? 'good' : 'default'}>{b.brand_kit_ready ? '✓ Brand kit ready' : 'Brand kit pending'}</Chip>
+        <Chip tone={b.pitch_deck_ready ? 'good' : 'default'}>{b.pitch_deck_ready ? '✓ Pitch deck v1' : 'Deck v1 pending'}</Chip>
+        <Chip tone={b.incorporated ? 'good' : 'default'}>{b.incorporated ? '✓ Incorporated' : 'Pre-incorporation'}</Chip>
+      </div>
+      {(isUnfilled(b.tagline) && isUnfilled(b.vision)) &&
+        <div style={{ marginTop: 16 }}><Nudge>Complete the Week 4 Brand kit milestone to fill tagline + vision.</Nudge></div>}
+    </SlideShell>
+  );
+};
+
+const Slide_VentureReadiness: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const v = d.venture_readiness;
+  return (
+    <SlideShell>
+      <Eyebrow>{v.eyebrow}{v.is_sandbox ? ' · sandbox' : ''}</Eyebrow>
+      <SlideHeading>{v.headline}</SlideHeading>
+      {v.breakdown.length === 0
+        ? <div style={{ marginTop: 32 }}><Nudge>Run your venture-readiness score in Week 2 to unlock this slide.</Nudge></div>
+        : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 32 }}>
+            {v.breakdown.map((b, i) => <MetricCard key={i} m={{ label: b.label, value: b.value }} />)}
+          </div>
+        )}
+      <div style={{ marginTop: 'auto', maxWidth: 760 }}>
+        {!isUnfilled(v.ai_notes) && <Body>{v.ai_notes}</Body>}
+      </div>
+    </SlideShell>
+  );
+};
+
+const Slide_Team: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const t = d.team;
+  return (
+    <SlideShell>
+      <Eyebrow>{t.eyebrow}</Eyebrow>
+      <SlideHeading>{t.headline}</SlideHeading>
+      {t.founders.length === 0
+        ? <div style={{ marginTop: 32 }}><Nudge>Seed your cap table in Week 3 to list the founding team here.</Nudge></div>
+        : (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(t.founders.length, 4)}, 1fr)`, gap: 16, marginTop: 32 }}>
+            {t.founders.map((f, i) => (
+              <div key={i} style={{ padding: '20px 18px', borderRadius: 12, border: '1px solid currentColor' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>{f.name}</div>
+                <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>{f.role}</div>
+                {f.bio && <Body max={220}>{f.bio}</Body>}
+              </div>
+            ))}
+          </div>
+        )}
+      <div style={{ marginTop: 28, maxWidth: 760 }}>
+        {!isUnfilled(t.team_intro) && <Body>{t.team_intro}</Body>}
+      </div>
+    </SlideShell>
+  );
+};
+
+const Slide_MentorNetwork: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const m = d.mentor_network;
+  return (
+    <SlideShell>
+      <Eyebrow>{m.eyebrow}</Eyebrow>
+      <SlideHeading>{m.headline}</SlideHeading>
+      <div style={{ marginTop: 28, maxWidth: 760 }}>
+        {isUnfilled(m.body)
+          ? <Nudge>Answer the "mentors and network" advisor questions to populate this slide.</Nudge>
+          : <Body>{m.body}</Body>}
+      </div>
+      {m.mentors.length > 0 && (
+        <div style={{ marginTop: 24, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {m.mentors.map((x, i) => <Chip key={i}>{x}</Chip>)}
+        </div>
+      )}
+      <div style={{ marginTop: 'auto' }}>
+        {m.network_signals.length > 0 && (
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {m.network_signals.map((s, i) => <li key={i} style={{ marginBottom: 6 }}><Body>{s}</Body></li>)}
+          </ul>
+        )}
+      </div>
+    </SlideShell>
+  );
+};
+
+const Slide_CapTable: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const c = d.cap_table;
+  const { pal, fonts } = useVariant();
+  return (
+    <SlideShell>
+      <Eyebrow>{c.eyebrow}</Eyebrow>
+      <SlideHeading>{c.headline}</SlideHeading>
+      {c.holders.length === 0
+        ? <div style={{ marginTop: 32 }}><Nudge>Seed your cap table in Week 3 to show ownership here.</Nudge></div>
+        : (
+          <table style={{ marginTop: 32, width: '100%', borderCollapse: 'collapse', fontFamily: fonts.mono, fontSize: 13 }}>
+            <thead>
+              <tr style={{ color: pal.muted, textAlign: 'left', borderBottom: `1px solid ${pal.rule}` }}>
+                <th style={{ padding: '10px 0', fontWeight: 500 }}>Holder</th>
+                <th style={{ padding: '10px 0', fontWeight: 500 }}>Kind</th>
+                <th style={{ padding: '10px 0', fontWeight: 500 }}>Security</th>
+                <th style={{ padding: '10px 0', fontWeight: 500, textAlign: 'right' }}>Ownership</th>
+              </tr>
+            </thead>
+            <tbody>
+              {c.holders.map((h, i) => (
+                <tr key={i} style={{ borderBottom: `1px solid ${pal.rule}`, color: pal.ink }}>
+                  <td style={{ padding: '12px 0' }}>{h.name}</td>
+                  <td style={{ padding: '12px 0', color: pal.muted }}>{h.kind}</td>
+                  <td style={{ padding: '12px 0', color: pal.muted }}>{h.role}</td>
+                  <td style={{ padding: '12px 0', textAlign: 'right' }}>{h.ownership_pct}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      <div style={{ marginTop: 'auto', color: pal.muted, fontSize: 12 }}>{c.note}</div>
+    </SlideShell>
+  );
+};
+
+const Slide_Ask: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const a = d.ask;
+  const { pal, fonts } = useVariant();
+  const askMissing = a.raise_amount === DASH;
+  return (
+    <SlideShell>
+      <Eyebrow>{a.eyebrow}</Eyebrow>
+      <SlideHeading>{a.headline}</SlideHeading>
+      <div style={{ display: 'flex', gap: 32, marginTop: 32, alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ color: pal.muted, fontFamily: fonts.mono, fontSize: 11, letterSpacing: '0.12em' }}>RAISE</div>
+          <div style={{ fontFamily: fonts.display, fontSize: 56, fontWeight: 700, color: askMissing ? pal.muted : pal.ink, lineHeight: 1 }}>{a.raise_amount}</div>
+        </div>
+        <div>
+          <div style={{ color: pal.muted, fontFamily: fonts.mono, fontSize: 11, letterSpacing: '0.12em' }}>RUNWAY</div>
+          <div style={{ fontFamily: fonts.display, fontSize: 56, fontWeight: 700, color: a.runway === DASH ? pal.muted : pal.ink, lineHeight: 1 }}>{a.runway}</div>
+        </div>
+      </div>
+      {askMissing && <div style={{ marginTop: 20 }}><Nudge>Set `funding_needed` on your project to show a raise amount.</Nudge></div>}
+      <div style={{ marginTop: 28, flex: 1 }}>
+        <Eyebrow>Use of funds</Eyebrow>
+        {a.use_of_funds.length > 0 ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            {a.use_of_funds.map((u, i) => (
+              <div key={i} style={{ padding: '12px 14px', border: `1px solid ${pal.rule}`, borderRadius: 8 }}>
+                <div style={{ fontFamily: fonts.mono, fontSize: 11, color: pal.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{u.label}</div>
+                <div style={{ fontFamily: fonts.display, fontSize: 28, fontWeight: 700 }}>{u.pct}%</div>
+              </div>
+            ))}
+          </div>
+        ) : <Nudge>Set `use_of_funds` on your project (e.g. "Engineering 50, GTM 30, Ops 20") to break down the spend.</Nudge>}
+      </div>
+      <div style={{ marginTop: 20 }}>
+        <Eyebrow>Next milestones</Eyebrow>
+        {a.next_milestones.some((x) => x !== DASH)
+          ? <ul style={{ margin: 0, paddingLeft: 18 }}>{a.next_milestones.map((m, i) => <li key={i}><Body max={520}>{m}</Body></li>)}</ul>
+          : <div style={{ opacity: 0.6, fontSize: 12 }}>Add Now / Next / Later OKRs to surface milestones here.</div>}
+      </div>
+    </SlideShell>
+  );
+};
+
+const Slide_AxalSignal: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const a = d.axal_signal;
+  const { pal, fonts } = useVariant();
+  return (
+    <SlideShell>
+      <Eyebrow>{a.eyebrow}</Eyebrow>
+      <SlideHeading>{a.headline}</SlideHeading>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 28 }}>
+        {a.lab_weeks.length === 0 ? (
+          <div style={{ gridColumn: '1 / -1' }}><Nudge>Once you start the Lab and complete milestones, the four-week sprint shows here.</Nudge></div>
+        ) : a.lab_weeks.map((w) => {
+          const toneBg = w.status === 'complete' ? pal.accentSoft : w.status === 'in_progress' ? pal.chip : pal.surface;
+          const accent = w.status === 'complete' ? pal.accent : w.status === 'in_progress' ? pal.warn : pal.muted;
+          return (
+            <div key={w.week} style={{ background: toneBg, border: `1px solid ${pal.rule}`, borderRadius: 10, padding: '14px 14px' }}>
+              <div style={{ color: accent, fontFamily: fonts.mono, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Week {w.week} · {w.status.replace('_', ' ')}</div>
+              <div style={{ fontFamily: fonts.display, fontSize: 18, fontWeight: 700, margin: '6px 0' }}>{w.title}</div>
+              <div style={{ fontSize: 12, color: pal.muted, marginBottom: 10 }}>{w.caption}</div>
+              <ul style={{ margin: 0, paddingLeft: 14, fontSize: 12 }}>
+                {w.milestones.map((m) => (
+                  <li key={m.key} style={{ opacity: m.done ? 1 : 0.5 }}>{m.done ? '✓ ' : '○ '}{m.label}</li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 'auto', maxWidth: 760 }}>
+        {!isUnfilled(a.body) && <Body>{a.body}</Body>}
+      </div>
+    </SlideShell>
+  );
+};
+
+const Slide_Contact: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const c = d.contact;
+  const { pal, fonts } = useVariant();
+  return (
+    <SlideShell>
+      <Eyebrow>{c.eyebrow}</Eyebrow>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <h2 style={{
+          color: pal.ink, fontFamily: fonts.display,
+          fontSize: 72, lineHeight: 1.02, letterSpacing: '-0.02em',
+          fontWeight: 700, margin: 0,
+        }}>{c.headline}</h2>
+        <div style={{ marginTop: 24, maxWidth: 760 }}>
+          {!isUnfilled(c.body) && <Body>{c.body}</Body>}
+        </div>
+      </div>
+      <div style={{ borderTop: `1px solid ${pal.rule}`, paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <div style={{ fontFamily: fonts.mono, fontSize: 14, color: c.contact_email === DASH ? pal.muted : pal.ink }}>{c.contact_email}</div>
+        <div style={{ fontFamily: fonts.body, fontSize: 14, color: pal.muted }}>{c.signoff}</div>
+      </div>
+    </SlideShell>
+  );
+};
+
+/* ─────────────────────────── slide registry ─────────────────────────── */
+
+type SlideEntry = { id: string; title: string; Component: React.FC<{ d: SpinoutDemoDayData }> };
+const SLIDES: SlideEntry[] = [
+  { id: 'cover',             title: 'Cover',             Component: Slide_Cover },
+  { id: 'problem',           title: 'Problem',           Component: Slide_Problem },
+  { id: 'validation',        title: 'Validation',        Component: Slide_Validation },
+  { id: 'market',            title: 'Market',            Component: Slide_Market },
+  { id: 'solution',          title: 'Solution',          Component: Slide_Solution },
+  { id: 'roadmap',           title: 'Roadmap',           Component: Slide_Roadmap },
+  { id: 'brand',             title: 'Brand',             Component: Slide_Brand },
+  { id: 'venture_readiness', title: 'Venture readiness', Component: Slide_VentureReadiness },
+  { id: 'team',              title: 'Team',              Component: Slide_Team },
+  { id: 'mentor_network',    title: 'Mentors & network', Component: Slide_MentorNetwork },
+  { id: 'cap_table',         title: 'Cap table',         Component: Slide_CapTable },
+  { id: 'ask',               title: 'Ask',               Component: Slide_Ask },
+  { id: 'axal_signal',       title: 'Axal signal',       Component: Slide_AxalSignal },
+  { id: 'contact',           title: 'Contact',           Component: Slide_Contact },
+];
+
+/* ─────────────────────────── root deck ─────────────────────────── */
+
+const SlideStage: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div style={{
+    position: 'relative', width: '100%', aspectRatio: '16 / 9',
+    background: '#000', borderRadius: 12, overflow: 'hidden',
+  }}>{children}</div>
+);
+
+const DeckRoot: React.FC<DeckProps> = (props) => {
+  const data = useMemo(() => hydrate(props.data), [props.data]);
+  const editable = !!(props as unknown as { editable?: boolean }).editable;
+
+  const [variant, setVariantState] = useState<VariantId>('editorial');
+  useEffect(() => {
+    try {
+      const stored = typeof window !== 'undefined' ? window.localStorage?.getItem(VARIANT_KEY) : null;
+      if (stored && (VARIANTS as readonly string[]).includes(stored)) {
+        setVariantState(stored as VariantId);
+      }
+    } catch { /* SSR / quota / private-mode — silent */ }
+  }, []);
+  const setVariant = (v: VariantId) => {
+    setVariantState(v);
+    try { window.localStorage?.setItem(VARIANT_KEY, v); } catch { /* swallow */ }
+  };
+
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); setIndex((i) => Math.min(SLIDES.length - 1, i + 1)); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); setIndex((i) => Math.max(0, i - 1)); }
+      else if (e.key === 'Home') { e.preventDefault(); setIndex(0); }
+      else if (e.key === 'End') { e.preventDefault(); setIndex(SLIDES.length - 1); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const pal = PALETTES[variant];
+  const fonts = FONTS[variant];
+  const ctx: VariantCtx = { variant, setVariant, pal, fonts, editable };
+
+  const Active = SLIDES[index].Component;
+
+  return (
+    <VariantContext.Provider value={ctx}>
+      <div style={{ width: '100%', maxWidth: 1280, margin: '0 auto', padding: 16, color: pal.ink }}>
+        <SlideStage>
+          {editable && <VariantSwitcher />}
+          <Active d={data} />
+        </SlideStage>
+        <div style={{
+          marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          fontFamily: fonts.mono, fontSize: 12, color: pal.muted,
+        }}>
+          <div>{index + 1} / {SLIDES.length} · {SLIDES[index].title}</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {SLIDES.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={`Go to slide ${i + 1}`}
+                onClick={() => setIndex(i)}
+                style={{
+                  width: 8, height: 8, borderRadius: 999, border: 'none',
+                  background: i === index ? pal.accent : pal.rule, cursor: 'pointer',
+                }}
+              />
+            ))}
+          </div>
+          <div>← / → / Home / End</div>
+        </div>
+      </div>
+    </VariantContext.Provider>
+  );
+};
+
+/**
+ * Default export — registered as `Deck_axal_spinout_demoday` in
+ * `frontend/src/decks/templates/index.ts`.
+ */
+export const Deck_axal_spinout_demoday: React.FC<DeckProps> = (props) => <DeckRoot {...props} />;
 export default Deck_axal_spinout_demoday;
