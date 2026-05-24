@@ -11,6 +11,55 @@
 > building it.
 
 
+## Task #6 — Partnership / BD: 12-slide executive-consulting upgrade
+
+Replaced the 11-slide simple `partnership_bd` template with a 12-slide
+self-contained executive-consulting variant (McKinsey / Bain /
+Accenture / AWS tone). Hand-built SVG diagrams throughout (hero
+convergence, industry-shifts chart, 2×2 opportunity quadrants,
+ecosystem diagram, architecture stack, impact chart, roadmap gantt,
+revenue-flow Sankey, risk heatmap, future-state arrow), executive
+blue + gold palette, Source Serif Pro for headlines. Mirrors the
+in-place swap pattern from Task #2 (Series A), Task #3 (Series B),
+and Task #5 (Demo Day) — registry slot stable (`partnership_bd`),
+drift count unchanged at 12 templates.
+
+- **`frontend/src/decks/templates/partnership_bd_app.tsx`** — new
+  self-contained 1960-line template with `PartnershipData` type,
+  `SAMPLE_DATA` mirroring the worker `heuristicSlides()` field names
+  (`meta.*`, `executive_summary.three_pillars`, `industry_context.shifts`,
+  `partner_challenges.challenges`, `shared_opportunity.quadrants`,
+  `solution_overview.*_responsibilities`, `product_platform.layers`,
+  `business_benefits.kpis`, `implementation_roadmap.phases`,
+  `case_studies.studies`, `commercial_structure.economics`,
+  `governance_risk.bodies`/`risks`, `next_steps.pilot`/`timeline`).
+  Appends `Deck_partnership_bd_app: React.FC<RegistryDeckProps>`
+  adapter that `mergeShape`s incoming `data` over `SAMPLE_DATA`
+  (shape-safe: empty arrays don't nuke defaults), bridges the
+  template's array-path `Edit` signature to the registry's dot-string
+  `onEdit`, and wraps each of the 12 `<SlideN…>` components in
+  `<Slide16x9>` so the print pipeline (`PitchDeckPrintPage.jsx`)
+  finds them via `[data-slide-frame]` and per-slide page breaks fire.
+- **`frontend/src/decks/templates/partnership_bd.tsx`** — collapsed
+  to a one-line re-export
+  (`export { Deck_partnership_bd_app as Deck_partnership_bd } from './partnership_bd_app';`)
+  so the registry key `partnership_bd` stays stable and the
+  `check-deck-templates.mjs` drift guard keeps finding the canonical
+  `Deck_<key>` import from `./<key>`.
+- **`frontend/src/decks/templates/index.ts`** — updated description
+  to `'12 slides · executive consulting · SVG diagrams'`. Slide count
+  (12), tier (`growth`), and category (`commercial`) unchanged.
+- **`frontend/src/decks/sample.ts`** — added `partnership_bd` branch
+  in `previewDataFor()` returning `PARTNERSHIP_BD_APP_SAMPLE` so the
+  template-picker thumbnail receives the nested `meta.*` /
+  `executive_summary.three_pillars` / `industry_context.shifts[]` /
+  `implementation_roadmap.phases[]` shapes the slides expect instead
+  of the legacy `SAMPLE_PREVIEW_DATA` strings (which would crash the
+  thumbnail the same way the old `series_b_diligence` shape did).
+
+Verified `node scripts/check-deck-templates.mjs` → `12 templates
+wired correctly`.
+
 ## Task #5 — Demo Day: render fix (Pill violet tone)
 
 `Slide10Market` rendered `<Pill tone="violet">` but `Pill`'s palette

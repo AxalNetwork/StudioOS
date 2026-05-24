@@ -1,87 +1,12 @@
-import React from 'react';
-import { Slide16x9, Editable, DeckProps, v } from '../DeckBase';
-
-export const Deck_partnership_bd: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
-  const F = 'Inter, system-ui, sans-serif';
-  const INK = '#0F172A';
-  const ACCENT = '#2563EB';
-  const Header: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <div style={{ fontSize: 22, color: ACCENT, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase' }}>
-      {children}
-    </div>
-  );
-  return <>
-    <Slide16x9 font={F} ink={INK}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', marginBottom: 'auto' }}>
-        <Editable path="company" value={v(data,'company')} editable={editable} onEdit={onEdit}
-          placeholder="[Us]" style={{ fontSize: 96, fontWeight: 800, flex: 1 }} />
-        <div style={{ fontSize: 96, color: '#CBD5E1', margin: '0 64px' }}>×</div>
-        <Editable path="partner_name" value={v(data,'partner_name')} editable={editable} onEdit={onEdit}
-          placeholder="[Partner]" style={{ fontSize: 96, fontWeight: 800, flex: 1, textAlign: 'right' }} />
-      </div>
-      <div style={{ marginTop: 48, fontSize: 32, color: '#475569' }}>
-        Partnership proposal · {new Date().toLocaleDateString()}
-      </div>
-    </Slide16x9>
-
-    <Slide16x9 font={F} ink={INK}>
-      <Header>What we know about you</Header>
-      <Editable path="partner_research" value={v(data,'partner_research')} editable={editable} onEdit={onEdit}
-        placeholder="[Three specific things showing you did your homework]"
-        style={{ fontSize: 48, fontWeight: 500, lineHeight: 1.3, marginTop: 48, maxWidth: 1500 }} />
-    </Slide16x9>
-
-    <Slide16x9 font={F} ink={INK}>
-      <Header>Shared thesis</Header>
-      <Editable path="shared_thesis" value={v(data,'shared_thesis')} editable={editable} onEdit={onEdit}
-        placeholder="[Why our worldviews align]"
-        style={{ fontSize: 56, fontWeight: 500, lineHeight: 1.3, marginTop: 48, maxWidth: 1500 }} />
-    </Slide16x9>
-
-    <Slide16x9 font={F} ink={INK}>
-      <Header>Mutual value</Header>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64, marginTop: 64 }}>
-        <div style={{ background: '#EFF6FF', padding: 40, borderRadius: 16 }}>
-          <div style={{ fontSize: 22, color: ACCENT, fontWeight: 700 }}>WHAT WE GET</div>
-          <Editable path="we_get" value={v(data,'we_get')} editable={editable} onEdit={onEdit}
-            placeholder="[…]" style={{ fontSize: 36, marginTop: 24, lineHeight: 1.3 }} />
-        </div>
-        <div style={{ background: '#F1F5F9', padding: 40, borderRadius: 16 }}>
-          <div style={{ fontSize: 22, color: '#475569', fontWeight: 700 }}>WHAT YOU GET</div>
-          <Editable path="they_get" value={v(data,'they_get')} editable={editable} onEdit={onEdit}
-            placeholder="[…]" style={{ fontSize: 36, marginTop: 24, lineHeight: 1.3 }} />
-        </div>
-      </div>
-    </Slide16x9>
-
-    {[
-      ['Our capabilities',  'capabilities'],
-      ['Integration points', 'integration_points'],
-      ['Case studies',       'case_studies'],
-      ['Partner logos',      'partner_logos'],
-      ['Security & legal',   'security_legal'],
-      ['Roadmap',            'roadmap'],
-    ].map(([label, key]) => (
-      <Slide16x9 key={key} font={F} ink={INK}>
-        <Header>{label}</Header>
-        <Editable path={key} value={v(data,key)} editable={editable} onEdit={onEdit}
-          placeholder={`[${label}]`}
-          style={{ fontSize: 44, fontWeight: 500, lineHeight: 1.3, marginTop: 48, maxWidth: 1500 }} />
-      </Slide16x9>
-    ))}
-
-    <Slide16x9 font={F} ink={INK}>
-      <Header>Proposed pilot</Header>
-      <Editable path="proposed_pilot" value={v(data,'proposed_pilot')} editable={editable} onEdit={onEdit}
-        placeholder="[Scope, success criteria, timeline]"
-        style={{ fontSize: 44, fontWeight: 500, lineHeight: 1.3, marginTop: 48, maxWidth: 1500 }} />
-    </Slide16x9>
-
-    <Slide16x9 font={F} ink={INK}>
-      <Header>Next steps</Header>
-      <Editable path="next_steps" value={v(data,'next_steps')} editable={editable} onEdit={onEdit}
-        placeholder="[Single concrete next step]"
-        style={{ fontSize: 64, fontWeight: 600, lineHeight: 1.2, marginTop: 64, color: ACCENT, maxWidth: 1500 }} />
-    </Slide16x9>
-  </>;
-};
+// Partnership / BD
+// ─────────────────────────────────────────────────────────────────
+// The original 11-slide simple variant has been superseded by the
+// richer 12-slide self-contained executive-consulting variant
+// defined in `./partnership_bd_app.tsx` (McKinsey/Bain/Accenture
+// tone, hand-built SVG diagrams). We re-export the new adapter
+// under the original `Deck_partnership_bd` name so:
+//   • the registry key `partnership_bd` stays stable for existing
+//     decks (no `method_id` migration needed),
+//   • the drift check (`scripts/check-deck-templates.mjs`) keeps
+//     finding the canonical `Deck_<key>` import from `./<key>`.
+export { Deck_partnership_bd_app as Deck_partnership_bd } from './partnership_bd_app';

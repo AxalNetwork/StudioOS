@@ -3,6 +3,7 @@ import { SAMPLE_DATA as MINIMAL_SEED_SAMPLE } from './templates/minimal_seed';
 import { SAMPLE_DATA as SERIES_A_APP_SAMPLE } from './templates/series_a_growth_app';
 import { SAMPLE_DATA as SERIES_B_APP_SAMPLE } from './templates/series_b_diligence_app';
 import { SAMPLE_DATA as DEMO_DAY_APP_SAMPLE } from './templates/demo_day_app';
+import { SAMPLE_DATA as PARTNERSHIP_BD_APP_SAMPLE } from './templates/partnership_bd_app';
 
 // Base preview sample used by the existing 11 templates. Keeps the
 // historical *string* shapes for `milestones`, `roadmap`, and
@@ -410,6 +411,15 @@ export function previewDataFor(templateKey: string): DeckData {
   // that SAMPLE_PREVIEW_DATA does not carry.
   if (templateKey === 'demo_day') {
     return DEMO_DAY_APP_SAMPLE as unknown as DeckData;
+  }
+  // Partnership / BD (now backed by the 12-slide self-contained
+  // `partnership_bd_app` variant) reads nested structured fields
+  // like `meta.*`, `executive_summary.three_pillars`,
+  // `industry_context.shifts[]`, `case_studies.studies[]`,
+  // `implementation_roadmap.phases[]`, etc. that SAMPLE_PREVIEW_DATA
+  // does not carry.
+  if (templateKey === 'partnership_bd') {
+    return PARTNERSHIP_BD_APP_SAMPLE as unknown as DeckData;
   }
   return SAMPLE_PREVIEW_DATA;
 }
