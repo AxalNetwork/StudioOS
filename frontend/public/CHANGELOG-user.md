@@ -10,6 +10,15 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ## May 2026
 
+- **Pitch decks shared via one-time link** now present properly in
+  fullscreen — one slide at a time, centred and letterboxed, with
+  no peek of the next slide. Use the arrow keys, Space, or PageUp/
+  PageDown to navigate, Home/End to jump to the ends, and Esc to
+  exit. Press `f` from anywhere to toggle fullscreen.
+- **"Save as PDF"** on a shared deck now downloads a real
+  1920×1080 landscape PDF directly to your computer — no browser
+  print dialog, no page margins or headers, and no extra clicks.
+  A small progress indicator shows which slide is being rendered.
 - The **Sales — Customer-facing** pitch-deck template was rebuilt
   from the ground up. It's now an 18-slide enterprise sales deck
   designed to close customers, not investors — covering customer

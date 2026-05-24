@@ -11,6 +11,101 @@
 > building it.
 
 
+## Task #11 — Share-link fullscreen one-slide presentation + real direct-download PDF
+
+Fixed the two long-standing rough edges in the one-time deck share
+viewer (`/share/deck/:token`) and authenticated print preview
+(`/deck/:id/print`):
+
+1. **Fullscreen now shows exactly one slide at a time**, 16:9
+   letterboxed on a black background, instead of the previous scrolled
+   stack (where the next slide was always peeking through the bottom).
+2. **"Save as PDF" downloads a real 1920×1080 landscape PDF directly**
+   for all 12 advanced templates, bypassing the browser's print dialog
+   (and the margins / headers / "where do you want to save" detour it
+   forced on users). No more `window.print()` for the advanced path.
+
+Mechanics:
+
+- **`frontend/src/lib/deckRasterPdf.js`** (new) — exports
+  `downloadRasterDeckPdf(deck, {stageEl, onProgress})`. Lazy-imports
+  `html2canvas` + `jspdf`, walks every `[data-slide-frame]` in the
+  live DOM, captures each at native 1920×1080 at 2× DPI, and assembles
+  a single landscape jsPDF document with one slide per page (zero
+  margins). The viewer applies `transform: scale()` on
+  `.deck-print-inner` to fit-to-width; the rasteriser uses html2canvas's
+  `onclone` hook to neutralise that transform on the cloned document
+  only (also resets `.deck-print-scaler`, `.deck-print-stage`,
+  `.deck-print-frames`, `[data-fullscreen-viewport]`,
+  `[data-fullscreen-track]`) so we always capture at native pixel size
+  regardless of viewport or fullscreen state. Output is JPEG @ 0.92
+  (visually indistinguishable from PNG on slide-grade content, ~6×
+  smaller on disk). Filename: `${slugified-title}-v${version}.pdf`.
+- **`frontend/src/pages/PitchDeckPrintPage.jsx`** — substantial refactor
+  with state isolated to the page so behaviour is identical for
+  share-mode and authenticated preview:
+  - New state: `currentIdx`, `slideCount`, `overlayVisible`,
+    `exportProgress`. `slideCount` is reported up from `PrintStage`
+    via a `MutationObserver` on the slide track so templates that emit
+    more slides than `deck.slides.length` (Series B's 32 vs the editor's
+    22, Sales Commercial's 18, etc.) still bound the keyboard nav
+    correctly.
+  - `toggleFullscreen()` now anchors `currentIdx` to the slide whose
+    rect-top is nearest the chrome line BEFORE requesting fullscreen,
+    so the user lands on the slide they were already reading instead
+    of slide 1.
+  - Keyboard listener branches on `document.fullscreenElement`: in
+    fullscreen it updates `currentIdx` (Arrow/Space/PageDown/Home/End,
+    plus `j`/`k`/`f`/`F`); outside fullscreen it keeps the legacy
+    `scrollIntoView` behaviour for the scrollable stack. Esc is the
+    native exit. Tab order untouched (`tabIndex={-1}`).
+  - Auto-hiding fullscreen overlay (`.opacity-0` after 2.5s mouse-idle,
+    re-shows on `mousemove`/`keydown`): bottom-left slide counter
+    `1 / N`, bottom-right `← → navigate · Esc to exit`.
+  - `exportPdf()` now calls `downloadRasterDeckPdf` for the advanced
+    path, exposes per-slide progress in the chrome ("Rendering slide
+    X of N…"), disables both chrome buttons while exporting, surfaces
+    failures via `window.alert()` (no `useToast` available on the
+    standalone share route — outside `ProtectedLayout`). Legacy
+    purple-card decks (no recognisable `method_id`) still use the
+    `@react-pdf/renderer` primitive path because they don't carry the
+    `data-slide-frame` contract at native 1920×1080.
+- **`PrintStage`** rewritten with two render modes selected by the new
+  `isFullscreen` prop. Both modes share the same `.deck-print-stage` /
+  `.deck-print-scaler` / `.deck-print-inner` / `.deck-print-frames`
+  class chain so the rasteriser onclone hook + the legacy `@media print`
+  rules behave identically. Fullscreen mode wraps the scaler in a
+  `[data-fullscreen-viewport]` clip with `overflow: hidden, width:
+  1920×s, height: 1080×s`, scales by `min(vw/1920, vh/1080)` so the
+  whole 16:9 frame is visible (letterboxed on the dominant axis), and
+  pages between slides via `transform: translateY(-currentIdx ×
+  1080px)` on `.deck-print-frames` (inside the scale wrapper, so the
+  native-px translate scales to exactly one screen-slide-height). 250ms
+  ease transition.
+- **Legacy `@media print` rules retained** for users who still hit
+  Ctrl/Cmd+P — the print stylesheet now also resets fullscreen-mode
+  inline styles (`position:static`, `transform:none`,
+  `[data-fullscreen-viewport]{overflow:visible}`) so the browser-print
+  fallback still produces the same one-page-per-slide 1920×1080 PDF
+  it always did.
+- **Dependencies**: `frontend/package.json` adds
+  `html2canvas@^1.4.1` and `jspdf@^4.2.1` (v4 chosen over v2 because
+  v2 transitively pinned a vulnerable `dompurify`; v4 dropped that
+  dep entirely — `npm audit --omit=dev --audit-level=high` reports
+  zero vulnerabilities). Both are lazy-loaded from
+  `deckRasterPdf.js` so the viewer's initial chunk stays at 32 KB
+  gzipped; the heavy libs (`html2canvas` 47 KB gzip, `jspdf.es.min`
+  127 KB gzip) only ship to users who actually click Save as PDF.
+
+Out of scope (per the task spec): server-side PDF rendering, PPTX
+export, editing-in-fullscreen, the legacy `@react-pdf/renderer` path
+for non-advanced decks, and any in-page scrollable preview changes.
+
+Verified: `node scripts/check-deck-templates.mjs` → `12 templates
+wired correctly`; `npx vite build` → clean build with new
+`html2canvas-*.js` and `jspdf.es.min-*.js` async chunks.
+
+
 ## Task #10 — Sales — Customer-facing: 18-slide enterprise-commercial upgrade
 
 Replaced the 15-slide simple `sales_commercial` template with an

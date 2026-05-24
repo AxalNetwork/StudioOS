@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { Download, Loader2, Maximize2, Minimize2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
+import { downloadRasterDeckPdf } from '../lib/deckRasterPdf';
 import ShareDeckCTA from '../components/ShareDeckCTA';
 
 // Task #25 — public viewer for an investor share link, plus an authenticated
@@ -261,9 +262,18 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
   const [deck, setDeck] = useState(null);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(null); // {current,total} | null
   const [Template, setTemplate] = useState(null);
   const [templateMeta, setTemplateMeta] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Task #11 — in fullscreen we render ONE slide at a time. `currentIdx`
+  // drives the translateY transform on the slide track; `slideCount`
+  // is reported up by PrintStage after first render so the keyboard
+  // listener and overlay readout know the bounds.
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [slideCount, setSlideCount] = useState(0);
+  const [overlayVisible, setOverlayVisible] = useState(true);
+  const overlayTimerRef = useRef(null);
   const viewIdRef = useRef(null);
   const startedAtRef = useRef(null);
   const stageRef = useRef(null);
@@ -334,21 +344,32 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
 
   // Task #6 — Fullscreen toggle. Uses the native Fullscreen API on the
   // root stage element so Esc exits, fullscreenchange flips state back
-  // (covers Esc + browser-button exits + cross-app focus loss).
+  // (covers Esc + browser-button exits + cross-app focus loss). Task #11
+  // anchors `currentIdx` to the slide nearest the scroll viewport when
+  // entering, so the user lands on the slide they were already reading.
   const toggleFullscreen = useCallback(async () => {
     try {
       if (document.fullscreenElement) {
         await document.exitFullscreen();
       } else if (stageRef.current && stageRef.current.requestFullscreen) {
-        await stageRef.current.requestFullscreen();
+        const root = stageRef.current;
+        const frames = Array.from(root.querySelectorAll('[data-slide-frame]'));
+        if (frames.length > 0) {
+          const anchor = 60;
+          let best = Infinity; let idx = 0;
+          frames.forEach((el, i) => {
+            const d = Math.abs(el.getBoundingClientRect().top - anchor);
+            if (d < best) { best = d; idx = i; }
+          });
+          setCurrentIdx(idx);
+        }
+        await root.requestFullscreen();
         // Task #15 — Safari/Firefox route keyboard events to the
         // fullscreen element first. Without an explicit focus the
         // stage is not the activeElement, so arrow keys can be
         // swallowed by the browser's default scroll handler before our
-        // document-level listener gets to preventDefault. tabIndex=-1
-        // on the stage div makes it programmatically focusable without
-        // entering the Tab order.
-        try { stageRef.current.focus({ preventScroll: true }); } catch { /* noop */ }
+        // document-level listener gets to preventDefault.
+        try { root.focus({ preventScroll: true }); } catch { /* noop */ }
       }
     } catch { /* user gesture missing / unsupported — silently ignore */ }
   }, []);
@@ -357,6 +378,26 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
+
+  // Task #11 — auto-hide the fullscreen overlay (slide counter +
+  // exit hint) after 2.5s of mouse-idle so the slide is the whole
+  // canvas. Any pointer move re-shows it briefly.
+  useEffect(() => {
+    if (!isFullscreen) { setOverlayVisible(true); return undefined; }
+    const ping = () => {
+      setOverlayVisible(true);
+      if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
+      overlayTimerRef.current = setTimeout(() => setOverlayVisible(false), 2500);
+    };
+    ping();
+    document.addEventListener('mousemove', ping);
+    document.addEventListener('keydown', ping);
+    return () => {
+      document.removeEventListener('mousemove', ping);
+      document.removeEventListener('keydown', ping);
+      if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
+    };
+  }, [isFullscreen]);
 
   // Task #11 — keyboard navigation. Works in both fullscreen and the
   // normal scroll-through view (same scroll-snap layout). Slides are
@@ -388,11 +429,27 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
         return;
       }
       const frames = Array.from(root.querySelectorAll('[data-slide-frame]'));
-      if (frames.length === 0) return;
+      const total = frames.length;
+      if (total === 0) return;
       e.preventDefault();
+
+      // Task #11 — in fullscreen we drive the single-slide viewer
+      // through `currentIdx`; outside fullscreen we keep the legacy
+      // scroll-anchored behaviour for the scrollable stack.
+      if (document.fullscreenElement) {
+        setCurrentIdx((cur) => {
+          if (isNext) return Math.min(total - 1, cur + 1);
+          if (isPrev) return Math.max(0, cur - 1);
+          if (isHome) return 0;
+          if (isEnd) return total - 1;
+          return cur;
+        });
+        return;
+      }
+
       // Sticky chrome occupies ~56px when not fullscreen; treat the
       // slide whose top is closest to that line as the current one.
-      const anchor = document.fullscreenElement ? 0 : 60;
+      const anchor = 60;
       let curIdx = 0;
       let best = Infinity;
       frames.forEach((el, i) => {
@@ -400,10 +457,10 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
         if (d < best) { best = d; curIdx = i; }
       });
       let target = curIdx;
-      if (isNext) target = Math.min(frames.length - 1, curIdx + 1);
+      if (isNext) target = Math.min(total - 1, curIdx + 1);
       else if (isPrev) target = Math.max(0, curIdx - 1);
       else if (isHome) target = 0;
-      else if (isEnd) target = frames.length - 1;
+      else if (isEnd) target = total - 1;
       if (target === curIdx && !isHome && !isEnd) return;
       frames[target].scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
@@ -419,17 +476,34 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
   const exportPdf = async () => {
     if (!deck) return;
     setExporting(true);
+    setExportProgress(null);
     try {
-      // For advanced graphical templates we use the browser's native
-      // print pipeline so the rendered SVG + custom typography survive
-      // intact. The @react-pdf/renderer path can't reproduce the
-      // custom illustrations.
+      // Task #11 — Advanced templates now rasterise each
+      // `[data-slide-frame]` at native 1920×1080 via html2canvas and
+      // assemble a real landscape PDF with jsPDF, bypassing the
+      // browser's print dialog (and its margins/headers). Legacy
+      // purple-card decks (no method_id) still use the @react-pdf
+      // primitive path because they don't carry the data-slide-frame
+      // contract at native size.
       if (isAdvanced) {
-        window.print();
+        if (!stageRef.current) throw new Error('Stage not ready');
+        await downloadRasterDeckPdf(deck, {
+          stageEl: stageRef.current,
+          onProgress: (p) => setExportProgress(p),
+        });
       } else {
         await downloadDeckPdf(deck);
       }
-    } finally { setExporting(false); }
+    } catch (e) {
+      // Surface a user-visible error so the click never silently fails.
+      // alert() is the only modal-free option on the standalone share
+      // route (no ProtectedLayout / toast container).
+      try { window.alert(`PDF export failed: ${e?.message || 'unknown error'}`); } catch { /* noop */ }
+      console.error('PitchDeckPrintPage: exportPdf failed', e);
+    } finally {
+      setExporting(false);
+      setExportProgress(null);
+    }
   };
 
   if (error) return (
@@ -468,10 +542,15 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
     <div className="deck-print-chrome sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
       <div className="text-sm text-gray-700 font-medium truncate">{deck.title || 'Pitch deck'} · v{deck.version}</div>
       <div className="flex items-center gap-2">
+        {exporting && exportProgress && (
+          <div className="text-xs text-gray-600 tabular-nums hidden sm:block">
+            Rendering slide {exportProgress.current} of {exportProgress.total}…
+          </div>
+        )}
         <button
-          type="button" onClick={toggleFullscreen}
-          title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
-          className="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg"
+          type="button" onClick={toggleFullscreen} disabled={exporting}
+          title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen (f)'}
+          className="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg disabled:opacity-50"
         >
           {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           <span className="hidden sm:inline">{isFullscreen ? 'Exit' : 'Fullscreen'}</span>
@@ -481,7 +560,7 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
           className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50"
         >
           {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-          Save as PDF
+          {exporting ? 'Exporting…' : 'Save as PDF'}
         </button>
       </div>
     </div>
@@ -490,29 +569,52 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
   // Advanced — render the actual template scaled to fit.
   if (isAdvanced) {
     return (
-      <div ref={stageRef} tabIndex={-1} className="bg-gray-100 min-h-screen outline-none">
-        {/* Print-time rules — fit one Slide16x9 per A4 landscape page,
-            kill margins, hide screen-only chrome. Fullscreen-time rules
-            black out the page background and hide the sticky header so
-            only the slides show. */}
+      <div
+        ref={stageRef}
+        tabIndex={-1}
+        className={`outline-none ${isFullscreen ? 'relative bg-black w-screen h-screen' : 'bg-gray-100 min-h-screen'}`}
+      >
+        {/* Print-time rules kept for the legacy Ctrl/Cmd+P pathway —
+            users who still hit the browser shortcut get a clean
+            1920×1080 page-per-slide PDF without margins or headers.
+            The primary "Save as PDF" button now drives the html2canvas
+            + jsPDF rasteriser instead. Task #11. */}
         <style>{`
           @page { size: 1920px 1080px; margin: 0; }
           @media print {
             html, body { background: #FFFFFF !important; margin: 0 !important; padding: 0 !important; }
             .deck-print-chrome { display: none !important; }
             .deck-print-cta { display: none !important; }
-            .deck-print-stage { background: #FFFFFF !important; padding: 0 !important; width: 1920px !important; }
-            .deck-print-scaler { width: 1920px !important; margin: 0 !important; }
+            .deck-print-stage { background: #FFFFFF !important; padding: 0 !important; width: 1920px !important; position: static !important; inset: auto !important; display: block !important; }
+            .deck-print-scaler { width: 1920px !important; margin: 0 !important; transform: none !important; }
             .deck-print-inner { transform: none !important; width: 1920px !important; }
-            .deck-print-frames { gap: 0 !important; }
+            .deck-print-frames { gap: 0 !important; transform: none !important; }
+            [data-fullscreen-viewport] { width: 1920px !important; height: auto !important; overflow: visible !important; }
           }
           :fullscreen .deck-print-chrome { display: none !important; }
-          :fullscreen { background: #000 !important; overflow-y: auto; }
-          :fullscreen .deck-print-stage { background: #000 !important; }
+          :fullscreen { background: #000 !important; }
         `}</style>
-        {Header}
-        <PrintStage Template={Template} data={templateData} />
-        {cta && <div className="deck-print-cta">{cta}</div>}
+        {!isFullscreen && Header}
+        <PrintStage
+          Template={Template}
+          data={templateData}
+          isFullscreen={isFullscreen}
+          currentIdx={currentIdx}
+          onSlideCount={setSlideCount}
+        />
+        {!isFullscreen && cta && <div className="deck-print-cta">{cta}</div>}
+        {isFullscreen && slideCount > 0 && (
+          <div
+            className={`pointer-events-none fixed inset-x-0 bottom-0 z-20 flex items-end justify-between p-6 transition-opacity duration-300 ${overlayVisible ? 'opacity-100' : 'opacity-0'}`}
+          >
+            <div className="pointer-events-auto rounded-lg bg-black/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur tabular-nums">
+              {Math.min(currentIdx + 1, slideCount)} / {slideCount}
+            </div>
+            <div className="pointer-events-auto rounded-lg bg-black/60 px-3 py-1.5 text-xs text-white backdrop-blur">
+              ← → navigate · Esc to exit
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -552,26 +654,112 @@ export default function PitchDeckPrintPage({ shareMode = false }) {
   );
 }
 
-// Width-fitted scaler for the 1920×1080 Slide16x9 stack. ResizeObserver
-// updates `scale` so the rendered deck fills the available width on
-// any viewport. Each slide gets its own scroll-snap target so investors
-// can paginate by mouse wheel / arrow key the same way the editor's
-// PreviewStage does.
-function PrintStage({ Template, data }) {
+// Scaler for the 1920×1080 Slide16x9 stack.
+//
+// NORMAL mode (Task #25): ResizeObserver fits the deck to the
+// available width; slides stack vertically with a gap so investors can
+// scroll-through the deck the same way the editor's PreviewStage does.
+//
+// FULLSCREEN mode (Task #11): single-slide letterboxed presentation.
+// Scale = min(vw/1920, vh/1080) so the whole 16:9 slide fits the
+// viewport with black bars on the dominant axis. A `translateY` on
+// the slide-track (`.deck-print-frames`) pages between slides, and
+// the outer viewport clips with `overflow: hidden` so neighbouring
+// slides never peek through.
+function PrintStage({ Template, data, isFullscreen, currentIdx, onSlideCount }) {
   const outerRef = useRef(null);
+  const innerRef = useRef(null);
   const [scale, setScale] = useState(0.5);
+
   useEffect(() => {
     const el = outerRef.current;
     if (!el) return undefined;
     const update = () => {
       const w = el.clientWidth;
-      if (w > 0) setScale(Math.min(1, w / INNER_W));
+      const h = el.clientHeight;
+      if (w <= 0) return;
+      // Fullscreen → fit-both so the whole 16:9 frame is visible.
+      // Normal   → fit-width so we still get the scroll-through stack.
+      const next = isFullscreen
+        ? Math.min(w / INNER_W, h / INNER_H)
+        : Math.min(1, w / INNER_W);
+      if (next > 0) setScale(next);
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [isFullscreen]);
+
+  // Count real DOM frames after each render so the parent's keyboard
+  // listener and overlay readout know how many slides the template
+  // actually emitted (some templates emit more slides than
+  // deck.slides.length — Series B has 32 vs the editor's 22).
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return undefined;
+    const count = () => {
+      const n = el.querySelectorAll('[data-slide-frame]').length;
+      if (n > 0) onSlideCount?.(n);
+    };
+    count();
+    const mo = new MutationObserver(count);
+    mo.observe(el, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, [Template, data, onSlideCount]);
+
+  if (isFullscreen) {
+    return (
+      <div
+        ref={outerRef}
+        className="deck-print-stage"
+        style={{
+          position: 'absolute', inset: 0, background: '#000',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          data-fullscreen-viewport
+          style={{
+            width: INNER_W * scale,
+            height: INNER_H * scale,
+            overflow: 'hidden',
+            position: 'relative',
+          }}
+        >
+          <div
+            className="deck-print-scaler"
+            style={{ width: INNER_W, height: INNER_H, position: 'relative' }}
+          >
+            <div
+              ref={innerRef}
+              className="deck-print-inner"
+              style={{
+                width: INNER_W,
+                transform: `scale(${scale})`,
+                transformOrigin: 'top left',
+              }}
+            >
+              <div
+                data-fullscreen-track
+                className="deck-print-frames"
+                style={{
+                  display: 'flex', flexDirection: 'column', gap: 0,
+                  transform: `translateY(${-currentIdx * INNER_H}px)`,
+                  transition: 'transform 0.25s ease',
+                  willChange: 'transform',
+                }}
+              >
+                <Template data={data || {}} editable={false} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div ref={outerRef} className="deck-print-stage" style={{ width: '100%', padding: 16 }}>
       <div
@@ -583,6 +771,7 @@ function PrintStage({ Template, data }) {
         }}
       >
         <div
+          ref={innerRef}
           className="deck-print-inner"
           style={{
             width: INNER_W,
@@ -590,23 +779,11 @@ function PrintStage({ Template, data }) {
             transformOrigin: 'top left',
           }}
         >
-          <TemplateFrames Template={Template} data={data} />
+          <div className="deck-print-frames" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <Template data={data || {}} editable={false} />
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-// Renders Template(data). The template returns a React fragment of
-// Slide16x9 children; each Slide16x9 already sets
-// pageBreakAfter:'always' inline, so the @media print rules above
-// hand us one fixed-size frame per page without any per-child wrapping
-// here. On screen, the gap pushes slides apart for scroll-through
-// review.
-function TemplateFrames({ Template, data }) {
-  return (
-    <div className="deck-print-frames" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <Template data={data || {}} editable={false} />
     </div>
   );
 }
