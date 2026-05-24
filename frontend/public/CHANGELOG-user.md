@@ -8,6 +8,12 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Fixed: Investor + Appendix and Narrative — Brand-led previews
+
+The picker and preview pane were showing a red "Failed to render" card
+instead of the slides for these two templates. Both now render their
+full sample decks again.
+
 ## May 2026
 
 - The **Narrative — Brand-led** pitch-deck template was rebuilt as a

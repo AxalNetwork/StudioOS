@@ -5,6 +5,8 @@ import { SAMPLE_DATA as SERIES_B_APP_SAMPLE } from './templates/series_b_diligen
 import { SAMPLE_DATA as DEMO_DAY_APP_SAMPLE } from './templates/demo_day_app';
 import { SAMPLE_DATA as PARTNERSHIP_BD_APP_SAMPLE } from './templates/partnership_bd_app';
 import { SAMPLE_DATA as SALES_COMMERCIAL_APP_SAMPLE } from './templates/sales_commercial_app';
+import { SAMPLE_DATA as INVESTOR_APPENDIX_APP_SAMPLE } from './templates/investor_appendix_app';
+import { SAMPLE_DATA as NARRATIVE_BRAND_APP_SAMPLE } from './templates/narrative_brand_app';
 
 // Base preview sample used by the existing 11 templates. Keeps the
 // historical *string* shapes for `milestones`, `roadmap`, and
@@ -430,6 +432,22 @@ export function previewDataFor(templateKey: string): DeckData {
   // SAMPLE_PREVIEW_DATA does not carry.
   if (templateKey === 'sales_commercial') {
     return SALES_COMMERCIAL_APP_SAMPLE as unknown as DeckData;
+  }
+  // Investor + Appendix (Task #12) — 42-slide editorial template that
+  // reads deeply nested shapes (`company.{name,tagline}`, `traction.*`,
+  // `appendix.*`, `financial_statements`, etc.) which SAMPLE_PREVIEW_DATA
+  // does not carry. Falling back to the generic preview dict caused
+  // mergeShape to overwrite the template's own SAMPLE_DATA with the
+  // wrong-shape values and crash the Thumbnail boundary with
+  // "Failed to render investor_appendix".
+  if (templateKey === 'investor_appendix') {
+    return INVESTOR_APPENDIX_APP_SAMPLE as unknown as DeckData;
+  }
+  // Narrative — Brand-led (Task #13) — same story: nested `brand.*`,
+  // `world.*`, `belief.*`, `solution.*`, `future.*` shapes are clobbered
+  // by SAMPLE_PREVIEW_DATA's top-level strings, crashing the renderer.
+  if (templateKey === 'narrative_brand') {
+    return NARRATIVE_BRAND_APP_SAMPLE as unknown as DeckData;
   }
   return SAMPLE_PREVIEW_DATA;
 }

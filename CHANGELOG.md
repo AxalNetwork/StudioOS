@@ -11,6 +11,19 @@
 > building it.
 
 
+## Fix — `previewDataFor` fallback crashed `investor_appendix` + `narrative_brand` thumbnails
+
+- `frontend/src/decks/sample.ts::previewDataFor()` had no explicit branch
+  for `investor_appendix` or `narrative_brand`, so both templates fell
+  back to `SAMPLE_PREVIEW_DATA`. That dict carries top-level *strings*
+  for `company` / `team` / etc., which `mergeShape` then clobbered over
+  each template's nested `SAMPLE_DATA` shapes (`company.{name,tagline}`,
+  `team.members[]`, …). First slide that dereferenced `d.company.name`
+  threw, the Thumbnail boundary surfaced "Failed to render investor_appendix".
+- Added explicit branches returning each template's exported
+  `SAMPLE_DATA` (same pattern as `series_a_growth_app`,
+  `partnership_bd_app`, `sales_commercial_app`). Build clean.
+
 ## Task #13 — Narrative — Brand-led: cinematic 4-act upgrade
 
 - **Replaces** the old 14-slide big-type `Deck_narrative_brand` stub with
