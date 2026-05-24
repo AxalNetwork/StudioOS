@@ -36,29 +36,33 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import type { DeckProps } from '../DeckBase';
+import { Slide16x9 } from '../DeckBase';
 
 /* ─────────────────────────── variant tokens ─────────────────────────── */
 
+// Axal brand: violet (`#7c3aed` / `#8b5cf6` / `#a78bfa`). All four
+// variants pivot around these accents so the Spin-Out deck visually
+// belongs in the same family as the rest of the app.
 const PALETTES = {
   editorial: {
-    bg: '#F7F2E8', surface: '#FFFFFF', ink: '#1A1814', inkSoft: '#3A352C',
-    muted: '#7A7268', accent: '#B8431E', accentSoft: '#F2D9CB', rule: '#E5DCC9',
-    chip: '#EBE1CC', good: '#3F6650', warn: '#B68A2E',
+    bg: '#FAF7FF', surface: '#FFFFFF', ink: '#1B1430', inkSoft: '#3B2D5C',
+    muted: '#7A6E94', accent: '#7C3AED', accentSoft: '#EDE4FF', rule: '#E6DCFC',
+    chip: '#F0E8FF', good: '#3F6650', warn: '#B68A2E',
   },
   product_first: {
-    bg: '#0B0B10', surface: '#15151D', ink: '#F5F4F0', inkSoft: '#C9C6BE',
-    muted: '#7E7A72', accent: '#FF7A45', accentSoft: '#3A1F14', rule: '#26262F',
-    chip: '#1E1E27', good: '#7EC596', warn: '#F0C36A',
+    bg: '#0B0916', surface: '#15112A', ink: '#F5F2FF', inkSoft: '#CBC1E8',
+    muted: '#7E76A0', accent: '#A78BFA', accentSoft: '#1F1542', rule: '#241A45',
+    chip: '#1E1638', good: '#7EC596', warn: '#F0C36A',
   },
   data_dense: {
-    bg: '#F1F3F5', surface: '#FFFFFF', ink: '#0F172A', inkSoft: '#334155',
-    muted: '#64748B', accent: '#0E5FBF', accentSoft: '#D8E6F6', rule: '#D8DEE5',
-    chip: '#E2E8EE', good: '#107E5C', warn: '#A26200',
+    bg: '#F4F2FA', surface: '#FFFFFF', ink: '#1B1233', inkSoft: '#3A2D5A',
+    muted: '#6B5F88', accent: '#6D28D9', accentSoft: '#E0D5F5', rule: '#D8CFEC',
+    chip: '#E5DCF5', good: '#107E5C', warn: '#A26200',
   },
   manifesto: {
-    bg: '#0A0A0C', surface: '#141416', ink: '#FFF8EC', inkSoft: '#D9D1BF',
-    muted: '#7A7368', accent: '#FF4D17', accentSoft: '#3A1808', rule: '#20201F',
-    chip: '#1A1A1C', good: '#9DDDA8', warn: '#FFD06A',
+    bg: '#0A0716', surface: '#14102A', ink: '#FFFAFF', inkSoft: '#D9D0F0',
+    muted: '#7A709A', accent: '#C4B5FD', accentSoft: '#241152', rule: '#1F1840',
+    chip: '#1A1432', good: '#9DDDA8', warn: '#FFD06A',
   },
 } as const;
 
@@ -254,29 +258,214 @@ function mergeShape<T>(base: T, incoming: unknown): T {
 /* ─────────────────────────── hydrate ─────────────────────────── */
 
 /**
- * Walk every `axal_spinout_section_*` key in `data`, JSON-parse it, and
- * merge onto SAMPLE_DATA. The worker writes one such key per top-level
- * section; slide 0 additionally carries `meta`. Unknown / unparseable
- * keys are silently skipped so a bad payload degrades gracefully.
+ * Read flat per-field keys from `data` and rebuild the nested
+ * SpinoutDemoDayData shape. Field keys are emitted by the worker
+ * (`buildAxalSpinoutDemoDaySlides()` in
+ * `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`) and
+ * flow through `buildTemplateData()` in `PitchDeckPrintPage.jsx`,
+ * which flattens slide fields into one top-level dict.
+ *
+ * Text and bullet fields are read directly as strings / string[].
+ * Complex object arrays (validation quotes, team founders, cap-table
+ * holders, axal-signal lab weeks) ride as a single JSON-encoded
+ * paragraph field with a `_json` suffix — these are populated by
+ * Lab data and aren't meant to be hand-edited in the deck builder.
+ *
+ * Backwards-compatible: also reads the legacy
+ * `axal_spinout_section_<name>` JSON-paragraph keys so decks created
+ * before this rewrite continue to render.
  */
-function hydrate(raw: unknown): SpinoutDemoDayData {
-  let out: SpinoutDemoDayData = SAMPLE_DATA;
-  if (!raw || typeof raw !== 'object') return out;
-  const dict = raw as Record<string, unknown>;
-  for (const k of Object.keys(dict)) {
-    if (!k.startsWith('axal_spinout_section_')) continue;
-    const section = k.slice('axal_spinout_section_'.length);
-    if (!(section in out)) continue;
-    const v = dict[k];
-    let parsed: unknown = v;
-    if (typeof v === 'string') {
-      try { parsed = JSON.parse(v); } catch { continue; }
-    }
-    const baseSlice = (out as Record<string, unknown>)[section];
-    const merged = mergeShape(baseSlice, parsed);
-    out = { ...out, [section]: merged } as SpinoutDemoDayData;
+const asStr = (v: unknown, fallback: string): string => {
+  if (v == null) return fallback;
+  const s = typeof v === 'string' ? v : String(v);
+  const t = s.trim();
+  return t ? t : fallback;
+};
+const asBool = (v: unknown): boolean => {
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v !== 0;
+  const s = String(v ?? '').trim().toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes';
+};
+const asArr = (v: unknown): string[] => {
+  if (Array.isArray(v)) return v.map((x) => String(x ?? '').trim()).filter(Boolean);
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (!s) return [];
+    return s.split(/\n+/).map((x) => x.replace(/^[-•·\s]+/, '').trim()).filter(Boolean);
   }
-  return out;
+  return [];
+};
+const asMetricGrid = (v: unknown): Array<{ label: string; value: string; sub?: string }> => {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x): x is Record<string, unknown> => !!x && typeof x === 'object')
+    .map((x) => ({
+      label: String(x.label ?? '').trim(),
+      value: String(x.value ?? '').trim() || DASH,
+      sub: x.sub != null ? String(x.sub).trim() : undefined,
+    }))
+    .filter((x) => x.label);
+};
+const parseJsonField = <T,>(v: unknown, fallback: T): T => {
+  if (v == null || v === '') return fallback;
+  if (typeof v === 'object') return v as T;
+  if (typeof v !== 'string') return fallback;
+  try {
+    const j = JSON.parse(v);
+    return j == null ? fallback : (j as T);
+  } catch { return fallback; }
+};
+
+function hydrate(raw: unknown): SpinoutDemoDayData {
+  const base = SAMPLE_DATA;
+  if (!raw || typeof raw !== 'object') return base;
+  const d = raw as Record<string, unknown>;
+
+  // Legacy support — if any axal_spinout_section_* key is present, fall
+  // back to the original JSON-encoded merge path.
+  const hasLegacy = Object.keys(d).some((k) => k.startsWith('axal_spinout_section_'));
+  if (hasLegacy) {
+    let out: SpinoutDemoDayData = base;
+    for (const k of Object.keys(d)) {
+      if (!k.startsWith('axal_spinout_section_')) continue;
+      const section = k.slice('axal_spinout_section_'.length);
+      if (!(section in out)) continue;
+      const v = d[k];
+      let parsed: unknown = v;
+      if (typeof v === 'string') {
+        try { parsed = JSON.parse(v); } catch { continue; }
+      }
+      const baseSlice = (out as Record<string, unknown>)[section];
+      const merged = mergeShape(baseSlice, parsed);
+      out = { ...out, [section]: merged } as SpinoutDemoDayData;
+    }
+    return out;
+  }
+
+  // Flat-field path (new).
+  const meta = parseJsonField<Partial<SpinoutDemoDayData['meta']>>(d.meta_json, {});
+
+  const asUseOfFunds = (v: unknown): FundUse[] => {
+    const grid = asMetricGrid(v);
+    return grid.map((c) => {
+      const raw = String(c.value).replace('%', '').trim();
+      const pct = Number(raw);
+      return { label: c.label, pct: isFinite(pct) ? pct : 0 };
+    }).filter((x) => x.pct > 0);
+  };
+
+  return {
+    meta: { ...base.meta, ...meta },
+    cover: {
+      eyebrow: asStr(d.cover_eyebrow, base.cover.eyebrow),
+      headline: asStr(d.cover_headline, base.cover.headline),
+      sub: asStr(d.cover_sub, base.cover.sub),
+      location: asStr(d.cover_location, base.cover.location),
+    },
+    problem: {
+      eyebrow: asStr(d.problem_eyebrow, base.problem.eyebrow),
+      headline: asStr(d.problem_headline, base.problem.headline),
+      body: asStr(d.problem_body, base.problem.body),
+      signals: asArr(d.problem_signals),
+    },
+    validation: {
+      eyebrow: asStr(d.validation_eyebrow, base.validation.eyebrow),
+      headline: asStr(d.validation_headline, base.validation.headline),
+      body: asStr(d.validation_body, base.validation.body),
+      metrics: (() => {
+        const g = asMetricGrid(d.validation_metrics);
+        return g.length > 0 ? g : base.validation.metrics;
+      })(),
+      quotes: parseJsonField<SpinoutDemoDayData['validation']['quotes']>(d.validation_quotes_json, []),
+    },
+    market: {
+      eyebrow: asStr(d.market_eyebrow, base.market.eyebrow),
+      headline: asStr(d.market_headline, base.market.headline),
+      tam: asStr(d.market_tam, base.market.tam),
+      sam: asStr(d.market_sam, base.market.sam),
+      som: asStr(d.market_som, base.market.som),
+      why_now: asArr(d.market_why_now),
+    },
+    solution: {
+      eyebrow: asStr(d.solution_eyebrow, base.solution.eyebrow),
+      headline: asStr(d.solution_headline, base.solution.headline),
+      body: asStr(d.solution_body, base.solution.body),
+      capabilities: asArr(d.solution_capabilities),
+    },
+    roadmap: {
+      eyebrow: asStr(d.roadmap_eyebrow, base.roadmap.eyebrow),
+      headline: asStr(d.roadmap_headline, base.roadmap.headline),
+      quarter: asStr(d.roadmap_quarter, base.roadmap.quarter),
+      now: asArr(d.roadmap_now),
+      next: asArr(d.roadmap_next),
+      later: asArr(d.roadmap_later),
+    },
+    brand: (() => {
+      const status = parseJsonField<{ brand_kit_ready?: boolean; pitch_deck_ready?: boolean; incorporated?: boolean }>(d.brand_status_json, {});
+      return {
+        eyebrow: asStr(d.brand_eyebrow, base.brand.eyebrow),
+        headline: asStr(d.brand_headline, base.brand.headline),
+        tagline: asStr(d.brand_tagline, base.brand.tagline),
+        vision: asStr(d.brand_vision, base.brand.vision),
+        brand_kit_ready: asBool(status.brand_kit_ready ?? d.brand_kit_ready),
+        pitch_deck_ready: asBool(status.pitch_deck_ready ?? d.brand_pitch_deck_ready),
+        incorporated: asBool(status.incorporated ?? d.brand_incorporated),
+      };
+    })(),
+    venture_readiness: {
+      eyebrow: asStr(d.vr_eyebrow, base.venture_readiness.eyebrow),
+      headline: asStr(d.vr_headline, base.venture_readiness.headline),
+      total_score: asStr(d.vr_total_score, base.venture_readiness.total_score),
+      tier: asStr(d.vr_tier, base.venture_readiness.tier),
+      is_sandbox: asBool(d.vr_sandbox),
+      breakdown: asMetricGrid(d.vr_breakdown).map((c) => ({ label: c.label, value: c.value })),
+      ai_notes: asStr(d.vr_ai_notes, base.venture_readiness.ai_notes),
+    },
+    team: {
+      eyebrow: asStr(d.team_eyebrow, base.team.eyebrow),
+      headline: asStr(d.team_headline, base.team.headline),
+      founders: parseJsonField<Founder[]>(d.team_founders_json, []),
+      team_intro: asStr(d.team_intro, base.team.team_intro),
+    },
+    mentor_network: {
+      eyebrow: asStr(d.mn_eyebrow, base.mentor_network.eyebrow),
+      headline: asStr(d.mn_headline, base.mentor_network.headline),
+      body: asStr(d.mn_body, base.mentor_network.body),
+      mentors: asArr(d.mn_mentors),
+      network_signals: asArr(d.mn_network_signals),
+    },
+    cap_table: {
+      eyebrow: asStr(d.ct_eyebrow, base.cap_table.eyebrow),
+      headline: asStr(d.ct_headline, base.cap_table.headline),
+      holders: parseJsonField<Holder[]>(d.ct_holders_json, []),
+      note: asStr(d.ct_note, base.cap_table.note),
+    },
+    ask: {
+      eyebrow: asStr(d.ask_eyebrow, base.ask.eyebrow),
+      headline: asStr(d.ask_headline, base.ask.headline),
+      raise_amount: asStr(d.ask_raise_amount, base.ask.raise_amount),
+      runway: asStr(d.ask_runway, base.ask.runway),
+      use_of_funds: asUseOfFunds(d.ask_use_of_funds),
+      next_milestones: (() => {
+        const a = asArr(d.ask_next_milestones);
+        return a.length > 0 ? a : base.ask.next_milestones;
+      })(),
+    },
+    axal_signal: {
+      eyebrow: asStr(d.as_eyebrow, base.axal_signal.eyebrow),
+      headline: asStr(d.as_headline, base.axal_signal.headline),
+      body: asStr(d.as_body, base.axal_signal.body),
+      lab_weeks: parseJsonField<LabWeek[]>(d.as_lab_weeks_json, []),
+    },
+    contact: {
+      eyebrow: asStr(d.contact_eyebrow, base.contact.eyebrow),
+      headline: asStr(d.contact_headline, base.contact.headline),
+      body: asStr(d.contact_body, base.contact.body),
+      contact_email: asStr(d.contact_email, base.contact.contact_email),
+      signoff: asStr(d.contact_signoff, base.contact.signoff),
+    },
+  };
 }
 
 /* ─────────────────────────── variant context ─────────────────────────── */
@@ -421,14 +610,20 @@ const VariantSwitcher: React.FC = () => {
 
 /* ─────────────────────────── 14 slides ─────────────────────────── */
 
-const SlideShell: React.FC<{ children: React.ReactNode; pad?: number }> = ({ children, pad = 72 }) => {
-  const { pal } = useVariant();
+// 1920×1080 sibling frame — same primitive as sequoia_classic /
+// investor_appendix_app so the print/share/export pipelines (which
+// scroll-snap on `[data-slide-frame]`) treat each Axal slide as a
+// first-class page break.
+const SlideShell: React.FC<{ children: React.ReactNode; pad?: number }> = ({ children, pad = 96 }) => {
+  const { pal, fonts } = useVariant();
   return (
-    <div style={{
-      width: '100%', height: '100%', background: pal.bg,
-      padding: pad, boxSizing: 'border-box', overflow: 'hidden',
-      display: 'flex', flexDirection: 'column',
-    }}>{children}</div>
+    <Slide16x9 bg={pal.bg} ink={pal.ink} font={fonts.body} className="">
+      <div style={{
+        width: '100%', height: '100%', boxSizing: 'border-box',
+        padding: pad - 96 /* compensate for Slide16x9's own padding of 96 */,
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}>{children}</div>
+    </Slide16x9>
   );
 };
 
@@ -839,13 +1034,9 @@ const SLIDES: SlideEntry[] = [
 
 /* ─────────────────────────── root deck ─────────────────────────── */
 
-const SlideStage: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div style={{
-    position: 'relative', width: '100%', aspectRatio: '16 / 9',
-    background: '#000', borderRadius: 12, overflow: 'hidden',
-  }}>{children}</div>
-);
-
+// Renders all 14 Slide16x9 frames stacked — matches sequoia_classic /
+// investor_appendix_app, so the picker thumbnail, modal preview, share
+// view and PDF export all work with a single scroll surface.
 const DeckRoot: React.FC<DeckProps> = (props) => {
   const data = useMemo(() => hydrate(props.data), [props.data]);
   const editable = !!(props as unknown as { editable?: boolean }).editable;
@@ -864,53 +1055,21 @@ const DeckRoot: React.FC<DeckProps> = (props) => {
     try { window.localStorage?.setItem(VARIANT_KEY, v); } catch { /* swallow */ }
   };
 
-  const [index, setIndex] = useState(0);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); setIndex((i) => Math.min(SLIDES.length - 1, i + 1)); }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); setIndex((i) => Math.max(0, i - 1)); }
-      else if (e.key === 'Home') { e.preventDefault(); setIndex(0); }
-      else if (e.key === 'End') { e.preventDefault(); setIndex(SLIDES.length - 1); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
   const pal = PALETTES[variant];
   const fonts = FONTS[variant];
   const ctx: VariantCtx = { variant, setVariant, pal, fonts, editable };
 
-  const Active = SLIDES[index].Component;
-
   return (
     <VariantContext.Provider value={ctx}>
-      <div style={{ width: '100%', maxWidth: 1280, margin: '0 auto', padding: 16, color: pal.ink }}>
-        <SlideStage>
-          {editable && <VariantSwitcher />}
-          <Active d={data} />
-        </SlideStage>
-        <div style={{
-          marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          fontFamily: fonts.mono, fontSize: 12, color: pal.muted,
-        }}>
-          <div>{index + 1} / {SLIDES.length} · {SLIDES[index].title}</div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {SLIDES.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                aria-label={`Go to slide ${i + 1}`}
-                onClick={() => setIndex(i)}
-                style={{
-                  width: 8, height: 8, borderRadius: 999, border: 'none',
-                  background: i === index ? pal.accent : pal.rule, cursor: 'pointer',
-                }}
-              />
-            ))}
-          </div>
-          <div>← / → / Home / End</div>
+      {editable && (
+        <div style={{ position: 'relative', height: 0 }}>
+          <VariantSwitcher />
         </div>
-      </div>
+      )}
+      {SLIDES.map((s) => {
+        const C = s.Component;
+        return <C key={s.id} d={data} />;
+      })}
     </VariantContext.Provider>
   );
 };

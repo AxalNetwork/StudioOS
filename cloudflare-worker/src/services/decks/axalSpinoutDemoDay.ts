@@ -708,29 +708,24 @@ export async function fillAxalSpinoutDemoDay(
 
 /**
  * Build the 14 slides written to `pitch_decks.slides`. Each slide
- * carries one JSON-encoded paragraph field keyed
- * `axal_spinout_section_<name>`; slide 0 also carries `meta`.
+ * carries a small set of *typed* flat fields the editor can render as
+ * real text inputs / bullet lists / metric grids — no more raw JSON
+ * blobs in the author surface.
  *
- * The adapter's `hydrate()` walks these keys, parses each JSON, and
- * merges onto SAMPLE_DATA via `mergeShape()`.
+ * Field-key map mirrors the adapter's `hydrate()` in
+ * `frontend/src/decks/templates/axal_spinout_demoday_app.tsx`.
+ * Complex object arrays (validation quotes, team founders, cap-table
+ * holders, axal-signal lab weeks) still ride as one JSON-encoded
+ * paragraph with a `_json` suffix — these are populated by Lab data
+ * and aren't meant to be hand-edited from the deck builder.
  */
 export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<Record<string, unknown>> {
-  // Per-section JSON size cap. The paragraph-field write path elsewhere
-  // in the worker caps values at ~4 KiB; we previously naively did
-  // `JSON.stringify(obj).slice(0, 3900)` which can chop a JSON payload
-  // mid-object and break hydrate()'s JSON.parse. Instead we encode once,
-  // and if oversized, walk the section recursively trimming the longest
-  // string fields / array tails until the encoded payload fits. The
-  // result is always valid JSON.
   const MAX_BYTES = 3900;
   const trimDeep = (val: unknown): unknown => {
     if (typeof val === 'string') {
       return val.length > 400 ? val.slice(0, 397) + '…' : val;
     }
-    if (Array.isArray(val)) {
-      // cap arrays at 8 entries and trim every entry recursively
-      return val.slice(0, 8).map(trimDeep);
-    }
+    if (Array.isArray(val)) return val.slice(0, 8).map(trimDeep);
     if (val && typeof val === 'object') {
       const out: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(val)) out[k] = trimDeep(v);
@@ -738,53 +733,193 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
     }
     return val;
   };
-  const enc = (obj: unknown): string => {
+  const encJson = (obj: unknown): string => {
     const first = JSON.stringify(obj);
     if (first.length <= MAX_BYTES) return first;
     const second = JSON.stringify(trimDeep(obj));
     if (second.length <= MAX_BYTES) return second;
-    // Last-resort: keep the shape but blank out the payload so hydrate
-    // merges nothing rather than crashing on a truncated parse.
-    return JSON.stringify({});
+    return JSON.stringify(Array.isArray(obj) ? [] : {});
   };
+
   const para = (key: string, value: string) => ({ kind: 'paragraph', key, value });
+  const bullets = (key: string, value: string[]) => ({ kind: 'bullets', key, value });
+  const metrics = (key: string, value: Array<{ label: string; value: string; sub?: string }>) =>
+    ({ kind: 'metric_grid', key, value });
+  const json = (key: string, value: unknown) => para(key, encJson(value));
 
-  const SPEC = [
-    { spec_id: 'cover', section: 'cover', title: 'Cover' },
-    { spec_id: 'problem', section: 'problem', title: 'Problem' },
-    { spec_id: 'validation', section: 'validation', title: 'Validation' },
-    { spec_id: 'market', section: 'market', title: 'Market' },
-    { spec_id: 'solution', section: 'solution', title: 'Solution' },
-    { spec_id: 'roadmap', section: 'roadmap', title: 'Roadmap' },
-    { spec_id: 'brand', section: 'brand', title: 'Brand' },
-    { spec_id: 'venture_readiness', section: 'venture_readiness', title: 'Venture readiness' },
-    { spec_id: 'team', section: 'team', title: 'Team' },
-    { spec_id: 'mentor_network', section: 'mentor_network', title: 'Mentors & network' },
-    { spec_id: 'cap_table', section: 'cap_table', title: 'Cap table' },
-    { spec_id: 'ask', section: 'ask', title: 'Ask' },
-    { spec_id: 'axal_signal', section: 'axal_signal', title: 'Axal signal' },
-    { spec_id: 'contact', section: 'contact', title: 'Contact' },
-  ] as const;
+  const m = data.meta;
+  const c = data.cover;
+  const p = data.problem;
+  const v = data.validation;
+  const mk = data.market;
+  const s = data.solution;
+  const r = data.roadmap;
+  const b = data.brand;
+  const vr = data.venture_readiness;
+  const t = data.team;
+  const mn = data.mentor_network;
+  const ct = data.cap_table;
+  const ask = data.ask;
+  const as = data.axal_signal;
+  const ctc = data.contact;
 
-  return SPEC.map((s, i) => {
-    const sectionPayload = (data as any)[s.section];
-    const fields: Array<Record<string, unknown>> = [
-      para(`axal_spinout_section_${s.section}`, enc(sectionPayload)),
-    ];
-    // Slide 0 carries the deck-wide meta envelope.
-    if (i === 0) {
-      fields.push(para('axal_spinout_section_meta', enc(data.meta)));
-    }
-    return {
-      title: s.title,
-      subtitle: null,
-      spec_id: s.spec_id,
-      appendix: false,
-      method_id: 'axal_spinout_demoday',
-      fields,
-      body: '',
-      bullets: [],
-      image_url: null,
-    };
-  });
+  const SLIDES: Array<{ spec_id: string; title: string; fields: Array<Record<string, unknown>> }> = [
+    {
+      spec_id: 'cover', title: 'Cover',
+      fields: [
+        para('cover_eyebrow', c.eyebrow),
+        para('cover_headline', c.headline),
+        para('cover_sub', c.sub),
+        para('cover_location', c.location),
+        // Deck-wide envelope lives on slide 0.
+        json('meta_json', m),
+      ],
+    },
+    {
+      spec_id: 'problem', title: 'Problem',
+      fields: [
+        para('problem_eyebrow', p.eyebrow),
+        para('problem_headline', p.headline),
+        para('problem_body', p.body),
+        bullets('problem_signals', p.signals),
+      ],
+    },
+    {
+      spec_id: 'validation', title: 'Validation',
+      fields: [
+        para('validation_eyebrow', v.eyebrow),
+        para('validation_headline', v.headline),
+        para('validation_body', v.body),
+        metrics('validation_metrics', v.metrics),
+        json('validation_quotes_json', v.quotes),
+      ],
+    },
+    {
+      spec_id: 'market', title: 'Market',
+      fields: [
+        para('market_eyebrow', mk.eyebrow),
+        para('market_headline', mk.headline),
+        para('market_tam', mk.tam),
+        para('market_sam', mk.sam),
+        para('market_som', mk.som),
+        bullets('market_why_now', mk.why_now),
+      ],
+    },
+    {
+      spec_id: 'solution', title: 'Solution',
+      fields: [
+        para('solution_eyebrow', s.eyebrow),
+        para('solution_headline', s.headline),
+        para('solution_body', s.body),
+        bullets('solution_capabilities', s.capabilities),
+      ],
+    },
+    {
+      spec_id: 'roadmap', title: 'Roadmap',
+      fields: [
+        para('roadmap_eyebrow', r.eyebrow),
+        para('roadmap_headline', r.headline),
+        para('roadmap_quarter', r.quarter),
+        bullets('roadmap_now', r.now),
+        bullets('roadmap_next', r.next),
+        bullets('roadmap_later', r.later),
+      ],
+    },
+    {
+      spec_id: 'brand', title: 'Brand',
+      fields: [
+        para('brand_eyebrow', b.eyebrow),
+        para('brand_headline', b.headline),
+        para('brand_tagline', b.tagline),
+        para('brand_vision', b.vision),
+        json('brand_status_json', {
+          brand_kit_ready: b.brand_kit_ready,
+          pitch_deck_ready: b.pitch_deck_ready,
+          incorporated: b.incorporated,
+        }),
+      ],
+    },
+    {
+      spec_id: 'venture_readiness', title: 'Venture readiness',
+      fields: [
+        para('vr_eyebrow', vr.eyebrow),
+        para('vr_headline', vr.headline),
+        para('vr_total_score', vr.total_score),
+        para('vr_tier', vr.tier),
+        para('vr_sandbox', vr.is_sandbox ? 'true' : 'false'),
+        metrics('vr_breakdown', vr.breakdown.map((x) => ({ label: x.label, value: x.value }))),
+        para('vr_ai_notes', vr.ai_notes),
+      ],
+    },
+    {
+      spec_id: 'team', title: 'Team',
+      fields: [
+        para('team_eyebrow', t.eyebrow),
+        para('team_headline', t.headline),
+        para('team_intro', t.team_intro),
+        json('team_founders_json', t.founders),
+      ],
+    },
+    {
+      spec_id: 'mentor_network', title: 'Mentors & network',
+      fields: [
+        para('mn_eyebrow', mn.eyebrow),
+        para('mn_headline', mn.headline),
+        para('mn_body', mn.body),
+        bullets('mn_mentors', mn.mentors),
+        bullets('mn_network_signals', mn.network_signals),
+      ],
+    },
+    {
+      spec_id: 'cap_table', title: 'Cap table',
+      fields: [
+        para('ct_eyebrow', ct.eyebrow),
+        para('ct_headline', ct.headline),
+        para('ct_note', ct.note),
+        json('ct_holders_json', ct.holders),
+      ],
+    },
+    {
+      spec_id: 'ask', title: 'Ask',
+      fields: [
+        para('ask_eyebrow', ask.eyebrow),
+        para('ask_headline', ask.headline),
+        para('ask_raise_amount', ask.raise_amount),
+        para('ask_runway', ask.runway),
+        metrics('ask_use_of_funds', ask.use_of_funds.map((u) => ({ label: u.label, value: `${u.pct}%` }))),
+        bullets('ask_next_milestones', ask.next_milestones.filter((x) => x && x !== DASH)),
+      ],
+    },
+    {
+      spec_id: 'axal_signal', title: 'Axal signal',
+      fields: [
+        para('as_eyebrow', as.eyebrow),
+        para('as_headline', as.headline),
+        para('as_body', as.body),
+        json('as_lab_weeks_json', as.lab_weeks),
+      ],
+    },
+    {
+      spec_id: 'contact', title: 'Contact',
+      fields: [
+        para('contact_eyebrow', ctc.eyebrow),
+        para('contact_headline', ctc.headline),
+        para('contact_body', ctc.body),
+        para('contact_email', ctc.contact_email),
+        para('contact_signoff', ctc.signoff),
+      ],
+    },
+  ];
+
+  return SLIDES.map((sl) => ({
+    title: sl.title,
+    subtitle: null,
+    spec_id: sl.spec_id,
+    appendix: false,
+    method_id: 'axal_spinout_demoday',
+    fields: sl.fields,
+    body: '',
+    bullets: [],
+    image_url: null,
+  }));
 }

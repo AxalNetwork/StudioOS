@@ -7,6 +7,7 @@ import { SAMPLE_DATA as PARTNERSHIP_BD_APP_SAMPLE } from './templates/partnershi
 import { SAMPLE_DATA as SALES_COMMERCIAL_APP_SAMPLE } from './templates/sales_commercial_app';
 import { SAMPLE_DATA as INVESTOR_APPENDIX_APP_SAMPLE } from './templates/investor_appendix_app';
 import { SAMPLE_DATA as NARRATIVE_BRAND_APP_SAMPLE } from './templates/narrative_brand_app';
+import { SAMPLE_DATA as AXAL_SPINOUT_APP_SAMPLE } from './templates/axal_spinout_demoday_app';
 
 // Base preview sample used by the existing 11 templates. Keeps the
 // historical *string* shapes for `milestones`, `roadmap`, and
@@ -448,6 +449,15 @@ export function previewDataFor(templateKey: string): DeckData {
   // by SAMPLE_PREVIEW_DATA's top-level strings, crashing the renderer.
   if (templateKey === 'narrative_brand') {
     return NARRATIVE_BRAND_APP_SAMPLE as unknown as DeckData;
+  }
+  // Axal VC Spin-Out (Task #15) — reads deeply nested shapes
+  // (`cover.*`, `validation.metrics[]`, `axal_signal.lab_weeks[]`,
+  // etc.). The generic SAMPLE_PREVIEW_DATA would crash hydrate's
+  // typed-field path; return the template's own SAMPLE_DATA so the
+  // picker thumbnail and preview modal render the canonical sample
+  // deck.
+  if (templateKey === 'axal_spinout_demoday') {
+    return AXAL_SPINOUT_APP_SAMPLE as unknown as DeckData;
   }
   return SAMPLE_PREVIEW_DATA;
 }

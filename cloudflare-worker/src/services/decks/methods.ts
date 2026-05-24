@@ -793,24 +793,109 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     ai_fill_hint: 'Honesty over polish. If a number is missing, leave the em-dash placeholder so the founder sees what to fill in.',
     // Spec-required 14-slide sequence: Cover · Problem · Validation ·
     // Market · Solution · Roadmap · Brand · Venture Readiness · Team ·
-    // Mentor+Network · Cap Table · Ask · Axal Signal · Contact. The
-    // entries below are informational — autofill is special-cased in
-    // routes/decks.ts.
+    // Mentor+Network · Cap Table · Ask · Axal Signal · Contact.
+    // Field keys mirror buildAxalSpinoutDemoDaySlides() so the editor
+    // renders real text/bullet/metric-grid inputs (not raw JSON).
     slides: [
-      { id: 'cover',             title: 'Cover',              fields: [f.title('cover_headline', [])] },
-      { id: 'problem',           title: 'Problem',            fields: [f.title('problem_headline', [])] },
-      { id: 'validation',        title: 'Validation',         fields: [f.title('validation_headline', [])] },
-      { id: 'market',            title: 'Market',             fields: [f.title('market_headline', [])] },
-      { id: 'solution',          title: 'Solution',           fields: [f.title('solution_headline', [])] },
-      { id: 'roadmap',           title: 'Roadmap',            fields: [f.title('roadmap_headline', [])] },
-      { id: 'brand',             title: 'Brand',              fields: [f.title('brand_headline', [])] },
-      { id: 'venture_readiness', title: 'Venture readiness',  fields: [f.title('venture_readiness_headline', [])] },
-      { id: 'team',              title: 'Team',               fields: [f.title('team_headline', [])] },
-      { id: 'mentor_network',    title: 'Mentors & network',  fields: [f.title('mentor_network_headline', [])] },
-      { id: 'cap_table',         title: 'Cap table',          fields: [f.title('cap_table_headline', [])] },
-      { id: 'ask',               title: 'Ask',                fields: [f.title('ask_headline', [])] },
-      { id: 'axal_signal',       title: 'Axal signal',        fields: [f.title('axal_signal_headline', [])] },
-      { id: 'contact',           title: 'Contact',            fields: [f.title('contact_headline', [])] },
+      { id: 'cover', title: 'Cover', fields: [
+        f.para('cover_eyebrow', 'Eyebrow', []),
+        f.para('cover_headline', 'Headline', []),
+        f.para('cover_sub', 'Sub-line', []),
+        f.para('cover_location', 'Location', []),
+        // Deck-wide envelope (project name, founder, week, etc.) — JSON-only.
+        f.para('meta_json', 'Meta (JSON, do not edit)', []),
+      ] },
+      { id: 'problem', title: 'Problem', fields: [
+        f.para('problem_eyebrow', 'Eyebrow', []),
+        f.para('problem_headline', 'Headline', []),
+        f.para('problem_body', 'Problem statement', []),
+        f.bullets('problem_signals', 'Growth signals', []),
+      ] },
+      { id: 'validation', title: 'Validation', fields: [
+        f.para('validation_eyebrow', 'Eyebrow', []),
+        f.para('validation_headline', 'Headline', []),
+        f.para('validation_body', 'Why now', []),
+        f.metrics('validation_metrics', 'Interviews / pains / hypotheses', []),
+        f.para('validation_quotes_json', 'Discovery quotes (JSON, from Lab)', []),
+      ] },
+      { id: 'market', title: 'Market', fields: [
+        f.para('market_eyebrow', 'Eyebrow', []),
+        f.para('market_headline', 'Headline', []),
+        f.para('market_tam', 'TAM', []),
+        f.para('market_sam', 'SAM', []),
+        f.para('market_som', 'SOM', []),
+        f.bullets('market_why_now', 'Why now', []),
+      ] },
+      { id: 'solution', title: 'Solution', fields: [
+        f.para('solution_eyebrow', 'Eyebrow', []),
+        f.para('solution_headline', 'Headline', []),
+        f.para('solution_body', 'Solution body', []),
+        f.bullets('solution_capabilities', 'Capabilities', []),
+      ] },
+      { id: 'roadmap', title: 'Roadmap', fields: [
+        f.para('roadmap_eyebrow', 'Eyebrow', []),
+        f.para('roadmap_headline', 'Headline', []),
+        f.para('roadmap_quarter', 'Quarter', []),
+        f.bullets('roadmap_now', 'Now', []),
+        f.bullets('roadmap_next', 'Next', []),
+        f.bullets('roadmap_later', 'Later', []),
+      ] },
+      { id: 'brand', title: 'Brand', fields: [
+        f.para('brand_eyebrow', 'Eyebrow', []),
+        f.para('brand_headline', 'Headline', []),
+        f.para('brand_tagline', 'Tagline', []),
+        f.para('brand_vision', 'Vision', []),
+        f.para('brand_status_json', 'Readiness flags (JSON, from Lab)', []),
+      ] },
+      { id: 'venture_readiness', title: 'Venture readiness', fields: [
+        f.para('vr_eyebrow', 'Eyebrow', []),
+        f.para('vr_headline', 'Headline', []),
+        f.para('vr_total_score', 'Total score', []),
+        f.para('vr_tier', 'Tier', []),
+        f.para('vr_sandbox', 'Sandbox flag (true / false)', []),
+        f.metrics('vr_breakdown', 'Sub-scores', []),
+        f.para('vr_ai_notes', 'AI notes', []),
+      ] },
+      { id: 'team', title: 'Team', fields: [
+        f.para('team_eyebrow', 'Eyebrow', []),
+        f.para('team_headline', 'Headline', []),
+        f.para('team_intro', 'Team intro', []),
+        f.para('team_founders_json', 'Founders (JSON, from Lab)', []),
+      ] },
+      { id: 'mentor_network', title: 'Mentors & network', fields: [
+        f.para('mn_eyebrow', 'Eyebrow', []),
+        f.title('mn_headline', []),
+        f.para('mn_body', 'Body', []),
+        f.bullets('mn_mentors', 'Mentors', []),
+        f.bullets('mn_network_signals', 'Network signals', []),
+      ] },
+      { id: 'cap_table', title: 'Cap table', fields: [
+        f.para('ct_eyebrow', 'Eyebrow', []),
+        f.para('ct_headline', 'Headline', []),
+        f.para('ct_note', 'Footnote', []),
+        f.para('ct_holders_json', 'Holders (JSON, from Lab)', []),
+      ] },
+      { id: 'ask', title: 'Ask', fields: [
+        f.para('ask_eyebrow', 'Eyebrow', []),
+        f.para('ask_headline', 'Headline', []),
+        f.para('ask_raise_amount', 'Raise amount', []),
+        f.para('ask_runway', 'Runway', []),
+        f.metrics('ask_use_of_funds', 'Use of funds', []),
+        f.bullets('ask_next_milestones', 'Next milestones', []),
+      ] },
+      { id: 'axal_signal', title: 'Axal signal', fields: [
+        f.para('as_eyebrow', 'Eyebrow', []),
+        f.para('as_headline', 'Headline', []),
+        f.para('as_body', 'Body', []),
+        f.para('as_lab_weeks_json', 'Lab weeks (JSON, from Lab)', []),
+      ] },
+      { id: 'contact', title: 'Contact', fields: [
+        f.para('contact_eyebrow', 'Eyebrow', []),
+        f.para('contact_headline', 'Headline', []),
+        f.para('contact_body', 'Body', []),
+        f.para('contact_email', 'Contact email', []),
+        f.para('contact_signoff', 'Signoff', []),
+      ] },
     ],
   },
 ];
