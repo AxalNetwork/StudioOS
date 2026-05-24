@@ -213,6 +213,14 @@ const fmtUSD = (n?: number) => {
 };
 const fmtNum = (n?: number) => (n == null || isNaN(n) ? '—' : n.toLocaleString());
 const fmtPct = (n?: number) => (n == null || isNaN(n) ? '—' : `${n}%`);
+// Defensive uppercaser for share-rendered data: founder-supplied items may omit
+// a stringy field (e.g. `quarter`, `phase`, `kind`); never crash the share-link
+// tree — degrade to a neutral placeholder instead.
+const safeUpper = (v: unknown, fallback = '—'): string => {
+  if (v == null) return fallback;
+  const s = typeof v === 'string' ? v : String(v);
+  return s.length ? s.toUpperCase() : fallback;
+};
 
 const Editable: React.FC<{
   value?: string; path: string; editable?: boolean; onEdit?: (p: string, v: string) => void;
@@ -622,7 +630,7 @@ const ArchitectureRack: React.FC<{ layers: { layer: string; nodes: string[] }[] 
           <g key={i}>
             <rect x="10" y={y} width="180" height={layerH} rx="8" fill={INK} />
             <text x="100" y={y + layerH / 2 + 5} textAnchor="middle" fontSize="13" fontWeight={700} fill="#FFFFFF" fontFamily={FONT_MONO} letterSpacing="2">
-              {L.layer.toUpperCase()}
+              {safeUpper(L.layer)}
             </text>
             {L.nodes.map((n, j) => (
               <g key={j}>
@@ -663,7 +671,7 @@ const Slide1Vision: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => (
             { l: 'Current ARR', v: fmtUSD(data.arr_usd) },
           ].map((s, i) => (
             <Card key={i}>
-              <div style={{ fontSize: 10, letterSpacing: 2, color: SUBTLE, fontFamily: FONT_MONO }}>{s.l.toUpperCase()}</div>
+              <div style={{ fontSize: 10, letterSpacing: 2, color: SUBTLE, fontFamily: FONT_MONO }}>{safeUpper(s.l)}</div>
               <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4, color: i === 1 ? ACCENT : INK }}>{s.v}</div>
             </Card>
           ))}
@@ -862,7 +870,7 @@ const Slide4Opportunity: React.FC<DeckProps> = ({ data = {}, editable, onEdit })
                   <div className="flex items-center justify-between text-sm">
                     <span style={{ fontWeight: 600, color: INK }}>{e.name}</span>
                     <span style={{ fontFamily: FONT_MONO, color: SUBTLE }}>
-                      {fmtUSD(e.tam_usd)} · <span style={{ color: e.phase === 'now' ? POSITIVE : e.phase === 'next' ? ACCENT : FAINT, fontWeight: 700 }}>{e.phase.toUpperCase()}</span>
+                      {fmtUSD(e.tam_usd)} · <span style={{ color: e.phase === 'now' ? POSITIVE : e.phase === 'next' ? ACCENT : FAINT, fontWeight: 700 }}>{safeUpper(e.phase)}</span>
                     </span>
                   </div>
                   <div className="mt-1 h-1.5 rounded-full" style={{ background: SURFACE_2 }}>
@@ -905,7 +913,7 @@ const Slide5Platform: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) =>
         <div className="col-span-4 grid grid-rows-3 gap-3">
           {metrics.slice(0, 3).map((m, i) => (
             <Card key={i}>
-              <div style={{ fontSize: 10, color: SUBTLE, letterSpacing: 2, fontFamily: FONT_MONO }}>{m.label.toUpperCase()}</div>
+              <div style={{ fontSize: 10, color: SUBTLE, letterSpacing: 2, fontFamily: FONT_MONO }}>{safeUpper(m.label)}</div>
               <div style={{ fontSize: 'clamp(28px, 2.8vw, 44px)', fontWeight: 900, letterSpacing: -1, color: ACCENT, marginTop: 6, lineHeight: 1 }}>{m.value}</div>
               {m.sublabel && <div style={{ fontSize: 12, color: FAINT, marginTop: 6 }}>{m.sublabel}</div>}
             </Card>
@@ -936,7 +944,7 @@ const Slide6TechStack: React.FC<DeckProps> = ({ data = {} }) => {
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, background: ACCENT, color: '#FFFFFF', fontWeight: 800, fontSize: 12, fontFamily: FONT_MONO }}>
                 {String(i + 1).padStart(2, '0')}
               </span>
-              <div style={{ fontSize: 14, letterSpacing: 2, color: ACCENT, fontWeight: 800, fontFamily: FONT_MONO }}>{s.layer.toUpperCase()}</div>
+              <div style={{ fontSize: 14, letterSpacing: 2, color: ACCENT, fontWeight: 800, fontFamily: FONT_MONO }}>{safeUpper(s.layer)}</div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {s.components.map((c, j) => (
@@ -988,7 +996,7 @@ const Slide7Innovation: React.FC<DeckProps> = ({ data = {} }) => {
             <div className="grid grid-cols-2 gap-3">
               {ip.slice(0, 4).map((s, i) => (
                 <div key={i} className="p-3 rounded-lg" style={{ background: SURFACE, border: `1px solid ${HAIRLINE}` }}>
-                  <div style={{ fontSize: 10, letterSpacing: 1.5, color: SUBTLE, fontFamily: FONT_MONO }}>{s.label.toUpperCase()}</div>
+                  <div style={{ fontSize: 10, letterSpacing: 1.5, color: SUBTLE, fontFamily: FONT_MONO }}>{safeUpper(s.label)}</div>
                   <div style={{ fontSize: 32, fontWeight: 900, color: INK, marginTop: 4, lineHeight: 1 }}>{s.v}</div>
                   {s.sublabel && <div style={{ fontSize: 11, color: FAINT, marginTop: 4 }}>{s.sublabel}</div>}
                 </div>
@@ -1568,7 +1576,7 @@ const Slide17Competition: React.FC<DeckProps> = ({ data = {} }) => {
                 <thead>
                   <tr style={{ background: SURFACE_2, color: SUBTLE, fontFamily: FONT_MONO, letterSpacing: 1.5 }}>
                     {['Name', 'Product', 'Pricing', 'Scale', 'Verdict'].map((h) => (
-                      <th key={h} className="px-3 py-2 text-left" style={{ fontWeight: 700, fontSize: 10 }}>{h.toUpperCase()}</th>
+                      <th key={h} className="px-3 py-2 text-left" style={{ fontWeight: 700, fontSize: 10 }}>{safeUpper(h)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1619,7 +1627,7 @@ const Slide18Moat: React.FC<DeckProps> = ({ data = {} }) => {
             <Card key={i}>
               <div className="flex items-center justify-between">
                 <div>
-                  <div style={{ fontSize: 11, letterSpacing: 2, color: ACCENT, fontWeight: 800, fontFamily: FONT_MONO }}>0{i + 1} · {m.kind.toUpperCase()}</div>
+                  <div style={{ fontSize: 11, letterSpacing: 2, color: ACCENT, fontWeight: 800, fontFamily: FONT_MONO }}>0{i + 1} · {safeUpper(m.kind)}</div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: INK, marginTop: 4 }}>{m.title}</div>
                   <div style={{ fontSize: 13, color: SUBTLE, marginTop: 4 }}>{m.body}</div>
                 </div>
@@ -1717,12 +1725,12 @@ const Slide20Team: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
                 <div key={i} className="p-3 rounded-lg" style={{ background: SURFACE, border: `1px solid ${HAIRLINE}` }}>
                   <div className="flex items-center gap-3">
                     <div style={{ width: 40, height: 40, borderRadius: 10, background: ACCENT, color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, fontFamily: FONT_MONO }}>
-                      {l.initials || l.name.slice(0, 2).toUpperCase()}
+                      {l.initials || safeUpper(l.name?.slice(0, 2))}
                     </div>
                     <div>
                       <Editable as="div" value={l.name} path={`leaders.${i}.name`} editable={editable} onEdit={onEdit}
                         style={{ fontSize: 13, fontWeight: 700, color: INK, lineHeight: 1.1 }} />
-                      <div style={{ fontSize: 10, color: ACCENT, fontFamily: FONT_MONO, marginTop: 2, letterSpacing: 1 }}>{l.role.toUpperCase()}</div>
+                      <div style={{ fontSize: 10, color: ACCENT, fontFamily: FONT_MONO, marginTop: 2, letterSpacing: 1 }}>{safeUpper(l.role)}</div>
                     </div>
                   </div>
                   <div style={{ fontSize: 12, color: SUBTLE, marginTop: 8, lineHeight: 1.45 }}>{l.bio}</div>
@@ -1783,7 +1791,7 @@ const Slide21Ops: React.FC<DeckProps> = ({ data = {} }) => {
       <div className="mt-5 grid grid-cols-3 gap-3">
         {kpis.slice(0, 6).map((k, i) => (
           <Card key={i}>
-            <div style={{ fontSize: 10, letterSpacing: 2, color: SUBTLE, fontFamily: FONT_MONO }}>{k.label.toUpperCase()}</div>
+            <div style={{ fontSize: 10, letterSpacing: 2, color: SUBTLE, fontFamily: FONT_MONO }}>{safeUpper(k.label)}</div>
             <div className="flex items-baseline justify-between mt-2">
               <div style={{ fontSize: 'clamp(26px, 2.6vw, 40px)', fontWeight: 900, color: INK, letterSpacing: -1, lineHeight: 1 }}>{k.value}</div>
               {k.target && (
@@ -1882,7 +1890,7 @@ const Slide22Fundraise: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) 
                 {milestones.slice(0, 4).map((m, i) => (
                   <div key={i} className="relative pt-7">
                     <span className="absolute left-1/2 -translate-x-1/2 top-1 w-3 h-3 rounded-full" style={{ background: ACCENT_2 }} />
-                    <div style={{ fontSize: 10, color: ACCENT_2, letterSpacing: 2, fontFamily: FONT_MONO, fontWeight: 700, textAlign: 'center' }}>{m.quarter.toUpperCase()}</div>
+                    <div style={{ fontSize: 10, color: ACCENT_2, letterSpacing: 2, fontFamily: FONT_MONO, fontWeight: 700, textAlign: 'center' }}>{safeUpper(m.quarter)}</div>
                     <div style={{ fontSize: 12, color: PAPER, marginTop: 4, textAlign: 'center', lineHeight: 1.3 }}>{m.goal}</div>
                     {m.metric && <div style={{ fontSize: 11, color: ACCENT_2, marginTop: 2, textAlign: 'center', fontFamily: FONT_MONO, fontWeight: 700 }}>{m.metric}</div>}
                   </div>
@@ -1913,7 +1921,7 @@ const Slide22Fundraise: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) 
               {scenarios.map((s, i) => (
                 <div key={i} className="p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <div className="flex justify-between items-baseline">
-                    <span style={{ fontSize: 12, color: '#94A3B8', fontFamily: FONT_MONO, letterSpacing: 2 }}>{s.case.toUpperCase()}</span>
+                    <span style={{ fontSize: 12, color: '#94A3B8', fontFamily: FONT_MONO, letterSpacing: 2 }}>{safeUpper(s.case)}</span>
                     <span style={{ fontSize: 14, color: ACCENT_2, fontWeight: 800, fontFamily: FONT_MONO }}>{s.multiple}</span>
                   </div>
                   <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4, color: PAPER }}>{fmtUSD(s.arr_y3)} ARR</div>
@@ -2079,7 +2087,7 @@ const A3Segmentation: React.FC<DeckProps> = ({ data = {} }) => {
           { l: 'SMB',        d: smb, color: ACCENT_3 },
         ].map((s, i) => (
           <Card key={i} style={{ borderColor: s.color }}>
-            <div style={{ fontSize: 12, letterSpacing: 3, color: s.color, fontWeight: 800, fontFamily: FONT_MONO }}>{s.l.toUpperCase()}</div>
+            <div style={{ fontSize: 12, letterSpacing: 3, color: s.color, fontWeight: 800, fontFamily: FONT_MONO }}>{safeUpper(s.l)}</div>
             <div style={{ fontSize: 32, fontWeight: 900, color: INK, marginTop: 6 }}>{fmtNum(s.d.count)}</div>
             <div className="mt-2 grid grid-cols-3 gap-2">
               <div>
@@ -2105,7 +2113,7 @@ const A3Segmentation: React.FC<DeckProps> = ({ data = {} }) => {
               <thead>
                 <tr style={{ background: SURFACE_2, color: SUBTLE, fontFamily: FONT_MONO, letterSpacing: 1.5 }}>
                   {['Region', 'Customers', 'ARR', 'Share'].map((h) => (
-                    <th key={h} className="px-4 py-2 text-left" style={{ fontWeight: 700, fontSize: 10 }}>{h.toUpperCase()}</th>
+                    <th key={h} className="px-4 py-2 text-left" style={{ fontWeight: 700, fontSize: 10 }}>{safeUpper(h)}</th>
                   ))}
                 </tr>
               </thead>
@@ -2146,7 +2154,7 @@ const A4Funnel: React.FC<DeckProps> = ({ data = {} }) => {
             <thead>
               <tr style={{ background: SURFACE_2, color: SUBTLE, fontFamily: FONT_MONO, letterSpacing: 1.5 }}>
                 {['Stage', 'Volume', 'Conversion', 'Avg cycle (days)'].map((h) => (
-                  <th key={h} className="px-4 py-2 text-left" style={{ fontWeight: 700, fontSize: 10 }}>{h.toUpperCase()}</th>
+                  <th key={h} className="px-4 py-2 text-left" style={{ fontWeight: 700, fontSize: 10 }}>{safeUpper(h)}</th>
                 ))}
               </tr>
             </thead>
@@ -2195,7 +2203,7 @@ const A5Pricing: React.FC<DeckProps> = ({ data = {} }) => {
         {plans.map((p, i) => (
           <Card key={i} accent={i === 1}>
             <div style={{ fontSize: 11, letterSpacing: 3, color: i === 1 ? 'rgba(255,255,255,0.85)' : ACCENT, fontWeight: 800, fontFamily: FONT_MONO }}>
-              {p.name.toUpperCase()}
+              {safeUpper(p.name)}
             </div>
             <div style={{ fontSize: 22, fontWeight: 900, marginTop: 6 }}>{p.price}</div>
             <div style={{ fontSize: 12, marginTop: 4, color: i === 1 ? 'rgba(255,255,255,0.85)' : SUBTLE }}>Seats {p.seats} · {p.target}</div>
@@ -2305,7 +2313,7 @@ const A7Security: React.FC<DeckProps> = ({ data = {} }) => {
         </div>
         <div className="col-span-8 grid grid-cols-2 gap-3">
           {controls.map((c, i) => (
-            <Card key={i} title={c.area.toUpperCase()}>
+            <Card key={i} title={safeUpper(c.area)}>
               <ul className="mt-1 space-y-1.5">
                 {c.items.map((it, j) => (
                   <li key={j} className="flex items-start gap-2" style={{ fontSize: 13, color: INK }}>
@@ -2340,14 +2348,14 @@ const A8Risks: React.FC<DeckProps> = ({ data = {} }) => {
             <thead>
               <tr style={{ background: SURFACE_2, color: SUBTLE, fontFamily: FONT_MONO, letterSpacing: 1.5 }}>
                 {['Category', 'Risk', 'Mitigation', 'Severity'].map((h) => (
-                  <th key={h} className="px-4 py-2 text-left" style={{ fontWeight: 700, fontSize: 10 }}>{h.toUpperCase()}</th>
+                  <th key={h} className="px-4 py-2 text-left" style={{ fontWeight: 700, fontSize: 10 }}>{safeUpper(h)}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {risks.map((r, i) => (
                 <tr key={i} style={{ background: i % 2 ? SURFACE : '#FFFFFF', borderTop: `1px solid ${HAIRLINE}` }}>
-                  <td className="px-4 py-2" style={{ fontFamily: FONT_MONO, letterSpacing: 1.5, color: ACCENT, fontWeight: 700, fontSize: 11 }}>{r.category.toUpperCase()}</td>
+                  <td className="px-4 py-2" style={{ fontFamily: FONT_MONO, letterSpacing: 1.5, color: ACCENT, fontWeight: 700, fontSize: 11 }}>{safeUpper(r.category)}</td>
                   <td className="px-4 py-2" style={{ fontWeight: 700, color: INK }}>{r.title}</td>
                   <td className="px-4 py-2" style={{ color: SUBTLE }}>{r.mitigation}</td>
                   <td className="px-4 py-2">
@@ -2393,11 +2401,11 @@ const A9Governance: React.FC<DeckProps> = ({ data = {} }) => {
               {board.slice(0, 6).map((b, i) => (
                 <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg" style={{ background: SURFACE, border: `1px solid ${HAIRLINE}` }}>
                   <div style={{ width: 36, height: 36, borderRadius: 8, background: ACCENT, color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, fontFamily: FONT_MONO }}>
-                    {b.initials || b.name.slice(0, 2).toUpperCase()}
+                    {b.initials || safeUpper(b.name?.slice(0, 2))}
                   </div>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>{b.name}</div>
-                    <div style={{ fontSize: 11, color: SUBTLE, fontFamily: FONT_MONO, letterSpacing: 1 }}>{b.role.toUpperCase()} · {b.affiliation?.toUpperCase()}</div>
+                    <div style={{ fontSize: 11, color: SUBTLE, fontFamily: FONT_MONO, letterSpacing: 1 }}>{safeUpper(b.role)} · {safeUpper(b.affiliation)}</div>
                   </div>
                 </div>
               ))}
@@ -2410,7 +2418,7 @@ const A9Governance: React.FC<DeckProps> = ({ data = {} }) => {
               {investors.map((iv, i) => (
                 <li key={i}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>{iv.name}</div>
-                  <div style={{ fontSize: 11, color: ACCENT, fontFamily: FONT_MONO, letterSpacing: 1.5 }}>{iv.round.toUpperCase()}</div>
+                  <div style={{ fontSize: 11, color: ACCENT, fontFamily: FONT_MONO, letterSpacing: 1.5 }}>{safeUpper(iv.round)}</div>
                 </li>
               ))}
             </ul>

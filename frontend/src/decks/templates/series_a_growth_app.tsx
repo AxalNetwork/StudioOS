@@ -1598,7 +1598,7 @@ const Slide15Ask: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
                   <div key={i} className="relative pt-7">
                     <span className="absolute left-1/2 -translate-x-1/2 top-1 w-3 h-3 rounded-full" style={{ background: ACCENT }} />
                     <div style={{ fontSize: 10, color: '#A5B4FC', letterSpacing: 2, fontFamily: FONT_MONO, fontWeight: 700, textAlign: 'center' }}>
-                      {m.quarter.toUpperCase()}
+                      {(m.quarter ?? '—').toString().toUpperCase() || '—'}
                     </div>
                     <div style={{ fontSize: 13, color: PAPER, marginTop: 4, textAlign: 'center', lineHeight: 1.3 }}>
                       {m.goal}

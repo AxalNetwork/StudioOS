@@ -1324,7 +1324,7 @@ const Slide6Ask: React.FC<SlideProps> = ({ data = {}, editable, onEdit }) => {
                       fontFamily: FONT_MONO,
                     }}
                   >
-                    {r.quarter.toUpperCase()}
+                    {(r.quarter ?? '—').toString().toUpperCase() || '—'}
                   </div>
                   <Editable
                     value={r.goal}
