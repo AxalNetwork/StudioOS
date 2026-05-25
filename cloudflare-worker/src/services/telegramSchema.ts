@@ -17,6 +17,20 @@ export async function ensureTelegramSchema(env: Env): Promise<void> {
     await env.DB.exec(
       "CREATE INDEX IF NOT EXISTS idx_telegram_channels_audience ON telegram_channels(audience, enabled)",
     );
+    // Lazy ALTER for per-channel author signature appended at send time.
+    // Same PRAGMA pattern as ensureAdvisorWeekColumn / ensureMarketIntelSchema.
+    try {
+      const cols = await env.DB.prepare("PRAGMA table_info('telegram_channels')").all<{ name: string }>();
+      const hasSig = (cols.results || []).some((c) => String(c.name) === 'signature');
+      if (!hasSig) {
+        await env.DB.exec("ALTER TABLE telegram_channels ADD COLUMN signature TEXT");
+        // Backfill default for the canonical seeded rows so existing posts
+        // immediately render the human signature.
+        await env.DB.exec("UPDATE telegram_channels SET signature = 'Guillaume Lauzier' WHERE signature IS NULL");
+      }
+    } catch (e) {
+      console.warn('[telegramSchema] signature column ensure failed:', (e as Error).message);
+    }
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS telegram_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id INTEGER NOT NULL REFERENCES telegram_channels(id), audience TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft', title TEXT, body_md TEXT NOT NULL, media_r2_key TEXT, media_kind TEXT, scheduled_for TEXT, sent_at TEXT, telegram_message_id INTEGER, telegram_link TEXT, source TEXT NOT NULL DEFAULT 'manual', source_kind TEXT, body_hash TEXT, send_error TEXT, override_reason TEXT, override_findings TEXT, created_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );

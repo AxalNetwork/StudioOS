@@ -80,13 +80,37 @@ async function sha256Hex(input: string): Promise<string> {
 
 async function loadPost(env: Env, id: number) {
   return env.DB.prepare(
-    `SELECT p.*, c.slug AS channel_slug, c.label AS channel_label, c.chat_id, c.audience AS channel_audience
+    `SELECT p.*, c.slug AS channel_slug, c.label AS channel_label, c.chat_id,
+            c.audience AS channel_audience, c.signature AS channel_signature
        FROM telegram_posts p
        JOIN telegram_channels c ON c.id = p.channel_id
       WHERE p.id = ?`,
   )
     .bind(id)
     .first<any>();
+}
+
+/**
+ * Append a human author signature to a MarkdownV2 body just before send.
+ * Stored body_md stays clean so the signature stays editable per-channel
+ * without rewriting historical drafts. Idempotent: if the exact sig line
+ * is already present at the tail, returns body unchanged so manual signs
+ * don't double up.
+ */
+function appendSignature(body: string, sig: string | null | undefined): string {
+  const s = (sig || '').trim();
+  if (!s) return body;
+  const sigLine = `— ${escapeMd2(s)}`;
+  // Canonicalize trailing whitespace before the duplicate check so manually-
+  // signed drafts (extra blank lines, trailing spaces) don't slip through and
+  // produce a double signature. Also catches the unescaped tail-form
+  // `— Name` that a human might have typed directly.
+  const trimmed = body.replace(/[\s\n]+$/g, '');
+  const tailUnescaped = `— ${s}`;
+  if (trimmed.endsWith(sigLine) || trimmed.endsWith(tailUnescaped)) {
+    return `${trimmed}`;
+  }
+  return `${trimmed}\n\n${sigLine}`;
 }
 
 // admin_audit_log writer. Tolerates the optional `actor` column the same
@@ -177,7 +201,7 @@ r.get('/channels', async (c) => {
   await ensureTelegramSchema(c.env);
   const rows = await c.env.DB.prepare(
     `SELECT id, slug, label, chat_id, audience, is_invite_only, enabled,
-            last_test_at, last_error, created_at, updated_at
+            signature, last_test_at, last_error, created_at, updated_at
        FROM telegram_channels
        ORDER BY audience ASC, id ASC`,
   ).all<any>();
@@ -204,11 +228,12 @@ r.post('/channels', async (c) => {
   }
   const chatId = body.chat_id ? String(body.chat_id).trim() : null;
   const isInviteOnly = body.is_invite_only === false ? 0 : 1;
+  const signature = typeof body.signature === 'string' ? body.signature.trim().slice(0, 100) || null : null;
   try {
     const ins = await c.env.DB.prepare(
-      `INSERT INTO telegram_channels (slug, label, chat_id, audience, is_invite_only)
-         VALUES (?, ?, ?, ?, ?) RETURNING id`,
-    ).bind(slug, label, chatId, audience, isInviteOnly).first<{ id: number }>();
+      `INSERT INTO telegram_channels (slug, label, chat_id, audience, is_invite_only, signature)
+         VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
+    ).bind(slug, label, chatId, audience, isInviteOnly, signature).first<{ id: number }>();
     await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'telegram_channel_created', channelId: ins?.id, extra: { slug, audience } });
     return c.json({ id: ins?.id, slug }, 201);
   } catch (err: any) {
@@ -239,6 +264,10 @@ r.put('/channels/:id', async (c) => {
   }
   if ('is_invite_only' in body) { sets.push('is_invite_only = ?'); args.push(body.is_invite_only ? 1 : 0); }
   if ('enabled' in body) { sets.push('enabled = ?'); args.push(body.enabled ? 1 : 0); }
+  if ('signature' in body) {
+    const v = body.signature == null ? null : String(body.signature).trim().slice(0, 100) || null;
+    sets.push('signature = ?'); args.push(v);
+  }
   if (sets.length === 0) return c.json({ error: 'no_fields' }, 400);
   sets.push("updated_at = datetime('now')");
   await c.env.DB.prepare(`UPDATE telegram_channels SET ${sets.join(', ')} WHERE id = ?`)
@@ -505,8 +534,13 @@ r.post('/posts/:id/send', async (c) => {
     } catch {}
   };
 
-  // PII linter — gate the send.
-  const lint = await lintForSend(c.env, post.body_md, post.audience);
+  // PII linter — gate the send. Lint the WIRE body (body_md + appended
+  // signature) so PII smuggled into the per-channel signature is caught at
+  // send time, not only on stored body. Architect-flagged: signatures are
+  // reusable per-channel and broadcast to public audiences, so they must
+  // pass the same gate as body_md.
+  const wireBodyForLint = appendSignature(post.body_md, post.channel_signature);
+  const lint = await lintForSend(c.env, wireBodyForLint, post.audience);
   if (!lint.ok) {
     if (!overrideReason || overrideReason.length < 8) {
       await releaseClaim('draft');
@@ -533,6 +567,9 @@ r.post('/posts/:id/send', async (c) => {
   try {
     let msgId: number | undefined;
     let chatLink: string | null = null;
+    // Per-channel human signature appended at send time only (body_md stays
+    // clean in storage so the sig can be edited retroactively per-channel).
+    const wireBody = appendSignature(post.body_md, post.channel_signature);
     if (post.media_r2_key && c.env.FILES) {
       const obj = await c.env.FILES.get(post.media_r2_key);
       if (!obj) {
@@ -542,14 +579,14 @@ r.post('/posts/:id/send', async (c) => {
       const bytes = new Uint8Array(await obj.arrayBuffer());
       const filename = post.media_r2_key.split('/').pop() || 'media';
       const sendFn = post.media_kind === 'document' ? sendDocument : sendPhoto;
-      const sent = await sendFn(c.env, post.chat_id, bytes, filename, post.body_md);
+      const sent = await sendFn(c.env, post.chat_id, bytes, filename, wireBody);
       msgId = sent.message_id;
       try {
         const chat = await getChat(c.env, post.chat_id);
         chatLink = buildTelegramLink(chat, msgId);
       } catch { /* link is best-effort */ }
     } else {
-      const sent = await sendMessage(c.env, post.chat_id, post.body_md);
+      const sent = await sendMessage(c.env, post.chat_id, wireBody);
       msgId = sent.message_id;
       try {
         const chat = await getChat(c.env, post.chat_id);

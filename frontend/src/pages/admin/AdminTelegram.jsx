@@ -124,6 +124,8 @@ function ChannelsTab({ channels, refresh, toast }) {
 function ChannelRow({ ch, testingId, onTest, onRemove, onSaved, toast }) {
   const [editingChat, setEditingChat] = useState(false);
   const [chatId, setChatId] = useState(ch.chat_id || '');
+  const [editingSig, setEditingSig] = useState(false);
+  const [signature, setSignature] = useState(ch.signature || '');
   const [busy, setBusy] = useState(false);
 
   const saveChat = async () => {
@@ -132,6 +134,20 @@ function ChannelRow({ ch, testingId, onTest, onRemove, onSaved, toast }) {
       await api.updateChannel(ch.id, { chat_id: chatId.trim() || null });
       toast.success('Chat ID saved');
       setEditingChat(false);
+      onSaved();
+    } catch (e) {
+      toast.error(e?.body?.message || 'Save failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveSignature = async () => {
+    setBusy(true);
+    try {
+      await api.updateChannel(ch.id, { signature: signature.trim() || null });
+      toast.success('Signature saved');
+      setEditingSig(false);
       onSaved();
     } catch (e) {
       toast.error(e?.body?.message || 'Save failed');
@@ -154,6 +170,27 @@ function ChannelRow({ ch, testingId, onTest, onRemove, onSaved, toast }) {
       <td className="px-3 py-2 font-mono text-xs">{ch.slug}</td>
       <td className="px-3 py-2">
         {ch.label}
+        {editingSig ? (
+          <div className="flex items-center gap-1 mt-1">
+            <input
+              value={signature}
+              onChange={(e) => setSignature(e.target.value)}
+              placeholder="Signed by (e.g. Guillaume Lauzier)"
+              maxLength={100}
+              className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 w-56"
+            />
+            <button onClick={saveSignature} disabled={busy} className="text-xs px-2 py-1 rounded bg-violet-600 text-white">Save</button>
+            <button onClick={() => { setEditingSig(false); setSignature(ch.signature || ''); }} className="text-xs px-2 py-1">Cancel</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setEditingSig(true)}
+            className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5 hover:underline"
+            title="Appended to every sent post (— Name)"
+          >
+            {ch.signature ? <>signed: <span className="italic">{ch.signature}</span></> : <span className="text-amber-700 dark:text-amber-400">+ add signature</span>}
+          </button>
+        )}
         {ch.last_error && (
           <div className="text-xs text-red-600 dark:text-red-400 mt-0.5 flex items-center gap-1">
             <AlertTriangle className="w-3 h-3" /> {ch.last_error}
@@ -216,7 +253,7 @@ function ChannelRow({ ch, testingId, onTest, onRemove, onSaved, toast }) {
 
 function AddChannelModal({ onClose, onSaved, toast }) {
   useEscapeClose(onClose);
-  const [form, setForm] = useState({ slug: '', label: '', audience: 'public', chat_id: '', is_invite_only: true });
+  const [form, setForm] = useState({ slug: '', label: '', audience: 'public', chat_id: '', signature: 'Guillaume Lauzier', is_invite_only: true });
   const [busy, setBusy] = useState(false);
 
   const submit = async (e) => {
@@ -228,6 +265,7 @@ function AddChannelModal({ onClose, onSaved, toast }) {
         label: form.label.trim(),
         audience: form.audience,
         chat_id: form.chat_id.trim() || null,
+        signature: form.signature.trim() || null,
         is_invite_only: form.is_invite_only,
       });
       toast.success('Channel added');
@@ -259,6 +297,9 @@ function AddChannelModal({ onClose, onSaved, toast }) {
         </Field>
         <Field label="Chat ID (optional)" hint="@channel for public, -100... for private; can set later">
           <input value={form.chat_id} onChange={(e) => setForm({ ...form, chat_id: e.target.value })} className={inputCls} />
+        </Field>
+        <Field label="Signature (optional)" hint="Appended to every sent post as &mdash; Name. Leave blank to send unsigned.">
+          <input value={form.signature} onChange={(e) => setForm({ ...form, signature: e.target.value })} maxLength={100} className={inputCls} />
         </Field>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={form.is_invite_only} onChange={(e) => setForm({ ...form, is_invite_only: e.target.checked })} />
