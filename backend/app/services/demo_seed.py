@@ -47,7 +47,7 @@ logger = logging.getLogger("studioos.demo_seed")
 # yields valid 6-digit codes anyone (or Playwright) can compute on the fly.
 DEMO_INVESTOR_EMAIL = "demo-investor@axal.test"
 DEMO_INVESTOR_NAME = "Demo Investor"
-DEMO_INVESTOR_TOTP_SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"  # 32-char base32
+DEMO_INVESTOR_TOTP_SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"  # 32-char base32  # nosemgrep: generic.secrets.security.detected-generic-secret.detected-generic-secret -- RFC 6238 well-known test vector, intentionally public so Playwright e2e suite can compute valid TOTP codes
 
 DEMO_FOUNDER_EMAIL = "demo-founder@axal.test"
 DEMO_FOUNDER_NAME = "Demo Founder"

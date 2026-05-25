@@ -633,7 +633,7 @@ def ensure_partner_directory_columns() -> None:
 
         for name, expr in indexes:
             try:
-                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON partners({expr})"))
+                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON partners({expr})"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_partner_directory_columns: %s INDEX failed: %s", name, exc)
         session.commit()
@@ -662,14 +662,14 @@ def ensure_trust_layer_columns() -> None:
     with Session(engine) as session:
         for col, ddl in partner_cols:
             try:
-                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
                 session.commit()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_trust_layer_columns: partners.%s: %s", col, exc)
                 session.rollback()
         for col, ddl in investor_cols:
             try:
-                session.exec(text(f"ALTER TABLE investors ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+                session.exec(text(f"ALTER TABLE investors ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
                 session.commit()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_trust_layer_columns: investors.%s: %s", col, exc)
@@ -916,7 +916,7 @@ def ensure_founder_risk_profiles_table() -> None:
             session.rollback()
         for name, expr in indexes:
             try:
-                session.exec(text(
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
                     f"CREATE INDEX IF NOT EXISTS {name} ON founder_risk_profiles({expr})"
                 ))
             except Exception as exc:  # noqa: BLE001
@@ -975,7 +975,7 @@ def ensure_references_table() -> None:
             session.rollback()
         for name, expr in indexes:
             try:
-                session.exec(text(
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
                     f'CREATE INDEX IF NOT EXISTS {name} ON "references"({expr})'
                 ))
             except Exception as exc:  # noqa: BLE001
@@ -1043,14 +1043,14 @@ def ensure_service_catalogue_columns() -> None:
         # 2) Partner Stripe columns
         for col, ddl in partner_cols:
             try:
-                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_service_catalogue_columns: partners.%s ALTER failed: %s", col, exc)
 
         # 3) Engagement lifecycle / Stripe columns
         for col, ddl in engagement_cols:
             try:
-                session.exec(text(f"ALTER TABLE engagements ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+                session.exec(text(f"ALTER TABLE engagements ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_service_catalogue_columns: engagements.%s ALTER failed: %s", col, exc)
 
@@ -1059,7 +1059,7 @@ def ensure_service_catalogue_columns() -> None:
         #    no-op once the column is already nullable.
         for col in ("quote_id", "need_id"):
             try:
-                session.exec(text(f"ALTER TABLE engagements ALTER COLUMN {col} DROP NOT NULL"))
+                session.exec(text(f"ALTER TABLE engagements ALTER COLUMN {col} DROP NOT NULL"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
             except Exception:  # noqa: BLE001
                 pass
 
@@ -1089,7 +1089,7 @@ def ensure_service_catalogue_columns() -> None:
         # 7) Indexes
         for name, tbl, expr in indexes:
             try:
-                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON {tbl}({expr})"))
+                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON {tbl}({expr})"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_service_catalogue_columns: %s INDEX failed: %s", name, exc)
 

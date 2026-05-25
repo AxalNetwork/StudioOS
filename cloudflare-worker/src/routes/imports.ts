@@ -957,7 +957,7 @@ async function extractPptxText(bytes: Uint8Array): Promise<{ index: number; text
     const re = /<a:t[^>]*>([\s\S]*?)<\/a:t>/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(xml)) !== null) {
-      runs.push(m[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'"));
+      runs.push(m[1].replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&'));
     }
     slides.push({ index: i + 1, text: runs.join(' ').replace(/\s+/g, ' ').trim() });
   }

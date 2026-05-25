@@ -2549,6 +2549,7 @@ export const SeriesBDiligenceDeckApp: React.FC<{
     setData((prev) => {
       const next = structuredClone(prev) as any;
       const parts = path.split('.');
+      if (parts.some(p => p === '__proto__' || p === 'constructor' || p === 'prototype')) return prev;
       let cur = next;
       for (let i = 0; i < parts.length - 1; i++) {
         const k = parts[i];
