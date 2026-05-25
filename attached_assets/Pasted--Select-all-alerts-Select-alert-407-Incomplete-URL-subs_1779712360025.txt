@@ -1,0 +1,153 @@
+
+Select all alerts
+ 
+Select alert #407
+Incomplete URL substring sanitization
+High
+Test
+#407 opened 3 days ago • Detected by CodeQL in cloudflare-worker/test/decks.autofill.test.ts :66
+main
+
+Select alert #358
+Incomplete string escaping or encoding
+High
+#358 opened 4 days ago • Detected by CodeQL in frontend/.../components/DataImportsTab.jsx :272
+main
+
+Select alert #357
+Double escaping or unescaping
+High
+#357 opened 4 days ago • Detected by CodeQL in cloudflare-worker/.../routes/imports.ts :960
+main
+
+Select alert #356
+Inefficient regular expression
+High
+#356 opened 4 days ago • Detected by CodeQL in cloudflare-worker/.../routes/imports.ts :923
+main
+
+Select alert #1477
+User-controlled bypass of security check
+High
+#1477 opened 3 minutes ago • Detected by CodeQL in frontend/.../pages/CalendarPage.jsx :146
+main
+
+Select alert #1476
+User-controlled bypass of security check
+High
+#1476 opened 3 minutes ago • Detected by CodeQL in frontend/.../pages/CalendarPage.jsx :142
+main
+
+Select alert #1475
+User-controlled bypass of security check
+High
+#1475 opened 3 minutes ago • Detected by CodeQL in frontend/.../pages/CalendarPage.jsx :140
+main
+
+Select alert #1474
+User-controlled bypass of security check
+High
+#1474 opened 3 minutes ago • Detected by CodeQL in frontend/.../pages/CalendarPage.jsx :139
+main
+
+Select alert #1473
+User-controlled bypass of security check
+High
+#1473 opened 3 minutes ago • Detected by CodeQL in frontend/.../pages/CalendarPage.jsx :139
+main
+
+Select alert #1472
+User-controlled bypass of security check
+High
+#1472 opened 3 minutes ago • Detected by CodeQL in frontend/.../pages/CalendarPage.jsx :136
+main
+
+Select alert #713
+Potential file system race condition
+High
+#713 opened 2 days ago • Detected by CodeQL in scripts/check-dark-mode.mjs :85
+main
+
+Select alert #941
+Prototype-polluting function
+Medium
+#941 opened yesterday • Detected by CodeQL in frontend/.../templates/series_b_diligence_app.t... :2559
+main
+
+Select alert #862
+Prototype-polluting function
+Medium
+#862 opened 2 days ago • Detected by CodeQL in frontend/.../templates/series_a_growth_app.tsx :1715
+main
+
+Select alert #861
+Prototype-polluting function
+Medium
+#861 opened 2 days ago • Detected by CodeQL in frontend/.../templates/minimal_seed.tsx :1483
+main
+
+Select alert #860
+Prototype-polluting function
+Medium
+#860 opened 2 days ago • Detected by CodeQL in frontend/.../templates/minimal_seed_app.tsx :1387
+main
+
+Select alert #320
+Semgrep Finding: generic.secrets.security.detected-generic-secret.detected-generic-secret
+Error
+#320 opened 4 days ago • Detected by Semgrep OSS in backend/.../services/demo_seed.py :50
+main
+
+Select alert #317
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#317 opened 4 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :1092
+main
+
+Select alert #316
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#316 opened 4 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :1062
+main
+
+Select alert #315
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#315 opened 4 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :1053
+main
+
+Select alert #314
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#314 opened 4 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :1046
+main
+
+Select alert #313
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#313 opened 4 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :978
+main
+
+Select alert #312
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#312 opened 4 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :919
+main
+
+Select alert #311
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#311 opened 4 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :672
+main
+
+Select alert #310
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#310 opened 4 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :665
+main
+
+Select alert #309
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#309 opened 4 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :636
+main

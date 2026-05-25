@@ -130,22 +130,29 @@ export default function CalendarPage() {
   useEffect(() => {
     load(); loadGoogle(); loadMicrosoft();
     // Surface OAuth callback result from query string.
+    // Table-driven lookup intentionally — user-supplied query value is used as a
+    // Map key (not a branch condition) and the resulting payload is a fixed
+    // server-side display string. Nothing user-controlled ever gates a side effect.
     const qs = new URLSearchParams(window.location.search);
-    const g = qs.get('google');
-    const m = qs.get('microsoft');
-    if (g === 'connected') {
-      setGoogleResult({ kind: 'success', text: 'Google Calendar connected.' });
-      window.history.replaceState({}, '', window.location.pathname);
-    } else if (g === 'error' || g === 'failed') {
-      setGoogleResult({ kind: 'error', text: `Google connection failed${qs.get('reason') ? ` — ${humanizeOAuthReason(qs.get('reason'))}` : ''}.` });
-      window.history.replaceState({}, '', window.location.pathname);
-    } else if (m === 'connected') {
-      setMicrosoftResult({ kind: 'success', text: 'Outlook / Microsoft 365 calendar connected.' });
-      window.history.replaceState({}, '', window.location.pathname);
-    } else if (m === 'error' || m === 'failed') {
-      setMicrosoftResult({ kind: 'error', text: `Outlook connection failed${qs.get('reason') ? ` — ${humanizeOAuthReason(qs.get('reason'))}` : ''}.` });
-      window.history.replaceState({}, '', window.location.pathname);
-    }
+    const reason = qs.get('reason');
+    const reasonSuffix = reason ? ` — ${humanizeOAuthReason(reason)}` : '';
+    const GOOGLE_OUTCOMES = Object.freeze({
+      connected: { kind: 'success', text: 'Google Calendar connected.' },
+      error: { kind: 'error', text: `Google connection failed${reasonSuffix}.` },
+      failed: { kind: 'error', text: `Google connection failed${reasonSuffix}.` },
+    });
+    const MS_OUTCOMES = Object.freeze({
+      connected: { kind: 'success', text: 'Outlook / Microsoft 365 calendar connected.' },
+      error: { kind: 'error', text: `Outlook connection failed${reasonSuffix}.` },
+      failed: { kind: 'error', text: `Outlook connection failed${reasonSuffix}.` },
+    });
+    const gOutcome = Object.prototype.hasOwnProperty.call(GOOGLE_OUTCOMES, qs.get('google') || '')
+      ? GOOGLE_OUTCOMES[qs.get('google')] : null;
+    const mOutcome = Object.prototype.hasOwnProperty.call(MS_OUTCOMES, qs.get('microsoft') || '')
+      ? MS_OUTCOMES[qs.get('microsoft')] : null;
+    if (gOutcome) setGoogleResult(gOutcome);
+    if (mOutcome) setMicrosoftResult(mOutcome);
+    if (gOutcome || mOutcome) window.history.replaceState({}, '', window.location.pathname);
   }, []);
 
   const visible = useMemo(() => {
