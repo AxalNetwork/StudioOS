@@ -1340,32 +1340,85 @@ const SlideShell: React.FC<{ children: React.ReactNode; pad?: number }> = ({ chi
   );
 };
 
+/* ───── slide-local helpers ─────
+ * Inline-style equivalents of the branch's <Card> and <Pill> primitives.
+ * Kept private to the slide layer so the PDF pipeline never has to chase
+ * Tailwind classes through the export — every visual byte is here. */
+
+const cardStyle = (V: V, soft?: boolean): React.CSSProperties => ({
+  background: soft ? V.cardSoft : V.card,
+  border: `1px solid ${V.line}`,
+  borderRadius: 10,
+  boxSizing: 'border-box',
+});
+
+const Pill: React.FC<{
+  children: React.ReactNode;
+  tone?: 'neutral' | 'accent' | 'gold' | 'emerald' | 'rose';
+}> = ({ children, tone = 'neutral' }) => {
+  const V = useV();
+  const map: Record<string, { bg: string; fg: string }> = {
+    neutral: { bg: V.cardSoft, fg: V.textSoft },
+    accent:  { bg: V.accentSoft, fg: V.accent },
+    gold:    { bg: V.cardSoft, fg: V.gold },
+    emerald: { bg: V.cardSoft, fg: V.emerald },
+    rose:    { bg: V.cardSoft, fg: V.rose },
+  };
+  const { bg, fg } = map[tone];
+  return (
+    <span style={{
+      background: bg, color: fg, border: `1px solid ${V.line}`,
+      fontFamily: V.mono, fontSize: 10, letterSpacing: '0.14em',
+      textTransform: 'uppercase', padding: '4px 10px', borderRadius: 999,
+      display: 'inline-block',
+    }}>{children}</span>
+  );
+};
+
 const Slide_Cover: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
   const { pal, fonts, variant } = useVariant();
+  const V = useV();
   const { cover, meta } = d;
+  // Architect note (Task #7 review): even the cinematic/manifesto variant
+  // keeps the two-column right-rail structure so no slide collapses to
+  // whitespace. The headline-weight contrast comes from font-size + weight,
+  // not from dropping the JourneyArc anchor.
   return (
     <SlideShell>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '6fr 6fr', gap: 48, flex: 1, alignItems: 'stretch' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <Eyebrow>{cover.eyebrow}</Eyebrow>
-          {meta.is_sample && <Chip tone="warn">SAMPLE</Chip>}
+          {meta.is_sample && <div style={{ marginBottom: 12 }}><Chip tone="warn">SAMPLE</Chip></div>}
+          <h1 style={{
+            color: pal.ink, fontFamily: fonts.display,
+            fontSize: variant === 'manifesto' ? 96 : 72, lineHeight: 0.96,
+            letterSpacing: '-0.022em', fontWeight: variant === 'editorial' ? 600 : 700, margin: 0,
+          }}>{cover.headline}</h1>
+          <p style={{ color: pal.inkSoft, fontFamily: fonts.body, fontSize: 18, lineHeight: 1.5, maxWidth: 680, marginTop: 20 }}>{cover.sub}</p>
+          <div style={{ marginTop: 32, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, maxWidth: 640 }}>
+            {[
+              { label: 'Sector',  value: meta.sector },
+              { label: 'Stage',   value: meta.lab_active ? `Lab · Week ${meta.week}` : 'Pre-incorporation' },
+              { label: 'Founder', value: meta.founder_name },
+            ].map((m, i) => (
+              <div key={i} style={{ ...cardStyle(V, true), padding: 14 }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', marginBottom: 6, color: V.textMuted, fontFamily: V.mono }}>{m.label}</div>
+                <div style={{ fontSize: 14, lineHeight: 1.2, fontFamily: V.display, fontWeight: 600, color: V.ink }}>{m.value}</div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div style={{ color: pal.muted, fontFamily: fonts.mono, fontSize: 11, textAlign: 'right' }}>
-          <div>{meta.project_name}</div>
-          <div>{meta.sector}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 16 }}>
+          <div style={{ ...cardStyle(V), padding: 16, overflow: 'hidden' }}>
+            <JourneyArc height={280} />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', marginBottom: 4, color: V.textMuted, fontFamily: V.mono }}>30 days · 4 milestones</div>
+            <div style={{ fontSize: 13, lineHeight: 1.4, color: V.ink, fontFamily: V.sans }}>Idea & Customer → Solution & Roadmap → Validate & Team → Incorporate & Capital.</div>
+          </div>
         </div>
       </div>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', maxWidth: 880 }}>
-        <h1 style={{
-          color: pal.ink, fontFamily: fonts.display,
-          fontSize: variant === 'manifesto' ? 96 : 72, lineHeight: 1.02,
-          letterSpacing: '-0.02em', fontWeight: variant === 'editorial' ? 500 : 700, margin: 0,
-        }}>{cover.headline}</h1>
-        <p style={{ color: pal.inkSoft, fontFamily: fonts.body, fontSize: 20, lineHeight: 1.5, maxWidth: 700, marginTop: 28 }}>
-          {cover.sub}
-        </p>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', color: pal.muted, fontFamily: fonts.mono, fontSize: 12 }}>
+      <div style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', color: pal.muted, fontFamily: fonts.mono, fontSize: 12 }}>
         <span>{cover.location}</span>
         <span>{meta.founder_name} · {meta.contact_email}</span>
       </div>
@@ -1374,302 +1427,628 @@ const Slide_Cover: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
 };
 
 const Slide_Problem: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
   const p = d.problem;
+  const signals = p.signals.filter((s) => !isUnfilled(s));
+  const slots = [0, 1, 2].map((i) => signals[i] || null);
   return (
     <SlideShell>
-      <Eyebrow>{p.eyebrow}</Eyebrow>
-      <SlideHeading>{p.headline}</SlideHeading>
-      <div style={{ marginTop: 32, maxWidth: 760 }}>
-        {isUnfilled(p.body)
-          ? <Nudge>Add a problem statement on your project to unlock this slide.</Nudge>
-          : <Body>{p.body}</Body>}
-      </div>
-      <div style={{ marginTop: 'auto', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-        {p.signals.length > 0
-          ? p.signals.slice(0, 3).map((s, i) => (
-            <div key={i} style={{ borderTop: `1px solid currentColor`, paddingTop: 12, opacity: 0.85 }}>
-              <Body max={260}>{s}</Body>
+      <div style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 32, flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <Eyebrow>{p.eyebrow}</Eyebrow>
+          {isUnfilled(p.body)
+            ? <h2 style={{ color: V.textMuted, fontStyle: 'italic', fontFamily: V.display, fontSize: 44, lineHeight: 1.1, margin: 0 }}>The pain we built the Lab to investigate.</h2>
+            : <SlideHeading size="xl">{p.body}</SlideHeading>}
+          {isUnfilled(p.body) && <div style={{ marginTop: 16 }}><Nudge>Add a problem statement on your project, or via the Personal Advisor (Week 1 question bank).</Nudge></div>}
+          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+            {slots.map((s, i) => {
+              const isReal = !!s;
+              return (
+                <div key={i} style={{ ...cardStyle(V, !isReal), padding: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: isReal ? V.rose : V.textMuted, fontFamily: V.mono }}>
+                      Pain {String(i + 1).padStart(2, '0')}
+                    </span>
+                    <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: V.textMuted, fontFamily: V.mono }}>from interviews</span>
+                  </div>
+                  {isReal ? (
+                    <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.35, color: V.ink, fontFamily: V.display }}>{s}</div>
+                  ) : (
+                    <>
+                      <div style={{ height: 8, borderRadius: 4, background: V.line, width: '92%' }} />
+                      <div style={{ height: 8, borderRadius: 4, background: V.line, width: '64%', opacity: 0.7, marginTop: 6 }} />
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ ...cardStyle(V, true), padding: 16, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ProblemEcho />
+          </div>
+          <div style={{ ...cardStyle(V, true), padding: 16 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 10 }}>Evidence backing this</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, textAlign: 'center' }}>
+              {[
+                { label: 'Themes', value: signals.length || DASH },
+                { label: 'Pain mentions', value: signals.length > 0 ? `${signals.length}+` : DASH },
+                { label: 'Interviews', value: d.validation.quotes.length || DASH },
+              ].map((k, i) => (
+                <div key={i}>
+                  <div style={{ fontFamily: V.display, fontWeight: 700, fontSize: 22, color: k.value === DASH ? V.textMuted : V.ink }}>{k.value}</div>
+                  <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: V.textMuted, fontFamily: V.mono }}>{k.label}</div>
+                </div>
+              ))}
             </div>
-          ))
-          : <div style={{ gridColumn: '1 / -1' }}><Nudge>Capture growth signals on your project to fill out the three columns.</Nudge></div>}
+          </div>
+        </div>
       </div>
     </SlideShell>
   );
 };
 
 const Slide_Validation: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
   const v = d.validation;
+  const quotes = v.quotes.slice(0, 3);
+  const total = v.quotes.length;
+  const enough = total >= 5;
   return (
     <SlideShell>
       <Eyebrow>{v.eyebrow}</Eyebrow>
       <SlideHeading>{v.headline}</SlideHeading>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 28 }}>
-        {v.metrics.map((m, i) => <MetricCard key={i} m={m} />)}
-      </div>
-      <div style={{ marginTop: 28, flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {v.quotes.length > 0 ? v.quotes.map((q, i) => (
-          <blockquote key={i} style={{ margin: 0, paddingLeft: 16, borderLeft: '3px solid currentColor', maxWidth: 820 }}>
-            <Body>"{q.takeaway}"</Body>
-            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>— {q.name}{q.role ? `, ${q.role}` : ''}</div>
-          </blockquote>
-        )) : <Nudge>Log 5 customer-discovery interviews in Week 1 to unlock real founder quotes here.</Nudge>}
+      {!enough && (
+        <div style={{ marginTop: 14, maxWidth: 640 }}>
+          <Nudge>{total}/5 interviews logged. Log {5 - total} more in Customer Discovery to graduate Week 1.</Nudge>
+        </div>
+      )}
+      <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 28, flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[0, 1, 2].map((i) => {
+            const q = quotes[i];
+            if (!q) {
+              return (
+                <div key={i} style={{ ...cardStyle(V, true), border: `1px dashed ${V.line}`, padding: 16, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: V.textMuted, fontFamily: V.mono, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em' }}>
+                  Interview {i + 1} pending
+                </div>
+              );
+            }
+            const excerpt = (q.takeaway || '').slice(0, 220) + ((q.takeaway || '').length > 220 ? '…' : '');
+            return (
+              <div key={i} style={{ ...cardStyle(V), padding: 18, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ fontSize: 30, lineHeight: 1, marginBottom: 6, color: V.accent, fontFamily: V.display }}>"</div>
+                <p style={{ fontSize: 14, lineHeight: 1.4, color: V.ink, fontFamily: V.vibe === 'serif' ? V.display : V.sans, flex: 1, margin: 0 }}>{excerpt}</p>
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${V.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: V.ink, fontFamily: V.display }}>{q.name || DASH}</div>
+                    {q.role && <div style={{ fontSize: 10, color: V.textMuted, fontFamily: V.mono }}>{q.role}</div>}
+                  </div>
+                  <Pill tone="accent">Logged</Pill>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ ...cardStyle(V), padding: 12, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <VoicesBubbles />
+          </div>
+          <div style={{ ...cardStyle(V, true), padding: 16 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 10 }}>Week-1 scoreboard</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, textAlign: 'center' }}>
+              {[
+                { label: 'Interviews', value: total || DASH },
+                { label: 'Distinct pains', value: d.problem.signals.filter((s) => !isUnfilled(s)).length || DASH },
+                { label: 'Quotes captured', value: total || DASH },
+              ].map((k, i) => (
+                <div key={i}>
+                  <div style={{ fontFamily: V.display, fontWeight: 700, fontSize: 22, color: k.value === DASH ? V.textMuted : V.ink }}>{k.value}</div>
+                  <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: V.textMuted, fontFamily: V.mono }}>{k.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </SlideShell>
   );
 };
 
 const Slide_Market: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
   const m = d.market;
-  const ms: Metric[] = [
-    { label: 'TAM', value: m.tam, sub: 'Total addressable' },
-    { label: 'SAM', value: m.sam, sub: 'Serviceable' },
-    { label: 'SOM', value: m.som, sub: 'Obtainable' },
-  ];
   const allMissing = m.tam === DASH && m.sam === DASH && m.som === DASH;
   return (
     <SlideShell>
       <Eyebrow>{m.eyebrow}</Eyebrow>
       <SlideHeading>{m.headline}</SlideHeading>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 32 }}>
-        {ms.map((x, i) => <MetricCard key={i} m={x} />)}
-      </div>
       {allMissing && (
-        <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>
-          <MarketCircles tam={m.tam} sam={m.sam} som={m.som} />
+        <div style={{ marginTop: 14, maxWidth: 640 }}>
+          <Nudge>Fill TAM / SAM / SOM in Projects → Market sizing, or via the Personal Advisor's Week 1 market questions.</Nudge>
         </div>
       )}
-      <div style={{ marginTop: 28, flex: 1 }}>
-        <Eyebrow>Why now</Eyebrow>
-        {m.why_now.length > 0
-          ? <ul style={{ margin: 0, paddingLeft: 18 }}>{m.why_now.map((w, i) => <li key={i} style={{ marginBottom: 6 }}><Body>{w}</Body></li>)}</ul>
-          : <Nudge>Fill in `why_now` on your project to explain the timing.</Nudge>}
+      <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: '5fr 7fr', gap: 32, flex: 1, alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <MarketCircles tam={m.tam} sam={m.sam} som={m.som} />
+        </div>
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            {[
+              { l: 'TAM', v: m.tam, sub: 'Total addressable' },
+              { l: 'SAM', v: m.sam, sub: 'Serviceable' },
+              { l: 'SOM', v: m.som, sub: 'Obtainable' },
+            ].map((k) => (
+              <div key={k.l} style={{ ...cardStyle(V, true), padding: 14 }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', color: V.textMuted, fontFamily: V.mono, marginBottom: 4 }}>{k.l}</div>
+                <div style={{ fontFamily: V.display, fontWeight: 700, fontSize: 32, color: k.v === DASH ? V.textMuted : V.ink, lineHeight: 1 }}>{k.v}</div>
+                <div style={{ fontSize: 11, color: V.textMuted, marginTop: 4 }}>{k.sub}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', color: V.textMuted, fontFamily: V.mono, marginBottom: 8 }}>Why now</div>
+            {m.why_now.length > 0 ? (
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {m.why_now.slice(0, 4).map((w, i) => <li key={i} style={{ marginBottom: 4, color: V.ink, fontSize: 13.5, lineHeight: 1.45, fontFamily: V.vibe === 'serif' ? V.display : V.sans }}>{w}</li>)}
+              </ul>
+            ) : (
+              <div style={{ fontSize: 12, color: V.textMuted, fontStyle: 'italic' }}>
+                Fill <code style={{ fontFamily: V.mono }}>why_now</code> on your project to explain the timing.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </SlideShell>
   );
 };
 
 const Slide_Solution: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
   const s = d.solution;
   return (
     <SlideShell>
-      <Eyebrow>{s.eyebrow}</Eyebrow>
-      <SlideHeading>{s.headline}</SlideHeading>
-      <div style={{ marginTop: 32, maxWidth: 720 }}>
-        {isUnfilled(s.body) ? <Nudge>Fill in your project's `solution` field to describe what you're building.</Nudge> : <Body>{s.body}</Body>}
-      </div>
-      <div style={{ marginTop: 'auto', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-        {s.capabilities.length > 0
-          ? s.capabilities.slice(0, 4).map((c, i) => (
-            <div key={i} style={{ padding: '14px 16px', borderRadius: 10, border: '1px solid currentColor' }}>
-              <Body max={300}>{c}</Body>
-            </div>
-          ))
-          : <div style={{ gridColumn: '1 / -1' }}><Nudge>Add a `solution` description with bullet-style capabilities.</Nudge></div>}
+      <div style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 32, flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <Eyebrow>{s.eyebrow}</Eyebrow>
+          {isUnfilled(s.body)
+            ? <h2 style={{ color: V.textMuted, fontStyle: 'italic', fontFamily: V.display, fontSize: 44, lineHeight: 1.1, margin: 0 }}>A first cut of what we will ship.</h2>
+            : <SlideHeading size="xl">{s.body}</SlideHeading>}
+          {isUnfilled(s.body) && <div style={{ marginTop: 14 }}><Nudge>Define the MVP scope in Roadmap (Week 2) and fill the solution field in Projects.</Nudge></div>}
+          <div style={{ marginTop: 20, ...cardStyle(V, true), padding: 18, flex: 1 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 10 }}>Capabilities</div>
+            {s.capabilities.length > 0 ? (
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {s.capabilities.slice(0, 5).map((c, i) => (
+                  <li key={i} style={{ marginBottom: 6, color: V.ink, fontSize: 14, lineHeight: 1.45, fontFamily: V.vibe === 'serif' ? V.display : V.sans }}>{c}</li>
+                ))}
+              </ul>
+            ) : (
+              <>
+                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '92%' }} />
+                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '78%', opacity: 0.7, marginTop: 6 }} />
+                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '54%', opacity: 0.5, marginTop: 6 }} />
+                <div style={{ marginTop: 10, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>Add capability bullets to your solution field.</div>
+              </>
+            )}
+          </div>
+          <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            {[
+              { label: 'Built in', value: 'Week 2' },
+              { label: 'Form factor', value: 'MVP scope' },
+              { label: 'Cost to ship', value: '< $50K target' },
+            ].map((k, i) => (
+              <div key={i}>
+                <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.22em', color: V.textMuted, fontFamily: V.mono, marginBottom: 4 }}>{k.label}</div>
+                <div style={{ fontSize: 13, fontFamily: V.display, fontWeight: 600, color: V.ink }}>{k.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ ...cardStyle(V), padding: 12, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <MvpBlueprint />
+          </div>
+          <div style={{ marginTop: 8, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', textAlign: 'center', color: V.textMuted, fontFamily: V.mono }}>
+            Architecture · MVP blueprint
+          </div>
+        </div>
       </div>
     </SlideShell>
   );
 };
 
 const Slide_Roadmap: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
   const r = d.roadmap;
-  const cols = [
-    { label: 'Now', items: r.now },
-    { label: 'Next', items: r.next },
-    { label: 'Later', items: r.later },
-  ];
-  const allEmpty = r.now.length + r.next.length + r.later.length === 0;
+  const counts = r.now.length + r.next.length + r.later.length;
   return (
     <SlideShell>
       <Eyebrow>{r.eyebrow}{r.quarter !== DASH ? ` · ${r.quarter}` : ''}</Eyebrow>
       <SlideHeading>{r.headline}</SlideHeading>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginTop: 32, flex: 1 }}>
-        {cols.map((c) => (
-          <div key={c.label}>
-            <Eyebrow>{c.label}</Eyebrow>
-            {c.items.length > 0
-              ? <ul style={{ margin: 0, paddingLeft: 16 }}>{c.items.map((o, i) => <li key={i} style={{ marginBottom: 8 }}><Body max={260}>{o}</Body></li>)}</ul>
-              : <div style={{ opacity: 0.5, fontSize: 12 }}>{DASH}</div>}
-          </div>
-        ))}
-      </div>
-      {allEmpty && (
-        <div style={{ marginTop: 16 }}>
-          <OkrBoard now={r.now} next={r.next} later={r.later} />
+      {counts < 3 && (
+        <div style={{ marginTop: 14, maxWidth: 640 }}>
+          <Nudge>{counts}/3 OKRs logged. Add {Math.max(0, 3 - counts)} more in Roadmap (Week 2) — tag each Now / Next / Later.</Nudge>
         </div>
       )}
+      <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '8fr 4fr', gap: 28, flex: 1, minHeight: 0 }}>
+        <div style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <OkrBoard now={r.now} next={r.next} later={r.later} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ ...cardStyle(V), padding: 16, flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 12 }}>30-day cadence</div>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+              <FourWeekTicks activeWeek={2} height={140} />
+            </div>
+          </div>
+          <div style={{ ...cardStyle(V, true), padding: 16 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 10 }}>OKR coverage</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, textAlign: 'center' }}>
+              {[
+                { label: 'Now', value: r.now.length || DASH },
+                { label: 'Next', value: r.next.length || DASH },
+                { label: 'Later', value: r.later.length || DASH },
+              ].map((k, i) => (
+                <div key={i}>
+                  <div style={{ fontFamily: V.display, fontWeight: 700, fontSize: 22, color: k.value === DASH ? V.textMuted : V.ink }}>{k.value}</div>
+                  <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: V.textMuted, fontFamily: V.mono }}>{k.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </SlideShell>
   );
 };
 
 const Slide_Brand: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
   const b = d.brand;
   return (
     <SlideShell>
-      <Eyebrow>{b.eyebrow}</Eyebrow>
-      <SlideHeading>{b.headline}</SlideHeading>
-      <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 24, rowGap: 12 }}>
-        <div style={{ opacity: 0.6, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Tagline</div>
-        <div><Body>{b.tagline}</Body></div>
-        <div style={{ opacity: 0.6, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Vision</div>
-        <div><Body>{b.vision}</Body></div>
+      <div style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 32, flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <Eyebrow>{b.eyebrow}</Eyebrow>
+          {isUnfilled(b.tagline)
+            ? <h2 style={{ color: V.textMuted, fontStyle: 'italic', fontFamily: V.display, fontSize: 44, lineHeight: 1.1, margin: 0 }}>The one-liner we will lead with.</h2>
+            : <SlideHeading size="xl">{b.tagline}</SlideHeading>}
+          {isUnfilled(b.tagline) && <div style={{ marginTop: 14 }}><Nudge>Define the brand one-liner in Brand Builder (Week 2) or via the Personal Advisor's brand questions.</Nudge></div>}
+          <div style={{ marginTop: 20, ...cardStyle(V), padding: 18, flex: 1 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 10 }}>Vision</div>
+            {!isUnfilled(b.vision) ? (
+              <p style={{ fontSize: 14.5, lineHeight: 1.4, color: V.ink, fontFamily: V.vibe === 'serif' ? V.display : V.sans, margin: 0 }}>{b.vision}</p>
+            ) : (
+              <>
+                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '88%' }} />
+                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '72%', opacity: 0.7, marginTop: 6 }} />
+                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '48%', opacity: 0.5, marginTop: 6 }} />
+                <div style={{ marginTop: 10, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>Set a brand vision in Brand Builder.</div>
+              </>
+            )}
+          </div>
+          <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Pill tone={b.brand_kit_ready ? 'emerald' : 'neutral'}>{b.brand_kit_ready ? '✓ Brand kit ready' : 'Brand kit pending'}</Pill>
+            <Pill tone={b.pitch_deck_ready ? 'emerald' : 'neutral'}>{b.pitch_deck_ready ? '✓ Pitch deck v1' : 'Deck v1 pending'}</Pill>
+            <Pill tone={b.incorporated ? 'emerald' : 'neutral'}>{b.incorporated ? '✓ Incorporated' : 'Pre-incorporation'}</Pill>
+          </div>
+        </div>
+        <div style={{ ...cardStyle(V), padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <BrandPaletteIllustration />
+        </div>
       </div>
-      <div style={{ marginTop: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <Chip tone={b.brand_kit_ready ? 'good' : 'default'}>{b.brand_kit_ready ? '✓ Brand kit ready' : 'Brand kit pending'}</Chip>
-        <Chip tone={b.pitch_deck_ready ? 'good' : 'default'}>{b.pitch_deck_ready ? '✓ Pitch deck v1' : 'Deck v1 pending'}</Chip>
-        <Chip tone={b.incorporated ? 'good' : 'default'}>{b.incorporated ? '✓ Incorporated' : 'Pre-incorporation'}</Chip>
-      </div>
-      {(isUnfilled(b.tagline) && isUnfilled(b.vision)) &&
-        <div style={{ marginTop: 16 }}><Nudge>Complete the Week 4 Brand kit milestone to fill tagline + vision.</Nudge></div>}
     </SlideShell>
   );
 };
 
 const Slide_VentureReadiness: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
   const v = d.venture_readiness;
+  const hasScore = v.total_score !== DASH && !isUnfilled(v.total_score);
   return (
     <SlideShell>
       <Eyebrow>{v.eyebrow}{v.is_sandbox ? ' · sandbox' : ''}</Eyebrow>
-      <SlideHeading>{v.headline}</SlideHeading>
-      {v.breakdown.length === 0
-        ? <div style={{ marginTop: 32, maxWidth: 520 }}><ScoreBars items={[]} /></div>
-        : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 32 }}>
-            {v.breakdown.map((b, i) => <MetricCard key={i} m={{ label: b.label, value: b.value }} />)}
+      <div style={{ display: 'grid', gridTemplateColumns: '5fr 7fr', gap: 32, flex: 1, alignItems: 'stretch', marginTop: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', color: V.textMuted, fontFamily: V.mono, marginBottom: 6 }}>Composite score</div>
+          <div style={{ fontFamily: V.display, fontWeight: 700, fontSize: 128, color: hasScore ? V.ink : V.textMuted, lineHeight: 1 }}>
+            {hasScore ? v.total_score : DASH}
+            <span style={{ fontSize: 32, color: V.textMuted }}> /100</span>
           </div>
-        )}
-      <div style={{ marginTop: 'auto', maxWidth: 760 }}>
-        {!isUnfilled(v.ai_notes) && <Body>{v.ai_notes}</Body>}
+          <div style={{ marginTop: 8 }}>
+            <Pill tone={hasScore ? 'gold' : 'neutral'}>{hasScore ? v.tier : 'Not scored yet'}</Pill>
+          </div>
+          <div style={{ marginTop: 20, ...cardStyle(V, true), padding: 16 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 8 }}>What this tells us</div>
+            {!isUnfilled(v.ai_notes) ? (
+              <p style={{ fontSize: 13, lineHeight: 1.45, color: V.ink, fontFamily: V.vibe === 'serif' ? V.display : V.sans, margin: 0 }}>{v.ai_notes}</p>
+            ) : (
+              <>
+                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '90%' }} />
+                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '70%', opacity: 0.7, marginTop: 6 }} />
+                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '46%', opacity: 0.5, marginTop: 6 }} />
+                <div style={{ marginTop: 10, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>Run the Diligence & Scoring Engine (Week 3) to generate this.</div>
+              </>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', color: V.textMuted, fontFamily: V.mono, marginBottom: 12 }}>Six sub-scores</div>
+          <ScoreBars items={v.breakdown} />
+        </div>
       </div>
     </SlideShell>
   );
 };
 
 const Slide_Team: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
   const t = d.team;
+  const slots = [0, 1, 2].map((i) => t.founders[i] || null);
+  const filledCount = t.founders.length;
+  const renderAvatar = (m: Founder | null, i: number) => {
+    if (!m) {
+      return (
+        <div key={i} style={{ ...cardStyle(V, true), padding: 16, display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 8, background: V.line, opacity: 0.7, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill={V.textMuted} opacity={0.7}>
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 22 Q12 14 20 22 Z" />
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ height: 10, borderRadius: 5, background: V.line, width: '70%' }} />
+            <div style={{ height: 8, borderRadius: 4, background: V.line, width: '40%', opacity: 0.6, marginTop: 8 }} />
+            <div style={{ marginTop: 8, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: V.textMuted, fontFamily: V.mono }}>
+              {i === 0 ? 'Founder' : i === 1 ? 'Co-founder?' : 'Early team'}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    const initials = (m.name || '').split(/\s+/).map((s) => s[0]).slice(0, 2).join('').toUpperCase();
+    return (
+      <div key={i} style={{ ...cardStyle(V), padding: 16, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+        <div style={{ width: 48, height: 48, borderRadius: 8, background: `linear-gradient(135deg, ${V.accent} 0%, ${V.gold} 100%)`, color: '#fff', fontFamily: V.display, fontWeight: 700, fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {initials || '?'}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: V.ink, fontFamily: V.display, lineHeight: 1.2 }}>{m.name}</div>
+          <div style={{ fontSize: 10, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.18em', color: V.accent, fontFamily: V.mono }}>{m.role}</div>
+          {m.bio && <p style={{ fontSize: 12, lineHeight: 1.4, color: V.textSoft, fontFamily: V.sans, marginTop: 8, marginBottom: 0 }}>{m.bio}</p>}
+        </div>
+      </div>
+    );
+  };
   return (
     <SlideShell>
       <Eyebrow>{t.eyebrow}</Eyebrow>
       <SlideHeading>{t.headline}</SlideHeading>
-      {t.founders.length === 0
-        ? <div style={{ marginTop: 32 }}><Nudge>Seed your cap table in Week 3 to list the founding team here.</Nudge></div>
-        : (
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(t.founders.length, 4)}, 1fr)`, gap: 16, marginTop: 32 }}>
-            {t.founders.map((f, i) => (
-              <div key={i} style={{ padding: '20px 18px', borderRadius: 12, border: '1px solid currentColor' }}>
-                <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>{f.name}</div>
-                <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>{f.role}</div>
-                {f.bio && <Body max={220}>{f.bio}</Body>}
-              </div>
-            ))}
+      <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {filledCount === 0 && <Pill tone="neutral">Team to be seeded in Week 3</Pill>}
+        {filledCount === 1 && <Pill tone="gold">Going solo · or co-founder pending</Pill>}
+        {filledCount > 0 && <Pill tone="emerald">{filledCount} on the cap table</Pill>}
+      </div>
+      <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 28, flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {slots.map((m, i) => renderAvatar(m, i))}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ ...cardStyle(V), padding: 16, flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 10 }}>Team intro</div>
+            {isUnfilled(t.team_intro) ? (
+              <>
+                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '88%' }} />
+                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '70%', opacity: 0.7, marginTop: 6 }} />
+                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '52%', opacity: 0.5, marginTop: 6 }} />
+                <div style={{ marginTop: 10, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>Answer the Personal Advisor's team questions to surface this.</div>
+              </>
+            ) : (
+              <p style={{ fontSize: 13.5, lineHeight: 1.5, color: V.ink, fontFamily: V.vibe === 'serif' ? V.display : V.sans, margin: 0 }}>{t.team_intro}</p>
+            )}
           </div>
-        )}
-      <div style={{ marginTop: 28, maxWidth: 760 }}>
-        {!isUnfilled(t.team_intro) && <Body>{t.team_intro}</Body>}
+          <div style={{ ...cardStyle(V, true), padding: 16 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 10 }}>Cap-table coverage</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, textAlign: 'center' }}>
+              {[
+                { label: 'Founders', value: filledCount || DASH },
+                { label: 'Holders', value: d.cap_table.holders.length || DASH },
+                { label: 'Mentors', value: d.mentor_network.mentors.filter((x) => !isUnfilled(x)).length || DASH },
+              ].map((k, i) => (
+                <div key={i}>
+                  <div style={{ fontFamily: V.display, fontWeight: 700, fontSize: 22, color: k.value === DASH ? V.textMuted : V.ink }}>{k.value}</div>
+                  <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: V.textMuted, fontFamily: V.mono }}>{k.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </SlideShell>
   );
 };
 
 const Slide_MentorNetwork: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
   const m = d.mentor_network;
+  const mentors = m.mentors.filter((x) => !isUnfilled(x));
+  const signals = m.network_signals.filter((x) => !isUnfilled(x));
   return (
     <SlideShell>
       <Eyebrow>{m.eyebrow}</Eyebrow>
       <SlideHeading>{m.headline}</SlideHeading>
-      <div style={{ marginTop: 28, maxWidth: 760 }}>
-        {isUnfilled(m.body)
-          ? <Nudge>Answer the "mentors and network" advisor questions to populate this slide.</Nudge>
-          : <Body>{m.body}</Body>}
-      </div>
-      {m.mentors.length > 0 && (
-        <div style={{ marginTop: 24, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {m.mentors.map((x, i) => <Chip key={i}>{x}</Chip>)}
+      <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 28, flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ ...cardStyle(V, true), padding: 18 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 10 }}>Mentor sessions</div>
+            {mentors.length === 0 ? (
+              <>
+                <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                  {[0, 1, 2].map((i) => (
+                    <li key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px dashed ${V.line}`, opacity: 0.55 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: V.textMuted }}>
+                        <span>○</span> Session #{i + 1}
+                      </span>
+                      <span style={{ fontSize: 10, color: V.textMuted, fontFamily: V.mono }}>{DASH}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div style={{ marginTop: 10, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: V.textMuted, fontFamily: V.mono }}>Book your first mentor session in Office Hours</div>
+              </>
+            ) : (
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                {mentors.slice(0, 6).map((name, i) => (
+                  <li key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid ${V.line}`, fontSize: 12.5, color: V.ink }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ color: V.emerald }}>✓</span>
+                      {name}
+                    </span>
+                    <span style={{ color: V.textMuted, fontFamily: V.mono, fontSize: 10 }}>logged</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div style={{ ...cardStyle(V), padding: 18, flex: 1 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 12 }}>Operating partners on call</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+              {(signals.length > 0 ? signals.slice(0, 6) : ['Legal', 'Design', 'Recruiting', 'Technical DD', 'Finance', 'GTM']).map((cat, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: 999, background: V.accent, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, color: V.ink, fontFamily: V.display, fontWeight: 600 }}>{cat}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 12, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: V.textMuted, fontFamily: V.mono }}>pre-vetted · network rates</div>
+          </div>
+          {!isUnfilled(m.body) && (
+            <div style={{ ...cardStyle(V, true), padding: 14 }}>
+              <p style={{ fontSize: 12.5, lineHeight: 1.4, color: V.ink, fontFamily: V.vibe === 'serif' ? V.display : V.sans, margin: 0 }}>{m.body}</p>
+            </div>
+          )}
         </div>
-      )}
-      <div style={{ marginTop: 'auto' }}>
-        {m.network_signals.length > 0 && (
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {m.network_signals.map((s, i) => <li key={i} style={{ marginBottom: 6 }}><Body>{s}</Body></li>)}
-          </ul>
-        )}
+        <div style={{ ...cardStyle(V), padding: 12, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <NetworkConstellation />
+          </div>
+          <div style={{ marginTop: 8, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', textAlign: 'center', color: V.textMuted, fontFamily: V.mono }}>
+            Axal network · {mentors.length || '—'} mentors
+          </div>
+        </div>
       </div>
     </SlideShell>
   );
 };
 
 const Slide_CapTable: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
   const c = d.cap_table;
-  const { pal, fonts } = useVariant();
+  const incorporated = d.brand.incorporated;
   return (
     <SlideShell>
       <Eyebrow>{c.eyebrow}</Eyebrow>
       <SlideHeading>{c.headline}</SlideHeading>
-      {c.holders.length === 0
-        ? <div style={{ marginTop: 32 }}><CapTablePie holders={[]} /></div>
-        : (
-          <table style={{ marginTop: 32, width: '100%', borderCollapse: 'collapse', fontFamily: fonts.mono, fontSize: 13 }}>
-            <thead>
-              <tr style={{ color: pal.muted, textAlign: 'left', borderBottom: `1px solid ${pal.rule}` }}>
-                <th style={{ padding: '10px 0', fontWeight: 500 }}>Holder</th>
-                <th style={{ padding: '10px 0', fontWeight: 500 }}>Kind</th>
-                <th style={{ padding: '10px 0', fontWeight: 500 }}>Security</th>
-                <th style={{ padding: '10px 0', fontWeight: 500, textAlign: 'right' }}>Ownership</th>
-              </tr>
-            </thead>
-            <tbody>
-              {c.holders.map((h, i) => (
-                <tr key={i} style={{ borderBottom: `1px solid ${pal.rule}`, color: pal.ink }}>
-                  <td style={{ padding: '12px 0' }}>{h.name}</td>
-                  <td style={{ padding: '12px 0', color: pal.muted }}>{h.kind}</td>
-                  <td style={{ padding: '12px 0', color: pal.muted }}>{h.role}</td>
-                  <td style={{ padding: '12px 0', textAlign: 'right' }}>{h.ownership_pct}</td>
-                </tr>
+      <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Pill tone={incorporated ? 'emerald' : 'neutral'}>{incorporated ? '✓ Incorporated · Delaware C-Corp' : 'Incorporation pending'}</Pill>
+        <Pill tone="neutral">4-yr vesting · 1-yr cliff</Pill>
+        <Pill tone={incorporated ? 'emerald' : 'neutral'}>{incorporated ? '✓ 83(b) filed in window' : '83(b) not yet filed'}</Pill>
+      </div>
+      <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: '8fr 4fr', gap: 24, flex: 1, minHeight: 0 }}>
+        <div>
+          <CapTablePie holders={c.holders} />
+        </div>
+        <div style={{ ...cardStyle(V), padding: 12, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <LegalScroll />
+          </div>
+          <div style={{ marginTop: 8, paddingTop: 12, borderTop: `1px solid ${V.line}` }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 8 }}>Documents on file</div>
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              {[
+                { name: 'Articles of Incorporation', done: incorporated },
+                { name: 'Founder stock + vesting',   done: incorporated },
+                { name: '83(b) election',            done: incorporated },
+                { name: 'Cofounder agreement',       done: incorporated },
+              ].map((doc, i) => (
+                <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: doc.done ? V.ink : V.textMuted, padding: '3px 0' }}>
+                  <span style={{ color: doc.done ? V.emerald : V.textMuted }}>{doc.done ? '✓' : '○'}</span>
+                  {doc.name}
+                </li>
               ))}
-            </tbody>
-          </table>
-        )}
-      <div style={{ marginTop: 'auto', color: pal.muted, fontSize: 12 }}>{c.note}</div>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div style={{ marginTop: 12, color: V.textMuted, fontSize: 11, fontFamily: V.mono }}>{c.note}</div>
     </SlideShell>
   );
 };
 
 const Slide_Ask: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
   const a = d.ask;
-  const { pal, fonts } = useVariant();
   const askMissing = a.raise_amount === DASH;
+  const runwayMissing = a.runway === DASH;
+  const milestones = a.next_milestones.filter((x) => !isUnfilled(x));
   return (
     <SlideShell>
-      <Eyebrow>{a.eyebrow}</Eyebrow>
-      <SlideHeading>{a.headline}</SlideHeading>
-      <div style={{ display: 'flex', gap: 32, marginTop: 32, alignItems: 'flex-start' }}>
-        <div>
-          <div style={{ color: pal.muted, fontFamily: fonts.mono, fontSize: 11, letterSpacing: '0.12em' }}>RAISE</div>
-          <div style={{ fontFamily: fonts.display, fontSize: 56, fontWeight: 700, color: askMissing ? pal.muted : pal.ink, lineHeight: 1 }}>{a.raise_amount}</div>
-        </div>
-        <div>
-          <div style={{ color: pal.muted, fontFamily: fonts.mono, fontSize: 11, letterSpacing: '0.12em' }}>RUNWAY</div>
-          <div style={{ fontFamily: fonts.display, fontSize: 56, fontWeight: 700, color: a.runway === DASH ? pal.muted : pal.ink, lineHeight: 1 }}>{a.runway}</div>
-        </div>
-      </div>
-      {askMissing && <div style={{ marginTop: 20 }}><Nudge>Set `funding_needed` on your project to show a raise amount.</Nudge></div>}
-      <div style={{ marginTop: 28, flex: 1 }}>
-        <Eyebrow>Use of funds</Eyebrow>
-        {a.use_of_funds.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-            {a.use_of_funds.map((u, i) => (
-              <div key={i} style={{ padding: '12px 14px', border: `1px solid ${pal.rule}`, borderRadius: 8 }}>
-                <div style={{ fontFamily: fonts.mono, fontSize: 11, color: pal.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{u.label}</div>
-                <div style={{ fontFamily: fonts.display, fontSize: 28, fontWeight: 700 }}>{u.pct}%</div>
-              </div>
-            ))}
+      <div style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 32, flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <Eyebrow>{a.eyebrow}</Eyebrow>
+          <SlideHeading size="3xl">What we are raising — and what it buys.</SlideHeading>
+          <div style={{ fontSize: 12, marginTop: 8, color: V.textMuted, fontFamily: V.mono }}>Pre-incorporation — entity stands up in Week 4.</div>
+          <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+            <div style={{ ...cardStyle(V, true), padding: 18 }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', color: V.textMuted, fontFamily: V.mono, marginBottom: 6 }}>Raise</div>
+              <div style={{ fontFamily: V.display, fontWeight: 700, fontSize: 52, lineHeight: 1, color: askMissing ? V.textMuted : V.ink }}>{a.raise_amount}</div>
+              <div style={{ marginTop: 8, fontSize: 11, color: V.textSoft, fontFamily: V.mono }}>SAFE · post-money · TBD</div>
+            </div>
+            <div style={{ ...cardStyle(V, true), padding: 18 }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', color: V.textMuted, fontFamily: V.mono, marginBottom: 6 }}>Runway</div>
+              <div style={{ fontFamily: V.display, fontWeight: 700, fontSize: 52, lineHeight: 1, color: runwayMissing ? V.textMuted : V.ink }}>{a.runway}</div>
+              <div style={{ marginTop: 8, fontSize: 11, color: V.textSoft, fontFamily: V.mono }}>Target close · Q3 2026</div>
+            </div>
           </div>
-        ) : <UseOfFundsBar buckets={undefined} />}
-      </div>
-      <div style={{ marginTop: 20 }}>
-        <Eyebrow>Next milestones</Eyebrow>
-        {a.next_milestones.some((x) => x !== DASH)
-          ? <ul style={{ margin: 0, paddingLeft: 18 }}>{a.next_milestones.map((m, i) => <li key={i}><Body max={520}>{m}</Body></li>)}</ul>
-          : <div style={{ opacity: 0.6, fontSize: 12 }}>Add Now / Next / Later OKRs to surface milestones here.</div>}
+          {askMissing && (
+            <div style={{ marginTop: 14, maxWidth: 520 }}>
+              <Nudge>Set <code style={{ fontFamily: V.mono }}>funding_needed</code> on your project to show a raise amount.</Nudge>
+            </div>
+          )}
+          <div style={{ marginTop: 22, flex: 1 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', color: V.textMuted, fontFamily: V.mono, marginBottom: 8 }}>Use of funds</div>
+            <UseOfFundsBar buckets={a.use_of_funds.length > 0 ? a.use_of_funds : undefined} />
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ ...cardStyle(V), padding: 12, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <RocketTrajectory />
+          </div>
+          <div style={{ ...cardStyle(V), padding: 16 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 8 }}>Next milestones</div>
+            {milestones.length === 0 ? (
+              <>
+                <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                  {[0, 1, 2].map((i) => (
+                    <li key={i} style={{ display: 'flex', gap: 8, padding: '4px 0', color: V.textMuted, opacity: 0.7 }}>
+                      <span style={{ color: V.line }}>·</span>
+                      <span style={{ height: 8, borderRadius: 4, background: V.line, width: `${60 - i * 8}%`, display: 'inline-block' }} />
+                    </li>
+                  ))}
+                </ul>
+                <div style={{ marginTop: 10, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: V.textMuted, fontFamily: V.mono }}>Add Now / Next / Later OKRs to surface milestones.</div>
+              </>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 14 }}>
+                {milestones.slice(0, 4).map((m, i) => (
+                  <li key={i} style={{ fontSize: 12, lineHeight: 1.4, color: V.ink, marginBottom: 4 }}>{m}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       </div>
     </SlideShell>
   );

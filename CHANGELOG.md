@@ -11,6 +11,69 @@
 > building it.
 
 
+## Feature — Axal Spin-Out deck: 12 slides rebuilt as two-column right-rail layouts
+
+Task #7 of the 3-task Spin-Out deck rebuild. All visual slides in
+`frontend/src/decks/templates/axal_spinout_demoday_app.tsx` now render
+as 12-column grids with a content column on the left and a dedicated
+right-rail anchor (illustration or skeleton-aware chart) on the right.
+No slide can collapse to whitespace at first paint regardless of which
+Lab fields the founder has filled.
+
+Rewritten: `Slide_Cover` (6+6 with `JourneyArc`), `Slide_Problem`
+(7+5 with `ProblemEcho` + evidence card), `Slide_Validation` (5-up
+interview cards with ghost slots until five are logged), `Slide_Market`
+(5+7 with `MarketCircles` rail), `Slide_Solution` (7+5 with
+`MvpBlueprint` rail), `Slide_Roadmap` (`OkrBoard` always rendered +
+`FourWeekTicks` footer), `Slide_Brand` (7+5 with
+`BrandPaletteIllustration` rail + status `Pill`s), `Slide_VentureReadiness`
+(5+7 with composite-score block + `ScoreBars`), `Slide_Team` (3 founder
+cards with gradient initial avatars + ghost rows), `Slide_MentorNetwork`
+(5+4+3 with `NetworkConstellation` middle rail + operating-partner
+list), `Slide_CapTable` (8+4 with `CapTablePie` + `LegalScroll` + docs
+checklist), `Slide_Ask` (7+5 with stat cards, `UseOfFundsBar`,
+`RocketTrajectory` rail + next-milestones card). Ask headline forced to
+"What we are raising — and what it buys." per the brand-voice spec.
+
+Added two slide-local helpers at the top of the slide layer:
+`cardStyle(V, soft?)` (inline-style equivalent of the branch's `<Card>`)
+and `<Pill tone="neutral|accent|gold|emerald|rose">` (inline-style
+equivalent of the branch's `<Pill>`). Both stay private to the slide
+section so the PDF pipeline never has to chase Tailwind classes through
+the export — every visual byte is inline styles + V-token reads, same
+PDF-safety contract as Task #6.
+
+`Slide_AxalSignal` and `Slide_Contact` are intentionally untouched —
+they already have right-rail anchors (4-card lab-week grid) and minimal-
+intent layout respectively. Data shape in `SpinoutDemoDataT` is
+unchanged; worker payload contract preserved.
+
+`npm run test:drift` clean (13 templates wired correctly). Default
+variant stays `'editorial'` (violet · Axal brand).
+
+Architect-review fix-ups landed in the same task:
+
+- `Slide_Cover` no longer collapses to a single column for the
+  `manifesto` variant — the `JourneyArc` right-rail card stays mounted
+  for every variant; the cinematic headline weight now comes from
+  font-size/weight only.
+- `Slide_Validation` rebuilt as strict 7+5: 3 quote cards on the left
+  (with dashed "Interview N pending" slots until 5 are logged) + a
+  right rail with the existing `VoicesBubbles` illustration + a
+  3-up Week-1 scoreboard (interviews / distinct pains / quotes).
+  This finally wires the previously-dead `VoicesBubbles` export from
+  the Task #6 primitives port.
+- `Slide_Roadmap` rebuilt as 8+4: `OkrBoard` on the left, right rail
+  carries a "30-day cadence" card around `FourWeekTicks` + an "OKR
+  coverage" 3-up (Now/Next/Later counts).
+- `Slide_Team` rebuilt as 7+5: 3 horizontal founder cards (gradient
+  avatar + bio) on the left, right rail with a team-intro card
+  (skeleton bars when unfilled) + a "Cap-table coverage" 3-up
+  (founders / holders / mentors).
+- `Slide_MentorNetwork` rebuilt as strict 7+5: mentor sessions +
+  operating-partners grid + optional body on the left, right rail
+  hosts `NetworkConstellation` with a footer caption.
+
 ## Feature — Axal Spin-Out deck: skeleton-aware charts + 9 SVG illustrations
 
 Ported the 14 visual primitives from branch

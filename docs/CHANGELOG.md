@@ -11,6 +11,93 @@
 > building it.
 
 
+## Feature — Axal Spin-Out deck: 12 slides rebuilt as two-column right-rail layouts
+
+Task #7 of the 3-task Spin-Out deck rebuild. All visual slides in
+`frontend/src/decks/templates/axal_spinout_demoday_app.tsx` now render
+as 12-column grids with a content column on the left and a dedicated
+right-rail anchor (illustration or skeleton-aware chart) on the right.
+No slide can collapse to whitespace at first paint regardless of which
+Lab fields the founder has filled.
+
+Rewritten: `Slide_Cover` (6+6 with `JourneyArc`), `Slide_Problem`
+(7+5 with `ProblemEcho` + evidence card), `Slide_Validation` (5-up
+interview cards with ghost slots until five are logged), `Slide_Market`
+(5+7 with `MarketCircles` rail), `Slide_Solution` (7+5 with
+`MvpBlueprint` rail), `Slide_Roadmap` (`OkrBoard` always rendered +
+`FourWeekTicks` footer), `Slide_Brand` (7+5 with
+`BrandPaletteIllustration` rail + status `Pill`s), `Slide_VentureReadiness`
+(5+7 with composite-score block + `ScoreBars`), `Slide_Team` (3 founder
+cards with gradient initial avatars + ghost rows), `Slide_MentorNetwork`
+(5+4+3 with `NetworkConstellation` middle rail + operating-partner
+list), `Slide_CapTable` (8+4 with `CapTablePie` + `LegalScroll` + docs
+checklist), `Slide_Ask` (7+5 with stat cards, `UseOfFundsBar`,
+`RocketTrajectory` rail + next-milestones card). Ask headline forced to
+"What we are raising — and what it buys." per the brand-voice spec.
+
+Added two slide-local helpers at the top of the slide layer:
+`cardStyle(V, soft?)` (inline-style equivalent of the branch's `<Card>`)
+and `<Pill tone="neutral|accent|gold|emerald|rose">` (inline-style
+equivalent of the branch's `<Pill>`). Both stay private to the slide
+section so the PDF pipeline never has to chase Tailwind classes through
+the export — every visual byte is inline styles + V-token reads, same
+PDF-safety contract as Task #6.
+
+`Slide_AxalSignal` and `Slide_Contact` are intentionally untouched —
+they already have right-rail anchors (4-card lab-week grid) and minimal-
+intent layout respectively. Data shape in `SpinoutDemoDataT` is
+unchanged; worker payload contract preserved.
+
+`npm run test:drift` clean (13 templates wired correctly). Default
+variant stays `'editorial'` (violet · Axal brand).
+
+## Feature — Axal Spin-Out deck: skeleton-aware charts + 9 SVG illustrations
+
+Ported the 14 visual primitives from branch
+`claude/add-missing-sidebar-options-tmCKz` into
+`frontend/src/decks/templates/axal_spinout_demoday_app.tsx` (Task #6 of
+3-task deck-rebuild plan; Tasks #7 / #8 follow). The Spin-Out deck no
+longer collapses to whitespace at chart positions when a founder's
+project is empty — every chart renders a designed skeleton instead of
+the previous one-line `<Nudge>` bail-out.
+
+Components landed (all theme-aware via a new `useV()` adapter shim that
+maps the existing `PALETTES`/`FONTS` to the branch's `V.accent`/`V.line`/
+`V.card`/etc. tokens, so component bodies stay byte-close to the branch
+source):
+
+- **Charts (5)**: `MarketCircles` (TAM/SAM/SOM nested circles; dashed
+  rings when all three are 0), `ScoreBars` (six dashed sub-score bars;
+  total-score header reads "—/100" when not scored yet), `OkrBoard`
+  (Now / Next / Later kanban; two ghost cards per empty column),
+  `CapTablePie` (donut + ownership table; 4-slice dashed donut at
+  50/30/12/8 when total ownership = 0), `UseOfFundsBar` (stacked bar +
+  legend; 3 striped ghost segments at 55/30/15 when buckets are empty,
+  with optional `fallback` prop for the raw string).
+- **Illustrations (9, decorative SVG)**: `JourneyArc`, `FourWeekTicks`,
+  `MvpBlueprint`, `VoicesBubbles`, `NetworkConstellation`, `LegalScroll`,
+  `RocketTrajectory`, `BrandPaletteIllustration`, `ProblemEcho`.
+
+Slide wiring (minimal; full slide redesigns are Task #7's territory):
+the five empty-state branches in `Slide_Market`, `Slide_Roadmap`,
+`Slide_VentureReadiness`, `Slide_CapTable`, `Slide_Ask` now render the
+matching chart (with empty data) instead of the literal `<Nudge>` toast.
+Populated-state rendering byte-for-byte unchanged so real-data renders
+don't drift. Adapter signatures consume the existing
+`SpinoutDemoDayData` shape directly — no changes to `sample.ts`,
+`PitchDeckPrintPage.jsx::buildTemplateData`, or `methods.ts` wiring.
+
+Two small helpers added: `usdShort` for MarketCircles axis labels and
+`parseSize` to coerce TAM/SAM/SOM string values (`"$8.4B"`, `"1.2M"`)
+back to numbers for the radius math.
+
+Verified: `node scripts/check-deck-templates.mjs` passes (13 templates
+still wired correctly); `vite build` succeeds (axal bundle 541 kB).
+
+Files: `frontend/src/decks/templates/axal_spinout_demoday_app.tsx`.
+
+---
+
 ## Fix — Telegram admin: aggregator drafts persist + Open works for older drafts
 
 Two regressions in `/admin/telegram`:

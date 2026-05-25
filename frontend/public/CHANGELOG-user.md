@@ -8,6 +8,18 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Axal Spin-Out demo-day deck slides feel like a finished pitch from day one
+
+Every visual slide in the Spin-Out demo-day deck has been rebuilt with
+a two-column layout — your story on the left, a designed illustration
+or chart anchor on the right. The cover, problem, market, solution,
+brand, venture-readiness score, team, mentors, cap table and ask slides
+all now hold their shape with no empty space, whether you've filled in
+the Lab fields yet or not. As you log interviews, set TAM/SAM/SOM,
+seed your cap table or set a raise amount, the placeholders quietly
+swap in for your real numbers without the slide jumping around. The ask
+slide now leads with "What we are raising — and what it buys."
+
 ## Axal Spin-Out demo-day deck no longer has blank chart areas
 
 The Spin-Out demo-day pitch deck used to leave large empty spaces on
