@@ -1,0 +1,114 @@
+Looking at the screenshots — the verdict is clear. Even where the layout *exists*, the empty states are too sparse: a single tiny nudge in 95% whitespace. The deck reads as "broken/incomplete" rather than "intentionally minimal". Let me audit what's actually on disk, then upgrade the visual system + harden Fill-from-project.
+
+Wiring is correct. The real problem the screenshots reveal: when the founder hasn't filled their project yet, every slide collapses to "title + tiny nudge + 90% whitespace" because each visual component bails out instead of rendering a skeleton. Two strategic edits:
+
+**A** — every chart renders a designed skeleton when data is empty (not a nudge in whitespace).
+**B** — every slide gets a hero illustration on the right rail so the layout is anchored even when text is thin.
+**C** — Fill-from-project UX shows per-section coverage so founders know exactly what to fill.
+
+Let me read the weakest current slides + the shared visual primitives to plan precise edits.
+
+Now I have the full picture. The problem isn't just visual — every chart component bails out with a `Nudge` (CapTablePie line 610, UseOfFundsBar line 679, OkrBoard line 580 shows "—"). That's why slides collapse to whitespace. Plan:
+
+1. **Add an illustration system** — reusable SVG anchor art for sparse slides.
+2. **Replace each chart with skeleton-aware versions** — never bail; show a designed empty state.
+3. **Rewrite the weakest slides** (Solution, Brand, Team, Mentors, Cap Table, Ask, Signal) with 2-column layouts where the right rail always renders an illustration or chart.
+4. **Upgrade the Cover** with the hero illustration.
+5. **Improve PitchDeckPage** Fill-from-project feedback (per-section coverage).
+
+Doing this as one tight pass of additive + replacement edits.
+
+Now upgrade each chart to render a graceful skeleton when empty — never bail.
+
+Same skeleton-aware treatment for MarketCircles. Then rewrite the slides for proper two-column structure.
+
+Now major slide rewrites. Starting with Cover — stronger layout, JourneyArc anchor.
+
+Now Slide 2 (Problem) — anchor the right rail with `ProblemEcho`, fix the empty-pains state.
+
+Slide 5 (Solution), 7 (Brand), 9 (Team), 10 (Mentors), 11 (Cap Table), 12 (Ask) — these are the slides the screenshots flag as empty. Rewriting them in a single pass.
+
+Now slides 9 (Team), 10 (Mentors), 11 (Cap Table), 12 (Ask), 13 (Signal). Let me read their current state:
+
+Now rewriting slides 9-12 — the ones the screenshots most clearly flag.
+
+Slide 13 (Signal) gets a cleaner title to match the editorial register. Now improving PitchDeckPage Fill-from-project UX so it's clearer what populates each slide.
+
+Now the Fill-from-project UX. The existing coverage strip is a one-line list — let me upgrade it to a per-slide map so founders see exactly which slides will populate.
+
+Let me verify the file still parses cleanly by checking line counts and looking for obvious syntax issues.
+
+14 slide components present, file grew from 1766 → 2524 lines (illustrations + skeletons + denser slides). Now quick sanity check on the JSX structure — verify each slide closes correctly and the `SLIDE_LIST` still has all 14.
+
+All 14 slides registered. Commit and push.
+
+Shipped. **+1049 / −252 lines across 2 files.** Here's what changed and how to verify.
+
+## What was broken
+
+The screenshots showed slides like:
+
+> `04 · SOLUTION`
+> **A first cut of what we will ship.**
+> ↳ Fill in your project's `solution` field to describe what you're building.
+
+…and then 90% whitespace. **Every chart and dependent panel bailed out with a `<Nudge>` when data was empty** — `CapTablePie` returned a single-line nudge if `total === 0`, `UseOfFundsBar` returned a nudge if no buckets, `OkrBoard` rendered `"—"` for empty columns, `MarketCircles` produced a tiny dot, `ScoreBars` wasn't even called when score was null. So as soon as a founder hit "Fill from project" against a fresh, mostly-empty project, the deck collapsed to title cards.
+
+The Fill-from-project flow itself was wired correctly end-to-end (frontend → `api.deckGenerate(pid, { template })` → worker `?template=axal_spinout_demoday` branch → `fillAxalSpinoutDemoDay()` → 9 D1 tables → response `{ initial, coverage }` → `setTemplateInitial(r.initial)` → deck remounts via `key=...`). What was missing was visual *resilience* at the receiving end.
+
+## The fix, in three layers
+
+**Layer 1 — Illustration system (9 new components, all hand-built SVG)**
+`JourneyArc` (cover hero — 4-week founder arc with milestone markers), `FourWeekTicks`, `MvpBlueprint`, `VoicesBubbles`, `NetworkConstellation`, `LegalScroll` (with the 83(b) seal), `RocketTrajectory`, `BrandPaletteIllustration`, `ProblemEcho`. Every weak slide now anchors its right rail with one of these.
+
+**Layer 2 — Skeleton-aware charts (5 components rewritten, never bail)**
+
+| Chart | Empty state |
+|---|---|
+| `ScoreBars` | 6 dashed bars + "—/100" + "Not scored yet" pill |
+| `OkrBoard` | 2 ghost cards per Now/Next/Later column |
+| `CapTablePie` | 4-slice ghost donut (founder/cofounder/option pool/SAFE) + placeholder ownership table |
+| `UseOfFundsBar` | 3 ghost segments at 55/30/15 with "—" labels |
+| `MarketCircles` | Dashed concentric rings with TAM/SAM/SOM size labels |
+
+**Layer 3 — Slide redesigns (8 slides)**
+
+Cover · Problem · Solution · Roadmap · Brand · Readiness · Team · Mentors · Cap Table · Ask · Signal — all rebuilt with two-column layouts where the right rail anchors with an illustration or chart that always renders. Slide 12 (Ask) now opens with the headline you wanted: **"What we are raising — and what it buys"** + two big stat cards (Raise / Runway with `—` fallbacks) + use-of-funds bar + rocket trajectory + next-milestones panel. Slide 13 (Signal) title changed to **"Built across 30 days of Lab work."** to match the brand voice from the screenshots.
+
+**Layer 4 — Fill-from-project coverage map**
+
+The single-line coverage strip became a **14-cell grid**, one card per slide, each showing:
+- A green/red dot (will populate / needs data)
+- The exact source table (`discovery_interviews.pains_json`, `score_snapshots`, etc.)
+- Current count ("3/5 interviews", "score: ✓")
+
+So the founder sees at a glance which Lab tools to open next.
+
+## Data mapping (unchanged, now visible)
+
+| Source | Drives |
+|---|---|
+| `projects` | Cover · Problem · Market · Solution · Brand · Ask (always populated) |
+| `discovery_interviews` | Validation cards + `top_pains` aggregation |
+| `roadmap_okrs` | OkrBoard + Next-milestones panel |
+| `score_snapshots` | Readiness score + ai_notes |
+| `captable_holders` | Team avatars + Cap-table donut + ownership table |
+| `financial_models.inputs_json` | Runway, instrument, use-of-funds buckets |
+| `spinout_lab_milestones` | Mentor sessions + Axal-signal 4-week timeline + 83(b) badge |
+| `advisor_answers` | Market citations, brand voice/palette, advisor names |
+| `users` | Contact slide |
+
+## How to verify
+
+1. Run the deck with `<AxalSpinoutDemoDayDeck initial={undefined} />` — falls back to `SAMPLE_DATA`, every slide should look polished with real Loopline content.
+2. Run with `initial={ /* empty AxalSpinoutData */ }` — every slide should now show skeleton illustrations + ghost charts, never raw whitespace.
+3. In PitchDeckPage: pick "Axal 30-day Spin-Out Lab — Demo Day", click "Fill from project". Coverage grid appears showing which slides populate. The deck renders with whatever real data exists; everything else shows its skeleton.
+
+## Assumptions
+
+- Frontend has Tailwind, framer-motion, React 18 (confirmed in other templates in the same folder).
+- `users` table has `founder_id` on `projects` (confirmed in audit).
+- The five existing templates in `frontend/src/decks/templates/` continue to coexist via the registry — no changes to them.
+- Skeleton chart styles use Tailwind `style` props rather than utility classes so they render identically in PDF export via Cloudflare Browser Rendering.
+
+PR #53 now has the upgraded deck. The next time you click "Fill from project" against a partially-filled project, you should see a deck that reads as a 14-slide premium pitch — not a series of empty hero pages.
