@@ -691,6 +691,636 @@ const VariantSwitcher: React.FC = () => {
   );
 };
 
+/* ─────────────────────────── visual primitives ─────────────────────────── */
+/*
+ * Ported from branch `claude/add-missing-sidebar-options-tmCKz` (Task #6).
+ * Nine hand-built SVG illustrations + five skeleton-aware chart components.
+ * Each chart renders a designed empty state in place of the previous
+ * one-line `<Nudge>` bail-out, so the deck never collapses to whitespace
+ * when a founder's project is thin. The slide layouts themselves stay as
+ * Task #1 left them — the slide redesigns happen in the next task.
+ *
+ * Adapter shim `useV()` maps the current PALETTES/FONTS into the token
+ * names the branch components read (`V.accent`, `V.line`, `V.card`,
+ * etc.) so component bodies stay byte-close to the branch source.
+ */
+
+type V = {
+  accent: string; accentSoft: string;
+  line: string; card: string; cardSoft: string;
+  ink: string; textSoft: string; textMuted: string;
+  emerald: string; rose: string; gold: string;
+  display: string; sans: string; mono: string;
+  isDark: boolean;
+  vibe: 'serif' | 'sans' | 'mono' | 'cinematic';
+};
+
+const useV = (): V => {
+  const { pal, fonts, variant } = useVariant();
+  return {
+    accent: pal.accent,
+    accentSoft: pal.accentSoft,
+    line: pal.rule,
+    card: pal.surface,
+    cardSoft: pal.chip,
+    ink: pal.ink,
+    textSoft: pal.inkSoft,
+    textMuted: pal.muted,
+    emerald: pal.good,
+    rose: '#B0314A',
+    gold: pal.warn,
+    display: fonts.display,
+    sans: fonts.body,
+    mono: fonts.mono,
+    isDark: variant === 'product_first' || variant === 'manifesto',
+    vibe: variant === 'editorial' ? 'serif'
+        : variant === 'data_dense' ? 'mono'
+        : variant === 'manifesto' ? 'cinematic'
+        : 'sans',
+  };
+};
+
+// USD formatter for MarketCircles labels. Empty / non-positive → DASH.
+const usdShort = (n: number | null | undefined): string => {
+  if (n == null || !isFinite(Number(n)) || Number(n) <= 0) return DASH;
+  const v = Number(n);
+  if (v >= 1_000_000_000) return `$${(v / 1e9).toFixed(v >= 1e10 ? 0 : 1)}B`;
+  if (v >= 1_000_000) return `$${(v / 1e6).toFixed(v >= 1e7 ? 0 : 1)}M`;
+  if (v >= 1_000) return `$${(v / 1e3).toFixed(0)}K`;
+  return `$${Math.round(v)}`;
+};
+
+// Coerce a TAM/SAM/SOM string ("$8.4B", "1.2M", "—") to a numeric size.
+// Returns 0 for unparseable / unfilled values so MarketCircles renders
+// its dashed skeleton.
+const parseSize = (raw: unknown): number => {
+  if (raw == null) return 0;
+  if (typeof raw === 'number') return isFinite(raw) ? raw : 0;
+  const s = String(raw).trim();
+  if (!s || s === DASH) return 0;
+  const m = s.replace(/[\s,_]/g, '').toLowerCase().match(/^\$?(-?\d+(?:\.\d+)?)([kmb])?/);
+  if (!m) return 0;
+  const base = parseFloat(m[1]);
+  if (!isFinite(base)) return 0;
+  const mul = m[2] === 'k' ? 1e3 : m[2] === 'm' ? 1e6 : m[2] === 'b' ? 1e9 : 1;
+  return base * mul;
+};
+
+/* ───── charts (skeleton-aware) ───── */
+
+/** TAM/SAM/SOM nested circles — dashed concentric rings when all three are 0. */
+export const MarketCircles: React.FC<{
+  tam: string | number | null | undefined;
+  sam: string | number | null | undefined;
+  som: string | number | null | undefined;
+}> = ({ tam, sam, som }) => {
+  const V = useV();
+  const T = parseSize(tam);
+  const S = parseSize(sam);
+  const O = parseSize(som);
+  const isEmpty = T === 0 && S === 0 && O === 0;
+  const tamR = 140;
+  const samR = T > 0 && S > 0 ? Math.max(40, Math.sqrt(S / T) * tamR) : 92;
+  const somR = T > 0 && O > 0 ? Math.max(18, Math.sqrt(O / T) * tamR) : 40;
+  const dashed = isEmpty ? '4 4' : undefined;
+  return (
+    <svg viewBox="-180 -180 360 360" style={{ width: '100%', maxWidth: 420, display: 'block' }}>
+      <circle r={tamR} fill={V.accent} fillOpacity={isEmpty ? 0.04 : 0.06} stroke={V.accent} strokeOpacity={isEmpty ? 0.35 : 0.4} strokeDasharray={dashed} />
+      <circle r={samR} fill={V.accent} fillOpacity={isEmpty ? 0.1 : 0.18} stroke={V.accent} strokeOpacity={isEmpty ? 0.45 : 0.6} strokeDasharray={dashed} />
+      <circle r={somR} fill={isEmpty ? 'transparent' : V.accent} stroke={V.accent} strokeDasharray={dashed} strokeWidth={isEmpty ? 1.5 : 0} />
+      <text y={-tamR - 10} textAnchor="middle" fontFamily={V.mono} fontSize="10" fill={V.textMuted} letterSpacing="0.18em">
+        TAM · {usdShort(T || null)}
+      </text>
+      <text x={samR + 8} y="-4" fontFamily={V.mono} fontSize="10" fill={V.accent} letterSpacing="0.18em">
+        SAM · {usdShort(S || null)}
+      </text>
+      <text x={somR + 6} y="4" fontFamily={V.mono} fontSize="10" fill={isEmpty ? V.accent : V.isDark ? V.ink : '#fff'} letterSpacing="0.18em">
+        SOM · {usdShort(O || null)}
+      </text>
+    </svg>
+  );
+};
+
+/** Six-sub-score dashed bars — skeleton when no items. */
+export const ScoreBars: React.FC<{
+  items?: { label: string; value: string | number }[] | null;
+}> = ({ items }) => {
+  const V = useV();
+  const LABELS = ['Market', 'Team', 'Product', 'Capital', 'Fit', 'Distribution'];
+  const numeric = (items || []).map((it) => {
+    const n = typeof it.value === 'number' ? it.value : parseFloat(String(it.value).replace(/[^0-9.\-]/g, ''));
+    return { label: it.label, value: isFinite(n) ? n : 0 };
+  });
+  const hasData = numeric.length > 0 && numeric.some((it) => it.value > 0);
+  const rows = hasData
+    ? numeric
+    : LABELS.map((l) => ({ label: l, value: 0 }));
+  const max = Math.max(...rows.map((i) => i.value), 20);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ fontFamily: V.display, fontSize: 32, fontWeight: 700, color: hasData ? V.ink : V.textMuted, lineHeight: 1 }}>
+          {hasData ? `${Math.round(rows.reduce((s, r) => s + r.value, 0) / rows.length)}/100` : `${DASH}/100`}
+        </span>
+        {!hasData && (
+          <span style={{ background: V.cardSoft, border: `1px dashed ${V.line}`, color: V.textMuted, fontFamily: V.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '4px 10px', borderRadius: 999 }}>
+            Not scored yet
+          </span>
+        )}
+      </div>
+      {rows.map((it, i) => (
+        <div key={i}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+            <span style={{ color: hasData ? V.ink : V.textMuted }}>{it.label}</span>
+            <span style={{ color: V.textMuted, fontFamily: V.mono }}>{hasData ? it.value.toFixed(1) : DASH}</span>
+          </div>
+          <div style={{ height: 6, borderRadius: 3, background: V.cardSoft }}>
+            {hasData ? (
+              <div style={{ height: '100%', borderRadius: 3, width: `${(it.value / max) * 100}%`, background: V.accent }} />
+            ) : (
+              <div style={{
+                height: '100%', borderRadius: 3,
+                width: `${28 + i * 6}%`,
+                background: `repeating-linear-gradient(135deg, ${V.line} 0, ${V.line} 3px, transparent 3px, transparent 6px)`,
+                opacity: 0.6,
+              }} />
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/** Now / Next / Later kanban — 2 ghost cards per column when empty. */
+export const OkrBoard: React.FC<{
+  now?: string[]; next?: string[]; later?: string[];
+}> = ({ now = [], next = [], later = [] }) => {
+  const V = useV();
+  const COLS: { key: 'now' | 'next' | 'later'; label: string; tone: string; items: string[] }[] = [
+    { key: 'now',   label: 'Now',   tone: V.accent,    items: now },
+    { key: 'next',  label: 'Next',  tone: V.gold,      items: next },
+    { key: 'later', label: 'Later', tone: V.textMuted, items: later },
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, height: '100%' }}>
+      {COLS.map((c) => (
+        <div key={c.key} style={{ background: V.cardSoft, border: `1px solid ${V.line}`, borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 999, background: c.tone, display: 'inline-block' }} />
+            <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: c.tone, fontFamily: V.mono }}>{c.label}</span>
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: V.textMuted, fontFamily: V.mono }}>{c.items.length}</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+            {c.items.length === 0 ? (
+              <>
+                {[0, 1].map((g) => (
+                  <div key={g} style={{ borderRadius: 6, padding: 12, background: V.card, border: `1px dashed ${V.line}`, opacity: 0.7 }}>
+                    <div style={{ height: 8, borderRadius: 4, background: V.line, width: `${65 + g * 12}%` }} />
+                    <div style={{ marginTop: 8, height: 6, borderRadius: 3, background: V.line, width: '40%', opacity: 0.7 }} />
+                    <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: V.line, width: '55%', opacity: 0.7 }} />
+                  </div>
+                ))}
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', marginTop: 4, color: V.textMuted, fontFamily: V.mono }}>
+                  Add a {c.label.toLowerCase()} OKR
+                </div>
+              </>
+            ) : c.items.slice(0, 4).map((o, i) => (
+              <div key={i} style={{ borderRadius: 6, padding: 12, background: V.card, border: `1px solid ${V.line}` }}>
+                <div style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.4, color: V.ink }}>{o}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/** Cap-table donut + ownership table — ghost 4-slice when total = 0. */
+export const CapTablePie: React.FC<{ holders: Holder[] }> = ({ holders }) => {
+  const V = useV();
+  // Parse ownership_pct ("50%" → 50) and treat as the slice weight.
+  const parsed = holders.map((h) => {
+    const n = parseFloat(String(h.ownership_pct).replace('%', '').trim());
+    return { ...h, pct: isFinite(n) ? n : 0 };
+  });
+  const total = parsed.reduce((s, h) => s + h.pct, 0);
+  const cx = 110, cy = 110, r = 80, ir = 50;
+  if (total === 0) {
+    const fakeSlices = [
+      { kind: 'Founder',            pct: 50 },
+      { kind: 'Co-founder',         pct: 30 },
+      { kind: 'Option pool',        pct: 12 },
+      { kind: 'SAFE / partnership', pct: 8 },
+    ];
+    let acc2 = 0;
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: '5fr 7fr', gap: 16 }}>
+        <div>
+          <svg viewBox="0 0 220 220" style={{ width: '100%' }}>
+            {fakeSlices.map((s, i) => {
+              const start = (acc2 / 100) * Math.PI * 2 - Math.PI / 2;
+              acc2 += s.pct;
+              const end = (acc2 / 100) * Math.PI * 2 - Math.PI / 2;
+              const large = s.pct > 50 ? 1 : 0;
+              const x1 = cx + r * Math.cos(start), y1 = cy + r * Math.sin(start);
+              const x2 = cx + r * Math.cos(end),   y2 = cy + r * Math.sin(end);
+              const xi1 = cx + ir * Math.cos(end), yi1 = cy + ir * Math.sin(end);
+              const xi2 = cx + ir * Math.cos(start), yi2 = cy + ir * Math.sin(start);
+              return (
+                <path key={i}
+                  d={`M${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} L${xi1},${yi1} A${ir},${ir} 0 ${large},0 ${xi2},${yi2} Z`}
+                  fill={V.line} fillOpacity={0.35 + i * 0.1} stroke={V.line} strokeDasharray="3 3" />
+              );
+            })}
+            <text x={cx} y={cy + 4} textAnchor="middle" fontFamily={V.mono} fontSize="10" fill={V.textMuted} letterSpacing="0.18em">EMPTY</text>
+          </svg>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <table style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${V.line}` }}>
+                <th style={{ textAlign: 'left', padding: '6px 0', color: V.textMuted, fontFamily: V.mono, fontWeight: 500 }}>HOLDER</th>
+                <th style={{ textAlign: 'left', padding: '6px 0', color: V.textMuted, fontFamily: V.mono, fontWeight: 500 }}>KIND</th>
+                <th style={{ textAlign: 'right', padding: '6px 0', color: V.textMuted, fontFamily: V.mono, fontWeight: 500 }}>OWNERSHIP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fakeSlices.map((s, i) => (
+                <tr key={i} style={{ borderBottom: `1px solid ${V.line}88`, opacity: 0.7 }}>
+                  <td style={{ padding: '6px 0', color: V.textMuted }}>{DASH}</td>
+                  <td style={{ padding: '6px 0', color: V.textMuted, fontFamily: V.mono, fontSize: 10 }}>{s.kind.toUpperCase()}</td>
+                  <td style={{ padding: '6px 0', textAlign: 'right', color: V.textMuted, fontFamily: V.mono }}>{DASH}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 12, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: V.textMuted, fontFamily: V.mono }}>
+            Seed your cap table in Week 4 · Incorporate
+          </div>
+        </div>
+      </div>
+    );
+  }
+  const palette = [V.accent, '#0E3B6B', V.gold, V.emerald, '#7C3AED', V.rose, V.textMuted];
+  let acc = 0;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '5fr 7fr', gap: 16 }}>
+      <div>
+        <svg viewBox="0 0 220 220" style={{ width: '100%' }}>
+          {parsed.map((s, i) => {
+            const pct = (s.pct / total) * 100;
+            const start = (acc / 100) * Math.PI * 2 - Math.PI / 2;
+            acc += pct;
+            const end = (acc / 100) * Math.PI * 2 - Math.PI / 2;
+            const large = pct > 50 ? 1 : 0;
+            const x1 = cx + r * Math.cos(start), y1 = cy + r * Math.sin(start);
+            const x2 = cx + r * Math.cos(end),   y2 = cy + r * Math.sin(end);
+            const xi1 = cx + ir * Math.cos(end), yi1 = cy + ir * Math.sin(end);
+            const xi2 = cx + ir * Math.cos(start), yi2 = cy + ir * Math.sin(start);
+            return (
+              <path key={i}
+                d={`M${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} L${xi1},${yi1} A${ir},${ir} 0 ${large},0 ${xi2},${yi2} Z`}
+                fill={palette[i % palette.length]} />
+            );
+          })}
+        </svg>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <table style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ borderBottom: `1px solid ${V.line}` }}>
+              <th style={{ textAlign: 'left', padding: '6px 0', color: V.textMuted, fontFamily: V.mono, fontWeight: 500 }}>HOLDER</th>
+              <th style={{ textAlign: 'left', padding: '6px 0', color: V.textMuted, fontFamily: V.mono, fontWeight: 500 }}>KIND</th>
+              <th style={{ textAlign: 'right', padding: '6px 0', color: V.textMuted, fontFamily: V.mono, fontWeight: 500 }}>OWNERSHIP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {parsed.slice(0, 8).map((h, i) => (
+              <tr key={i} style={{ borderBottom: `1px solid ${V.line}88` }}>
+                <td style={{ padding: '6px 0', color: V.ink }}>{h.name}</td>
+                <td style={{ padding: '6px 0', color: V.textSoft, fontFamily: V.mono, fontSize: 10 }}>{(h.kind || '').toUpperCase()}</td>
+                <td style={{ padding: '6px 0', textAlign: 'right', color: V.ink, fontFamily: V.mono }}>{h.ownership_pct}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+/** Use-of-funds stacked bar — 3 ghost segments (55/30/15) when empty. */
+export const UseOfFundsBar: React.FC<{
+  buckets?: FundUse[]; fallback?: string;
+}> = ({ buckets, fallback }) => {
+  const V = useV();
+  const palette = [V.accent, V.gold, V.emerald, '#0E3B6B', '#7C3AED'];
+  if (!buckets || buckets.length === 0) {
+    if (fallback && fallback.trim()) {
+      return (
+        <div style={{ fontSize: 13.5, lineHeight: 1.4, fontFamily: V.vibe === 'serif' ? V.display : V.sans, color: V.textSoft }}>
+          {fallback}
+        </div>
+      );
+    }
+    const ghosts = [
+      { label: 'Engineering & AI',        pct: 55 },
+      { label: 'GTM & Customer Success',  pct: 30 },
+      { label: 'Operations & legal',      pct: 15 },
+    ];
+    return (
+      <div>
+        <div style={{ height: 12, borderRadius: 6, overflow: 'hidden', display: 'flex', background: V.cardSoft, opacity: 0.55 }}>
+          {ghosts.map((g, i) => (
+            <div key={i} style={{
+              height: '100%', width: `${g.pct}%`,
+              background: `repeating-linear-gradient(135deg, ${palette[i]} 0, ${palette[i]} 4px, transparent 4px, transparent 8px)`,
+              opacity: 0.45,
+            }} />
+          ))}
+        </div>
+        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 24, rowGap: 6, fontSize: 11.5 }}>
+          {ghosts.map((g, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 999, background: palette[i], display: 'inline-block' }} />
+              <span style={{ color: V.textMuted }}>{g.label}</span>
+              <span style={{ marginLeft: 'auto', color: V.textMuted, fontFamily: V.mono }}>{DASH}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 8, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: V.textMuted, fontFamily: V.mono }}>
+          Fill use_of_funds in the financial model
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div style={{ height: 12, borderRadius: 6, overflow: 'hidden', display: 'flex', background: V.cardSoft }}>
+        {buckets.map((b, i) => (
+          <div key={i} title={`${b.label} ${b.pct}%`} style={{ height: '100%', width: `${b.pct}%`, background: palette[i % palette.length] }} />
+        ))}
+      </div>
+      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 24, rowGap: 6, fontSize: 11.5 }}>
+        {buckets.map((b, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 999, background: palette[i % palette.length], display: 'inline-block' }} />
+            <span style={{ color: V.ink }}>{b.label}</span>
+            <span style={{ marginLeft: 'auto', color: V.textMuted, fontFamily: V.mono }}>{b.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ───── illustrations (decorative, theme-aware SVG) ───── */
+
+/** Cover-slide hero — 4-week founder arc with milestone markers. */
+export const JourneyArc: React.FC<{ height?: number }> = ({ height = 280 }) => {
+  const V = useV();
+  return (
+    <svg viewBox="0 0 480 320" style={{ width: '100%', display: 'block', maxHeight: height }} preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <linearGradient id="ja-sky" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor={V.accentSoft} stopOpacity={V.isDark ? 0.4 : 1} />
+          <stop offset="1" stopColor={V.card} stopOpacity={V.isDark ? 0.1 : 1} />
+        </linearGradient>
+        <linearGradient id="ja-ground" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor={V.cardSoft} />
+          <stop offset="1" stopColor={V.card} />
+        </linearGradient>
+        <radialGradient id="ja-sun" cx="50%" cy="50%">
+          <stop offset="0" stopColor={V.gold} stopOpacity={0.9} />
+          <stop offset="1" stopColor={V.accent} stopOpacity={0} />
+        </radialGradient>
+      </defs>
+      <rect x="0" y="0" width="480" height="200" fill="url(#ja-sky)" />
+      <circle cx="360" cy="120" r="80" fill="url(#ja-sun)" />
+      <circle cx="360" cy="120" r="30" fill={V.gold} fillOpacity={0.9} />
+      <path d="M0,200 Q120,170 240,185 T480,180 L480,260 L0,260 Z" fill={V.accent} fillOpacity={0.18} />
+      <path d="M0,230 Q140,210 280,220 T480,225 L480,320 L0,320 Z" fill="url(#ja-ground)" />
+      <path d="M30,260 Q120,140 240,180 Q360,210 450,90" stroke={V.accent} strokeWidth={2.5} fill="none" strokeDasharray="6 4" strokeLinecap="round" />
+      {[
+        { x: 30,  y: 260, label: 'W1', sub: 'Idea' },
+        { x: 165, y: 200, label: 'W2', sub: 'Solution' },
+        { x: 300, y: 200, label: 'W3', sub: 'Validate' },
+        { x: 450, y: 90,  label: 'W4', sub: 'Inc.' },
+      ].map((m, i) => (
+        <g key={i}>
+          <circle cx={m.x} cy={m.y} r="10" fill={V.card} stroke={V.accent} strokeWidth={2.5} />
+          <circle cx={m.x} cy={m.y} r="4" fill={V.accent} />
+          <text x={m.x} y={m.y - 18} textAnchor="middle" fontFamily={V.mono} fontSize="9" fontWeight={700} fill={V.accent} letterSpacing="0.12em">{m.label}</text>
+          <text x={m.x} y={m.y + 24} textAnchor="middle" fontFamily={V.display} fontSize="11" fontWeight={600} fill={V.ink}>{m.sub}</text>
+        </g>
+      ))}
+      <g transform="translate(140, 196)">
+        <circle cx="0" cy="-8" r="3.5" fill={V.ink} />
+        <path d="M-4,-2 L4,-2 L5,12 L2,12 L1,4 L-1,4 L-2,12 L-5,12 Z" fill={V.ink} />
+      </g>
+    </svg>
+  );
+};
+
+/** Compact 4-week tick illustration for slide right rails. */
+export const FourWeekTicks: React.FC<{ activeWeek?: number; height?: number }> = ({ activeWeek = 0, height = 200 }) => {
+  const V = useV();
+  const weeks = [1, 2, 3, 4];
+  return (
+    <svg viewBox="0 0 320 200" style={{ width: '100%', maxHeight: height }} preserveAspectRatio="xMidYMid meet">
+      <line x1="30" y1="100" x2="290" y2="100" stroke={V.line} strokeWidth={1.5} />
+      <path d="M30,100 L260,100" stroke={V.accent} strokeWidth={2.5} strokeLinecap="round"
+            style={{ opacity: activeWeek === 0 ? 0.18 : 1, strokeDasharray: activeWeek === 0 ? '4 4' : 'none' }} />
+      {weeks.map((w, i) => {
+        const x = 30 + i * 86.7;
+        const isActive = activeWeek >= w;
+        return (
+          <g key={w}>
+            <circle cx={x} cy="100" r={isActive ? 14 : 10} fill={isActive ? V.accent : V.card} stroke={isActive ? V.accent : V.line} strokeWidth={2} />
+            {isActive && <circle cx={x} cy="100" r="4" fill={V.card} />}
+            <text x={x} y="60" textAnchor="middle" fontFamily={V.mono} fontSize="10" fontWeight={700} fill={isActive ? V.accent : V.textMuted} letterSpacing="0.18em">W{w}</text>
+            <text x={x} y="140" textAnchor="middle" fontFamily={V.display} fontSize="11" fontWeight={600} fill={V.ink}>{['Idea', 'Solution', 'Validate', 'Inc.'][i]}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+/** MVP blueprint motif — layered construction lines (Solution slide). */
+export const MvpBlueprint: React.FC = () => {
+  const V = useV();
+  return (
+    <svg viewBox="0 0 360 280" style={{ width: '100%', display: 'block' }} preserveAspectRatio="xMidYMid meet">
+      <rect x="0" y="0" width="360" height="280" fill={V.cardSoft} rx="8" />
+      {Array.from({ length: 12 }).map((_, i) => (
+        <line key={`v${i}`} x1={i * 30} y1="0" x2={i * 30} y2="280" stroke={V.line} strokeWidth={0.5} strokeOpacity={0.5} />
+      ))}
+      {Array.from({ length: 10 }).map((_, i) => (
+        <line key={`h${i}`} x1="0" y1={i * 28} x2="360" y2={i * 28} stroke={V.line} strokeWidth={0.5} strokeOpacity={0.5} />
+      ))}
+      <rect x="60" y="60" width="240" height="60" fill={V.card} stroke={V.accent} strokeWidth={2} rx="6" />
+      <text x="180" y="96" textAnchor="middle" fontFamily={V.mono} fontSize="11" fontWeight={700} fill={V.accent} letterSpacing="0.18em">EXPERIENCE</text>
+      <rect x="80" y="135" width="200" height="40" fill={V.card} stroke={V.accent} strokeOpacity={0.7} strokeWidth={1.5} rx="6" />
+      <text x="180" y="160" textAnchor="middle" fontFamily={V.mono} fontSize="10" fontWeight={600} fill={V.textSoft} letterSpacing="0.18em">WORKFLOW</text>
+      <rect x="100" y="188" width="160" height="40" fill={V.card} stroke={V.gold} strokeOpacity={0.7} strokeWidth={1.5} rx="6" />
+      <text x="180" y="213" textAnchor="middle" fontFamily={V.mono} fontSize="10" fontWeight={600} fill={V.gold} letterSpacing="0.18em">DATA · AI</text>
+      <line x1="180" y1="120" x2="180" y2="135" stroke={V.accent} strokeWidth={1.5} strokeDasharray="2 2" />
+      <line x1="180" y1="175" x2="180" y2="188" stroke={V.accent} strokeWidth={1.5} strokeDasharray="2 2" />
+    </svg>
+  );
+};
+
+/** Voices motif — speech bubbles for the Validation slide. */
+export const VoicesBubbles: React.FC = () => {
+  const V = useV();
+  return (
+    <svg viewBox="0 0 320 200" style={{ width: '100%', display: 'block' }} preserveAspectRatio="xMidYMid meet">
+      {[
+        { x: 50,  y: 60,  r: 26, op: 0.9 },
+        { x: 130, y: 100, r: 32, op: 1 },
+        { x: 220, y: 50,  r: 22, op: 0.8 },
+        { x: 270, y: 120, r: 28, op: 0.85 },
+        { x: 160, y: 160, r: 18, op: 0.7 },
+      ].map((b, i) => (
+        <g key={i}>
+          <circle cx={b.x} cy={b.y} r={b.r} fill={V.accent} fillOpacity={b.op * 0.16} stroke={V.accent} strokeOpacity={b.op * 0.5} strokeWidth={1.5} />
+          <text x={b.x} y={b.y + 5} textAnchor="middle" fontFamily={V.display} fontSize={b.r * 0.65} fontWeight={600} fill={V.accent} fillOpacity={b.op}>"</text>
+        </g>
+      ))}
+      <line x1="76" y1="60" x2="98" y2="100" stroke={V.accent} strokeOpacity={0.4} strokeDasharray="2 2" />
+      <line x1="162" y1="100" x2="198" y2="50" stroke={V.accent} strokeOpacity={0.4} strokeDasharray="2 2" />
+      <line x1="162" y1="100" x2="244" y2="120" stroke={V.accent} strokeOpacity={0.4} strokeDasharray="2 2" />
+      <line x1="148" y1="116" x2="160" y2="142" stroke={V.accent} strokeOpacity={0.4} strokeDasharray="2 2" />
+    </svg>
+  );
+};
+
+/** Network constellation — Mentors slide. */
+export const NetworkConstellation: React.FC = () => {
+  const V = useV();
+  const center = { x: 160, y: 110 };
+  const nodes = [
+    { x: 50,  y: 50,  label: 'Legal' },
+    { x: 280, y: 60,  label: 'Design' },
+    { x: 50,  y: 180, label: 'Recruiting' },
+    { x: 270, y: 180, label: 'Tech DD' },
+    { x: 160, y: 30,  label: 'Finance' },
+    { x: 160, y: 200, label: 'Alumni' },
+  ];
+  return (
+    <svg viewBox="0 0 320 240" style={{ width: '100%', display: 'block' }} preserveAspectRatio="xMidYMid meet">
+      {nodes.map((n, i) => (
+        <line key={i} x1={center.x} y1={center.y} x2={n.x} y2={n.y} stroke={V.accent} strokeOpacity={0.35} strokeWidth={1.2} />
+      ))}
+      {nodes.map((n, i) => (
+        <g key={i}>
+          <circle cx={n.x} cy={n.y} r="14" fill={V.card} stroke={V.accent} strokeWidth={1.5} />
+          <circle cx={n.x} cy={n.y} r="4" fill={V.accent} fillOpacity={0.7} />
+          <text x={n.x} y={n.y + (n.y > center.y ? 28 : -22)} textAnchor="middle" fontFamily={V.mono} fontSize="9" fontWeight={600} fill={V.textSoft} letterSpacing="0.14em">{n.label.toUpperCase()}</text>
+        </g>
+      ))}
+      <circle cx={center.x} cy={center.y} r="22" fill={V.accent} />
+      <text x={center.x} y={center.y + 4} textAnchor="middle" fontFamily={V.display} fontWeight={700} fontSize="13" fill="#fff">AXAL</text>
+    </svg>
+  );
+};
+
+/** Legal scroll motif with 83(b) seal — Cap-table / Signal slides. */
+export const LegalScroll: React.FC = () => {
+  const V = useV();
+  return (
+    <svg viewBox="0 0 320 240" style={{ width: '100%', display: 'block' }} preserveAspectRatio="xMidYMid meet">
+      <rect x="60" y="20" width="200" height="200" fill={V.card} stroke={V.line} strokeWidth={1.5} rx="4" />
+      <rect x="68" y="28" width="184" height="184" fill="none" stroke={V.line} strokeWidth={0.5} strokeDasharray="2 2" />
+      {Array.from({ length: 9 }).map((_, i) => (
+        <rect key={i} x="80" y={48 + i * 18} width={i === 0 ? 140 : i === 2 ? 100 : i === 4 ? 160 : 130} height="3" rx="1.5" fill={V.line} />
+      ))}
+      <line x1="80" y1="190" x2="200" y2="190" stroke={V.ink} strokeWidth={1.5} />
+      <text x="80" y="204" fontFamily={V.mono} fontSize="9" fill={V.textMuted}>Founder signature</text>
+      <circle cx="232" cy="184" r="22" fill={V.accent} fillOpacity={0.12} stroke={V.accent} strokeWidth={1.5} />
+      <text x="232" y="188" textAnchor="middle" fontFamily={V.display} fontWeight={700} fontSize="11" fill={V.accent}>83(b)</text>
+    </svg>
+  );
+};
+
+/** Rocket trajectory — Ask slide. */
+export const RocketTrajectory: React.FC = () => {
+  const V = useV();
+  return (
+    <svg viewBox="0 0 320 240" style={{ width: '100%', display: 'block' }} preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <linearGradient id="rt-trail" x1="0" x2="1">
+          <stop offset="0" stopColor={V.accent} stopOpacity={0.05} />
+          <stop offset="1" stopColor={V.accent} stopOpacity={0.6} />
+        </linearGradient>
+      </defs>
+      <path d="M20,210 Q120,180 180,120 T300,30" stroke="url(#rt-trail)" strokeWidth={3} fill="none" strokeLinecap="round" />
+      {[{ x: 80, y: 200 }, { x: 150, y: 150 }, { x: 220, y: 90 }].map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r="5" fill={V.card} stroke={V.accent} strokeWidth={1.8} />
+      ))}
+      <g transform="translate(296, 32) rotate(-32)">
+        <path d="M0,-14 L7,0 L0,16 L-7,0 Z" fill={V.accent} />
+        <path d="M-7,0 L-14,8 L-7,8 Z" fill={V.gold} />
+        <path d="M7,0 L14,8 L7,8 Z" fill={V.gold} />
+        <circle cx="0" cy="-2" r="3" fill={V.card} />
+      </g>
+      <line x1="0" y1="220" x2="320" y2="220" stroke={V.line} />
+      <text x="20" y="234" fontFamily={V.mono} fontSize="9" fill={V.textMuted} letterSpacing="0.14em">DAY 1</text>
+      <text x="300" y="234" textAnchor="end" fontFamily={V.mono} fontSize="9" fill={V.textMuted} letterSpacing="0.14em">18 MO</text>
+    </svg>
+  );
+};
+
+/** Brand palette specimen — three swatches + type sample. */
+export const BrandPaletteIllustration: React.FC = () => {
+  const V = useV();
+  return (
+    <svg viewBox="0 0 320 240" style={{ width: '100%', display: 'block' }} preserveAspectRatio="xMidYMid meet">
+      <rect x="0" y="0" width="320" height="240" fill={V.cardSoft} rx="6" />
+      <rect x="24" y="36" width="200" height="168" fill={V.card} stroke={V.line} rx="6" />
+      <text x="40" y="84" fontFamily={V.display} fontWeight={700} fontSize="36" fill={V.ink}>Aa</text>
+      <text x="40" y="120" fontFamily={V.display} fontWeight={600} fontSize="13" fill={V.ink}>Display · serif</text>
+      <text x="40" y="138" fontFamily={V.sans} fontSize="11" fill={V.textSoft}>Body · sans-serif</text>
+      <text x="40" y="158" fontFamily={V.mono} fontSize="10" fill={V.textMuted}>MONO · CODE / LABELS</text>
+      <line x1="40" y1="178" x2="200" y2="178" stroke={V.line} />
+      <text x="40" y="194" fontFamily={V.mono} fontSize="9" fill={V.textMuted} letterSpacing="0.18em">VOICE · CALM · CLEAR</text>
+      {[V.accent, V.gold, V.ink].map((c, i) => (
+        <g key={i}>
+          <rect x="244" y={36 + i * 56} width="52" height="48" fill={c} rx="4" />
+          <text x="270" y={66 + i * 56} textAnchor="middle" fontFamily={V.mono} fontSize="8" fontWeight={700} fill="#fff" letterSpacing="0.14em">{['ACCENT', 'GOLD', 'INK'][i]}</text>
+        </g>
+      ))}
+    </svg>
+  );
+};
+
+/** Problem-space illustration — tangled lines resolving to one insight node. */
+export const ProblemEcho: React.FC = () => {
+  const V = useV();
+  return (
+    <svg viewBox="0 0 320 240" style={{ width: '100%', display: 'block' }} preserveAspectRatio="xMidYMid meet">
+      {Array.from({ length: 14 }).map((_, i) => {
+        const x1 = 20 + ((i * 37) % 110);
+        const y1 = 30 + ((i * 53) % 160);
+        const x2 = 30 + ((i * 73) % 130);
+        const y2 = 40 + ((i * 41) % 160);
+        return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={V.rose} strokeOpacity={0.5} strokeWidth={1} />;
+      })}
+      {[60, 80, 100, 120, 140, 160, 180].map((y, i) => (
+        <line key={i} x1="150" y1={y} x2="280" y2="120" stroke={V.accent} strokeOpacity={0.5} strokeWidth={1.2} />
+      ))}
+      <circle cx="280" cy="120" r="14" fill={V.accent} />
+      <circle cx="280" cy="120" r="22" fill="none" stroke={V.accent} strokeOpacity={0.4} />
+      <text x="280" y="124" textAnchor="middle" fontFamily={V.display} fontWeight={700} fontSize="11" fill="#fff">✦</text>
+      <text x="60" y="220" fontFamily={V.mono} fontSize="9" fill={V.textMuted} letterSpacing="0.18em">PROBLEM</text>
+      <text x="280" y="220" textAnchor="middle" fontFamily={V.mono} fontSize="9" fill={V.accent} letterSpacing="0.18em">INSIGHT</text>
+    </svg>
+  );
+};
+
 /* ─────────────────────────── 14 slides ─────────────────────────── */
 
 // 1920×1080 sibling frame — same primitive as sequoia_classic /
@@ -803,7 +1433,11 @@ const Slide_Market: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 32 }}>
         {ms.map((x, i) => <MetricCard key={i} m={x} />)}
       </div>
-      {allMissing && <div style={{ marginTop: 20 }}><Nudge>Set TAM / SAM / SOM on your project to size the market.</Nudge></div>}
+      {allMissing && (
+        <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>
+          <MarketCircles tam={m.tam} sam={m.sam} som={m.som} />
+        </div>
+      )}
       <div style={{ marginTop: 28, flex: 1 }}>
         <Eyebrow>Why now</Eyebrow>
         {m.why_now.length > 0
@@ -858,7 +1492,11 @@ const Slide_Roadmap: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
           </div>
         ))}
       </div>
-      {allEmpty && <div style={{ marginTop: 16 }}><Nudge>Add 3 OKRs in Week 2 to populate Now / Next / Later.</Nudge></div>}
+      {allEmpty && (
+        <div style={{ marginTop: 16 }}>
+          <OkrBoard now={r.now} next={r.next} later={r.later} />
+        </div>
+      )}
     </SlideShell>
   );
 };
@@ -893,7 +1531,7 @@ const Slide_VentureReadiness: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
       <Eyebrow>{v.eyebrow}{v.is_sandbox ? ' · sandbox' : ''}</Eyebrow>
       <SlideHeading>{v.headline}</SlideHeading>
       {v.breakdown.length === 0
-        ? <div style={{ marginTop: 32 }}><Nudge>Run your venture-readiness score in Week 2 to unlock this slide.</Nudge></div>
+        ? <div style={{ marginTop: 32, maxWidth: 520 }}><ScoreBars items={[]} /></div>
         : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 32 }}>
             {v.breakdown.map((b, i) => <MetricCard key={i} m={{ label: b.label, value: b.value }} />)}
@@ -967,7 +1605,7 @@ const Slide_CapTable: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
       <Eyebrow>{c.eyebrow}</Eyebrow>
       <SlideHeading>{c.headline}</SlideHeading>
       {c.holders.length === 0
-        ? <div style={{ marginTop: 32 }}><Nudge>Seed your cap table in Week 3 to show ownership here.</Nudge></div>
+        ? <div style={{ marginTop: 32 }}><CapTablePie holders={[]} /></div>
         : (
           <table style={{ marginTop: 32, width: '100%', borderCollapse: 'collapse', fontFamily: fonts.mono, fontSize: 13 }}>
             <thead>
@@ -1025,7 +1663,7 @@ const Slide_Ask: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
               </div>
             ))}
           </div>
-        ) : <Nudge>Set `use_of_funds` on your project (e.g. "Engineering 50, GTM 30, Ops 20") to break down the spend.</Nudge>}
+        ) : <UseOfFundsBar buckets={undefined} />}
       </div>
       <div style={{ marginTop: 20 }}>
         <Eyebrow>Next milestones</Eyebrow>

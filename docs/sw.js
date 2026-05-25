@@ -14,14 +14,16 @@
 // offline.html, manifest, icons) so old caches drop on activate. Vite-built
 // /assets/* files are content-hashed in their filenames, so the cache-first
 // rule is safe across deploys without a version bump.
-const VERSION = 'v3-2026-05-24';
+const VERSION = 'v4-2026-05-25';
 const PRECACHE = `studioos-precache-${VERSION}`;
 const RUNTIME_STATIC = `studioos-static-${VERSION}`;
 const RUNTIME_API = `studioos-api-${VERSION}`;
 
+// Do NOT precache '/' or '/index.html'. The navigation handler is network-first
+// and falls back to '/offline.html' on failure — precaching the SPA shell pins
+// users to an old HTML referencing stale hashed JS chunks across deploys,
+// which manifests as a blank page on next visit. See Task #57.
 const PRECACHE_URLS = [
-  '/',
-  '/index.html',
   '/manifest.webmanifest',
   '/offline.html',
   '/axal-mark.png',

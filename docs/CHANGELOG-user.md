@@ -8,6 +8,16 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Telegram drafts stay put, and "Open" actually opens them
+
+Two annoyances in the admin Telegram page are fixed:
+
+- After running the aggregator, your drafts now stay visible when you
+  switch tabs and come back — no more having to re-run just to see them.
+- Clicking "Open" on a draft now jumps straight into the Compose view
+  with that draft loaded, even for older drafts that had piled up.
+
+
 ## Pitch-deck PDF and PowerPoint exports now actually work
 
 Downloading a pitch deck as PDF or PowerPoint now produces a file that
