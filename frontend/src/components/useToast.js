@@ -32,7 +32,21 @@ export function useToast(defaultMs = 4000) {
     setToast(null);
   }, [clear]);
 
+  // Convenience aliases. Many admin pages were written against an older
+  // toast API (`toast.success(msg)` / `toast.error(msg)`); without these,
+  // every success/error path threw TypeError, silently breaking reloads
+  // (e.g. AdminTelegram aggregator runs left the drafts list stale and
+  // channel signature/chat_id saves never re-fetched). These wrap
+  // showToast so the toast renderer's shape (`{ kind, msg }`) is preserved.
+  const success = useCallback((msg, ms) => {
+    showToast({ kind: 'success', msg: typeof msg === 'string' ? msg : msg?.msg ?? '' }, ms);
+  }, [showToast]);
+
+  const error = useCallback((msg, ms) => {
+    showToast({ kind: 'error', msg: typeof msg === 'string' ? msg : msg?.msg ?? '' }, ms);
+  }, [showToast]);
+
   useEffect(() => clear, [clear]);
 
-  return { toast, showToast, dismissToast };
+  return { toast, showToast, dismissToast, success, error };
 }

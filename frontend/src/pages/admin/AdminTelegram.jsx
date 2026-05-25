@@ -465,17 +465,24 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
   const loadDraft = useCallback(async (id) => {
     setLoading(true);
     try {
-      const res = await api.listPosts({ limit: 200 });
-      const found = (res.posts || []).find((p) => p.id === id);
-      setPost(found || null);
+      // Fetch by id directly. Previously we listed the latest 200 and
+      // `.find()`d, which silently missed drafts beyond that window once
+      // aggregator runs accumulated history — Open then rendered
+      // "Draft not found" while the post existed.
+      const res = await api.getPost(id);
+      const found = res?.post || null;
+      setPost(found);
       setLintResult(null);
       setOverrideReason('');
       setShowOverride(false);
       setScheduleAt(found?.scheduled_for || '');
+    } catch (e) {
+      setPost(null);
+      toast.error(e?.body?.error || e?.body?.message || 'Load draft failed');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (editingId) loadDraft(editingId);

@@ -356,6 +356,20 @@ r.get('/posts', async (c) => {
   return c.json({ posts: rows.results || [], total: total?.n ?? 0, limit, offset });
 });
 
+// Single-post fetch by id — used by ComposeTab when opening a draft from
+// the Drafts list. Previously the frontend re-fetched a paginated list and
+// `.find()`d by id, which silently failed if the draft was beyond the
+// LIMIT 200 window (e.g. after several aggregator runs accumulated drafts).
+r.get('/posts/:id', async (c) => {
+  await requireAdmin(c);
+  await ensureTelegramSchema(c.env);
+  const id = Number(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ error: 'invalid_id' }, 400);
+  const row = await loadPost(c.env, id);
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  return c.json({ post: row });
+});
+
 r.post('/posts', async (c) => {
   const admin = await requireAdmin(c);
   await ensureTelegramSchema(c.env);

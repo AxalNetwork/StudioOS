@@ -1974,6 +1974,7 @@ export const adminTelegram = {
     qs.set('offset', String(offset));
     return request(`/admin/telegram/posts?${qs.toString()}`);
   },
+  getPost: (id) => request(`/admin/telegram/posts/${id}`),
   createPost: (payload) =>
     request('/admin/telegram/posts', { method: 'POST', body: JSON.stringify(payload) }),
   updatePost: (id, patch) =>

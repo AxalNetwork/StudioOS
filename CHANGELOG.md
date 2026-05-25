@@ -11,6 +11,45 @@
 > building it.
 
 
+## Fix — Telegram admin: aggregator drafts persist + Open works for older drafts
+
+Two regressions in `/admin/telegram`:
+1. **Aggregator drafts appeared to "disappear"** when navigating away from the
+   Drafts tab and only "came back" after another Run aggregator click.
+2. **Clicking Open on a draft did nothing visible** — the post only surfaced
+   when the user manually clicked the Compose tab afterwards.
+
+Root cause (1): `useToast()` in `frontend/src/components/useToast.js` returns
+`{ toast, showToast, dismissToast }`, but every admin call site (34 in
+`AdminTelegram.jsx`, plus `AdminX.jsx`, `AdminNewsQueue.jsx`,
+`ArticlesQueuePage.jsx`, `ArticleAuthorPage.jsx`, `NewsAuthorPage.jsx`) calls
+`toast.success(msg)` / `toast.error(msg)`. Those methods are undefined →
+`TypeError` thrown synchronously inside the `try`/`catch`, so e.g. in
+`DraftsTab.runAgg` the `toast.success(...)` after a successful
+`api.runAggregator(...)` aborted control flow before `reload()` could fire,
+leaving the list stale until the next tab remount.
+
+Root cause (2): `ComposeTab.loadDraft` did
+`api.listPosts({ limit: 200 }).find(p => p.id === id)`. Once aggregator
+history grew past 200 rows the target draft fell outside the newest-first
+window and `setPost(null)` rendered "Draft not found." Manually clicking
+Compose appeared to "work" only when the draft happened to still be in the
+top 200.
+
+Fixes:
+- `frontend/src/components/useToast.js`: add `success(msg, ms?)` and
+  `error(msg, ms?)` aliases that wrap `showToast({ kind, msg })`. Backward
+  compatible; fixes silent breakage across all five pages.
+- `cloudflare-worker/src/routes/admin_telegram.ts`: add
+  `GET /api/admin/telegram/posts/:id` returning a single post via
+  `loadPost(env, id)`. Admin-gated, schema-bootstrapped, 404 on miss.
+- `frontend/src/lib/api.js`: add `adminTelegram.getPost(id)` binding.
+- `frontend/src/pages/admin/AdminTelegram.jsx::ComposeTab.loadDraft`:
+  switch to `api.getPost(id)`, add explicit catch with `toast.error`.
+
+No migration. No new env. Worker route is purely additive.
+
+
 ## Fix — Task #2 — Deck library exports: real PDF + image-mode PPTX, drop PNG cover
 
 PDF was returning `502 pdf_render_failed` because the prior implementation
