@@ -17,7 +17,7 @@ import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
 // path that bypasses the generic field-source vocabulary in autofill.ts
 // because the deck binds to Lab tables (interviews, milestones, OKRs)
 // that don't fit the project/financials/captable source shape.
-import { fillAxalSpinoutDemoDay, buildAxalSpinoutDemoDaySlides } from '../services/decks/axalSpinoutDemoDay';
+import { fillAxalSpinoutDemoDay, buildAxalSpinoutDemoDaySlides, buildAxalSpinoutCoverage } from '../services/decks/axalSpinoutDemoDay';
 import { recommendMethod, listOverrides, setOverride, deleteOverride } from '../services/decks/recommend';
 import { getDeckBrand, setStudioWatermark, ensureMethodAllowed } from '../services/decks/branding';
 import { renderDeckHTML, type RenderableDeck } from '../services/decks/render';
@@ -1017,6 +1017,8 @@ decks.post('/apply-method', async (c) => {
       deck: rowToDeck(row),
       method_id: methodId,
       coverage_pct: coverage,
+      // Task #8 — 14-cell per-slide coverage map for the Fill-from-project grid.
+      coverage: buildAxalSpinoutCoverage(data),
     });
   }
 
@@ -1121,6 +1123,8 @@ decks.post('/:id/autofill', async (c) => {
       slide_confidence: safeWrapped.map((s: any, i: number) => ({
         index: i, spec_id: s.spec_id, title: s.title, coverage_pct: coverage,
       })),
+      // Task #8 — 14-cell per-slide coverage map for the Fill-from-project grid.
+      coverage: buildAxalSpinoutCoverage(data),
     });
   }
 

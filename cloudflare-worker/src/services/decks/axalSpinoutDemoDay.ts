@@ -1010,3 +1010,162 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
     image_url: null,
   }));
 }
+
+/**
+ * Task #8 — per-slide coverage map for the "Fill from project" grid in
+ * PitchDeckPage. 14 cells in the canonical slide order; each cell
+ * records (a) the source table(s) it reads, (b) whether the slide will
+ * populate vs. needs founder input, and (c) a short count_label the UI
+ * shows as a badge ("3/5 interviews", "0 holders", "score: ✓").
+ *
+ * Derived entirely from the SpinoutDemoDayData object so we don't need
+ * to re-query D1. `data.meta.is_sample === true` is treated as fully
+ * uncovered (no slide gets a green dot) — keeps the grid honest when
+ * the deck is being previewed before any real Lab data exists.
+ */
+export type AxalSpinoutCoverageCell = {
+  spec_id: string;
+  title: string;
+  source: string;
+  has: boolean;
+  count_label: string;
+};
+export function buildAxalSpinoutCoverage(data: SpinoutDemoDayData): AxalSpinoutCoverageCell[] {
+  const isReal = !data.meta.is_sample;
+  const notDash = (v: string | null | undefined): boolean =>
+    !!v && String(v).trim() !== '' && String(v).trim() !== DASH;
+  const intOr0 = (v: string | null | undefined): number => {
+    const n = parseInt(String(v ?? '').trim(), 10);
+    return isFinite(n) ? n : 0;
+  };
+
+  // ── validation: pull interview / pain counts back out of metrics ──
+  const interviewN = intOr0(data.validation.metrics?.[0]?.value);
+  const painsN = intOr0(data.validation.metrics?.[1]?.value);
+  const hypN = intOr0(data.validation.metrics?.[2]?.value);
+
+  // ── roadmap: total OKR objectives bucketed into now/next/later ─
+  const okrTotal =
+    (data.roadmap.now?.length || 0) +
+    (data.roadmap.next?.length || 0) +
+    (data.roadmap.later?.length || 0);
+
+  // ── ask: use_of_funds line + raise/runway ──
+  const usePcts = data.ask.use_of_funds || [];
+  const hasRaise = notDash(data.ask.raise_amount);
+  const hasRunway = notDash(data.ask.runway);
+
+  // ── axal_signal: count completed milestones across the 4 weeks ──
+  const totalMilestones = data.axal_signal.lab_weeks.reduce(
+    (s, w) => s + (w.milestones?.length || 0), 0);
+  const doneMilestones = data.axal_signal.lab_weeks.reduce(
+    (s, w) => s + (w.milestones?.filter((m) => m.done).length || 0), 0);
+
+  // ── market: count of TAM/SAM/SOM cells that are non-DASH ──
+  const marketFilled =
+    (notDash(data.market.tam) ? 1 : 0) +
+    (notDash(data.market.sam) ? 1 : 0) +
+    (notDash(data.market.som) ? 1 : 0);
+
+  // ── brand: count of brand_kit / pitch_deck / incorporated checks ──
+  const brandFilled =
+    (data.brand.brand_kit_ready ? 1 : 0) +
+    (data.brand.pitch_deck_ready ? 1 : 0) +
+    (data.brand.incorporated ? 1 : 0);
+
+  const cells: AxalSpinoutCoverageCell[] = [
+    {
+      spec_id: 'cover', title: 'Cover',
+      source: 'projects.name + projects.tagline',
+      has: isReal && notDash(data.meta.project_name),
+      count_label: notDash(data.meta.project_name) ? `${data.meta.project_name}` : 'project: —',
+    },
+    {
+      spec_id: 'problem', title: 'Problem',
+      source: 'projects.problem_statement',
+      has: isReal && notDash(data.problem.body),
+      count_label: notDash(data.problem.body) ? 'problem: ✓' : 'problem: —',
+    },
+    {
+      spec_id: 'validation', title: 'Validation',
+      source: 'discovery_interviews.pains_json',
+      has: isReal && interviewN > 0,
+      count_label: `${interviewN}/5 interviews · ${painsN} pains · ${hypN} hypotheses`,
+    },
+    {
+      spec_id: 'market', title: 'Market',
+      source: 'projects.tam/sam/som',
+      has: isReal && marketFilled > 0,
+      count_label: `${marketFilled}/3 sized`,
+    },
+    {
+      spec_id: 'solution', title: 'Solution',
+      source: 'projects.solution',
+      has: isReal && notDash(data.solution.body),
+      count_label: notDash(data.solution.body)
+        ? `${(data.solution.capabilities || []).length} capabilities`
+        : 'solution: —',
+    },
+    {
+      spec_id: 'roadmap', title: 'Roadmap',
+      source: 'roadmap_okrs',
+      has: isReal && okrTotal > 0,
+      count_label: `${okrTotal} OKRs (${data.roadmap.now?.length || 0} now)`,
+    },
+    {
+      spec_id: 'brand', title: 'Brand',
+      source: 'projects.tagline + spinout_lab_milestones',
+      has: isReal && (notDash(data.brand.tagline) || brandFilled > 0),
+      count_label: `${brandFilled}/3 stand-up checks`,
+    },
+    {
+      spec_id: 'venture_readiness', title: 'Venture readiness',
+      source: 'score_snapshots',
+      has: isReal && notDash(data.venture_readiness.tier),
+      count_label: notDash(data.venture_readiness.tier)
+        ? `score: ${data.venture_readiness.total_score} (${data.venture_readiness.tier})`
+        : 'score: —',
+    },
+    {
+      spec_id: 'team', title: 'Team',
+      source: 'cap_table_holders + advisor_answers',
+      has: isReal && (data.team.founders?.length || 0) > 0,
+      count_label: `${data.team.founders?.length || 0} founders`,
+    },
+    {
+      spec_id: 'mentor_network', title: 'Mentors & network',
+      source: 'advisor_answers',
+      has: isReal && (notDash(data.mentor_network.body) || (data.mentor_network.mentors?.length || 0) > 0),
+      count_label: `${data.mentor_network.mentors?.length || 0} mentors`,
+    },
+    {
+      spec_id: 'cap_table', title: 'Cap table',
+      source: 'cap_table_holders',
+      has: isReal && (data.cap_table.holders?.length || 0) > 0,
+      count_label: `${data.cap_table.holders?.length || 0} holders`,
+    },
+    {
+      spec_id: 'ask', title: 'Ask',
+      source: 'projects.funding_needed + financial_models.inputs_json',
+      has: isReal && (hasRaise || hasRunway || usePcts.length > 0),
+      count_label: [
+        hasRaise ? `raise ${data.ask.raise_amount}` : 'raise: —',
+        hasRunway ? `${data.ask.runway} runway` : 'runway: —',
+        `${usePcts.length} use-of-funds`,
+      ].join(' · '),
+    },
+    {
+      spec_id: 'axal_signal', title: 'Axal signal',
+      source: 'spinout_lab_milestones',
+      has: isReal && doneMilestones > 0,
+      count_label: `${doneMilestones}/${totalMilestones} Lab milestones`,
+    },
+    {
+      spec_id: 'contact', title: 'Contact',
+      source: 'projects.contact_email',
+      has: isReal && notDash(data.contact.contact_email),
+      count_label: notDash(data.contact.contact_email) ? 'email: ✓' : 'email: —',
+    },
+  ];
+  return cells;
+}

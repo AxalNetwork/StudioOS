@@ -57,6 +57,10 @@ export default function PitchDeckPage() {
   // Task #14 — per-slide coverage_pct[] from POST /decks/:id/autofill,
   // rendered as a colored dot on each slide row in the left rail.
   const [slideConfidence, setSlideConfidence] = useState([]);
+  // Task #8 — 14-cell per-slide coverage map returned by the worker's
+  // axal_spinout_demoday apply-method / autofill branches. Drives the
+  // green/red grid below "Fill from project"; null hides the grid.
+  const [templateCoverage, setTemplateCoverage] = useState(null);
   const [error, setError] = useState('');
 
   // Task #17 — Spin-Out Lab CTA deep-link. A `?method_id=<id>` query
@@ -245,6 +249,7 @@ export default function PitchDeckPage() {
       setDeck(r?.deck || r);
       setActiveIdx(0);
       setSlideConfidence([]);
+      setTemplateCoverage(Array.isArray(r?.coverage) ? r.coverage : null);
       const refreshed = await api.deckListVersions(projectId);
       setVersions(Array.isArray(refreshed) ? refreshed : (refreshed?.versions || []));
       addToast(`Applied ${methods.find((m) => m.id === methodId)?.label || 'template'} (${r.coverage_pct || 0}% auto-filled)`, 'success');
@@ -269,6 +274,7 @@ export default function PitchDeckPage() {
       const r = await api.deckAutofill(deck.id);
       setDeck(r?.deck || deck);
       setSlideConfidence(Array.isArray(r?.slide_confidence) ? r.slide_confidence : []);
+      setTemplateCoverage(Array.isArray(r?.coverage) ? r.coverage : null);
       addToast(`Refilled from project (${r?.coverage_pct ?? 0}% covered)`, 'success');
     } catch (e) {
       if (e.status === 409 || /no_method_id/i.test(e.message || '')) {
@@ -357,6 +363,9 @@ export default function PitchDeckPage() {
       const refreshed = await api.deckListVersions(projectId);
       setVersions(Array.isArray(refreshed) ? refreshed : (refreshed?.versions || []));
       setActiveIdx(0);
+      // Stale coverage from a different version would lie about what
+      // populates — clear and let the next "Fill from project" repopulate.
+      setTemplateCoverage(null);
     } catch (e) { setError(e.message || 'Restore failed'); }
   };
 
@@ -417,6 +426,55 @@ export default function PitchDeckPage() {
             <Wand2 className="w-4 h-4" /> Fill from project
           </button>
         </div>
+
+        {/* Task #8 — 14-cell coverage grid, axal_spinout_demoday only.
+            One card per slide: green/red dot · source table · count badge.
+            Other templates keep their existing single-line UX (none). */}
+        {activeMethodId === 'axal_spinout_demoday' && Array.isArray(templateCoverage) && templateCoverage.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-slate-400 font-medium">
+                Fill-from-project coverage · {templateCoverage.filter((c) => c.has).length}/{templateCoverage.length} slides will populate
+              </div>
+              <div className="text-[11px] text-gray-400 dark:text-slate-500">
+                Red dot = open the matching Lab tool before pitching.
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2">
+              {templateCoverage.map((cell) => (
+                <div
+                  key={cell.spec_id}
+                  className={`rounded-lg border p-2.5 text-left transition ${
+                    cell.has
+                      ? 'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20'
+                      : 'border-rose-200 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20'
+                  }`}
+                  title={`${cell.title} · ${cell.source}`}
+                >
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span
+                      aria-hidden="true"
+                      className={`inline-block w-2 h-2 rounded-full ${
+                        cell.has ? 'bg-emerald-500' : 'bg-rose-500'
+                      }`}
+                    />
+                    <span className="text-[12px] font-semibold text-gray-900 dark:text-slate-100 truncate">
+                      {cell.title}
+                    </span>
+                  </div>
+                  <div className="text-[10px] font-mono text-gray-500 dark:text-slate-400 truncate">
+                    {cell.source}
+                  </div>
+                  <div className={`text-[11px] mt-1 truncate ${
+                    cell.has ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'
+                  }`}>
+                    {cell.count_label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 rounded text-sm">

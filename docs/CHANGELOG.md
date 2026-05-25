@@ -51,6 +51,29 @@ unchanged; worker payload contract preserved.
 `npm run test:drift` clean (13 templates wired correctly). Default
 variant stays `'editorial'` (violet · Axal brand).
 
+Architect-review fix-ups landed in the same task:
+
+- `Slide_Cover` no longer collapses to a single column for the
+  `manifesto` variant — the `JourneyArc` right-rail card stays mounted
+  for every variant; the cinematic headline weight now comes from
+  font-size/weight only.
+- `Slide_Validation` rebuilt as strict 7+5: 3 quote cards on the left
+  (with dashed "Interview N pending" slots until 5 are logged) + a
+  right rail with the existing `VoicesBubbles` illustration + a
+  3-up Week-1 scoreboard (interviews / distinct pains / quotes).
+  This finally wires the previously-dead `VoicesBubbles` export from
+  the Task #6 primitives port.
+- `Slide_Roadmap` rebuilt as 8+4: `OkrBoard` on the left, right rail
+  carries a "30-day cadence" card around `FourWeekTicks` + an "OKR
+  coverage" 3-up (Now/Next/Later counts).
+- `Slide_Team` rebuilt as 7+5: 3 horizontal founder cards (gradient
+  avatar + bio) on the left, right rail with a team-intro card
+  (skeleton bars when unfilled) + a "Cap-table coverage" 3-up
+  (founders / holders / mentors).
+- `Slide_MentorNetwork` rebuilt as strict 7+5: mentor sessions +
+  operating-partners grid + optional body on the left, right rail
+  hosts `NetworkConstellation` with a footer caption.
+
 ## Feature — Axal Spin-Out deck: skeleton-aware charts + 9 SVG illustrations
 
 Ported the 14 visual primitives from branch

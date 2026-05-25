@@ -11,6 +11,38 @@
 > building it.
 
 
+## Feature — Axal Spin-Out deck: 14-cell Fill-from-project coverage grid
+
+Task #8 of the 3-task Spin-Out deck rebuild. Replaces the one-line
+"X% covered" toast-only feedback on the Axal VC Spin-Out template with
+a per-slide coverage grid that maps directly onto the 14 demo-day
+slides (cover, problem, validation, market, solution, roadmap, brand,
+venture_readiness, team, mentor_network, cap_table, ask, axal_signal,
+contact). Each card shows a green/red dot, the exact source table(s)
+the slide reads (`discovery_interviews.pains_json`,
+`spinout_lab_milestones`, `roadmap_okrs`, `score_snapshots`,
+`cap_table_holders`, `financial_models.inputs_json`, etc.) and a
+short count badge ("3/5 interviews", "0 holders", "score: ✓").
+
+Worker: new `buildAxalSpinoutCoverage(data)` export in
+`cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts` derives the
+14 cells entirely from the `SpinoutDemoDayData` already returned by
+`fillAxalSpinoutDemoDay()` — no additional D1 queries. The two
+`axal_spinout_demoday` branches in `cloudflare-worker/src/routes/decks.ts`
+(`POST /apply-method` and `POST /:id/autofill`) now ship a `coverage`
+array alongside the existing `coverage_pct` scalar. Other templates'
+responses are unchanged.
+
+Frontend: `frontend/src/pages/PitchDeckPage.jsx` captures `r.coverage`
+in `applyMethod()` and `fillFromProject()`, clears it on version
+restore so stale grids don't bleed across versions, and renders the
+grid below the toolbar gated on `activeMethodId === 'axal_spinout_demoday'`
+— every other template keeps its existing UX.
+
+Drift: Task #1's spec assumed the worker already returned the coverage
+payload; it didn't. The minimal additive shape above closes that gap
+without touching `fillAxalSpinoutDemoDay()` itself.
+
 ## Feature — Axal Spin-Out deck: 12 slides rebuilt as two-column right-rail layouts
 
 Task #7 of the 3-task Spin-Out deck rebuild. All visual slides in
