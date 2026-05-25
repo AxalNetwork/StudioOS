@@ -11,6 +11,86 @@
 > building it.
 
 
+## Fix — Task #2 — Deck library exports: real PDF + image-mode PPTX, drop PNG cover
+
+PDF was returning `502 pdf_render_failed` because the prior implementation
+called the Browser Rendering binding with raw HTML and no auth, and the
+SPA route it tried to point at required a session cookie. PPTX was
+emitting a text-only generic deck (`pptxgenjs` programmatic shapes) that
+didn't match the rendered slides at all. PNG (cover) was a footgun next
+to those two and is now removed end-to-end.
+
+**Worker — `cloudflare-worker/src/routes/decks.ts`**
+- New HMAC token pair `signDeckPrintToken(env, deckId, ttlSec)` /
+  `verifyDeckPrintToken(env, token)` keyed on `JWT_SECRET`, payload
+  `deck-print|<id>|<exp>`, b64url(payload).b64url(sig). Reuses the
+  hoisted `b64url` / `b64urlDecode` already in the file — no duplicate
+  helpers.
+- New public route `GET /api/decks/print-export/:token` (no `requireAuth`)
+  returns the same `rowToDeck()` JSON shape the editor uses, gated only
+  by the HMAC token. This is what the headless Browser Rendering session
+  fetches.
+- `POST /:id/export` rewritten:
+  - rejects `format='png'` with `400 png_export_removed`;
+  - mints a deck-print token (TTL 180s for PDF, 300s for the per-slide
+    PPTX fan-out) and calls `https://browser/pdf` with
+    `url=<publicBase>/deck/print-export/<token>?print_mode=pdf` at
+    `1920×1080`, `deviceScaleFactor: 2`, `waitUntil:'networkidle0'`;
+  - for PPTX, fans out N `https://browser/screenshot` calls with
+    `&slide=N` to capture one PNG per slide, then calls the new
+    `renderDeckPPTXWithImages()`;
+  - preserves the existing `503 browser_rendering_unavailable` path so
+    the client-side `downloadDeckPdf()` fallback still triggers in dev.
+- `publicBase` derived via `stripTrailingSlashes(env.PUBLIC_BASE_URL ||
+  env.APP_URL || 'https://axal.vc')` so it follows the canonical-host
+  switch from Phase 2.
+
+**Worker — `cloudflare-worker/src/services/decks/pptx.ts`**
+- New `renderDeckPPTXWithImages(deck, pngs[], opts)` builds a 16:9
+  PPTX with one full-bleed image per slide
+  (`12192000 × 6858000` EMU, no margin) plus a `notesMaster` and a
+  per-slide notes part carrying the slide's text content via the new
+  `slideToNotesText(slide)` helper. Adds `png` to `[Content_Types].xml`
+  Defaults, and wires `rId2=image`, `rId3=notesSlide` on each slide rel
+  with a matching `notesSlide{N}.xml.rels` pointing back to the slide
+  + the shared notesMaster.
+- Legacy `renderDeckPPTX()` retained as a fallback (still called from the
+  503 path) but the export route prefers the image-mode renderer.
+
+**Frontend — `frontend/src/pages/PitchDeckPrintPage.jsx`**
+- New `exportMode` prop (wired via the new `/deck/print-export/:token`
+  route) reads `print_mode` + `slide` from the query, fetches the deck
+  via `api.deckPrintExportRead(token)` (no auth), and renders a
+  no-chrome native `1920×1080` stack with `@page { size: 1920px 1080px
+  landscape; margin: 0 }` and per-frame `page-break-after: always` so
+  CF Browser PDF gets one slide per page at native scale.
+- New `SingleSlideStage` component (used when `slide=N` is present) puts
+  the full template stack inside a 1920×1080 `overflow:hidden` viewport
+  and `translateY`s the track to the measured top of the requested
+  `[data-slide-frame]` — exact pixel-snap via `ResizeObserver` so the
+  screenshot lands flush at the top regardless of template-specific
+  frame heights.
+
+**Frontend — `frontend/src/App.jsx`**
+- New unguarded route `/deck/print-export/:token`
+  → `<PitchDeckPrintPage exportMode />`. Mounted alongside the existing
+  `/deck/share/:token` and `/share/deck/:token` share routes.
+
+**Frontend — `frontend/src/lib/api.js`**
+- New `deckPrintExportRead(token)` cookieless helper.
+- Updated `deckExport` doc-comment: format ∈ `{pdf, pptx}` only.
+
+**Frontend — `frontend/src/pages/PitchDeckPage.jsx`**
+- Removed the "PNG (cover)" menu button, the `FileImage` import, and the
+  `format === 'png'` branch of the extension picker. The export menu is
+  now PDF + PowerPoint only.
+
+Drift / typecheck: `cloudflare-worker tsc --noEmit` clean;
+`check-api-drift`, `check-deck-templates` clean. `test:drift` does flag
+two pre-existing dark-mode violations in
+`frontend/src/pages/LandingPage.jsx:264` that are unrelated to this task
+(file untouched here — last touched by commit `6c6d547`).
+
 ## Feature — Task #17 — Spin-Out Lab → Demo Day deck CTA + deep-link auto-apply
 
 In-product hint that points Spin-Out Lab founders at the new Demo Day

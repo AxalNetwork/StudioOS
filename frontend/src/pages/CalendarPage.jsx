@@ -95,7 +95,8 @@ export default function CalendarPage() {
   const [microsoft, setMicrosoft] = useState(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const [msSyncBusy, setMsSyncBusy] = useState(false);
-  const [syncResult, setSyncResult] = useState(null);
+  const [googleResult, setGoogleResult] = useState(null);
+  const [microsoftResult, setMicrosoftResult] = useState(null);
   const [showIc, setShowIc] = useState(false);
   const [showCk, setShowCk] = useState(false);
 
@@ -133,16 +134,16 @@ export default function CalendarPage() {
     const g = qs.get('google');
     const m = qs.get('microsoft');
     if (g === 'connected') {
-      setSyncResult({ kind: 'success', text: 'Google Calendar connected.' });
+      setGoogleResult({ kind: 'success', text: 'Google Calendar connected.' });
       window.history.replaceState({}, '', window.location.pathname);
     } else if (g === 'error' || g === 'failed') {
-      setSyncResult({ kind: 'error', text: `Google connection failed${qs.get('reason') ? ` — ${humanizeOAuthReason(qs.get('reason'))}` : ''}.` });
+      setGoogleResult({ kind: 'error', text: `Google connection failed${qs.get('reason') ? ` — ${humanizeOAuthReason(qs.get('reason'))}` : ''}.` });
       window.history.replaceState({}, '', window.location.pathname);
     } else if (m === 'connected') {
-      setSyncResult({ kind: 'success', text: 'Outlook / Microsoft 365 calendar connected.' });
+      setMicrosoftResult({ kind: 'success', text: 'Outlook / Microsoft 365 calendar connected.' });
       window.history.replaceState({}, '', window.location.pathname);
     } else if (m === 'error' || m === 'failed') {
-      setSyncResult({ kind: 'error', text: `Outlook connection failed${qs.get('reason') ? ` — ${humanizeOAuthReason(qs.get('reason'))}` : ''}.` });
+      setMicrosoftResult({ kind: 'error', text: `Outlook connection failed${qs.get('reason') ? ` — ${humanizeOAuthReason(qs.get('reason'))}` : ''}.` });
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -174,9 +175,9 @@ export default function CalendarPage() {
         const miss = Array.isArray(data.missing) && data.missing.length
           ? ` (missing: ${data.missing.join(', ')})`
           : '';
-        setSyncResult({ kind: 'error', text: `Google Calendar isn't configured yet — contact an admin${miss}.` });
+        setGoogleResult({ kind: 'error', text: `Google Calendar isn't configured yet — contact an admin${miss}.` });
       } else {
-        setSyncResult({ kind: 'error', text: e.message });
+        setGoogleResult({ kind: 'error', text: e.message });
       }
     }
   }
@@ -185,17 +186,17 @@ export default function CalendarPage() {
     if (!window.confirm('Disconnect Google Calendar? Already-pushed events stay on Google.')) return;
     await api.googleCalDisconnect();
     await loadGoogle();
-    setSyncResult({ kind: 'success', text: 'Google disconnected.' });
+    setGoogleResult({ kind: 'success', text: 'Google disconnected.' });
   }
 
   async function runSync() {
-    setSyncBusy(true); setSyncResult(null);
+    setSyncBusy(true); setGoogleResult(null);
     try {
       const r = await api.googleCalSync();
-      setSyncResult({ kind: 'success', text: `Pushed ${r.pushed} new, updated ${r.updated}, ${r.failed} failed (of ${r.total}).` });
+      setGoogleResult({ kind: 'success', text: `Pushed ${r.pushed} new, updated ${r.updated}, ${r.failed} failed (of ${r.total}).` });
       await loadGoogle();
     } catch (e) {
-      setSyncResult({ kind: 'error', text: e.message });
+      setGoogleResult({ kind: 'error', text: e.message });
     }
     setSyncBusy(false);
   }
@@ -210,9 +211,9 @@ export default function CalendarPage() {
         const miss = Array.isArray(data.missing) && data.missing.length
           ? ` (missing: ${data.missing.join(', ')})`
           : '';
-        setSyncResult({ kind: 'error', text: `Outlook isn't configured yet — contact an admin${miss}.` });
+        setMicrosoftResult({ kind: 'error', text: `Outlook isn't configured yet — contact an admin${miss}.` });
       } else {
-        setSyncResult({ kind: 'error', text: e.message });
+        setMicrosoftResult({ kind: 'error', text: e.message });
       }
     }
   }
@@ -221,17 +222,17 @@ export default function CalendarPage() {
     if (!window.confirm('Disconnect Outlook? Already-pushed events stay on Outlook.')) return;
     await api.microsoftCalDisconnect();
     await loadMicrosoft();
-    setSyncResult({ kind: 'success', text: 'Outlook disconnected.' });
+    setMicrosoftResult({ kind: 'success', text: 'Outlook disconnected.' });
   }
 
   async function runMsSync() {
-    setMsSyncBusy(true); setSyncResult(null);
+    setMsSyncBusy(true); setMicrosoftResult(null);
     try {
       const r = await api.microsoftCalSync();
-      setSyncResult({ kind: 'success', text: `Outlook: pushed ${r.pushed} new, updated ${r.updated}, ${r.failed} failed (of ${r.total}).` });
+      setMicrosoftResult({ kind: 'success', text: `Pushed ${r.pushed} new, updated ${r.updated}, ${r.failed} failed (of ${r.total}).` });
       await loadMicrosoft();
     } catch (e) {
-      setSyncResult({ kind: 'error', text: e.message });
+      setMicrosoftResult({ kind: 'error', text: e.message });
     }
     setMsSyncBusy(false);
   }
@@ -299,9 +300,9 @@ export default function CalendarPage() {
             )}
           </div>
         </div>
-        {syncResult && (
-          <div className={`mt-3 text-sm px-3 py-2 rounded ${syncResult.kind === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
-            {syncResult.text}
+        {googleResult && (
+          <div className={`mt-3 text-sm px-3 py-2 rounded ${googleResult.kind === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
+            {googleResult.text}
           </div>
         )}
       </section>
@@ -347,6 +348,11 @@ export default function CalendarPage() {
             )}
           </div>
         </div>
+        {microsoftResult && (
+          <div className={`mt-3 text-sm px-3 py-2 rounded ${microsoftResult.kind === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
+            {microsoftResult.text}
+          </div>
+        )}
       </section>
 
       {/* Quick add */}
