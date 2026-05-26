@@ -11,6 +11,52 @@
 > building it.
 
 
+## Feature — Task #15 · Customer Discovery captures 0–5 solution-fit rating + free-text comment
+
+`frontend/src/pages/DiscoveryPage.jsx` — interview modal now carries
+two new fields:
+
+- **`validation_rating`** (integer 0–5 or null) — six-pip `RatingPicker`
+  with prompt "How well does this solution address the problem the
+  interviewee experiences?" Unrated state renders six **dashed
+  outlines** so it never visually reads as "0". Clicking the currently
+  selected pip clears back to null, and a small "clear" link sits
+  beside the row. `Number.isInteger(value)` guards the rated branch so
+  `null` and `0` are visually distinct end-to-end.
+- **`validation_comment`** (string ≤240 chars or null) — one-line text
+  input appears below the picker only when a rating is set; collapses
+  back to null when the rating is cleared.
+
+`emptyInterview()` now seeds `validation_rating: null,
+validation_comment: ''`. `handleSave()` clamps the wire payload:
+`null` when unrated, else `Math.max(0, Math.min(5,
+Math.round(Number(...))))`; empty comment trims to `null`. The worker
+also clamps via `asValidationRating()`, but normalising here keeps
+the wire payload tight and reproducible. `handleToggleFeatured()`
+omits both fields, which is safe — the PUT handler in
+`cloudflare-worker/src/routes/progress.ts` already preserves the
+existing rating + comment when the keys are absent from the body
+(`hasOwnProperty` checks landed with Task #14).
+
+Card-view summary: new `RatingBadge` renders a slim "Fit · • • • • ○ ○
+· 4 / 5 · 'quote'" row under the interview notes; hidden entirely
+when `validation_rating` is null. Card uses `bg-violet-600` for filled
+dots and `bg-gray-200 dark:bg-gray-700` for empties so the badge is
+legible in both themes.
+
+Worker / migration: no new work. The `validation_rating` /
+`validation_comment` columns + lazy-bootstrap helper
+`ensureDiscoveryValidationRatingColumns()` + `asValidationRating()` +
+`serializeInterview()` round-trip + "preserve when omitted" PUT
+semantics all landed with Task #14 (migration `074`). This task wires
+the UI that finally populates them.
+
+Net effect: once a project has ≥1 rated interview, the Demo Day deck's
+`RatingDistribution` chart on the Validation slide renders with real
+data the next time the founder hits "Fill from project".
+
+---
+
 ## Feature — Task #14 · Spin-Out Demo Day deck rebuild (13 slides)
 
 Rebuilt `Deck_axal_spinout_demoday` to the 13-slide layout per the Task #14

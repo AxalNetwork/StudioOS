@@ -8,6 +8,24 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Customer Discovery — rate how well your solution fits each interview
+
+You can now record a 0–5 "fit" rating on every Customer Discovery
+interview: how well your current solution addresses the problem the
+person you spoke with is actually experiencing. Click a pip, optionally
+jot a one-line note about what they said, and save.
+
+The rating shows as a small dot row on the interview card so you can
+scan your interview log at a glance. Leaving it blank is fine — the
+"unrated" state shows hollow outlines and is visually distinct from a
+real "0" answer, so we never invent a low score.
+
+Once at least one interview has a rating, the Demo Day deck's
+Validation slide automatically lights up its 0–5 histogram the next
+time you hit "Fill from project".
+
+---
+
 ## Spin-Out Demo Day deck — sharper, 13 slides, and a "Review the deal" call-to-action
 
 The Demo Day deck has had a refresh. Highlights:

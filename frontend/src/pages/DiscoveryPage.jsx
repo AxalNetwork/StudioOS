@@ -21,6 +21,11 @@ function emptyInterview() {
     hypotheses: [{ hypothesis: '', status: 'inconclusive', evidence: '' }],
     pains: [],
     featured: false,
+    // Task #15 — null (not 0) means "unrated"; the Demo Day Validation
+    // histogram only counts integer 0–5 ratings, so a missing pulse
+    // must stay null end-to-end.
+    validation_rating: null,
+    validation_comment: '',
   };
 }
 
@@ -100,6 +105,14 @@ export default function DiscoveryPage() {
         ...editing,
         hypotheses: editing.hypotheses.filter((h) => (h.hypothesis || '').trim()),
         pains: editing.pains.filter((p) => (p || '').trim()),
+        // Task #15 — explicit null when unrated; coerce to integer 0–5
+        // otherwise. Worker also clamps, but normalising here keeps the
+        // wire payload tight and reproducible.
+        validation_rating: (editing.validation_rating == null || editing.validation_rating === '')
+          ? null
+          : Math.max(0, Math.min(5, Math.round(Number(editing.validation_rating)))),
+        // Empty comment → null so we don't store empty strings.
+        validation_comment: (editing.validation_comment || '').trim() || null,
       };
       const isCreate = !editing.id;
       const priorCount = interviews.length;
@@ -264,6 +277,9 @@ export default function DiscoveryPage() {
                   <span className="text-xs text-gray-400">· {i.interview_date}</span>
                 </div>
                 {i.notes && <p className="text-sm text-gray-600 mt-1 whitespace-pre-line line-clamp-3">{i.notes}</p>}
+                {Number.isInteger(i.validation_rating) && (
+                  <RatingBadge rating={i.validation_rating} comment={i.validation_comment} />
+                )}
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -358,6 +374,37 @@ function InterviewModal({ value, onChange, onSave, onClose }) {
             <textarea rows={4} value={value.notes} onChange={(e) => onChange({ ...value, notes: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm dark:border-gray-700" />
           </Field>
 
+          {/* Task #15 — 0–5 "how well does this solve their problem?" rating.
+              null = unrated (empty outline pips, distinct from 0 which is a
+              real "doesn't help at all" answer). When rated, an optional
+              one-line comment field appears below it. */}
+          <div>
+            <label className="text-xs uppercase tracking-wide text-gray-500 block mb-1">
+              How well does this solution address the problem the interviewee experiences?
+            </label>
+            <RatingPicker
+              value={value.validation_rating}
+              onChange={(r) => onChange({
+                ...value,
+                validation_rating: r,
+                // Clearing the rating also drops any stale comment so an
+                // unrated interview never carries a hidden quote into the
+                // wire payload on save.
+                validation_comment: r == null ? '' : value.validation_comment,
+              })}
+            />
+            {Number.isInteger(value.validation_rating) && (
+              <input
+                type="text"
+                value={value.validation_comment || ''}
+                onChange={(e) => onChange({ ...value, validation_comment: e.target.value })}
+                placeholder="What did they say about it? (optional)"
+                maxLength={240}
+                className="mt-2 w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700"
+              />
+            )}
+          </div>
+
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs uppercase tracking-wide text-gray-500">Hypotheses</label>
@@ -393,6 +440,76 @@ function Field({ label, children }) {
     <div>
       <label className="text-xs uppercase tracking-wide text-gray-500 block mb-1">{label}</label>
       {children}
+    </div>
+  );
+}
+
+// Task #15 — 6 clickable pips for 0..5. Click the active pip to clear back
+// to "unrated" (null) so a mis-click can't trap a founder at "0". Rendered
+// pips use a filled dot up to the current value; unrated state shows six
+// dashed outlines so it never visually reads as "0".
+function RatingPicker({ value, onChange }) {
+  const isRated = Number.isInteger(value);
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1" role="radiogroup" aria-label="Solution-fit rating, 0 to 5">
+        {[0, 1, 2, 3, 4, 5].map((n) => {
+          const filled = isRated && n <= value;
+          const isCurrent = isRated && n === value;
+          return (
+            <button
+              key={n}
+              type="button"
+              role="radio"
+              aria-checked={isCurrent}
+              aria-label={`${n} out of 5`}
+              onClick={() => onChange(isCurrent ? null : n)}
+              className={[
+                'h-7 w-7 rounded-full text-xs font-semibold flex items-center justify-center transition',
+                filled
+                  ? 'bg-violet-600 text-white border border-violet-600 hover:bg-violet-700'
+                  : isRated
+                    ? 'bg-white text-gray-500 border border-gray-300 hover:border-violet-400 dark:bg-gray-900 dark:border-gray-700'
+                    : 'bg-white text-gray-400 border border-dashed border-gray-300 hover:border-violet-400 dark:bg-gray-900 dark:border-gray-700',
+              ].join(' ')}
+            >
+              {n}
+            </button>
+          );
+        })}
+      </div>
+      <span className="text-xs text-gray-500">
+        {isRated ? `${value} / 5` : 'Unrated — click a pip to record their pulse'}
+      </span>
+      {isRated && (
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="text-xs text-gray-400 hover:text-rose-600 underline"
+        >
+          clear
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Card-view summary — slim row of 6 filled/empty dots + optional one-line
+// quote. Hidden entirely when validation_rating is null.
+function RatingBadge({ rating, comment }) {
+  return (
+    <div className="mt-2 flex items-center gap-2 text-xs">
+      <span className="uppercase tracking-wide text-gray-400">Fit</span>
+      <span className="flex items-center gap-0.5" aria-label={`Rated ${rating} of 5`}>
+        {[0, 1, 2, 3, 4, 5].map((n) => (
+          <span
+            key={n}
+            className={`h-2 w-2 rounded-full ${n <= rating ? 'bg-violet-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+          />
+        ))}
+      </span>
+      <span className="text-gray-600 font-medium">{rating} / 5</span>
+      {comment && <span className="text-gray-500 italic truncate">· "{comment}"</span>}
     </div>
   );
 }
