@@ -1432,16 +1432,26 @@ const Slide_Problem: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
   const p = d.problem;
   const signals = p.signals.filter((s) => !isUnfilled(s));
   const slots = [0, 1, 2].map((i) => signals[i] || null);
+  const lenStatus = isUnfilled(p.body)
+    ? { status: 'empty' as const }
+    : getPitchCopyLengthStatus(p.body, 'problem');
+  const showPlaceholder = lenStatus.status === 'empty' || lenStatus.status === 'too_short';
   return (
     <SlideShell>
       <div style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 32, flex: 1, minHeight: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <Eyebrow>{p.eyebrow}</Eyebrow>
-          {isUnfilled(p.body)
+          {showPlaceholder
             ? <h2 style={{ color: V.textMuted, fontStyle: 'italic', fontFamily: V.display, fontSize: 44, lineHeight: 1.1, margin: 0 }}>The pain we built the Lab to investigate.</h2>
             : <SlideHeading size="xl">{trimPitchCopyToMax(p.body, 'problem')}</SlideHeading>}
-          {isUnfilled(p.body) && <div style={{ marginTop: 16 }}><Nudge>Add a problem statement on your project, or via the Personal Advisor (Week 1 question bank).</Nudge></div>}
-          {!isUnfilled(p.body) && getPitchCopyLengthStatus(p.body, 'problem').status === 'too_long' && (
+          {showPlaceholder && (
+            <div style={{ marginTop: 16 }}>
+              <Nudge>{lenStatus.status === 'empty'
+                ? 'Add a problem statement on your project, or via the Personal Advisor (Week 1 question bank).'
+                : 'Problem statement is too short for a pitch slide — aim for 35–60 words on the project.'}</Nudge>
+            </div>
+          )}
+          {lenStatus.status === 'too_long' && (
             <div style={{ marginTop: 10, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>
               Trimmed to 75 words for the slide — edit the Problem Statement in Projects to refine.
             </div>
@@ -1614,16 +1624,26 @@ const Slide_Market: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
 const Slide_Solution: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
   const V = useV();
   const s = d.solution;
+  const lenStatus = isUnfilled(s.body)
+    ? { status: 'empty' as const }
+    : getPitchCopyLengthStatus(s.body, 'solution');
+  const showPlaceholder = lenStatus.status === 'empty' || lenStatus.status === 'too_short';
   return (
     <SlideShell>
       <div style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 32, flex: 1, minHeight: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <Eyebrow>{s.eyebrow}</Eyebrow>
-          {isUnfilled(s.body)
+          {showPlaceholder
             ? <h2 style={{ color: V.textMuted, fontStyle: 'italic', fontFamily: V.display, fontSize: 44, lineHeight: 1.1, margin: 0 }}>A first cut of what we will ship.</h2>
             : <SlideHeading size="xl">{trimPitchCopyToMax(s.body, 'solution')}</SlideHeading>}
-          {isUnfilled(s.body) && <div style={{ marginTop: 14 }}><Nudge>Define the MVP scope in Roadmap (Week 2) and fill the solution field in Projects.</Nudge></div>}
-          {!isUnfilled(s.body) && getPitchCopyLengthStatus(s.body, 'solution').status === 'too_long' && (
+          {showPlaceholder && (
+            <div style={{ marginTop: 14 }}>
+              <Nudge>{lenStatus.status === 'empty'
+                ? 'Define the MVP scope in Roadmap (Week 2) and fill the solution field in Projects.'
+                : 'Solution copy is too short for a pitch slide — aim for 35–50 words on the project.'}</Nudge>
+            </div>
+          )}
+          {lenStatus.status === 'too_long' && (
             <div style={{ marginTop: 10, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>
               Trimmed to 70 words for the slide — edit Solution in Projects to refine.
             </div>

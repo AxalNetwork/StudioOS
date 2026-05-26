@@ -70,7 +70,7 @@ export function getPitchCopyLengthStatus(text, fieldType) {
       wordCount,
       status: 'acceptable',
       tone: 'amber',
-      label: `Getting long — keep under ${cfg.max} words`,
+      label: `Acceptable — keep under ${cfg.max} words`,
       progressPercent: 100,
     };
   }
