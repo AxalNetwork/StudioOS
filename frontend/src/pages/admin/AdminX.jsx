@@ -737,7 +737,41 @@ function AggregatorTab({ accounts, onReload, toast }) {
 
 // ----- Page root --------------------------------------------------------
 
+/**
+ * 2026-05-26 — TEMPORARILY DISABLED.
+ *
+ * X (Twitter) broadcaster is parked until the prod worker has
+ * `X_CLIENT_ID` / `X_CLIENT_SECRET` bound and the X Developer Portal
+ * is fully provisioned. Mounting the live UI fires `/api/admin/x/*`
+ * calls that 503 with `x_config_missing`, which surface as red toasts
+ * on every visit.
+ *
+ * To re-enable:
+ *   1. Push the X secrets (`wrangler secret put X_CLIENT_ID --env production`, etc).
+ *   2. Restore the sidebar link in `frontend/src/sidebarConfig.js`.
+ *   3. Swap the default export below back to `AdminXFull`.
+ *
+ * `AdminXFull` is preserved verbatim — no logic loss.
+ */
 export default function AdminX() {
+  return (
+    <div className="p-6 max-w-3xl mx-auto">
+      <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-6">
+        <h1 className="text-xl font-bold text-amber-900 dark:text-amber-100 mb-2">
+          X (Twitter) broadcaster — coming soon
+        </h1>
+        <p className="text-sm text-amber-900 dark:text-amber-200">
+          This feature is temporarily paused while we finish configuring X
+          Developer access. No action needed — your existing drafts, accounts,
+          and history are preserved server-side and will reappear here when it
+          comes back online.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function AdminXFull() {
   const [tab, setTab] = useState('accounts');
   const [accounts, setAccounts] = useState([]);
   const [configOk, setConfigOk] = useState(true);
