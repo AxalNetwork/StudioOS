@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
+import { getPitchCopyLengthStatus } from '../lib/pitchCopyLength';
 import { StatusBadge } from './Dashboard';
 
 const weekLabels = {
@@ -595,6 +596,33 @@ function InfoCard({ label, value }) {
   );
 }
 
+const PITCH_FIELD_TYPE = { problem_statement: 'problem', solution: 'solution' };
+
+function PitchCopyMeter({ status }) {
+  if (!status) return null;
+  const toneColors = {
+    neutral: { bar: 'bg-gray-300 dark:bg-gray-600', text: 'text-gray-500 dark:text-gray-400' },
+    amber:   { bar: 'bg-amber-500',                 text: 'text-amber-600 dark:text-amber-400' },
+    green:   { bar: 'bg-emerald-500',               text: 'text-emerald-600 dark:text-emerald-400' },
+    red:     { bar: 'bg-red-500',                   text: 'text-red-600 dark:text-red-400' },
+  };
+  const c = toneColors[status.tone] || toneColors.neutral;
+  return (
+    <div className="mt-1.5">
+      <div className="h-1 w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+        <div
+          className={`h-full ${c.bar} transition-all duration-200`}
+          style={{ width: `${status.progressPercent}%` }}
+        />
+      </div>
+      <div className="mt-1 flex items-center justify-between text-[11px]">
+        <span className={c.text}>{status.label}</span>
+        <span className="text-gray-400 dark:text-gray-500 font-mono">{status.wordCount} {status.wordCount === 1 ? 'word' : 'words'}</span>
+      </div>
+    </div>
+  );
+}
+
 const EDITABLE_FIELDS = [
   { key: 'name', label: 'Project Name', required: true },
   { key: 'description', label: 'Description' },
@@ -671,6 +699,9 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
                   onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
                   className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
                 />
+              )}
+              {PITCH_FIELD_TYPE[f.key] && (
+                <PitchCopyMeter status={getPitchCopyLengthStatus(form[f.key], PITCH_FIELD_TYPE[f.key])} />
               )}
             </div>
           ))}

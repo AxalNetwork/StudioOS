@@ -9,6 +9,7 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 import { StatusBadge, WeekBadge } from './Dashboard';
 import VirtualList from '../components/VirtualList';
 import { useToast } from '../components/useToast';
+import { getPitchCopyLengthStatus } from '../lib/pitchCopyLength';
 import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
 import Skeleton from '../components/Skeleton';
@@ -140,8 +141,8 @@ export default function ProjectsPage() {
             <div className="md:col-span-2">
               <Input label="Description" value={form.description} onChange={v => setForm(f => ({ ...f, description: v }))} />
             </div>
-            <Input label="Problem Statement" value={form.problem_statement} onChange={v => setForm(f => ({ ...f, problem_statement: v }))} />
-            <Input label="Solution" value={form.solution} onChange={v => setForm(f => ({ ...f, solution: v }))} />
+            <PitchInput label="Problem Statement" fieldType="problem" value={form.problem_statement} onChange={v => setForm(f => ({ ...f, problem_statement: v }))} />
+            <PitchInput label="Solution" fieldType="solution" value={form.solution} onChange={v => setForm(f => ({ ...f, solution: v }))} />
           </div>
           <div className="flex gap-3 mt-4">
             <button onClick={submit} disabled={submitting} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm text-white font-medium transition-colors">{submitting ? 'Creating…' : 'Create'}</button>
@@ -314,6 +315,37 @@ function Input({ label, value, onChange }) {
         type="text" value={value} onChange={e => onChange(e.target.value)}
         className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:text-gray-100"
       />
+    </div>
+  );
+}
+
+function PitchInput({ label, fieldType, value, onChange }) {
+  const status = getPitchCopyLengthStatus(value, fieldType);
+  const toneColors = {
+    neutral: { bar: 'bg-gray-300 dark:bg-gray-600', text: 'text-gray-500 dark:text-gray-400' },
+    amber:   { bar: 'bg-amber-500',                 text: 'text-amber-600 dark:text-amber-400' },
+    green:   { bar: 'bg-emerald-500',               text: 'text-emerald-600 dark:text-emerald-400' },
+    red:     { bar: 'bg-red-500',                   text: 'text-red-600 dark:text-red-400' },
+  };
+  const c = toneColors[status.tone] || toneColors.neutral;
+  return (
+    <div>
+      <label className="block text-xs text-gray-600 mb-1">{label}</label>
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        rows={3}
+        className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:text-gray-100"
+      />
+      <div className="mt-1.5">
+        <div className="h-1 w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+          <div className={`h-full ${c.bar} transition-all duration-200`} style={{ width: `${status.progressPercent}%` }} />
+        </div>
+        <div className="mt-1 flex items-center justify-between text-[11px]">
+          <span className={c.text}>{status.label}</span>
+          <span className="text-gray-400 dark:text-gray-500 font-mono">{status.wordCount} {status.wordCount === 1 ? 'word' : 'words'}</span>
+        </div>
+      </div>
     </div>
   );
 }

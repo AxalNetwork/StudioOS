@@ -8,6 +8,21 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Length guidance for Problem and Solution — no more wall-of-text slides
+
+When you edit a project's Problem Statement or Solution, you'll see a
+slim progress bar under each box with a live word count and a short
+hint — "Too short", "Good length", "Getting long", or "Too long" —
+shaped around the lengths that actually fit on a pitch slide. Problem
+sits best between 35 and 60 words; Solution between 35 and 50. You can
+still save whatever you want — the bar is guidance, not a wall.
+
+The Axal Spin-Out demo-day deck now uses the same rule: if your
+Problem or Solution copy runs past the slide-friendly limit, the slide
+trims it to fit (with an ellipsis) and shows a small note pointing you
+back to the project to refine it — so the slide header never balloons
+into a paragraph block.
+
 ## Help-widget chats and new tickets now show up in our Slack
 
 When you message us from the Help widget, or open a support ticket, it

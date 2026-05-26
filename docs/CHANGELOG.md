@@ -11,6 +11,98 @@
 > building it.
 
 
+## Feature — Word-count guidance for Problem & Solution copy (editor + Spin-Out deck)
+
+New shared helper `frontend/src/lib/pitchCopyLength.js` exports
+`getPitchCopyLengthStatus(text, fieldType)` + `trimPitchCopyToMax()`,
+with `PITCH_COPY_CONFIG` as the single source of truth for the two
+word-range bands: **problem** `min 25 / ideal 35–60 / max 75`, **solution**
+`min 25 / ideal 35–50 / max 70`. Status taxonomy is
+`empty | too_short | good | acceptable | too_long`; tone is
+`neutral | amber | green | red`; `progressPercent` ramps to 100% inside
+the ideal range and stays there (color carries the over-max signal so
+the bar never has to display a "wrong direction" fill).
+
+Editor wiring:
+- `frontend/src/pages/ProjectDetail.jsx::EditProjectModal` — new local
+  `<PitchCopyMeter>` (1px-tall bar + status text + word count, all
+  dark-mode aware) rendered immediately below the Problem Statement
+  and Solution textareas via a `PITCH_FIELD_TYPE` map keyed by field.
+  Save is **not** blocked when too long — meter is guidance only.
+- `frontend/src/pages/ProjectsPage.jsx` — Add-New-Project form's
+  Problem/Solution `<Input>`s replaced with a new `<PitchInput>` that
+  upgrades to a textarea + the same meter pattern (the previous
+  single-line `<input>` for a 25–75 word field was itself a UX bug).
+
+Deck wiring (`frontend/src/decks/templates/axal_spinout_demoday_app.tsx`):
+- `Slide_Problem` and `Slide_Solution` now wrap `p.body` / `s.body` in
+  `trimPitchCopyToMax(text, 'problem'|'solution')` before passing to
+  `<SlideHeading size="xl">` so an 80+ word paragraph can no longer
+  render as a wall-of-text headline (the bug from the screenshot that
+  triggered Task #12). When `getPitchCopyLengthStatus(...).status ===
+  'too_long'`, a small muted-mono footnote ("Trimmed to N words for the
+  slide — edit … in Projects to refine.") appears below the headline.
+- Empty-body branches unchanged: the existing italic placeholder
+  heading + `<Nudge>` cue still fire when `isUnfilled(body)` is true.
+
+Worker / schema unchanged — guidance is editor + render only.
+Files: `frontend/src/lib/pitchCopyLength.js`,
+`frontend/src/pages/ProjectDetail.jsx`,
+`frontend/src/pages/ProjectsPage.jsx`,
+`frontend/src/decks/templates/axal_spinout_demoday_app.tsx`.
+
+## Feature — Slack bus Phase 1 (org-wide channel poster)
+
+New `cloudflare-worker/src/services/slackBus.ts` — bot-token-based poster
+that routes platform events to 5 named Slack channels by `ChannelKey`
+(`ops` | `founders` | `review` | `signals` | `launch`). Resolves channel
+IDs from env (`SLACK_CHANNEL_OPS`/`_FOUNDERS`/`_REVIEW`/`_SIGNALS`/`_LAUNCH`)
+so renames are cost-free and typos can't silently drop messages. In-isolate
+30s dedupe per `(channel, payload-hash)` so retry storms / crash loops
+can't blow Slack's Tier-3 quota. Best-effort: missing token, missing
+channel ID, or Slack 4xx all return `{ok:false, reason}` and NEVER throw
+or propagate to the caller.
+
+Wired two emit points in Phase 1:
+- `routes/customer_chat.ts` — Help → "Chat with Axal team" now posts to
+  `#axal-founders` via slackBus when `SLACK_BOT_TOKEN` +
+  `SLACK_CHANNEL_FOUNDERS` are set; falls back to the legacy
+  `AXAL_TEAM_SLACK_WEBHOOK_URL` incoming-webhook path otherwise so
+  delivery is uninterrupted through the cutover. Bot path uses real
+  `ts` returned by `chat.postMessage` for `thread_ts` (no more
+  `pending:` placeholders); legacy path still synthesises a placeholder
+  for the `/slack-reply` Events handler to rewrite.
+- `routes/tickets.ts` — every `POST /api/tickets` now posts a Block Kit
+  card to `#axal-review` with title/body/submitter/priority/GitHub-link
+  fields and an "Open ticket" CTA. Wrapped in try/catch — Slack failures
+  cannot block ticket creation.
+
+New admin status route at `/api/admin/slack` (mounted BEFORE catch-all
+`/api/admin`, inside the existing `requireCfAccess()` perimeter):
+- `GET /status` — `{token_configured, bus_configured, channels: {key:
+  {configured, channel_id}}, legacy_webhook_configured}`.
+- `POST /test/:channel` — fires a verification card to the named channel
+  (admin role enforced; writes `slack_bus_test_ok`/`_failed` to
+  `admin_audit_log`).
+
+Env additions in `types.ts`: `SLACK_BOT_TOKEN`, `SLACK_CHANNEL_OPS`,
+`SLACK_CHANNEL_FOUNDERS`, `SLACK_CHANNEL_REVIEW`, `SLACK_CHANNEL_SIGNALS`,
+`SLACK_CHANNEL_LAUNCH`, plus formalising the legacy
+`AXAL_TEAM_SLACK_WEBHOOK_URL` + `AXAL_TEAM_SLACK_CHANNEL`. All optional;
+worker boots fine with none set (slackBus is then a structured no-op).
+
+Required ops to activate in prod: create Axal StudioOS Slack App with
+`chat:write` + `chat:write.public` + `files:write` + `reactions:write`
+bot scopes, install, invite to the 5 channels, then
+`wrangler secret put SLACK_BOT_TOKEN --env production` plus
+`wrangler secret put SLACK_CHANNEL_FOUNDERS --env production` (etc) for
+each channel ID. Verify via `curl https://axal.vc/api/admin/slack/status`
+behind CF Access and `POST /api/admin/slack/test/founders`.
+
+Phase 2 (deal pipeline / KYC / DD / signups / spin-out / market intel)
++ Phase 3 (5xx + auth failures → `#axal-ops`) + Phase 4 (GitHub App
+webhook receiver → `#axal-ops`) tracked separately.
+
 ## Feature — Axal Spin-Out deck: 14-cell Fill-from-project coverage grid
 
 Task #8 of the 3-task Spin-Out deck rebuild. Replaces the one-line

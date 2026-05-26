@@ -11,6 +11,46 @@
 > building it.
 
 
+## Feature — Word-count guidance for Problem & Solution copy (editor + Spin-Out deck)
+
+New shared helper `frontend/src/lib/pitchCopyLength.js` exports
+`getPitchCopyLengthStatus(text, fieldType)` + `trimPitchCopyToMax()`,
+with `PITCH_COPY_CONFIG` as the single source of truth for the two
+word-range bands: **problem** `min 25 / ideal 35–60 / max 75`, **solution**
+`min 25 / ideal 35–50 / max 70`. Status taxonomy is
+`empty | too_short | good | acceptable | too_long`; tone is
+`neutral | amber | green | red`; `progressPercent` ramps to 100% inside
+the ideal range and stays there (color carries the over-max signal so
+the bar never has to display a "wrong direction" fill).
+
+Editor wiring:
+- `frontend/src/pages/ProjectDetail.jsx::EditProjectModal` — new local
+  `<PitchCopyMeter>` (1px-tall bar + status text + word count, all
+  dark-mode aware) rendered immediately below the Problem Statement
+  and Solution textareas via a `PITCH_FIELD_TYPE` map keyed by field.
+  Save is **not** blocked when too long — meter is guidance only.
+- `frontend/src/pages/ProjectsPage.jsx` — Add-New-Project form's
+  Problem/Solution `<Input>`s replaced with a new `<PitchInput>` that
+  upgrades to a textarea + the same meter pattern (the previous
+  single-line `<input>` for a 25–75 word field was itself a UX bug).
+
+Deck wiring (`frontend/src/decks/templates/axal_spinout_demoday_app.tsx`):
+- `Slide_Problem` and `Slide_Solution` now wrap `p.body` / `s.body` in
+  `trimPitchCopyToMax(text, 'problem'|'solution')` before passing to
+  `<SlideHeading size="xl">` so an 80+ word paragraph can no longer
+  render as a wall-of-text headline (the bug from the screenshot that
+  triggered Task #12). When `getPitchCopyLengthStatus(...).status ===
+  'too_long'`, a small muted-mono footnote ("Trimmed to N words for the
+  slide — edit … in Projects to refine.") appears below the headline.
+- Empty-body branches unchanged: the existing italic placeholder
+  heading + `<Nudge>` cue still fire when `isUnfilled(body)` is true.
+
+Worker / schema unchanged — guidance is editor + render only.
+Files: `frontend/src/lib/pitchCopyLength.js`,
+`frontend/src/pages/ProjectDetail.jsx`,
+`frontend/src/pages/ProjectsPage.jsx`,
+`frontend/src/decks/templates/axal_spinout_demoday_app.tsx`.
+
 ## Feature — Slack bus Phase 1 (org-wide channel poster)
 
 New `cloudflare-worker/src/services/slackBus.ts` — bot-token-based poster

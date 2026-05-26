@@ -37,6 +37,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { DeckProps } from '../DeckBase';
 import { Slide16x9 } from '../DeckBase';
+import { trimPitchCopyToMax, getPitchCopyLengthStatus } from '../../lib/pitchCopyLength';
 
 /* ─────────────────────────── variant tokens ─────────────────────────── */
 
@@ -1438,8 +1439,13 @@ const Slide_Problem: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
           <Eyebrow>{p.eyebrow}</Eyebrow>
           {isUnfilled(p.body)
             ? <h2 style={{ color: V.textMuted, fontStyle: 'italic', fontFamily: V.display, fontSize: 44, lineHeight: 1.1, margin: 0 }}>The pain we built the Lab to investigate.</h2>
-            : <SlideHeading size="xl">{p.body}</SlideHeading>}
+            : <SlideHeading size="xl">{trimPitchCopyToMax(p.body, 'problem')}</SlideHeading>}
           {isUnfilled(p.body) && <div style={{ marginTop: 16 }}><Nudge>Add a problem statement on your project, or via the Personal Advisor (Week 1 question bank).</Nudge></div>}
+          {!isUnfilled(p.body) && getPitchCopyLengthStatus(p.body, 'problem').status === 'too_long' && (
+            <div style={{ marginTop: 10, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>
+              Trimmed to 75 words for the slide — edit the Problem Statement in Projects to refine.
+            </div>
+          )}
           <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
             {slots.map((s, i) => {
               const isReal = !!s;
@@ -1615,8 +1621,13 @@ const Slide_Solution: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
           <Eyebrow>{s.eyebrow}</Eyebrow>
           {isUnfilled(s.body)
             ? <h2 style={{ color: V.textMuted, fontStyle: 'italic', fontFamily: V.display, fontSize: 44, lineHeight: 1.1, margin: 0 }}>A first cut of what we will ship.</h2>
-            : <SlideHeading size="xl">{s.body}</SlideHeading>}
+            : <SlideHeading size="xl">{trimPitchCopyToMax(s.body, 'solution')}</SlideHeading>}
           {isUnfilled(s.body) && <div style={{ marginTop: 14 }}><Nudge>Define the MVP scope in Roadmap (Week 2) and fill the solution field in Projects.</Nudge></div>}
+          {!isUnfilled(s.body) && getPitchCopyLengthStatus(s.body, 'solution').status === 'too_long' && (
+            <div style={{ marginTop: 10, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>
+              Trimmed to 70 words for the slide — edit Solution in Projects to refine.
+            </div>
+          )}
           <div style={{ marginTop: 20, ...cardStyle(V, true), padding: 18, flex: 1 }}>
             <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 10 }}>Capabilities</div>
             {s.capabilities.length > 0 ? (
