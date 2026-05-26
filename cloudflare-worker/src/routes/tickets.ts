@@ -141,6 +141,35 @@ tickets.post('/', async (c) => {
     } catch {}
   }
 
+  // Phase 1 (2026-05-26) — surface new tickets in #axal-review. Best-effort:
+  // a missing Slack token or unreachable Slack must not break ticket creation
+  // (DB write already committed above).
+  try {
+    const { postToChannel, buildEventCard } = await import('../services/slackBus');
+    const priority = String(data.priority || 'medium').toLowerCase();
+    const card = buildEventCard({
+      appUrl: (c.env as { APP_URL?: string }).APP_URL || '',
+      header: priority === 'urgent' || priority === 'high'
+        ? ':rotating_light: New high-priority ticket'
+        : ':ticket: New support ticket',
+      title: data.title,
+      body: data.description ? String(data.description).slice(0, 600) : null,
+      fields: [
+        { label: 'Submitted by', value: `${user.name || user.email} (${user.role || 'user'})` },
+        { label: 'Priority', value: priority },
+        ...(githubIssue ? [{ label: 'GitHub', value: `<${githubIssue.html_url}|#${githubIssue.number}>` }] : []),
+      ],
+      cta: { label: 'Open ticket', path: `/tickets/${ticket.id}` },
+    });
+    await postToChannel(c.env, {
+      channel: 'review',
+      text: card.text,
+      blocks: card.blocks,
+    });
+  } catch (e) {
+    console.warn('[tickets] slack notify failed', (e as Error).message);
+  }
+
   await sql.end();
   return c.json({ ...ticket, github_sync_status: githubIssue ? 'synced' : 'failed' });
 });

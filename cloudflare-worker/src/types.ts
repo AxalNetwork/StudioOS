@@ -304,9 +304,28 @@ export interface Env {
   // Crunchbase API
   CRUNCHBASE_API_KEY?: string;
 
-  // Slack OAuth (one-way notifications)
+  // Slack OAuth (one-way per-user notifications — see notify.ts).
   SLACK_CLIENT_ID?: string;
   SLACK_CLIENT_SECRET?: string;
+
+  // ── Org-wide Slack bus (services/slackBus.ts) ────────────────────────────
+  // Bot token from the Axal StudioOS Slack App (`xoxb-...`). One token
+  // posts to every channel; per-channel routing happens via the
+  // SLACK_CHANNEL_* IDs below. When the token is unset, slackBus is a
+  // no-op (returns ok:false) and never breaks the underlying business
+  // action that called it.
+  SLACK_BOT_TOKEN?: string;
+  // Channel IDs (NOT names — looks like `C012ABCD3EF`). The keys here
+  // mirror the constants in services/slackBus.ts.
+  SLACK_CHANNEL_OPS?: string;       // #axal-ops — 5xx, auth failures, GitHub
+  SLACK_CHANNEL_FOUNDERS?: string;  // #axal-founders — chat, deals, signups
+  SLACK_CHANNEL_REVIEW?: string;    // #axal-review — KYC, DD, tickets
+  SLACK_CHANNEL_SIGNALS?: string;   // #axal-signals — market intel
+  SLACK_CHANNEL_LAUNCH?: string;    // #axal-launch — spin-outs, milestones
+  // Legacy single-channel customer-chat webhook (used as a fallback when
+  // SLACK_BOT_TOKEN/SLACK_CHANNEL_FOUNDERS are not yet provisioned).
+  AXAL_TEAM_SLACK_WEBHOOK_URL?: string;
+  AXAL_TEAM_SLACK_CHANNEL?: string;
 
   // DocuSign — Integration Key + RSA private key for JWT grant
   DOCUSIGN_INTEGRATION_KEY?: string;

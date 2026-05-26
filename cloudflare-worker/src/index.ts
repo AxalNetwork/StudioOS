@@ -42,6 +42,7 @@ import adminTeam from './routes/admin_team';
 // Task #3 — Admin Telegram channels + aggregator + post send.
 import adminTelegram from './routes/admin_telegram';
 import adminX from './routes/admin_x';
+import adminSlack from './routes/admin_slack';
 // Task #2 — News with author proposals + admin queue.
 import newsRoutes from './routes/news';
 import adminNews from './routes/admin_news';
@@ -496,6 +497,10 @@ app.route('/api/admin/team', adminTeam);
 app.route('/api/admin/telegram', adminTelegram);
 // Task #4 — same mount-before-catch-all precedence as Telegram.
 app.route('/api/admin/x', adminX);
+// Slack bus (Phase 1, 2026-05-26) — org-wide channel poster status +
+// per-channel test action. Mounted BEFORE catch-all /api/admin so the
+// /api/admin/slack/* routes resolve here.
+app.route('/api/admin/slack', adminSlack);
 // Task #2 — News admin queue. Mounted BEFORE catch-all /api/admin so the
 // nested /api/admin/news/* routes resolve here.
 app.route('/api/admin/news', adminNews);

@@ -101,52 +101,116 @@ customerChat.post('/send', async (c) => {
       ORDER BY last_message_at DESC LIMIT 1`,
   ).bind(user.id).first<any>();
 
-  const webhookUrl = (env as any).AXAL_TEAM_SLACK_WEBHOOK_URL || '';
-  const channel = (env as any).AXAL_TEAM_SLACK_CHANNEL || '#customer-chat';
-
-  // Compose Slack payload. We include user identity + tier so the team
-  // can route the reply. For follow-up messages on an existing thread we
-  // pass `thread_ts`; Slack incoming-webhooks support thread_ts.
   const tierLabel = user.role === 'investor'
     ? `investor/${(user as any).investor_tier || 'free'}`
     : user.role === 'partner'
       ? 'partner'
       : `founder/${(user as any).subscription_tier || 'free'}`;
 
-  const slackPayload: any = {
-    text: `*${user.name || user.email}* (${tierLabel}) — ${text.slice(0, 200)}${text.length > 200 ? '…' : ''}`,
-    blocks: [
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `*${user.name || user.email}* _(${tierLabel})_\n${text}`,
-        },
+  // Phase 1 (2026-05-26) — prefer the org-wide slackBus (bot token +
+  // #axal-founders channel ID) when configured. Falls back to the legacy
+  // AXAL_TEAM_SLACK_WEBHOOK_URL incoming webhook when the bot path isn't
+  // wired yet so customer chat keeps working through the transition.
+  const { postToChannel, resolveChannelId } = await import('../services/slackBus');
+  const useBus = !!env.SLACK_BOT_TOKEN && !!resolveChannelId(env, 'founders');
+  const legacyWebhookUrl = env.AXAL_TEAM_SLACK_WEBHOOK_URL || '';
+  const legacyChannelLabel = env.AXAL_TEAM_SLACK_CHANNEL || '#customer-chat';
+
+  // Common block payload used by both delivery paths.
+  const composedBlocks: Array<Record<string, unknown>> = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*${user.name || user.email}* _(${tierLabel})_\n${text}`,
       },
-      {
-        type: 'context',
-        elements: [
-          { type: 'mrkdwn', text: `:email: ${user.email} · user_id ${user.id}` },
-        ],
-      },
-    ],
-  };
-  if (thread?.slack_thread_ts) slackPayload.thread_ts = thread.slack_thread_ts;
+    },
+    {
+      type: 'context',
+      elements: [
+        { type: 'mrkdwn', text: `:email: ${user.email} · user_id ${user.id}` },
+      ],
+    },
+  ];
+  const composedText = `*${user.name || user.email}* (${tierLabel}) — ${text.slice(0, 200)}${text.length > 200 ? '…' : ''}`;
 
   let slackDelivered = false;
   let newThreadTs: string | null = thread?.slack_thread_ts || null;
-  if (webhookUrl) {
+
+  // Helper for the legacy webhook path — also used as a fallback when
+  // the bot path is configured but Slack rejects (bad scope, missing
+  // channel membership, outage). Returns true on confirmed delivery.
+  async function deliverViaLegacyWebhook(): Promise<boolean> {
+    if (!legacyWebhookUrl) return false;
+    const slackPayload: any = { text: composedText, blocks: composedBlocks };
+    if (thread?.slack_thread_ts && !String(thread.slack_thread_ts).startsWith('pending:') && !String(thread.slack_thread_ts).startsWith('local:')) {
+      slackPayload.thread_ts = thread.slack_thread_ts;
+    }
     try {
-      const res = await fetch(webhookUrl, {
+      const res = await fetch(legacyWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(slackPayload),
+      });
+      if (!res.ok) return false;
+      if (!thread) {
+        // Webhooks don't return ts — synthesise a placeholder that the
+        // /slack-reply Events handler rewrites to the real ts on first
+        // inbound reply (existing behaviour, preserved).
+        newThreadTs = `pending:${user.id}:${Date.now()}`;
+      }
+      return true;
+    } catch (e) {
+      console.warn('[customer-chat] legacy webhook post failed', (e as Error).message);
+      return false;
+    }
+  }
+
+  if (useBus) {
+    // Bot-token path — chat.postMessage returns a real `ts` we can pin
+    // as thread_ts for follow-ups, no more `pending:` placeholders.
+    // Don't pass an existing `pending:` placeholder to Slack — it's not a
+    // real ts and Slack would reject it. Only thread when we have a real ts.
+    const realThreadTs = thread?.slack_thread_ts && !String(thread.slack_thread_ts).startsWith('pending:') && !String(thread.slack_thread_ts).startsWith('local:')
+      ? thread.slack_thread_ts
+      : undefined;
+    const result = await postToChannel(env, {
+      channel: 'founders',
+      text: composedText,
+      blocks: composedBlocks,
+      thread_ts: realThreadTs,
+      // Customer messages are unique enough that the 30s dedupe is fine,
+      // but disable it on follow-ups inside an existing thread so quick
+      // back-to-back messages don't get dropped.
+      dedupe_ms: realThreadTs ? 0 : 30_000,
+    });
+    slackDelivered = result.ok;
+    if (result.ok && !thread && result.ts) {
+      newThreadTs = result.ts;
+    }
+    // Fallback to legacy webhook on bot failure (bad scope, missing
+    // channel membership, Slack outage). `deduped` is not a real
+    // failure — same payload already delivered seconds ago, no retry
+    // needed and no fallback either.
+    if (!result.ok && result.reason !== 'deduped' && legacyWebhookUrl) {
+      slackDelivered = await deliverViaLegacyWebhook();
+    }
+  } else if (legacyWebhookUrl) {
+    // Legacy webhook path — kept verbatim until the bot is provisioned.
+    const slackPayload: any = { text: composedText, blocks: composedBlocks };
+    if (thread?.slack_thread_ts && !String(thread.slack_thread_ts).startsWith('pending:') && !String(thread.slack_thread_ts).startsWith('local:')) {
+      slackPayload.thread_ts = thread.slack_thread_ts;
+    }
+    try {
+      const res = await fetch(legacyWebhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(slackPayload),
       });
       slackDelivered = res.ok;
-      // Slack incoming-webhooks do NOT return the new message's ts in the
-      // response body (only "ok"). We synthesize a thread key using the
-      // current timestamp + user id; the Slack reply handler (events API)
-      // will rewrite it to the real ts on the first inbound reply.
+      // Webhooks don't return ts — synthesise a placeholder that the
+      // /slack-reply Events handler rewrites to the real ts on first
+      // inbound reply (existing behaviour, preserved).
       if (!thread) {
         newThreadTs = `pending:${user.id}:${Date.now()}`;
       }
@@ -154,6 +218,8 @@ customerChat.post('/send', async (c) => {
       console.warn('[customer-chat] slack post failed', (e as Error).message);
     }
   }
+  // Channel label used purely for the DB row's slack_channel column.
+  const channel = useBus ? (resolveChannelId(env, 'founders') || '#axal-founders') : legacyChannelLabel;
 
   // Persist thread + message no matter what (so the user's intent is never lost).
   if (!thread) {

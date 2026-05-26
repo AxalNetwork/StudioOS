@@ -8,6 +8,13 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Help-widget chats and new tickets now show up in our Slack
+
+When you message us from the Help widget, or open a support ticket, it
+now lands in the right Axal team Slack channel automatically — chats in
+the Founders channel, tickets in the Review channel. We'll see and
+respond faster. Nothing changes on your end.
+
 ## See exactly which Spin-Out deck slides will fill — before you click
 
 When you pick the Axal VC Spin-Out template and hit "Fill from project",
