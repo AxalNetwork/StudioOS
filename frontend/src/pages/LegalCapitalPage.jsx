@@ -51,23 +51,45 @@ export default function LegalCapitalPage() {
         )}
       </div>
 
-      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto dark:border-gray-800">
-        {[
+      {(() => {
+        const tabs = [
           {id: 'legal', label: 'Legal Engine', icon: FileText},
           {id: 'capital', label: 'Capital Engine', icon: Banknote},
           {id: 'spinout', label: 'Spin-Out', icon: Rocket},
           {id: 'diligence', label: 'Diligence', icon: ClipboardCheck},
           {id: 'lp', label: 'LP Portal', icon: ShieldCheck},
-        ].map(t => {
-          const Icon = t.icon;
-          return (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tab === t.id ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-              <Icon size={14} /> {t.label}
-            </button>
-          );
-        })}
-      </div>
+        ];
+        return (
+          <>
+            {/* Mobile: native <select> dropdown — tabs were clipping off-screen at <sm widths */}
+            <div className="sm:hidden border-b border-gray-200 dark:border-gray-800 pb-2">
+              <label className="sr-only" htmlFor="lce-section">Section</label>
+              <select
+                id="lce-section"
+                value={tab}
+                onChange={(e) => setTab(e.target.value)}
+                className="w-full min-h-[44px] px-3 py-2 text-sm font-medium rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+              >
+                {tabs.map(t => (
+                  <option key={t.id} value={t.id}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+            {/* Desktop/tablet: original horizontal tab row */}
+            <div className="hidden sm:flex gap-1 border-b border-gray-200 overflow-x-auto dark:border-gray-800">
+              {tabs.map(t => {
+                const Icon = t.icon;
+                return (
+                  <button key={t.id} onClick={() => setTab(t.id)}
+                    className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tab === t.id ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+                    <Icon size={14} /> {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        );
+      })()}
 
       {!selectedDeal && tab !== 'lp' && <Empty text="No deals available. Create one in the Pipeline first." />}
       {tab === 'legal' && selectedDeal && <LegalTab dealId={selectedDeal} canEdit={canEdit} />}
